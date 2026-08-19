@@ -152,6 +152,50 @@ describe('DaemonIndexPage tree view', () => {
     })
   })
 
+  // The two modes are not a width breakpoint and not a subset of each other:
+  // one column reaches every document without moving anything, two columns
+  // trade that for cards you can actually see.
+  it('switches between one and two columns', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+
+    fireEvent.click(screen.getByRole('button', { name: 'One column' }))
+    await waitFor(() => {
+      expect(screen.queryByTestId('folder-contents')).toBeNull()
+    })
+    // The document one level down is reachable without navigating into it.
+    const tree = screen.getByRole('tree')
+    expect(within(tree).getByText('design')).not.toBeNull()
+    // And the trail belongs to whatever narrows the view, which here nothing does.
+    expect(screen.queryByRole('navigation', { name: 'Folder path' })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: 'Two columns' }))
+    await screen.findByTestId('folder-contents')
+    expect(screen.getByRole('navigation', { name: 'Folder path' })).not.toBeNull()
+  })
+
+  // Selecting in one column fills the same preview the cards fill, so the
+  // two modes are two ways into one browser rather than two browsers.
+  it('previews from the one-column tree too', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+    fireEvent.click(screen.getByRole('button', { name: 'One column' }))
+
+    const tree = await screen.findByRole('tree')
+    fireEvent.click(within(tree).getByText('design'))
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
+    })
+  })
+
   // The three panes are driven left to right, so a preview showing a
   // document the contents pane does not list is the one way they can
   // disagree — and the contents pane has no row to mark, so nothing on

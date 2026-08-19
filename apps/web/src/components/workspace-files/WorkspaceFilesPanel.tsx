@@ -1,3 +1,4 @@
+import { Columns2, List } from 'lucide-react'
 import { useEffect, useMemo, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import {
@@ -6,12 +7,15 @@ import {
   getDocumentSnapshot,
   listDocuments,
 } from '../../lib/daemon-api-client.js'
+import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
+import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
+import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
 export interface WorkspaceFilesPanelProps {
@@ -21,6 +25,18 @@ export interface WorkspaceFilesPanelProps {
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
 }
+
+/**
+ * How many columns stand between the workspace and the preview.
+ *
+ * `one` is the whole tree — folders and documents together, reachable
+ * without moving anything, which is what you want when you know where you
+ * are going. `two` splits it: folders on the left, that folder's contents
+ * as cards beside them, which is what you want when you are looking rather
+ * than navigating. Neither is a subset of the other, which is why this is a
+ * toggle and not a width breakpoint.
+ */
+export type BrowserColumns = 'one' | 'two'
 
 /**
  * The workspace document browser (`/api/v1`), in three panes: the folder
@@ -46,6 +62,7 @@ export function WorkspaceFilesPanel({
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
   // '' is the workspace root, which is where a freshly loaded tree starts.
   const [folder, setFolder] = useState('')
+  const [columns, setColumns] = useState<BrowserColumns>('two')
 
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
@@ -60,6 +77,21 @@ export function WorkspaceFilesPanel({
         getOkf: getDocumentOkfV1,
       }),
     [daemonFetch, daemonBaseUrl, workspaceId, resolvedTheme],
+  )
+
+  // The row-size rendition. Separate from `loadRender` on purpose: it asks
+  // the worker for block geometry rather than a serialized SVG, which is
+  // both cheaper and the only thing legible at 24px (see DocumentMinimap).
+  const loadOutline = useMemo(
+    () =>
+      createRowOutlineLoader({
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId,
+        getSnapshot: getDocumentSnapshot,
+        getOkf: getDocumentOkfV1,
+      }),
+    [daemonFetch, daemonBaseUrl, workspaceId],
   )
 
   useEffect(() => {
@@ -123,50 +155,101 @@ export function WorkspaceFilesPanel({
   }
 
   return (
-    <div
-      className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row"
-      data-testid="workspace-files-panel"
-    >
-      {/* Below md the tree goes: the middle pane's breadcrumb already walks
-          the same hierarchy, and three columns in a phone's width leaves
-          none of them readable. */}
-      <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
-        <WorkspaceFolderTree
-          documents={documents}
-          onSelectFolder={selectFolder}
-          selectedFolder={folder}
-        />
-      </div>
-      <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
-        <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
-        <div data-testid="folder-contents">
-          <FolderContentsList
-            documents={documents}
-            folder={folder}
-            selectedPath={selected?.path}
-            onOpen={(target) =>
-              target.kind === 'folder' ? selectFolder(target.path) : setSelected(target.document)
-            }
-            renderThumbnail={(entry) => (
-              <DocumentThumbnail
-                key={entry.documentId}
-                document={entry}
-                loadRender={loadRender}
-                className="size-full"
-              />
-            )}
-          />
+    <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="workspace-files-panel">
+      <div className="flex items-center gap-2">
+        <div className="min-w-0 flex-1">
+          {/* The trail belongs to whatever narrows the view, and in one-column
+              mode nothing does — the tree already shows every level at once. */}
+          {columns === 'two' && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
+        </div>
+        <div
+          role="group"
+          aria-label="Column layout"
+          className="flex shrink-0 items-center gap-0.5 rounded border p-0.5"
+        >
+          <button
+            type="button"
+            aria-label="One column"
+            aria-pressed={columns === 'one'}
+            onClick={() => setColumns('one')}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
+          >
+            <List className="size-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Two columns"
+            aria-pressed={columns === 'two'}
+            onClick={() => setColumns('two')}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
+          >
+            <Columns2 className="size-4" />
+          </button>
         </div>
       </div>
-      <div className="w-full shrink-0 overflow-y-auto md:w-72">
-        <DocumentPreview
-          document={selected}
-          loadRender={loadRender}
-          {...(onOpenDocument === undefined
-            ? {}
-            : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
-          className="h-full"
-        />
+
+      <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
+        {columns === 'one' ? (
+          <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
+            <WorkspaceFileTree
+              documents={documents}
+              onOpen={setSelected}
+              selectedPath={selected?.path}
+              renderIcon={(entry) => (
+                <DocumentMinimap
+                  key={entry.documentId}
+                  document={entry}
+                  loadOutline={loadOutline}
+                />
+              )}
+            />
+          </div>
+        ) : (
+          <>
+            {/* Below md the folder column goes: the breadcrumb already walks
+                the same hierarchy, and three columns in a phone's width
+                leaves none of them readable. */}
+            <div className="hidden w-56 shrink-0 overflow-y-auto border-r pr-3 md:block">
+              <WorkspaceFolderTree
+                documents={documents}
+                onSelectFolder={selectFolder}
+                selectedFolder={folder}
+              />
+            </div>
+            <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
+              <div data-testid="folder-contents">
+                <FolderContentsList
+                  documents={documents}
+                  folder={folder}
+                  selectedPath={selected?.path}
+                  onOpen={(target) =>
+                    target.kind === 'folder'
+                      ? selectFolder(target.path)
+                      : setSelected(target.document)
+                  }
+                  renderThumbnail={(entry) => (
+                    <DocumentThumbnail
+                      key={entry.documentId}
+                      document={entry}
+                      loadRender={loadRender}
+                      className="size-full"
+                    />
+                  )}
+                />
+              </div>
+            </div>
+          </>
+        )}
+        <div className="w-full shrink-0 overflow-y-auto md:w-72">
+          <DocumentPreview
+            document={selected}
+            loadRender={loadRender}
+            {...(onOpenDocument === undefined
+              ? {}
+              : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
+            className="h-full"
+          />
+        </div>
       </div>
     </div>
   )
