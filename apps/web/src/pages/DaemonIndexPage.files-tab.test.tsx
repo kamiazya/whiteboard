@@ -514,6 +514,96 @@ describe('DaemonIndexPage tree view', () => {
     await waitFor(() => expect(kinds).toEqual(['spatial', 'markdown']))
   })
 
+  // Three conditional prop spreads and three new call sites on the page —
+  // glue code, which is where an argument-order slip lives and where nothing
+  // else would catch one.
+  it('opens and duplicates through the page’s own handlers', async () => {
+    const opened: [string, string][] = []
+    const posted: string[] = []
+    let docs = [
+      { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+      { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/api/workspaces')) {
+          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+          const body = JSON.parse(String(init.body)) as { path: string }
+          posted.push(body.path)
+          docs = [
+            ...docs,
+            {
+              id: `id-${body.path}`,
+              path: body.path,
+              updatedAt: '2026-05-01T12:00:00.000Z',
+              kind: 'markdown',
+            },
+          ]
+          return Promise.resolve(jsonResponse({ path: body.path }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+          return Promise.resolve(jsonResponse({ documents: docs }))
+        }
+        // Duplicate reads the source's bytes before it creates anything, so
+        // a 404 here throws before the POST and the test would report a
+        // wiring failure that is really a fixture gap.
+        if (url.endsWith('/snapshot')) {
+          return Promise.resolve(
+            new Response(new Uint8Array([1, 2, 3]), {
+              headers: { 'Content-Type': 'application/octet-stream' },
+            }),
+          )
+        }
+        if (url.endsWith('/update')) {
+          return Promise.resolve(jsonResponse({ ok: true }))
+        }
+        // Schema-valid, not merely 200: the client parses this one, and an
+        // `{ok:true}` here throws inside the duplicate before it ever
+        // reaches the list reload — which reads exactly like broken wiring.
+        if (url.endsWith('/name')) {
+          return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+        }
+        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+      }),
+    )
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        token="secret"
+        onOpenDocument={(workspaceId, path) => opened.push([workspaceId, path])}
+      />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+    fireEvent.click(
+      within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
+    )
+    await screen.findByTestId('okf-preview')
+
+    // Both arguments, in order: a workspace passed where a path belongs would
+    // still be two strings.
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+    expect(opened).toEqual([['default', 'notes/design']])
+
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+    await waitFor(() => expect(posted.length).toBe(1))
+    // The copy lands beside the original, and the browser shows it without
+    // anyone leaving and coming back.
+    expect(posted[0]).toMatch(/^notes\/design/)
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('copy')
+    })
+  })
+
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
