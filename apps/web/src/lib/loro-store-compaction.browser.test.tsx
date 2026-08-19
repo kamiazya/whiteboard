@@ -68,3 +68,27 @@ it('folds the delta log once it passes the budget, keeping the content', async (
   for (const d of loaded.deltas ?? []) reopened.import(d)
   expect(readSpatialCanvas(reopened).nodes[0]?.x).toBe(canvasWith(20, appended).nodes[0]?.x)
 }, 120_000)
+
+// The guard the fold rests on: bytes that will not replay are kept exactly as
+// they were. Reachable, not defensive — appendDelta only checks the envelope
+// STRUCTURALLY (instanceof Uint8Array); it never deep-validates the stored
+// snapshot or the deltas already there, and the repo's own loro-store tests
+// seed a v:1 envelope carrying invalid Loro bytes.
+it('keeps a log it cannot replay rather than dropping the edits', async () => {
+  const store = new LoroStore()
+  const id = `unfoldable-${Math.trunc(performance.now() * 1000)}`
+
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, canvasWith(5))
+  doc.commit()
+  await store.save(id, doc.export({ mode: 'snapshot' }))
+
+  // Past the budget in one go, and not Loro bytes at all.
+  const garbage = new Uint8Array(COMPACT_DELTA_BYTES + 1).fill(7)
+  await expect(store.appendDelta(id, garbage)).resolves.toBeUndefined()
+
+  const loaded = await store.load(id)
+  // load()'s deep validation refuses it — which is the point: the bytes are
+  // still there to be refused, rather than silently gone.
+  expect(loaded.kind).toBe('corrupt-delta')
+}, 120_000)
