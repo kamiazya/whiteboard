@@ -323,6 +323,65 @@ describe('DaemonIndexPage tree view', () => {
     expect(alert.textContent).toContain('archive/design/x')
   })
 
+  // Until now the only way to put a document anywhere but the workspace root
+  // was MCP or raw HTTP, so the browser showed a hierarchy it could not add
+  // to.
+  it('creates a document in the folder it is standing in', async () => {
+    const created: string[] = []
+    // `notes` needs something under it or it is not a folder to stand in.
+    let docs = [
+      { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+      { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/api/workspaces')) {
+          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+          const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
+          created.push(body.path)
+          docs = [
+            ...docs,
+            {
+              id: `id-${body.path}`,
+              path: body.path,
+              updatedAt: '2026-05-01T12:00:00.000Z',
+              kind: 'markdown',
+            },
+          ]
+          return Promise.resolve(jsonResponse({ path: body.path }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+          return Promise.resolve(jsonResponse({ documents: docs }))
+        }
+        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+      }),
+    )
+
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+
+    // At the root it lands at the root.
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await waitFor(() => expect(created).toEqual(['untitled']))
+
+    // Inside a folder it lands in that folder — the whole point.
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await waitFor(() => expect(created).toEqual(['untitled', 'notes/untitled']))
+
+    // And it is selected, so the preview says where it went.
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/untitled')
+    })
+  })
+
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(

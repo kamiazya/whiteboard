@@ -1,7 +1,9 @@
-import { Columns2, List } from 'lucide-react'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { Columns2, FilePlus2, LayoutGrid, List } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import {
+  createDocument,
   DaemonApiError,
   getDocumentOkfV1,
   getDocumentSnapshot,
@@ -16,6 +18,7 @@ import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
+import { newDocumentPathIn } from './new-document-path.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -64,6 +67,7 @@ export function WorkspaceFilesPanel({
   // '' is the workspace root, which is where a freshly loaded tree starts.
   const [folder, setFolder] = useState('')
   const [columns, setColumns] = useState<BrowserColumns>('two')
+  const [createError, setCreateError] = useState<string | null>(null)
 
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
@@ -145,6 +149,28 @@ export function WorkspaceFilesPanel({
    * The rejection is re-thrown: the pane that asked owns the message, and
    * this is the only place that knows it was the server's words.
    */
+  /**
+   * Create a document in the folder the browser is standing in.
+   *
+   * Until now the only way to put a document anywhere but the workspace root
+   * was MCP or raw HTTP, which left the browser showing a hierarchy it had
+   * no way to add to. No name is collected: naming follows creation
+   * (ADR-0006), and a path is never derived from a name (ADR-0008).
+   */
+  const createHere = useCallback(
+    async (kind: DocumentKind) => {
+      const path = newDocumentPathIn(
+        folder,
+        (documents ?? []).map((row) => row.path),
+      )
+      await createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind)
+      const entries = await readList()
+      setDocuments(entries)
+      setSelected(entries.find((row) => row.path === path) ?? null)
+    },
+    [daemonFetch, daemonBaseUrl, workspaceId, readList, folder, documents],
+  )
+
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, entry.path, newPath)
@@ -191,6 +217,24 @@ export function WorkspaceFilesPanel({
               mode nothing does — the tree already shows every level at once. */}
           {columns === 'two' && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
         </div>
+        <div className="flex shrink-0 items-center gap-1">
+          <button
+            type="button"
+            aria-label="New markdown document"
+            onClick={() => void createHere('markdown').catch(() => setCreateError('markdown'))}
+            className="text-muted-foreground hover:text-foreground rounded border p-1.5"
+          >
+            <FilePlus2 className="size-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="New canvas"
+            onClick={() => void createHere('spatial').catch(() => setCreateError('spatial'))}
+            className="text-muted-foreground hover:text-foreground rounded border p-1.5"
+          >
+            <LayoutGrid className="size-4" />
+          </button>
+        </div>
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
           <button
@@ -213,6 +257,12 @@ export function WorkspaceFilesPanel({
           </button>
         </fieldset>
       </div>
+
+      {createError !== null && (
+        <p role="alert" className="text-destructive text-sm">
+          Could not create a {createError} document here.
+        </p>
+      )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
         {columns === 'one' ? (
