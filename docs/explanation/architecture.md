@@ -61,13 +61,12 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | Tool | Purpose |
 |---|---|
 | `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` | Document lifecycle (CRUD). |
-| `wb_node_add` / `wb_edge_add` | Add a node to a spatial document, or connect two of its nodes. Both refuse an id already in use rather than overwriting, and `wb_edge_add` refuses an endpoint the canvas does not have. |
-| `wb_node_patch` / `wb_edge_patch` / `wb_body_patch` | Update a node, an edge, or a node's Markdown body. These update only — an element that is not there is an error, not a create. |
-| `wb_node_lock` / `wb_edge_lock` | Lock an element against edits. The lock binds agents exactly as it binds the pointer, and is editor state that never appears in an export. |
-| `wb_canvas_tidy` | Normalize a canvas's spatial layout: snap near-aligned nodes into rows/columns on the grid and separate overlaps, optionally restricted to a `scope` of node ids. Locked nodes never move. Idempotent — a second call reports no moves. |
+| `wb_body_patch` | Update a node's Markdown body. Updates only — a node that is not there is an error, not a create. |
 | `wb_facet_set` | Set structured facet metadata on a canvas (used for the private ticketing backlog, among other uses). |
 | `wb_scene_render` | Render the current canvas to an SVG string from its persisted document — no browser connection required. The reported `width`/`height` cover everything drawn, edges included, not just the nodes' own boxes. |
-| `wb_scene_digest` | Return the AI-facing spatial digest (overlap/containment/cluster/free-region summary) of a canvas. Entries are named by the canvas's own node ids, so anything the digest reports can be acted on directly with `wb_node_patch`; content laid out inside a node is not reported as a node of its own. |
+| `wb_canvas_edit` | Apply a batch of edits to a spatial document in one transaction — add, patch, remove, lock and tidy nodes and edges, plus `region.set` to reconcile a group's contents to a declared list (the one op that deletes by omission; scoped by strict containment, so a node straddling the group's edge is never touched). Either every op applies or none does, and a refusal names the op that failed by index. Node geometry is optional: a node with no `x`/`y`/`width`/`height` is placed below the existing content and the chosen position is reported back under `geometry`. The result also carries the resulting board, so a caller never needs a second read to see what it just wrote. |
+| `wb_viewport_set` | Move a watching browser's view of a spatial document — frame specific elements, or pan and zoom directly. Answers `delivered: false` rather than failing when no browser is open, so it is safe to call headlessly. `wb_canvas_edit` already follows its own edits; use this to point at something you did not just change. |
+| `wb_canvas_snapshot` | The one read of a spatial document. By default, **what is on it**: every node with its type, text, stored geometry and lock state, plus every edge, with long text and large boards cut and the true totals reported alongside so a capped read never looks complete. With `layout: true`, additionally **whether it is tidy**: overlap, containment, cluster and free-region analysis of the laid-out scene, named by the document's own node ids so anything it reports can be acted on with a `node.patch` op. The layout half also marks each node whose content does not fit its box as `overflows` — the one fact the stored geometry cannot show, since whether text fits is only knowable after it is measured. It is opt-in because it costs a full layout pass. This is the read to reach for before editing a canvas — `wb_document_get` answers with the whole untruncated JSON Canvas. |
 | `wb_document_get` / `wb_document_set` | Read and replace a document's content. `wb_document_get` answers in the document's own format — OKF Markdown for a markdown document, JSON Canvas 1.0 (with the `x-whiteboard` extension) for a spatial one — and the format is not a parameter. `wb_document_set` writes OKF Markdown. |
 | `wb_version_save` / `wb_version_restore` / `wb_version_list` | Save and restore labeled canvas versions. `wb_version_restore` accepts an optional `targetPath` to fork the past state into a new canvas instead of reconciling in place. |
 
@@ -77,7 +76,7 @@ text node — so an unguarded cross-format write would not fail, it would
 destroy: OKF into a diagram replaces its nodes and edges, a node into a
 markdown document lands beside the one holding its body. The first content
 write declares the document's format and every later write must match it, so
-`wb_document_set` on a spatial document and `wb_node_add` / `wb_edge_add` on a
+`wb_document_set` on a spatial document and `wb_canvas_edit` on a
 markdown one are errors. A document created before formats were recorded takes
 its format from the first write.
 

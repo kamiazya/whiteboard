@@ -32,7 +32,7 @@ describe('createServer', () => {
 
     const expectations = [
       { tool: tools.canvasRenderSvg, name: 'wb_scene_render' },
-      { tool: tools.canvasDigest, name: 'wb_scene_digest' },
+      { tool: tools.canvasSnapshot, name: 'wb_canvas_snapshot' },
       { tool: tools.documentGet, name: 'wb_document_get' },
     ]
 

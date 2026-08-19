@@ -1,5 +1,12 @@
-import { useEffect, useState } from 'react'
-import { DaemonApiError, getDocumentOkfV1, listDocuments } from '../../lib/daemon-api-client.js'
+import { useEffect, useMemo, useState } from 'react'
+import {
+  DaemonApiError,
+  getDocumentOkfV1,
+  getDocumentSnapshot,
+  listDocuments,
+} from '../../lib/daemon-api-client.js'
+import { DocumentMinimap } from './DocumentMinimap.js'
+import { createRowOutlineLoader } from './load-row-outline.js'
 import { WorkspaceFileTree, type WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
 
 export interface WorkspaceFilesPanelProps {
@@ -31,6 +38,20 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [preview, setPreview] = useState<OkfPreview>({ kind: 'idle' })
+
+  // One loader for the whole tree, so a re-render does not hand every row a
+  // new function and re-trigger its read.
+  const loadRowOutline = useMemo(
+    () =>
+      createRowOutlineLoader({
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId,
+        getSnapshot: getDocumentSnapshot,
+        getOkf: getDocumentOkfV1,
+      }),
+    [daemonFetch, daemonBaseUrl, workspaceId],
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -101,7 +122,13 @@ export function WorkspaceFilesPanel({
   return (
     <div className="flex min-h-0 flex-1 gap-4" data-testid="workspace-files-panel">
       <div className="w-64 shrink-0 overflow-y-auto border-r pr-3">
-        <WorkspaceFileTree documents={documents} onOpen={openDocument} />
+        <WorkspaceFileTree
+          documents={documents}
+          onOpen={openDocument}
+          renderIcon={(entry) => (
+            <DocumentMinimap key={entry.documentId} document={entry} loadOutline={loadRowOutline} />
+          )}
+        />
       </div>
       <div className="min-w-0 flex-1 overflow-y-auto" data-testid="okf-preview">
         {preview.kind === 'idle' && (

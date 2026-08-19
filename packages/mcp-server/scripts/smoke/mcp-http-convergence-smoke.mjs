@@ -14,7 +14,7 @@
 // Env knobs (all optional):
 //   WHITEBOARD_SMOKE_READY_TIMEOUT_MS        daemon readiness budget (default 30000)
 //   WHITEBOARD_SMOKE_RPC_TIMEOUT_MS           per-RPC budget (default 20000)
-//   WHITEBOARD_SMOKE_CONVERGENCE_TIMEOUT_MS   wb_scene_digest poll budget (default 10000)
+//   WHITEBOARD_SMOKE_CONVERGENCE_TIMEOUT_MS   wb_canvas_snapshot poll budget (default 10000)
 //   WHITEBOARD_SMOKE_WS_SNAPSHOT_TIMEOUT_MS   WS initial-snapshot wait budget (default 20000)
 
 import { spawn } from 'node:child_process'
@@ -278,15 +278,15 @@ async function main() {
     height: 100,
     text: 'node A — created via MCP',
   }
-  const addedA = await callTool('wb_node_add', {
+  const addedA = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    node: NODE_A,
+    ops: [{ op: 'node.add', node: NODE_A }],
   })
-  if (addedA.node?.id !== 'node-a') {
-    throw new Error(`wb_node_add(A) returned unexpected shape: ${JSON.stringify(addedA)}`)
+  if (!addedA.touched?.nodes.includes('node-a')) {
+    throw new Error(`wb_canvas_edit(A) returned unexpected shape: ${JSON.stringify(addedA)}`)
   }
-  log('[e2e] wb_node_add → node A')
+  log('[e2e] wb_canvas_edit → node A')
 
   // ── Step 3: read the SAME document with no mocks through the HTTP path-
   //    snapshot route and the WS route — the exact shape of the drift bug ──
@@ -344,15 +344,15 @@ async function main() {
     height: 100,
     text: 'node C — added via MCP while the WS session is open',
   }
-  const addedC = await callTool('wb_node_add', {
+  const addedC = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    node: NODE_C,
+    ops: [{ op: 'node.add', node: NODE_C }],
   })
-  if (addedC.node?.id !== 'node-c') {
-    throw new Error(`wb_node_add(C) returned unexpected shape: ${JSON.stringify(addedC)}`)
+  if (!addedC.touched?.nodes.includes('node-c')) {
+    throw new Error(`wb_canvas_edit(C) returned unexpected shape: ${JSON.stringify(addedC)}`)
   }
-  log('[e2e] wb_node_add → node C (while WS session stays open)')
+  log('[e2e] wb_canvas_edit → node C (while WS session stays open)')
 
   // web-edit shape: import the connect-time snapshot into a fresh LoroDoc,
   // write a node through loro-adapter's writeSpatialNode (the same bridge
@@ -376,24 +376,23 @@ async function main() {
   log('[e2e] WS push → node B (writeSpatialNode + incremental update frame)')
 
   // ── Step 5: acceptance — MCP read-back names and contains all three
-  //    writers' content. wb_scene_digest is polled because the WS push
+  //    writers' content. wb_canvas_snapshot is polled because the WS push
   //    above is fire-and-forget from the client's perspective. ──
   const expectedIds = ['node-a', 'node-b', 'node-c']
-  const digestDeadline = Date.now() + CONVERGENCE_TIMEOUT_MS
-  let digest
+  const readDeadline = Date.now() + CONVERGENCE_TIMEOUT_MS
   for (;;) {
-    digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, documentId })
-    const ids = new Set((digest.nodes ?? []).map((n) => n.id))
+    const read = await callTool('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId })
+    const ids = new Set((read.nodes ?? []).map((n) => n.id))
     const missing = expectedIds.filter((id) => !ids.has(id))
     if (missing.length === 0) break
-    if (Date.now() >= digestDeadline) {
+    if (Date.now() >= readDeadline) {
       throw new Error(
-        `wb_scene_digest did not converge within ${CONVERGENCE_TIMEOUT_MS}ms; still missing: ${missing.join(', ')}`,
+        `wb_canvas_snapshot did not converge within ${CONVERGENCE_TIMEOUT_MS}ms; still missing: ${missing.join(', ')}`,
       )
     }
     await new Promise((r) => setTimeout(r, CONVERGENCE_POLL_INTERVAL_MS))
   }
-  log('[e2e] wb_scene_digest → nodes A, B, C all named by id')
+  log('[e2e] wb_canvas_snapshot → nodes A, B, C all named by id')
 
   const got = await callTool('wb_document_get', { workspaceId: WORKSPACE_ID, documentId })
   const exportedCanvas = JSON.parse(got.content)

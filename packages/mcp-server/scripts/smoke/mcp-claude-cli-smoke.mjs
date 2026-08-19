@@ -7,7 +7,7 @@
 // without relying on prompts or conversation history from the parent client.
 //
 // Expected behavior:
-// Call wb_document_create -> wb_node_patch -> wb_version_save as one flow and succeed if
+// Call wb_document_create -> wb_canvas_edit -> wb_version_save as one flow and succeed if
 // the last line prints a versionId.
 //
 // Notes:
@@ -56,7 +56,7 @@ const prompt = [
   'Use the whiteboard MCP server.',
   'Do exactly these three steps in order, no extra work:',
   '1. call wb_document_create with path="claude-smoke".',
-  '2. call wb_node_patch with type=rectangle at {x:10,y:10}, width=40, height=20 on the document id returned above.',
+  '2. call wb_canvas_edit on the document id returned above with ops=[{op:"node.add",node:{id:"box",type:"text",text:"claude smoke"}}].',
   '3. call wb_version_save for that canvas id with label "claude-smoke".',
   'Return only the versionId on the last line, nothing else.',
 ].join('\n')
@@ -68,7 +68,7 @@ const args = [
   mcpConfigPath,
   '--strict-mcp-config',
   '--allowedTools',
-  'mcp__whiteboard__wb_document_create mcp__whiteboard__wb_node_patch mcp__whiteboard__wb_version_save',
+  'mcp__whiteboard__wb_document_create mcp__whiteboard__wb_canvas_edit mcp__whiteboard__wb_version_save',
   '--max-turns',
   '6',
   '--output-format',

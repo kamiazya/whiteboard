@@ -43,6 +43,7 @@ export {
 // ── Inbound callback surface (hook receives from backend) ─────────────────────
 
 import type {
+  AgentActivityMessage,
   ExportRequestMessage,
   HeadChangedMessage,
   RestoreStartedMessage,
@@ -54,6 +55,7 @@ export type RestoreStartedPayload = RestoreStartedMessage
 export type HeadChangedPayload = HeadChangedMessage
 export type ViewportRequestPayload = ViewportRequestMessage
 export type ExportRequestPayload = ExportRequestMessage
+export type AgentActivityPayload = AgentActivityMessage
 
 export interface DocumentBackendHandlers {
   /** First binary frame from the server: raw Loro snapshot bytes. */
@@ -72,6 +74,13 @@ export interface DocumentBackendHandlers {
   onViewportRequest: (payload: Omit<ViewportRequestPayload, 'type'>) => void
   /** Server requests a PNG export from this connected client. */
   onExportRequest: (payload: Omit<ExportRequestPayload, 'type'>) => void
+  /**
+   * An agent just changed this document. Optional because it is news rather
+   * than protocol: a backend that never emits it, and a page that does not
+   * care, are both valid. The change itself still arrives as a Loro update —
+   * this only says WHO did it and WHAT to draw attention to.
+   */
+  onAgentActivity?: (payload: Omit<AgentActivityPayload, 'type'>) => void
   /**
    * Transport (re)connected. Called on every successful open — both the initial
    * connection and every subsequent reconnect after a close/error cycle.

@@ -11,6 +11,7 @@ const DESTRUCTIVE_IDEMPOTENT = {
   openWorldHint: false,
 } as const
 const MUTATING_IDEMPOTENT = { idempotentHint: true, openWorldHint: false } as const
+const DESTRUCTIVE = { destructiveHint: true, openWorldHint: false } as const
 export const MUTATING = { openWorldHint: false } as const
 
 // Map from tool name to annotation profile and human-friendly title. Used by
@@ -22,22 +23,24 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     profile: MUTATING_IDEMPOTENT,
     title: 'Set the OKF frontmatter facets of a document',
   },
-  wb_edge_add: { profile: MUTATING, title: 'Connect two nodes on the spatial canvas' },
-  wb_node_add: { profile: MUTATING, title: 'Add a node to the spatial canvas' },
-  wb_node_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch a node on the spatial canvas' },
-  wb_edge_patch: { profile: MUTATING_IDEMPOTENT, title: 'Patch an edge on the spatial canvas' },
-  wb_node_lock: {
-    profile: MUTATING_IDEMPOTENT,
-    title: 'Lock or unlock a node on the spatial canvas',
+  wb_canvas_edit: {
+    // Destructive because a batch may carry node.remove / edge.remove, and
+    // NOT idempotent because an add refuses an id already on the canvas.
+    profile: DESTRUCTIVE,
+    title: 'Apply a batch of edits to the spatial canvas',
   },
-  wb_edge_lock: {
-    profile: MUTATING_IDEMPOTENT,
-    title: 'Lock or unlock an edge on the spatial canvas',
-  },
-  wb_canvas_tidy: { profile: MUTATING_IDEMPOTENT, title: 'Tidy the spatial canvas layout' },
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
-  wb_scene_digest: { profile: READ_ONLY, title: 'Summarise the laid-out scene' },
+  wb_viewport_set: {
+    // Mutating rather than read-only: it changes what a human is looking at.
+    // Idempotent — sending the same viewport twice lands in the same place.
+    profile: MUTATING_IDEMPOTENT,
+    title: "Move a watching browser's view of the spatial canvas",
+  },
+  wb_canvas_snapshot: {
+    profile: READ_ONLY,
+    title: 'Read a spatial canvas as a compact snapshot',
+  },
   wb_document_set: { profile: MUTATING, title: 'Replace a document from OKF Markdown' },
   wb_document_get: { profile: READ_ONLY, title: 'Read a document in its own format' },
   wb_document_create: { profile: MUTATING, title: 'Create a document' },
