@@ -38,6 +38,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
+import { installedFontFiles } from './installed-fonts.js'
 import { createOpentypeMeasureText } from './measure-text.js'
 import { undrawableCharacters } from './undrawable-characters.js'
 
@@ -197,6 +198,9 @@ async function buildExporter(): Promise<HeadlessExporter> {
   // appears in the SVG canvas-render produces. All four faces register:
   // resvg selects among them by the font-weight/font-style the SVG
   // declares, and it does NOT synthesize a face it was not given.
+  // The vendored faces plus whatever the user installed. Resolved per render
+  // rather than once with the exporter singleton: installing a font must take
+  // effect on the next export, not on the next daemon restart.
   const fontFiles = [faces.regular, faces.bold, faces.italic, faces.boldItalic].filter(
     (path): path is string => path !== null,
   )
@@ -215,9 +219,10 @@ async function buildExporter(): Promise<HeadlessExporter> {
         Number.isFinite(scale) && scale > 0 && scale !== 1
           ? ({ mode: 'zoom', value: scale } as const)
           : ({ mode: 'original' } as const)
+      const installed = await installedFontFiles()
       const resvg = new Resvg(svg, {
         background: themeBackground(options),
-        font: fontOption,
+        font: { ...fontOption, fontFiles: [...(fontOption.fontFiles ?? []), ...installed] },
         fitTo,
       })
       const png = resvg.render()

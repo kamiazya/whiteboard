@@ -10,6 +10,7 @@ import * as opentype from 'opentype.js'
 
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, type ExportFontFace, resolveExportFontFaces } from './export-font.js'
+import { installedFontFiles } from './installed-fonts.js'
 
 const log = getLogger('export-measure-text')
 
@@ -180,6 +181,35 @@ export async function loadExportFont(
   } catch {
     return null
   }
+}
+
+/**
+ * Every face the export path draws with: the vendored Regular plus whatever
+ * the user installed.
+ *
+ * This is the set `undrawableCharacters` has to ask, not just the vendored
+ * one. A report built from a narrower set than the renderer uses answers about
+ * a picture nobody produced — it would keep naming characters an installed
+ * font now draws perfectly.
+ *
+ * A face that fails to parse is skipped rather than fatal: it cannot draw
+ * anything, so it contributes nothing to the question being asked, and a
+ * corrupt file in the directory must not take the export down with it.
+ */
+export async function loadExportFonts(
+  resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>> = resolveExportFontFaces,
+): Promise<readonly opentype.Font[]> {
+  const paths = [(await resolveFontFiles()).regular, ...(await installedFontFiles())]
+  const fonts: opentype.Font[] = []
+  for (const path of paths) {
+    try {
+      const font = await parseFace(path)
+      if (font !== null) fonts.push(font)
+    } catch {
+      // Skipped on purpose — see above.
+    }
+  }
+  return fonts
 }
 
 async function loadRealMeasurer(
