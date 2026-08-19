@@ -388,6 +388,8 @@ export function DaemonIndexPage({
                 daemonBaseUrl={daemonBaseUrl}
                 workspaceId={selectedWorkspace}
                 onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
+                onDuplicateDocument={(path) => void handleDuplicate(path)}
+                onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
               />
             </div>
           ) : (

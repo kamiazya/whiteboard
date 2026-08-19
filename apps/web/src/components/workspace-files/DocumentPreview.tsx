@@ -29,6 +29,14 @@ export interface DocumentPreviewProps {
    * the pane shows no way to move — reading still works.
    */
   readonly onMove?: (document: WorkspaceDocumentEntry, newPath: string) => Promise<void>
+  /** Copy it. Absent means the pane offers no copy. */
+  readonly onDuplicate?: (document: WorkspaceDocumentEntry) => void
+  /**
+   * ASK to delete it. The pane never performs the deletion: it is
+   * destructive and takes the whole subtree, so the confirmation belongs to
+   * whoever owns the data, not to the pane that happens to be showing it.
+   */
+  readonly onDelete?: (document: WorkspaceDocumentEntry) => void
   readonly className?: string
 }
 
@@ -43,6 +51,8 @@ export function DocumentPreview({
   loadRender,
   onOpen,
   onMove,
+  onDuplicate,
+  onDelete,
   className,
 }: DocumentPreviewProps) {
   const [state, setState] = useState<State>({ kind: 'idle' })
@@ -193,15 +203,35 @@ export function DocumentPreview({
             </>
           )}
         </dl>
-        {onOpen !== undefined && (
-          <button
-            type="button"
-            onClick={() => onOpen(document)}
-            className="bg-primary text-primary-foreground mt-1 self-start rounded px-2.5 py-1 text-xs"
-          >
-            Open
-          </button>
-        )}
+        <div className="mt-1 flex flex-wrap items-center gap-2">
+          {onOpen !== undefined && (
+            <button
+              type="button"
+              onClick={() => onOpen(document)}
+              className="bg-primary text-primary-foreground rounded px-2.5 py-1 text-xs"
+            >
+              Open
+            </button>
+          )}
+          {onDuplicate !== undefined && (
+            <button
+              type="button"
+              onClick={() => onDuplicate(document)}
+              className="rounded border px-2.5 py-1 text-xs"
+            >
+              Duplicate
+            </button>
+          )}
+          {onDelete !== undefined && (
+            <button
+              type="button"
+              onClick={() => onDelete(document)}
+              className="text-destructive rounded border px-2.5 py-1 text-xs"
+            >
+              Delete
+            </button>
+          )}
+        </div>
       </div>
     </div>
   )

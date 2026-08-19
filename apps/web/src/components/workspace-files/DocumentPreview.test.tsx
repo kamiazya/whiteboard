@@ -182,4 +182,46 @@ describe('DocumentPreview', () => {
       expect(screen.queryByRole('button', { name: /Move/ })).toBeNull()
     })
   })
+
+  // The grid had a Duplicate and a Delete on every card; the browser has to
+  // carry them or retiring the grid loses them. They live on the SELECTED
+  // document, which is the one the pane is already about.
+  describe('acting on the selected document', () => {
+    it('duplicates, and does not open or move anything', async () => {
+      const onDuplicate = vi.fn()
+      const onOpen = vi.fn()
+      render(
+        <DocumentPreview
+          document={doc}
+          loadRender={async () => drawn}
+          onOpen={onOpen}
+          onDuplicate={onDuplicate}
+        />,
+      )
+      await act(async () => {})
+
+      fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+      expect(onDuplicate).toHaveBeenCalledWith(doc)
+      expect(onOpen).not.toHaveBeenCalled()
+    })
+
+    // Destructive, so the pane never performs it — it asks, and the caller
+    // owns the confirmation. A pane that deleted on click would be one
+    // mis-aimed pointer away from losing a subtree.
+    it('asks to delete rather than deleting', async () => {
+      const onDelete = vi.fn()
+      render(<DocumentPreview document={doc} loadRender={async () => drawn} onDelete={onDelete} />)
+      await act(async () => {})
+
+      fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+      expect(onDelete).toHaveBeenCalledWith(doc)
+    })
+
+    it('offers neither when the caller supplies neither', async () => {
+      render(<DocumentPreview document={doc} loadRender={async () => drawn} />)
+      await act(async () => {})
+      expect(screen.queryByRole('button', { name: 'Duplicate' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Delete' })).toBeNull()
+    })
+  })
 })

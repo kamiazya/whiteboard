@@ -28,6 +28,14 @@ export interface WorkspaceFilesPanelProps {
   workspaceId: string
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
+  /**
+   * Copy and ask-to-delete. Both stay with the page: it already owns the
+   * duplicate that the grid used and the confirmation dialog that guards a
+   * delete, and a second copy of either would be a second set of rules for
+   * the same destructive act.
+   */
+  onDuplicateDocument?: (path: string) => void
+  onRequestDelete?: (path: string, displayName: string) => void
 }
 
 /**
@@ -57,6 +65,8 @@ export function WorkspaceFilesPanel({
   daemonBaseUrl,
   workspaceId,
   onOpenDocument,
+  onDuplicateDocument,
+  onRequestDelete,
 }: WorkspaceFilesPanelProps) {
   const { resolvedTheme } = useThemeMode()
   const [documents, setDocuments] = useState<WorkspaceDocumentEntry[] | null>(null)
@@ -324,6 +334,17 @@ export function WorkspaceFilesPanel({
               ? {}
               : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
             onMove={moveDocument}
+            {...(onDuplicateDocument === undefined
+              ? {}
+              : {
+                  onDuplicate: (entry: WorkspaceDocumentEntry) => onDuplicateDocument(entry.path),
+                })}
+            {...(onRequestDelete === undefined
+              ? {}
+              : {
+                  onDelete: (entry: WorkspaceDocumentEntry) =>
+                    onRequestDelete(entry.path, entry.name ?? entry.path),
+                })}
             className="h-full"
           />
         </div>
