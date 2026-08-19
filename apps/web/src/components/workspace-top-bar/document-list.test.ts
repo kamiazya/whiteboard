@@ -23,9 +23,11 @@ describe('sortDocumentsByRecency', () => {
 })
 
 describe('filterDocumentsBySearch', () => {
-  // browser-local has no daemon /names endpoint, so its display name arrives
-  // on the row itself. Reading only the table left such a document findable
-  // by path alone — by the auto-generated `untitled-2`, never by its name.
+  // A CONTRACT test, not a regression: no caller today can produce a row with
+  // a name and no table entry, because both build the table from the field
+  // the row carries. It pins that the two arguments are two sources rather
+  // than one plus decoration, so a caller that ever populates only one is
+  // not silently searching by path.
   it('matches an inline display name when the names table has none', () => {
     const local = [{ path: 'untitled-2', updatedAt: 'x', name: 'Weekly review' }]
     expect(filterDocumentsBySearch(local, 'weekly', {}).map((c) => c.path)).toEqual(['untitled-2'])
