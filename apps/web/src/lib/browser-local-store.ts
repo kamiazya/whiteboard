@@ -1,3 +1,4 @@
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb } from './browser-idb.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 import { documentSnapshotSchema } from './whiteboard-client.js'
@@ -44,7 +45,7 @@ export class MemoryStore implements BrowserLocalStore {
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
-    this.documents.set(snapshot.id, snapshot)
+    this.documents.set(snapshot.documentId, snapshot)
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
@@ -60,7 +61,7 @@ export class MemoryStore implements BrowserLocalStore {
   }
 
   generateId(): string {
-    return crypto.randomUUID()
+    return generateDocumentId()
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
@@ -121,7 +122,7 @@ export class IndexedDBStore implements BrowserLocalStore {
     const db = await openWhiteboardDb()
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readwrite')
-      tx.objectStore('documents').put(snapshot, snapshot.id)
+      tx.objectStore('documents').put(snapshot, snapshot.documentId)
       tx.oncomplete = () => {
         db.close()
         resolve()
@@ -197,7 +198,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   generateId(): string {
-    return crypto.randomUUID()
+    return generateDocumentId()
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
