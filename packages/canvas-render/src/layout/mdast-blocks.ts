@@ -113,6 +113,20 @@ export interface MdastLayoutOptions {
    */
   readonly fontFamily: string
   /**
+   * The fill every body run is painted with — the theme's per-mode text
+   * colour, supplied by the caller exactly as `fontFamily` is.
+   *
+   * Body runs used to carry NO fill and inherit one from whatever ancestor
+   * the host set, which put the most-read colour on the canvas outside the
+   * one appearance producer and outside the contrast tests that guard the
+   * rest of it. Muted runs still modulate it with `fillOpacity` rather than
+   * naming a second colour, so "muted" tracks the mode for free.
+   *
+   * Absent, runs carry no fill and inherit, as before — the SVG is then only
+   * legible where an ancestor sets one.
+   */
+  readonly textFill?: string
+  /**
    * Renders a math source string to an SVG fragment. Optional composition-
    * root seam — MathJax itself is never imported by this package. Absent a
    * real renderer, math nodes fall back to a deterministic placeholder
@@ -391,7 +405,12 @@ function layoutPhrasing(
       // MdastLayoutOptions.fontFamily) — a run drawn at the host's inherited
       // size would render every measured wrap width wrong and flatten the
       // heading hierarchy.
-      appearance: { ...extra.appearance, fontFamily: font.family, fontSize: font.sizePx },
+      appearance: {
+        ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+        ...extra.appearance,
+        fontFamily: font.family,
+        fontSize: font.sizePx,
+      },
     })
     line.x += width + 2 * padX
   }
@@ -853,7 +872,11 @@ function layoutBlock(
           text: fitted.text,
           code: true,
           ...(fitted.truncated ? { truncated: true as const } : {}),
-          appearance: { fontFamily: T.monoFontFamily, fontSize: CODE_FONT_SIZE_PX },
+          appearance: {
+            ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+            fontFamily: T.monoFontFamily,
+            fontSize: CODE_FONT_SIZE_PX,
+          },
         }
       })
       const code: CodeBlockNode = {
@@ -1042,7 +1065,11 @@ function layoutListItem(
       },
       baseline: clampAdvance(baselineIn(BODY_LINE_HEIGHT_PX, BODY_FONT_SIZE_PX, metrics.ascent)),
       text: markerText,
-      appearance: { fontFamily: options.fontFamily, fontSize: BODY_FONT_SIZE_PX },
+      appearance: {
+        ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+        fontFamily: options.fontFamily,
+        fontSize: BODY_FONT_SIZE_PX,
+      },
     })
   }
   // Prose blocks each close with a full block gap; inside a list that reads

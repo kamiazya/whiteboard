@@ -273,8 +273,14 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     measure: options.measure,
     maxWidth,
     // Body content is measured and declared with the SAME family the label
-    // path resolves, so one theme drives every glyph in a node.
+    // path resolves, so one theme drives every glyph in a node — and painted
+    // with the SAME fill, for the same reason. `resolveLabel` is already the
+    // seam for "a degraded body fallback run"; a body that renders owes its
+    // colour to the same producer as one that does not.
     fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
+    ...(options.appearance.resolveLabel().fill !== undefined
+      ? { textFill: options.appearance.resolveLabel().fill }
+      : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
