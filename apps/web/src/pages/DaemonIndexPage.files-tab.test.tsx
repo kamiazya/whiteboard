@@ -226,6 +226,103 @@ describe('DaemonIndexPage tree view', () => {
     expect(screen.getByText(/Select a document/)).not.toBeNull()
   })
 
+  // The move route has existed since #888 with no caller at all. This is it.
+  it('moves a document, and the panes follow it', async () => {
+    // The daemon's own semantics, in miniature: a move takes the subtree.
+    let docs = [
+      { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+      { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+    ]
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
+      }
+      if (url.endsWith('/path') && init?.method === 'PUT') {
+        const to = JSON.parse(String(init.body)).path as string
+        const from = 'notes/design'
+        docs = docs.map((d) =>
+          d.path === from || d.path.startsWith(`${from}/`)
+            ? { ...d, path: `${to}${d.path.slice(from.length)}` }
+            : d,
+        )
+        return Promise.resolve(jsonResponse({ path: to }))
+      }
+      if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+        return Promise.resolve(jsonResponse({ documents: docs }))
+      }
+      return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+    fireEvent.click(
+      within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
+    )
+    await screen.findByTestId('okf-preview')
+
+    fireEvent.click(screen.getByRole('button', { name: /Move/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: /path/i }), {
+      target: { value: 'archive/design' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // The selection follows the document, and the panes move with it —
+    // otherwise the preview goes blank exactly when someone wants to see
+    // that the move landed.
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('archive/design')
+    })
+    expect(screen.getByRole('navigation', { name: 'Folder path' }).textContent).toContain('archive')
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+
+  it('shows the server’s refusal when a move collides', async () => {
+    const base = installFetchMock()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        return url.endsWith('/path') && init?.method === 'PUT'
+          ? Promise.resolve(jsonResponse({ title: 'Path "archive/design/x" already exists' }, 409))
+          : base(input)
+      }),
+    )
+
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+    fireEvent.click(
+      within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
+    )
+    await screen.findByTestId('okf-preview')
+
+    fireEvent.click(screen.getByRole('button', { name: /Move/ }))
+    fireEvent.change(screen.getByRole('textbox', { name: /path/i }), {
+      target: { value: 'archive/design' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+
+    // The server named a path the caller never typed — that is the point of
+    // forwarding its words instead of building a sentence around the input.
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('archive/design/x')
+  })
+
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(

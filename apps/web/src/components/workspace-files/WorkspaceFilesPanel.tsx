@@ -1,11 +1,12 @@
 import { Columns2, List } from 'lucide-react'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import {
   DaemonApiError,
   getDocumentOkfV1,
   getDocumentSnapshot,
   listDocuments,
+  renameDocumentPath,
 } from '../../lib/daemon-api-client.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -94,29 +95,34 @@ export function WorkspaceFilesPanel({
     [daemonFetch, daemonBaseUrl, workspaceId],
   )
 
+  // The RICH list, not /api/v1's: that one carries only {documentId, path},
+  // so a row could be labelled by nothing but its path segment and there was
+  // no way to know a document's kind. Both are things the browser shows.
+  const readList = useCallback(
+    () =>
+      listDocuments(daemonFetch, daemonBaseUrl, workspaceId).then((res) =>
+        res.documents.map((entry) => ({
+          // An older daemon omits the id; the path stands in, as it does
+          // everywhere else that reads this list.
+          documentId: entry.id ?? entry.path,
+          path: entry.path,
+          ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
+          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+        })),
+      ),
+    [daemonFetch, daemonBaseUrl, workspaceId],
+  )
+
   useEffect(() => {
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
     setSelected(null)
     setFolder('')
-    // The RICH list, not /api/v1's: that one carries only {documentId, path},
-    // so the tree could label a row by nothing but its path segment and had
-    // no way to know a document's kind. Both are things the tree has to show.
-    listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
-      .then((res) => {
-        if (cancelled) return
-        setDocuments(
-          res.documents.map((entry) => ({
-            // An older daemon omits the id; the path stands in, as it does
-            // everywhere else that reads this list.
-            documentId: entry.id ?? entry.path,
-            path: entry.path,
-            ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
-            ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-            ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-          })),
-        )
+    readList()
+      .then((entries) => {
+        if (!cancelled) setDocuments(entries)
       })
       .catch((err) => {
         if (cancelled) return
@@ -125,7 +131,30 @@ export function WorkspaceFilesPanel({
     return () => {
       cancelled = true
     }
-  }, [daemonFetch, daemonBaseUrl, workspaceId])
+  }, [readList])
+
+  /**
+   * Move a document and re-read the list.
+   *
+   * A move is the one action here that changes what every pane is showing —
+   * a subtree lands somewhere else entirely — so the list is re-read rather
+   * than patched. The selection follows the document to its new path,
+   * because losing it would leave the preview blank right when someone wants
+   * to see that the move landed.
+   *
+   * The rejection is re-thrown: the pane that asked owns the message, and
+   * this is the only place that knows it was the server's words.
+   */
+  const moveDocument = useCallback(
+    async (entry: WorkspaceDocumentEntry, newPath: string) => {
+      await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, entry.path, newPath)
+      const entries = await readList()
+      setDocuments(entries)
+      setSelected(entries.find((row) => row.path === newPath) ?? null)
+      setFolder(newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : '')
+    },
+    [daemonFetch, daemonBaseUrl, workspaceId, readList],
+  )
 
   /**
    * Moving the contents pane always empties the preview.
@@ -244,6 +273,7 @@ export function WorkspaceFilesPanel({
             {...(onOpenDocument === undefined
               ? {}
               : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
+            onMove={moveDocument}
             className="h-full"
           />
         </div>
