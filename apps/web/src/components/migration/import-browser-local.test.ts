@@ -63,7 +63,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws 1#x',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'markdown',
       loroLoad: loroOkResult(),
     })
@@ -96,7 +96,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -119,7 +119,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -140,7 +140,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -159,7 +159,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -177,7 +177,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -197,7 +197,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentPath: 'My Canvas',
+      documentPath: 'my-canvas',
       documentKind: 'spatial',
       loroLoad: loroLoad as LoroLoadResult,
     })

@@ -299,11 +299,16 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     }
 
     const metaStore = new IndexedDBStore()
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v7 document')
-    }
+    // The row moves intact, but it is no longer READABLE: a document is now
+    // addressed by workspace + path, and a pre-path row carries neither. There
+    // is deliberately no migration inventing them — a local document is
+    // discardable (0.0.x, no users), and `load` reporting `corrupted` routes
+    // the editor to its existing safe fallback instead of guessing an address.
+    expect(await readRawDocumentsRow(documentId)).toMatchObject({
+      id: documentId,
+      name: 'Pre-v7 document',
+    })
+    expect((await metaStore.load(documentId)).kind).toBe('corrupted')
   })
 
   it('carries the default pointer across the meta key rename', async () => {
@@ -373,11 +378,16 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
 
     const metaStore = new IndexedDBStore()
     expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v6 canvas')
-    }
+    // The row moves intact, but it is no longer READABLE: a document is now
+    // addressed by workspace + path, and a pre-path row carries neither. There
+    // is deliberately no migration inventing them — a local document is
+    // discardable (0.0.x, no users), and `load` reporting `corrupted` routes
+    // the editor to its existing safe fallback instead of guessing an address.
+    expect(await readRawDocumentsRow(documentId)).toMatchObject({
+      id: documentId,
+      name: 'Pre-v6 canvas',
+    })
+    expect((await metaStore.load(documentId)).kind).toBe('corrupted')
 
     // purgeLegacyReconnectCredentials() is exercised directly here (rather
     // than via a full App/router boot harness) — it is called unconditionally
@@ -441,11 +451,16 @@ describe('IndexedDB v4 -> v5', () => {
 
     const metaStore = new IndexedDBStore()
     expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v5 canvas')
-    }
+    // The row moves intact, but it is no longer READABLE: a document is now
+    // addressed by workspace + path, and a pre-path row carries neither. There
+    // is deliberately no migration inventing them — a local document is
+    // discardable (0.0.x, no users), and `load` reporting `corrupted` routes
+    // the editor to its existing safe fallback instead of guessing an address.
+    expect(await readRawDocumentsRow(documentId)).toMatchObject({
+      id: documentId,
+      name: 'Pre-v5 canvas',
+    })
+    expect((await metaStore.load(documentId)).kind).toBe('corrupted')
   })
 })
 
@@ -474,11 +489,16 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
 
     const metaStore = new IndexedDBStore()
     expect(await metaStore.getDefaultDocumentId()).toBe(documentId)
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot.name).toBe('Pre-v4 canvas')
-    }
+    // The row moves intact, but it is no longer READABLE: a document is now
+    // addressed by workspace + path, and a pre-path row carries neither. There
+    // is deliberately no migration inventing them — a local document is
+    // discardable (0.0.x, no users), and `load` reporting `corrupted` routes
+    // the editor to its existing safe fallback instead of guessing an address.
+    expect(await readRawDocumentsRow(documentId)).toMatchObject({
+      id: documentId,
+      name: 'Pre-v4 canvas',
+    })
+    expect((await metaStore.load(documentId)).kind).toBe('corrupted')
   })
 })
 
@@ -525,18 +545,14 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     })
 
     const metaStore = new IndexedDBStore()
-    const loadResult = await metaStore.load(documentId)
-    expect(loadResult.kind).toBe('ok')
-    if (loadResult.kind === 'ok') {
-      expect(loadResult.snapshot).toEqual({
-        id: documentId,
-        name: 'Pre-migration canvas',
-        updatedAt: '2026-01-01T00:00:00.000Z',
-        // Not stored in the v2 fixture: the schema's own default — a
-        // pre-kind row parses as a spatial canvas with no migration.
-        kind: 'spatial',
-      })
-    }
+    // The row moves intact, but it is no longer READABLE: a document is now
+    // addressed by workspace + path, and a pre-path row carries neither. There
+    // is deliberately no migration inventing them — a local document is
+    // discardable (0.0.x, no users), and `load` reporting `corrupted` routes
+    // the editor to its existing safe fallback instead of guessing an address.
+    expect((await metaStore.load(documentId)).kind).toBe('corrupted')
+    // ...and it is skipped rather than blanking the list or throwing.
+    expect(await metaStore.listDocuments()).toEqual([])
 
     // (d) The default pointer/id is intact.
     expect(await metaStore.getDefaultDocumentId()).toBe(documentId)

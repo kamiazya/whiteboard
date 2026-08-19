@@ -36,7 +36,9 @@ vi.mock('../lib/browser-local-backend.js', () => ({
 }))
 
 const snap: DocumentSnapshot = {
-  id: 'c1',
+  documentId: '0AFMSY38DJQW16BGNTZ49EKRX2',
+  workspaceId: 'local',
+  path: 'untitled',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
   kind: 'spatial' as const,
@@ -69,7 +71,7 @@ describe('BrowserLocalDocumentPage WebMCP wiring', () => {
     document.modelContext = fake
 
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId('0AFMSY38DJQW16BGNTZ49EKRX2')
     await store.save(snap)
 
     await act(async () => {
@@ -95,7 +97,7 @@ describe('BrowserLocalDocumentPage WebMCP wiring', () => {
     document.modelContext = fake
 
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('c1')
+    await store.setDefaultDocumentId('0AFMSY38DJQW16BGNTZ49EKRX2')
     await store.save(snap)
 
     await act(async () => {

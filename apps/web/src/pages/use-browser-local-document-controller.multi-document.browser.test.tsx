@@ -44,18 +44,18 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     let idA = ''
     let idB = ''
     await act(async () => {
-      idA = (await result.current.createDocument('Canvas A')).id
+      idA = (await result.current.createDocument('Canvas A')).documentId
     })
     await act(async () => {
-      idB = (await result.current.createDocument('Canvas B')).id
+      idB = (await result.current.createDocument('Canvas B')).documentId
     })
 
     const list = await result.current.listDocuments()
-    const ids = list.map((c) => c.id)
+    const ids = list.map((c) => c.documentId)
     expect(ids).toContain(idA)
     expect(ids).toContain(idB)
-    expect(list.find((c) => c.id === idA)?.name).toBe('Canvas A')
-    expect(list.find((c) => c.id === idB)?.name).toBe('Canvas B')
+    expect(list.find((c) => c.documentId === idA)?.name).toBe('Canvas A')
+    expect(list.find((c) => c.documentId === idB)?.name).toBe('Canvas B')
 
     // createDocument seeds an empty Loro doc so a switch onto a never-edited
     // canvas delivers a valid empty doc rather than not-found.
@@ -72,10 +72,10 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     let idA = ''
     let idB = ''
     await act(async () => {
-      idA = (await result.current.createDocument('Canvas A')).id
+      idA = (await result.current.createDocument('Canvas A')).documentId
     })
     await act(async () => {
-      idB = (await result.current.createDocument('Canvas B')).id
+      idB = (await result.current.createDocument('Canvas B')).documentId
     })
 
     await loro.save(idA, snapshotWithElements([{ id: 'rect-a', type: 'rectangle' }]))
@@ -100,23 +100,23 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
-    const idA = result.current.snapshot!.id
+    const idA = result.current.snapshot!.documentId
 
     let idB = ''
     await act(async () => {
-      idB = (await result.current.createDocument('Canvas B')).id
+      idB = (await result.current.createDocument('Canvas B')).documentId
     })
 
     await act(async () => {
       await result.current.switchDocument(idB)
     })
-    expect(result.current.snapshot?.id).toBe(idB)
+    expect(result.current.snapshot?.documentId).toBe(idB)
     expect(await store.getDefaultDocumentId()).toBe(idB)
 
     await act(async () => {
       await result.current.switchDocument(idA)
     })
-    expect(result.current.snapshot?.id).toBe(idA)
+    expect(result.current.snapshot?.documentId).toBe(idA)
     expect(await store.getDefaultDocumentId()).toBe(idA)
   })
 
@@ -125,15 +125,15 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     const loro = new LoroStore()
     const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
-    const sourceId = result.current.snapshot!.id
+    const sourceId = result.current.snapshot!.documentId
     await loro.save(sourceId, snapshotWithElements([{ id: 'original-element' }]))
 
     let duplicated: Awaited<ReturnType<typeof result.current.duplicateDocument>> | undefined
     await act(async () => {
       duplicated = await result.current.duplicateDocument()
     })
-    expect(duplicated?.id).not.toBe(sourceId)
-    expect(result.current.snapshot?.id).toBe(duplicated?.id)
+    expect(duplicated?.documentId).not.toBe(sourceId)
+    expect(result.current.snapshot?.documentId).toBe(duplicated?.documentId)
 
     // Edit the SOURCE canvas's real IndexedDB record after duplicating.
     const loadedSource = await loro.load(sourceId)
@@ -144,7 +144,7 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
     sourceDoc.getList('elements').push({ id: 'added-after-duplicate' })
     await loro.save(sourceId, sourceDoc.export({ mode: 'snapshot' }))
 
-    const loadedCopy = await loro.load(duplicated!.id)
+    const loadedCopy = await loro.load(duplicated!.documentId)
     expect(loadedCopy.kind).toBe('ok')
     if (loadedCopy.kind !== 'ok') return
     const copyDoc = new Loro()

@@ -38,13 +38,17 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     const loroStore = new LoroStore()
 
     await browserLocalStore.save({
-      id: 'c1',
+      documentId: '0Y147ADGKPSWZ258BEHMQTX036',
+      workspaceId: 'local',
+      path: 'no-deltas',
       name: 'No Deltas',
       updatedAt: '2026-01-01T00:00:00.000Z',
       kind: 'spatial' as const,
     })
     await browserLocalStore.save({
-      id: 'c2',
+      documentId: '058BEHMQTX0369CFJNRVY147AD',
+      workspaceId: 'local',
+      path: 'with-deltas',
       name: 'With Deltas',
       updatedAt: '2026-01-02T00:00:00.000Z',
       kind: 'spatial' as const,
@@ -53,20 +57,23 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     const doc1 = new Loro()
     doc1.getMovableList('elements').push('one')
     doc1.commit()
-    await loroStore.save('c1', doc1.export({ mode: 'snapshot' }))
+    await loroStore.save('0Y147ADGKPSWZ258BEHMQTX036', doc1.export({ mode: 'snapshot' }))
 
     const doc2 = new Loro()
     doc2.getMovableList('elements').push('two-a')
     doc2.commit()
-    await loroStore.save('c2', doc2.export({ mode: 'snapshot' }))
+    await loroStore.save('058BEHMQTX0369CFJNRVY147AD', doc2.export({ mode: 'snapshot' }))
     const prevVV = doc2.version()
     doc2.getMovableList('elements').push('two-b')
     doc2.commit()
-    await loroStore.appendDelta('c2', doc2.export({ mode: 'update', from: prevVV }))
+    await loroStore.appendDelta(
+      '058BEHMQTX0369CFJNRVY147AD',
+      doc2.export({ mode: 'update', from: prevVV }),
+    )
 
     const documentsBefore = await browserLocalStore.listDocuments()
-    const loro1Before = await loroStore.load('c1')
-    const loro2Before = await loroStore.load('c2')
+    const loro1Before = await loroStore.load('0Y147ADGKPSWZ258BEHMQTX036')
+    const loro2Before = await loroStore.load('058BEHMQTX0369CFJNRVY147AD')
 
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
@@ -102,8 +109,8 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     expect(updateCalls).toHaveLength(2)
 
     const documentsAfter = await browserLocalStore.listDocuments()
-    const loro1After = await loroStore.load('c1')
-    const loro2After = await loroStore.load('c2')
+    const loro1After = await loroStore.load('0Y147ADGKPSWZ258BEHMQTX036')
+    const loro2After = await loroStore.load('058BEHMQTX0369CFJNRVY147AD')
 
     await waitFor(() => {
       expect(documentsAfter).toEqual(documentsBefore)

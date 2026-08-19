@@ -1,18 +1,31 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID, MemoryStore } from '../../lib/browser-local-store.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 
+// The panel loads a Loro snapshot by DOCUMENT ID and creates the destination
+// by PATH, so a fixture has to pin both and the two must not be the same
+// string — otherwise a test cannot tell which one a call site used.
+const documentIdFor = (path: string): string =>
+  `01ARZ3NDEKTSV4RRFFQ69G5${path.toUpperCase().padEnd(3, '0').slice(0, 3)}`
+
 function makeCanvas(
-  id: string,
+  path: string,
   name: string,
   kind: DocumentSnapshot['kind'] = 'spatial',
 ): DocumentSnapshot {
-  return { id, name, updatedAt: new Date().toISOString(), kind }
+  return {
+    documentId: documentIdFor(path),
+    workspaceId: LOCAL_WORKSPACE_ID,
+    path,
+    name,
+    updatedAt: new Date().toISOString(),
+    kind,
+  }
 }
 
 function snapshotFor(tag: string): Uint8Array {
@@ -69,7 +82,9 @@ describe('ImportBrowserLocalPanel', () => {
         workspaceId="ws1"
         daemonFetch={daemonFetch}
         browserLocalStore={store}
-        loroStore={makeLoroStore({ c1: { kind: 'ok', snapshot: snapshotFor('c1') } })}
+        loroStore={makeLoroStore({
+          [documentIdFor('c1')]: { kind: 'ok', snapshot: snapshotFor('c1') },
+        })}
         settingsStore={createUserSettingsStore()}
       />,
     )
@@ -116,8 +131,8 @@ describe('ImportBrowserLocalPanel', () => {
     await store.save(makeCanvas('c2', 'Bad'))
 
     const loroStore = makeLoroStore({
-      c1: { kind: 'ok', snapshot: snapshotFor('good') },
-      c2: { kind: 'not-found' },
+      [documentIdFor('c1')]: { kind: 'ok', snapshot: snapshotFor('good') },
+      [documentIdFor('c2')]: { kind: 'not-found' },
     })
 
     const daemonFetch = vi
@@ -154,7 +169,7 @@ describe('ImportBrowserLocalPanel', () => {
 
     const loroStore = {
       load: vi.fn(async (id: string) => {
-        if (id === 'c1') throw new Error('IndexedDB read failed')
+        if (id === documentIdFor('c1')) throw new Error('IndexedDB read failed')
         return { kind: 'ok', snapshot: snapshotFor('good') } as LoroLoadResult
       }),
     }
@@ -209,7 +224,7 @@ describe('ImportBrowserLocalPanel', () => {
   it('does not write lastImportedAt when every canvas fails', async () => {
     const store = new MemoryStore()
     await store.save(makeCanvas('c1', 'Bad'))
-    const loroStore = makeLoroStore({ c1: { kind: 'corrupt-snapshot' } })
+    const loroStore = makeLoroStore({ [documentIdFor('c1')]: { kind: 'corrupt-snapshot' } })
     const settingsStore = createUserSettingsStore()
 
     render(
@@ -243,7 +258,9 @@ describe('ImportBrowserLocalPanel', () => {
         workspaceId="ws1"
         daemonFetch={daemonFetch}
         browserLocalStore={store}
-        loroStore={makeLoroStore({ c1: { kind: 'ok', snapshot: snapshotFor('alpha') } })}
+        loroStore={makeLoroStore({
+          [documentIdFor('c1')]: { kind: 'ok', snapshot: snapshotFor('alpha') },
+        })}
         settingsStore={createUserSettingsStore()}
       />,
     )
@@ -255,12 +272,14 @@ describe('ImportBrowserLocalPanel', () => {
     expect(after).toEqual(before)
   })
 
-  it('imports two same-named documents sequentially with distinct destination paths on 409', async () => {
+  it('sidesteps a path the destination workspace already owns by suffixing it', async () => {
+    // Two local documents can no longer collide with EACH OTHER — a local path
+    // is unique in its own store. What still collides is the destination: the
+    // daemon workspace may already hold a document at this path.
     const store = new MemoryStore()
-    await store.save(makeCanvas('c1', 'My Canvas!'))
-    await store.save(makeCanvas('c2', 'My Canvas!'))
+    await store.save(makeCanvas('my-canvas', 'My Canvas!'))
 
-    const takenPaths = new Set<string>()
+    const takenPaths = new Set<string>(['my-canvas'])
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
       if (url.endsWith('/documents')) {
@@ -278,16 +297,13 @@ describe('ImportBrowserLocalPanel', () => {
         daemonFetch={daemonFetch}
         browserLocalStore={store}
         loroStore={makeLoroStore({
-          c1: { kind: 'ok', snapshot: snapshotFor('a') },
-          c2: { kind: 'ok', snapshot: snapshotFor('b') },
+          [documentIdFor('my-canvas')]: { kind: 'ok', snapshot: snapshotFor('a') },
         })}
         settingsStore={createUserSettingsStore()}
       />,
     )
 
     fireEvent.click(await screen.findByRole('button', { name: /import/i }))
-
-    await screen.findByText(/^imported as my-canvas$/i)
     await screen.findByText(/^imported as my-canvas-2$/i)
   })
 })

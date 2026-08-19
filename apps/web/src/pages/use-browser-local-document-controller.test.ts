@@ -367,7 +367,7 @@ describe('useBrowserLocalDocumentController', () => {
       del: base.del.bind(base),
       removeDocument: base.removeDocument.bind(base),
       generateId: () => FRESH,
-      listDocuments: async () => [],
+      listDocuments: base.listDocuments.bind(base),
       setDefaultDocumentId: async () => {
         throw new Error('IndexedDB: meta write aborted')
       },
@@ -557,7 +557,7 @@ describe('useBrowserLocalDocumentController', () => {
     })
   })
 
-  describe('initialDocumentId (deep-linked canvas)', () => {
+  describe('initialPath (deep-linked document)', () => {
     const other: DocumentSnapshot = {
       documentId: C2,
       workspaceId: 'local',
@@ -572,9 +572,23 @@ describe('useBrowserLocalDocumentController', () => {
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
       await store.save(other)
-      const { result } = renderHook(() => useBrowserLocalDocumentController(store, undefined, C2))
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, undefined, other.path),
+      )
       await act(async () => {})
       expect(result.current.snapshot).toEqual(other)
+    })
+
+    it('resolves by path only — the document id is not an address here', async () => {
+      const store = new MemoryStore()
+      await store.setDefaultDocumentId(C1)
+      await store.save(snap)
+      await store.save(other)
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, undefined, other.documentId),
+      )
+      await act(async () => {})
+      expect(result.current.snapshot).toEqual(snap)
     })
 
     it('repoints the store default to the requested canvas so a later plain load resumes there', async () => {
@@ -582,12 +596,12 @@ describe('useBrowserLocalDocumentController', () => {
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
       await store.save(other)
-      renderHook(() => useBrowserLocalDocumentController(store, undefined, C2))
+      renderHook(() => useBrowserLocalDocumentController(store, undefined, other.path))
       await act(async () => {})
       expect(await store.getDefaultDocumentId()).toBe(C2)
     })
 
-    it('falls back to the normal default-canvas flow when the requested id is not found (stale/bookmarked link)', async () => {
+    it('falls back to the normal default-canvas flow when the requested path is not found (stale/bookmarked link)', async () => {
       const store = new MemoryStore()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)
@@ -596,12 +610,12 @@ describe('useBrowserLocalDocumentController', () => {
       )
       await act(async () => {})
       // No error wall — silently lands on whatever the store's own default
-      // resolves to, exactly like a plain (no initialDocumentId) mount would.
+      // resolves to, exactly like a plain (no initialPath) mount would.
       expect(result.current.snapshot).toEqual(snap)
       expect(result.current.persistence.kind).toBe('saved')
     })
 
-    it('behaves exactly like today when initialDocumentId is omitted', async () => {
+    it('behaves exactly like today when initialPath is omitted', async () => {
       const store = new MemoryStore()
       await store.setDefaultDocumentId(C1)
       await store.save(snap)

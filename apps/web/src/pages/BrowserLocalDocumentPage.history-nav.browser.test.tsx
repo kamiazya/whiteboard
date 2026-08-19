@@ -54,6 +54,15 @@ function mountedNodeIds(): string[] {
 
 const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js')
 
+// The address bar names a document by PATH; the store's default pointer names
+// it by id. Every URL assertion below goes through this so the two are never
+// silently conflated.
+async function pathOf(store: IndexedDBStore, documentId: string): Promise<string> {
+  const found = (await store.listDocuments()).find((row) => row.documentId === documentId)
+  if (found === undefined) throw new Error(`no document ${documentId}`)
+  return found.path
+}
+
 describe('BrowserLocalDocumentPage browser Back/Forward (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -92,6 +101,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       },
       { timeout: 5000 },
     )
+    const pathA = await pathOf(store, idA)
 
     const nodeA = textNodeCanvas('history-nav-node-a', 0, 0)
     await waitFor(
@@ -120,8 +130,10 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       },
       { timeout: 5000 },
     )
+    const pathB = await pathOf(store, idB)
+    expect(pathB).not.toBe(pathA)
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${idB}`), {
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`), {
       timeout: 5000,
     })
 
@@ -143,7 +155,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       await router.navigate(-1)
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${idA}`), {
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathA}`), {
       timeout: 5000,
     })
     await waitFor(
@@ -164,7 +176,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       await router.navigate(1)
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${idB}`), {
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`), {
       timeout: 5000,
     })
     await waitFor(

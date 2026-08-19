@@ -237,3 +237,40 @@ describe('IndexedDBStore', () => {
     expect(list).toEqual([a])
   })
 })
+
+// A path is the ADDRESS a URL, the switcher and every [[reference]] follow
+// resolve through, so two documents sharing one is not a tidiness problem: it
+// makes `find(entry => entry.path === …)` answer with whichever row happened
+// to come first. Both stores refuse it at the write instead.
+describe.each([
+  ['MemoryStore', () => new MemoryStore()],
+  ['IndexedDBStore', () => new IndexedDBStore()],
+])('%s path uniqueness', (name, make) => {
+  beforeEach(() => {
+    if (name === 'IndexedDBStore') globalThis.indexedDB = new IDBFactory()
+  })
+
+  it('refuses a second document at a path another document already holds', async () => {
+    const store = make()
+    await store.save(snap)
+    await expect(store.save({ ...snap, documentId: ID_B, name: 'impostor' })).rejects.toThrow(
+      /path/i,
+    )
+    expect(await store.load(ID_B)).toEqual({ kind: 'not-found' })
+  })
+
+  it('lets a document keep its own path across an ordinary update', async () => {
+    const store = make()
+    await store.save(snap)
+    await store.save({ ...snap, name: 'renamed' })
+    expect(await store.load(ID)).toEqual({ kind: 'ok', snapshot: { ...snap, name: 'renamed' } })
+  })
+
+  it('frees the path once the holder is removed', async () => {
+    const store = make()
+    await store.save(snap)
+    await store.removeDocument?.(ID)
+    await store.save({ ...snap, documentId: ID_B })
+    expect(await store.load(ID_B)).toEqual({ kind: 'ok', snapshot: { ...snap, documentId: ID_B } })
+  })
+})

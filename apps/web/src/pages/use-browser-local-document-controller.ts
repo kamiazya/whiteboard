@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeToSnapshot } from '../components/migration/import-browser-local.js'
-import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
+import { newDocumentPathIn, takenPathsIn } from '../components/workspace-files/new-document-path.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
@@ -73,13 +73,15 @@ function createCanvasSnapshot(
 export function useBrowserLocalDocumentController(
   store: BrowserLocalStore,
   loro: LoroStoreLike = new LoroStore(),
-  // A canvas id requested by the URL (e.g. a bookmarked /local/:documentId
-  // deep link), read once at mount. Takes priority over the store's own
+  // A document PATH requested by the URL (e.g. a bookmarked /local/:path
+  // deep link), read once at mount. The URL addresses a document the way the
+  // daemon does — by workspace-relative path, not by id — so this resolves
+  // through the list before loading. Takes priority over the store's own
   // "default canvas" pointer, which it also repoints on success so a later
   // plain (no deep link) load resumes here — the same contract switchDocument
-  // already has. A stale/deleted id falls back to the normal flow rather
+  // already has. A stale/moved path falls back to the normal flow rather
   // than showing an error: a dead bookmark must not dead-end the user.
-  initialDocumentId?: string,
+  initialPath?: string,
 ): BrowserLocalDocumentController {
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -164,13 +166,18 @@ export function useBrowserLocalDocumentController(
     let cancelled = false
 
     async function load() {
-      if (initialDocumentId !== undefined) {
-        const requested = await storeRef.current.load(initialDocumentId)
+      if (initialPath !== undefined) {
+        const listed = await storeRef.current.listDocuments()
         if (cancelled) return
-        if (requested.kind === 'ok') {
-          await storeRef.current.setDefaultDocumentId(initialDocumentId)
-          if (!cancelled) setSnapshot(requested.snapshot)
-          return
+        const requestedId = listed.find((entry) => entry.path === initialPath)?.documentId
+        if (requestedId !== undefined) {
+          const requested = await storeRef.current.load(requestedId)
+          if (cancelled) return
+          if (requested.kind === 'ok') {
+            await storeRef.current.setDefaultDocumentId(requestedId)
+            if (!cancelled) setSnapshot(requested.snapshot)
+            return
+          }
         }
         // Not found / corrupted: silently fall through to the normal
         // default-canvas flow below rather than showing a degraded banner —
@@ -182,7 +189,9 @@ export function useBrowserLocalDocumentController(
 
       if (id === null) {
         id = storeRef.current.generateId()
-        const newSnapshot = createCanvasSnapshot(id, newDocumentPathIn('', []))
+        const taken = await takenPathsIn(storeRef.current)
+        if (cancelled) return
+        const newSnapshot = createCanvasSnapshot(id, newDocumentPathIn('', taken))
         await storeRef.current.setDefaultDocumentId(id)
         await storeRef.current.save(newSnapshot)
         if (!cancelled) setSnapshot(newSnapshot)
@@ -280,7 +289,8 @@ export function useBrowserLocalDocumentController(
   const startFresh = useCallback(async () => {
     setCleanupError(null)
     const id = storeRef.current.generateId()
-    const fresh = createCanvasSnapshot(id, newDocumentPathIn('', []))
+    const taken = (await storeRef.current.listDocuments()).map((row) => row.path)
+    const fresh = createCanvasSnapshot(id, newDocumentPathIn('', taken))
     try {
       // Save the new canvas BEFORE repointing the default id, so a failed write never
       // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).

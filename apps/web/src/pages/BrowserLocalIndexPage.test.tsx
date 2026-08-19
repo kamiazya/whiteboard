@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
 
@@ -32,8 +32,22 @@ function renderPage(store: MemoryStore) {
 describe('BrowserLocalIndexPage', () => {
   it('lists snapshots most-recent first with name and kind marker', async () => {
     const store = await seededStore([
-      { id: 'id-a', name: 'Trip Plan', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
-      { id: 'id-b', name: 'Meeting Notes', updatedAt: '2026-08-10T00:00:00Z', kind: 'markdown' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'trip-plan',
+        name: 'Trip Plan',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+      {
+        documentId: '0KPSWZ258BEHMQTX0369CFJNRV',
+        workspaceId: 'local',
+        path: 'meeting-notes',
+        name: 'Meeting Notes',
+        updatedAt: '2026-08-10T00:00:00Z',
+        kind: 'markdown',
+      },
     ])
     renderPage(store)
 
@@ -45,19 +59,33 @@ describe('BrowserLocalIndexPage', () => {
     expect(within(cards[1]!).queryByText(/markdown/i)).toBeNull()
   })
 
-  it('opens a canvas by its id on card click', async () => {
+  it('opens a canvas by its path on card click', async () => {
     const store = await seededStore([
-      { id: 'id-a', name: 'Solo', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'solo',
+        name: 'Solo',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
     ])
     const { onOpenDocument } = renderPage(store)
 
     fireEvent.click((await screen.findAllByTestId('document-list-card'))[0]!)
-    expect(onOpenDocument).toHaveBeenCalledWith('id-a')
+    expect(onOpenDocument).toHaveBeenCalledWith('solo')
   })
 
   it('creates a markdown canvas from the + menu, repoints the default, and opens it', async () => {
     const store = await seededStore([
-      { id: 'id-a', name: 'Existing', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'existing',
+        name: 'Existing',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
     ])
     const { onOpenDocument } = renderPage(store)
     await screen.findAllByTestId('document-list-card')
@@ -69,12 +97,14 @@ describe('BrowserLocalIndexPage', () => {
     fireEvent.pointerUp(await screen.findByRole('menuitem', { name: 'New markdown note' }))
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
-    const newId = onOpenDocument.mock.calls[0]![0] as string
-    expect(newId).not.toBe('id-a')
+    const newPath = onOpenDocument.mock.calls[0]![0] as string
+    expect(newPath).not.toBe('existing')
     const all = await store.listDocuments()
-    const created = all.find((s) => s.id === newId)
+    const created = all.find((s) => s.path === newPath)
     expect(created?.kind).toBe('markdown')
-    expect(await store.getDefaultDocumentId()).toBe(newId)
+    // The default pointer is by id, the callback is by path — the two
+    // addresses have to agree on one document.
+    expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
   })
 
   it('empty store shows the empty state whose action creates a spatial canvas', async () => {
@@ -84,8 +114,8 @@ describe('BrowserLocalIndexPage', () => {
     fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
-    const newId = onOpenDocument.mock.calls[0]![0] as string
-    const created = (await store.listDocuments()).find((s) => s.id === newId)
+    const newPath = onOpenDocument.mock.calls[0]![0] as string
+    const created = (await store.listDocuments()).find((s) => s.path === newPath)
     expect(created?.kind).toBe('spatial')
   })
 
@@ -133,7 +163,14 @@ describe('BrowserLocalIndexPage', () => {
 
   it('Delete opens a dialog naming the canvas; Cancel removes nothing', async () => {
     const store = await seededStore([
-      { id: 'id-a', name: 'Keep Me', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'keep-me',
+        name: 'Keep Me',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
     ])
     renderPage(store)
     await screen.findAllByTestId('document-list-card')
@@ -150,7 +187,14 @@ describe('BrowserLocalIndexPage', () => {
 
   it('confirming Delete removes the canvas; deleting the last one returns the empty state', async () => {
     const store = await seededStore([
-      { id: 'id-a', name: 'Doomed', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'doomed',
+        name: 'Doomed',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
     ])
     const { onOpenDocument } = renderPage(store)
     await screen.findAllByTestId('document-list-card')
@@ -168,7 +212,14 @@ describe('BrowserLocalIndexPage', () => {
 
   it('a failed delete shows the fixed error in the dialog, which stays open, and Cancel clears it', async () => {
     const store = await seededStore([
-      { id: 'id-a', name: 'Sticky', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'sticky',
+        name: 'Sticky',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
     ])
     store.removeDocument = () => Promise.reject(new Error('quota exceeded'))
     renderPage(store)
@@ -189,19 +240,35 @@ describe('BrowserLocalIndexPage', () => {
     expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
   })
 
-  it('shows the name alone — a browser-local canvas has no path to put under it', async () => {
-    // These names carry no ASCII, so any name-derived path collapses them to
-    // `untitled` / `untitled-2` — indistinguishable in the very column a
-    // secondary line exists to distinguish.
+  it('shows each name over its own real path, which is never derived from that name', async () => {
+    // Neither name carries ASCII, so a name-derived path would collapse both
+    // to `untitled` / `untitled-2` — indistinguishable in the very column the
+    // secondary line exists to distinguish. A local document now has a real
+    // path exactly like a daemon one, and this is what shows it.
     const store = await seededStore([
-      { id: 'id-a', name: '構成図', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
-      { id: 'id-b', name: '設計メモ', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: 'diagrams/structure',
+        name: '構成図',
+        updatedAt: '2026-08-02T00:00:00Z',
+        kind: 'spatial',
+      },
+      {
+        documentId: '0KPSWZ258BEHMQTX0369CFJNRV',
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: 'notes/design',
+        name: '設計メモ',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
     ])
     renderPage(store)
 
     const cards = await screen.findAllByTestId('document-list-card')
     expect(within(cards[0]!).getByText('構成図')).toBeTruthy()
+    expect(within(cards[0]!).getByTestId('canvas-secondary').textContent).toBe('diagrams/structure')
     expect(within(cards[1]!).getByText('設計メモ')).toBeTruthy()
-    expect(screen.queryAllByTestId('canvas-secondary')).toHaveLength(0)
+    expect(within(cards[1]!).getByTestId('canvas-secondary').textContent).toBe('notes/design')
   })
 })

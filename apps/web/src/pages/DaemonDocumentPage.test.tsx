@@ -14,7 +14,7 @@ import {
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { getShellDaemonAuthError } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -2113,7 +2113,9 @@ describe('DaemonDocumentPage', () => {
     it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
       const browserLocalStore = new MemoryStore()
       await browserLocalStore.save({
-        id: 'local-1',
+        documentId: 'local-1',
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: 'my-local-canvas',
         name: 'My local canvas',
         updatedAt: '2026-01-01T00:00:00Z',
         kind: 'spatial' as const,

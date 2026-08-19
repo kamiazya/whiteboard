@@ -37,23 +37,23 @@ afterEach(cleanup)
 // page mounts. BrowserLocalDocumentPage pulls in loro-crdt, which needs a
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
-// Captures the initialDocumentId prop so a test can assert App derives it from
-// the /local/:documentId URL (parseBrowserLocalRoute) rather than merely
+// Captures the initialPath prop so a test can assert App derives it from
+// the /local/:path URL (parseBrowserLocalRoute) rather than merely
 // mounting the page.
-let receivedInitialCanvasId: string | undefined
+let receivedInitialPath: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
 // during render, so App's ErrorBoundary wiring has something real to catch.
 let throwInBrowserLocalDocumentPage = false
 vi.mock('./pages/BrowserLocalDocumentPage.js', () => ({
   BrowserLocalDocumentPage: ({
     capabilities,
-    initialDocumentId,
+    initialPath,
   }: {
     capabilities?: WhiteboardCapabilities
-    initialDocumentId?: string
+    initialPath?: string
   }) => {
     receivedCapabilities = capabilities
-    receivedInitialCanvasId = initialDocumentId
+    receivedInitialPath = initialPath
     if (throwInBrowserLocalDocumentPage) {
       throw new Error('boom')
     }
@@ -63,9 +63,9 @@ vi.mock('./pages/BrowserLocalDocumentPage.js', () => ({
 
 // Captures the open callback so a test can drive list -> editor navigation
 // without rendering the real list (which would pull in the store's IDB path).
-let receivedIndexPageOnOpenCanvas: ((id: string) => void) | undefined
+let receivedIndexPageOnOpenCanvas: ((path: string) => void) | undefined
 vi.mock('./pages/BrowserLocalIndexPage.js', () => ({
-  BrowserLocalIndexPage: ({ onOpenDocument }: { onOpenDocument: (id: string) => void }) => {
+  BrowserLocalIndexPage: ({ onOpenDocument }: { onOpenDocument: (path: string) => void }) => {
     receivedIndexPageOnOpenCanvas = onOpenDocument
     return <div data-testid="browser-local-index-page" />
   },
@@ -390,15 +390,17 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_LOCAL_STATE.capabilities)
   })
 
-  it('derives initialDocumentId from a /local/:documentId cold-load URL', async () => {
-    receivedInitialCanvasId = undefined
+  it('derives initialPath from a /local/:path cold-load URL, folders and all', async () => {
+    receivedInitialPath = undefined
     render(
-      <MemoryRouter initialEntries={['/local/c2']}>
+      <MemoryRouter initialEntries={['/local/design/login%20flow']}>
         <App providerState={BROWSER_LOCAL_STATE} />
       </MemoryRouter>,
     )
     await screen.findByTestId('browser-local-document-page')
-    expect(receivedInitialCanvasId).toBe('c2')
+    // A path has segments and may be percent-encoded; an id never is, so a
+    // single-segment fixture could not tell the two readings apart.
+    expect(receivedInitialPath).toBe('design/login flow')
   })
 
   it('lands a plain "/" cold load on the canvas list, not the editor', async () => {
@@ -412,7 +414,7 @@ describe('App capability wiring', () => {
   })
 
   it('opening a canvas from the list mounts the editor on that canvas', async () => {
-    receivedInitialCanvasId = undefined
+    receivedInitialPath = undefined
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={BROWSER_LOCAL_STATE} />
@@ -420,9 +422,9 @@ describe('App capability wiring', () => {
     )
     await screen.findByTestId('browser-local-index-page')
     expect(receivedIndexPageOnOpenCanvas).toBeDefined()
-    act(() => receivedIndexPageOnOpenCanvas?.('c9'))
+    act(() => receivedIndexPageOnOpenCanvas?.('notes/c9'))
     expect(await screen.findByTestId('browser-local-document-page')).toBeTruthy()
-    expect(receivedInitialCanvasId).toBe('c9')
+    expect(receivedInitialPath).toBe('notes/c9')
   })
 })
 

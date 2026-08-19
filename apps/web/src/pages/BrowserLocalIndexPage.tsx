@@ -2,14 +2,14 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DocumentListView } from '../components/document-list/DocumentListView.js'
-import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
+import { newDocumentPathIn, takenPathsIn } from '../components/workspace-files/new-document-path.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
   store: BrowserLocalStore
-  onOpenDocument: (documentId: string) => void
+  onOpenDocument: (path: string) => void
 }
 
 // The browser-local landing surface: the same shared list the daemon gallery
@@ -57,9 +57,12 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
     }))
   }, [snapshots])
 
-  const [pendingDelete, setPendingDelete] = useState<{ id: string; displayName: string } | null>(
-    null,
-  )
+  // The list addresses a document by PATH; the store deletes by id. Carrying
+  // both is what keeps the conversion at one place instead of at the call.
+  const [pendingDelete, setPendingDelete] = useState<{
+    documentId: string
+    displayName: string
+  } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
 
@@ -71,7 +74,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
       // Unconditional removal by id. If this was the canvas the default
       // pointer resumes into, the pointer dangles deliberately — the
       // editor's resume path already falls back safely on a dead id.
-      await store.removeDocument?.(pendingDelete.id)
+      await store.removeDocument?.(pendingDelete.documentId)
       setSnapshots(await store.listDocuments())
       setPendingDelete(null)
     } catch {
@@ -86,16 +89,16 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
       setCreating(true)
       try {
         const id = store.generateId()
+        // Numbered against the STORE, not against `snapshots`: this callback
+        // is memoized on [store, onOpenDocument], so a rendered list captured
+        // here would be whatever the first render held — `null` on the first
+        // create after a load, which numbers from nothing and lands on a path
+        // the store already holds.
+        const taken = await takenPathsIn(store)
         const fresh: DocumentSnapshot = {
           documentId: id,
           workspaceId: LOCAL_WORKSPACE_ID,
-          // A create while the list is still loading numbers from nothing.
-          // The store rejects a duplicate path, so the worst case is a
-          // refused create rather than two documents at one address.
-          path: newDocumentPathIn(
-            '',
-            (snapshots ?? []).map((row) => row.path),
-          ),
+          path: newDocumentPathIn('', taken),
           name: 'untitled',
           updatedAt: new Date().toISOString(),
           kind,
@@ -104,7 +107,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
         // Repointed so a later plain load resumes in the new canvas — the
         // same contract the editor's own create/switch flows keep.
         await store.setDefaultDocumentId(id)
-        onOpenDocument(id)
+        onOpenDocument(fresh.path)
       } catch {
         setError('Failed to create a canvas in this browser.')
       } finally {
@@ -147,7 +150,12 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
               onClick={(event) => {
                 // Prevents the click from bubbling to the wrapping open-button.
                 event.stopPropagation()
-                setPendingDelete({ id: row.path, displayName: row.displayName })
+                const target = snapshots?.find((entry) => entry.path === row.path)
+                if (target === undefined) return
+                setPendingDelete({
+                  documentId: target.documentId,
+                  displayName: row.displayName,
+                })
               }}
               className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
             >

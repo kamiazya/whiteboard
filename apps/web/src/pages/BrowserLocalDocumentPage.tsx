@@ -101,10 +101,10 @@ interface BrowserLocalDocumentPageProps {
   // Defaults to browser-local so existing callers/tests keep working
   // unedited; App.tsx passes the resolved ProviderState's capabilities.
   capabilities?: WhiteboardCapabilities
-  // A canvas id requested by the URL at mount (e.g. a bookmarked
-  // /local/:documentId deep link), read once — see
+  // A document path requested by the URL at mount (e.g. a bookmarked
+  // /local/:path deep link), read once — see
   // useBrowserLocalDocumentController's own contract for the same parameter.
-  initialDocumentId?: string
+  initialPath?: string
 }
 
 // Map the persistence state machine to user-facing copy. `degraded` carries its
@@ -124,7 +124,7 @@ export function BrowserLocalDocumentPage({
   store,
   loro,
   capabilities = BROWSER_LOCAL_CAPABILITIES,
-  initialDocumentId,
+  initialPath,
 }: BrowserLocalDocumentPageProps) {
   const {
     loro: resolvedLoro,
@@ -139,7 +139,7 @@ export function BrowserLocalDocumentPage({
     createDocument,
     switchDocument,
     duplicateDocument,
-  } = useBrowserLocalDocumentController(store, loro, initialDocumentId)
+  } = useBrowserLocalDocumentController(store, loro, initialPath)
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -237,6 +237,11 @@ export function BrowserLocalDocumentPage({
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
+  // The loaded document's own path — the address the URL carries. Read off the
+  // snapshot rather than looked up in the list, so it is known at the same
+  // instant the id is, and so this effect does not re-fire every time the list
+  // refreshes (which would overwrite a Back the user just performed).
+  const documentPath = pageState.kind === 'editing' ? pageState.snapshot.path : null
   const documentName = pageState.kind === 'editing' ? pageState.snapshot.name : null
   const documentKind = pageState.kind === 'editing' ? pageState.snapshot.kind : 'spatial'
   const markdownDoc = useMarkdownDocument(resolvedLoro, documentId, documentKind === 'markdown')
@@ -293,6 +298,17 @@ export function BrowserLocalDocumentPage({
     [switcherOptions],
   )
 
+  // Following a [[reference]]: it names a document id, the address bar names a
+  // path. An id with no path is a document the list has not caught up with —
+  // do nothing rather than navigate somewhere wrong.
+  const navigateToDocument = useCallback(
+    (id: string) => {
+      const path = pathOfDocument(id)
+      if (path !== null) navigate(browserLocalDocumentPath(path))
+    },
+    [pathOfDocument, navigate],
+  )
+
   const linkTargets = useMemo(
     () =>
       switcherOptions.map((entry) => ({
@@ -311,9 +327,9 @@ export function BrowserLocalDocumentPage({
   // Canvas id -> URL: once a canvas has loaded, the address bar reflects it
   // (bookmarkable/shareable, matching the daemon side's
   // /document/:workspaceId/:path contract). This page only mounts on
-  // /local/:documentId (App routes '/' to the list), so on a normal open the
+  // /local/:path (App routes '/' to the list), so on a normal open the
   // first run is a no-op — the URL already matches. The first-sync REPLACE
-  // exists for the stale-deep-link case: a bookmarked id that no longer
+  // exists for the stale-deep-link case: a bookmarked path that no longer
   // exists falls back to the default canvas, and repairing the URL with a
   // push would leave the dead link as a history entry behind it. Every
   // subsequent switch (via the switcher, or create-then-switch) pushes.
@@ -324,14 +340,14 @@ export function BrowserLocalDocumentPage({
   // path — so the other effect sees no drift left to act on.
   const isFirstCanvasUrlSyncRef = useRef(true)
   useEffect(() => {
-    if (documentId === null) return
-    const path = browserLocalDocumentPath(documentId)
+    if (documentPath === null) return
+    const path = browserLocalDocumentPath(documentPath)
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
     navigate(path, { replace: isFirstSync })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [documentId, navigate])
+  }, [documentPath, navigate])
 
   // URL -> canvas id: browser Back/Forward (and any other history navigation)
   // moves location.pathname without any switcher click firing, so this is the
@@ -831,7 +847,7 @@ export function BrowserLocalDocumentPage({
                   title: titleOf(documentName),
                   resolveAlias,
                   linkTargets,
-                  onOpenDocument: (id) => navigate(browserLocalDocumentPath(id)),
+                  onOpenDocument: (id) => navigateToDocument(id),
                   resolveEmbed,
                 }
           }
@@ -901,7 +917,7 @@ export function BrowserLocalDocumentPage({
                     linkTargets={linkTargets}
                     onCommit={nodeInEditor.commit}
                     onClose={nodeInEditor.close}
-                    onOpenDocument={(id) => navigate(browserLocalDocumentPath(id))}
+                    onOpenDocument={(id) => navigateToDocument(id)}
                   />
                 )}
               </div>

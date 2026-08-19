@@ -8,7 +8,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { LoroStoreLike } from './use-browser-local-document-controller.js'
 
@@ -51,12 +51,16 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 
 afterEach(cleanup)
 
-describe('stale /local/:id deep link', () => {
+describe('stale /local/:path deep link', () => {
   it('falls back to the default canvas and replaces the URL', async () => {
     const store = new MemoryStore()
-    await store.setDefaultDocumentId('real-1')
+    await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
-      id: 'real-1',
+      documentId: '005AFMSY38DJQW16BGNTZ49EKR',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      // Deliberately not the id: the fallback below has to be reached by PATH,
+      // and an id-shaped path could not tell the two apart.
+      path: 'real-canvas',
       name: 'Real canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
       kind: 'spatial' as const,
@@ -65,12 +69,12 @@ describe('stale /local/:id deep link', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/local/:documentId?',
+          path: '/local/*',
           element: (
             <BrowserLocalDocumentPage
               store={store}
               loro={new FakeLoroStore()}
-              initialDocumentId="gone-123"
+              initialPath="gone-123"
             />
           ),
         },
@@ -85,7 +89,7 @@ describe('stale /local/:id deep link', () => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
     })
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/local/real-1')
+      expect(router.state.location.pathname).toBe('/local/real-canvas')
     })
     // No degraded dead-end screen.
     expect(screen.queryByText('The canvas could not be switched.')).toBeNull()
