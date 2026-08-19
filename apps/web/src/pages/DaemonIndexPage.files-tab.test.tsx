@@ -382,6 +382,138 @@ describe('DaemonIndexPage tree view', () => {
     })
   })
 
+  // The browser keeps its own list, and the page keeps another. An action
+  // the page performs on the browser's behalf must reach BOTH, or the
+  // deleted document stays on screen with live buttons still bound to a
+  // path that no longer exists.
+  it('drops a deleted document from the browser, not only from the page', async () => {
+    let docs = [
+      { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+      { id: 'b', path: 'notes/design', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
+    ]
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/api/workspaces')) {
+          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
+        }
+        if (init?.method === 'DELETE') {
+          docs = docs.filter((d) => !url.endsWith(encodeURI(d.path)) || d.path !== 'notes/design')
+          return Promise.resolve(jsonResponse({ ok: true }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+          return Promise.resolve(jsonResponse({ documents: docs }))
+        }
+        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+      }),
+    )
+
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+    fireEvent.click(
+      within(screen.getByTestId('folder-contents')).getByRole('button', { name: /design/ }),
+    )
+    await screen.findByTestId('okf-preview')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    fireEvent.click(await screen.findByRole('button', { name: /^Delete$/, hidden: false }))
+    const confirm = screen
+      .getAllByRole('button', { name: /Delete/ })
+      .find((b) => b.closest('[role="dialog"]') !== null)
+    if (confirm !== undefined) fireEvent.click(confirm)
+
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).not.toContain('design')
+    })
+    // And nothing is left selected, so no button is bound to a path that is gone.
+    expect(screen.queryByTestId('okf-preview')).toBeNull()
+  })
+
+  // The alert must not outlive the failure that caused it: a create that
+  // works after one that did not has to clear the message, or the browser
+  // says it is broken forever.
+  it('clears the create alert once a create succeeds', async () => {
+    let failNext = true
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/api/workspaces')) {
+          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+          if (failNext) {
+            failNext = false
+            return Promise.resolve(jsonResponse({ title: 'nope' }, 500))
+          }
+          return Promise.resolve(jsonResponse({ path: 'untitled' }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+          return Promise.resolve(jsonResponse({ documents: [] }))
+        }
+        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+      }),
+    )
+
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    const alert = await screen.findByText(/Could not create/)
+    expect(alert.textContent).toContain('markdown')
+
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await waitFor(() => {
+      expect(screen.queryByText(/Could not create/)).toBeNull()
+    })
+  })
+
+  // Two buttons, two kinds. A mock that discards the kind would pass with
+  // both wired to the same one.
+  it('creates a canvas from the canvas button, not another markdown note', async () => {
+    const kinds: (string | undefined)[] = []
+    vi.stubGlobal(
+      'fetch',
+      vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.endsWith('/api/workspaces')) {
+          return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'default' }] }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/) && init?.method === 'POST') {
+          const body = JSON.parse(String(init.body)) as { path: string; kind?: string }
+          kinds.push(body.kind)
+          return Promise.resolve(jsonResponse({ path: body.path }))
+        }
+        if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
+          return Promise.resolve(jsonResponse({ documents: [] }))
+        }
+        return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
+      }),
+    )
+
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+
+    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await waitFor(() => expect(kinds).toEqual(['spatial']))
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await waitFor(() => expect(kinds).toEqual(['spatial', 'markdown']))
+  })
+
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(

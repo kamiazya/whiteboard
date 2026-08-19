@@ -36,6 +36,17 @@ export interface WorkspaceFilesPanelProps {
    */
   onDuplicateDocument?: (path: string) => void
   onRequestDelete?: (path: string, displayName: string) => void
+  /**
+   * Any value that changes when the workspace's documents may have changed
+   * behind this panel's back.
+   *
+   * The page performs duplicate and delete on the browser's behalf, and a
+   * delete finishes later still, in a confirmation dialog the panel does not
+   * own — so neither can be awaited here. Without this the deleted document
+   * stayed on screen with a live Delete bound to a path that no longer
+   * existed, and a duplicate never appeared at all.
+   */
+  revision?: unknown
 }
 
 /**
@@ -67,6 +78,7 @@ export function WorkspaceFilesPanel({
   onOpenDocument,
   onDuplicateDocument,
   onRequestDelete,
+  revision,
 }: WorkspaceFilesPanelProps) {
   const { resolvedTheme } = useThemeMode()
   const [documents, setDocuments] = useState<WorkspaceDocumentEntry[] | null>(null)
@@ -147,6 +159,27 @@ export function WorkspaceFilesPanel({
     }
   }, [readList])
 
+  // Deliberately NOT the effect above: that one is the workspace changing,
+  // and it resets the open folder. A document appearing or disappearing must
+  // leave someone exactly where they were standing. The selection is dropped
+  // only when the document it pointed at is gone.
+  useEffect(() => {
+    if (revision === undefined) return
+    let cancelled = false
+    readList()
+      .then((entries) => {
+        if (cancelled) return
+        setDocuments(entries)
+        setSelected((current) =>
+          current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
+        )
+      })
+      .catch(() => undefined)
+    return () => {
+      cancelled = true
+    }
+  }, [revision, readList])
+
   /**
    * Move a document and re-read the list.
    *
@@ -169,6 +202,7 @@ export function WorkspaceFilesPanel({
    */
   const createHere = useCallback(
     async (kind: DocumentKind) => {
+      setCreateError(null)
       const path = newDocumentPathIn(
         folder,
         (documents ?? []).map((row) => row.path),

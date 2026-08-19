@@ -390,6 +390,11 @@ export function DaemonIndexPage({
                 onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
                 onDuplicateDocument={(path) => void handleDuplicate(path)}
                 onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
+                // A new array on every successful read, which is exactly the
+                // signal the panel needs: the page reloads this list after a
+                // duplicate and after a delete, both of which it performs on
+                // the panel's behalf.
+                revision={rows}
               />
             </div>
           ) : (
