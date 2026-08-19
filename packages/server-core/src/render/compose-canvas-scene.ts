@@ -16,7 +16,7 @@ import { getLogger } from '../log.js'
 // decision #8): a user's ambient UI theme must never change what wb_scene_render
 // or wb_canvas_snapshot's layout analysis emit. Built once — the resolver
 // is stateless.
-const MCP_SCENE_APPEARANCE = createSpatialTheme({ mode: 'light' })
+export const MCP_SCENE_APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 const log = getLogger('compose-canvas-scene')
 

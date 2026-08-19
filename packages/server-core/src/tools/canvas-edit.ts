@@ -1,4 +1,10 @@
-import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
+import {
+  constantRatioMeasureText,
+  type MeasureText,
+  naturalNodeContentSize,
+  SPATIAL_THEME_GEOMETRY,
+  tidyNodes,
+} from '@kamiazya/whiteboard-canvas-render'
 import {
   readDocumentKind,
   readEdgeLocks,
@@ -20,6 +26,7 @@ import {
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { MCP_SCENE_APPEARANCE } from '../render/compose-canvas-scene.js'
 import type { CanvasOpSummaryInput, ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { canvasSnapshotSchema, projectCanvasSnapshot } from './canvas-snapshot.js'
@@ -41,6 +48,25 @@ const DEFAULT_SIZE: Record<SpatialNode['type'], { width: number; height: number 
   file: { width: 260, height: 120 },
   link: { width: 260, height: 120 },
   group: { width: 400, height: 300 },
+}
+
+/**
+ * The height a node needs for its own text, never less than the default it
+ * would otherwise get.
+ *
+ * GROW-ONLY on purpose. A one-word node measures about 32px, and shrinking
+ * every short node to that would redraw how a whole diagram looks for a
+ * defect that is only ever about content NOT FITTING. The default stays the
+ * floor; this only lifts it.
+ *
+ * Position does not matter here: `naturalNodeContentSize` lays the content
+ * out unbounded, so only the width it wraps against is an input. That is what
+ * breaks the circularity — placement needs a height, and the height needs a
+ * width, not a position.
+ */
+function fittedHeight(node: SpatialNode, measure: MeasureText, fallback: number): number {
+  const natural = naturalNodeContentSize(node, { measure, appearance: MCP_SCENE_APPEARANCE })
+  return Math.max(fallback, natural.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
 }
 
 /**
@@ -401,6 +427,19 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
 
+      // Resolved once, and only when some op actually creates a text node
+      // without naming a height — the composition root's measurer parses a
+      // font on first use, and a batch of patches should not pay for that.
+      // `region.set` is deliberately NOT included: what it declares must fit
+      // inside its group, so growing a node there could refuse the very op
+      // that asked for it. A node created there keeps the flat default.
+      const wantsFit = input.ops.some(
+        (op) => op.op === 'node.add' && op.node.type === 'text' && op.node.height === undefined,
+      )
+      const measure: MeasureText | undefined = wantsFit
+        ? ((await deps.measure?.()) ?? constantRatioMeasureText)
+        : undefined
+
       const nodeAt = (id: string) => nodes.find((node) => node.id === id)
       const edgeAt = (id: string) => edges.find((edge) => edge.id === id)
 
@@ -421,7 +460,15 @@ export function createCanvasEditTool(deps: ServerDeps) {
             }
             const size = DEFAULT_SIZE[draft.type]
             const width = draft.width ?? size.width
-            const height = draft.height ?? size.height
+            const height =
+              draft.height ??
+              (draft.type === 'text' && measure !== undefined
+                ? fittedHeight(
+                    { ...draft, id, x: 0, y: 0, width, height: size.height },
+                    measure,
+                    size.height,
+                  )
+                : size.height)
             // Partial geometry is treated as none: a node given an x but no
             // y has no position, and guessing the other half would put it
             // somewhere the caller did not ask for either.
