@@ -758,7 +758,10 @@ describe('cross-tab upgrades', () => {
       setTimeout(() => resolve(false), 4000)
     })
 
-    expect({ upgraded, blocked }).toEqual({ upgraded: true, blocked: false })
+    // Closed BEFORE the assertion: a failure here would otherwise leave the
+    // connection open, and `afterEach`'s deleteDatabase then blocks on it —
+    // turning one failed test into a hung file.
     idle.close()
+    expect({ upgraded, blocked }).toEqual({ upgraded: true, blocked: false })
   })
 })

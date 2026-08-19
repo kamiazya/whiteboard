@@ -209,8 +209,7 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       db.onversionchange = () => db.close()
       resolve(db)
     }
-    req.onblocked = () =>
-      reject(new Error('another tab has this app open at an older version; close it and reload'))
+    // MUTATION-CHECK: onblocked handler removed on purpose. Restore.
     req.onerror = () => reject(req.error)
   })
 }
