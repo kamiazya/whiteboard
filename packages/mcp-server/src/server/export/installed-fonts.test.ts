@@ -6,8 +6,8 @@
 // TTF in has installed a font, and a mechanism that only recognises its own
 // downloads would refuse the simplest way to answer "my exports are tofu".
 
-import { existsSync, mkdtempSync } from 'node:fs'
-import { copyFile, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtempSync } from 'node:fs'
+import { mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -66,27 +66,60 @@ describe('installedFontFiles', () => {
  * a picture nobody produced. This is ADR-0011 decision 4 at the one place it
  * can actually be checked: install a face that covers the text, and both the
  * pixels and the `undrawable` answer must change together.
+ *
+ * The face is SYNTHESISED rather than copied from the machine. An earlier
+ * version read `/usr/share/fonts/...` and skipped when absent — which on CI is
+ * always, since no job installs a CJK font. Both assertions below were
+ * therefore green and had never run. A test that needs a glyph can make one.
  */
 describe('an installed font reaches both the renderer and the report', () => {
-  // Any CJK-capable face on the machine; the point is coverage, not identity.
-  const SYSTEM_CJK = [
-    '/usr/share/fonts/truetype/droid/DroidSansFallbackFull.ttf',
-    '/usr/share/fonts/opentype/noto/NotoSansCJK-Regular.ttc',
-  ].find((path) => existsSync(path))
+  const COVERED = 'こ'
+
+  /** A one-glyph font covering `COVERED`, drawn as a filled square so it leaves ink. */
+  async function writeSyntheticFont(path: string): Promise<void> {
+    const opentype = await import('opentype.js')
+    const square = new opentype.Path()
+    square.moveTo(100, 0)
+    square.lineTo(100, 700)
+    square.lineTo(800, 700)
+    square.lineTo(800, 0)
+    square.close()
+    const font = new opentype.Font({
+      familyName: 'WhiteboardTestCJK',
+      styleName: 'Regular',
+      unitsPerEm: 1000,
+      ascender: 800,
+      descender: -200,
+      glyphs: [
+        // Index 0 must be `.notdef` — a font without it is not loadable.
+        new opentype.Glyph({
+          name: '.notdef',
+          unicode: 0,
+          advanceWidth: 1000,
+          path: new opentype.Path(),
+        }),
+        new opentype.Glyph({
+          name: 'covered',
+          unicode: COVERED.codePointAt(0),
+          advanceWidth: 1000,
+          path: square,
+        }),
+      ],
+    })
+    await writeFile(path, Buffer.from(font.toArrayBuffer()))
+  }
 
   const CANVAS = {
-    nodes: [
-      { id: 'n', type: 'text' as const, x: 0, y: 0, width: 300, height: 60, text: 'こんにちは' },
-    ],
+    nodes: [{ id: 'n', type: 'text' as const, x: 0, y: 0, width: 300, height: 60, text: COVERED }],
     edges: [],
   }
 
-  it.skipIf(SYSTEM_CJK === undefined)('stops reporting characters it can now draw', async () => {
+  it('stops reporting characters it can now draw', async () => {
     const { undrawableCharacters } = await import('./undrawable-characters.js')
-    expect(await undrawableCharacters(CANVAS)).toEqual(['こ', 'ん', 'に', 'ち', 'は'])
+    expect(await undrawableCharacters(CANVAS)).toEqual([COVERED])
 
     await mkdir(installedFontDir(), { recursive: true })
-    await copyFile(SYSTEM_CJK as string, join(installedFontDir(), 'cjk.ttf'))
+    await writeSyntheticFont(join(installedFontDir(), 'covered.ttf'))
 
     expect(await undrawableCharacters(CANVAS)).toEqual([])
   })
@@ -96,17 +129,17 @@ describe('an installed font reaches both the renderer and the report', () => {
   // above unchanged. resvg is the half a user actually sees, so it gets its
   // own assertion — on the PIXELS, since that is the only place the answer
   // exists.
-  it.skipIf(SYSTEM_CJK === undefined)('renders glyphs the vendored face lacks', async () => {
+  it('renders glyphs the vendored face lacks', async () => {
     const { renderSpatialCanvasToPng } = await import('./headless-renderer.js')
     const tofu = await renderSpatialCanvasToPng(CANVAS, { theme: 'light' })
 
     await mkdir(installedFontDir(), { recursive: true })
-    await copyFile(SYSTEM_CJK as string, join(installedFontDir(), 'cjk.ttf'))
+    await writeSyntheticFont(join(installedFontDir(), 'covered.ttf'))
     const drawn = await renderSpatialCanvasToPng(CANVAS, { theme: 'light' })
 
     // Same canvas, same size, different ink. Byte equality would mean resvg
-    // painted the identical tofu boxes — which is exactly what happens when
-    // the installed files never reach `fontFiles`.
+    // painted the identical tofu box — which is exactly what happens when the
+    // installed files never reach `fontFiles`.
     expect(drawn.width).toBe(tofu.width)
     expect(drawn.height).toBe(tofu.height)
     expect(drawn.png.equals(tofu.png)).toBe(false)
