@@ -162,11 +162,8 @@ export function WorkspaceFilesPanel({
               mode nothing does — the tree already shows every level at once. */}
           {columns === 'two' && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
         </div>
-        <div
-          role="group"
-          aria-label="Column layout"
-          className="flex shrink-0 items-center gap-0.5 rounded border p-0.5"
-        >
+        <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
+          <legend className="sr-only">Column layout</legend>
           <button
             type="button"
             aria-label="One column"
@@ -185,7 +182,7 @@ export function WorkspaceFilesPanel({
           >
             <Columns2 className="size-4" />
           </button>
-        </div>
+        </fieldset>
       </div>
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
