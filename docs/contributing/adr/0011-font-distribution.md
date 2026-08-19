@@ -9,6 +9,12 @@ given their paths with `loadSystemFonts: false`, deliberately — the system-fon
 scan dominates first-call latency, and no other family appears in the SVG
 `canvas-render` produces.
 
+**With one existing exception**, which decision 5 below makes explicit: when the
+vendored Regular face cannot be resolved at all, `headless-renderer.ts` falls
+back to `{ loadSystemFonts: true }` and logs a warning. That branch is a
+last-resort degradation, not the normal path, and it is the one place today
+where host fonts can change exported pixels.
+
 Roboto is Latin-only. resvg does not substitute a face it was not given. So a
 Japanese canvas exports as tofu boxes:
 
@@ -88,7 +94,30 @@ reader sees. `ServerDeps.measure` is the existing seam and both sides go through
 it. A future provider registry supplies faces to that seam and to resvg from one
 place, never two.
 
-### 5. Licensing follows the Roboto precedent
+### 5. The whole-font fallback is a declared exception, and stays one
+
+`headless-renderer.ts` uses `{ loadSystemFonts: true }` when the vendored
+Regular face is unresolvable. It contradicts decision 3's reproducibility
+requirement, and it is kept anyway: the alternative is an export that fails
+outright because an asset is missing from a packaging accident, which is worse
+for the user than a render that is legible but not byte-reproducible. It logs a
+warning, which is what keeps it from being silent.
+
+Two bounds on it:
+
+- **It is per-install, not per-canvas.** The condition is "this deployment has
+  no vendored font", not "this text needs a glyph". A working install never
+  reaches it.
+- **`undrawable` reports `[]` in that branch**, because nothing was measured
+  against a known face — the same rule as `overflows`, where absence means NOT
+  MEASURED rather than "fine". Reporting every character as undrawable there
+  would be a louder and wronger answer than reporting nothing.
+
+Making the renderer fail closed instead is a real option and deliberately not
+taken here; it is a behaviour change for a condition nobody has hit, and this
+ADR is about distribution.
+
+### 6. Licensing follows the Roboto precedent
 
 `assets/fonts/Roboto/LICENSE.txt` sits beside the files, and root `NOTICE` names
 the font, its authors, its license and where the full text lives. Any font
@@ -106,10 +135,11 @@ choice, not a project-wide one.
 **Bundle a CJK face in `@kamiazya/whiteboard-mcp`.** 5.2 MB → 23.8 MB for every
 user, most of whom never need it. Rejected on the measurement.
 
-**`loadSystemFonts: true`.** One line, and it makes output depend on the host's
-installed fonts — the same canvas renders differently on two machines, which is
-precisely the guarantee `canvas-render` exists to make. The current code comment
-already warns about this for the whole-font fallback case.
+**`loadSystemFonts: true` as the ANSWER for missing scripts.** One line, and it
+makes output depend on the host's installed fonts — the same canvas renders
+differently on two machines, which is precisely the guarantee `canvas-render`
+exists to make. Rejected as a solution; it survives only as the last-resort
+branch described in decision 5, on a condition a working install never meets.
 
 **Download at startup or on first render.** Breaks the offline property the
 widget smoke asserts, makes output depend on when the download succeeded, and
