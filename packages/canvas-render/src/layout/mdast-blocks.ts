@@ -99,6 +99,23 @@ function bodyFont(
   }
 }
 
+/**
+ * The closed set of things a code token can be. Five roles including plain
+ * (a token with no role), not forty TextMate scopes: at 10-12px inside a
+ * node, finer resolution is discarded on the way out, and each role has to
+ * hold its own contrast floor against the code surface.
+ */
+export type CodeTokenRole = 'keyword' | 'string' | 'number' | 'comment'
+
+export interface CodeToken {
+  readonly text: string
+  /** Absent means plain — the token paints as body text. */
+  readonly role?: CodeTokenRole
+}
+
+/** One array per source line, in source order. */
+export type CodeTokenLines = readonly (readonly CodeToken[])[]
+
 export interface MdastLayoutOptions {
   readonly measure: MeasureText
   readonly maxWidth: number
@@ -126,6 +143,26 @@ export interface MdastLayoutOptions {
    * legible where an ancestor sets one.
    */
   readonly textFill?: string
+  /**
+   * Tokenises a fenced block for syntax highlighting — one array per SOURCE
+   * line, each token carrying a ROLE rather than a colour. Same injected-
+   * seam class as `renderMath`/`renderDiagram`: this package is allowed two
+   * third-party dependencies and a highlighter is not going to be the third,
+   * so the grammars live in whichever composition root wants them.
+   *
+   * Roles, not colours, so the palette stays with the one appearance
+   * producer instead of being duplicated into every root that installs a
+   * highlighter — which is exactly the multi-producer divergence the theme
+   * layer exists to delete.
+   *
+   * TOTAL from this side: a throw, `undefined`, an unknown language, or a
+   * line count that disagrees with the source all fall back to plain code.
+   * The source is the authority on how many lines a fence has, because that
+   * is what the block's height is computed from.
+   */
+  readonly highlightCode?: (lang: string, value: string) => CodeTokenLines | undefined
+  /** The fill for each token role. Absent, a tokenised run paints as body text. */
+  readonly syntax?: Partial<Readonly<Record<CodeTokenRole, string>>>
   /**
    * Renders a math source string to an SVG fragment. Optional composition-
    * root seam — MathJax itself is never imported by this package. Absent a
@@ -717,6 +754,30 @@ function cellPlainText(children: readonly MdastCellPhrasingContent[]): string {
   return text
 }
 
+/**
+ * The `highlightCode` seam, guarded to the never-throw rule its siblings
+ * follow. Anything unusable — a throw, `undefined`, a non-array, or a line
+ * count that disagrees with the source — degrades to one plain token per
+ * line, which is exactly what the block rendered before highlighting existed.
+ */
+function tokenizeCode(
+  lang: string,
+  value: string,
+  lineCount: number,
+  options: MdastLayoutOptions,
+): CodeTokenLines {
+  const plain: CodeTokenLines = value.split('\n').map((text) => [{ text }])
+  if (options.highlightCode === undefined) return plain
+  let tokenized: CodeTokenLines | undefined
+  try {
+    tokenized = options.highlightCode(lang, value)
+  } catch {
+    return plain
+  }
+  if (!Array.isArray(tokenized) || tokenized.length !== lineCount) return plain
+  return tokenized.every((line) => Array.isArray(line)) ? tokenized : plain
+}
+
 function layoutBlock(
   node: MdastFlowContent,
   cursor: Cursor,
@@ -855,29 +916,44 @@ function layoutBlock(
       // source line are the point — so the only way to keep it inside the
       // panel is to cut it, exactly as an atomic inline run is cut.
       const innerWidth = options.maxWidth - 2 * T.codeBlockPaddingPx
-      const runs: TextRunNode[] = lines.map((line, index) => {
-        const fitted = fitToWidth(line, font, options.measure, innerWidth)
-        const metrics = options.measure(fitted.text, font)
-        return {
-          kind: 'textRun' as const,
-          bbox: {
-            x: cursor.x + T.codeBlockPaddingPx,
-            y: cursor.y + T.codeBlockPaddingPx + index * CODE_LINE_HEIGHT_PX,
-            w: clampAdvance(metrics.advanceWidth),
-            h: CODE_LINE_HEIGHT_PX,
-          },
-          baseline: clampAdvance(
-            baselineIn(CODE_LINE_HEIGHT_PX, CODE_FONT_SIZE_PX, metrics.ascent),
-          ),
-          text: fitted.text,
-          code: true,
-          ...(fitted.truncated ? { truncated: true as const } : {}),
-          appearance: {
-            ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
-            fontFamily: T.monoFontFamily,
-            fontSize: CODE_FONT_SIZE_PX,
-          },
+      const tokenLines = tokenizeCode(node.lang ?? '', node.value, lines.length, options)
+      const runs: TextRunNode[] = tokenLines.flatMap((tokens, index) => {
+        const y = cursor.y + T.codeBlockPaddingPx + index * CODE_LINE_HEIGHT_PX
+        const baselineOf = (ascent: number) =>
+          clampAdvance(baselineIn(CODE_LINE_HEIGHT_PX, CODE_FONT_SIZE_PX, ascent))
+        const out: TextRunNode[] = []
+        let x = 0
+        for (const token of tokens) {
+          // The line's budget is shared across its tokens: fitting each one
+          // against the full width would let a highlighted line run out of
+          // the panel that a plain one is cut to stay inside.
+          const fitted = fitToWidth(token.text, font, options.measure, innerWidth - x)
+          if (fitted.text === '') break
+          const metrics = options.measure(fitted.text, font)
+          const fill = token.role !== undefined ? options.syntax?.[token.role] : undefined
+          out.push({
+            kind: 'textRun' as const,
+            bbox: {
+              x: cursor.x + T.codeBlockPaddingPx + x,
+              y,
+              w: clampAdvance(metrics.advanceWidth),
+              h: CODE_LINE_HEIGHT_PX,
+            },
+            baseline: baselineOf(metrics.ascent),
+            text: fitted.text,
+            code: true,
+            ...(fitted.truncated ? { truncated: true as const } : {}),
+            appearance: {
+              ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+              ...(fill !== undefined ? { fill } : {}),
+              fontFamily: T.monoFontFamily,
+              fontSize: CODE_FONT_SIZE_PX,
+            },
+          })
+          x += clampAdvance(metrics.advanceWidth)
+          if (fitted.truncated) break
         }
+        return out
       })
       const code: CodeBlockNode = {
         kind: 'codeBlock',

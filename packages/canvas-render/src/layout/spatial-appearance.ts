@@ -17,6 +17,7 @@
 // the call site, never through this resolver.
 import type { CanvasEdge, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { Appearance } from '../scene-graph.js'
+import type { SpatialSyntaxPalette } from '../theme/spatial-palette.js'
 
 /** What a resolver decided for one spatial node's chrome. */
 export interface SpatialNodeAppearance {
@@ -30,4 +31,11 @@ export interface SpatialAppearanceResolver {
   resolveEdge(edge: CanvasEdge): Appearance | undefined
   /** Appearance for a `file`/`link`/`group` label run or a degraded body fallback run. */
   resolveLabel(): Appearance
+  /**
+   * Fills for syntax-highlighted code runs, per role. Optional: a resolver
+   * that answers nothing here renders code plain, which is the same
+   * degradation as a caller that installs no highlighter at all — so the
+   * absence assigns no appearance rather than inventing one.
+   */
+  resolveSyntax?(): SpatialSyntaxPalette
 }

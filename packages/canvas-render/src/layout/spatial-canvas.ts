@@ -142,6 +142,7 @@ export interface SpatialLayoutOptions {
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  readonly highlightCode?: MdastLayoutOptions['highlightCode']
   /**
    * Resolves one reference — a file node's `file`, or a group's
    * `background` — to everything the caller knows about it. Absent, or
@@ -281,6 +282,10 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     ...(options.appearance.resolveLabel().fill !== undefined
       ? { textFill: options.appearance.resolveLabel().fill }
       : {}),
+    ...(options.appearance.resolveSyntax !== undefined
+      ? { syntax: options.appearance.resolveSyntax() }
+      : {}),
+    ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),

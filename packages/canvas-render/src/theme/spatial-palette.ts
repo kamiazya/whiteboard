@@ -24,6 +24,30 @@ export interface SpatialPresetAccent {
   readonly fill: string
 }
 
+/**
+ * The fill for each syntax role inside a fenced code block. Drawn from the
+ * SAME hues as the JSON Canvas preset accents, so code inside a node speaks
+ * the colour language of the node borders around it and dark mode arrives
+ * with the rest of the palette.
+ *
+ * The light values are one step darker than the matching preset stroke, and
+ * that is not a stylistic tweak: preset strokes are floored at 3:1 against
+ * the background because they are NON-TEXT (WCAG 1.4.11), while a syntax
+ * token is text on the code surface and owes 4.5:1 (1.4.3). Measured on the
+ * light surface, the 600-weight strokes came in at 3.15-3.33 — a floor the
+ * dark ramp already cleared and the light one did not.
+ *
+ * The blue spark is deliberately absent, however conventional a blue keyword
+ * is: BRAND.md reserves `#3b6ecc` for the AI acting, and "its meaning is the
+ * point".
+ */
+export interface SpatialSyntaxPalette {
+  readonly keyword: string
+  readonly string: string
+  readonly number: string
+  readonly comment: string
+}
+
 export interface SpatialPalette {
   readonly node: Readonly<Record<'text' | 'file' | 'link' | 'group', SpatialNodeStyle>>
   /** Stroke applied to a routed edge when it carries no authored color. */
@@ -47,6 +71,8 @@ export interface SpatialPalette {
    * >= 4.5:1 against the tint fill (WCAG 1.4.3).
    */
   readonly presets: Readonly<Record<SpatialPresetKey, SpatialPresetAccent>>
+  /** Fills for syntax-highlighted code runs. */
+  readonly syntax: SpatialSyntaxPalette
 }
 
 // Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at
@@ -80,6 +106,13 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
     '5': { stroke: '#0891b2', fill: '#cffafe' },
     '6': { stroke: '#9333ea', fill: '#f3e8ff' },
   },
+  // Tailwind 700 — the text-grade step of the preset hues above.
+  syntax: {
+    keyword: '#7e22ce',
+    string: '#047857',
+    number: '#c2410c',
+    comment: '#5b6472',
+  },
 }
 
 // Seeded from the pre-theme editor's dark palette (EDITOR_DARK_PALETTE) — a
@@ -109,5 +142,14 @@ export const SPATIAL_DARK_PALETTE: SpatialPalette = {
     '4': { stroke: '#34d399', fill: '#022c22' },
     '5': { stroke: '#22d3ee', fill: '#083344' },
     '6': { stroke: '#c084fc', fill: '#3b0764' },
+  },
+  // The 400 strokes unchanged: measured 5.7-9.2 on the dark code surface,
+  // so the dark ramp already clears the text floor the light one needed a
+  // darker step for.
+  syntax: {
+    keyword: '#c084fc',
+    string: '#34d399',
+    number: '#fb923c',
+    comment: '#9ba3af',
   },
 }
