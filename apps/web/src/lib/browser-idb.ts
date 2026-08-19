@@ -209,7 +209,13 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       db.onversionchange = () => db.close()
       resolve(db)
     }
-    // MUTATION-CHECK: onblocked handler removed on purpose. Restore.
+    // The request is not aborted by this rejection: if the blocking tab later
+    // closes, `onsuccess` still runs and opens a connection nobody holds. That
+    // is deliberately left alone rather than closed — the `onversionchange`
+    // handler above is set on it too, so it steps aside for the next upgrade
+    // or delete, which is the only harm an unowned connection can do here.
+    req.onblocked = () =>
+      reject(new Error('another tab has this app open at an older version; close it and reload'))
     req.onerror = () => reject(req.error)
   })
 }

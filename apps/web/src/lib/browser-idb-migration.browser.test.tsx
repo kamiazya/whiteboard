@@ -22,6 +22,11 @@ async function clearDb(): Promise<void> {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
+    // A delete waits on every open connection. Resolving here rather than
+    // hanging keeps one test's leftover connection from spending the NEXT
+    // test's budget, which reads as a failure in a test that did nothing
+    // wrong.
+    req.onblocked = () => resolve()
   })
 }
 
@@ -763,5 +768,45 @@ describe('cross-tab upgrades', () => {
     // turning one failed test into a hung file.
     idle.close()
     expect({ upgraded, blocked }).toEqual({ upgraded: true, blocked: false })
+  })
+
+  it('rejects with a message a caller can show when a connection that will NOT self-close holds the old version', async () => {
+    // The other half, and the one the self-close cannot cover: a tab still
+    // running a pre-v8 bundle has no `onversionchange` handler, so it sits on
+    // the old version until a person closes it. Without this branch the open
+    // request never settles, and every caller — the store, the Loro store, the
+    // file store — awaits a promise that has no outcome, which in the app is an
+    // editor that never loads with nothing on screen to explain why.
+    const stubborn = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open('whiteboard', DB_VERSION - 1)
+      req.onsuccess = () => resolve(req.result)
+      req.onerror = () => reject(req.error)
+    })
+
+    try {
+      // Raced against a short deadline on purpose. Without the branch the open
+      // request never settles at all, and an unbounded await would spend the
+      // whole per-test timeout (measured: 120s) reporting the same thing this
+      // says in three.
+      const outcome = await Promise.race([
+        openWhiteboardDb().then(
+          (db) => {
+            db.close()
+            return 'resolved'
+          },
+          (err: unknown) => (err instanceof Error ? err.message : String(err)),
+        ),
+        new Promise<string>((r) => setTimeout(() => r('never settled'), 3000)),
+      ])
+      expect(outcome).toMatch(/another tab/i)
+    } finally {
+      stubborn.close()
+      // The rejected request is still live and will upgrade the database the
+      // moment `stubborn` lets go. Draining it here, inside the test that
+      // created it, is what keeps the next test's seed from meeting a
+      // database at a version it did not put there.
+      await new Promise((r) => setTimeout(r, 300))
+      await clearDb()
+    }
   })
 })
