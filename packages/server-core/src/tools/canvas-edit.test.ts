@@ -1,4 +1,10 @@
 import {
+  constantRatioMeasureText,
+  createSpatialTheme,
+  naturalNodeContentSize,
+  SPATIAL_THEME_GEOMETRY,
+} from '@kamiazya/whiteboard-canvas-render'
+import {
   readDocumentKind,
   readEdgeLocks,
   readNodeLocks,
@@ -1190,5 +1196,71 @@ describe('wb_canvas_edit — region.set', () => {
 
     const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.edges).toEqual([])
+  })
+})
+
+/**
+ * The last gap in "content stays inside its frame": a node created without a
+ * height got a fixed default, so an agent that did not invent geometry got a
+ * box its own text did not fit. The fade and `overflows` report that
+ * afterwards; this is about not producing it in the first place.
+ */
+const DEFAULT_TEXT_HEIGHT = 120
+
+describe('wb_canvas_edit — a node created without a height', () => {
+  // Long enough to need 176px in a 260-wide box, against the 120px default.
+  // One repetition measures 96px and FITS — a fixture that short would pass
+  // against the unfixed code and assert nothing, which is why the first test
+  // below re-checks that it is still reaching the case.
+  const LONG_JA = (
+    'これは日本語の長い文章です。ノードの幅を超えても折り返されるべきですが、' +
+    '既定の高さのままだと入りきりません。だから作るときに測ります。'
+  ).repeat(2)
+
+  async function addAndMeasure(text: string, height?: number) {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, EMPTY)
+    const tool = createCanvasEditTool(makeDeps(store))
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'n', type: 'text', text, ...(height === undefined ? {} : { height }) },
+        },
+      ],
+    })
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    const node = canvas.nodes[0]
+    const natural = naturalNodeContentSize(node, {
+      measure: constantRatioMeasureText,
+      appearance: createSpatialTheme({ mode: 'light' }),
+    })
+    return { node, needs: natural.h + 2 * SPATIAL_THEME_GEOMETRY.paddingPx }
+  }
+
+  test('is tall enough for its own text', async () => {
+    const { node, needs } = await addAndMeasure(LONG_JA)
+
+    // The fixture has to out-grow the default, or this asserts nothing.
+    expect(needs).toBeGreaterThan(DEFAULT_TEXT_HEIGHT)
+    expect(node.height).toBeGreaterThanOrEqual(needs)
+  })
+
+  test('respects a height that was named, however small', async () => {
+    // "no height" and "a small height" are different inputs. Someone who
+    // asked for 40 gets 40 — the fade is the honest answer there.
+    const { node } = await addAndMeasure(LONG_JA, 40)
+
+    expect(node.height).toBe(40)
+  })
+
+  test('does not shrink a short node below the default', async () => {
+    // Grow-only. A one-word node measuring 32px tall would still look wrong
+    // next to its neighbours, and nothing about the defect asks for that.
+    const { node } = await addAndMeasure('short')
+
+    expect(node.height).toBe(DEFAULT_TEXT_HEIGHT)
   })
 })
