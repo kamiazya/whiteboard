@@ -257,11 +257,14 @@ describe('headless-renderer', () => {
     vi.doMock('./measure-text.js', () => ({
       createOpentypeMeasureText: buildSpy,
       _resetExportMeasureTextCacheForTests: vi.fn(),
-      // `headless-renderer` asks this what the export face cannot draw. These
-      // mocks replace the module wholesale, so an export it omits is a runtime
-      // failure rather than a type error. `null` is the documented "no parsed
-      // face" answer and keeps these tests about the singleton, not fonts.
+      // These mocks replace the module WHOLESALE, so every export
+      // `headless-renderer` reaches for has to be answered here — an omission
+      // is a runtime failure rather than a type error, and adding an export to
+      // `measure-text.ts` has now broken this file twice. The empty/`null`
+      // answers are the documented "no parsed face" case, which keeps these
+      // tests about the singleton rather than about fonts.
       loadExportFont: vi.fn().mockResolvedValue(null),
+      loadExportFonts: vi.fn().mockResolvedValue([]),
     }))
     try {
       const { renderSpatialCanvasToSvg } = await importRenderer()
@@ -286,11 +289,14 @@ describe('headless-renderer', () => {
         .mockRejectedValueOnce(new Error('boom'))
         .mockResolvedValue(() => ({ advanceWidth: 0, ascent: 0, descent: 0, lineGap: 0 })),
       _resetExportMeasureTextCacheForTests: vi.fn(),
-      // `headless-renderer` asks this what the export face cannot draw. These
-      // mocks replace the module wholesale, so an export it omits is a runtime
-      // failure rather than a type error. `null` is the documented "no parsed
-      // face" answer and keeps these tests about the singleton, not fonts.
+      // These mocks replace the module WHOLESALE, so every export
+      // `headless-renderer` reaches for has to be answered here — an omission
+      // is a runtime failure rather than a type error, and adding an export to
+      // `measure-text.ts` has now broken this file twice. The empty/`null`
+      // answers are the documented "no parsed face" case, which keeps these
+      // tests about the singleton rather than about fonts.
       loadExportFont: vi.fn().mockResolvedValue(null),
+      loadExportFonts: vi.fn().mockResolvedValue([]),
     }))
     const { renderSpatialCanvasToSvg } = await importRenderer()
     await expect(renderSpatialCanvasToSvg(rectCanvas())).rejects.toThrow('boom')
@@ -304,11 +310,14 @@ describe('headless-renderer', () => {
     vi.doMock('./measure-text.js', () => ({
       createOpentypeMeasureText: vi.fn().mockRejectedValue(new Error('font load failed')),
       _resetExportMeasureTextCacheForTests: vi.fn(),
-      // `headless-renderer` asks this what the export face cannot draw. These
-      // mocks replace the module wholesale, so an export it omits is a runtime
-      // failure rather than a type error. `null` is the documented "no parsed
-      // face" answer and keeps these tests about the singleton, not fonts.
+      // These mocks replace the module WHOLESALE, so every export
+      // `headless-renderer` reaches for has to be answered here — an omission
+      // is a runtime failure rather than a type error, and adding an export to
+      // `measure-text.ts` has now broken this file twice. The empty/`null`
+      // answers are the documented "no parsed face" case, which keeps these
+      // tests about the singleton rather than about fonts.
       loadExportFont: vi.fn().mockResolvedValue(null),
+      loadExportFonts: vi.fn().mockResolvedValue([]),
     }))
     // `captureLogsForTests` must come from the SAME fresh module instance
     // `headless-renderer.js` resolves its own `getLogger` through — both

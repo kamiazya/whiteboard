@@ -1,14 +1,14 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { loadExportFont } from './measure-text.js'
+import { loadExportFonts } from './measure-text.js'
 
 /**
  * The characters this renderer's own fonts have no glyph for.
  *
- * The export path draws with the vendored Roboto and nothing else
- * (`loadSystemFonts: false` in `headless-renderer.ts` — a deliberate choice,
- * since the system-font scan dominates first-call latency). resvg does not
- * substitute a face it was not given, so a code point Roboto lacks is painted
- * as a tofu box.
+ * The export path draws with the vendored Roboto plus whatever the user
+ * installed, and nothing else (`loadSystemFonts: false` in
+ * `headless-renderer.ts` — a deliberate choice, since the system-font scan
+ * dominates first-call latency). resvg does not substitute a face it was not
+ * given, so a code point NONE of those faces carries is painted as a tofu box.
  *
  * It is worth reporting because of HOW it fails. Measurement is correct
  * (`createOpentypeMeasureText` falls back to the estimator per code point), so
@@ -23,11 +23,11 @@ import { loadExportFont } from './measure-text.js'
  * report this should say which of the two they mean.
  */
 export async function undrawableCharacters(canvas: SpatialCanvas): Promise<readonly string[]> {
-  const font = await loadExportFont()
-  // No parsed face means the whole render already degraded to system fonts,
-  // which is logged where it happens. Claiming every character is undrawable
-  // there would be a second, louder, and wrong report.
-  if (font === null) return []
+  const fonts = await loadExportFonts()
+  // No parsed face at all means the whole render already degraded to system
+  // fonts, which is logged where it happens. Claiming every character is
+  // undrawable there would be a second, louder, and wrong report.
+  if (fonts.length === 0) return []
 
   const seen = new Set<string>()
   const missing: string[] = []
@@ -38,7 +38,7 @@ export async function undrawableCharacters(canvas: SpatialCanvas): Promise<reado
       seen.add(char)
       // Whitespace and control characters have no glyph to miss.
       if (char.trim() === '') continue
-      if (font.charToGlyphIndex(char) === 0) missing.push(char)
+      if (fonts.every((font) => font.charToGlyphIndex(char) === 0)) missing.push(char)
     }
   }
 
