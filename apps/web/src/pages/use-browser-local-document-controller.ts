@@ -167,7 +167,11 @@ export function useBrowserLocalDocumentController(
 
     async function load() {
       if (initialPath !== undefined) {
-        const listed = await storeRef.current.listDocuments()
+        // A store that cannot list is indistinguishable from a path that is
+        // not there, and both fall through to the same place. Letting the read
+        // throw instead would dead-end EVERY deep link on a degraded store —
+        // and App mounts this page only with a path, so that is every mount.
+        const listed = await storeRef.current.listDocuments().catch(() => [])
         if (cancelled) return
         const requestedId = listed.find((entry) => entry.path === initialPath)?.documentId
         if (requestedId !== undefined) {

@@ -1,9 +1,10 @@
 /**
- * A stale /local/:id deep link (bookmark to a deleted canvas) must not
- * dead-end: the page falls back to the default canvas, the URL is
- * replaced with the real id, and no degraded screen hides the editor.
- * Before this slice the URL→canvas effect switched to the missing id and
- * parked the page on "The canvas could not be switched." with no editor.
+ * A stale /local/:path deep link (bookmark to a deleted document) must not
+ * dead-end: the page falls back to the default document, the URL is replaced
+ * with the real path, and no degraded screen hides the editor. Two entry
+ * points reach it and they are different code — the initial mount goes
+ * through the controller's store-backed load, a MID-SESSION history
+ * navigation goes through the page's own URL→document effect.
  */
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
@@ -93,5 +94,57 @@ describe('stale /local/:path deep link', () => {
     })
     // No degraded dead-end screen.
     expect(screen.queryByText('The canvas could not be switched.')).toBeNull()
+  })
+
+  it('repairs the address bar when a mid-session navigation names a path this workspace does not have', async () => {
+    // The mounted page never remounts across /local/:path changes (see
+    // App.tsx's routing comment), so the effect below is the ONLY thing that
+    // can answer a Back onto a document that has since been deleted. It
+    // resolves the requested path against the in-memory list, and a path that
+    // is not in it used to make the effect return before reaching its own
+    // documented repair — leaving the address bar naming nothing.
+    const store = new MemoryStore()
+    await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
+    await store.save({
+      documentId: '005AFMSY38DJQW16BGNTZ49EKR',
+      workspaceId: LOCAL_WORKSPACE_ID,
+      path: 'real-canvas',
+      name: 'Real canvas',
+      updatedAt: '2026-05-24T00:00:00.000Z',
+      kind: 'spatial' as const,
+    })
+
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/local/*',
+          element: (
+            <BrowserLocalDocumentPage
+              store={store}
+              loro={new FakeLoroStore()}
+              initialPath="real-canvas"
+            />
+          ),
+        },
+      ],
+      { initialEntries: ['/local/real-canvas'] },
+    )
+    await act(async () => {
+      render(<RouterProvider router={router} />)
+    })
+    await waitFor(() => {
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
+    })
+
+    await act(async () => {
+      await router.navigate('/local/gone-123')
+    })
+
+    await waitFor(() => {
+      expect(router.state.location.pathname).toBe('/local/real-canvas')
+    })
+    // The loaded document is untouched — a dead link costs the address bar, not
+    // the editor.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
   })
 })

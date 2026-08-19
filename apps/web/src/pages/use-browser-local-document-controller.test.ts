@@ -615,6 +615,35 @@ describe('useBrowserLocalDocumentController', () => {
       expect(result.current.persistence.kind).toBe('saved')
     })
 
+    it('falls back to the default document when the list read itself fails', async () => {
+      // The deep link is resolved by listing, so a store that cannot list is
+      // indistinguishable from a path that is not there — and the fallback is
+      // the same. This is the reachable version of the create path's own
+      // tolerance: App only mounts this page WITH a path, so a throw here
+      // would dead-end every deep link on a degraded store, even though the
+      // default pointer below could still answer.
+      const base = new MemoryStore()
+      await base.setDefaultDocumentId(C1)
+      await base.save(snap)
+      const store: BrowserLocalStore = {
+        ...base,
+        getDefaultDocumentId: base.getDefaultDocumentId.bind(base),
+        setDefaultDocumentId: base.setDefaultDocumentId.bind(base),
+        load: base.load.bind(base),
+        save: base.save.bind(base),
+        del: base.del.bind(base),
+        removeDocument: base.removeDocument.bind(base),
+        generateId: base.generateId.bind(base),
+        listDocuments: () => Promise.reject(new Error('idb blocked')),
+      }
+      const { result } = renderHook(() =>
+        useBrowserLocalDocumentController(store, undefined, 'other-canvas'),
+      )
+      await act(async () => {})
+      expect(result.current.snapshot).toEqual(snap)
+      expect(result.current.persistence.kind).toBe('saved')
+    })
+
     it('behaves exactly like today when initialPath is omitted', async () => {
       const store = new MemoryStore()
       await store.setDefaultDocumentId(C1)

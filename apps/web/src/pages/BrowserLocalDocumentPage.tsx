@@ -367,24 +367,38 @@ export function BrowserLocalDocumentPage({
   // skip it and let the other effect finish the sync.
   const lastKnownCanvasIdRef = useRef<string | null>(null)
   useEffect(() => {
-    if (documentId === null) return
-    const requestedPath = parseBrowserLocalRoute(location.pathname)?.path
-    const requestedId = requestedPath === undefined ? null : documentIdOfPath(requestedPath)
+    if (documentId === null || documentPath === null) return
+    // Recorded before any early return: a run that finds nothing to do still
+    // establishes which document was loaded, and the guard below reads it to
+    // tell an external navigation from this component's own pending push.
     const lastKnownDocumentId = lastKnownCanvasIdRef.current
     lastKnownCanvasIdRef.current = documentId
-    if (requestedId === null || requestedId === documentId) return
-    if (requestedId === lastKnownDocumentId) return
+
+    const requestedPath = parseBrowserLocalRoute(location.pathname)?.path
+    if (requestedPath === undefined) return
+    // Compared against the loaded snapshot's OWN path rather than against the
+    // list, so this is right before the list has arrived — which is also what
+    // makes the unknown-path branch below safe to treat as genuinely unknown.
+    if (requestedPath === documentPath) return
+
+    const requestedId = documentIdOfPath(requestedPath)
+    if (requestedId === documentId) return
+    if (requestedId !== null && requestedId === lastKnownDocumentId) return
+
+    // Two ways the address bar can name something that is not the loaded
+    // document, and both are the same recoverable miss: keep the document and
+    // repair the URL. The path resolves to nothing (deleted, or hand-typed),
+    // or it resolves and the switch then finds no record.
+    const repair = () => navigate(browserLocalDocumentPath(documentPath), { replace: true })
+    if (requestedId === null) {
+      repair()
+      return
+    }
     void switchDocument(requestedId).then((switched) => {
-      // A stale deep link (deleted/unknown canvas) is a recoverable miss:
-      // keep the loaded canvas and repair the address bar instead of
-      // leaving a URL that names nothing.
-      if (!switched) {
-        const here = pathOfDocument(documentId)
-        if (here !== null) navigate(browserLocalDocumentPath(here), { replace: true })
-      }
+      if (!switched) repair()
     })
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [location.pathname, documentId, switchDocument])
+  }, [location.pathname, documentId, documentPath, switchDocument])
 
   useEffect(() => {
     if (documentId === null) return
@@ -886,11 +900,10 @@ export function BrowserLocalDocumentPage({
                       label: entry.name,
                       kind: entry.kind,
                     }))}
-                  onOpenFileRef={(file) => {
-                    // A reference names a document id; the route names a path.
-                    const target = pathOfDocument(file)
-                    if (target !== null) navigate(browserLocalDocumentPath(target))
-                  }}
+                  // A file-node reference names a document id exactly like a
+                  // [[wikiLink]] does, so it follows through the same one
+                  // conversion rather than repeating it here.
+                  onOpenFileRef={navigateToDocument}
                   missingFileRef={missingFileRef}
                   {...fileSeams}
                   lockedNodeIds={lockedNodeIds}
