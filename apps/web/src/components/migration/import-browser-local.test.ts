@@ -1,7 +1,7 @@
 import { Loro } from 'loro-crdt'
 import { describe, expect, it, vi } from 'vitest'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
-import { importOneDocument, mergeToSnapshot, toPathSegment } from './import-browser-local.js'
+import { importOneDocument, mergeToSnapshot } from './import-browser-local.js'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -9,33 +9,6 @@ function jsonResponse(body: unknown, status = 200): Response {
     headers: { 'content-type': 'application/json' },
   })
 }
-
-describe('toPathSegment', () => {
-  it('lowercases and hyphenates', () => {
-    expect(toPathSegment('My Canvas!')).toBe('my-canvas')
-  })
-
-  it('strips leading and trailing hyphens', () => {
-    expect(toPathSegment('--hello--')).toBe('hello')
-  })
-
-  it('collapses runs of invalid characters into a single hyphen', () => {
-    expect(toPathSegment('a!!!b   c')).toBe('a-b-c')
-  })
-
-  it('falls back to "canvas" for empty/all-invalid input', () => {
-    expect(toPathSegment('')).toBe('canvas')
-    expect(toPathSegment('!!!')).toBe('canvas')
-  })
-
-  it('always produces output matching the server path charset (letters/digits/hyphen, non-empty, no leading/trailing hyphen)', () => {
-    const samples = ['日本語', '  spaced  ', 'a.b.c', 'UPPER_case-1', '---', '123']
-    for (const sample of samples) {
-      const path = toPathSegment(sample)
-      expect(path).toMatch(/^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/)
-    }
-  })
-})
 
 describe('mergeToSnapshot', () => {
   it('imports a snapshot and deltas into one combined snapshot', () => {
@@ -90,7 +63,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws 1#x',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'markdown',
       loroLoad: loroOkResult(),
     })
@@ -123,7 +96,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -146,7 +119,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -167,7 +140,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -186,7 +159,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -204,7 +177,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroOkResult(),
     })
@@ -224,7 +197,7 @@ describe('importOneDocument', () => {
       fetch: fetchMock,
       daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws1',
-      documentName: 'My Canvas',
+      documentPath: 'My Canvas',
       documentKind: 'spatial',
       loroLoad: loroLoad as LoroLoadResult,
     })

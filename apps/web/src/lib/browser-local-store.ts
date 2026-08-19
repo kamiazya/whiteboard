@@ -3,6 +3,16 @@ import { openWhiteboardDb } from './browser-idb.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 import { documentSnapshotSchema } from './whiteboard-client.js'
 
+/**
+ * The one workspace a browser-local install has.
+ *
+ * It is a real value in every stored row rather than a literal in JSX,
+ * because a row that does not carry its workspace cannot be turned into the
+ * addresses the port contracts take. Local staying single-workspace is a
+ * product decision; being unable to SAY which workspace was an accident.
+ */
+export const LOCAL_WORKSPACE_ID = 'local'
+
 export type LoadResult =
   | { kind: 'ok'; snapshot: DocumentSnapshot }
   | { kind: 'not-found' }

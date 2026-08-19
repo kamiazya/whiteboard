@@ -2,7 +2,9 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DocumentListView } from '../components/document-list/DocumentListView.js'
+import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
 export interface BrowserLocalIndexPageProps {
@@ -41,13 +43,15 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
   const rows = useMemo(() => {
     if (!snapshots) return []
     const sorted = [...snapshots].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    // No `secondary`: a browser-local canvas is addressed by UUID and has no
-    // path. Deriving a label from the name instead collapses every non-Latin
-    // name to `untitled`/`untitled-2` — indistinguishable in the one column
-    // that exists to distinguish rows (ADR-0008).
+    // A local document has a real path now, so `secondary` shows it on the
+    // same terms the daemon list does: worth a second line only when a
+    // display name covers the first. It is still never DERIVED from the name
+    // — ADR-0008 measured that and every non-Latin name collapsed to
+    // `untitled-N`.
     return sorted.map((s) => ({
-      path: s.id,
+      path: s.path,
       displayName: s.name,
+      ...(s.name === s.path ? {} : { secondary: s.path }),
       updatedAt: s.updatedAt,
       kind: s.kind,
     }))
@@ -83,7 +87,15 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
       try {
         const id = store.generateId()
         const fresh: DocumentSnapshot = {
-          id,
+          documentId: id,
+          workspaceId: LOCAL_WORKSPACE_ID,
+          // A create while the list is still loading numbers from nothing.
+          // The store rejects a duplicate path, so the worst case is a
+          // refused create rather than two documents at one address.
+          path: newDocumentPathIn(
+            '',
+            (snapshots ?? []).map((row) => row.path),
+          ),
           name: 'untitled',
           updatedAt: new Date().toISOString(),
           kind,
