@@ -651,6 +651,58 @@ describe('DaemonIndexPage tree view', () => {
     expect(screen.queryByTestId('search-results')).toBeNull()
   })
 
+  // The invariant the three panes rest on: the preview must never show a
+  // document the list beside it does not contain. Searching can reach one
+  // from another folder, so clearing the query has to put that right.
+  it('drops a result from elsewhere when the search is cleared', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+
+    const box = screen.getByRole('searchbox', { name: 'Search documents' })
+    fireEvent.change(box, { target: { value: 'design' } })
+    const results = await screen.findByTestId('search-results')
+    fireEvent.click(within(results).getByRole('button', { name: /design/ }))
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
+    })
+
+    // Back at the root, where `notes/design` is not listed.
+    fireEvent.change(box, { target: { value: '' } })
+    await screen.findByTestId('folder-contents')
+    expect(screen.queryByTestId('okf-preview')).toBeNull()
+  })
+
+  // ...but a result that lives where you were already standing is not from
+  // elsewhere, and dropping it would lose a selection for no reason.
+  it('keeps a result that is in the folder already open', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+    fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
+    await waitFor(() => {
+      expect(screen.getByTestId('folder-contents').textContent).toContain('design')
+    })
+
+    const box = screen.getByRole('searchbox', { name: 'Search documents' })
+    fireEvent.change(box, { target: { value: 'design' } })
+    const results = await screen.findByTestId('search-results')
+    fireEvent.click(within(results).getByRole('button', { name: /design/ }))
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
+    })
+
+    fireEvent.change(box, { target: { value: '' } })
+    await screen.findByTestId('folder-contents')
+    expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
+  })
+
   it('says nothing matches rather than showing an empty pane', async () => {
     installFetchMock()
     render(

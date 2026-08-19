@@ -218,6 +218,30 @@ export function WorkspaceFilesPanel({
     [daemonFetch, daemonBaseUrl, workspaceId, readList, folder, documents],
   )
 
+  /**
+   * Leaving a search puts the folder view back, and the selection has to be
+   * put back with it: a result can come from anywhere, and the preview must
+   * never show a document the list beside it does not contain.
+   *
+   * Kept when it IS in the open folder — unlike a move, that case is real
+   * here (search from inside `design`, pick `design/login`, clear), and
+   * dropping it would lose a selection for no reason anyone could see.
+   */
+  const changeQuery = useCallback(
+    (next: string) => {
+      if (query.trim() !== '' && next.trim() === '') {
+        setSelected((current) => {
+          if (current === null) return null
+          const cut = current.path.lastIndexOf('/')
+          const parent = cut === -1 ? '' : current.path.slice(0, cut)
+          return parent === folder ? current : null
+        })
+      }
+      setQuery(next)
+    },
+    [query, folder],
+  )
+
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, entry.path, newPath)
@@ -278,7 +302,7 @@ export function WorkspaceFilesPanel({
             aria-label="Search documents"
             placeholder="Search"
             value={query}
-            onChange={(event) => setQuery(event.target.value)}
+            onChange={(event) => changeQuery(event.target.value)}
             className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
           />
         </div>

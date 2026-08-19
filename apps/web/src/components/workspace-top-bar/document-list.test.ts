@@ -23,6 +23,14 @@ describe('sortDocumentsByRecency', () => {
 })
 
 describe('filterDocumentsBySearch', () => {
+  // browser-local has no daemon /names endpoint, so its display name arrives
+  // on the row itself. Reading only the table left such a document findable
+  // by path alone — by the auto-generated `untitled-2`, never by its name.
+  it('matches an inline display name when the names table has none', () => {
+    const local = [{ path: 'untitled-2', updatedAt: 'x', name: 'Weekly review' }]
+    expect(filterDocumentsBySearch(local, 'weekly', {}).map((c) => c.path)).toEqual(['untitled-2'])
+  })
+
   const documents = [canvas('team/roadmap', '2024-01-01'), canvas('personal', '2024-01-02')]
   const names: Record<string, string> = { personal: 'My Notes' }
 

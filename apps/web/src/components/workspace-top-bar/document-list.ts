@@ -34,8 +34,11 @@ export function filterDocumentsBySearch(
   namesByPath: Readonly<Record<string, string>>,
 ): DocumentInfo[] {
   if (query.trim() === '') return [...documents]
+  // Either source: `namesByPath` is the daemon's /names table, `c.name` is
+  // the inline one browser-local supplies because it has no daemon to ask.
+  // Reading only the table made a local document searchable by path alone.
   return documents.filter((c) =>
-    documentMatchesSearch(query, { path: c.path, name: namesByPath[c.path] }),
+    documentMatchesSearch(query, { path: c.path, name: namesByPath[c.path] ?? c.name }),
   )
 }
 
