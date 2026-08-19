@@ -65,6 +65,13 @@ export class MemoryStore implements BrowserLocalStore {
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
+    // The in-memory store is used only by tests, and it is the one place a
+    // fixture the real store would REJECT can otherwise sail through:
+    // IndexedDBStore hydrates every read through documentSnapshotSchema and
+    // silently skips a row that fails it, so a test seeding a non-ULID id here
+    // would pass while production saw no document at all. Parsing on write
+    // makes that a loud failure in the test that wrote it.
+    documentSnapshotSchema.parse(snapshot)
     for (const existing of this.documents.values()) {
       if (existing.path === snapshot.path && existing.documentId !== snapshot.documentId) {
         throw new DuplicatePathError(snapshot.path)

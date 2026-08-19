@@ -365,6 +365,10 @@ export function BrowserLocalDocumentPage({
   // the URL still names the previously-known canvas id, that's this
   // component's own pending push catching up, not an external navigation —
   // skip it and let the other effect finish the sync.
+  // Whether listDocuments has answered at least once. Read by the URL ->
+  // document effect to tell "this path does not exist" from "the list has not
+  // arrived", which look identical in `switcherOptions`.
+  const documentsEnumeratedRef = useRef(false)
   const lastKnownCanvasIdRef = useRef<string | null>(null)
   useEffect(() => {
     if (documentId === null || documentPath === null) return
@@ -391,7 +395,14 @@ export function BrowserLocalDocumentPage({
     // or it resolves and the switch then finds no record.
     const repair = () => navigate(browserLocalDocumentPath(documentPath), { replace: true })
     if (requestedId === null) {
-      repair()
+      // ...but only once the list has actually been enumerated. Until then it
+      // holds this document alone, so "absent" means "not known yet" and
+      // repairing would overwrite a navigation to a perfectly valid document
+      // with nothing to undo it. Leaving the address bar alone keeps the
+      // user's intent visible; recovering the switch itself once the list
+      // lands needs this effect's own-push guard restructured first, since it
+      // assumes one run per loaded document.
+      if (documentsEnumeratedRef.current) repair()
       return
     }
     void switchDocument(requestedId).then((switched) => {
@@ -406,6 +417,7 @@ export function BrowserLocalDocumentPage({
     listDocuments()
       .then((list) => {
         if (generation !== listGenerationRef.current) return
+        documentsEnumeratedRef.current = true
         setDocuments(list)
       })
       .catch((err: unknown) => {

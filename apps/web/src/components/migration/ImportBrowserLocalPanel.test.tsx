@@ -10,8 +10,24 @@ import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 // The panel loads a Loro snapshot by DOCUMENT ID and creates the destination
 // by PATH, so a fixture has to pin both and the two must not be the same
 // string — otherwise a test cannot tell which one a call site used.
-const documentIdFor = (path: string): string =>
-  `01ARZ3NDEKTSV4RRFFQ69G5${path.toUpperCase().padEnd(3, '0').slice(0, 3)}`
+//
+// Written out rather than derived from the path: a derivation both produced
+// non-ULIDs (`my-canvas` → a trailing `-`, which Crockford base32 has no
+// symbol for) and collided any two paths sharing a prefix. MemoryStore does
+// not parse what it is given, so neither would have failed a test here — but
+// IndexedDBStore skips a row `documentSnapshotSchema` rejects, so the fixture
+// would stop representing what production actually stores.
+const DOCUMENT_IDS: Record<string, string> = {
+  c1: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+  c2: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
+  'my-canvas': '01ARZ3NDEKTSV4RRFFQ69G5FC1',
+}
+
+function documentIdFor(path: string): string {
+  const id = DOCUMENT_IDS[path]
+  if (id === undefined) throw new Error(`no fixture id for path "${path}"`)
+  return id
+}
 
 function makeCanvas(
   path: string,

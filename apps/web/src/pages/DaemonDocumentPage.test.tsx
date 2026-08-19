@@ -2113,7 +2113,7 @@ describe('DaemonDocumentPage', () => {
     it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
       const browserLocalStore = new MemoryStore()
       await browserLocalStore.save({
-        documentId: 'local-1',
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         workspaceId: LOCAL_WORKSPACE_ID,
         path: 'my-local-canvas',
         name: 'My local canvas',
