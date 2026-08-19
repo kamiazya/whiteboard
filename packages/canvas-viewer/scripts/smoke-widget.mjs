@@ -29,6 +29,16 @@ const SAMPLE_SCENE = {
     // Non-Latin text exercises the browser-fallback glyph path (Roboto's
     // Latin-only vendored subset does not cover CJK) while the zero-network
     // assertion below confirms it never triggers a font fetch.
+    //
+    // NO system CJK font is required, and CI deliberately installs none. The
+    // assertion below reads the SVG's textContent, which a <text> element
+    // carries whether or not a glyph exists for it, and the only font-status
+    // assertion is on the EMBEDDED Roboto face. Measured: with 887 faces
+    // available and none of them `:lang=ja`, the whole smoke passes. Running
+    // WITHOUT a fallback face is the stronger version of the zero-network
+    // claim — it shows the widget fetches nothing even when the glyph is
+    // genuinely unavailable. CI once apt-installed a CJK font for this and it
+    // hung the job in three separate shapes; do not add it back.
     { id: 'text-jp', type: 'text', x: 10, y: 50, width: 200, height: 25, text: JP_TEXT },
   ],
   edges: [],
