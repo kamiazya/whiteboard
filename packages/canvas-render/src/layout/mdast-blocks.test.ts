@@ -882,3 +882,106 @@ describe('layoutMdastBlocks — embed body resolution', () => {
     expect(paragraph.runs.map((r) => r.text)).toEqual(['see', 'Target note'])
   })
 })
+
+describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
+  // The fake measure is 0.6em per character, and code sets at 85% of the
+  // 16px body, so a character is 8.16px wide.
+  const maxWidth = 200
+  const root: MdastRoot = {
+    type: 'root',
+    children: [
+      {
+        type: 'code',
+        lang: null,
+        meta: null,
+        value: 'const veryLongIdentifierName = computeSomething(alpha, beta)\nok()',
+      },
+    ],
+  }
+
+  it('keeps every run inside the panel, not merely inside the node', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth })
+    const code = scene.nodes.find((node) => node.kind === 'codeBlock')
+    if (code?.kind !== 'codeBlock') throw new Error('expected a codeBlock')
+    const panelRight = code.bbox.x + code.bbox.w
+    for (const run of code.runs) {
+      expect(run.bbox.x + run.bbox.w).toBeLessThanOrEqual(panelRight)
+    }
+  })
+
+  it('marks the run it cut, and leaves the one that fits alone', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth })
+    const code = scene.nodes.find((node) => node.kind === 'codeBlock')
+    if (code?.kind !== 'codeBlock') throw new Error('expected a codeBlock')
+    expect(code.runs.map((run) => run.truncated)).toEqual([true, undefined])
+    expect(code.runs[1]?.text).toBe('ok()')
+  })
+})
+
+describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () => {
+  const root: MdastRoot = {
+    type: 'root',
+    children: [
+      {
+        type: 'table',
+        align: [],
+        children: [
+          {
+            type: 'tableRow',
+            children: [
+              { type: 'tableCell', children: [{ type: 'text', value: 'k' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'v' }] },
+            ],
+          },
+          {
+            type: 'tableRow',
+            children: [
+              { type: 'tableCell', children: [{ type: 'text', value: 'one' }] },
+              {
+                type: 'tableCell',
+                children: [
+                  { type: 'text', value: 'a cell whose content is long enough that it must wrap' },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            children: [
+              { type: 'tableCell', children: [{ type: 'text', value: 'two' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'second row' }] },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  it('never paints a cell run below its own row', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth: 240 })
+    const table = scene.nodes.find((node) => node.kind === 'table')
+    if (table?.kind !== 'table') throw new Error('expected a table')
+    for (const row of table.rows) {
+      const rowBottom = row.bbox.y + row.bbox.h
+      for (const cell of row.cells) {
+        for (const run of cell.runs) {
+          expect(run.bbox.y + run.bbox.h).toBeLessThanOrEqual(rowBottom)
+        }
+      }
+    }
+  })
+
+  it('stacks the rows without overlap and reports the total height', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth: 240 })
+    const table = scene.nodes.find((node) => node.kind === 'table')
+    if (table?.kind !== 'table') throw new Error('expected a table')
+    const rows = table.rows
+    for (const [index, row] of rows.entries()) {
+      const next = rows[index + 1]
+      if (next !== undefined) expect(row.bbox.y + row.bbox.h).toBeLessThanOrEqual(next.bbox.y)
+    }
+    const last = rows[rows.length - 1]
+    if (last === undefined) throw new Error('expected rows')
+    expect(table.bbox.y + table.bbox.h).toBeGreaterThanOrEqual(last.bbox.y + last.bbox.h)
+  })
+})

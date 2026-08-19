@@ -841,8 +841,13 @@ function layoutBlock(
       // One run per SOURCE line. A single `<text>` carrying the whole fence
       // paints it on one line — SVG collapses the newlines — so the code ran
       // off the right edge of a box sized for every line.
-      const runs: TextRunNode[] = lines.map((text, index) => {
-        const metrics = options.measure(text, font)
+      // A code line never wraps — its indentation and its identity as one
+      // source line are the point — so the only way to keep it inside the
+      // panel is to cut it, exactly as an atomic inline run is cut.
+      const innerWidth = options.maxWidth - 2 * T.codeBlockPaddingPx
+      const runs: TextRunNode[] = lines.map((line, index) => {
+        const fitted = fitToWidth(line, font, options.measure, innerWidth)
+        const metrics = options.measure(fitted.text, font)
         return {
           kind: 'textRun' as const,
           bbox: {
@@ -854,8 +859,9 @@ function layoutBlock(
           baseline: clampAdvance(
             baselineIn(CODE_LINE_HEIGHT_PX, CODE_FONT_SIZE_PX, metrics.ascent),
           ),
-          text,
+          text: fitted.text,
           code: true,
+          ...(fitted.truncated ? { truncated: true as const } : {}),
           appearance: { fontFamily: T.monoFontFamily, fontSize: CODE_FONT_SIZE_PX },
         }
       })
@@ -906,7 +912,6 @@ function layoutBlock(
       const startY = cursor.y
       const columnCount = Math.max(...node.children.map((row) => row.children.length), 1)
       const columnWidths = tableColumnWidths(node, columnCount, options)
-      const rowHeight = BODY_LINE_HEIGHT_PX + 2 * T.tableCellPaddingYPx
       const tableWidth = columnWidths.reduce((total, w) => total + w, 0)
       const rows: TableRowSceneNode[] = node.children.map((row, rowIndex) => {
         const rowY = cursor.y
@@ -916,24 +921,32 @@ function layoutBlock(
         const header = rowIndex === 0
         const striped = rowIndex % 2 === 1
         let x = cursor.x
-        const cells: TableCellSceneNode[] = row.children.map((cell, cellIndex) => {
+        // Cells are laid out BEFORE the row has a height: a column narrow
+        // enough to wrap its content is reachable (tableColumnWidths scales
+        // columns down to fit), and a row fixed at one line box would paint
+        // the overflow across the row below it.
+        const laid = row.children.map((cell, cellIndex) => {
           const width = columnWidths[cellIndex] ?? 0
           const cellX = x
           x += width
-          const { runs } = layoutPhrasing(
+          const { runs, lineCount } = layoutPhrasing(
             cell.children,
             { y: rowY + T.tableCellPaddingYPx, x: T.tableCellPaddingXPx },
             { ...options, maxWidth: width - 2 * T.tableCellPaddingXPx },
             BODY_FONT_SIZE_PX,
             header ? { strong: true } : {},
           )
-          return {
-            kind: 'tableCell',
-            bbox: { x: cellX, y: rowY, w: width, h: rowHeight },
-            runs,
-            appearance: borderPaint(),
-          }
+          return { cellX, width, runs, lineCount }
         })
+        const rowHeight =
+          Math.max(...laid.map((cell) => cell.lineCount), 1) * BODY_LINE_HEIGHT_PX +
+          2 * T.tableCellPaddingYPx
+        const cells: TableCellSceneNode[] = laid.map((cell) => ({
+          kind: 'tableCell',
+          bbox: { x: cell.cellX, y: rowY, w: cell.width, h: rowHeight },
+          runs: cell.runs,
+          appearance: borderPaint(),
+        }))
         cursor.y += rowHeight
         return {
           kind: 'tableRow',
@@ -1190,7 +1203,32 @@ export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number
     break
   }
   if (kept.length < nodes.length) truncated = true
-  return { nodes: truncated ? markLastRun(kept) : kept, truncated }
+  // A run cut sideways is content the reader cannot see, exactly like a
+  // dropped block — an atomic inline run or a code line, neither of which can
+  // wrap. Counted here rather than at each producer so every caller of this
+  // one seam reports it, and only vertical loss needs `markLastRun`: a cut
+  // run is already its own visible signal.
+  const nodesToKeep = truncated ? markLastRun(kept) : kept
+  return { nodes: nodesToKeep, truncated: truncated || anyRunTruncated(nodesToKeep) }
+}
+
+/** Whether any run anywhere under `nodes` was cut to fit its width. */
+function anyRunTruncated(nodes: readonly SceneNode[]): boolean {
+  return nodes.some((node) => {
+    if (node.kind === 'edge') return false
+    if (node.kind === 'textRun') return node.truncated === true
+    const branching = node as SceneNode & {
+      runs?: readonly SceneNode[]
+      children?: readonly SceneNode[]
+      items?: readonly SceneNode[]
+      cells?: readonly SceneNode[]
+      rows?: readonly SceneNode[]
+    }
+    return (['runs', 'children', 'items', 'cells', 'rows'] as const).some((key) => {
+      const branch = branching[key]
+      return branch !== undefined && anyRunTruncated(branch)
+    })
+  })
 }
 
 /**

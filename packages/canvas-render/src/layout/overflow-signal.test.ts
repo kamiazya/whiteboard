@@ -176,3 +176,37 @@ describe('a box too small for even ONE line', () => {
     expect(chrome(layout(64, ONE_LONG_PARAGRAPH)).truncated).toBeUndefined()
   })
 })
+
+describe('a run cut sideways is hidden content too', () => {
+  // A code line and an atomic inline run cannot wrap, so keeping them inside
+  // the box means CUTTING them. That is the same loss as a dropped block and
+  // owes the same signal — counting only dropped blocks left it silent.
+  const wideCode: MdastRoot = {
+    type: 'root',
+    children: [
+      {
+        type: 'code',
+        lang: null,
+        meta: null,
+        value: 'const veryLongIdentifierName = computeSomething(alpha, beta, gamma)',
+      },
+    ],
+  }
+
+  it('reports the node as truncated even when every block fits vertically', () => {
+    const scene = layout(400, wideCode)
+    const shape = scene.nodes.find((node) => node.kind === 'shape') as ShapeSceneNode | undefined
+    expect(shape?.truncated).toBe(true)
+  })
+
+  it('reaches sceneDigest, which is what an agent reads', () => {
+    const digest = sceneDigest(layout(400, wideCode))
+    expect(digest.nodes.find((node) => node.id === 'n1')?.truncated).toBe(true)
+  })
+
+  it('stays quiet when nothing was cut', () => {
+    const scene = layout(400, { type: 'root', children: [paragraph('short')] })
+    const shape = scene.nodes.find((node) => node.kind === 'shape') as ShapeSceneNode | undefined
+    expect(shape?.truncated).toBeUndefined()
+  })
+})
