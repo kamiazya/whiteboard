@@ -7,6 +7,7 @@ import {
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Container, type ContainerModule } from 'inversify'
 import { createCanvasClientNotifier } from '../server/canvas-client-notifier.js'
+import { createOpentypeMeasureText } from '../server/export/measure-text.js'
 import { storeMemoryModule } from './store-memory.module.js'
 
 export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {
@@ -31,6 +32,13 @@ export function resolveServerDeps(container: Container): ServerDeps {
     documentStore,
     blobStore,
     documentIndex,
+    // The real font metrics, so every tool that lays a scene out measures
+    // text the same way an export does. Without this they fall back to a
+    // constant-ratio estimate while the PNG exporter — same process, same
+    // canvas — uses opentype.js, and the two disagree on where every wrapped
+    // line lands. Memoized inside the measurer, so this reference costs
+    // nothing until a render actually asks for it.
+    measure: createOpentypeMeasureText,
     // Wired here rather than bound as a port: it is a bridge onto this
     // package's own WebSocket routes, not an interchangeable implementation
     // anyone would swap.

@@ -1,5 +1,6 @@
 import {
   assignEdgeAnchors,
+  constantRatioMeasureText,
   createSpatialTheme,
   layoutSpatialCanvas,
   routeEdge,
@@ -9,7 +10,6 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { afterEach, describe, expect, test } from 'vitest'
 import { setLogSink } from '../log.js'
 import { composeCanvasScene } from './compose-canvas-scene.js'
-import { fallbackMeasureText } from './fallback-measure.js'
 
 afterEach(() => {
   // `sink` is module-level state in log.ts, shared across every test file
@@ -32,7 +32,7 @@ describe('composeCanvasScene', () => {
       ],
     }
 
-    const scene = composeCanvasScene(canvas, fallbackMeasureText)
+    const scene = composeCanvasScene(canvas, constantRatioMeasureText)
 
     // (a) the file node emits a `kind: 'shape'` scene node at its own bbox.
     const fileChrome = scene.nodes.find(
@@ -94,9 +94,9 @@ describe('composeCanvasScene', () => {
       ],
     }
 
-    const actual = composeCanvasScene(canvas, fallbackMeasureText)
+    const actual = composeCanvasScene(canvas, constantRatioMeasureText)
     const expected = layoutSpatialCanvas(canvas, {
-      measure: fallbackMeasureText,
+      measure: constantRatioMeasureText,
       parseBody: parseMarkdownBody,
       appearance: createSpatialTheme({ mode: 'light' }),
     })
@@ -125,7 +125,7 @@ describe('composeCanvasScene', () => {
       edges: [],
     }
 
-    const scene = composeCanvasScene(canvas, fallbackMeasureText)
+    const scene = composeCanvasScene(canvas, constantRatioMeasureText)
 
     const literalRun = scene.nodes.find(
       (n) => n.kind === 'rawHtml' && n.value === '<div><span></div>',
@@ -143,11 +143,11 @@ describe('composeCanvasScene', () => {
       edges: [],
     } as unknown as SpatialCanvas
 
-    const sceneWithoutSink = composeCanvasScene(canvas, fallbackMeasureText)
+    const sceneWithoutSink = composeCanvasScene(canvas, constantRatioMeasureText)
 
     const records: unknown[] = []
     setLogSink((record) => records.push(record))
-    const sceneWithSink = composeCanvasScene(canvas, fallbackMeasureText)
+    const sceneWithSink = composeCanvasScene(canvas, constantRatioMeasureText)
 
     expect(records).toEqual([
       {
@@ -170,8 +170,8 @@ describe('composeCanvasScene', () => {
       edges: [],
     }
 
-    expect(composeCanvasScene(canvas, fallbackMeasureText)).toEqual(
-      composeCanvasScene(canvas, fallbackMeasureText),
+    expect(composeCanvasScene(canvas, constantRatioMeasureText)).toEqual(
+      composeCanvasScene(canvas, constantRatioMeasureText),
     )
   })
 })

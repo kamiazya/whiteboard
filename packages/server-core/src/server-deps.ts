@@ -1,3 +1,4 @@
+import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 
 /**
@@ -64,6 +65,19 @@ export interface ServerDeps {
    * both surfaces now write the same index.
    */
   documentIndex: DocumentIndex
+  /**
+   * How to measure text when laying a scene out. Optional because
+   * server-core is a shared layer forbidden from loading a font itself
+   * (architecture-map.md) — absent, the render/digest tools degrade to
+   * canvas-render's `constantRatioMeasureText`, which matches no real
+   * font.
+   *
+   * Asynchronous, and a factory rather than a value, because the real
+   * implementation parses a font file: the composition root's own measurer
+   * memoizes that parse, so calling this per request costs one resolved
+   * promise and startup pays nothing for a server that never renders.
+   */
+  measure?: () => Promise<MeasureText>
   /**
    * Optional on purpose: every existing composition — and every test — is a
    * valid server without one, and a tool that needed a browser to be present

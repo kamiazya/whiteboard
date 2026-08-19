@@ -1,4 +1,8 @@
-import { sceneDigest, sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
+import {
+  constantRatioMeasureText,
+  sceneDigest,
+  sceneDigestSchema,
+} from '@kamiazya/whiteboard-canvas-render'
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
@@ -12,7 +16,6 @@ import {
 import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
 import { composeCanvasScene } from '../render/compose-canvas-scene.js'
-import { fallbackMeasureText } from '../render/fallback-measure.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -250,8 +253,12 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
       )
       if (input.layout !== true) return snapshot
 
+      // The exporter's own measurer when the composition root supplies one:
+      // `overflows` is a claim about what a reader SEES, so measuring it with
+      // a different model than the one that draws the picture would make the
+      // claim about nothing.
       const { nodes: laidOut, ...relations } = sceneDigest(
-        composeCanvasScene(canvas, fallbackMeasureText),
+        composeCanvasScene(canvas, (await deps.measure?.()) ?? constantRatioMeasureText),
       )
       // The one fact the node list above cannot restate. Matched by id, so a
       // node past `SNAPSHOT_MAX_NODES` simply never gets asked about.

@@ -1,6 +1,8 @@
+import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
+import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
 import { InMemoryDocumentStore } from '../server/store/inmemory/in-memory-document-store.js'
 import { createContainer, resolveServerDeps } from './container.js'
@@ -33,6 +35,30 @@ describe('resolveServerDeps', () => {
     expect(deps.documentStore).toBeInstanceOf(InMemoryDocumentStore)
     expect(deps.blobStore).toBeInstanceOf(InMemoryBlobStore)
     expect(deps.documentStore).toBe(container.get(TOKENS.DocumentStore))
+  })
+
+  it('supplies the real opentype measurer, not the constant-ratio fallback', async () => {
+    const deps = resolveServerDeps(createContainer())
+
+    const measure = await deps.measure?.()
+    expect(measure).toBeDefined()
+    const font = {
+      family: EXPORT_FONT_FAMILY,
+      fallbackChain: [],
+      weight: 400,
+      style: 'normal' as const,
+      sizePx: 16,
+    }
+    // A real face's advance varies per glyph; the constant-ratio estimate
+    // cannot tell 'iiii' from 'MMMM'. That difference is the whole point of
+    // wiring this in — `wb_scene_render` now wraps text where the exporter
+    // does — so assert it rather than merely that a function came back.
+    expect(measure?.('iiii', font).advanceWidth).not.toBeCloseTo(
+      measure?.('MMMM', font).advanceWidth ?? 0,
+    )
+    expect(constantRatioMeasureText('iiii', font).advanceWidth).toBeCloseTo(
+      constantRatioMeasureText('MMMM', font).advanceWidth,
+    )
   })
 
   it('throws a clear, descriptive error when a token is not bound in the container', () => {

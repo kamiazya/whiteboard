@@ -91,3 +91,34 @@ describe('wb_scene_render tool', () => {
     ).rejects.toMatchObject({ name: 'NotASpatialDocumentError' })
   })
 })
+
+describe('wb_scene_render measurer injection', () => {
+  test('lays the scene out with the measurer the composition root supplied', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 400, height: 200, text: 'hi' }],
+        edges: [],
+      })
+    })
+    const measured: string[] = []
+    const tool = createCanvasRenderSvgTool({
+      ...makeDeps(store),
+      measure: async () => (text, font) => {
+        measured.push(text)
+        // Deliberately unlike the constant-ratio fallback, so a scene laid
+        // out with the fallback instead cannot produce this width.
+        return { advanceWidth: text.length * font.sizePx * 3, ascent: 1, descent: 1, lineGap: 0 }
+      },
+    })
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      embedReferences: false,
+    })
+
+    expect(measured).toContain('hi')
+    expect(result.svg).toContain('hi')
+  })
+})
