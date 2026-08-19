@@ -39,6 +39,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
 import { createOpentypeMeasureText } from './measure-text.js'
+import { undrawableCharacters } from './undrawable-characters.js'
 
 // Export never has its own theme switch (the composition root always
 // exports light, see package-canvas-render.md decision #8), so this
@@ -81,10 +82,31 @@ export interface HeadlessExportResult {
   png: Buffer
   width: number
   height: number
+  /**
+   * Characters this renderer's own fonts have no glyph for, which resvg has
+   * therefore painted as tofu boxes.
+   *
+   * Reported because of HOW that fails: measurement falls back to the
+   * estimator per code point, so the box is the right size, the text wraps
+   * correctly, and every other signal says the render is fine. The only thing
+   * wrong is that the reader cannot read it.
+   *
+   * Empty is the answer for a Latin canvas, and for one where the vendored
+   * face was unreachable at all — that degradation is a different condition,
+   * logged where it happens.
+   */
+  undrawable: readonly string[]
 }
 
 export interface HeadlessSvgExportResult {
   svg: string
+  /**
+   * Same question as `HeadlessExportResult.undrawable`, but SVG keeps the
+   * characters as `<text>` — a viewer whose system carries the face reads
+   * them normally. This says what THIS renderer could not draw, which is what
+   * the PNG of the same canvas would lose.
+   */
+  undrawable: readonly string[]
 }
 
 interface HeadlessExporter {
@@ -199,16 +221,36 @@ async function buildExporter(): Promise<HeadlessExporter> {
         fitTo,
       })
       const png = resvg.render()
+      const undrawable = await reportUndrawable(canvas)
       return {
         png: Buffer.from(png.asPng()),
         width: png.width,
         height: png.height,
+        undrawable,
       }
     },
     async renderSvg(canvas, options) {
-      return { svg: buildSvg(canvas, options, measure) }
+      return { svg: buildSvg(canvas, options, measure), undrawable: await reportUndrawable(canvas) }
     },
   }
+}
+
+/**
+ * Same discipline as the "Roboto TTF not found" warning above, one level
+ * finer: a silent degradation that diverges visually is worth a record. The
+ * whole-font case is logged once when the singleton is built; this is the
+ * per-character case, and it is logged per render because it depends on the
+ * canvas rather than on the install.
+ */
+async function reportUndrawable(canvas: SpatialCanvas): Promise<readonly string[]> {
+  const undrawable = await undrawableCharacters(canvas)
+  if (undrawable.length > 0) {
+    log.warning(
+      { count: undrawable.length, characters: undrawable.join('') },
+      'export fonts have no glyph for some characters; they render as tofu',
+    )
+  }
+  return undrawable
 }
 
 // Pre-warm the singleton during daemon startup so the first user-facing
