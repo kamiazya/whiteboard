@@ -212,16 +212,22 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       # This step cancelled `widget-smoke` in 4 of 25 ci runs, always at the
-      # job's 15-minute ceiling. The log shows WHY it is worth bounding at the
-      # apt level rather than only at the step: it produced no output at all
-      # for four minutes — not a slow download, a connection that never
-      # returns. `-qq` was hiding that.
+      # job's 15-minute ceiling. The log showed no output at all for four
+      # minutes — not a slow download, a connection that never returns.
+      # `Acquire::http::Timeout` fixes THAT shape: a stuck mirror fails in 15s
+      # instead of hanging, and `Acquire::Retries` tries another.
       #
-      # `Acquire::http::Timeout` is what actually fixes it: a stuck mirror
-      # fails in 15s instead of hanging, and `Acquire::Retries` then tries
-      # another. `--no-install-recommends` skips `fonts-noto-cjk-extra`, every
-      # remaining weight and none of what this smoke renders — worth having,
-      # but it was not the cause.
+      # It then failed three more times in a different shape the timeouts
+      # cannot catch, because nothing is stuck: `fonts-noto-cjk` is a SINGLE
+      # 61.2MB package, and fetching it does not fit in five minutes on a slow
+      # runner. The index before it took 3s for 11.4MB, so the mirror is fine —
+      # the package is just enormous.
+      #
+      # `fonts-vlgothic` is 2.4MB and does the same job here. Nothing asserts a
+      # CJK family: the smoke's only font assertion is on the EMBEDDED Roboto
+      # face, and the Japanese sample exists to exercise the browser-fallback
+      # glyph path and prove no network fetch happens. Any `:lang=ja` face
+      # satisfies that, and this one is 26x smaller.
       #
       # A cancelled job is worse than a failed one here: `verify` NEEDS this,
       # and a cancelled dependency SKIPS it rather than failing it, so the PR
@@ -233,7 +239,7 @@ jobs:
           APT_OPTS: -o Acquire::Retries=3 -o Acquire::http::Timeout=15 -o Acquire::https::Timeout=15
         run: |
           sudo apt-get $APT_OPTS update
-          sudo apt-get $APT_OPTS install -y --no-install-recommends fonts-noto-cjk
+          sudo apt-get $APT_OPTS install -y --no-install-recommends fonts-vlgothic
           fc-list :lang=ja family | head -3
 
       - name: Build canvas-viewer widget
