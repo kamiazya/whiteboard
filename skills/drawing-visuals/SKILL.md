@@ -18,9 +18,8 @@ Use these tools:
 
 - `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` — create, find, and remove documents
 - `wb_canvas_edit` — **the whole spatial-editing surface.** One call takes a list of ops (add, patch, remove, lock, tidy) and applies them as a single transaction
-- `wb_canvas_snapshot` — read what is on a canvas: node types, text, geometry and lock state, plus every edge
+- `wb_canvas_snapshot` — read a canvas: node types, text, geometry and lock state, plus every edge. Pass `layout: true` to also get the laid-out analysis (overlaps, clusters, free regions) for judging whether the board is tidy
 - `wb_scene_render` — render the laid-out scene as SVG (the only export format)
-- `wb_scene_digest` — the laid-out geometry (overlaps, clusters, free regions), for judging whether a board is tidy
 - `wb_version_save` / `wb_version_list` / `wb_version_restore` — checkpoint and roll back
 
 **Open [`references/reading-map.md`](./references/reading-map.md) first and read only the note you need.**
@@ -184,11 +183,13 @@ Open the returned SVG (or write it to a file and view it) to inspect it visually
 If you cannot see the rendered image, read the board instead. The two reads answer different
 questions and neither replaces the other:
 
-- `wb_canvas_snapshot({ workspaceId, documentId })` — **what is on the board**: each node's type,
-  text, geometry and lock state, plus every edge. Long text and very large boards are cut, and the
-  real totals come back alongside so a capped read never looks complete.
-- `wb_scene_digest({ workspaceId, documentId })` — **whether the board is tidy**: laid-out geometry,
-  overlaps, clusters and free regions. It carries no text at all.
+`wb_canvas_snapshot({ workspaceId, documentId })` answers **what is on the board**: each node's
+type, text, geometry and lock state, plus every edge. Long text and very large boards are cut, and
+the real totals come back alongside so a capped read never looks complete.
+
+Add `layout: true` to also get **whether the board is tidy** — overlaps, containment, clusters and
+free regions, from the laid-out scene. It costs a layout pass, so ask for it when you are judging
+composition rather than reading content.
 
 You rarely need either right after an edit: `wb_canvas_edit` already returns the resulting board
 under `snapshot`.

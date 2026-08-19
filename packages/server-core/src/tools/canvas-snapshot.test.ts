@@ -201,3 +201,185 @@ describe('wb_canvas_snapshot tool', () => {
     ).rejects.toThrow(SnapshotNotFoundError)
   })
 })
+
+/**
+ * The layout analysis this tool absorbed from the retired `wb_scene_digest`.
+ * Opt-in, because it needs a full layout pass (text measurement, edge
+ * routing) that reading stored content does not — and "what is on this
+ * board" is the far more common question.
+ */
+describe('wb_canvas_snapshot — layout analysis', () => {
+  test('omits the layout section entirely unless it was asked for', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'group', x: 0, y: 0, width: 100, height: 100 }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasSnapshotTool(makeDeps(store))
+
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result).not.toHaveProperty('layout')
+  })
+
+  test('reports overlap, containment, clustering and free space when asked (from wb_scene_digest)', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          { id: 'n1', type: 'group', x: 0, y: 0, width: 100, height: 100 },
+          { id: 'n2', type: 'group', x: 50, y: 50, width: 100, height: 100 },
+        ],
+        edges: [],
+      })
+    })
+    const tool = createCanvasSnapshotTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      layout: true,
+    })
+
+    // Pinned rather than recomputed through the same producer: an
+    // expectation built by calling the code under test can never fail when
+    // that code changes.
+    expect(result.layout).toEqual({
+      overlaps: [['n1', 'n2']],
+      containment: [],
+      clusters: [['n1', 'n2']],
+      freeRegions: [
+        { x: 100, y: 0, w: 60, h: 20 },
+        { x: 100, y: 20, w: 60, h: 20 },
+        { x: 0, y: 100, w: 40, h: 20 },
+        { x: 0, y: 120, w: 40, h: 20 },
+        { x: 0, y: 140, w: 40, h: 20 },
+      ],
+      partial: false,
+    })
+    expect(() => canvasSnapshotSchema.parse(result)).not.toThrow()
+  })
+
+  test('names layout entries by the ids the edit tool takes (from wb_scene_digest)', async () => {
+    // A layout report that numbers entries positionally still satisfies the
+    // schema and still looks right, while telling a reader to patch a node
+    // that does not exist.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [
+          { id: 'alpha', type: 'group', x: 0, y: 0, width: 100, height: 100 },
+          { id: 'beta', type: 'group', x: 50, y: 50, width: 100, height: 100 },
+        ],
+        edges: [],
+      })
+    })
+    const tool = createCanvasSnapshotTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      layout: true,
+    })
+
+    expect(result.layout?.overlaps).toEqual([['alpha', 'beta']])
+  })
+
+  test('refuses a markdown document known only from its index row (from wb_scene_digest)', async () => {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeMarkdownBody(doc, 'row-kind only')
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      path: 'legacy-md',
+      kind: 'markdown',
+    })
+    const tool = createCanvasSnapshotTool(makeDeps(store))
+
+    await expect(
+      tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID }),
+    ).rejects.toMatchObject({ name: 'NotASpatialDocumentError' })
+  })
+
+  test('still reads a document with no recorded kind anywhere (from wb_scene_digest)', async () => {
+    // Pre-kind spatial documents must keep reading — the guard refuses only
+    // a KNOWN markdown document, never an unknown one.
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, {
+        nodes: [{ id: 'n1', type: 'group', x: 0, y: 0, width: 10, height: 10 }],
+        edges: [],
+      })
+    })
+    const tool = createCanvasSnapshotTool(makeDeps(store))
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      layout: true,
+    })
+
+    expect(result.nodes).toHaveLength(1)
+    expect(result.layout).toBeDefined()
+  })
+})
+
+/**
+ * The one fact a reader cannot derive from the node list, and the reason
+ * `layout` drops `sceneDigest`'s own `nodes` but carries this up: whether a
+ * node's content actually fits the box it is drawn in. Distinct from
+ * `textTruncated`, which is this read cutting `text` for transport.
+ */
+describe('wb_canvas_snapshot — overflows', () => {
+  const CRAMPED = 'これは日本語のテキストで折り返します'
+
+  async function snapshotOf(nodes: SpatialNode[], layout: boolean) {
+    const store = new FakeDocumentStore()
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, { nodes, edges: [] })
+    })
+    return createCanvasSnapshotTool(makeDeps(store)).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ...(layout ? { layout: true } : {}),
+    })
+  }
+
+  test('marks a node whose content does not fit the box it is drawn in', async () => {
+    const result = await snapshotOf(
+      [{ id: 'cramped', type: 'text', x: 0, y: 0, width: 200, height: 32, text: CRAMPED }],
+      true,
+    )
+
+    expect(result.nodes[0].overflows).toBe(true)
+    // Not `textTruncated`: 18 characters is nowhere near the 400-char read
+    // budget. The text came back whole and still does not fit.
+    expect(result.nodes[0]).not.toHaveProperty('textTruncated')
+    expect(result.nodes[0].text).toBe(CRAMPED)
+  })
+
+  test('leaves a node with room to spare unmarked', async () => {
+    const result = await snapshotOf(
+      [{ id: 'roomy', type: 'text', x: 0, y: 0, width: 400, height: 400, text: CRAMPED }],
+      true,
+    )
+
+    expect(result.nodes[0]).not.toHaveProperty('overflows')
+  })
+
+  // Absence has to mean "not measured", never "fits" — a reader that took the
+  // default read as evidence of fitting would be wrong on every cramped node.
+  test('never claims to know without a layout pass', async () => {
+    const result = await snapshotOf(
+      [{ id: 'cramped', type: 'text', x: 0, y: 0, width: 200, height: 32, text: CRAMPED }],
+      false,
+    )
+
+    expect(result.nodes[0]).not.toHaveProperty('overflows')
+    expect(result).not.toHaveProperty('layout')
+  })
+})

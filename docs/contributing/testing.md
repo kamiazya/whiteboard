@@ -224,7 +224,7 @@ Runs alongside `mcp-node` during normal `pnpm test`. No build prerequisite. Test
 | Script | What it covers |
 |---|---|
 | `pnpm smoke` | Startup-only: MCP server starts without fatal errors and stays alive for 3 s |
-| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_document_create` → `wb_facet_set` → `wb_canvas_edit` (seed, duplicate-id / dangling-endpoint / locked refusals, rejected-batch rollback, tidy) → `wb_scene_render` / `wb_scene_digest` / `wb_canvas_snapshot` → version save/list/restore → `wb_document_set` → `wb_document_get` |
+| `pnpm smoke:e2e` | Full stdio MCP round-trip: `wb_document_create` → `wb_facet_set` → `wb_canvas_edit` (seed, duplicate-id / dangling-endpoint / locked refusals, rejected-batch rollback, tidy) → `wb_scene_render` / `wb_canvas_snapshot` (default, and `layout:true`) / `wb_viewport_set` → version save/list/restore → `wb_document_set` → `wb_document_get` |
 
 Run all mcp-smoke tests together:
 

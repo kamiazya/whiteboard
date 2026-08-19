@@ -135,7 +135,6 @@ const WORKSPACE_ID = 'e2e'
 const EXPECTED_TOOLS = [
   'wb_viewport_set',
   'wb_body_patch',
-  'wb_scene_digest',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_document_get',
@@ -350,12 +349,11 @@ async function main() {
     ops: [{ op: 'node.lock', id: 'lockable', locked: false }],
   })
 
-  // wb_scene_render / wb_scene_digest: the only two tools whose
-  // structuredContent is built through server-core's layoutSpatialCanvas
-  // delegate (compose-canvas-scene.ts) rather than read back from stored
-  // content — this is the runtime guard that the laid-out scene still
-  // validates against canvasRenderSvgOutputSchema / sceneDigestSchema
-  // through the real MCP SDK, which a type-level check cannot see.
+  // wb_scene_render: its structuredContent is built through server-core's
+  // layoutSpatialCanvas delegate (compose-canvas-scene.ts) rather than read
+  // back from stored content — this is the runtime guard that the laid-out
+  // scene still validates against canvasRenderSvgOutputSchema through the
+  // real MCP SDK, which a type-level check cannot see.
   const rendered = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
   if (typeof rendered.svg !== 'string' || !rendered.svg.includes('<rect')) {
     throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
@@ -394,26 +392,37 @@ async function main() {
   }
   console.log('[e2e] canvas_view → scene + references for the widget')
 
-  const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, documentId })
-  if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
-    throw new Error(`wb_scene_digest returned unexpected shape: ${JSON.stringify(digest)}`)
-  }
-  // The names have to be the ones the OTHER tools take. A digest that reads
-  // back positionally still satisfies the schema and still looks right in a
-  // unit test, while telling a reader to patch a node that does not exist.
-  if (!digest.nodes.some((node) => node.id === 'lockable')) {
+  // The opt-in layout analysis is a SECOND composition through the same
+  // output schema, reached only when `layout` is set, so the default read
+  // below cannot cover it. It is also the only tool result still built
+  // through server-core's layoutSpatialCanvas delegate besides
+  // wb_scene_render — which makes this the runtime guard that a laid-out
+  // scene still validates through the real MCP SDK.
+  const analysed = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    layout: true,
+  })
+  if (analysed.layout === undefined || !Array.isArray(analysed.layout.clusters)) {
     throw new Error(
-      `wb_scene_digest did not name the seeded node by its document id: ${JSON.stringify(digest.nodes)}`,
+      `wb_canvas_snapshot(layout) returned unexpected shape: ${JSON.stringify(analysed)}`,
     )
   }
-  console.log('[e2e] wb_scene_digest → digest naming the seeded node by document id')
+  // The names have to be the ones wb_canvas_edit takes. An analysis that
+  // reads back positionally still satisfies the schema and still looks right
+  // in a unit test, while telling a reader to patch a node that does not exist.
+  if (!analysed.nodes.some((node) => node.id === 'lockable')) {
+    throw new Error(
+      `wb_canvas_snapshot did not name the seeded node by its document id: ${JSON.stringify(analysed.nodes)}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_snapshot(layout:true) → analysis naming the seeded node by id')
 
-  // wb_canvas_snapshot answers the question wb_scene_digest cannot: WHAT is
-  // on the board. The digest above carries geometry only, so this is the
-  // runtime guard that the semantic projection (node text, type, lock
-  // state, edges) still validates against canvasSnapshotSchema through the
-  // real MCP SDK. It also pins the honesty of the caps — nodeCount is the
-  // board's real total, not the returned length.
+  // The DEFAULT read: stored content only, no layout pass. This is the
+  // runtime guard that the semantic projection (node text, type, lock state,
+  // edges) still validates against canvasSnapshotSchema through the real MCP
+  // SDK, and it pins the honesty of the caps — nodeCount is the board's real
+  // total, not the returned length.
   const snapshot = await callTool('wb_canvas_snapshot', {
     workspaceId: WORKSPACE_ID,
     documentId,

@@ -262,7 +262,7 @@ describe('registered MCP handlers', () => {
       },
       {},
     )
-    const read = await handlers.get('wb_scene_digest')!(
+    const read = await handlers.get('wb_canvas_snapshot')!(
       { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
       {},
     )

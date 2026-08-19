@@ -1,3 +1,4 @@
+import { sceneDigest, sceneDigestSchema } from '@kamiazya/whiteboard-canvas-render'
 import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
@@ -10,6 +11,8 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { assertSpatialDocument } from '../render/assert-spatial-document.js'
+import { composeCanvasScene } from '../render/compose-canvas-scene.js'
+import { fallbackMeasureText } from '../render/fallback-measure.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
@@ -48,6 +51,20 @@ const canvasSnapshotNodeSchema = z
     url: z.string().optional(),
     color: canvasColorSchema.optional(),
     locked: z.literal(true).optional(),
+    /**
+     * The node's content does not fit the box it is drawn in, so the editor
+     * paints its last surviving line under a fade and the rest is invisible.
+     *
+     * Deliberately NOT `textTruncated`, which is this READ cutting `text` at
+     * `SNAPSHOT_TEXT_MAX_CHARS` for transport. That one is an artifact of
+     * asking; this one is a property of the board, and the fix for it is to
+     * resize the node or shorten its text.
+     *
+     * Present only under `layout: true` — whether content fits is knowable
+     * only from a layout pass, so its ABSENCE means "not measured", never
+     * "fits".
+     */
+    overflows: z.literal(true).optional(),
   })
   .strict()
 
@@ -75,12 +92,33 @@ export const canvasSnapshotSchema = z
     nodeCount: z.number().int().nonnegative(),
     edgeCount: z.number().int().nonnegative(),
     truncated: z.boolean(),
+    /**
+     * Present only when asked for. Derived from a full LAYOUT pass, which is
+     * why it is opt-in: these boxes are where things actually get drawn
+     * after text sizing and edge routing, not the `x`/`y`/`width`/`height`
+     * above, which are what is stored and what an edit writes back.
+     *
+     * `nodes` is dropped from what `sceneDigest` produces — its ids and
+     * z-order restate the node list above. What a reader could NOT derive is
+     * carried up instead, onto the nodes themselves as `overflows`.
+     */
+    layout: sceneDigestSchema.omit({ nodes: true }).optional(),
   })
   .strict()
 export type CanvasSnapshot = z.infer<typeof canvasSnapshotSchema>
 
 const canvasSnapshotInputSchema = z
-  .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
+  .object({
+    workspaceId: workspaceIdSchema,
+    documentId: documentIdSchema,
+    /**
+     * Also analyse the laid-out scene: what overlaps, what contains what,
+     * what clusters, where the free space is, and which nodes' content does
+     * not fit its box. Off by default because it costs a full layout pass,
+     * and "what is on this board" is the far more common question.
+     */
+    layout: z.boolean().optional(),
+  })
   .strict()
 type CanvasSnapshotInput = z.infer<typeof canvasSnapshotInputSchema>
 
@@ -204,7 +242,27 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
         'wb_canvas_snapshot',
       )
 
-      return projectCanvasSnapshot(input.documentId, canvas, readNodeLocks(doc), readEdgeLocks(doc))
+      const snapshot = projectCanvasSnapshot(
+        input.documentId,
+        canvas,
+        readNodeLocks(doc),
+        readEdgeLocks(doc),
+      )
+      if (input.layout !== true) return snapshot
+
+      const { nodes: laidOut, ...relations } = sceneDigest(
+        composeCanvasScene(canvas, fallbackMeasureText),
+      )
+      // The one fact the node list above cannot restate. Matched by id, so a
+      // node past `SNAPSHOT_MAX_NODES` simply never gets asked about.
+      const overflowing = new Set(laidOut.filter((n) => n.truncated === true).map((n) => n.id))
+      return {
+        ...snapshot,
+        nodes: snapshot.nodes.map((node) =>
+          overflowing.has(node.id) ? { ...node, overflows: true as const } : node,
+        ),
+        layout: relations,
+      }
     },
   }
 }

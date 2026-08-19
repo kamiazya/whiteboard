@@ -3,7 +3,6 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ServerDeps } from './server-deps.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
-import { createCanvasDigestTool } from './tools/canvas-digest.js'
 import { createCanvasEditTool } from './tools/canvas-edit.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
 import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
@@ -131,7 +130,6 @@ export function createServer(deps: ServerDeps) {
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasView: createCanvasViewTool(deps),
-    canvasDigest: createCanvasDigestTool(deps),
     canvasSnapshot: createCanvasSnapshotTool(deps),
     canvasEdit: createCanvasEditTool(deps),
     viewportSet: createViewportSetTool(deps),

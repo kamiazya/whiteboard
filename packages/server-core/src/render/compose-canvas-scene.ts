@@ -14,7 +14,8 @@ import { getLogger } from '../log.js'
 
 // MCP render/digest are deliberately pinned to light (package-canvas-render.md
 // decision #8): a user's ambient UI theme must never change what wb_scene_render
-// or wb_scene_digest emit. Built once — the resolver is stateless.
+// or wb_canvas_snapshot's layout analysis emit. Built once — the resolver
+// is stateless.
 const MCP_SCENE_APPEARANCE = createSpatialTheme({ mode: 'light' })
 
 const log = getLogger('compose-canvas-scene')
@@ -50,7 +51,7 @@ export interface ComposeCanvasSceneOptions {
  * With no `references`, no file seam is passed at all, which keeps the scene
  * a pure function of the canvas snapshot (decision #10's opt-in rule) — a
  * file node renders as chrome + label regardless of whether the reference
- * resolves to anything. `wb_scene_digest` depends on exactly that: a digest
+ * resolves to anything. The layout analysis depends on exactly that: a result
  * that moved whenever a DIFFERENT document was edited would stop being
  * usable as a change signal for the canvas it names.
  *

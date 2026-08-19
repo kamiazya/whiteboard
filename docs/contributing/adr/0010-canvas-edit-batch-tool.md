@@ -59,11 +59,33 @@ Three properties follow from the shape rather than being bolted on:
    its edges with it, because a dangling edge stores a canvas that
    `spatialCanvasSchema` refuses on the next read.
 
-**A companion read, `wb_canvas_snapshot`, answers "what is on the board":** each
-node's type, text, geometry and lock state, plus every edge, with a per-node text
-budget and per-list caps that report the board's *real* totals alongside. It does
-not replace `wb_scene_digest`, which answers "is the board tidy" and carries no
-text. Neither subsumes the other.
+**One read, `wb_canvas_snapshot`, answers both read questions.** By default,
+"what is on the board": each node's type, text, stored geometry and lock state,
+plus every edge, with a per-node text budget and per-list caps that report the
+board's *real* totals alongside. With `layout: true`, additionally "is the board
+tidy": the overlap / containment / cluster / free-region analysis that
+`wb_scene_digest` used to be. **`wb_scene_digest` is retired.**
+
+That merge was not in the first version of this decision. The argument for
+keeping the two apart was that neither subsumes the other's information — which
+is true, and was the wrong test. The seven mutation tools each had a defensible
+payload too. Two reads that both answer with a node list put the same selection
+problem one layer down, and the same reasoning that collapsed the mutation
+surface applies to the read surface.
+
+Merging also collapsed two disagreeing honesty rules into one. `sceneDigest`
+degraded SILENTLY past its guards — a board over `PAIRWISE_MAX_ENTRIES` reported
+`overlaps: []`, which reads as "nothing overlaps", the most misleading possible
+answer to "is this board tidy". It now reports `truncated`, and the snapshot's
+existing rule (say the real totals, never let a capped read look complete) covers
+the whole payload.
+
+**The layout half is opt-in** because it costs a full layout pass — text
+measurement and edge routing — while "what is on this board" is the far more
+common question. Its boxes are also a different thing from the geometry beside
+them: laid out, i.e. where content is actually drawn, versus stored, i.e. what an
+edit writes back. The merged `nodes` carries the STORED geometry, because that is
+what an edit acts on.
 
 **The retirement is backed by tests, not by an argument.** Of the 44 cases across
 the seven retired test files, 11 asserted behaviour `wb_canvas_edit`'s own tests

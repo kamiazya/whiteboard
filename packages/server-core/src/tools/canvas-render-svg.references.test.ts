@@ -2,14 +2,15 @@
 // markdown document in the same workspace renders that document's body.
 //
 // Opt-in, not default, because `composeCanvasScene` also backs
-// `wb_scene_digest`. Resolving by default would make a canvas's digest move
+// `wb_canvas_snapshot({ layout: true })`. Resolving by default would make a
+// canvas's layout analysis move
 // whenever a DIFFERENT document was edited, which is the property that makes
-// the digest usable as a change signal at all.
+// that analysis usable as a change signal at all.
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
-import { createCanvasDigestTool } from './canvas-digest.js'
 import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
+import { createCanvasSnapshotTool } from './canvas-snapshot.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
@@ -221,25 +222,29 @@ describe('wb_scene_render input schema', () => {
   })
 })
 
-describe('wb_scene_digest', () => {
+describe('wb_canvas_snapshot({ layout: true })', () => {
   // Characterization, and deliberately NOT a guard on the opt-in wiring:
-  // this passes even if the digest is wired to resolve references, because
+  // this passes even if the analysis is wired to resolve references, because
   // `sceneDigest` reports one entry per ADDRESSABLE node — the chrome
   // shapes carrying a document id — and content laid out INSIDE a node is
-  // excluded by design. So the digest is immune for a structural reason,
-  // which is stronger than "nobody wired it".
+  // excluded by design. So it is immune for a structural reason, which is
+  // stronger than "nobody wired it".
   //
   // What it does guard is that chrome-only contract from the other side: if
-  // `sceneDigest` ever started reporting laid-out content, a canvas's digest
-  // would begin moving whenever a DIFFERENT document was edited, and this
-  // goes red at that moment. The opt-in itself is guarded by
+  // `sceneDigest` ever started reporting laid-out content, a canvas's
+  // analysis would begin moving whenever a DIFFERENT document was edited,
+  // and this goes red at that moment. The opt-in itself is guarded by
   // 'leaves the default render untouched' above, which IS mutation-checked.
   test('does not move when only the referenced document changes', async () => {
     const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
-    const digest = createCanvasDigestTool(makeDeps(store))
+    const snapshot = createCanvasSnapshotTool(makeDeps(store))
 
-    const before = await digest.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+    const before = await snapshot.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      layout: true,
+    })
 
     // Edit ONLY the referenced document.
     await seedDoc(store, NOTE_ID, (doc) => {
@@ -260,7 +265,11 @@ describe('wb_scene_digest', () => {
       })
     })
 
-    const after = await digest.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+    const after = await snapshot.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      layout: true,
+    })
     expect(after).toEqual(before)
   })
 })

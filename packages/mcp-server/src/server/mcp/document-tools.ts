@@ -136,21 +136,6 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
-    tools.canvasDigest.name,
-    {
-      description: tools.canvasDigest.description,
-      inputSchema: tools.canvasDigest.inputSchema.shape,
-      outputSchema: tools.canvasDigest.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.canvasDigest.inputSchema.parse(args)
-      const result = await tools.canvasDigest.execute(parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
     tools.canvasSnapshot.name,
     {
       description: tools.canvasSnapshot.description,

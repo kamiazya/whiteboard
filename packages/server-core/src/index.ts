@@ -14,8 +14,6 @@ export {
   bodyPatchRangeSchema,
   createBodyPatchTool,
 } from './tools/body-patch.js'
-export type { CanvasDigestInput } from './tools/canvas-digest.js'
-export { canvasDigestInputSchema, createCanvasDigestTool } from './tools/canvas-digest.js'
 export { createCanvasEditTool } from './tools/canvas-edit.js'
 export type { CanvasRenderSvgInput, CanvasRenderSvgOutput } from './tools/canvas-render-svg.js'
 export {
