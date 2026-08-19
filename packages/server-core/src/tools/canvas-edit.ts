@@ -595,18 +595,22 @@ export function createCanvasEditTool(deps: ServerDeps) {
             // An edge goes if it was in scope and undeclared, OR if either
             // endpoint just went — a dangling edge stores a canvas the next
             // read refuses.
+            // Scoped to THIS op. `touchedEdges` spans the whole batch, so an
+            // edge an earlier op merely touched is not this region's to delete.
+            const removedEdges = new Set<string>()
             for (const edge of edges) {
               const strandedBy = droppedIds.has(edge.fromNode) || droppedIds.has(edge.toNode)
               const undeclaredInRegion =
                 inScopeEdges.some((candidate) => candidate.id === edge.id) &&
                 !declaredEdges.has(edge.id)
               if (strandedBy || undeclaredInRegion) {
+                removedEdges.add(edge.id)
                 touchedEdges.add(edge.id)
                 edgeLocks.delete(edge.id)
               }
             }
             nodes = nodes.filter((node) => !droppedIds.has(node.id))
-            edges = edges.filter((edge) => !touchedEdges.has(edge.id) || declaredEdges.has(edge.id))
+            edges = edges.filter((edge) => !removedEdges.has(edge.id))
 
             // Placement for the declared nodes that carry no position, all at
             // once so they tile rather than stack.
@@ -648,6 +652,17 @@ export function createCanvasEditTool(deps: ServerDeps) {
               })
               if (!parsed.success) fail(index, op.op, issues(parsed.error))
               const next = parsed.data
+              // A declaration names what the region CONTAINS, so its result has
+              // to be inside it. Without this an op scoped to one group could
+              // move any node on the board — and since the lock preflight only
+              // walks what is in scope, a locked one at that.
+              if (!encloses(next)) {
+                fail(
+                  index,
+                  op.op,
+                  `node "${declared.id}" would not be inside "${bounds.id}"; region.set declares what the region contains`,
+                )
+              }
               nodes =
                 existing === undefined
                   ? [...nodes, next]
@@ -660,8 +675,18 @@ export function createCanvasEditTool(deps: ServerDeps) {
 
             for (const declared of op.edges) {
               for (const endpoint of [declared.fromNode, declared.toNode]) {
-                if (nodeAt(endpoint) === undefined) {
+                const node = nodeAt(endpoint)
+                if (node === undefined) {
                   fail(index, op.op, `endpoint "${endpoint}" is not on the canvas`)
+                }
+                // Same rule as the nodes above, and the same reason: an edge is
+                // in this region only when BOTH its endpoints are.
+                if (!encloses(node)) {
+                  fail(
+                    index,
+                    op.op,
+                    `endpoint "${endpoint}" is not inside "${bounds.id}"; an edge is in the region only when both ends are`,
+                  )
                 }
               }
               const parsed = canvasEdgeSchema.safeParse(declared)

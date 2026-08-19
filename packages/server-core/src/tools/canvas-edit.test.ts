@@ -903,7 +903,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'inside-new', 'outside'])
     expect(result.touched.nodes).toContain('inside-old')
     expect(result.touched.nodes).toContain('inside-new')
@@ -931,7 +931,7 @@ describe('wb_canvas_edit — region.set', () => {
     })
 
     expect(result.touched.nodes).not.toContain('straddling')
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'straddling'])
   })
 
@@ -946,7 +946,7 @@ describe('wb_canvas_edit — region.set', () => {
       ops: [{ op: 'region.set', within: 'g', nodes: [], edges: [] }],
     })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id)).toEqual(['g'])
   })
 
@@ -981,7 +981,7 @@ describe('wb_canvas_edit — region.set', () => {
       ],
     })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.edges.map((e) => e.id)).toEqual(['leaving'])
   })
 
@@ -1011,7 +1011,7 @@ describe('wb_canvas_edit — region.set', () => {
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
 
-    const { canvas } = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
     expect(canvas.nodes.map((n) => n.id).sort()).toEqual(['g', 'pinned'])
   })
 
@@ -1056,9 +1056,9 @@ describe('wb_canvas_edit — region.set', () => {
     }
 
     await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
-    const before = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const before = await loadDocument(makeDeps(store), DOCUMENT_ID)
     await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] })
-    const after = await loadSpatialCanvas(makeDeps(store), DOCUMENT_ID)
+    const after = await loadDocument(makeDeps(store), DOCUMENT_ID)
 
     expect(after.canvas).toEqual(before.canvas)
   })
@@ -1088,5 +1088,107 @@ describe('wb_canvas_edit — region.set', () => {
         ops: [{ op: 'region.set', within: 'ghost', nodes: [], edges: [] }],
       }),
     ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+  })
+
+  // `touchedEdges` accumulates across the WHOLE batch, so using it as the
+  // region's own deletion set makes an earlier op's edge collateral damage.
+  test('leaves an edge an earlier op touched alone when it is nowhere near the region', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'far1', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
+        { id: 'far2', type: 'text', x: 900, y: 940, width: 10, height: 10, text: 'far' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      ops: [
+        // Touches `outside` — and this edge is nowhere near `g`.
+        { op: 'edge.add', edge: { id: 'outside', fromNode: 'far1', toNode: 'far2' } },
+        { op: 'region.set', within: 'g', nodes: [], edges: [] },
+      ],
+    })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.edges.map((edge) => edge.id)).toEqual(['outside'])
+  })
+
+  // The lock preflight only walks the region, so a declaration naming
+  // something outside it is neither checked nor in scope — it would let a
+  // region edit reach any node on the board, locked ones included.
+  test('refuses to move a node that is not inside the region', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'outsider', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'keep me' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            op: 'region.set',
+            within: 'g',
+            nodes: [
+              {
+                id: 'outsider',
+                type: 'text',
+                x: 950,
+                y: 950,
+                width: 10,
+                height: 10,
+                text: 'moved',
+              },
+            ],
+            edges: [],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.nodes.find((node) => node.id === 'outsider')).toMatchObject({ x: 900, y: 900 })
+  })
+
+  test('refuses an edge whose endpoints are not both inside the region', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, {
+      nodes: [
+        GROUP,
+        { id: 'far1', type: 'text', x: 900, y: 900, width: 10, height: 10, text: 'far' },
+        { id: 'far2', type: 'text', x: 900, y: 940, width: 10, height: 10, text: 'far' },
+      ],
+      edges: [],
+    })
+    const tool = createCanvasEditTool(makeDeps(store))
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [
+          {
+            op: 'region.set',
+            within: 'g',
+            nodes: [],
+            edges: [{ id: 'smuggled', fromNode: 'far1', toNode: 'far2' }],
+          },
+        ],
+      }),
+    ).rejects.toMatchObject({ name: 'CanvasEditError', opIndex: 0 })
+
+    const { canvas } = await loadDocument(makeDeps(store), DOCUMENT_ID)
+    expect(canvas.edges).toEqual([])
   })
 })
