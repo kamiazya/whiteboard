@@ -161,6 +161,27 @@ async function parseFace(path: string | null): Promise<opentype.Font | null> {
   return opentypeApi.parse(buffer)
 }
 
+/**
+ * The parsed Regular face the export path draws with, or `null` when the
+ * vendored asset is unreachable and the render has already degraded to system
+ * fonts.
+ *
+ * Exposed for `undrawableCharacters`, which asks the same question the
+ * measurer asks internally — does this face carry a glyph for this code point
+ * — but reports the answer instead of silently estimating around it. Parsed
+ * on demand and NOT cached here: the answer is needed once per export, while
+ * the measurer's own cache exists because layout calls it per line.
+ */
+export async function loadExportFont(
+  resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>> = resolveExportFontFaces,
+): Promise<opentype.Font | null> {
+  try {
+    return await parseFace((await resolveFontFiles()).regular)
+  } catch {
+    return null
+  }
+}
+
 async function loadRealMeasurer(
   resolveFontFiles: () => Promise<Record<ExportFontFace, string | null>>,
 ): Promise<MeasureText> {

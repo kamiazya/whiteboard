@@ -43,3 +43,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0008](0008-slug-derivation-and-rename.md) | Slug derivation, rename, and sibling uniqueness | Accepted — read *slug* as *path* |
 | [ADR-0009](0009-mcp-tool-naming.md) | The Document model, and `wb_<entity>_<action>` tool naming | Accepted — decisions 3-4 now implemented; *format* is spelled `kind` |
 | [ADR-0010](0010-canvas-edit-batch-tool.md) | One batch tool for spatial editing, and why it is not `apply` | Accepted |
+| [ADR-0011](0011-font-distribution.md) | Fonts are installed by whoever needs them, not bundled | Accepted — provider registry not built yet |

@@ -42,7 +42,9 @@ beforeAll(() => {
     encoding: 'utf8',
   })
   if (result.status !== 0) {
-    throw new Error(`tsc failed:\n${result.stderr}`)
+    // tsc writes diagnostics to STDOUT; stderr alone reports the failure with
+    // an empty body, which says a build broke without saying how.
+    throw new Error(`tsc failed:\n${result.stdout}${result.stderr}`)
   }
 }, 60_000)
 
