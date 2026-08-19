@@ -12,9 +12,11 @@ backed by more than one representation today. Read
   The kind is chosen at creation and does not change afterwards — except
   that restoring a version also restores that version's kind.
 - **Workspace** — a named collection of canvases. Only daemon mode has
-  real, multiple workspaces; browser-local mode behaves as one fixed,
-  implicit workspace (that constraint is modeled as "a single workspace
-  that is always present", not as the absence of the concept).
+  real, multiple workspaces; browser-local mode has exactly one, and it is
+  stored rather than implied — every browser-local canvas carries the
+  workspace it belongs to, the same field a daemon canvas carries. The
+  constraint is "a single workspace that is always present", not the absence
+  of the concept.
 - **Display name** — the human title of a canvas. Optional; a canvas
   without one shows its identifier instead. Renaming changes only the
   display name, never the identity.
@@ -39,7 +41,7 @@ backed by more than one representation today. Read
 
 | mode | identity of a canvas | shown to the user |
 |---|---|---|
-| Browser-local | a random UUID, generated at creation | display name, plus a *display path* derived from the name |
+| Browser-local | a ULID `documentId` plus the pair `(workspaceId, path)` | display name, plus the path |
 | Daemon (gallery, editing, sync) | the pair `(workspaceId, path)` | display name, plus the path |
 | Daemon (agent/MCP tree) | a ULID `documentId` plus a `segment` path | alias path derived from segments |
 
@@ -52,13 +54,21 @@ is deliberately an open question (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
 which predates the rename and calls this a *slug* throughout).
 
-Browser-local canvases have no persisted or canonical path. The
-path-shaped label under a
-card in the browser-local list is **cosmetic**: it is derived from the
-display name on every render, is never stored, and collisions are
-suffixed (`notes`, `notes-2`). It deliberately uses the same character
-set as daemon paths so that, if browser-local canvases ever gain real
-paths, the labels users already see can be promoted without changing.
+Browser-local canvases are addressed the same way. A path is stored, not
+derived: it is assigned at creation (`untitled`, `untitled-2`, …) exactly as
+in daemon mode, it is what `/local/:path` names, and it is unique within the
+browser — the store refuses a second canvas at a path another one holds,
+because a duplicate would make that address ambiguous rather than merely
+untidy.
+
+A path is never derived from a display name, in either mode.
+[ADR-0008](../contributing/adr/0008-slug-derivation-and-rename.md) measured
+that and found every non-Latin title collapsing to `untitled-N`, which is
+indistinguishable in the very column a path exists to distinguish.
+
+The identifier stays the durable one: a `[[reference]]` between canvases
+names the target's `documentId`, so it survives both a rename and a move,
+and following one resolves that identifier to the target's current path.
 
 ## One product concept, one daemon-side store
 

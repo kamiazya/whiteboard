@@ -1,7 +1,7 @@
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { IDBFactory } from 'fake-indexeddb'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { DB_VERSION } from './browser-idb.js'
+import { DB_VERSION, openWhiteboardDb } from './browser-idb.js'
 import { IndexedDBStore, MemoryStore } from './browser-local-store.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 
@@ -152,29 +152,29 @@ describe('IndexedDBStore', () => {
     expect(await store.load(ID)).toEqual({ kind: 'ok', snapshot: snap })
   })
 
-  it('load returns corrupted for malformed stored data', async () => {
-    // Write garbage directly via raw IDB
+  it('load returns corrupted for a row that is addressed but does not parse', async () => {
+    // The row has to survive the v8 discard to reach the parse boundary at
+    // all, and the two checks are deliberately different strictnesses: the
+    // migration's frozen predicate asks only whether the three address fields
+    // are strings, while documentSnapshotSchema demands a canonical ULID. A
+    // row in between is exactly what `corrupted` is for — a shape written at
+    // the current version that no longer parses, rather than one from before
+    // addressing existed (that one is discarded and reads as not-found).
+    const db = await openWhiteboardDb()
     await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open('whiteboard', 1)
-      req.onupgradeneeded = (e) => {
-        const db = (e.target as IDBOpenDBRequest).result
-        db.createObjectStore('meta')
-        db.createObjectStore('documents')
+      const tx = db.transaction('documents', 'readwrite')
+      tx.objectStore('documents').put(
+        { documentId: 'not-a-ulid', workspaceId: 'local', path: 'broken', broken: true },
+        'not-a-ulid',
+      )
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
       }
-      req.onsuccess = () => {
-        const db = req.result
-        const tx = db.transaction('documents', 'readwrite')
-        tx.objectStore('documents').put({ broken: true }, ID)
-        tx.oncomplete = () => {
-          db.close()
-          resolve()
-        }
-        tx.onerror = () => reject(tx.error)
-      }
-      req.onerror = () => reject(req.error)
+      tx.onerror = () => reject(tx.error)
     })
     const store = new IndexedDBStore()
-    expect(await store.load(ID)).toEqual({ kind: 'corrupted' })
+    expect(await store.load('not-a-ulid')).toEqual({ kind: 'corrupted' })
   })
 
   it('del with matching id deletes canvas and clears pointer', async () => {
