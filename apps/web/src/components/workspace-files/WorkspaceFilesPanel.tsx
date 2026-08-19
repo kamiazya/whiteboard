@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Columns2, FilePlus2, LayoutGrid, List } from 'lucide-react'
+import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import {
@@ -19,6 +19,8 @@ import { FolderContentsList } from './FolderContentsList.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { newDocumentPathIn } from './new-document-path.js'
+import { SearchResults } from './SearchResults.js'
+import { searchDocuments } from './search-documents.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -90,6 +92,7 @@ export function WorkspaceFilesPanel({
   const [folder, setFolder] = useState('')
   const [columns, setColumns] = useState<BrowserColumns>('two')
   const [createError, setCreateError] = useState<string | null>(null)
+  const [query, setQuery] = useState('')
 
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
@@ -215,6 +218,30 @@ export function WorkspaceFilesPanel({
     [daemonFetch, daemonBaseUrl, workspaceId, readList, folder, documents],
   )
 
+  /**
+   * Leaving a search puts the folder view back, and the selection has to be
+   * put back with it: a result can come from anywhere, and the preview must
+   * never show a document the list beside it does not contain.
+   *
+   * Kept when it IS in the open folder — unlike a move, that case is real
+   * here (search from inside `design`, pick `design/login`, clear), and
+   * dropping it would lose a selection for no reason anyone could see.
+   */
+  const changeQuery = useCallback(
+    (next: string) => {
+      if (query.trim() !== '' && next.trim() === '') {
+        setSelected((current) => {
+          if (current === null) return null
+          const cut = current.path.lastIndexOf('/')
+          const parent = cut === -1 ? '' : current.path.slice(0, cut)
+          return parent === folder ? current : null
+        })
+      }
+      setQuery(next)
+    },
+    [query, folder],
+  )
+
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, entry.path, newPath)
@@ -257,9 +284,27 @@ export function WorkspaceFilesPanel({
     <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="workspace-files-panel">
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
-          {/* The trail belongs to whatever narrows the view, and in one-column
-              mode nothing does — the tree already shows every level at once. */}
-          {columns === 'two' && <FolderBreadcrumb folder={folder} onSelect={selectFolder} />}
+          {/* The trail belongs to whatever narrows the view. In one-column
+              mode nothing does — the tree already shows every level at once —
+              and while searching the results are from everywhere, so a trail
+              would name a folder the list is not confined to. */}
+          {columns === 'two' && query.trim() === '' && (
+            <FolderBreadcrumb folder={folder} onSelect={selectFolder} />
+          )}
+        </div>
+        <div className="relative shrink-0">
+          <Search
+            aria-hidden="true"
+            className="text-muted-foreground pointer-events-none absolute left-2 top-1/2 size-3.5 -translate-y-1/2"
+          />
+          <input
+            type="search"
+            aria-label="Search documents"
+            placeholder="Search"
+            value={query}
+            onChange={(event) => changeQuery(event.target.value)}
+            className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
+          />
         </div>
         <div className="flex shrink-0 items-center gap-1">
           <button
@@ -309,7 +354,29 @@ export function WorkspaceFilesPanel({
       )}
 
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
-        {columns === 'one' ? (
+        {query.trim() !== '' ? (
+          // Results come from everywhere, so neither the folder tree nor the
+          // folder's own contents describes them. One flat list, in both
+          // column modes — a search that behaved differently per mode would
+          // be two features wearing one box.
+          <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
+            <div data-testid="search-results">
+              <SearchResults
+                results={searchDocuments(documents, query)}
+                selectedPath={selected?.path}
+                onSelect={setSelected}
+                renderThumbnail={(entry) => (
+                  <DocumentThumbnail
+                    key={entry.documentId}
+                    document={entry}
+                    loadRender={loadRender}
+                    className="size-full"
+                  />
+                )}
+              />
+            </div>
+          </div>
+        ) : columns === 'one' ? (
           <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
             <WorkspaceFileTree
               documents={documents}
