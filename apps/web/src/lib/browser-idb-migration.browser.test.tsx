@@ -22,11 +22,6 @@ async function clearDb(): Promise<void> {
     const req = indexedDB.deleteDatabase('whiteboard')
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
-    // A delete waits on every open connection. Resolving here rather than
-    // hanging keeps one test's leftover connection from spending the NEXT
-    // test's budget, which reads as a failure in a test that did nothing
-    // wrong.
-    req.onblocked = () => resolve()
   })
 }
 
@@ -273,15 +268,14 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     await seedV6Fixture(documentId, doc.export({ mode: 'snapshot' }))
 
     const db = await openWhiteboardDb()
+    // Read before asserting, and assert after: a failed expect() between the
+    // open and the close would leak the connection, and every later test in
+    // this file would then meet a database clearDb cannot delete.
+    const storeNames = [...db.objectStoreNames].sort()
     // The old names are DELETED, not merely abandoned. A store left in place
     // would keep a second copy of every document readable by anything that
     // still remembers the old name.
-    expect([...db.objectStoreNames].sort()).toEqual([
-      'documentFiles',
-      'documents',
-      'loroDocuments',
-      'meta',
-    ])
+    expect(storeNames).toEqual(['documentFiles', 'documents', 'loroDocuments', 'meta'])
 
     const fileCount = await new Promise<number>((resolve, reject) => {
       const tx = db.transaction('documentFiles', 'readonly')
@@ -547,7 +541,13 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
           db.close()
           resolve()
         }
-        tx.onerror = () => reject(tx.error)
+        tx.onerror = () => {
+          // Closed on the failure path too: a seeder that leaks a connection at
+          // an old version blocks the very upgrade the next test is there to
+          // exercise, and the error surfaces in that test rather than this one.
+          db.close()
+          reject(tx.error)
+        }
       }
       req.onerror = () => reject(req.error)
     })
