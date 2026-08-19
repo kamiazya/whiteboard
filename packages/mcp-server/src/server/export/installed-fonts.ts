@@ -23,7 +23,7 @@ export function installedFontDir(): string {
  * than refusing it. What the browser loads and what the exporter loads are
  * allowed to differ in FORMAT; they must not differ in which glyphs exist.
  */
-const FONT_EXTENSIONS = new Set(['.ttf', '.otf', '.ttc'])
+export const FONT_EXTENSIONS: ReadonlySet<string> = new Set(['.ttf', '.otf', '.ttc'])
 
 /**
  * Absolute paths of every installed font, sorted.

@@ -42,6 +42,10 @@ describe('api-contracts barrel scope', () => {
       // exported so every client error surface reads through the same
       // parser instead of hand-rolled per-file field checks.
       './errors.js',
+      // fonts: the installable-font catalogue, exported so the settings
+      // picker sends an id the daemon gave it. Publishing the contract is
+      // what keeps a URL out of the request (ADR-0012).
+      './fonts.js',
       './pairing.js',
       './runtime.js',
     ])

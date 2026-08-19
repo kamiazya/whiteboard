@@ -6,22 +6,14 @@
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
 import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
-import * as opentype from 'opentype.js'
+import type * as opentype from 'opentype.js'
 
+import { opentypeApi } from '../../shared/opentype.js'
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, type ExportFontFace, resolveExportFontFaces } from './export-font.js'
 import { installedFontFiles } from './installed-fonts.js'
 
 const log = getLogger('export-measure-text')
-
-// opentype.js is CommonJS. Running from source (tsx) its exports land on the
-// namespace root, but tsup's ESM interop nests them under `default` in the
-// bundled dist. Reading only one of the two shapes throws
-// "opentype.parse is not a function" in exactly one environment — the
-// published package — where the fallback measurer then silently absorbs it
-// and every export loses the real font metrics. Resolve whichever object
-// actually carries the API.
-const opentypeApi = (opentype as unknown as { default?: typeof opentype }).default ?? opentype
 
 function clampNonNegative(value: number): number {
   return Number.isFinite(value) && value >= 0 ? value : 0
