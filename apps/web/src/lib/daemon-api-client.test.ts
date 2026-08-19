@@ -6,6 +6,7 @@ import {
   getDocumentSnapshot,
   listDocuments,
   listWorkspaces,
+  renameDocumentPath,
   setDocumentDisplayName,
   updateDocument,
 } from './daemon-api-client.js'
@@ -284,5 +285,41 @@ describe('setDocumentDisplayName', () => {
     await expect(
       setDocumentDisplayName(fetchFn, DAEMON_BASE_URL, 'w1', 'main', 'x'),
     ).rejects.toThrow(/bad request/i)
+  })
+})
+
+describe('renameDocumentPath', () => {
+  it('sends the new path to the old path’s /path URL', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ path: 'archive/notes' }))
+    const result = await renameDocumentPath(
+      fetchFn,
+      DAEMON_BASE_URL,
+      'w1',
+      'design/notes',
+      'archive/notes',
+    )
+
+    expect(result).toEqual({ path: 'archive/notes' })
+    const [url, init] = fetchFn.mock.calls[0]!
+    // The path being MOVED is in the URL and the destination is in the body:
+    // sending the new one in the URL would address a document that does not
+    // exist yet and 404.
+    expect(String(url)).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1/documents/design/notes/path`)
+    expect((init as RequestInit).method).toBe('PUT')
+    expect(JSON.parse(String((init as RequestInit).body))).toEqual({ path: 'archive/notes' })
+  })
+
+  // The server names the PRODUCED path that collided, which for a subtree
+  // move is often not the path the caller asked for. Rebuilding a message
+  // here would send someone to retry the one thing that was never the
+  // problem, so the status and the server's own words have to survive.
+  it('carries the server’s conflict message through, with its status', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ title: 'Path "archive/notes/a" already exists' }, 409))
+
+    await expect(
+      renameDocumentPath(fetchFn, DAEMON_BASE_URL, 'w1', 'design/notes', 'archive/notes'),
+    ).rejects.toMatchObject({ status: 409, message: 'Path "archive/notes/a" already exists' })
   })
 })

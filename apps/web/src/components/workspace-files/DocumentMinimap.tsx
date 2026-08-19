@@ -1,10 +1,20 @@
 /**
  * A tree row's icon: a miniature of the document's own shape.
  *
- * At this size nothing readable survives, which is the point — the
- * arrangement is what tells one document from another, the same reasoning
- * the favicon has always used. It reuses the favicon's projection so the two
- * renditions of one document agree.
+ * The card beside this in two-column mode draws the REAL render, and this
+ * deliberately does not, because a faithful render carries no information at
+ * row size. Measured on this document at four sizes: a square 24px is one
+ * horizontal dash, 40x24 and 56x32 are smears, and only at about 80x44 do
+ * the heading, the bullet block and the second heading become separable. A
+ * card is 144x64 and clears that; a row is not going to be.
+ *
+ * What survives the reduction is an ARRANGEMENT, which is why this throws
+ * detail away on purpose — the largest few boxes, floored to a visible
+ * extent. It is a reduction of the same layout the card renders, not a
+ * second opinion about it, so the two cannot disagree.
+ *
+ * It reuses the favicon's projection so the two renditions of one document
+ * agree.
  *
  * Loading is deferred to first sight (`useOnScreen`): a tree lists far more
  * rows than fit, and each miniature costs a fetch of that document's bytes.
@@ -18,7 +28,7 @@ import { useEffect, useState } from 'react'
 import { useOnScreen } from '../../hooks/useOnScreen.js'
 import type { FaviconRect } from '../../lib/favicon.js'
 import { fitMinimap, projectBox } from '../spatial-editor/minimap.js'
-import type { WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
  * The icon's own box, in percent-of-element units.
@@ -41,15 +51,13 @@ const MIN_EXTENT_PCT = 6
 const MAX_RECTS = 10
 
 export interface DocumentMinimapProps {
-  readonly document: WorkspaceFileTreeDocument
+  readonly document: WorkspaceDocumentEntry
   /**
    * Reads a document's shape. Injected rather than fetched here so this
    * component stays free of the daemon client — and so a test can answer
    * without a network or a worker.
    */
-  readonly loadOutline: (
-    document: WorkspaceFileTreeDocument,
-  ) => Promise<readonly FaviconRect[] | null>
+  readonly loadOutline: (document: WorkspaceDocumentEntry) => Promise<readonly FaviconRect[] | null>
 }
 
 /** The largest few rects, fitted to the whole icon box. */

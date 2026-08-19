@@ -18,8 +18,14 @@ import {
 } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { expect, it } from 'vitest'
+import { renderMarkdownPreview } from '../components/markdown-editor/render-preview.js'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
-import type { LayoutRequest, LayoutResponse } from './layout-worker-protocol.js'
+import type {
+  LayoutRequest,
+  LayoutResponse,
+  MarkdownRenderRequest,
+  MarkdownRenderResponse,
+} from './layout-worker-protocol.js'
 
 // Text that wraps, punctuation that kerns, and a mix of scripts: measurement
 // differences show up in wrapped-line counts, not in a single short word.
@@ -166,4 +172,47 @@ it('parses markdown itself — no pre-parsed bodies cross the wire', async () =>
   expect(fromWorker.type).toBe('laid-out')
   if (fromWorker.type !== 'laid-out') return
   expect(fromWorker.svg).toBe(onMain.svg)
+}, 60_000)
+
+const renderMarkdownInWorker = (request: MarkdownRenderRequest) =>
+  new Promise<MarkdownRenderResponse>((resolve, reject) => {
+    const worker = new Worker(new URL('./layout-worker.ts', import.meta.url), { type: 'module' })
+    const timer = setTimeout(() => reject(new Error('markdown render timed out')), 15_000)
+    worker.onmessage = (e: MessageEvent<MarkdownRenderResponse>) => {
+      clearTimeout(timer)
+      worker.terminate()
+      resolve(e.data)
+    }
+    worker.onerror = (e) => {
+      clearTimeout(timer)
+      worker.terminate()
+      reject(new Error(`markdown render error: ${e.message}`))
+    }
+    worker.postMessage(request)
+  })
+
+// A row thumbnail is the same picture the preview pane draws, only smaller,
+// so a worker that measured with a different face would put every wrapped
+// line somewhere else and the thumbnail would stop being that document.
+it('the worker markdown SVG is the main-thread markdown SVG', async () => {
+  expect(await ensureViewerFontLoaded()).toBe('loaded')
+  const body =
+    '# Title\n\nA paragraph that is long enough to wrap at the width below, plus あいうえお.\n\n- one\n- two\n'
+
+  const onMain = renderMarkdownPreview(body, {
+    measure: createBrowserMeasureText(),
+    maxWidth: 640,
+  })
+  const fromWorker = await renderMarkdownInWorker({
+    type: 'markdown-render',
+    id: 9,
+    body,
+    maxWidth: 640,
+  })
+
+  expect(fromWorker.type).toBe('markdown-render-done')
+  if (fromWorker.type !== 'markdown-render-done') return
+  expect(fromWorker.svg).toBe(onMain.svg)
+  expect(fromWorker.bounds.w).toBeGreaterThan(0)
+  expect(fromWorker.bounds.h).toBeGreaterThan(0)
 }, 60_000)

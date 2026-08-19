@@ -7,106 +7,27 @@ afterEach(cleanup)
 const documents = [
   { documentId: 'c-root', path: 'readme' },
   { documentId: 'c-notes', path: 'notes' },
-  { documentId: 'c-child', path: 'notes/design' },
+  { documentId: 'c-child', path: 'notes/design', name: 'Design system' },
   { documentId: 'c-deep', path: 'notes/design/palette' },
 ]
 
 describe('WorkspaceFileTree', () => {
-  // The name is what every other surface shows and what a reference resolves
-  // by; the path is an auto-generated address nothing invites you to type.
-  // Showing the segment made the tree the one place a document went by a
-  // different name than the rest of the app calls it.
+  // One column has no contents pane beside it, so the documents have to be
+  // reachable from the column itself — the whole difference from the
+  // folders-only sibling.
+  it('shows documents at every depth, not only folders', () => {
+    render(<WorkspaceFileTree documents={documents} onOpen={vi.fn()} />)
+    expect(screen.getByText('readme')).not.toBeNull()
+    expect(screen.getByText('palette')).not.toBeNull()
+  })
+
   it('labels a document by its display name, not its path segment', () => {
-    render(
-      <WorkspaceFileTree
-        documents={[{ documentId: 'c1', path: 'design/login-flow', name: 'Auth signup flow' }]}
-        onOpen={() => {}}
-      />,
-    )
-    expect(screen.getByText('Auth signup flow')).not.toBeNull()
-    expect(screen.queryByText('login-flow')).toBeNull()
+    render(<WorkspaceFileTree documents={documents} onOpen={vi.fn()} />)
+    expect(screen.getByText('Design system')).not.toBeNull()
+    expect(screen.queryByText('design')).toBeNull()
   })
 
-  // The list carries the kind, so the row shows it. Not the minimap that
-  // will replace this icon — just the difference between the two things a
-  // document can be, which the tree already knows and was throwing away.
-  it('distinguishes a spatial document from a markdown one', () => {
-    render(
-      <WorkspaceFileTree
-        documents={[
-          { documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' },
-          { documentId: 'c2', path: 'b', name: 'Diagram', kind: 'spatial' },
-        ]}
-        onOpen={() => {}}
-      />,
-    )
-    const prose = screen.getByRole('treeitem', { name: 'Prose' })
-    const diagram = screen.getByRole('treeitem', { name: 'Diagram' })
-    expect(prose.querySelector('[data-kind]')?.getAttribute('data-kind')).toBe('markdown')
-    expect(diagram.querySelector('[data-kind]')?.getAttribute('data-kind')).toBe('spatial')
-  })
-
-  // A capability slot, like DocumentListView's renderThumb: the tree never
-  // fetches or renders a document itself, so it stays usable by a caller
-  // that has no daemon to fetch from.
-  it('lets the caller supply a row’s icon', () => {
-    render(
-      <WorkspaceFileTree
-        documents={[{ documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' }]}
-        onOpen={() => {}}
-        renderIcon={(doc) => <span data-testid="custom-icon">{doc.documentId}</span>}
-      />,
-    )
-    expect(screen.getByTestId('custom-icon').textContent).toBe('c1')
-  })
-
-  it('keeps the kind icon when the caller supplies none', () => {
-    render(
-      <WorkspaceFileTree
-        documents={[{ documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' }]}
-        onOpen={() => {}}
-      />,
-    )
-    expect(
-      screen.getByRole('treeitem', { name: 'Prose' }).querySelector('[data-kind]'),
-    ).not.toBeNull()
-  })
-
-  it('falls back to the segment for a document nobody named', () => {
-    render(
-      <WorkspaceFileTree
-        documents={[{ documentId: 'c1', path: 'design/untitled-2' }]}
-        onOpen={() => {}}
-      />,
-    )
-    expect(screen.getByText('untitled-2')).not.toBeNull()
-  })
-
-  // A folder has no document and therefore no name of its own — only the
-  // segment, which is the honest label for it.
-  it('still labels a folder by its segment', () => {
-    render(
-      <WorkspaceFileTree
-        documents={[{ documentId: 'c1', path: 'design/login', name: 'Auth signup flow' }]}
-        onOpen={() => {}}
-      />,
-    )
-    expect(screen.getByText('design')).not.toBeNull()
-  })
-
-  it('renders nested paths as an ARIA tree, not a flat list', () => {
-    render(<WorkspaceFileTree documents={documents} onOpen={() => {}} />)
-
-    expect(screen.getByRole('tree')).not.toBeNull()
-    // notes is a branch: expandable, expanded by default.
-    const notes = screen.getByRole('treeitem', { name: /notes/ })
-    expect(notes.getAttribute('aria-expanded')).toBe('true')
-    // Its child is reachable inside a group, not as a sibling path string.
-    expect(screen.getByRole('treeitem', { name: /design/ })).not.toBeNull()
-    expect(screen.queryByText('notes/design')).toBeNull()
-  })
-
-  it('clicking a canvas row reports its documentId', () => {
+  it('reports the whole entry, so the preview needs no second lookup', () => {
     const onOpen = vi.fn()
     render(<WorkspaceFileTree documents={documents} onOpen={onOpen} />)
 
@@ -116,32 +37,86 @@ describe('WorkspaceFileTree', () => {
     )
   })
 
+  it('marks the document the preview is showing', () => {
+    render(<WorkspaceFileTree documents={documents} onOpen={vi.fn()} selectedPath="readme" />)
+    expect(screen.getByRole('button', { name: /readme/ }).getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('button', { name: /palette/ }).getAttribute('aria-current')).toBeNull()
+  })
+
+  it('lets the caller supply a row’s picture', () => {
+    render(
+      <WorkspaceFileTree
+        documents={documents}
+        onOpen={vi.fn()}
+        renderIcon={(doc) => <span data-testid="custom-icon">{doc.documentId}</span>}
+      />,
+    )
+    expect(screen.getAllByTestId('custom-icon').length).toBe(documents.length)
+  })
+
+  it('keeps the kind icon when the caller supplies none', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'a', name: 'Prose', kind: 'markdown' }]}
+        onOpen={vi.fn()}
+      />,
+    )
+    expect(
+      screen
+        .getByRole('treeitem', { name: 'Prose' })
+        .querySelector('[data-kind]')
+        ?.getAttribute('data-kind'),
+    ).toBe('markdown')
+  })
+
+  // A folder that no document claims has no name of its own — the segment
+  // is the honest label, and it is not something to click.
+  it('shows a folder nobody claims as plain text', () => {
+    render(
+      <WorkspaceFileTree
+        documents={[{ documentId: 'c1', path: 'design/login', name: 'Auth' }]}
+        onOpen={vi.fn()}
+      />,
+    )
+    expect(screen.getByText('design')).not.toBeNull()
+    expect(screen.queryByRole('button', { name: /^design$/ })).toBeNull()
+  })
+
+  it('renders nested paths as an ARIA tree, not a flat list', () => {
+    render(<WorkspaceFileTree documents={documents} onOpen={vi.fn()} />)
+    expect(screen.getByRole('tree')).not.toBeNull()
+    expect(screen.getByRole('treeitem', { name: /notes/ }).getAttribute('aria-expanded')).toBe(
+      'true',
+    )
+    expect(screen.queryByText('notes/design')).toBeNull()
+  })
+
   it('collapsing a branch hides its descendants', () => {
-    render(<WorkspaceFileTree documents={documents} onOpen={() => {}} />)
+    render(<WorkspaceFileTree documents={documents} onOpen={vi.fn()} />)
 
     fireEvent.click(screen.getByTestId('tree-toggle-notes'))
     expect(screen.getByRole('treeitem', { name: /notes/ }).getAttribute('aria-expanded')).toBe(
       'false',
     )
-    expect(screen.queryByText('design')).toBeNull()
+    expect(screen.queryByText('Design system')).toBeNull()
     expect(screen.queryByText('palette')).toBeNull()
   })
 
-  it('a branch that is itself a canvas is both expandable and openable', () => {
+  // `notes` is a document AND a folder: both halves have to work, or one of
+  // the two roles becomes unreachable in this mode.
+  it('a branch that is itself a document is both expandable and selectable', () => {
     const onOpen = vi.fn()
     render(<WorkspaceFileTree documents={documents} onOpen={onOpen} />)
 
-    // notes/design is a canvas AND has the child notes/design/palette.
-    const design = screen.getByRole('treeitem', { name: /design/ })
-    expect(design.getAttribute('aria-expanded')).toBe('true')
-    fireEvent.click(screen.getByText('design'))
-    expect(onOpen).toHaveBeenCalledWith(
-      expect.objectContaining({ documentId: 'c-child', path: 'notes/design' }),
+    expect(screen.getByRole('treeitem', { name: /notes/ }).getAttribute('aria-expanded')).toBe(
+      'true',
     )
+    fireEvent.click(screen.getByText('notes'))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ path: 'notes' }))
   })
 
   it('shows an empty state instead of an empty tree', () => {
-    render(<WorkspaceFileTree documents={[]} onOpen={() => {}} />)
+    render(<WorkspaceFileTree documents={[]} onOpen={vi.fn()} />)
     expect(screen.queryByRole('tree')).toBeNull()
     expect(screen.getByText(/no documents/i)).not.toBeNull()
   })

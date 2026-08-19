@@ -17,7 +17,7 @@ import { outlineFromSpatial } from '../../lib/document-outline.js'
 import type { FaviconRect } from '../../lib/favicon.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { MarkdownRailResponse } from '../../lib/layout-worker-protocol.js'
-import type { WorkspaceFileTreeDocument } from './WorkspaceFileTree.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
  * Width a row's markdown is laid out at. Fixed rather than measured: an icon
@@ -66,7 +66,7 @@ async function layoutInSharedPool(
 }
 
 export function createRowOutlineLoader(deps: RowOutlineDeps) {
-  return async (document: WorkspaceFileTreeDocument): Promise<readonly FaviconRect[] | null> => {
+  return async (document: WorkspaceDocumentEntry): Promise<readonly FaviconRect[] | null> => {
     try {
       if (document.kind === 'markdown') {
         const { markdown } = await deps.getOkf(
