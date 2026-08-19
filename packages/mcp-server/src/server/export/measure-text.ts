@@ -1,10 +1,11 @@
 // Composition-root implementation of canvas-render's injected text-
 // measurement seam (packages/canvas-render/src/measure.ts). Layout never
 // imports a font itself — this module supplies the real opentype.js-backed
-// measurer, plus a constant-ratio fallback for when the vendored asset is
-// unavailable.
+// measurer. When the vendored asset is unavailable it degrades to
+// canvas-render's shared constant-ratio measurer rather than a local copy.
 import { readFile } from 'node:fs/promises'
 import type { FontDescriptor, MeasureText, TextMetrics } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import * as opentype from 'opentype.js'
 
 import { getLogger } from '../log.js'
@@ -21,37 +22,8 @@ const log = getLogger('export-measure-text')
 // actually carries the API.
 const opentypeApi = (opentype as unknown as { default?: typeof opentype }).default ?? opentype
 
-// Every glyph advance/vertical metric below is a rough Latin-sans-serif
-// average expressed as a fraction of sizePx. This measurer is used only
-// when the real vendored font cannot be loaded, so its output is NOT
-// byte-reproducible with a real opentype.js/browser Canvas measurement —
-// it exists solely so export still succeeds (degraded, not blocked).
-const FALLBACK_ADVANCE_RATIO = 0.55
-const FALLBACK_ASCENT_RATIO = 0.75
-const FALLBACK_DESCENT_RATIO = 0.25
-const FALLBACK_LINE_GAP_RATIO = 0.1
-
 function clampNonNegative(value: number): number {
   return Number.isFinite(value) && value >= 0 ? value : 0
-}
-
-/**
- * A deterministic, font-independent measurer used when the real export
- * font asset cannot be loaded. Satisfies the same `MeasureText` contract
- * (finite, non-negative, `advanceWidth('') === 0`, linear in `sizePx`) but
- * its pixel output does not match any real font — a fallback export is a
- * degraded export, not a byte-reproducible one.
- */
-export function createConstantRatioMeasureText(): MeasureText {
-  return (text: string, font: FontDescriptor): TextMetrics => {
-    const sizePx = clampNonNegative(font.sizePx)
-    return {
-      advanceWidth: clampNonNegative(text.length * sizePx * FALLBACK_ADVANCE_RATIO),
-      ascent: clampNonNegative(sizePx * FALLBACK_ASCENT_RATIO),
-      descent: clampNonNegative(sizePx * FALLBACK_DESCENT_RATIO),
-      lineGap: clampNonNegative(sizePx * FALLBACK_LINE_GAP_RATIO),
-    }
-  }
 }
 
 /** CSS-style face selection: 600+ is bold, per the numeric weight scale. */
@@ -62,6 +34,60 @@ export function faceForDescriptor(descriptor: FontDescriptor): ExportFontFace {
   if (bold) return 'bold'
   if (italic) return 'italic'
   return 'regular'
+}
+
+/**
+ * The vendored face is Latin-only, and `opentype.js` does not report that: a
+ * code point it has no glyph for is measured as `.notdef`, a flat ~0.44 em
+ * that is not a measurement of anything. Left alone it understates Japanese
+ * by more than the constant-ratio estimator it is supposed to improve on —
+ * measured, `あ` at 7.1px against a true 16px — so "lay out with the real
+ * font" would be a regression for every non-Latin canvas.
+ *
+ * The face is asked by GLYPH INDEX rather than by comparing advances: a
+ * legitimately narrow glyph can share `.notdef`'s width, and comparing would
+ * throw it away.
+ *
+ * Fixing it properly means shipping a CJK face, which is a font-distribution
+ * decision rather than a layout one.
+ * ponytail: estimate the glyphs the face lacks; ship a CJK face when export
+ * fidelity for those scripts is worth the package size.
+ */
+function measureAdvance(
+  font: opentype.Font,
+  text: string,
+  descriptor: FontDescriptor,
+  sizePx: number,
+): number {
+  const carried = (char: string): boolean => font.charToGlyphIndex(char) !== 0
+  // Nothing missing is the common case and stays exactly one call into the
+  // font, so a Latin canvas measures no differently than before.
+  let allCarried = true
+  for (const char of text) {
+    if (!carried(char)) {
+      allCarried = false
+      break
+    }
+  }
+  if (allCarried) return font.getAdvanceWidth(text, sizePx, { kerning: false })
+
+  let advance = 0
+  let run = ''
+  const flush = (): void => {
+    if (run === '') return
+    advance += font.getAdvanceWidth(run, sizePx, { kerning: false })
+    run = ''
+  }
+  for (const char of text) {
+    if (carried(char)) {
+      run += char
+      continue
+    }
+    flush()
+    advance += constantRatioMeasureText(char, descriptor).advanceWidth
+  }
+  flush()
+  return advance
 }
 
 function measureWithFont(
@@ -78,10 +104,12 @@ function measureWithFont(
   // Kerning is disabled deliberately: it would make advanceWidth(a + b)
   // only approximately equal to advanceWidth(a) + advanceWidth(b) at the
   // kerning-pair seam, which this measurer's callers rely on being exact.
+  // That additivity is also what lets the mixed-script path below measure
+  // run by run and sum the pieces.
   const advanceWidth =
     sizePx === 0 || text.length === 0
       ? 0
-      : clampNonNegative(font.getAdvanceWidth(text, sizePx, { kerning: false }))
+      : clampNonNegative(measureAdvance(font, text, descriptor, sizePx))
   return {
     advanceWidth,
     ascent: clampNonNegative(font.ascender * scale),
@@ -141,7 +169,7 @@ async function loadRealMeasurer(
     const regular = await parseFace(paths.regular)
     if (regular === null) {
       logFallbackOnce('asset-not-found')
-      return createConstantRatioMeasureText()
+      return constantRatioMeasureText
     }
     const faces: Partial<Record<ExportFontFace, opentype.Font>> = { regular }
     for (const face of ['bold', 'italic', 'boldItalic'] as const) {
@@ -157,7 +185,7 @@ async function loadRealMeasurer(
     return buildOpentypeMeasurer(regular, faces)
   } catch (err) {
     logFallbackOnce(describeLoadFailure(err))
-    return createConstantRatioMeasureText()
+    return constantRatioMeasureText
   }
 }
 

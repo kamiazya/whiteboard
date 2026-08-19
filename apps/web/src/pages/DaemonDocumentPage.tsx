@@ -5,6 +5,7 @@ import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-documen
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
@@ -22,12 +23,14 @@ import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
+import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -39,7 +42,7 @@ import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
-import { daemonFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -225,6 +228,9 @@ export function DaemonDocumentPage({
   // viewport_request (see onViewportRequest below) can reach it without
   // useDocumentSync/document-sync-session owning a DOM-facing ref themselves.
   const spatialEditorRef = useRef<SpatialEditorHandle | null>(null)
+  // An agent editing this document announces itself; both the chip and the
+  // outline lapse on their own, so a crashed agent leaves nothing behind.
+  const { state: agentActivity, report: reportAgentActivity } = useAgentActivity()
 
   const {
     canvas: canvasValue,
@@ -250,6 +256,7 @@ export function DaemonDocumentPage({
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
     onViewportRequest: (payload) => applyViewportRequest(payload, spatialEditorRef.current),
+    onAgentActivity: (payload) => reportAgentActivity(payload),
     identity: canvas ?? undefined,
   })
 
@@ -390,20 +397,18 @@ export function DaemonDocumentPage({
   // re-reads reasoning as webMcpEnabled above).
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
   const { isDirty } = useDirtyState(canvas?.workspaceId ?? '', canvas?.path ?? '')
+  // One shape for whichever kind this document is — the favicon draws
+  // it today, and a tree row's icon draws the same one.
+  const documentOutline = useDocumentOutline({
+    kind: documentKind,
+    canvas: canvasValue,
+    markdownBody,
+  })
+
   useFavicon({
     style: faviconStyle,
     status: daemonFaviconStatus({ authError, syncStatus, isDirty }),
-    rects: useMemo(
-      () =>
-        canvasValue.nodes.map((n) => ({
-          x: n.x,
-          y: n.y,
-          w: n.width,
-          h: n.height,
-          color: resolveRectColor(n.color),
-        })),
-      [canvasValue.nodes],
-    ),
+    rects: documentOutline,
   })
 
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
@@ -767,6 +772,7 @@ export function DaemonDocumentPage({
             }}
             spatial={() => (
               <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
+                <AgentPresenceChip summary={agentActivity.summary} />
                 {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                 gesture and open text editor all describe ONE canvas, and
                 `SpatialCanvas` carries no id for the editor to notice a switch
@@ -786,6 +792,7 @@ export function DaemonDocumentPage({
                       : undefined
                   }
                   ref={spatialEditorRef}
+                  agentTouchedNodeIds={agentActivity.touchedNodeIds}
                   canvas={canvasValue}
                   onChange={onChange}
                   externalVersion={externalVersion}

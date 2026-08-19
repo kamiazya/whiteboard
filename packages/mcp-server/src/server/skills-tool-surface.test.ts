@@ -67,6 +67,44 @@ const BANNED_PATTERNS: ReadonlyArray<{ pattern: RegExp; reason: string }> = [
     reason:
       'export is SVG-only via wb_scene_render (docs/reference/export-formats.md); there is no raster export tool',
   },
+  // The seven single-purpose spatial-mutation tools, retired into
+  // wb_canvas_edit's op list (ADR-0010). Their names are banned outright
+  // rather than left to the registered-tool check below, so prose that
+  // teaches the old one-call-per-edit shape fails loudly instead of only
+  // failing once someone notices the tool is gone.
+  {
+    pattern: /\bwb_node_add\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "node.add" }',
+  },
+  {
+    pattern: /\bwb_node_patch\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "node.patch" }',
+  },
+  {
+    pattern: /\bwb_edge_add\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "edge.add" }',
+  },
+  {
+    pattern: /\bwb_edge_patch\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "edge.patch" }',
+  },
+  {
+    pattern: /\bwb_node_lock\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "node.lock" }',
+  },
+  {
+    pattern: /\bwb_edge_lock\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "edge.lock" }',
+  },
+  {
+    pattern: /\bwb_canvas_tidy\b/,
+    reason: 'retired into wb_canvas_edit — use an ops entry { op: "tidy" }',
+  },
+  {
+    pattern: /\bwb_scene_digest\b/,
+    reason:
+      'merged into wb_canvas_snapshot (ADR-0010) — pass layout:true for the overlap/containment/cluster/free-region analysis',
+  },
 ]
 
 describe('skills tool-surface guard', () => {
@@ -186,6 +224,13 @@ describe('skills tool-surface guard', () => {
     // array without a consumer would revive the false shipped-skills claim.
     const mcpPackage = readJson(resolve(repoRoot, 'packages/mcp-server/package.json'))
     expect(mcpPackage.files).not.toContain('skills')
+
+    // And the deliberate absence of a SECOND copy. `packages/mcp-server/skills/`
+    // was a byte-identical duplicate of this tree, tracked but read by
+    // nothing — the guard below only scans the repo root, so a sweep that
+    // fixed one copy left the other stale while every assertion stayed
+    // green. Deleted 2026-08-18; this keeps it deleted.
+    expect(existsSync(resolve(repoRoot, 'packages/mcp-server/skills'))).toBe(false)
 
     const skillDirs = ['drawing-visuals', 'coauthoring-visuals', 'auditing-workspaces']
     expect(skillDirs).toHaveLength(3)

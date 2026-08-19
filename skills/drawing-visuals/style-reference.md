@@ -14,11 +14,12 @@ Its job is to keep you from hand-calculating coordinates ad hoc or redrawing the
 **Do:**
 - state the diagram type and actors in 1-2 sentences
 - place nodes on a rigid grid
-- connect edges by node id (`wb_edge_add`'s `fromNode`/`toNode`)
+- connect edges by node id (an `edge.add` op's `fromNode`/`toNode`)
 
 There is no coordinate math for the edge itself — `wb_scene_render` computes the drawn path from the
-two node ids. The math you do own is node placement: `x`, `y`, `width`, `height` on every
-`wb_node_add` / `wb_node_patch` call.
+two node ids. Node placement is the only math you might own, and only if you choose to: geometry is
+optional on a `node.add`, and omitting it hands placement to the server. Set `x`/`y`/`width`/`height`
+when the layout itself carries meaning, and read the rest of this note for how.
 
 ## Rigid Grid
 
@@ -42,7 +43,7 @@ Pick row and column indices, then fill in `x`, `y`, `width`, and `height` on the
 
 ## Colors
 
-`wb_node_add` / `wb_node_patch` / `wb_edge_add` / `wb_edge_patch` accept `color` as either a 6-digit
+The `node.add` / `node.patch` / `edge.add` / `edge.patch` ops accept `color` as either a 6-digit
 hex string (`#1971c2`) or one of the JSON Canvas numbered presets `"1"`-`"6"`. There is no semantic
 color name — `"primary"` is not a valid value. Pick your own hex-to-role mapping and keep it
 consistent across the document:
@@ -69,13 +70,16 @@ Hierarchy should come mostly from layout, not from painting everything in emphas
 ## Edges
 
 ```js
-wb_edge_add({
+wb_canvas_edit({
   workspaceId, documentId,
-  edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" },
+  ops: [
+    { op: "edge.add", edge: { id: "req", fromNode: "client", toNode: "server", label: "request", toEnd: "arrow" } },
+  ],
 })
 ```
 
-- both `fromNode` and `toNode` must already exist on the canvas — `wb_edge_add` refuses otherwise
+- both `fromNode` and `toNode` must be on the canvas by the time the op runs — a node added earlier
+  in the SAME `wb_canvas_edit` call counts, anything else refuses the whole batch
 - `fromSide`/`toSide` (`top`/`right`/`bottom`/`left`) hint which face of the node the edge leaves from
 - `fromEnd`/`toEnd` (`none`/`arrow`) control arrowheads independently on each end
 - there is no dash/line-style field on an edge — a distinction like "async vs sync" has to be carried
@@ -128,13 +132,15 @@ If unsure, keep user-facing or front-stage elements to the left / top and backst
 
 ### Automatic Layout
 
-`wb_canvas_tidy({ workspaceId, documentId, scope? })` re-lays-out node positions. It has no
-`direction`, `pins`, or `groups` parameters — it is a single automatic pass, not a configurable
-layout engine. Pass `scope` (a list of node ids) to restrict which nodes it moves; everything
-outside `scope` acts as a fixed obstacle. A locked node (`wb_node_lock`) is also treated as fixed,
-whether or not it is in `scope`.
+The `{ op: "tidy", scope? }` op re-lays-out node positions. It has no `direction`, `pins`, or
+`groups` parameters — it is a single automatic pass, not a configurable layout engine. Pass `scope`
+(a list of node ids) to restrict which nodes it moves; everything outside `scope` acts as a fixed
+obstacle. A locked node is also treated as fixed, whether or not it is in `scope`. Whatever moved
+comes back under `geometry`.
 
-If you need a layout `wb_canvas_tidy` cannot produce, place nodes by hand on the rigid grid instead.
+Put it last in the same call that drew the diagram rather than in a call of its own.
+
+If you need a layout `tidy` cannot produce, place nodes by hand on the rigid grid instead.
 
 ### When Backward Flow Is Unavoidable
 
@@ -147,7 +153,7 @@ If you need a layout `wb_canvas_tidy` cannot produce, place nodes by hand on the
 
 Each diagram family has a best-practice shell.
 Read the relevant recipe before drawing so you know the shell, the must-have pieces, and the common traps.
-All recipes below use only `text`/`link`/`file`/`group` nodes, `wb_edge_add`, and manual grid
+All recipes below use only `text`/`link`/`file`/`group` nodes, `edge.add` ops, and manual grid
 coordinates — nothing here assumes a feature the tool surface does not have.
 
 | What You Need To Show | Recipe |
@@ -251,7 +257,7 @@ coordinates — nothing here assumes a feature the tool surface does not have.
 **Shell**
 - lay out a grid of `text` nodes by hand: fixed `cellWidth`/`cellHeight`/`gap`, and `x = col *
   (cellWidth + gap), y = row * (cellHeight + gap)`
-- assign each item its own `row` / `col` before calling `wb_node_add`
+- assign each item its own `row` / `col` before writing the `node.add` ops
 - give the header row / column a distinct `color` from body cells
 
 **Must-have**
@@ -268,12 +274,14 @@ coordinates — nothing here assumes a feature the tool surface does not have.
 - reacting to one broken render by overfitting tiny x/y tweaks instead of returning to the grid
 - choosing colors arbitrarily instead of by a fixed role mapping
 - cramming 15+ elements into one document when a second document would read faster
-- expecting `wb_canvas_tidy` to accept a layout direction, pin, or grouping hint it does not have
+- expecting `tidy` to accept a layout direction, pin, or grouping hint it does not have
 
 ## After Drawing
 
 1. call `wb_scene_render({ workspaceId, documentId })` and inspect the SVG for overflow / overlap / directionality
-2. if you cannot see the image, call `wb_scene_digest` and read the structural summary
-3. if refinement is needed, use `wb_node_patch` / `wb_edge_patch` locally before considering a full redraw on a new document
+2. if you cannot see the image, read the board with `wb_canvas_snapshot` (add `layout: true` to
+   judge whether it is tidy) — though `wb_canvas_edit` already returned the board under `snapshot`
+3. if refinement is needed, send `node.patch` / `edge.patch` / `node.remove` ops before considering a
+   full redraw on a new document
 
 If you are unsure, think in this order: **logical structure -> rigid grid -> color -> label -> commit**.

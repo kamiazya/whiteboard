@@ -8,8 +8,8 @@
 // want deterministic behavior without reconnecting the main client.
 //
 // Coverage:
-//   1. wb_document_create -> wb_node_patch -> wb_scene_digest
-//   2. wb_version_save -> wb_version_restore -> wb_scene_digest element recovery
+//   1. wb_document_create -> wb_canvas_edit -> wb_canvas_snapshot
+//   2. wb_version_save -> wb_version_restore -> wb_canvas_snapshot element recovery
 //   3. checkpoint_restore branches for overwrite=true and validation errors
 //   4. viewport_set rejects immediately with no_client when no browser is connected
 //   5. export_canvas(format:png/svg/json) succeeds via headless rendering with no browser connected

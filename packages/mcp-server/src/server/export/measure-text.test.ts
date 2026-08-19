@@ -2,11 +2,7 @@ import type { FontDescriptor, TextMetrics } from '@kamiazya/whiteboard-canvas-re
 import { afterEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../log.js'
 import { resolveExportFontFaces } from './export-font.js'
-import {
-  _resetExportMeasureTextCacheForTests,
-  createConstantRatioMeasureText,
-  createOpentypeMeasureText,
-} from './measure-text.js'
+import { _resetExportMeasureTextCacheForTests, createOpentypeMeasureText } from './measure-text.js'
 
 const NO_FACES = { regular: null, bold: null, italic: null, boldItalic: null }
 
@@ -199,25 +195,37 @@ describe('createOpentypeMeasureText', () => {
   })
 })
 
-describe('createConstantRatioMeasureText', () => {
-  it('satisfies the same contract as the real measurer', () => {
-    const measure = createConstantRatioMeasureText()
+// The vendored face is Latin-only. `opentype.js` answers a code point it does
+// not carry with the `.notdef` advance — a flat ~0.44 em — which is not a
+// measurement of anything, and understates Japanese by more than the estimator
+// it replaced. Falling back per code point is what stops "measure with the
+// real font" being a regression for every non-Latin canvas.
+describe('a code point the vendored face does not carry', () => {
+  const font = {
+    family: 'Roboto',
+    fallbackChain: [],
+    weight: 400,
+    style: 'normal' as const,
+    sizePx: 16,
+  }
 
-    expect(measure('', font(16)).advanceWidth).toBe(0)
-
-    const base = measure('Fallback test', font(16))
-    const doubled = measure('Fallback test', font(32))
-    expectFiniteNonNegativeMetrics(base)
-    expect(doubled.advanceWidth).toBeCloseTo(base.advanceWidth * 2, 5)
-    expect(doubled.ascent).toBeCloseTo(base.ascent * 2, 5)
-    expect(doubled.descent).toBeCloseTo(base.descent * 2, 5)
-    expect(doubled.lineGap).toBeCloseTo(base.lineGap * 2, 5)
+  it('is estimated at a full em rather than measured as .notdef', async () => {
+    const measure = await createOpentypeMeasureText()
+    for (const char of ['あ', '漢', '한']) {
+      expect(measure(char, font).advanceWidth).toBeCloseTo(16)
+    }
   })
 
-  it('is monotonic under appending characters', () => {
-    const measure = createConstantRatioMeasureText()
-    const shorter = measure('abc', font(16)).advanceWidth
-    const longer = measure('abcdef', font(16)).advanceWidth
-    expect(longer).toBeGreaterThan(shorter)
+  it('still measures the Latin it does carry from the font, not the estimate', async () => {
+    const measure = await createOpentypeMeasureText()
+    // 'MMMM' vs 'iiii' is the discriminator: the estimator cannot tell them
+    // apart, so equal advances here would mean the fallback swallowed everything.
+    expect(measure('MMMM', font).advanceWidth).not.toBeCloseTo(measure('iiii', font).advanceWidth)
+  })
+
+  it('adds a carried and an uncarried run to the sum of their parts', async () => {
+    const measure = await createOpentypeMeasureText()
+    const whole = measure('API漢字', font).advanceWidth
+    expect(whole).toBeCloseTo(measure('API', font).advanceWidth + 32)
   })
 })

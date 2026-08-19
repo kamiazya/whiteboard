@@ -81,7 +81,7 @@ Use this loop:
 2. brainstorm: generate 2-3 candidate node / edge compositions
 3. curate: choose one and explicitly name what you are discarding
 4. gap check: find meaning that still exists only in your head
-5. draw/update: `wb_node_add` / `wb_node_patch` / `wb_edge_add` / `wb_edge_patch`
+5. draw/update: one `wb_canvas_edit` call carrying the whole composition as ops
 6. refine: tighten labels, alignment, and reading direction
 
 Stage 2 rules:
@@ -126,7 +126,7 @@ Stage 2 rules:
 - Do not overstuff detail into the whiteboard
   - overview belongs on the canvas
   - dense tables, long lists, and code-heavy detail belong in a companion artifact
-- When fixing an existing document, prefer local surgery — `wb_node_patch` / `wb_edge_patch` — over a full redraw
+- When fixing an existing document, prefer local surgery — `node.patch` / `edge.patch` / `node.remove` ops — over a full redraw
 - Build complex sections from the shell outward
   - layout / reading direction
   - large-scale shell such as layer, lane, zone, boundary
@@ -162,8 +162,8 @@ Stage 2 rules:
 
 Once a draft exists, break it as if you know nothing about the prior chat.
 Review either the whole document or one section at a time, but do it **while looking at the SVG
-`wb_scene_render` returns** (or, when you cannot view an image, the summary `wb_scene_digest`
-returns).
+`wb_scene_render` returns** (or, when you cannot view an image, what
+`wb_canvas_snapshot({ layout: true })` returns).
 
 Check:
 
@@ -203,7 +203,7 @@ Open [`references/geometry-checks.md`](./references/geometry-checks.md) when the
 
 If the fresh-viewer test surfaces ambiguity, return to Stage 2.
 Do not over-explain by dumping more text.
-Prefer **local whiteboard surgery** — `wb_node_patch` / `wb_edge_patch` — over redrawing everything.
+Prefer **local whiteboard surgery** — `node.patch` / `edge.patch` / `node.remove` ops in one `wb_canvas_edit` call — over redrawing everything.
 At this stage, prioritize the **second polish pass** over adding more nodes:
 composition, whitespace, alignment, and label density should get tighter before the board gets bigger.
 

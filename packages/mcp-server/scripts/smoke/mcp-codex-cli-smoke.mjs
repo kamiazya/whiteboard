@@ -3,8 +3,8 @@
 // server behaves correctly for a zero-context Codex client.
 //
 // Purpose:
-// Ensure the Codex subprocess can discover the repo-local Excalidraw MCP and
-// complete wb_document_create -> wb_node_patch -> wb_version_save. The final response is
+// Ensure the Codex subprocess can discover the repo-local whiteboard MCP and
+// complete wb_document_create -> wb_canvas_edit -> wb_version_save. The final response is
 // constrained by JSON Schema, and the resulting files under WHITEBOARD_DATA_DIR
 // are also verified.
 //

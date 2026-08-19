@@ -3,8 +3,9 @@ import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ServerDeps } from './server-deps.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
-import { createCanvasDigestTool } from './tools/canvas-digest.js'
+import { createCanvasEditTool } from './tools/canvas-edit.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
+import { createCanvasSnapshotTool } from './tools/canvas-snapshot.js'
 import { createCanvasViewTool } from './tools/canvas-view.js'
 import {
   WorkspaceDocumentNotFoundError,
@@ -25,18 +26,12 @@ import {
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
 import { createDocumentSetTool } from './tools/document-set.js'
-import { createEdgeAddTool } from './tools/edge-add.js'
-import { createEdgeLockTool } from './tools/edge-lock.js'
-import { createEdgePatchTool } from './tools/edge-patch.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
-import { createNodeAddTool } from './tools/node-add.js'
-import { createNodeLockTool } from './tools/node-lock.js'
-import { createNodePatchTool } from './tools/node-patch.js'
-import { createTidyCanvasTool } from './tools/tidy-canvas.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
+import { createViewportSetTool } from './tools/viewport-set.js'
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono()
@@ -132,17 +127,12 @@ export function createServer(deps: ServerDeps) {
 
   const tools = {
     facetSet: createFacetSetTool(deps),
-    nodeLock: createNodeLockTool(deps),
-    edgeLock: createEdgeLockTool(deps),
-    nodeAdd: createNodeAddTool(deps),
-    nodePatch: createNodePatchTool(deps),
-    edgeAdd: createEdgeAddTool(deps),
-    edgePatch: createEdgePatchTool(deps),
-    tidyCanvas: createTidyCanvasTool(deps),
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),
     canvasView: createCanvasViewTool(deps),
-    canvasDigest: createCanvasDigestTool(deps),
+    canvasSnapshot: createCanvasSnapshotTool(deps),
+    canvasEdit: createCanvasEditTool(deps),
+    viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
     documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),

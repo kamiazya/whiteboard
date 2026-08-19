@@ -35,18 +35,13 @@
 
 // Authoritative list — keep in sync with registerDocumentTools calls.
 export const ALL_REGISTERED_TOOLS = [
+  'wb_viewport_set',
   'wb_body_patch',
-  'wb_scene_digest',
+  'wb_canvas_snapshot',
+  'wb_canvas_edit',
   'wb_document_set',
   'wb_scene_render',
-  'wb_edge_lock',
-  'wb_edge_add',
-  'wb_edge_patch',
   'wb_facet_set',
-  'wb_node_add',
-  'wb_node_lock',
-  'wb_node_patch',
-  'wb_canvas_tidy',
   'wb_version_list',
   'wb_version_restore',
   'wb_version_save',
@@ -59,13 +54,10 @@ export const ALL_REGISTERED_TOOLS = [
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
+  'wb_viewport_set',
   'wb_document_set',
-  'wb_node_add',
-  'wb_edge_add',
-  'wb_edge_lock',
-  'wb_edge_patch',
-  'wb_node_lock',
-  'wb_canvas_tidy',
+  'wb_canvas_snapshot',
+  'wb_canvas_edit',
   'wb_facet_set',
   'wb_version_save',
   'wb_version_restore',
@@ -74,7 +66,7 @@ export const COVERED_TOOLS = [
   'canvas_view',
 ] as const
 
-// Empty since wb_edge_add gave wb_edge_lock an edge to lock: every tool
+// Empty since the seeding batch gives every later step something to act on: every tool
 // either reaches its success path in the smoke or is listed below.
 export const ERROR_PATH_ONLY_TOOLS = [] as const
 
@@ -92,10 +84,8 @@ export const UI_LINKED_TOOLS = ['canvas_view'] as const
 
 export const UNIT_ONLY_TOOLS = [
   'wb_body_patch',
-  'wb_scene_digest',
   'wb_scene_render',
   'wb_document_get',
-  'wb_node_patch',
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',

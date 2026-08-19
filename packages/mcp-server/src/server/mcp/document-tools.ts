@@ -86,125 +86,6 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
-    tools.nodeAdd.name,
-    {
-      description: tools.nodeAdd.description,
-      inputSchema: tools.nodeAdd.inputSchema.shape,
-      outputSchema: tools.nodeAdd.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.nodeAdd.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.nodeAdd.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.nodePatch.name,
-    {
-      description: tools.nodePatch.description,
-      inputSchema: tools.nodePatch.inputSchema.shape,
-      outputSchema: tools.nodePatch.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.nodePatch.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.nodePatch.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.nodeLock.name,
-    {
-      description: tools.nodeLock.description,
-      inputSchema: tools.nodeLock.inputSchema.shape,
-      outputSchema: tools.nodeLock.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.nodeLock.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.nodeLock.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.edgeLock.name,
-    {
-      description: tools.edgeLock.description,
-      inputSchema: tools.edgeLock.inputSchema.shape,
-      outputSchema: tools.edgeLock.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.edgeLock.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.edgeLock.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.edgeAdd.name,
-    {
-      description: tools.edgeAdd.description,
-      inputSchema: tools.edgeAdd.inputSchema.shape,
-      outputSchema: tools.edgeAdd.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.edgeAdd.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.edgeAdd.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.edgePatch.name,
-    {
-      description: tools.edgePatch.description,
-      inputSchema: tools.edgePatch.inputSchema.shape,
-      outputSchema: tools.edgePatch.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.edgePatch.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.edgePatch.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    tools.tidyCanvas.name,
-    {
-      description: tools.tidyCanvas.description,
-      inputSchema: tools.tidyCanvas.inputSchema.shape,
-      outputSchema: tools.tidyCanvas.outputSchema,
-    },
-    async (args) => {
-      const parsed = tools.tidyCanvas.inputSchema.parse(args)
-      const result = await withDocumentWriteLock(parsed.documentId, () =>
-        tools.tidyCanvas.execute(parsed),
-      )
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
     tools.canvasRenderSvg.name,
     {
       description: tools.canvasRenderSvg.description,
@@ -255,15 +136,54 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
-    tools.canvasDigest.name,
+    tools.canvasSnapshot.name,
     {
-      description: tools.canvasDigest.description,
-      inputSchema: tools.canvasDigest.inputSchema.shape,
-      outputSchema: tools.canvasDigest.outputSchema,
+      description: tools.canvasSnapshot.description,
+      inputSchema: tools.canvasSnapshot.inputSchema.shape,
+      outputSchema: tools.canvasSnapshot.outputSchema,
     },
     async (args) => {
-      const parsed = tools.canvasDigest.inputSchema.parse(args)
-      const result = await tools.canvasDigest.execute(parsed)
+      const parsed = tools.canvasSnapshot.inputSchema.parse(args)
+      const result = await tools.canvasSnapshot.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.viewportSet.name,
+    {
+      description: tools.viewportSet.description,
+      inputSchema: tools.viewportSet.inputSchema.shape,
+      outputSchema: tools.viewportSet.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.viewportSet.inputSchema.parse(args)
+      // No document write lock: this changes nothing stored, it only asks a
+      // browser to look somewhere. Queueing it behind an in-flight batch
+      // would make "show me this" wait on an unrelated edit.
+      const result = await tools.viewportSet.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.canvasEdit.name,
+    {
+      description: tools.canvasEdit.description,
+      inputSchema: tools.canvasEdit.inputSchema.shape,
+      outputSchema: tools.canvasEdit.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.canvasEdit.inputSchema.parse(args)
+      // Under the per-document write lock: this is the one tool that reads
+      // the whole canvas, decides ids and placements against what it read,
+      // and writes it back. Two concurrent batches without the lock can
+      // mint the same id and the later save wins silently.
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
+        tools.canvasEdit.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )

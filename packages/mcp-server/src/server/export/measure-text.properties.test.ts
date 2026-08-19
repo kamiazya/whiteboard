@@ -1,11 +1,8 @@
 import type { FontDescriptor, MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { afterAll, beforeAll, describe } from 'vitest'
 import { fc, fcTest, withDefaults } from '../../shared/test-utils/fast-check.js'
-import {
-  _resetExportMeasureTextCacheForTests,
-  createConstantRatioMeasureText,
-  createOpentypeMeasureText,
-} from './measure-text.js'
+import { _resetExportMeasureTextCacheForTests, createOpentypeMeasureText } from './measure-text.js'
 
 function font(sizePx: number): FontDescriptor {
   return { family: 'Roboto', fallbackChain: [], weight: 400, style: 'normal', sizePx }
@@ -65,8 +62,8 @@ function runContractProperties(getMeasure: () => MeasureText, label: string) {
   })
 }
 
-describe('measure-text properties: createConstantRatioMeasureText', () => {
-  runContractProperties(() => createConstantRatioMeasureText(), 'constant-ratio')
+describe('measure-text properties: constantRatioMeasureText', () => {
+  runContractProperties(() => constantRatioMeasureText, 'constant-ratio')
 })
 
 describe('measure-text properties: createOpentypeMeasureText (real font)', () => {

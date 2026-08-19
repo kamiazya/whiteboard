@@ -6,7 +6,7 @@ import { writeSpatialCanvas as _w, readSpatialCanvas } from '@kamiazya/whiteboar
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
-import { createNodePatchTool } from '@kamiazya/whiteboard-server-core'
+import { createCanvasEditTool } from '@kamiazya/whiteboard-server-core'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { registerDocumentTools } from '../mcp/document-tools.js'
@@ -98,7 +98,7 @@ describe('withDocumentWriteLock', () => {
   it('THE RED CASE: two unserialized patches to one canvas lose an update', async () => {
     const deps = await makeDeps()
     barrierOnCanvasLoads(deps.documentStore, 2)
-    const tool = createNodePatchTool(deps)
+    const tool = createCanvasEditTool(deps)
 
     // Both are held at the barrier until each has loaded, so they provably
     // share a base — the shape of an agent and a user editing the same
@@ -107,14 +107,12 @@ describe('withDocumentWriteLock', () => {
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
-        nodeId: 'n1',
-        patch: { x: 11 },
+        ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
       }),
       tool.execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
-        nodeId: 'n2',
-        patch: { x: 22 },
+        ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
       }),
     ])
 
@@ -128,23 +126,21 @@ describe('withDocumentWriteLock', () => {
 
   it('serializes them so both survive', async () => {
     const deps = await makeDeps()
-    const tool = createNodePatchTool(deps)
+    const tool = createCanvasEditTool(deps)
 
     await Promise.all([
       withDocumentWriteLock(DOCUMENT_ID, () =>
         tool.execute({
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
-          nodeId: 'n1',
-          patch: { x: 11 },
+          ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
         }),
       ),
       withDocumentWriteLock(DOCUMENT_ID, () =>
         tool.execute({
           workspaceId: WORKSPACE_ID,
           documentId: DOCUMENT_ID,
-          nodeId: 'n2',
-          patch: { x: 22 },
+          ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
         }),
       ),
     ])
@@ -212,14 +208,22 @@ describe('registered MCP handlers', () => {
     }
 
     const handlers = registeredHandlers(deps)
-    const nodePatch = handlers.get('wb_node_patch')!
+    const canvasEdit = handlers.get('wb_canvas_edit')!
     await Promise.all([
-      nodePatch(
-        { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, nodeId: 'n1', patch: { x: 11 } },
+      canvasEdit(
+        {
+          workspaceId: WORKSPACE_ID,
+          documentId: DOCUMENT_ID,
+          ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
+        },
         {},
       ),
-      nodePatch(
-        { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, nodeId: 'n2', patch: { x: 22 } },
+      canvasEdit(
+        {
+          workspaceId: WORKSPACE_ID,
+          documentId: DOCUMENT_ID,
+          ops: [{ op: 'node.patch', id: 'n2', patch: { x: 22 } }],
+        },
         {},
       ),
     ])
@@ -250,11 +254,15 @@ describe('registered MCP handlers', () => {
       return save(input)
     }
 
-    const writing = handlers.get('wb_node_patch')!(
-      { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, nodeId: 'n1', patch: { x: 11 } },
+    const writing = handlers.get('wb_canvas_edit')!(
+      {
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'node.patch', id: 'n1', patch: { x: 11 } }],
+      },
       {},
     )
-    const read = await handlers.get('wb_scene_digest')!(
+    const read = await handlers.get('wb_canvas_snapshot')!(
       { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
       {},
     )

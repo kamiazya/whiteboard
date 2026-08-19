@@ -133,20 +133,15 @@ const WORKSPACE_ID = 'e2e'
 
 // Authoritative tool list — must match ALL_REGISTERED_TOOLS in mcp-smoke-coverage.ts.
 const EXPECTED_TOOLS = [
+  'wb_viewport_set',
   'wb_body_patch',
-  'wb_scene_digest',
+  'wb_canvas_snapshot',
+  'wb_canvas_edit',
   'wb_document_get',
   'wb_document_set',
   'wb_scene_render',
   'canvas_view',
-  'wb_edge_add',
-  'wb_edge_lock',
-  'wb_edge_patch',
   'wb_facet_set',
-  'wb_node_add',
-  'wb_node_lock',
-  'wb_node_patch',
-  'wb_canvas_tidy',
   'wb_version_list',
   'wb_version_restore',
   'wb_version_save',
@@ -244,80 +239,93 @@ async function main() {
     'Facets are OKF frontmatter',
   )
 
-  // wb_node_add: the only MCP path that puts a node on a spatial canvas,
-  // and what the lock round-trip below needs to have something to lock.
-  const added = await callTool('wb_node_add', {
+  // The seed the rest of this flow needs: two nodes and the edge between
+  // them, drawn the way an agent actually draws — one call, explicit
+  // geometry (a later step tidies, and a tidy that moves nothing proves
+  // nothing).
+  const seedBatch = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    node: { id: 'lockable', type: 'text', x: 0, y: 0, width: 200, height: 100, text: 'lockable' },
+    ops: [
+      {
+        op: 'node.add',
+        node: {
+          id: 'lockable',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 200,
+          height: 100,
+          text: 'lockable',
+        },
+      },
+      {
+        op: 'node.add',
+        node: { id: 'target', type: 'text', x: 10, y: 10, width: 200, height: 100, text: 'target' },
+      },
+      { op: 'edge.add', edge: { id: 'link', fromNode: 'lockable', toNode: 'target' } },
+    ],
   })
-  if (added.documentId !== documentId || added.node?.id !== 'lockable') {
-    throw new Error(`wb_node_add returned unexpected shape: ${JSON.stringify(added)}`)
+  if (seedBatch.applied !== 3 || seedBatch.snapshot.edges[0]?.id !== 'link') {
+    throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
-  console.log('[e2e] wb_node_add → lockable')
+  console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(
-    'wb_node_add',
+    'wb_canvas_edit',
     {
       workspaceId: WORKSPACE_ID,
       documentId,
-      node: { id: 'lockable', type: 'text', x: 1, y: 1, width: 10, height: 10, text: 'clobber' },
+      ops: [
+        {
+          op: 'node.add',
+          node: {
+            id: 'lockable',
+            type: 'text',
+            x: 1,
+            y: 1,
+            width: 10,
+            height: 10,
+            text: 'clobber',
+          },
+        },
+      ],
     },
     'on an id that is already taken',
-    'already exists on canvas',
+    'is already on the canvas',
   )
 
-  // wb_edge_add: the only MCP path that connects two nodes. Needs a second
-  // node, so it also proves wb_node_add adds rather than replaces.
-  await callTool('wb_node_add', {
-    workspaceId: WORKSPACE_ID,
-    documentId,
-    node: { id: 'target', type: 'text', x: 300, y: 0, width: 200, height: 100, text: 'target' },
-  })
-  const linked = await callTool('wb_edge_add', {
-    workspaceId: WORKSPACE_ID,
-    documentId,
-    edge: { id: 'link', fromNode: 'lockable', toNode: 'target' },
-  })
-  if (linked.edge?.id !== 'link') {
-    throw new Error(`wb_edge_add returned unexpected shape: ${JSON.stringify(linked)}`)
-  }
-  console.log('[e2e] wb_edge_add → lockable→target')
-
-  // spatialCanvasSchema owns endpoint existence, so a dangling edge is
-  // refused by the same gate a retarget goes through.
+  // An edge whose endpoint does not exist is refused by the batch itself,
+  // before the canvas schema ever sees it — so the message names the op
+  // rather than a schema path.
   await expectToolError(
-    'wb_edge_add',
+    'wb_canvas_edit',
     {
       workspaceId: WORKSPACE_ID,
       documentId,
-      edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' },
+      ops: [{ op: 'edge.add', edge: { id: 'dangling', fromNode: 'lockable', toNode: 'ghost' } }],
     },
     'with an endpoint the canvas does not have',
-    'references nonexistent toNode',
+    'add that node first',
   )
 
-  const nodeLocked = await callTool('wb_node_lock', {
+  await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    nodeId: 'lockable',
-    locked: true,
+    ops: [{ op: 'node.lock', id: 'lockable', locked: true }],
   })
-  if (
-    nodeLocked.documentId !== documentId ||
-    nodeLocked.nodeId !== 'lockable' ||
-    nodeLocked.locked !== true
-  ) {
-    throw new Error(`wb_node_lock returned unexpected shape: ${JSON.stringify(nodeLocked)}`)
-  }
-  console.log('[e2e] wb_node_lock → lockable locked')
+  console.log('[e2e] wb_canvas_edit → lockable locked')
 
   // The lock binds agents, not just the pointer.
   await expectToolError(
-    'wb_node_patch',
-    { workspaceId: WORKSPACE_ID, documentId, nodeId: 'lockable', patch: { x: 999 } },
+    'wb_canvas_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      ops: [{ op: 'node.patch', id: 'lockable', patch: { x: 999 } }],
+    },
     'on a locked node',
-    'node is locked',
+    'is locked',
   )
 
   // The lock is editor state, never canvas content: it must not appear in
@@ -335,19 +343,17 @@ async function main() {
   }
   console.log('[e2e] wb_document_get → no lock leaked into the spatial export')
 
-  await callTool('wb_node_lock', {
+  await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    nodeId: 'lockable',
-    locked: false,
+    ops: [{ op: 'node.lock', id: 'lockable', locked: false }],
   })
 
-  // wb_scene_render / wb_scene_digest: the only two tools whose
-  // structuredContent is built through server-core's layoutSpatialCanvas
-  // delegate (compose-canvas-scene.ts) rather than read back from stored
-  // content — this is the runtime guard that the laid-out scene still
-  // validates against canvasRenderSvgOutputSchema / sceneDigestSchema
-  // through the real MCP SDK, which a type-level check cannot see.
+  // wb_scene_render: its structuredContent is built through server-core's
+  // layoutSpatialCanvas delegate (compose-canvas-scene.ts) rather than read
+  // back from stored content — this is the runtime guard that the laid-out
+  // scene still validates against canvasRenderSvgOutputSchema through the
+  // real MCP SDK, which a type-level check cannot see.
   const rendered = await callTool('wb_scene_render', { workspaceId: WORKSPACE_ID, documentId })
   if (typeof rendered.svg !== 'string' || !rendered.svg.includes('<rect')) {
     throw new Error(`wb_scene_render returned unexpected shape: ${JSON.stringify(rendered)}`)
@@ -386,64 +392,231 @@ async function main() {
   }
   console.log('[e2e] canvas_view → scene + references for the widget')
 
-  const digest = await callTool('wb_scene_digest', { workspaceId: WORKSPACE_ID, documentId })
-  if (!Array.isArray(digest.nodes) || digest.nodes.length === 0) {
-    throw new Error(`wb_scene_digest returned unexpected shape: ${JSON.stringify(digest)}`)
-  }
-  // The names have to be the ones the OTHER tools take. A digest that reads
-  // back positionally still satisfies the schema and still looks right in a
-  // unit test, while telling a reader to patch a node that does not exist.
-  if (!digest.nodes.some((node) => node.id === 'lockable')) {
+  // The opt-in layout analysis is a SECOND composition through the same
+  // output schema, reached only when `layout` is set, so the default read
+  // below cannot cover it. It is also the only tool result still built
+  // through server-core's layoutSpatialCanvas delegate besides
+  // wb_scene_render — which makes this the runtime guard that a laid-out
+  // scene still validates through the real MCP SDK.
+  const analysed = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    layout: true,
+  })
+  if (analysed.layout === undefined || !Array.isArray(analysed.layout.clusters)) {
     throw new Error(
-      `wb_scene_digest did not name the seeded node by its document id: ${JSON.stringify(digest.nodes)}`,
+      `wb_canvas_snapshot(layout) returned unexpected shape: ${JSON.stringify(analysed)}`,
     )
   }
-  console.log('[e2e] wb_scene_digest → digest naming the seeded node by document id')
+  // The names have to be the ones wb_canvas_edit takes. An analysis that
+  // reads back positionally still satisfies the schema and still looks right
+  // in a unit test, while telling a reader to patch a node that does not exist.
+  if (!analysed.nodes.some((node) => node.id === 'lockable')) {
+    throw new Error(
+      `wb_canvas_snapshot did not name the seeded node by its document id: ${JSON.stringify(analysed.nodes)}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_snapshot(layout:true) → analysis naming the seeded node by id')
 
-  // wb_canvas_tidy: what this asserts is the full pipeline (input parse →
-  // doc load → tidy → structuredContent vs outputSchema), which is the drift
+  // The DEFAULT read: stored content only, no layout pass. This is the
+  // runtime guard that the semantic projection (node text, type, lock state,
+  // edges) still validates against canvasSnapshotSchema through the real MCP
+  // SDK, and it pins the honesty of the caps — nodeCount is the board's real
+  // total, not the returned length.
+  const snapshot = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  const seeded = Array.isArray(snapshot.nodes)
+    ? snapshot.nodes.find((node) => node.id === 'lockable')
+    : undefined
+  if (seeded === undefined || seeded.type !== 'text' || typeof seeded.text !== 'string') {
+    throw new Error(`wb_canvas_snapshot returned unexpected shape: ${JSON.stringify(snapshot)}`)
+  }
+  if (snapshot.nodeCount !== snapshot.nodes.length || snapshot.truncated !== false) {
+    throw new Error(
+      `wb_canvas_snapshot miscounted an uncapped board: ${JSON.stringify({
+        nodeCount: snapshot.nodeCount,
+        returned: snapshot.nodes.length,
+        truncated: snapshot.truncated,
+      })}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
+
+  // wb_canvas_edit is the whole spatial-mutation surface, so the smoke has
+  // to reach the parts a unit test cannot: the batch's structuredContent vs
+  // its outputSchema through the real MCP SDK, and — because this tool
+  // decides ids and coordinates the caller never supplied — that what it
+  // REPORTS placing is what it actually stored.
+  const applied = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [
+      { op: 'node.add', node: { id: 'batch-a', type: 'text', text: 'batched A' } },
+      { op: 'node.add', node: { id: 'batch-b', type: 'text', text: 'batched B' } },
+      { op: 'edge.add', edge: { id: 'batch-e', fromNode: 'batch-a', toNode: 'batch-b' } },
+    ],
+  })
+  if (applied.applied !== 3 || !applied.touched.nodes.includes('batch-a')) {
+    throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(applied)}`)
+  }
+  const placedA = applied.geometry.find((entry) => entry.id === 'batch-a')
+  if (placedA === undefined) {
+    throw new Error(
+      `wb_canvas_edit placed a node with no coordinates but did not report it: ${JSON.stringify(applied.geometry)}`,
+    )
+  }
+  const inSnapshot = applied.snapshot.nodes.find((node) => node.id === 'batch-a')
+  if (inSnapshot?.x !== placedA.x || inSnapshot?.y !== placedA.y) {
+    throw new Error(
+      `wb_canvas_edit reported a placement its own snapshot disagrees with: ${JSON.stringify({ placedA, inSnapshot })}`,
+    )
+  }
+  console.log('[e2e] wb_canvas_edit → 3 ops in one transaction, placement reported and stored')
+
+  // All-or-nothing across the real wire: the second op cannot apply, so the
+  // first must not survive either.
+  await expectToolError(
+    'wb_canvas_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      ops: [
+        {
+          op: 'node.add',
+          node: { id: 'batch-rollback', type: 'text', text: 'should not persist' },
+        },
+        { op: 'node.patch', id: 'no-such-node', patch: { x: 1 } },
+      ],
+    },
+    'with a second op that cannot apply',
+    'ops[1]',
+  )
+  const afterRollback = await callTool('wb_canvas_snapshot', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+  })
+  if (afterRollback.nodes.some((node) => node.id === 'batch-rollback')) {
+    throw new Error('wb_canvas_edit persisted the first op of a batch it rejected')
+  }
+  console.log('[e2e] wb_canvas_edit → rejected batch left nothing behind')
+
+  // region.set is the one op that deletes by OMISSION, so the smoke drives
+  // the full reconcile through the real wire: declare two, then declare one,
+  // and the other must be gone. The group sits far from everything else so
+  // nothing already on this canvas is enclosed by it.
+  await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [
+      {
+        op: 'node.add',
+        node: { id: 'region', type: 'group', x: 5000, y: 5000, width: 900, height: 600 },
+      },
+      {
+        op: 'region.set',
+        within: 'region',
+        nodes: [
+          { id: 'in-1', type: 'text', text: 'first' },
+          { id: 'in-2', type: 'text', text: 'second' },
+        ],
+        edges: [],
+      },
+    ],
+    follow: false,
+  })
+  const reconciled = await callTool('wb_canvas_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    ops: [
+      {
+        op: 'region.set',
+        within: 'region',
+        nodes: [{ id: 'in-1', type: 'text', text: 'first' }],
+        edges: [],
+      },
+    ],
+    follow: false,
+  })
+  const survivors = reconciled.snapshot.nodes.map((node) => node.id)
+  if (!survivors.includes('in-1') || survivors.includes('in-2')) {
+    throw new Error(
+      `region.set did not reconcile the region: ${JSON.stringify({ survivors, touched: reconciled.touched })}`,
+    )
+  }
+  // Everything outside the region is untouched by it — the property that
+  // makes deleting-by-omission safe to hand an agent at all.
+  if (!survivors.includes('lockable') || !survivors.includes('batch-a')) {
+    throw new Error(`region.set reached outside its region: ${JSON.stringify(survivors)}`)
+  }
+  console.log('[e2e] wb_canvas_edit(region.set) → region reconciled, rest of the board untouched')
+
+  // wb_viewport_set with nobody watching. This smoke runs headless, so
+  // delivered:false IS the success path — the point is that asking a
+  // browser to look somewhere does not FAIL when there is no browser, which
+  // is what would make every headless agent run look broken.
+  const viewport = await callTool('wb_viewport_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'fit',
+    elementIds: ['lockable'],
+  })
+  if (viewport.documentId !== documentId || viewport.delivered !== false) {
+    throw new Error(`wb_viewport_set returned unexpected shape: ${JSON.stringify(viewport)}`)
+  }
+  console.log('[e2e] wb_viewport_set → delivered:false with no browser attached (not an error)')
+
+  // The tidy op: what this asserts is the full pipeline (input parse → doc
+  // load → tidy → structuredContent vs outputSchema), which is the drift
   // guard this smoke exists for. How far anything moves is geometry, covered
   // by canvas-render's unit/property tests — so this checks the shape of
   // every entry rather than a move count, which would only be restating the
-  // layout the nodes above happen to have.
-  const tidied = await callTool('wb_canvas_tidy', {
+  // layout the nodes above happen to have. `lockable` and `target` were
+  // seeded overlapping, so there IS something to separate.
+  const tidied = await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
+    ops: [{ op: 'tidy' }],
   })
   if (
     tidied.documentId !== documentId ||
-    !Array.isArray(tidied.moved) ||
-    tidied.moved.some(
+    !Array.isArray(tidied.geometry) ||
+    tidied.geometry.some(
       (m) => typeof m.id !== 'string' || typeof m.x !== 'number' || typeof m.y !== 'number',
     )
   ) {
-    throw new Error(`wb_canvas_tidy returned unexpected shape: ${JSON.stringify(tidied)}`)
+    throw new Error(`wb_canvas_edit(tidy) returned unexpected shape: ${JSON.stringify(tidied)}`)
   }
-  console.log(`[e2e] wb_canvas_tidy → ${tidied.moved.length} move(s), each well-formed`)
+  console.log(`[e2e] wb_canvas_edit(tidy) → ${tidied.geometry.length} move(s), each well-formed`)
 
-  const edgeLocked = await callTool('wb_edge_lock', {
+  await callTool('wb_canvas_edit', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    edgeId: 'link',
-    locked: true,
+    ops: [{ op: 'edge.lock', id: 'link', locked: true }],
   })
-  if (edgeLocked.edgeId !== 'link' || edgeLocked.locked !== true) {
-    throw new Error(`wb_edge_lock returned unexpected shape: ${JSON.stringify(edgeLocked)}`)
-  }
-  console.log('[e2e] wb_edge_lock → link locked')
+  console.log('[e2e] wb_canvas_edit → link locked')
 
   await expectToolError(
-    'wb_edge_patch',
-    { workspaceId: WORKSPACE_ID, documentId, edgeId: 'link', patch: { label: 'nope' } },
+    'wb_canvas_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      ops: [{ op: 'edge.patch', id: 'link', patch: { label: 'nope' } }],
+    },
     'on a locked edge',
-    'edge is locked',
+    'is locked',
   )
 
   await expectToolError(
-    'wb_edge_lock',
-    { workspaceId: WORKSPACE_ID, documentId, edgeId: 'no-such-edge', locked: true },
+    'wb_canvas_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      ops: [{ op: 'edge.lock', id: 'no-such-edge', locked: true }],
+    },
     'with an id the canvas does not have',
-    'edge not found',
+    'is not on the canvas',
   )
 
   // wb_version_save
@@ -513,14 +686,14 @@ async function main() {
     'This writes OKF Markdown',
   )
   await expectToolError(
-    'wb_node_add',
+    'wb_canvas_edit',
     {
       workspaceId: WORKSPACE_ID,
       documentId: mdCanvasId,
-      node: { id: 'stray', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'stray' },
+      ops: [{ op: 'node.add', node: { id: 'stray', type: 'text', text: 'stray' } }],
     },
     'on a markdown document',
-    'This adds a JSON Canvas node',
+    'This edits a JSON Canvas',
   )
 
   const importMarkdown = [

@@ -18,8 +18,8 @@ import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
+import { createCanvasEditTool } from './canvas-edit.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
-import { createNodeAddTool } from './node-add.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
@@ -57,10 +57,18 @@ describe('a document with no saved snapshot', () => {
       }),
     )
     const writeSide = await raisedBy(() =>
-      createNodeAddTool(writeDeps).execute({
+      // The write side is whichever tool mutates a canvas; `wb_node_add`
+      // was that tool until the seven were retired into `wb_canvas_edit`.
+      // What is under test is the loader they share, not the tool.
+      createCanvasEditTool(writeDeps).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
-        node: { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
+        ops: [
+          {
+            op: 'node.add',
+            node: { id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 50, text: 'hello' },
+          },
+        ],
       }),
     )
 

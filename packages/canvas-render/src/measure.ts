@@ -70,3 +70,56 @@ export function isFullWidthCodePoint(codePoint: number): boolean {
     (codePoint >= 0x1f300 && codePoint <= 0x1faff) // emoji
   )
 }
+
+/**
+ * Ratios of an em box for a rough Latin sans-serif face. Not any real
+ * font's metrics — see `constantRatioMeasureText`.
+ */
+const RATIO_ADVANCE = 0.55
+const RATIO_ASCENT = 0.75
+const RATIO_DESCENT = 0.25
+const RATIO_LINE_GAP = 0.1
+
+function clampNonNegative(value: number): number {
+  return Number.isFinite(value) && value >= 0 ? value : 0
+}
+
+/**
+ * The measurer of last resort: what a caller uses when no real one is
+ * reachable — the export font asset failed to load, the realm has no
+ * Canvas 2D context (jsdom), or the layer is forbidden from loading a font
+ * at all (server-core).
+ *
+ * It lives here, in the package that DEFINES `MeasureText`, because every
+ * one of those callers needs the same thing: a deterministic estimate that
+ * satisfies the contract (finite, non-negative, `advanceWidth('') === 0`,
+ * linear in `sizePx`). Three composition roots grew their own copy with
+ * three different constant sets, so the same canvas measured differently
+ * depending on which degraded path produced it — the numbers are arbitrary,
+ * but they must be arbitrary in ONE way.
+ *
+ * Its output matches no real font, and that is the point: a scene laid out
+ * with it is degraded, never byte-reproducible against a measured one.
+ *
+ * Degraded is not the same as arbitrary, though, which is why it is
+ * script-aware (`isFullWidthCodePoint`). One ratio for every character is
+ * not a coarse estimate of Japanese, it is the wrong shape: a kana occupies
+ * a full em where an `i` occupies a fraction of one, so a uniform ratio
+ * understates a Japanese line by roughly half however the constant is
+ * tuned. Counting code points rather than UTF-16 units falls out of the
+ * same loop, and stops an astral code point being charged twice.
+ */
+export const constantRatioMeasureText: MeasureText = (text, font) => {
+  const sizePx = clampNonNegative(font.sizePx)
+  let em = 0
+  for (const char of text) {
+    const codePoint = char.codePointAt(0)
+    em += codePoint !== undefined && isFullWidthCodePoint(codePoint) ? 1 : RATIO_ADVANCE
+  }
+  return {
+    advanceWidth: clampNonNegative(em * sizePx),
+    ascent: sizePx * RATIO_ASCENT,
+    descent: sizePx * RATIO_DESCENT,
+    lineGap: sizePx * RATIO_LINE_GAP,
+  }
+}

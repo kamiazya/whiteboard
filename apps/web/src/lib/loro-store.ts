@@ -1,6 +1,7 @@
 import { Loro } from 'loro-crdt'
 import { z } from 'zod'
 import { openWhiteboardDb } from './browser-idb.js'
+import { shouldCompact } from './loro-compaction.js'
 
 /**
  * Versioned envelope for Loro records persisted in IndexedDB.
@@ -42,6 +43,22 @@ function isValidLoroBytes(bytes: Uint8Array): boolean {
     return true
   } catch {
     return false
+  }
+}
+
+/**
+ * Replay a record into one snapshot. Returns null when any byte refuses to
+ * import — an unfoldable log is left exactly as it was, because losing edits
+ * to save space is not a trade this is allowed to make.
+ */
+function foldDeltas(snapshot: Uint8Array, deltas: readonly Uint8Array[]): Uint8Array | null {
+  try {
+    const doc = new Loro()
+    doc.import(snapshot)
+    for (const delta of deltas) doc.import(delta)
+    return doc.export({ mode: 'snapshot' })
+  } catch {
+    return null
   }
 }
 
@@ -183,11 +200,17 @@ export class LoroStore {
           tx.abort()
           return
         }
-        const updated: LoroRecordEnvelope = {
-          ...parsed.data,
-          deltas: [...(parsed.data.deltas ?? []), delta],
-          updatedAt: new Date().toISOString(),
-        }
+        const deltas = [...(parsed.data.deltas ?? []), delta]
+        // Folding HERE rather than on read: this is already the one
+        // read-modify-write transaction over this record, so the fold cannot
+        // race an append, and a fresh open never pays for a log someone
+        // else's session grew. Measured at the budget, the fold costs about
+        // 10ms of synchronous replay and it happens once per 64KB written.
+        const folded = shouldCompact(deltas) ? foldDeltas(parsed.data.snapshot, deltas) : null
+        const updated: LoroRecordEnvelope =
+          folded === null
+            ? { ...parsed.data, deltas, updatedAt: new Date().toISOString() }
+            : { v: 1, snapshot: folded, updatedAt: new Date().toISOString() }
         store.put(updated, documentId)
       }
       tx.oncomplete = () => {

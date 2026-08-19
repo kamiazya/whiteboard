@@ -259,6 +259,14 @@ export class DaemonBackend implements DocumentBackend {
           handlers.onHeadChanged({ head: msg.head })
           return
         }
+        if (msg.type === 'agent_activity') {
+          handlers.onAgentActivity?.({
+            operator: msg.operator,
+            touched: msg.touched,
+            summary: msg.summary,
+          })
+          return
+        }
         if (msg.type === 'viewport_request') {
           handlers.onViewportRequest({
             requestId: msg.requestId,

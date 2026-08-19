@@ -49,6 +49,67 @@ export type LayoutRequest = {
   readonly missingFileRefs?: readonly string[]
 }
 
+/**
+ * Lay a markdown BODY out, for the editor's rail.
+ *
+ * Only the block boxes and their source lines come back — no SVG. The rail
+ * draws rectangles, and a document's worth of serialized SVG per keystroke
+ * is a cost with no reader.
+ *
+ * The resolver seams (`resolveAlias`, `resolveEmbed`, math, diagrams) do NOT
+ * cross: they are functions, and the rail does not need them. An unresolved
+ * reference lays out as the literal text the author typed, which shifts a
+ * block's width slightly and never its position — a difference no minimap
+ * can show. The PREVIEW's own layout stays the source of truth wherever one
+ * is on screen; this exists for write mode, where none is.
+ */
+export type MarkdownRailRequest = {
+  readonly type: 'markdown-rail'
+  readonly id: number
+  readonly body: string
+  readonly maxWidth: number
+}
+
+export type MarkdownRailResponse =
+  | {
+      readonly type: 'markdown-rail-done'
+      readonly id: number
+      readonly blocks: readonly { x: number; y: number; w: number; h: number }[]
+      readonly anchors: readonly { line: number; y: number }[]
+    }
+  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+
+/**
+ * Render a markdown BODY to SVG.
+ *
+ * The sibling `markdown-rail` request deliberately returns no SVG, and its
+ * reasoning still holds where it was written: the rail redraws per keystroke
+ * and draws rectangles, so serializing a document's worth of SVG for it
+ * would be a cost with no reader. A row thumbnail HAS a reader — the SVG is
+ * the picture — and it is produced once per document, not per keystroke.
+ *
+ * The resolver seams do not cross here either, for the same reason (a
+ * function cannot be posted). An unresolved reference draws as the literal
+ * text the author typed, which at thumbnail scale is a difference no eye can
+ * find.
+ */
+export type MarkdownRenderRequest = {
+  readonly type: 'markdown-render'
+  readonly id: number
+  readonly body: string
+  readonly maxWidth: number
+}
+
+export type MarkdownRenderResponse =
+  | {
+      readonly type: 'markdown-render-done'
+      readonly id: number
+      readonly svg: string
+      /** What the SVG's own viewBox covers, so a caller can scale it. */
+      readonly bounds: BoundingBox
+    }
+  | { readonly type: 'failed'; readonly id: number; readonly reason: string }
+
 export type LayoutResponse =
   | {
       readonly type: 'laid-out'

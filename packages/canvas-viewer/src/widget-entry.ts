@@ -90,7 +90,7 @@ const HOST_CONNECT_TIMEOUT_MS = 2_000
 // unmounted for whoever restores it.
 //
 // Restoring it needs a decision first, not just re-wiring: the document model has no
-// annotate equivalent, and a sticky note is a `wb_node_add` of a text node —
+// annotate equivalent, and a sticky note is a `node.add` of a text node —
 // so the question is whether this widget should mutate a document at all
 // (it is otherwise strictly read-only), and if so under what placement
 // rule. `computeStickyPlacement` is the old rule, still tested.

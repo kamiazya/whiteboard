@@ -50,44 +50,6 @@ export class NodeNotFoundError extends Error {
 }
 
 /**
- * Thrown when a mutation targets a node the user has locked. The lock
- * binds agents too, not just the pointer (user decision 2026-08-09) —
- * `wb_node_lock` is the one tool that still accepts a locked node, so an
- * agent can lift its own mistake without a human at the keyboard.
- */
-export class NodeLockedError extends Error {
-  constructor(
-    public readonly documentId: string,
-    public readonly nodeId: string,
-  ) {
-    super(`node is locked: ${nodeId} in canvas ${documentId} (unlock it with wb_node_lock)`)
-    this.name = 'NodeLockedError'
-  }
-}
-
-/** Edge counterpart to `NodeLockedError` — see `wb_edge_lock`. */
-export class EdgeLockedError extends Error {
-  constructor(
-    public readonly documentId: string,
-    public readonly edgeId: string,
-  ) {
-    super(`edge is locked: ${edgeId} in canvas ${documentId} (unlock it with wb_edge_lock)`)
-    this.name = 'EdgeLockedError'
-  }
-}
-
-/** Thrown when a patch tool targets an edgeId absent from the canvas. */
-export class EdgeNotFoundError extends Error {
-  constructor(
-    public readonly documentId: string,
-    public readonly edgeId: string,
-  ) {
-    super(`edge not found: ${edgeId} in canvas ${documentId}`)
-    this.name = 'EdgeNotFoundError'
-  }
-}
-
-/**
  * Thrown when a patch's merged result fails `spatialCanvasSchema`
  * validation — e.g. an edge patch retargets `fromNode`/`toNode` to a
  * nonexistent node id. Reuses the schema's own cross-field invariant

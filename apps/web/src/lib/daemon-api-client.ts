@@ -9,11 +9,12 @@ import {
   documentOkfV1ResponseSchema,
   documentsApiUrl,
   type ListDocumentsResponse,
-  type ListDocumentsV1Response,
   type ListWorkspacesResponse,
   listDocumentsResponseSchema,
-  listDocumentsV1ResponseSchema,
   listWorkspacesResponseSchema,
+  type RenameDocumentPathRequest,
+  type RenameDocumentPathResponse,
+  renameDocumentPathResponseSchema,
   type UpdateDocumentResponse,
   updateDocumentResponseSchema,
   type WorkspaceNames,
@@ -108,6 +109,35 @@ export function createDocument(
   )
 }
 
+/**
+ * Move a document, and everything under it, to a new path.
+ *
+ * The path being MOVED addresses the request and the destination travels in
+ * the body: putting the new one in the URL would address a document that
+ * does not exist yet. The store plans the whole subtree, so a 409 names the
+ * PRODUCED path that collided — often not the one the caller asked for,
+ * which is why callers must show the server's message rather than rebuild
+ * one around `newPath`.
+ */
+export function renameDocumentPath(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  path: string,
+  newPath: string,
+): Promise<RenameDocumentPathResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'path')}`,
+    renameDocumentPathResponseSchema,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: newPath } satisfies RenameDocumentPathRequest),
+    },
+  )
+}
+
 export function deleteDocument(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
@@ -174,18 +204,6 @@ export function setDocumentDisplayName(
 }
 
 // ---- /api/v1 document surface (documentId + derived alias world) ----
-
-export function listDocumentsV1(
-  fetchFn: typeof globalThis.fetch,
-  daemonBaseUrl: string,
-  workspaceId: string,
-): Promise<ListDocumentsV1Response> {
-  return fetchAndParse(
-    fetchFn,
-    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents`,
-    listDocumentsV1ResponseSchema,
-  )
-}
 
 export function getDocumentOkfV1(
   fetchFn: typeof globalThis.fetch,

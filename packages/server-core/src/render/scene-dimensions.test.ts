@@ -3,10 +3,10 @@
 // routed around one, which the router now does deliberately — fell outside
 // the reported size, and a consumer sizing a viewport by it clipped the
 // drawing.
+import { constantRatioMeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { composeCanvasScene, computeSceneDimensions } from './compose-canvas-scene.js'
-import { fallbackMeasureText } from './fallback-measure.js'
 
 const canvas = (nodes: unknown[], edges: unknown[] = []): SpatialCanvas =>
   ({ nodes, edges }) as unknown as SpatialCanvas
@@ -22,7 +22,7 @@ const node = (id: string, x: number, y: number, w = 100, h = 60) => ({
 })
 
 const dimensionsOf = (c: SpatialCanvas) =>
-  computeSceneDimensions(composeCanvasScene(c, fallbackMeasureText))
+  computeSceneDimensions(composeCanvasScene(c, constantRatioMeasureText))
 
 describe('computeSceneDimensions', () => {
   it('an empty canvas has no size', () => {
@@ -49,7 +49,7 @@ describe('computeSceneDimensions', () => {
     // Whatever the route is, the reported size must cover it.
     expect(withEdgeSize.width).toBeGreaterThanOrEqual(nodesOnlySize.width)
     expect(withEdgeSize.height).toBeGreaterThanOrEqual(nodesOnlySize.height)
-    const scene = composeCanvasScene(withEdge, fallbackMeasureText)
+    const scene = composeCanvasScene(withEdge, constantRatioMeasureText)
     for (const sceneNode of scene.nodes) {
       if (sceneNode.kind !== 'edge') continue
       for (const point of sceneNode.path) {

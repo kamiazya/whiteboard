@@ -38,6 +38,7 @@ import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/expo
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
+import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
@@ -47,7 +48,7 @@ import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
-import { browserLocalFaviconStatus, type FaviconStyle, resolveRectColor } from '../lib/favicon.js'
+import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -454,20 +455,18 @@ export function BrowserLocalDocumentPage({
   // Read once at mount for the same remount-re-reads reason as webMcpEnabled
   // above — the style picker now lives on the routed /settings page.
   const faviconStyle: FaviconStyle = settingsStore.load().appearance?.faviconStyle ?? 'minimap'
+  // One shape for whichever kind this document is — the favicon draws
+  // it today, and a tree row's icon draws the same one.
+  const documentOutline = useDocumentOutline({
+    kind: documentKind,
+    canvas: canvas,
+    markdownBody: documentKind === 'markdown' ? (markdownDoc.body ?? '') : null,
+  })
+
   useFavicon({
     style: faviconStyle,
     status: browserLocalFaviconStatus(persistence.kind),
-    rects: useMemo(
-      () =>
-        canvas.nodes.map((n) => ({
-          x: n.x,
-          y: n.y,
-          w: n.width,
-          h: n.height,
-          color: resolveRectColor(n.color),
-        })),
-      [canvas.nodes],
-    ),
+    rects: documentOutline,
   })
 
   // The option list refreshes asynchronously (see the effect above) while the

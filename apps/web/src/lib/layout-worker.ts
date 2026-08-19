@@ -29,12 +29,20 @@
 
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
+import {
+  layoutMarkdownOutline,
+  renderMarkdownPreview,
+} from '../components/markdown-editor/render-preview.js'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
 import {
   composeReferenceSeam,
   FONT_DEGRADED,
   type LayoutRequest,
   type LayoutResponse,
+  type MarkdownRailRequest,
+  type MarkdownRailResponse,
+  type MarkdownRenderRequest,
+  type MarkdownRenderResponse,
 } from './layout-worker-protocol.js'
 
 const measure = createBrowserMeasureText()
@@ -45,8 +53,84 @@ const measure = createBrowserMeasureText()
 // introduce. Later requests await an already-settled promise.
 const fontReady = ensureViewerFontLoaded()
 
-self.onmessage = async (event: MessageEvent<LayoutRequest>) => {
+self.onmessage = async (
+  event: MessageEvent<LayoutRequest | MarkdownRailRequest | MarkdownRenderRequest>,
+) => {
   const request = event.data
+  if (request.type === 'markdown-render') {
+    try {
+      // Same font gate as the other two: a thumbnail measured with a system
+      // face wraps its lines elsewhere and stops being a picture of the
+      // document it labels.
+      if ((await fontReady) !== 'loaded') {
+        const failed: MarkdownRenderResponse = {
+          type: 'failed',
+          id: request.id,
+          reason: FONT_DEGRADED,
+        }
+        self.postMessage(failed)
+        return
+      }
+      const { svg, blocks } = renderMarkdownPreview(request.body, {
+        measure,
+        maxWidth: request.maxWidth,
+      })
+      // The preview's SVG carries its own viewBox; the caller needs the
+      // extent to scale it, and the blocks already describe it.
+      const right = Math.max(0, ...blocks.map((b) => b.x + b.w))
+      const bottom = Math.max(0, ...blocks.map((b) => b.y + b.h))
+      const done: MarkdownRenderResponse = {
+        type: 'markdown-render-done',
+        id: request.id,
+        svg,
+        bounds: { x: 0, y: 0, w: right, h: bottom },
+      }
+      self.postMessage(done)
+    } catch (error) {
+      const failed: MarkdownRenderResponse = {
+        type: 'failed',
+        id: request.id,
+        reason: error instanceof Error ? error.message : String(error),
+      }
+      self.postMessage(failed)
+    }
+    return
+  }
+  if (request.type === 'markdown-rail') {
+    try {
+      // Same font gate as layout: measuring with a system face would put
+      // every wrapped line somewhere else, and the rail's whole content is
+      // where the lines land.
+      if ((await fontReady) !== 'loaded') {
+        const failed: MarkdownRailResponse = {
+          type: 'failed',
+          id: request.id,
+          reason: FONT_DEGRADED,
+        }
+        self.postMessage(failed)
+        return
+      }
+      const { blocks, anchors } = layoutMarkdownOutline(request.body, {
+        measure,
+        maxWidth: request.maxWidth,
+      })
+      const done: MarkdownRailResponse = {
+        type: 'markdown-rail-done',
+        id: request.id,
+        blocks,
+        anchors,
+      }
+      self.postMessage(done)
+    } catch (error) {
+      const failed: MarkdownRailResponse = {
+        type: 'failed',
+        id: request.id,
+        reason: error instanceof Error ? error.message : String(error),
+      }
+      self.postMessage(failed)
+    }
+    return
+  }
   if (request.type !== 'layout') return
   try {
     // Verified present in Chromium, WebKit and Firefox — but Playwright's
