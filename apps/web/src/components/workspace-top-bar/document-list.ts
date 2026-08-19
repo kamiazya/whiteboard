@@ -5,18 +5,38 @@ export function sortDocumentsByRecency(documents: readonly DocumentInfo[]): Docu
   return [...documents].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
 }
 
+/**
+ * The one rule for "does this document match what was typed": its path or
+ * its display name contains the query, case-insensitively.
+ *
+ * Exported so the document browser can apply it to its own row shape, which
+ * carries the name inline instead of in a side table. Two matchers would be
+ * two searches that disagree about the same query.
+ *
+ * An empty query matches everything — callers decide whether that means
+ * "show all" or "not searching".
+ */
+export function documentMatchesSearch(
+  query: string,
+  document: { readonly path: string; readonly name?: string | undefined },
+): boolean {
+  const q = query.trim().toLowerCase()
+  if (q === '') return true
+  return (
+    document.path.toLowerCase().includes(q) || (document.name?.toLowerCase().includes(q) ?? false)
+  )
+}
+
 // Matches by path or by the caller-supplied display name, case-insensitively.
 export function filterDocumentsBySearch(
   documents: readonly DocumentInfo[],
   query: string,
   namesByPath: Readonly<Record<string, string>>,
 ): DocumentInfo[] {
-  const q = query.trim().toLowerCase()
-  if (!q) return [...documents]
-  return documents.filter((c) => {
-    const n = namesByPath[c.path]
-    return c.path.toLowerCase().includes(q) || (n?.toLowerCase().includes(q) ?? false)
-  })
+  if (query.trim() === '') return [...documents]
+  return documents.filter((c) =>
+    documentMatchesSearch(query, { path: c.path, name: namesByPath[c.path] }),
+  )
 }
 
 // Preserves the user-defined order in `pinnedPaths` instead of resorting

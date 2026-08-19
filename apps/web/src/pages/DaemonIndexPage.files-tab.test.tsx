@@ -604,6 +604,67 @@ describe('DaemonIndexPage tree view', () => {
     })
   })
 
+  // Searching is what someone does when they do NOT know where a document
+  // is, so the results have to come from folders they are not standing in —
+  // including ones they have never opened.
+  it('finds a document from a folder it is not standing in', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    const contents = await screen.findByTestId('folder-contents')
+    // Standing at the root, where `notes/design` is NOT listed.
+    expect(contents.textContent).not.toContain('design')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+      target: { value: 'design' },
+    })
+
+    const results = await screen.findByTestId('search-results')
+    expect(results.textContent).toContain('notes/design')
+    // The folder view is replaced, not shown beside the results.
+    expect(screen.queryByTestId('folder-contents')).toBeNull()
+    // And the trail is gone, because the results are not confined to a folder.
+    expect(screen.queryByRole('navigation', { name: 'Folder path' })).toBeNull()
+  })
+
+  it('previews a result, and goes back to the folder when the search is cleared', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+
+    const box = screen.getByRole('searchbox', { name: 'Search documents' })
+    fireEvent.change(box, { target: { value: 'design' } })
+    const results = await screen.findByTestId('search-results')
+
+    fireEvent.click(within(results).getByRole('button', { name: /design/ }))
+    await waitFor(() => {
+      expect(screen.getByTestId('okf-preview').textContent).toContain('notes/design')
+    })
+
+    fireEvent.change(box, { target: { value: '' } })
+    await screen.findByTestId('folder-contents')
+    expect(screen.queryByTestId('search-results')).toBeNull()
+  })
+
+  it('says nothing matches rather than showing an empty pane', async () => {
+    installFetchMock()
+    render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
+    )
+    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
+    await screen.findByTestId('folder-contents')
+
+    fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
+      target: { value: 'zzzz' },
+    })
+    expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')
+  })
+
   it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
