@@ -102,8 +102,15 @@ export class MemoryStore implements BrowserLocalStore {
 }
 
 export class IndexedDBStore implements BrowserLocalStore {
+  /**
+   * Which database to talk to. Production never passes it; a browser test
+   * does, so its fixtures cannot collide with another test FILE's — they
+   * share an origin, and therefore one `whiteboard` database.
+   */
+  constructor(private readonly dbName?: string) {}
+
   async getDefaultDocumentId(): Promise<string | null> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readonly')
       const req = tx.objectStore('meta').get('defaultDocumentId')
@@ -114,7 +121,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async setDefaultDocumentId(id: string): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readwrite')
       tx.objectStore('meta').put(id, 'defaultDocumentId')
@@ -133,7 +140,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async load(id: string): Promise<LoadResult> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve) => {
       const tx = db.transaction('documents', 'readonly')
       const req = tx.objectStore('documents').get(id)
@@ -151,7 +158,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readwrite')
       const store = tx.objectStore('documents')
@@ -194,7 +201,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction(['meta', 'documents'], 'readwrite')
       const metaStore = tx.objectStore('meta')
@@ -236,7 +243,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async removeDocument(id: string): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readwrite')
       tx.objectStore('documents').delete(id)
@@ -260,7 +267,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readonly')
       const cursorReq = tx.objectStore('documents').openCursor()
