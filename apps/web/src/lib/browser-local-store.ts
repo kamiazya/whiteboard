@@ -147,8 +147,16 @@ function newerOf(metadata: string, content: string | undefined): string {
 }
 
 export class IndexedDBStore implements BrowserLocalStore {
+  /**
+   * Only tests pass this, and they must: browser tests share an origin, so a
+   * file that deletes `whiteboard` between cases does so while another file is
+   * mid-fixture, and the failure lands there rather than here. `IdbDocumentIndex`
+   * takes the same parameter for the same reason.
+   */
+  constructor(private readonly dbName?: string) {}
+
   async getDefaultDocumentId(): Promise<string | null> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readonly')
       const req = tx.objectStore('meta').get('defaultDocumentId')
@@ -159,7 +167,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async setDefaultDocumentId(id: string): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('meta', 'readwrite')
       tx.objectStore('meta').put(id, 'defaultDocumentId')
@@ -178,7 +186,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async load(id: string): Promise<LoadResult> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     // One connection for both reads — `load` is on the editor's resume path
     // and opening twice per read buys nothing — and one `finally` for closing
     // it, so the not-found and corrupted branches cannot leak it. An unclosed
@@ -213,7 +221,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readwrite')
       const store = tx.objectStore('documents')
@@ -256,7 +264,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async del(expectedId: string): Promise<DeleteResult> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction(['meta', 'documents'], 'readwrite')
       const metaStore = tx.objectStore('meta')
@@ -298,7 +306,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async removeDocument(id: string): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readwrite')
       tx.objectStore('documents').delete(id)
@@ -322,7 +330,7 @@ export class IndexedDBStore implements BrowserLocalStore {
   }
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('documents', 'readonly')
       const cursorReq = tx.objectStore('documents').openCursor()

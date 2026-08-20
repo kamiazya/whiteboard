@@ -72,6 +72,9 @@ function foldDeltas(snapshot: Uint8Array, deltas: readonly Uint8Array[]): Uint8A
  * rather than surfacing as throws inside the hook's onSnapshot/onRemoteUpdate.
  */
 export class LoroStore {
+  /** Only tests pass this; see `IndexedDBStore`'s note on why it exists. */
+  constructor(private readonly dbName?: string) {}
+
   /**
    * Bytes for a brand-new, empty Loro document snapshot. Callers that only
    * need to seed a fresh canvas (e.g. the page-layer create-canvas flow) use
@@ -83,7 +86,7 @@ export class LoroStore {
   }
 
   async load(documentId: string): Promise<LoroLoadResult> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve) => {
       const tx = db.transaction('loroDocuments', 'readonly')
       const req = tx.objectStore('loroDocuments').get(documentId)
@@ -149,7 +152,7 @@ export class LoroStore {
   }
 
   async save(documentId: string, snapshot: Uint8Array): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const envelope: LoroRecordEnvelope = {
         v: 1,
@@ -182,7 +185,7 @@ export class LoroStore {
    * If no record exists yet, this is a no-op (snapshot must be saved first).
    */
   async appendDelta(documentId: string, delta: Uint8Array): Promise<void> {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(this.dbName)
     return new Promise((resolve, reject) => {
       const tx = db.transaction('loroDocuments', 'readwrite')
       const store = tx.objectStore('loroDocuments')
