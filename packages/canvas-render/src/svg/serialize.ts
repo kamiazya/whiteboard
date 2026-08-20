@@ -56,6 +56,14 @@ export function* serializeSvgChunks(node: SvgVNode): Generator<string> {
   yield `</${node.tag}>`
 }
 
+/** Serializes any child form — element, text, rawXml, nested arrays — to
+ * its exact document bytes; the keyed renderer's per-part serializer. */
+export function serializeSvgChild(child: SvgChild): string {
+  let out = ''
+  for (const chunk of serializeChildren([child])) out += chunk
+  return out
+}
+
 export function serializeSvg(node: SvgVNode): string {
   let out = ''
   for (const chunk of serializeSvgChunks(node)) out += chunk

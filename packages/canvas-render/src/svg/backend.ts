@@ -16,7 +16,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { collectDefs } from './defs.js'
-import type { PaintAttrs, SvgBoxAttrs, TextEmphasisAttrs } from './elements.js'
+import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
 import { hoistInheritedAttrs } from './hoist.js'
 import { serializeSvg } from './serialize.js'
@@ -612,7 +612,26 @@ const SVG_XMLNS = 'http://www.w3.org/2000/svg'
  * per-node visual attribute — the one exemption to this package's
  * no-visual-attributes rule) when `background` is set.
  */
-export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
+/**
+ * The document's assembled pieces, shared by `renderSceneToSvg` and the
+ * keyed renderer (svg/keyed.ts) so the two can never disagree on root
+ * attributes, defs, background, or per-entry bodies. `body` holds exactly
+ * one (possibly empty) child per top-level scene entry, hoisted, in
+ * document order — the unit the keyed renderer wraps and the scene-diff
+ * scoreboard counts.
+ */
+export interface SvgDocumentParts {
+  /** Fixed order: xmlns [width height viewBox fill] — the envelope rule. */
+  readonly rootAttrs: SvgElements['svg']
+  readonly defs: SvgChild
+  readonly background: SvgChild
+  readonly body: ReadonlyArray<SvgChild>
+}
+
+export function buildSvgDocumentParts(
+  scene: Scene,
+  options?: SvgDocumentOptions,
+): SvgDocumentParts {
   // Hoisting runs before defs collection only by convention — it preserves
   // `defs` declarations on rebuilt nodes, so the order is not load-bearing.
   const body = scene.nodes.map(renderNode).map(hoistInheritedAttrs)
@@ -629,7 +648,7 @@ export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): st
       : []
 
   if (!hasEnvelopeOptions(options)) {
-    return serializeSvg(el('svg', { xmlns: SVG_XMLNS }, [defs, body]))
+    return { rootAttrs: { xmlns: SVG_XMLNS }, defs, background: [], body }
   }
 
   const viewBox = resolveViewBox(scene, options)
@@ -639,21 +658,25 @@ export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): st
   const background: SvgChild =
     options.background !== undefined ? renderBackgroundRect(viewBox, options.background) : []
 
-  // Fixed root-attribute order: xmlns width height viewBox fill.
-  return serializeSvg(
-    el(
-      'svg',
-      {
-        xmlns: SVG_XMLNS,
-        width,
-        height,
-        viewBox: viewBoxAttr,
-        fill:
-          typeof options.textFill === 'string' && options.textFill.length > 0
-            ? options.textFill
-            : undefined,
-      },
-      [defs, background, body],
-    ),
-  )
+  return {
+    // Fixed root-attribute order: xmlns width height viewBox fill.
+    rootAttrs: {
+      xmlns: SVG_XMLNS,
+      width,
+      height,
+      viewBox: viewBoxAttr,
+      fill:
+        typeof options.textFill === 'string' && options.textFill.length > 0
+          ? options.textFill
+          : undefined,
+    },
+    defs,
+    background,
+    body,
+  }
+}
+
+export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
+  const parts = buildSvgDocumentParts(scene, options)
+  return serializeSvg(el('svg', parts.rootAttrs, [parts.defs, parts.background, parts.body]))
 }

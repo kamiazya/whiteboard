@@ -59,7 +59,9 @@ export type SvgElements = {
     fill?: string
     role?: SvgRole
   }
-  g: PaintAttrs & { transform?: string; role?: SvgRole }
+  // data-wb-key is the keyed renderer's patch handle (svg/keyed.ts) —
+  // emitted only in keyed mode, never by the plain document renderer.
+  g: PaintAttrs & { transform?: string; role?: SvgRole; 'data-wb-key'?: string }
   rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.

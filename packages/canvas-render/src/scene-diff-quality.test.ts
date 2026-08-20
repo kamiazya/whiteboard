@@ -1,6 +1,7 @@
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
+import { sceneEntryKeys } from './scene-entry-keys.js'
 import type { Scene } from './scene-graph.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import { createSpatialTheme } from './theme/spatial-theme.js'
@@ -65,28 +66,14 @@ const layout = (canvas: SpatialCanvas): Scene =>
     appearance: createSpatialTheme({ mode: 'light' }),
   })
 
-/**
- * Keys each top-level scene entry stably: identified entries (chrome
- * shapes, edges) by their id; the content entries a node's shape is
- * followed by inherit that owner id plus an ordinal, matching the
- * documented emission order (shape, then its content, then all edges).
- */
+/** Entries keyed by the shared producer the keyed SVG renderer patches by
+ * (scene-entry-keys.ts) — one keying, so this scoreboard's counts are
+ * exactly the group replacements a patch layer would perform. */
 function keyedEntries(scene: Scene): Map<string, string> {
-  const out = new Map<string, string>()
-  let owner = 'preamble'
-  let ordinal = 0
-  for (const node of scene.nodes) {
-    const id = 'id' in node && typeof node.id === 'string' ? node.id : undefined
-    if (id !== undefined) {
-      owner = id
-      ordinal = 0
-      out.set(id, JSON.stringify(node))
-    } else {
-      ordinal += 1
-      out.set(`${owner}#${ordinal}`, JSON.stringify(node))
-    }
-  }
-  return out
+  const keys = sceneEntryKeys(scene)
+  return new Map(
+    scene.nodes.map((node, index) => [keys[index] ?? `#${index}`, JSON.stringify(node)]),
+  )
 }
 
 function diffCount(base: Scene, edited: Scene): { changed: number; total: number } {
