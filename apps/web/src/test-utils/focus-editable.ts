@@ -22,8 +22,16 @@ import { expect, vi } from 'vitest'
  * different test.
  */
 export async function focusEditable(element: Element): Promise<void> {
-  ;(element as HTMLElement).focus()
+  // focus() INSIDE the retry, not once before it. CodeMirror's contentDOM is
+  // not focusable until the view has finished mounting, and a `focus()` that
+  // lands before then is a silent no-op — so calling it once and then merely
+  // WAITING can never recover: the wait re-checks a condition nothing is
+  // still trying to satisfy. Locally the view is ready and the first call
+  // takes; in CI it is not, and a whole file failed with
+  // `expected <body> to be <div spellcheck="false" …>` — this assertion,
+  // reporting that focus never moved.
   await vi.waitFor(() => {
+    ;(element as HTMLElement).focus()
     expect(document.activeElement).toBe(element)
   })
 }
