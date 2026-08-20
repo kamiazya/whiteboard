@@ -20,6 +20,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(cleanup)
@@ -37,7 +38,7 @@ describe('SourcePane external value reconciliation (real browser)', () => {
     const onChange = vi.fn()
     const { rerender } = render(<MarkdownEditor value="abcdef" onChange={onChange} />)
 
-    await userEvent.click(editableOf())
+    await focusEditable(editableOf())
     await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}')
 
     // Appended beyond the caret — nothing the caret sits on has moved, so it
@@ -53,7 +54,7 @@ describe('SourcePane external value reconciliation (real browser)', () => {
     const onChange = vi.fn()
     const { rerender } = render(<MarkdownEditor value="abc" onChange={onChange} />)
 
-    await userEvent.click(editableOf())
+    await focusEditable(editableOf())
     await userEvent.keyboard('{End}')
 
     // Prepended: the caret must follow the text it was anchored after, so it

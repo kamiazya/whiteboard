@@ -7,6 +7,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 // CodeMirror's Mod- prefix resolves to Cmd on macOS and Ctrl elsewhere;
@@ -33,7 +34,7 @@ function lastValue(onChange: ReturnType<typeof vi.fn>): string {
 describe('SourcePane keymap (real browser)', () => {
   it('Mod-z undoes typing', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('hello')
     await userEvent.keyboard(mod('z'))
     expect(lastValue(onChange)).not.toBe('hello')
@@ -41,7 +42,7 @@ describe('SourcePane keymap (real browser)', () => {
 
   it('Tab indents instead of leaving the editor', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('item')
     await userEvent.keyboard('{Home}')
     await userEvent.keyboard('{Tab}')
@@ -52,7 +53,7 @@ describe('SourcePane keymap (real browser)', () => {
 
   it('Mod-b wraps the selection in strong emphasis', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('bold')
     await userEvent.keyboard(mod('a'))
     await userEvent.keyboard(mod('b'))
@@ -61,7 +62,7 @@ describe('SourcePane keymap (real browser)', () => {
 
   it('Mod-i wraps the selection in emphasis', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('slanted')
     await userEvent.keyboard(mod('a'))
     await userEvent.keyboard(mod('i'))
@@ -70,7 +71,7 @@ describe('SourcePane keymap (real browser)', () => {
 
   it('Mod-b with a collapsed selection inserts delimiters and keeps the cursor between them', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard(mod('b'))
     await userEvent.keyboard('x')
     expect(lastValue(onChange)).toBe('**x**')
@@ -94,21 +95,21 @@ describe('SourcePane keymap (real browser)', () => {
 describe('SourcePane markdown ergonomics (real browser)', () => {
   it('Enter continues an unordered list marker', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('- one{Enter}two')
     expect(lastValue(onChange)).toBe('- one\n- two')
   })
 
   it('Enter increments an ordered list marker', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('1. one{Enter}two')
     expect(lastValue(onChange)).toBe('1. one\n2. two')
   })
 
   it('Enter on an empty list item removes the marker instead of continuing forever', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     // First Enter continues to "- "; the second, on the now-empty item,
     // deletes the marker and leaves the caret on the emptied line.
     await userEvent.keyboard('- one{Enter}{Enter}after')
@@ -117,7 +118,7 @@ describe('SourcePane markdown ergonomics (real browser)', () => {
 
   it('Mod-Enter toggles a task checkbox on the caret line', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     // `[[` is userEvent.keyboard's escape for a literal `[`.
     await userEvent.keyboard('- [[ ] task')
     await userEvent.keyboard(mod('{Enter}'))
@@ -128,7 +129,7 @@ describe('SourcePane markdown ergonomics (real browser)', () => {
 
   it('Mod-e wraps the selection in backticks', async () => {
     const { onChange, editable } = mountEditor()
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await userEvent.keyboard('code')
     await userEvent.keyboard(mod('a'))
     await userEvent.keyboard(mod('e'))
