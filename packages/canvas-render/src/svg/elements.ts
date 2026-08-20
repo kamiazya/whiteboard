@@ -75,9 +75,30 @@ export type SvgElements = {
       'xml:space'?: 'preserve'
     }
   a: { href: SafeHref }
-  polyline: PaintAttrs & { points: string; fill: string; role?: SvgRole }
-  path: PaintAttrs & { d: string; fill: string; role?: SvgRole }
+  polyline: PaintAttrs & {
+    points: string
+    fill: string
+    'marker-start'?: string
+    'marker-end'?: string
+    role?: SvgRole
+  }
+  path: PaintAttrs & {
+    d: string
+    fill: string
+    'marker-start'?: string
+    'marker-end'?: string
+    role?: SvgRole
+  }
   polygon: { points: string; fill: string; role?: SvgRole }
+  marker: {
+    id: string
+    markerWidth: number
+    markerHeight: number
+    refX: number
+    refY: number
+    markerUnits: 'userSpaceOnUse'
+    orient: 'auto'
+  }
   image: SvgBoxAttrs & { href: string; preserveAspectRatio: string; role?: SvgRole }
   title: Record<string, never>
   defs: Record<string, never>
