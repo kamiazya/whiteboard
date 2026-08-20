@@ -7,7 +7,8 @@
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DB_VERSION } from './browser-idb.js'
-import { LoroStore, loroRecordEnvelopeSchema } from './loro-store.js'
+import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
+import { LoroStore } from './loro-store.js'
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {

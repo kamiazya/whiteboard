@@ -28,6 +28,7 @@ function mountBound(initialBody: string) {
   const utils = render(
     <div style={{ width: 800, height: 300 }}>
       <MarkdownEditor
+        initialViewMode="write"
         value={initialBody}
         onChange={() => {}}
         previewDebounceMs={0}

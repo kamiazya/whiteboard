@@ -32,6 +32,15 @@ export async function focusEditable(resolveEditable: () => Element | null): Prom
   await vi.waitFor(() => {
     const element = resolveEditable()
     expect(element, 'no editable to focus').not.toBeNull()
+    // `focus()` on an element that is not being RENDERED is a spec'd no-op,
+    // and the resulting failure — activeElement still <body> after a full
+    // second — says nothing about why. display:none is how it actually
+    // happens here: the source pane is hidden whenever the editor is in Read
+    // mode, so name that cause outright instead of printing a body diff.
+    expect(
+      (element as HTMLElement).checkVisibility(),
+      'editable is not rendered (display:none — is the editor in Read mode?)',
+    ).toBe(true)
     if (document.activeElement !== element) {
       ;(element as HTMLElement).focus()
     }

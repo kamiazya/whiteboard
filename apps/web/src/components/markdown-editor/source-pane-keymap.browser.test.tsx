@@ -20,7 +20,7 @@ afterEach(cleanup)
 
 function mountEditor() {
   const onChange = vi.fn()
-  const utils = render(<MarkdownEditor value="" onChange={onChange} />)
+  const utils = render(<MarkdownEditor initialViewMode="write" value="" onChange={onChange} />)
   const editable = () =>
     utils.getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
   return { onChange, editable }
@@ -81,7 +81,13 @@ describe('SourcePane keymap (real browser)', () => {
     // long line as the initial value instead of sending ~400 individual
     // keystrokes through the real event pipeline — per-key CodeMirror
     // update cycles made this test time out under full-suite load.
-    render(<MarkdownEditor value={'word '.repeat(80).trim()} onChange={vi.fn()} />)
+    render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value={'word '.repeat(80).trim()}
+        onChange={vi.fn()}
+      />,
+    )
     // Wait for the long line to actually render first — asserting widths on a
     // not-yet-measured (effectively empty) editor would pass vacuously.
     const content = document.querySelector('.cm-content') as HTMLElement
