@@ -10,6 +10,14 @@
 const DB_NAME = 'whiteboard'
 
 /**
+ * The database name is a parameter so a test can have one of its own. Browser
+ * tests share an origin, so two FILES touching `whiteboard` interleave: a
+ * suite that deletes the database between cases will do so while another file
+ * is seeding a fixture into it, and the failure lands in the file that did
+ * nothing wrong. Production has exactly one name and never passes this.
+ */
+
+/**
  * v2 -> v3: elements are canonical in the Loro doc; the JSON metadata row is
  * demoted to metadata only (id/name/updatedAt). Any legacy 'scene' field left
  * over from a pre-v3 row is stripped during upgrade so no old-schema shape
@@ -54,6 +62,17 @@ const DB_NAME = 'whiteboard'
  * them. Deleting the bytes matters as much as the row: a Loro record no
  * document names is unreachable storage nothing would ever collect.
  *
+ * v8 -> v9: adds the two stores behind the browser's `DocumentIndex` port
+ * implementation — `workspaces` (keyed by workspaceId) and `documentIndex`
+ * (keyed by the pair `[workspaceId, path]`, with a unique `byId` index on
+ * `[workspaceId, documentId]`). Purely additive; the bespoke `documents`
+ * store keeps serving `browser-local-store.ts` until its call sites move.
+ *
+ * The compound keys are the schema doing the work rather than the code: the
+ * primary key IS the uniqueness rule `createDocument` has to enforce, so
+ * claiming a path is one `add()` that fails on conflict rather than a read
+ * followed by a write two callers could interleave.
+ *
  * Cross-tab upgrades are handled rather than accepted from v8 on: every
  * connection this module opens closes itself on `versionchange`, so a newer
  * tab's upgrade is not blocked by an older one sitting idle, and a block that
@@ -61,7 +80,12 @@ const DB_NAME = 'whiteboard'
  * message a caller can show instead of hanging on a request that never
  * settles.
  */
-export const DB_VERSION = 8
+export const DB_VERSION = 9
+
+/** The `DocumentIndex` port's two stores. Exported so the implementation and
+ * the opener cannot disagree about a name. */
+export const WORKSPACES_STORE = 'workspaces'
+export const DOCUMENT_INDEX_STORE = 'documentIndex'
 
 const RENAMED_STORES: readonly (readonly [from: string, to: string])[] = [
   ['canvases', 'documents'],
@@ -168,9 +192,9 @@ function renameMetaKey(tx: IDBTransaction, from: string, to: string): void {
   }
 }
 
-export function openWhiteboardDb(): Promise<IDBDatabase> {
+export function openWhiteboardDb(dbName: string = DB_NAME): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    const req = indexedDB.open(dbName, DB_VERSION)
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -182,6 +206,13 @@ export function openWhiteboardDb(): Promise<IDBDatabase> {
       // for a fresh install (oldVersion 0) or any DB that never reached v5.
       if (db.objectStoreNames.contains('reconnectKeypairs')) {
         db.deleteObjectStore('reconnectKeypairs')
+      }
+      if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
+      if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
+        const index = db.createObjectStore(DOCUMENT_INDEX_STORE, {
+          keyPath: ['workspaceId', 'path'],
+        })
+        index.createIndex('byId', ['workspaceId', 'documentId'], { unique: true })
       }
 
       // req.transaction is always non-null inside onupgradeneeded; narrowed for TS.

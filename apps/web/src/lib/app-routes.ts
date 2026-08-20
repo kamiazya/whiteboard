@@ -93,9 +93,9 @@ export function parseBrowserLocalRoute(pathname: string): { path: string } | nul
   return { path: segments.join('/') }
 }
 
-export type SettingsSection = 'general' | 'data' | 'connections'
+export type SettingsSection = 'general' | 'data' | 'fonts' | 'connections'
 
-const SETTINGS_SECTIONS: readonly SettingsSection[] = ['general', 'data', 'connections']
+const SETTINGS_SECTIONS: readonly SettingsSection[] = ['general', 'data', 'fonts', 'connections']
 
 export function settingsPath(section?: SettingsSection): string {
   return section === undefined ? '/settings' : `/settings/${section}`

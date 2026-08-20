@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { exportResponseSchema } from '../../shared/api-contracts/export.js'
 
 let tempDir: string
 
@@ -40,7 +41,14 @@ type MockHeadlessArgs = {
   }
 }
 const mockExportCanvasHeadless =
-  vi.fn<(args: MockHeadlessArgs) => Promise<{ png: Buffer; width: number; height: number }>>()
+  vi.fn<
+    (args: MockHeadlessArgs) => Promise<{
+      png: Buffer
+      width: number
+      height: number
+      undrawable: readonly string[]
+    }>
+  >()
 
 vi.mock('../export/headless-export.js', () => ({
   exportCanvasHeadless: (args: MockHeadlessArgs) => mockExportCanvasHeadless(args),
@@ -96,7 +104,12 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   it('is served by the headless renderer even when a WS client is connected', async () => {
     mockGetClientCount.mockReturnValue(2)
     const fakePng = Buffer.from('fake-png-bytes')
-    mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: fakePng,
+      width: 100,
+      height: 50,
+      undrawable: [],
+    })
     const app = makeApp()
 
     const res = await app.request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
@@ -115,7 +128,12 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   // Metamorphic: client count must not be an input to export behavior at all.
   it('produces identical status/body/headless-args regardless of WS client count', async () => {
     const fakePng = Buffer.from('fake-png-bytes')
-    mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: fakePng,
+      width: 100,
+      height: 50,
+      undrawable: [],
+    })
 
     mockGetClientCount.mockReturnValue(0)
     const resNoClient = await makeApp().request('/api/w/s1/document/canvas-a/export', {
@@ -144,6 +162,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from('fake-png-bytes'),
       width: 100,
       height: 50,
+      undrawable: [],
     })
     const app = makeApp()
     vi.useFakeTimers()
@@ -195,7 +214,10 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     mockExportCanvasHeadless.mockImplementation(
       () =>
         new Promise((resolve) => {
-          setTimeout(() => resolve({ png: Buffer.from('slow-png'), width: 10, height: 10 }), 50)
+          setTimeout(
+            () => resolve({ png: Buffer.from('slow-png'), width: 10, height: 10, undrawable: [] }),
+            50,
+          )
         }),
     )
     const app = makeApp()
@@ -208,6 +230,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from('fake-png-bytes'),
       width: 100,
       height: 50,
+      undrawable: [],
     })
     const app = makeApp()
 
@@ -227,6 +250,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from('fake-png-bytes'),
       width: 100,
       height: 50,
+      undrawable: [],
     })
     const app = makeApp()
 
@@ -247,7 +271,12 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
   // so this only needs to assert the forwarding itself.
   it('forwards theme to the headless export', async () => {
     const fakePng = Buffer.from('fake-dark-png')
-    mockExportCanvasHeadless.mockResolvedValue({ png: fakePng, width: 100, height: 50 })
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: fakePng,
+      width: 100,
+      height: 50,
+      undrawable: [],
+    })
     const app = makeApp()
 
     const res = await app.request('/api/w/s1/document/canvas-a/export', {
@@ -295,6 +324,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from('fake-png-bytes'),
       width: 100,
       height: 50,
+      undrawable: [],
     })
     const app = makeApp()
 
@@ -316,6 +346,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       width: 1,
       height: 1,
+      undrawable: [],
     })
     const app = makeApp()
 
@@ -323,6 +354,39 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     expect(res.status).toBe(200)
     const body = (await res.json()) as { filePath: string }
     expect(body.filePath).toMatch(/canvas-a-.*\.png$/)
+  })
+
+  // The renderer has always known which characters it could not draw; the
+  // route dropped the answer on the floor. This path's caller is an agent over
+  // HTTP, and a PNG it exported has already lost them.
+  it('reports the characters the export renderer had no glyph for', async () => {
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
+      undrawable: ['日', '本'],
+    })
+
+    const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+
+    expect(res.status).toBe(200)
+    // Parsed, not cast: the point is that the field survives the contract.
+    expect(exportResponseSchema.parse(await res.json()).undrawable).toEqual(['日', '本'])
+  })
+
+  it('reports an empty list when every character drew', async () => {
+    mockExportCanvasHeadless.mockResolvedValue({
+      png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
+      width: 1,
+      height: 1,
+      undrawable: [],
+    })
+
+    const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
+
+    // Present and empty rather than absent: a caller must be able to tell
+    // "nothing was lost" from "this daemon does not report".
+    expect(exportResponseSchema.parse(await res.json()).undrawable).toEqual([])
   })
 
   // Nested canvas paths such as architecture/overview should create parent
@@ -335,8 +399,13 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     vi.mocked(nanoid).mockReturnValueOnce('aaaaaa').mockReturnValueOnce('aaaaaa')
 
     mockExportCanvasHeadless
-      .mockResolvedValueOnce({ png: Buffer.from('first-png'), width: 1, height: 1 })
-      .mockResolvedValueOnce({ png: Buffer.from('second-png'), width: 1, height: 1 })
+      .mockResolvedValueOnce({ png: Buffer.from('first-png'), width: 1, height: 1, undrawable: [] })
+      .mockResolvedValueOnce({
+        png: Buffer.from('second-png'),
+        width: 1,
+        height: 1,
+        undrawable: [],
+      })
     const app = makeApp()
     vi.useFakeTimers()
     vi.setSystemTime(new Date('2024-01-01T00:00:00.000Z'))
@@ -362,6 +431,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       width: 1,
       height: 1,
+      undrawable: [],
     })
     const app = makeApp()
 
@@ -394,6 +464,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       width: 1,
       height: 1,
+      undrawable: [],
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'subdir', 'custom.excalidraw.png')
@@ -499,6 +570,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       width: 1,
       height: 1,
+      undrawable: [],
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'pre-existing.png')
@@ -521,6 +593,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       png: Buffer.from(SAMPLE_PNG_BASE64, 'base64'),
       width: 1,
       height: 1,
+      undrawable: [],
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'replace.png')

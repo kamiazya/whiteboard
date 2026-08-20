@@ -12,6 +12,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
+import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
 import { installedFontDir, installedFontFiles } from './installed-fonts.js'
 
 let dataDir: string
@@ -75,39 +76,8 @@ describe('installedFontFiles', () => {
 describe('an installed font reaches both the renderer and the report', () => {
   const COVERED = 'こ'
 
-  /** A one-glyph font covering `COVERED`, drawn as a filled square so it leaves ink. */
-  async function writeSyntheticFont(path: string): Promise<void> {
-    const opentype = await import('opentype.js')
-    const square = new opentype.Path()
-    square.moveTo(100, 0)
-    square.lineTo(100, 700)
-    square.lineTo(800, 700)
-    square.lineTo(800, 0)
-    square.close()
-    const font = new opentype.Font({
-      familyName: 'WhiteboardTestCJK',
-      styleName: 'Regular',
-      unitsPerEm: 1000,
-      ascender: 800,
-      descender: -200,
-      glyphs: [
-        // Index 0 must be `.notdef` — a font without it is not loadable.
-        new opentype.Glyph({
-          name: '.notdef',
-          unicode: 0,
-          advanceWidth: 1000,
-          path: new opentype.Path(),
-        }),
-        new opentype.Glyph({
-          name: 'covered',
-          unicode: COVERED.codePointAt(0),
-          advanceWidth: 1000,
-          path: square,
-        }),
-      ],
-    })
-    await writeFile(path, Buffer.from(font.toArrayBuffer()))
-  }
+  const writeSyntheticFont = (path: string): Promise<void> =>
+    writeFile(path, syntheticFont(COVERED))
 
   const CANVAS = {
     nodes: [{ id: 'n', type: 'text' as const, x: 0, y: 0, width: 300, height: 60, text: COVERED }],

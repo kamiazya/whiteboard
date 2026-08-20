@@ -275,7 +275,14 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // The old names are DELETED, not merely abandoned. A store left in place
     // would keep a second copy of every document readable by anything that
     // still remembers the old name.
-    expect(storeNames).toEqual(['documentFiles', 'documents', 'loroDocuments', 'meta'])
+    expect(storeNames).toEqual([
+      'documentFiles',
+      'documentIndex',
+      'documents',
+      'loroDocuments',
+      'meta',
+      'workspaces',
+    ])
 
     const fileCount = await new Promise<number>((resolve, reject) => {
       const tx = db.transaction('documentFiles', 'readonly')
@@ -321,9 +328,11 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     const db = await openWhiteboardDb()
     expect([...db.objectStoreNames].sort()).toEqual([
       'documentFiles',
+      'documentIndex',
       'documents',
       'loroDocuments',
       'meta',
+      'workspaces',
     ])
     db.close()
   })
@@ -398,9 +407,11 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
     expect([...db.objectStoreNames].sort()).toEqual([
       'documentFiles',
+      'documentIndex',
       'documents',
       'loroDocuments',
       'meta',
+      'workspaces',
     ])
     db.close()
   })

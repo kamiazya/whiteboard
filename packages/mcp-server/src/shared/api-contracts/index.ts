@@ -22,6 +22,7 @@ export * from './branches.js'
 export * from './document.js'
 export * from './document-url.js'
 export * from './errors.js'
+export * from './fonts.js'
 export type { ListGrantsResponse, PairingTokenResponse } from './pairing.js'
 export {
   listGrantsResponseSchema,

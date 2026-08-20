@@ -7,6 +7,7 @@ import {
   Moon,
   Palette,
   Sun,
+  Type,
   Waves,
 } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
@@ -23,6 +24,7 @@ import type { FaviconStyle } from '@/lib/favicon'
 import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
 import { ensurePersistentStorage, queryPersistentStorage } from '@/lib/persistent-storage'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
+import { FontsCard } from '../components/FontsCard.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 
@@ -48,6 +50,7 @@ const FAVICON_OPTIONS: Array<{ value: FaviconStyle; label: string; icon: typeof 
 const NAV_ITEMS: Array<{ section: SettingsSection; label: string; icon: typeof Palette }> = [
   { section: 'general', label: 'General', icon: Palette },
   { section: 'data', label: 'Data & app', icon: Database },
+  { section: 'fonts', label: 'Fonts', icon: Type },
   { section: 'connections', label: 'Connections', icon: Cable },
 ]
 
@@ -205,6 +208,33 @@ function ConnectionsSection({ daemon }: { daemon?: { baseUrl: string; token: str
   )
 }
 
+/**
+ * Fonts belong to the DAEMON, not to this browser: it is the daemon that
+ * rasterises an export, so a font the browser alone has still exports as
+ * tofu (ADR-0012 decision 4). Without one there is nothing to install into,
+ * and saying so beats an empty list.
+ */
+function FontsSection({ daemon }: { daemon?: { baseUrl: string; token: string | null } }) {
+  if (!daemon) {
+    return (
+      <section>
+        <p className="text-sm">Fonts — Not connected</p>
+        <p className="mt-1 text-xs text-muted-foreground">
+          Installed fonts live on a local daemon, which renders exports. Connect one to choose fonts
+          for the scripts you write in.
+        </p>
+      </section>
+    )
+  }
+  return (
+    <DaemonApiContext.Provider value={createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined)}>
+      <section aria-label="Fonts">
+        <FontsCard />
+      </section>
+    </DaemonApiContext.Provider>
+  )
+}
+
 function sectionContent(
   section: SettingsSection,
   props: {
@@ -251,6 +281,8 @@ function sectionContent(
           </div>
         </div>
       )
+    case 'fonts':
+      return <FontsSection daemon={props.daemon} />
     case 'connections':
       return <ConnectionsSection daemon={props.daemon} />
   }
@@ -259,6 +291,7 @@ function sectionContent(
 const SECTION_TITLE: Record<SettingsSection, string> = {
   general: 'General',
   data: 'Data & app',
+  fonts: 'Fonts',
   connections: 'Connections',
 }
 

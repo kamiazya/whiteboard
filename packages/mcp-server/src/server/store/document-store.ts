@@ -28,6 +28,9 @@ import {
   chunkSnapshot,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
+  findDescendantPath,
+  isSelfOrDescendant,
+  planSubtreeMove,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
 import type { Value } from 'loro-crdt'
@@ -45,7 +48,6 @@ import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad } from './doc-cache.js'
-import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'

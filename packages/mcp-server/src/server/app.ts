@@ -36,6 +36,7 @@ import { createDebugRouter } from './routes/debug.js'
 import { createDocumentRouter } from './routes/document.js'
 import { createExportRouter } from './routes/export.js'
 import { createFilesRouter } from './routes/files.js'
+import { createFontsRouter } from './routes/fonts.js'
 import {
   createOAuthAuthzRouter,
   OAUTH_AUTHZ_CORS_PATHS,
@@ -415,6 +416,7 @@ export function createApp(options: AppOptions) {
   const sharedVersionStore = new FileVersionStore()
   app.route('/', createFilesRouter({ versionStore: sharedVersionStore }))
   app.route('/', createExportRouter())
+  app.route('/', createFontsRouter())
   app.route('/', createViewportRouter())
   app.route('/', createSyncSseRouter())
   app.route('/', createDebugRouter({ token }))

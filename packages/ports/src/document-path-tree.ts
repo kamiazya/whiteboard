@@ -1,16 +1,20 @@
 /**
  * The subtree arithmetic behind moving and deleting a document path.
  *
- * Two stores write the `documents` table — `document-store.ts` for the HTTP
- * surface and `sqlite-document-index.ts` for the MCP one — and they are
- * deliberately kept from importing each other. That is what let them grow
+ * Two stores write the daemon's `documents` table — `document-store.ts` for
+ * the HTTP surface and `sqlite-document-index.ts` for the MCP one — and they
+ * are deliberately kept from importing each other. That is what let them grow
  * two different answers to the same question: the index moved a whole
  * subtree while the HTTP path renamed one row and stranded its children,
  * and the index refused to delete a document with descendants while the
  * HTTP path stranded them again.
  *
- * The rules live here, as pure functions over rows, so both stores keep
- * their own SQL and neither owns the semantics alone.
+ * The rules live here, as pure functions over rows, so every store keeps its
+ * own storage and none owns the semantics alone. That is now literally every
+ * store rather than both of two: the browser's IndexedDB `DocumentIndex` is
+ * the third, which is what moved this file out of the daemon and beside
+ * `compareDocumentPaths` — a rule each implementation re-derives from prose
+ * is a rule they will re-derive differently.
  */
 
 /** How many segments a path has. */
