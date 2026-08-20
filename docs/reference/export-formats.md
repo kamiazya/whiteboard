@@ -43,6 +43,38 @@ What may appear inside `x-whiteboard` is machine-readable:
 draft 2020-12) is generated from the same Zod schemas the code validates
 with, so it cannot drift from the implementation.
 
+## Characters the exporter cannot draw
+
+The daemon rasterises with the fonts **it** has — a vendored Latin face plus
+whatever has been installed into its data directory, and deliberately nothing
+from the operating system. A character no such face carries is painted as an
+empty box.
+
+It is worth reporting because of how it fails. Measurement is correct, so the
+text wraps in the right places and every box is the right size; the only thing
+wrong is that a reader cannot read it. The daemon's HTTP export routes
+therefore answer with the characters they could not draw:
+
+```json
+{ "filePath": "…/canvas-a-8f3.png", "undrawable": ["日", "本"] }
+```
+
+Empty is the normal answer. What the report means differs by format:
+
+| Format | What was lost |
+| --- | --- |
+| PNG | The characters are gone from the image. |
+| SVG | Nothing yet — the file still carries them as `<text>`, and any viewer whose own system has the face renders them correctly. The report is what a PNG of this file would lose. |
+
+Fix it by installing a font for the script:
+[install-fonts-for-export](../how-to/install-fonts-for-export.md).
+
+**The web editor's own exports are a separate question.** They are rendered in
+the browser, not by the daemon, so they use the browser's fonts and the report
+above does not describe them. A daemon with no Japanese face and a browser with
+one disagree about the same canvas — which is why installing a font is worth
+doing even when the on-screen canvas looks fine.
+
 ## Web app exports
 
 The web editor's canvas row (More actions → Export) saves the current canvas as
