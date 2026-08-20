@@ -20,6 +20,23 @@ export const exportRequestSchema = z.object({
 
 export const exportResponseSchema = z.object({
   filePath: z.string(),
+  /**
+   * Characters this daemon's export fonts have no glyph for, in first-seen
+   * order — the vendored Latin face plus whatever the user installed, and
+   * nothing else (`loadSystemFonts: false`).
+   *
+   * Reported because of HOW it fails: measurement is correct, so the text
+   * wraps in the right places, the boxes are the right size, and every other
+   * signal says the render is fine. The only thing wrong is that a reader
+   * cannot read it. Empty is the normal answer.
+   *
+   * The loss is not the same on both formats, and a caller relaying this to a
+   * person should say which it means: a PNG has already lost these characters,
+   * while an SVG still carries them as `<text>` and renders correctly for any
+   * viewer whose own system has the face. Install one with
+   * `POST /api/fonts/:id/install` (ADR-0012).
+   */
+  undrawable: z.array(z.string()),
 })
 
 // Shared error body. The route emits this for invalid_request /

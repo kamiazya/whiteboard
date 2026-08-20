@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
-import type { ExportErrorBody } from '../../../shared/api-contracts/export.js'
+import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
@@ -75,6 +75,7 @@ export function createDocumentSvgExportRouter() {
       }
 
       let svg: string
+      let undrawable: readonly string[]
       try {
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
@@ -82,6 +83,7 @@ export function createDocumentSvgExportRouter() {
           options: { padding: body.padding, frameId: body.frameId, theme: body.theme },
         })
         svg = result.svg
+        undrawable = result.undrawable
       } catch (err) {
         const errBody: ExportErrorBody = {
           error: 'headless_export_failed',
@@ -93,7 +95,11 @@ export function createDocumentSvgExportRouter() {
       const filePath = outputPath ?? defaultSvgExportPath(workspaceId, path)
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, svg, 'utf-8')
-      return c.json({ filePath })
+      // Typed rather than a bare literal so the contract, not this handler,
+      // decides what an export answers with — the PNG route and this one had
+      // already drifted into two different response shapes.
+      const response: ExportResponse = { filePath, undrawable: [...undrawable] }
+      return c.json(response)
     },
     bodyLimit({
       maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,

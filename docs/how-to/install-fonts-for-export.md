@@ -8,6 +8,12 @@ This is a property of the daemon, not of your canvas or your browser: the text i
 SVG export still carries it as text that any viewer with the font can read. Only the rasterised
 formats (PNG) bake in what the daemon could draw.
 
+It is specifically the **daemon's** exports — the ones an AI agent produces over MCP or HTTP.
+The web editor's own Export menu renders in your browser with your browser's fonts, so it can
+look fine while an agent exporting the same canvas gets boxes. The daemon's export routes say
+which characters they lost, in an `undrawable` field; see
+[export-formats](../reference/export-formats.md#characters-the-exporter-cannot-draw).
+
 ## Install one
 
 1. Connect the web app to a local daemon (see
