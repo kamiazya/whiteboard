@@ -2,11 +2,11 @@ import { act, cleanup, render as rtlRender } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
 import { defaultUserSettings, STORAGE_KEY } from '../lib/user-settings-store.js'
 import { webMcpTools } from '../lib/webmcp/tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 
 function render(ui: ReactElement) {
@@ -70,12 +70,18 @@ describe('BrowserLocalDocumentPage WebMCP wiring', () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('0AFMSY38DJQW16BGNTZ49EKRX2')
     await store.save(snap)
 
     await act(async () => {
-      render(<BrowserLocalDocumentPage store={store} />)
+      render(
+        <BrowserLocalDocumentPage
+          store={store.index}
+          pointer={store.pointer}
+          clock={store.clock}
+        />,
+      )
     })
     await act(async () => {
       await Promise.resolve()
@@ -96,12 +102,18 @@ describe('BrowserLocalDocumentPage WebMCP wiring', () => {
     const fake = createFakeModelContext()
     document.modelContext = fake
 
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('0AFMSY38DJQW16BGNTZ49EKRX2')
     await store.save(snap)
 
     await act(async () => {
-      render(<BrowserLocalDocumentPage store={store} />)
+      render(
+        <BrowserLocalDocumentPage
+          store={store.index}
+          pointer={store.pointer}
+          clock={store.clock}
+        />,
+      )
     })
     await act(async () => {
       await Promise.resolve()

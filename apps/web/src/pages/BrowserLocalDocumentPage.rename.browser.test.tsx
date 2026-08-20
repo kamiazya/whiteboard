@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testi
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
@@ -28,7 +28,7 @@ async function clearDb(): Promise<void> {
 }
 
 async function renderLoaded(): Promise<void> {
-  render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+  render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -101,7 +101,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
     })
 
     cleanup()
-    render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('Reloaded title')
   })
 
@@ -153,7 +153,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
     await waitForTitle('untitled')
 
     cleanup()
-    render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('untitled')
   })
 
@@ -181,7 +181,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
     })
 
     cleanup()
-    render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
     await waitForTitle('untitled')
   })
 

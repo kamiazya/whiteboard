@@ -3248,42 +3248,44 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         )}
         {contextMenu !== null && (
           <CanvasContextMenu
+            commands={{
+              applyResult,
+              applyBoxMoves,
+              copySelection,
+              cutSelection,
+              pasteClipboard,
+              duplicateSelection,
+              reorderSelection,
+              groupSelection,
+              createNodeAt,
+              createGroupAtViewportCenter,
+              openLinkNode,
+              onOpenFileRef,
+              onAddImage,
+              onToggleNodeLock,
+              onToggleEdgeLock,
+              setEdgeLabelEditId,
+              setGroupLabelEditId,
+              setSelectedEdgeId,
+              setLinkDialog,
+              setDocumentPicker,
+            }}
             contextMenu={contextMenu}
             setContextMenu={setContextMenu}
             canvas={canvas}
             canvasRef={canvasRef}
             theme={theme}
             gestureState={gestureState}
-            applyResult={applyResult}
             isEdgeLocked={isEdgeLocked}
-            onToggleEdgeLock={onToggleEdgeLock}
-            setEdgeLabelEditId={setEdgeLabelEditId}
-            setSelectedEdgeId={setSelectedEdgeId}
-            setGroupLabelEditId={setGroupLabelEditId}
-            pasteClipboard={pasteClipboard}
-            createNodeAt={createNodeAt}
-            createGroupAtViewportCenter={createGroupAtViewportCenter}
-            setLinkDialog={setLinkDialog}
             fileRefOptions={fileRefOptions}
-            setDocumentPicker={setDocumentPicker}
-            onAddImage={onAddImage}
             pendingImagePointRef={pendingImagePointRef}
             imageInputRef={imageInputRef}
             pendingBackgroundGroupIdRef={pendingBackgroundGroupIdRef}
             isLocked={isLocked}
-            onToggleNodeLock={onToggleNodeLock}
-            applyBoxMoves={applyBoxMoves}
             extraIds={extraIds}
             selectedId={selectedId}
-            groupSelection={groupSelection}
             isImageFileRef={isImageFileRef}
             missingFileRef={missingFileRef}
-            onOpenFileRef={onOpenFileRef}
-            openLinkNode={openLinkNode}
-            copySelection={copySelection}
-            cutSelection={cutSelection}
-            duplicateSelection={duplicateSelection}
-            reorderSelection={reorderSelection}
           />
         )}
         {canvasPicker !== null && fileRefOptions !== undefined && (

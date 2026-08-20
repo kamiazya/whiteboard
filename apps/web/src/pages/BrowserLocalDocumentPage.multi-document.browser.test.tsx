@@ -23,7 +23,8 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
 import {
   clearWhiteboardDb,
   loroDocumentsKeys,
@@ -63,8 +64,8 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 
 // The switcher addresses a document by PATH; the store's default pointer and
 // every persistence helper here address it by id. This is the one conversion.
-async function pathOf(store: IndexedDBStore, documentId: string): Promise<string> {
-  const found = (await store.listDocuments()).find((row) => row.documentId === documentId)
+async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<string> {
+  const found = (await listLocalDocuments(store)).find((row) => row.documentId === documentId)
   if (found === undefined) throw new Error(`no document ${documentId}`)
   return found.path
 }
@@ -81,7 +82,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   })
 
   it('edits A, New switches to empty B, switching back to A restores the edited node', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
@@ -95,7 +96,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       async () => {
         const heading = screen.getByRole('heading', { level: 1 })
         expect(heading).toBeTruthy()
-        const id = await store.getDefaultDocumentId()
+        const id = await new IdbDefaultDocumentPointer().get()
         expect(id).not.toBeNull()
         return id as string
       },
@@ -127,7 +128,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
 
     const idB = await waitFor(
       async () => {
-        const id = await store.getDefaultDocumentId()
+        const id = await new IdbDefaultDocumentPointer().get()
         expect(id).not.toBe(idA)
         return id as string
       },
@@ -181,7 +182,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   })
 
   it('persists an edit made inside the 300ms debounce before switching canvas', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
@@ -195,7 +196,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       async () => {
         const heading = screen.getByRole('heading', { level: 1 })
         expect(heading).toBeTruthy()
-        const id = await store.getDefaultDocumentId()
+        const id = await new IdbDefaultDocumentPointer().get()
         expect(id).not.toBeNull()
         return id as string
       },
@@ -251,7 +252,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
 
     const idB = await waitFor(
       async () => {
-        const id = await store.getDefaultDocumentId()
+        const id = await new IdbDefaultDocumentPointer().get()
         expect(id).not.toBe(idA)
         return id as string
       },

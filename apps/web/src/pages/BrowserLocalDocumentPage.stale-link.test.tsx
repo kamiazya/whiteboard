@@ -9,8 +9,9 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 import type { LoroStoreLike } from './use-browser-local-document-controller.js'
 
 class FakeLoroStore implements LoroStoreLike {
@@ -54,7 +55,7 @@ afterEach(cleanup)
 
 describe('stale /local/:path deep link', () => {
   it('falls back to the default canvas and replaces the URL', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
@@ -73,7 +74,9 @@ describe('stale /local/:path deep link', () => {
           path: '/local/*',
           element: (
             <BrowserLocalDocumentPage
-              store={store}
+              store={store.index}
+              pointer={store.pointer}
+              clock={store.clock}
               loro={new FakeLoroStore()}
               initialPath="gone-123"
             />
@@ -103,7 +106,7 @@ describe('stale /local/:path deep link', () => {
     // resolves the requested path against the in-memory list, and a path that
     // is not in it used to make the effect return before reaching its own
     // documented repair — leaving the address bar naming nothing.
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
@@ -120,7 +123,9 @@ describe('stale /local/:path deep link', () => {
           path: '/local/*',
           element: (
             <BrowserLocalDocumentPage
-              store={store}
+              store={store.index}
+              pointer={store.pointer}
+              clock={store.clock}
               loro={new FakeLoroStore()}
               initialPath="real-canvas"
             />
@@ -153,7 +158,7 @@ describe('stale /local/:path deep link', () => {
     // "not in the list" means "not known yet", not "does not exist". Repairing
     // there would overwrite a navigation to a perfectly valid document with
     // the current path, and the list arriving later cannot undo it.
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
@@ -180,12 +185,16 @@ describe('stale /local/:path deep link', () => {
     const held = new Promise<void>((resolve) => {
       releaseList = resolve
     })
-    const listDocuments = store.listDocuments.bind(store)
+    // Held at the INDEX, which is what the page's listing actually reads.
+    // The double's own `listDocuments` is not on that path any more, so
+    // suspending it suspended nothing and the test covered the fast case
+    // twice.
+    const listDocuments = store.index.listDocuments.bind(store.index)
     let calls = 0
-    store.listDocuments = async () => {
+    store.index.listDocuments = async (input) => {
       calls += 1
       if (calls === 2) await held
-      return listDocuments()
+      return listDocuments(input)
     }
 
     const router = createMemoryRouter(
@@ -194,7 +203,9 @@ describe('stale /local/:path deep link', () => {
           path: '/local/*',
           element: (
             <BrowserLocalDocumentPage
-              store={store}
+              store={store.index}
+              pointer={store.pointer}
+              clock={store.clock}
               loro={new FakeLoroStore()}
               initialPath="real-canvas"
             />

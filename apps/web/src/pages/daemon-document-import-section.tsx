@@ -1,6 +1,7 @@
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useState } from 'react'
 import { ImportBrowserLocalPanel } from '../components/migration/ImportBrowserLocalPanel.js'
-import type { BrowserLocalStore } from '../lib/browser-local-store.js'
+import type { ContentClock } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
@@ -8,7 +9,8 @@ export interface DaemonDocumentImportSectionProps {
   workspaceId: string
   daemonFetch: typeof fetch
   daemonBaseUrl?: string
-  browserLocalStore: BrowserLocalStore
+  browserLocalStore: DocumentIndex
+  browserLocalClock?: ContentClock
 }
 
 /**
@@ -23,6 +25,7 @@ export function DaemonDocumentImportSection({
   daemonFetch,
   daemonBaseUrl,
   browserLocalStore,
+  browserLocalClock,
 }: DaemonDocumentImportSectionProps) {
   // useState's lazy initializer guarantees exactly-once construction per
   // mount; useMemo may legally re-run and would reset the stores' state.
@@ -35,6 +38,7 @@ export function DaemonDocumentImportSection({
       daemonFetch={daemonFetch}
       daemonBaseUrl={daemonBaseUrl}
       browserLocalStore={browserLocalStore}
+      browserLocalClock={browserLocalClock}
       loroStore={loroStore}
       settingsStore={settingsStore}
     />

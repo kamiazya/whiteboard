@@ -9,8 +9,8 @@ import type { ReactElement } from 'react'
 import { forwardRef } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 
 const capturedThemes: unknown[] = []
 
@@ -75,11 +75,17 @@ describe('BrowserLocalDocumentPage theme wiring', () => {
 
   it('threads resolvedTheme=dark into SpatialEditor when the stored preference is dark', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'dark')
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('0W16BGNTZ49EKRX27CHPV05AFM')
     await store.save(snap)
     await act(async () => {
-      render(<BrowserLocalDocumentPage store={store} />)
+      render(
+        <BrowserLocalDocumentPage
+          store={store.index}
+          pointer={store.pointer}
+          clock={store.clock}
+        />,
+      )
     })
     expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
     expect(capturedThemes).toContain('dark')
@@ -87,11 +93,17 @@ describe('BrowserLocalDocumentPage theme wiring', () => {
 
   it('threads resolvedTheme=light into SpatialEditor when the stored preference is light', async () => {
     window.localStorage.setItem(THEME_STORAGE_KEY, 'light')
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('0W16BGNTZ49EKRX27CHPV05AFM')
     await store.save(snap)
     await act(async () => {
-      render(<BrowserLocalDocumentPage store={store} />)
+      render(
+        <BrowserLocalDocumentPage
+          store={store.index}
+          pointer={store.pointer}
+          clock={store.clock}
+        />,
+      )
     })
     expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
     expect(capturedThemes).toContain('light')

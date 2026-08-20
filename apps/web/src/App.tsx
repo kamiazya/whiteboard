@@ -42,7 +42,7 @@ import {
   parseDaemonRoute,
   parseSettingsRoute,
 } from './lib/app-routes.js'
-import { IndexedDBStore } from './lib/browser-local-store.js'
+import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import {
   BROWSER_LOCAL_CAPABILITIES,
   type ProviderState,
@@ -117,7 +117,7 @@ export function LazyPageFallback({
 }
 
 export function App({ providerState }: AppProps) {
-  const [browserLocalStore] = useState(() => new IndexedDBStore())
+  const [browserLocalStore] = useState(() => new IdbDocumentIndex())
   const [userSettingsStore] = useState(() => createUserSettingsStore())
   const [defaultProviderState] = useState<ProviderState>(() =>
     resolveHostedProviderStateFromRaw(
@@ -631,7 +631,7 @@ export function App({ providerState }: AppProps) {
               // canvas switching it keeps owning — App re-routes solely when
               // the URL crosses the list/editor boundary.
               <BrowserLocalIndexPage
-                store={browserLocalStore}
+                index={browserLocalStore}
                 onOpenDocument={(path) => navigate(browserLocalDocumentPath(path))}
               />
             ) : (

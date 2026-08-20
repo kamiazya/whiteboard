@@ -19,8 +19,9 @@ import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
-import { IndexedDBStore } from './browser-local-store.js'
 import { DocumentFileStore } from './document-file-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
+import { LOCAL_WORKSPACE_ID } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
 const log = getAppLogger('document-embed-content')
@@ -36,10 +37,14 @@ const log = getAppLogger('document-embed-content')
  */
 async function loadDocumentName(documentId: string): Promise<string | undefined> {
   try {
-    const result = await new IndexedDBStore().load(documentId)
-    if (result.kind !== 'ok') return undefined
-    // `untitled` is the store's sentinel for an unnamed canvas, not a name.
-    return result.snapshot.name === 'untitled' ? undefined : result.snapshot.name
+    const entry = await new IdbDocumentIndex().resolveDocumentById({
+      workspaceId: LOCAL_WORKSPACE_ID,
+      documentId,
+    })
+    // A document with no name of its own reports one as ABSENT rather than as
+    // the sentinel string the old metadata row used, so the caller's fallback
+    // to the reference happens without anyone comparing against 'untitled'.
+    return entry?.name
   } catch (err) {
     log.warn('document name load failed', { documentId, err })
     return undefined

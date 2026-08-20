@@ -48,6 +48,18 @@ export interface MarkdownEditorProps {
   maxWidth?: number
   /** Trailing-edge debounce delay for preview recomputation. Default 150ms. */
   previewDebounceMs?: number
+  /**
+   * Start in this view mode instead of the persisted per-browser preference,
+   * and keep later mode changes OUT of that preference.
+   *
+   * A test seam, like `openWhiteboardDb(dbName?)`: production passes nothing.
+   * The preference lives in localStorage, which browser test files share —
+   * one origin, files in parallel — so a mount that reads it inherits
+   * whatever a concurrent file last wrote, and a mount that writes it
+   * poisons every concurrent reader. An explicit initial mode detaches this
+   * mount from the shared preference in both directions.
+   */
+  initialViewMode?: MarkdownViewMode
   /** Injection seam for tests; defaults to the real Canvas 2D measurer. */
   measure?: MeasureText
   /** Focus the source pane on mount (fresh-note flows). */
@@ -236,6 +248,7 @@ export function MarkdownEditor({
   className,
   maxWidth = DEFAULT_MAX_WIDTH,
   previewDebounceMs = DEFAULT_PREVIEW_DEBOUNCE_MS,
+  initialViewMode,
   measure,
   autoFocus = false,
   theme = 'light',
@@ -271,9 +284,14 @@ export function MarkdownEditor({
     onOpenDocument(href)
   }
 
-  const [mode, setMode] = useState<MarkdownViewMode>(readStoredViewMode)
+  const [mode, setMode] = useState<MarkdownViewMode>(() => initialViewMode ?? readStoredViewMode())
   const changeMode = (next: MarkdownViewMode) => {
     setMode(next)
+    // A mount with an explicit initial mode stays detached from the shared
+    // preference when the mode changes too — half an isolation (read the
+    // prop, still write the store) would leave the writer side poisoning
+    // concurrent mounts.
+    if (initialViewMode !== undefined) return
     try {
       window.localStorage.setItem(VIEW_MODE_STORAGE_KEY, next)
     } catch {

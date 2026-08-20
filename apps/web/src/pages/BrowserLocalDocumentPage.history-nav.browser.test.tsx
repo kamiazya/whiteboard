@@ -22,7 +22,8 @@ import {
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
 import {
   clearWhiteboardDb,
   persistedNodeIds,
@@ -57,8 +58,8 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 // The address bar names a document by PATH; the store's default pointer names
 // it by id. Every URL assertion below goes through this so the two are never
 // silently conflated.
-async function pathOf(store: IndexedDBStore, documentId: string): Promise<string> {
-  const found = (await store.listDocuments()).find((row) => row.documentId === documentId)
+async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<string> {
+  const found = (await listLocalDocuments(store)).find((row) => row.documentId === documentId)
   if (found === undefined) throw new Error(`no document ${documentId}`)
   return found.path
 }
@@ -74,9 +75,14 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
   })
 
   it('Back returns to the first canvas and Forward returns to the second', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const router = createMemoryRouter(
-      [{ path: '*', element: <BrowserLocalDocumentPage store={store} /> }],
+      [
+        {
+          path: '*',
+          element: <BrowserLocalDocumentPage store={store} />,
+        },
+      ],
       { initialEntries: ['/'] },
     )
     rtlRender(
@@ -95,7 +101,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
 
     const idA = await waitFor(
       async () => {
-        const id = await store.getDefaultDocumentId()
+        const id = await new IdbDefaultDocumentPointer().get()
         expect(id).not.toBeNull()
         return id as string
       },
@@ -124,7 +130,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
 
     const idB = await waitFor(
       async () => {
-        const id = await store.getDefaultDocumentId()
+        const id = await new IdbDefaultDocumentPointer().get()
         expect(id).not.toBe(idA)
         return id as string
       },
@@ -160,7 +166,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
     })
     await waitFor(
       async () => {
-        expect(await store.getDefaultDocumentId()).toBe(idA)
+        expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
       },
       { timeout: 5000 },
     )
@@ -181,7 +187,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
     })
     await waitFor(
       async () => {
-        expect(await store.getDefaultDocumentId()).toBe(idB)
+        expect(await new IdbDefaultDocumentPointer().get()).toBe(idB)
       },
       { timeout: 5000 },
     )

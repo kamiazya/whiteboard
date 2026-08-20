@@ -13,7 +13,7 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import '../index.css'
 
@@ -56,7 +56,7 @@ beforeEach(async () => {
 afterEach(cleanup)
 
 it('opens exactly one connection per canvas, and keeps it across a re-render', async () => {
-  const { rerender } = render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+  const { rerender } = render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })
@@ -68,7 +68,7 @@ it('opens exactly one connection per canvas, and keeps it across a re-render', a
     rerender(
       <div style={{ height: '100vh' }}>
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalDocumentPage store={new IndexedDBStore()} />
+          <BrowserLocalDocumentPage store={new IdbDocumentIndex()} />
         </MemoryRouter>
       </div>,
     )

@@ -2,7 +2,7 @@ import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testi
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 import '../index.css'
@@ -49,7 +49,7 @@ function captureExportedBlobs(): { blobs: Blob[] } {
 }
 
 async function renderLoaded(): Promise<void> {
-  render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+  render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })

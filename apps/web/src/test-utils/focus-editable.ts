@@ -21,42 +21,44 @@ import { expect, vi } from 'vitest'
  * with `focus()` would move the caret to wherever CodeMirror last had it — a
  * different test.
  *
- * `focus()` is re-issued on EVERY attempt rather than once before the wait.
- * Focus is shared mutable state across a whole browser project: a neighbour's
- * leftover keystrokes, or its still-settling layout, can take it back after
- * the call and before it settles, and waiting alone never gets it back. And a
- * detached node is reported by name — it can never take focus, so waiting is
- * the one thing that cannot help, and "activeElement is <body>" says nothing
- * about which of the two happened. That message is what a whole file of
- * failures looked like in CI, eleven times, with no way to tell them apart.
+ * Everything below is re-done on EVERY attempt, because each step can be
+ * invalidated between attempts by state this test does not own:
+ *
+ * - It takes a RESOLVER, not an element. A node grabbed right after `render()`
+ *   is a snapshot; under load the contentDOM lands late or is swapped, and
+ *   `focus()` on a disconnected element is a spec'd no-op. Only re-resolving
+ *   follows the swap — an element held by value is the repo's sixth flake
+ *   shape wearing a helper.
+ * - `window.focus()` before the element focus. Several browser pages run in
+ *   parallel and only ONE can hold focus; measured in CI, the failing case is
+ *   `document.hasFocus()=false`, and an element in an unfocused document
+ *   cannot become its activeElement however many times focus() is called.
+ * - An unrendered editable is named outright: the source pane is display:none
+ *   whenever the editor is in Read mode, `focus()` on an element that is not
+ *   being rendered is a no-op, and "activeElement is <body>" says nothing
+ *   about why. Seeding the shared view-mode preference to 'read' reproduces a
+ *   whole file of those verbatim — see `initialViewMode` on MarkdownEditor.
  */
-export async function focusEditable(element: Element): Promise<void> {
+export async function focusEditable(resolveEditable: () => Element | null): Promise<void> {
   await vi.waitFor(() => {
-    // focus() INSIDE the retry, not once before it. CodeMirror's contentDOM is
-    // not focusable until the view has finished mounting, and a `focus()` that
-    // lands before then is a silent no-op — so calling it once and then merely
-    // WAITING can never recover: the wait re-checks a condition nothing is
-    // still trying to satisfy. Locally the view is ready and the first call
-    // takes; in CI it is not, and a whole file failed with
-    // `expected <body> to be <div spellcheck="false" …>` — this assertion,
-    // reporting that focus never moved.
-    //
-    // A detached node is called out rather than waited on: it can never take
-    // focus, so the retry is the one thing that cannot help it, and the
-    // assertion below cannot tell that case apart from the not-yet-mounted
-    // one. "activeElement is <body>" is equally what a reference held across
-    // a re-render looks like, which is a different fix at a different place.
-    if (!element.isConnected) {
+    const element = resolveEditable()
+    expect(
+      element,
+      'focusEditable: the resolver answered null — no editable in the DOM',
+    ).not.toBeNull()
+    if (!(element as Element).isConnected) {
+      // A resolver that answers a detached node is frozen over a captured
+      // reference — retrying cannot help, so say so instead of spending the
+      // budget.
       throw new Error(
-        'focusEditable: the editable is no longer in the document — it was replaced between ' +
-          'being queried and being focused. Re-query it inside the step that focuses it.',
+        'focusEditable: the resolver answered a node that is no longer in the document — ' +
+          'resolve from the live DOM, not a captured reference.',
       )
     }
-    // The window first: measured in CI, the failing case is
-    // `document.hasFocus()=false`, and an element in an unfocused document
-    // cannot become its activeElement however many times focus() is called.
-    // Several browser pages run in parallel and only one can hold focus, so
-    // this asks for it back rather than assuming the frame still has it.
+    expect(
+      (element as HTMLElement).checkVisibility(),
+      'focusEditable: editable is not rendered (display:none — is the editor in Read mode?)',
+    ).toBe(true)
     window.focus()
     ;(element as HTMLElement).focus()
     // The message carries what DID have focus, and whether the document had
