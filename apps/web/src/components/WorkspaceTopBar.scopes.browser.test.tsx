@@ -1,3 +1,4 @@
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 /**
  * The two header rows own different SCOPES.
  *
@@ -12,7 +13,6 @@ import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { MemoryStore } from '../lib/browser-local-store.js'
 import { BrowserLocalDocumentPage } from '../pages/BrowserLocalDocumentPage.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
 import '../index.css'
@@ -79,14 +79,27 @@ describe('top bar scopes', () => {
 
 describe('fullscreen ground', () => {
   it('paints the fullscreen target itself, not just the body behind it', async () => {
-    // MemoryStore, not IndexedDBStore: every browser test file shares one
+    // In memory, and ALL FOUR of them: every browser test file shares one
     // origin, so a sibling file's `indexedDB.deleteDatabase('whiteboard')`
     // lands mid-load here and the page never leaves its loading state. The
     // assertion is about a CSS ground, so the storage backend is incidental.
+    //
+    // All four, not just the index: the page's `loro`, `pointer` and `clock`
+    // each default to real IndexedDB, so an in-memory index beside three real
+    // ones is not isolated at all. Measured idle this costs only ~5ms
+    // (34ms vs 39ms to first `<main>`), so it is NOT what failed in CI — the
+    // budget below is. It is here because the isolation this file asks for in
+    // the comment above is a property of all four or of none.
+    const local = new LocalStoreDouble()
     render(
       <div style={{ height: '400px' }}>
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalDocumentPage store={new MemoryStore()} />
+          <BrowserLocalDocumentPage
+            store={local.index}
+            loro={local.loro}
+            pointer={local.pointer}
+            clock={local.clock}
+          />
         </MemoryRouter>
       </div>,
     )
@@ -96,11 +109,18 @@ describe('fullscreen ground', () => {
     // anything `<main>` does not paint itself falls through to the default
     // black backdrop, which is what made the canvas area go black under a
     // light theme.
-    const main = await waitFor(() => {
-      const el = document.querySelector('main')
-      expect(el).not.toBeNull()
-      return el as HTMLElement
-    })
+    // An explicit budget, like every sibling in this project. The default is
+    // 1000ms, and the whole browser project in flight makes a test 20-30x
+    // slower than the same file alone — so a mount measured at ~35ms idle has
+    // no margin at all under a full run. That is what failed in CI.
+    const main = await waitFor(
+      () => {
+        const el = document.querySelector('main')
+        expect(el).not.toBeNull()
+        return el as HTMLElement
+      },
+      { timeout: 5000 },
+    )
     const background = getComputedStyle(main).backgroundColor
     expect(background).not.toBe('rgba(0, 0, 0, 0)')
     expect(background).not.toBe('transparent')

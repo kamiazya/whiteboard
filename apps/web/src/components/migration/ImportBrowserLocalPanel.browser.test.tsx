@@ -1,12 +1,14 @@
 /**
- * Real-IndexedDB browser test: seeds the actual IndexedDBStore + LoroStore
+ * Real-IndexedDB browser test: seeds the actual IdbDocumentIndex + LoroStore
  * with two documents (one with deltas), imports both, and asserts copy-first
  * — after import the source store's contents are byte-identical.
  */
+
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IndexedDBStore } from '../../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
+import { listLocalDocuments } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
@@ -34,46 +36,44 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
   afterEach(cleanup)
 
   it('imports two seeded documents via daemonFetch without mutating the source IndexedDB store', async () => {
-    const browserLocalStore = new IndexedDBStore()
+    const browserLocalStore = new IdbDocumentIndex()
+    await browserLocalStore.createWorkspace({ workspaceId: 'local' })
     const loroStore = new LoroStore()
 
-    await browserLocalStore.save({
-      documentId: '0Y147ADGKPSWZ258BEHMQTX036',
-      workspaceId: 'local',
-      path: 'no-deltas',
-      name: 'No Deltas',
-      updatedAt: '2026-01-01T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
-    await browserLocalStore.save({
-      documentId: '058BEHMQTX0369CFJNRVY147AD',
-      workspaceId: 'local',
-      path: 'with-deltas',
-      name: 'With Deltas',
-      updatedAt: '2026-01-02T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
+    const noDeltasId = (
+      await browserLocalStore.createDocument({
+        workspaceId: 'local',
+        path: 'no-deltas',
+        name: 'No Deltas',
+        kind: 'spatial',
+      })
+    ).documentId
+    const withDeltasId = (
+      await browserLocalStore.createDocument({
+        workspaceId: 'local',
+        path: 'with-deltas',
+        name: 'With Deltas',
+        kind: 'spatial',
+      })
+    ).documentId
 
     const doc1 = new Loro()
     doc1.getMovableList('elements').push('one')
     doc1.commit()
-    await loroStore.save('0Y147ADGKPSWZ258BEHMQTX036', doc1.export({ mode: 'snapshot' }))
+    await loroStore.save(noDeltasId, doc1.export({ mode: 'snapshot' }))
 
     const doc2 = new Loro()
     doc2.getMovableList('elements').push('two-a')
     doc2.commit()
-    await loroStore.save('058BEHMQTX0369CFJNRVY147AD', doc2.export({ mode: 'snapshot' }))
+    await loroStore.save(withDeltasId, doc2.export({ mode: 'snapshot' }))
     const prevVV = doc2.version()
     doc2.getMovableList('elements').push('two-b')
     doc2.commit()
-    await loroStore.appendDelta(
-      '058BEHMQTX0369CFJNRVY147AD',
-      doc2.export({ mode: 'update', from: prevVV }),
-    )
+    await loroStore.appendDelta(withDeltasId, doc2.export({ mode: 'update', from: prevVV }))
 
-    const documentsBefore = await browserLocalStore.listDocuments()
-    const loro1Before = await loroStore.load('0Y147ADGKPSWZ258BEHMQTX036')
-    const loro2Before = await loroStore.load('058BEHMQTX0369CFJNRVY147AD')
+    const documentsBefore = await listLocalDocuments(browserLocalStore)
+    const loro1Before = await loroStore.load(noDeltasId)
+    const loro2Before = await loroStore.load(withDeltasId)
 
     const daemonFetch = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
       const url = String(input)
@@ -108,9 +108,9 @@ describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
     expect(createCalls).toHaveLength(2)
     expect(updateCalls).toHaveLength(2)
 
-    const documentsAfter = await browserLocalStore.listDocuments()
-    const loro1After = await loroStore.load('0Y147ADGKPSWZ258BEHMQTX036')
-    const loro2After = await loroStore.load('058BEHMQTX0369CFJNRVY147AD')
+    const documentsAfter = await listLocalDocuments(browserLocalStore)
+    const loro1After = await loroStore.load(noDeltasId)
+    const loro2After = await loroStore.load(withDeltasId)
 
     await waitFor(() => {
       expect(documentsAfter).toEqual(documentsBefore)

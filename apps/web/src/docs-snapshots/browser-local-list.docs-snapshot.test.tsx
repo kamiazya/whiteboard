@@ -2,8 +2,8 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { MemoryStore } from '../lib/browser-local-store.js'
 import { BrowserLocalIndexPage } from '../pages/BrowserLocalIndexPage.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { resolveDocAssetPath } from './_helpers.js'
 
@@ -24,7 +24,7 @@ afterEach(() => {
 
 describe('docs snapshot: browser-local canvas list', () => {
   it('captures the list with a markdown note and a spatial pair', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     // 1d, 2d, 5d ago relative to NOW so the labels stay stable.
     await store.save({
       documentId: '0RVY147ADGKPSWZ258BEHMQTX0',
@@ -54,7 +54,12 @@ describe('docs snapshot: browser-local canvas list', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <div style={{ height: '100vh', background: 'white' }}>
-          <BrowserLocalIndexPage store={store} onOpenDocument={() => {}} />
+          <BrowserLocalIndexPage
+            index={store.index}
+            pointer={store.pointer}
+            clock={store.clock}
+            onOpenDocument={() => {}}
+          />
         </div>
       </MemoryRouter>,
     )

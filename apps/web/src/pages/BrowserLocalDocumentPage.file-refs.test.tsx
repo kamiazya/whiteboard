@@ -9,8 +9,9 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
-import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 import type { LoroStoreLike } from './use-browser-local-document-controller.js'
 
 // Captures the editor's file-ref props without mounting the real canvas —
@@ -67,8 +68,8 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 const HERE_ID = '005AFMSY38DJQW16BGNTZ49EKR'
 const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
-async function seededStore(): Promise<MemoryStore> {
-  const store = new MemoryStore()
+async function seededStore(): Promise<LocalStoreDouble> {
+  const store = new LocalStoreDouble()
   await store.setDefaultDocumentId(HERE_ID)
   await store.save({
     documentId: HERE_ID,
@@ -92,13 +93,19 @@ async function seededStore(): Promise<MemoryStore> {
   return store
 }
 
-async function mountPage(store: MemoryStore) {
+async function mountPage(store: LocalStoreDouble) {
   const router = createMemoryRouter(
     [
       {
         path: '/local/*',
         element: (
-          <BrowserLocalDocumentPage store={store} loro={new FakeLoroStore()} initialPath="here" />
+          <BrowserLocalDocumentPage
+            store={store.index}
+            pointer={store.pointer}
+            clock={store.clock}
+            loro={new FakeLoroStore()}
+            initialPath="here"
+          />
         ),
       },
     ],

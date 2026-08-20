@@ -21,10 +21,11 @@ import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import {
   clearWhiteboardDb,
   loroDocumentsKeys,
+  persistedNodeIds,
   setTextCommand,
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
@@ -69,7 +70,7 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
   })
 
   it('persists a node across remount and never writes a __placeholder__ row', async () => {
-    render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {
@@ -85,13 +86,19 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
     // (idempotent) edit on each poll so a change dispatched before the
     // connection settles is retried until it lands, then wait for the debounce
     // (300ms) to flush the write into the real canvas row (not '__placeholder__').
+    //
+    // Waits on the record's CONTENT, not on a record existing. Every create
+    // path now seeds an empty content record, so "a key is present" is true
+    // before any edit lands — a poll on that stops retrying immediately and
+    // the remount below then reads an empty canvas. Measured: the wait passed
+    // and the assertion after the remount got `[]`.
+    const [documentId] = await loroDocumentsKeys()
     await waitFor(
       async () => {
         act(() => {
           latestOnChange!(next, setTextCommand('reload-regression-node'))
         })
-        const keys = await loroDocumentsKeys()
-        expect(keys.length).toBeGreaterThan(0)
+        expect(await persistedNodeIds(documentId as string)).toContain('reload-regression-node')
       },
       { timeout: 10000, interval: 600 },
     )
@@ -101,7 +108,7 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
 
     cleanup()
     latestMountedCanvases = []
-    render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(
       () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
       {

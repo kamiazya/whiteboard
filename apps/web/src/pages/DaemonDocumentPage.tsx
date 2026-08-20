@@ -4,6 +4,7 @@ import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
@@ -35,7 +36,6 @@ import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { createDaemonFetch } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
@@ -44,6 +44,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
+import type { ContentClock } from '../lib/local-document-summary.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellDaemonAuthError } from '../lib/shell-status-store.js'
@@ -86,7 +87,8 @@ export interface DaemonDocumentPageProps {
   // renders a collapsed "Import from this browser" disclosure so a user who
   // previously worked browser-local can copy those documents onto this
   // daemon workspace. Absent in tests/embedders that don't need the flow.
-  browserLocalStore?: BrowserLocalStore
+  browserLocalStore?: DocumentIndex
+  browserLocalClock?: ContentClock
   // Wired to WorkspaceTopBar's own "Back to canvas list" button. Absent
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
@@ -102,6 +104,7 @@ export function DaemonDocumentPage({
   onContinueBrowserLocal,
   createBackend,
   browserLocalStore,
+  browserLocalClock,
   onNavigateBack,
 }: DaemonDocumentPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
@@ -714,6 +717,7 @@ export function DaemonDocumentPage({
                         daemonFetch={daemonFetch}
                         daemonBaseUrl={daemonBaseUrl}
                         browserLocalStore={browserLocalStore}
+                        browserLocalClock={browserLocalClock}
                       />
                     </Suspense>
                   </ErrorBoundary>

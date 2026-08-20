@@ -6,8 +6,8 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
-import { MemoryStore } from '../lib/browser-local-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // The top bar is React.lazy in the page; loading it in the collection phase
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (the lazy-race
@@ -55,11 +55,13 @@ function setFullscreenElement(el: Element | null) {
 }
 
 async function renderLoaded() {
-  const store = new MemoryStore()
+  const store = new LocalStoreDouble()
   await store.setDefaultDocumentId('0PV05AFMSY38DJQW16BGNTZ49E')
   await store.save(snap)
   await act(async () => {
-    render(<BrowserLocalDocumentPage store={store} />)
+    render(
+      <BrowserLocalDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
+    )
   })
   // The first mount in the file pays every lazy chunk's load; the default
   // 1s retry budget loses that race under a parallel suite (the documented

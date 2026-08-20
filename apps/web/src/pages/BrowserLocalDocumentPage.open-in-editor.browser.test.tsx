@@ -1,12 +1,14 @@
 // The seam between the three parts: the canvas raises the verb, the page owns
 // the surface, and the edit has to land back in the canvas. Each part has its
 // own test; only the page can answer whether they are connected.
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { IndexedDBStore, LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
+import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
 type OnChange = (next: SpatialCanvas, command: unknown) => void
 type OpenInEditor = (nodeId: string, text: string) => void
@@ -40,17 +42,13 @@ describe('open in editor (page seam)', () => {
   })
 
   it("opens the page's editing surface on the node body the canvas hands over", async () => {
-    const id = '01ARZ3NDEKTSV4RRFFQ69G5FCC'
-    const store = new IndexedDBStore()
-    await store.save({
-      documentId: id,
-      workspaceId: LOCAL_WORKSPACE_ID,
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, {
       path: 'board',
       name: 'Board',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'spatial' as const,
+      kind: 'spatial',
+      makeDefault: true,
     })
-    await store.setDefaultDocumentId(id)
     render(
       <MemoryRouter>
         <BrowserLocalDocumentPage store={store} />

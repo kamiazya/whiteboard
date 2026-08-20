@@ -1,14 +1,30 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DocumentListView } from '../components/document-list/DocumentListView.js'
-import { newDocumentPathIn, takenPathsIn } from '../components/workspace-files/new-document-path.js'
-import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
+import {
+  type ContentClock,
+  type DefaultDocumentPointer,
+  ensureLocalWorkspace,
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  LOCAL_WORKSPACE_ID,
+  listLocalDocuments,
+} from '../lib/local-document-summary.js'
+import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import {
+  createSeededDocument,
+  type LoroStoreLike,
+} from './use-browser-local-document-controller.js'
 
 export interface BrowserLocalIndexPageProps {
-  store: BrowserLocalStore
+  index: DocumentIndex
+  /** Seeds a content record for a newly created document; see handleCreate. */
+  loro?: LoroStoreLike
+  pointer?: DefaultDocumentPointer
+  clock?: ContentClock
   onOpenDocument: (path: string) => void
 }
 
@@ -16,7 +32,23 @@ export interface BrowserLocalIndexPageProps {
 // renders, minus its daemon-only capabilities (no thumbnails, no workspace
 // selector). Rows come straight from the store; the editor page owns
 // everything after onOpenDocument fires.
-export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalIndexPageProps) {
+// Module-level, NOT default parameters. A default in the parameter list is
+// evaluated on every render, so `idbContentClock()` hands back a new function
+// identity each time; the load effect depends on it, `setSnapshots` stores a
+// new array, the render mints another clock, and the effect runs again without
+// end. Measured on the production wiring (index + onOpenDocument only): 464
+// index reads and still climbing after half a second.
+const defaultLoroStore = /* @__PURE__ */ new LoroStore()
+const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
+const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
+
+export function BrowserLocalIndexPage({
+  index,
+  loro = defaultLoroStore,
+  pointer = defaultPointer,
+  clock = defaultClock,
+  onOpenDocument,
+}: BrowserLocalIndexPageProps) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
   const [error, setError] = useState<string | null>(null)
   // The `disabled` attribute (via createDisabled) is the whole double-press
@@ -27,8 +59,12 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
 
   useEffect(() => {
     let cancelled = false
-    store
-      .listDocuments()
+    // On a device that has never created a document there is no workspace to
+    // list, and the port answers that with an error rather than an empty
+    // list. Ensuring it here is what makes a first visit render the empty
+    // state instead of "Failed to load documents from this browser."
+    ensureLocalWorkspace(index)
+      .then(() => listLocalDocuments(index, clock))
       .then((all) => {
         if (!cancelled) setSnapshots(all)
       })
@@ -38,7 +74,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
     return () => {
       cancelled = true
     }
-  }, [store])
+  }, [index, clock])
 
   const rows = useMemo(() => {
     if (!snapshots) return []
@@ -57,10 +93,10 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
     }))
   }, [snapshots])
 
-  // The list addresses a document by PATH; the store deletes by id. Carrying
-  // both is what keeps the conversion at one place instead of at the call.
+  // The index deletes by PATH, and the list already addresses rows that way,
+  // so this carries the path rather than the id it used to need.
   const [pendingDelete, setPendingDelete] = useState<{
-    documentId: string
+    path: string
     displayName: string
   } | null>(null)
   const [deleting, setDeleting] = useState(false)
@@ -71,50 +107,56 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
     setDeleting(true)
     setDeleteError(null)
     try {
-      // Unconditional removal by id. If this was the canvas the default
-      // pointer resumes into, the pointer dangles deliberately — the
-      // editor's resume path already falls back safely on a dead id.
-      await store.removeDocument?.(pendingDelete.documentId)
-      setSnapshots(await store.listDocuments())
+      // Resolved BEFORE the delete, because afterwards there is nothing left
+      // to compare the pointer against. A pointer still naming the deleted
+      // document does not degrade gracefully: the editor's resume path
+      // reports 'The canvas data could not be read.', so an ordinary delete
+      // would hand the user an error screen the next time they open the
+      // editor.
+      const pointed = await pointer.get()
+      const target = await index.resolveDocument({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: pendingDelete.path,
+      })
+      await index.deleteDocument({ workspaceId: LOCAL_WORKSPACE_ID, path: pendingDelete.path })
+      if (pointed !== null && target !== null && pointed === target.documentId) {
+        await pointer.clear()
+      }
+      setSnapshots(await listLocalDocuments(index, clock))
       setPendingDelete(null)
     } catch {
       setDeleteError('Failed to delete the canvas from this browser.')
     } finally {
       setDeleting(false)
     }
-  }, [store, pendingDelete])
+  }, [index, clock, pointer, pendingDelete])
 
   const handleCreate = useCallback(
     async (kind: DocumentKind) => {
       setCreating(true)
       try {
-        const id = store.generateId()
-        // Numbered against the STORE, not against `snapshots`: this callback
-        // is memoized on [store, onOpenDocument], so a rendered list captured
+        // Numbered against the INDEX, not against `snapshots`: this callback
+        // is memoized on [index, onOpenDocument], so a rendered list captured
         // here would be whatever the first render held — `null` on the first
         // create after a load, which numbers from nothing and lands on a path
-        // the store already holds.
-        const taken = await takenPathsIn(store)
-        const fresh: DocumentSnapshot = {
-          documentId: id,
-          workspaceId: LOCAL_WORKSPACE_ID,
-          path: newDocumentPathIn('', taken),
-          name: 'untitled',
-          updatedAt: new Date().toISOString(),
-          kind,
-        }
-        await store.save(fresh)
-        // Repointed so a later plain load resumes in the new canvas — the
+        // already taken. A failed read falls back to numbering from nothing,
+        // which the index's own uniqueness check then refuses rather than
+        // duplicating an address.
+        // The editor's create path, not a second one beside it: numbering,
+        // the content seed, and the rollback on a failed seed are all things
+        // this page used to do differently or not at all.
+        const created = await createSeededDocument(index, loro, clock, undefined, kind)
+        // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.
-        await store.setDefaultDocumentId(id)
-        onOpenDocument(fresh.path)
+        await pointer.set(created.documentId)
+        onOpenDocument(created.path)
       } catch {
         setError('Failed to create a canvas in this browser.')
       } finally {
         setCreating(false)
       }
     },
-    [store, onOpenDocument],
+    [index, loro, clock, pointer, onOpenDocument],
   )
 
   return (
@@ -150,12 +192,7 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
               onClick={(event) => {
                 // Prevents the click from bubbling to the wrapping open-button.
                 event.stopPropagation()
-                const target = snapshots?.find((entry) => entry.path === row.path)
-                if (target === undefined) return
-                setPendingDelete({
-                  documentId: target.documentId,
-                  displayName: row.displayName,
-                })
+                setPendingDelete({ path: row.path, displayName: row.displayName })
               }}
               className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
             >
@@ -165,8 +202,9 @@ export function BrowserLocalIndexPage({ store, onOpenDocument }: BrowserLocalInd
         />
       ) : (
         // Load failed (error set, snapshots never arrived): creating does
-        // not need the list — a fresh id + save routes around the broken
-        // read, and success navigates into the new canvas.
+        // not need the list — numbering falls back to nothing and the index
+        // refuses a duplicate address, so the worst case is a refused create
+        // rather than two documents at one path.
         <button
           type="button"
           disabled={creating}
