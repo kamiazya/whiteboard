@@ -83,7 +83,7 @@ export interface RenderedMarkdownPreview {
   readonly blocks: readonly RailBlock[]
 }
 
-const PREVIEW_PADDING_PX = 8
+export const PREVIEW_PADDING_PX = 8
 
 /**
  * The SVG plus per-block scroll-sync anchors from the SAME layout pass —
