@@ -22,9 +22,15 @@ const DB_NAME = 'whiteboard-document-index-conformance'
 async function deleteDb(): Promise<void> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.deleteDatabase(DB_NAME)
+    // No `onblocked` resolve. `blocked` fires when a connection is still open,
+    // and the deletion happens only once it closes — so resolving there means
+    // starting the next case against rows the previous one left, which every
+    // conformance case assumes are gone. Waiting is safe here because
+    // `IdbDocumentIndex` closes its connection in a `finally`, so nothing this
+    // suite opens outlives its own call; if that ever stops being true, the
+    // hang names this file rather than corrupting the case after it.
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error)
-    req.onblocked = () => resolve()
   })
 }
 
