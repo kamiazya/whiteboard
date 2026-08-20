@@ -1,5 +1,5 @@
-import { describe, expect, it } from 'vitest'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import type { Scene } from './scene-graph.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
