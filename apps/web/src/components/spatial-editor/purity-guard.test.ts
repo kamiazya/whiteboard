@@ -4,7 +4,12 @@ import { describe, expect, it } from 'vitest'
 // canvas-render's import-guard.test.ts does. A lazy glob makes each case
 // await a per-file transform, and scanning the whole directory serially
 // that way overran the 5s default under a saturated worker pool.
-const modules = import.meta.glob('./**/*.{ts,tsx}', {
+// `../../lib` joins the scan because the committed-scene sink moved there:
+// the keyed SVG patcher owns the mount/patch innerHTML writes that used to
+// be a dangerouslySetInnerHTML prop in SpatialEditor.tsx, and a guard that
+// stopped at this directory would have let a new raw-HTML sink land in lib
+// unscanned.
+const modules = import.meta.glob(['./**/*.{ts,tsx}', '../../lib/**/*.{ts,tsx}'], {
   query: '?raw',
   eager: true,
   import: 'default',
@@ -109,19 +114,25 @@ describe('file seams reach every render path', () => {
 })
 
 describe('single content path (S10 guardrail)', () => {
-  it('raw HTML injection exists ONLY at the two documented scene-svg sinks', () => {
+  it('raw HTML injection exists ONLY at the documented scene-svg sinks', () => {
     // String-level TRIPWIRE, not a syntax-aware proof: it catches the ways
     // raw markup realistically enters a React/DOM codebase
     // (dangerouslySetInnerHTML, innerHTML/outerHTML assignment,
     // insertAdjacentHTML). The escaping guarantee itself lives in
     // canvas-render's serializer tests — this test only pins that nothing
-    // BUT that serializer's two documented injection points exists here.
+    // BUT the serializer's documented injection points exists here.
     const allowed = new Map([
-      // Committed scene + the live-edges drag overlay + the live-node
-      // resize overlay, all fed solely by canvas-render's escaping
-      // serializer.
-      ['./SpatialEditor.tsx', 3],
+      // The live-edges drag overlay + the live-node resize overlay, both
+      // fed solely by canvas-render's escaping serializer.
+      ['./SpatialEditor.tsx', 2],
       ['./DragPreviewLayer.tsx', 1],
+      // The committed-scene sink: mount-once innerHTML write of the full
+      // keyed document, plus the per-group parse the patcher replaces
+      // changed groups through. Every byte both writes carry is
+      // serializer-produced (`renderSceneToKeyedSvg`'s group strings) —
+      // the patcher decides WHICH elements to swap, never how markup is
+      // spelled, so the single-producer argument is unchanged.
+      ['../../lib/keyed-svg-patcher.ts', 2],
     ])
     const sinkPattern =
       /dangerouslySetInnerHTML=|\.innerHTML\s*=|\.outerHTML\s*=|insertAdjacentHTML\(/g

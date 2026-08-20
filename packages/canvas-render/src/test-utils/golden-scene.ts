@@ -179,7 +179,7 @@ export const SHAPE_APPEARANCE_GOLDEN_SVG =
   '<rect x="0" y="0" width="100" height="60" rx="8"/>' +
   '<rect x="120" y="0" width="100" height="60"/>' +
   '<rect x="240" y="0" width="100" height="60" rx="4" fill="#fff" stroke="#000" stroke-width="2"/>' +
-  '<g><text x="0" y="80" fill="#111" font-family="Inter" font-size="14">Styled</text></g>' +
+  '<g fill="#111" font-family="Inter" font-size="14"><text x="0" y="80">Styled</text></g>' +
   '<polyline points="0,120 100,120" fill="none" stroke="#888" stroke-width="1.5" role="presentation"/>' +
   '<polygon points="100,120 90,124 90,116" fill="#888" role="presentation"/>' +
   '</svg>'
