@@ -18,8 +18,8 @@ import type {
 import { collectDefs } from './defs.js'
 import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
-import { hoistInheritedAttrs } from './hoist.js'
 import { serializeSvg } from './serialize.js'
+import { applyOptimizationPasses } from './transform.js'
 import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 /**
@@ -632,9 +632,11 @@ export function buildSvgDocumentParts(
   scene: Scene,
   options?: SvgDocumentOptions,
 ): SvgDocumentParts {
-  // Hoisting runs before defs collection only by convention — it preserves
-  // `defs` declarations on rebuilt nodes, so the order is not load-bearing.
-  const body = scene.nodes.map(renderNode).map(hoistInheritedAttrs)
+  // Optimization passes run before defs collection only by convention —
+  // they preserve `defs` declarations on rebuilt nodes, so the order is not
+  // load-bearing. Applied per top-level node: passes are group-local by
+  // construction (see transform.ts).
+  const body = scene.nodes.map(renderNode).map((node) => applyOptimizationPasses(node))
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.
   const collected = collectDefs(body)
