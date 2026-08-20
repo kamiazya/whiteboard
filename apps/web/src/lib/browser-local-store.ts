@@ -128,15 +128,29 @@ async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<str
     for (const id of ids) {
       const req = store.get(id)
       req.onsuccess = () => {
-        // Only the envelope's own field, through its schema: a record this
-        // parser rejects is one `LoroStore.load` would call corrupt, and
-        // taking a timestamp off it would dress a broken record as fresh.
+        // The ENVELOPE only. `LoroStore.load` goes further and imports the
+        // bytes to reject a structurally-valid record whose CRDT payload is
+        // corrupt — deliberately not repeated here, because doing it would
+        // import every listed document's snapshot on every list AND put
+        // `loro-crdt` back on the critical path (measured at +24.3 KB gzip,
+        // which is why the schema lives in its own module at all).
+        //
+        // The consequence is stated rather than hidden: a corrupt record still
+        // contributes the timestamp its writer stamped, so a document whose
+        // content will not load can still read as recently edited. That is a
+        // last-write time, which is what this field claims to be; whether the
+        // bytes are readable is a question for whoever loads them.
         const parsed = loroRecordEnvelopeSchema.safeParse(req.result)
         if (parsed.success) stamps.set(id, parsed.data.updatedAt)
       }
     }
     tx.oncomplete = () => resolve(stamps)
     tx.onerror = () => reject(tx.error)
+    // Without onabort an aborted transaction leaves this promise pending, and
+    // `load`/`listDocuments` await it — a hang rather than a failure. A
+    // connection closing abnormally aborts its active transactions, so this is
+    // reachable without anyone calling abort() directly.
+    tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
   })
 }
 
