@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '../../lib/utils.js'
+import { RAIL_WIDTH_PX } from './preview-width.js'
 import {
   type RailBlock,
   railGeometry,
@@ -30,8 +31,6 @@ export interface MinimapRailProps {
   readonly onSeek: (documentY: number) => void
   readonly className?: string
 }
-
-export const RAIL_WIDTH_PX = 56
 
 export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null)

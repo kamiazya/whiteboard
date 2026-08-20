@@ -24,8 +24,14 @@ import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import type { LinkTarget } from './link-target.js'
-import { MinimapRail, RAIL_WIDTH_PX } from './MinimapRail.js'
+import { MinimapRail } from './MinimapRail.js'
 import { PreviewPane } from './PreviewPane.js'
+import {
+  previewWidth as computePreviewWidth,
+  previewColumnMaxWidth,
+  RAIL_WIDTH_PX,
+  railFits,
+} from './preview-width.js'
 import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
@@ -98,7 +104,6 @@ export interface MarkdownEditorProps {
 
 const DEFAULT_MAX_WIDTH = 720
 const DEFAULT_PREVIEW_DEBOUNCE_MS = 150
-const MIN_PREVIEW_WIDTH = 320
 
 /**
  * A controlled markdown editor: one source-of-truth `value` string, edited
@@ -417,25 +422,23 @@ export function MarkdownEditor({
   }, [])
 
   // Layout width the preview typesets at: what the pane can actually offer
-  // (minus the document column's padding), clamped to a readable measure.
-  const horizontalPadding = 48
+  // (minus the document column's padding), clamped to a readable measure —
+  // see preview-width.ts, which owns the arithmetic and the reasons.
+  //
   // The rail is a sibling of the preview, so the width it occupies is width
   // the preview does not get. Typesetting against the container's full width
   // instead overflows by exactly the rail — the document is then clipped at
   // the very edge the rail is drawn on.
-  const railWidth = effectiveMode !== 'write' && debouncedValue.trim() !== '' ? RAIL_WIDTH_PX : 0
-  const paneWidth =
-    containerWidth === null
-      ? maxWidth
-      : effectiveMode === 'split'
-        ? containerWidth * (1 - splitRatio) - railWidth
-        : containerWidth - railWidth
-  // Quantized so a divider drag re-typesets the whole document at 64px
-  // steps instead of on every pointermove.
-  const previewWidth = Math.max(
-    MIN_PREVIEW_WIDTH,
-    Math.min(maxWidth, Math.round((paneWidth - horizontalPadding) / 64) * 64),
-  )
+  const railAffordable = railFits(containerWidth)
+  const railWidth =
+    railAffordable && effectiveMode !== 'write' && debouncedValue.trim() !== '' ? RAIL_WIDTH_PX : 0
+  const previewWidth = computePreviewWidth({
+    containerWidth,
+    maxWidth,
+    railWidth,
+    splitRatio,
+    mode: effectiveMode,
+  })
 
   /**
    * Keeps the rail in step with the preview it maps.
@@ -673,7 +676,10 @@ export function MarkdownEditor({
             className="min-w-0 flex-1 overflow-auto"
             onClick={onPreviewClick}
           >
-            <div className="mx-auto px-6 py-8" style={{ maxWidth: previewWidth + 48 }}>
+            <div
+              className="mx-auto px-6 py-8"
+              style={{ maxWidth: previewColumnMaxWidth(previewWidth) }}
+            >
               {effectiveMode === 'read' && meta !== undefined && (
                 <DocumentHeader title={title} meta={meta} />
               )}
@@ -696,7 +702,7 @@ export function MarkdownEditor({
             </div>
           </div>
         )}
-        {!previewEmpty && railBlocks.length > 0 && (
+        {!previewEmpty && railAffordable && railBlocks.length > 0 && (
           // The bars are the same in every mode — they describe the document,
           // not the pane. Only what a press moves differs: the preview when
           // one is on screen, otherwise the source through its anchors.

@@ -1,0 +1,87 @@
+// A phone-width editor must not hand the reader a horizontal scrollbar under
+// content that has nowhere to go, and must not spend 56px of a 390px screen
+// on a rail the document cannot spare.
+//
+// Real browser, and the assertions target the element that actually scrolls:
+// the preview PANE, not the column scroller around it. `max-width` on a block
+// never widens it, so the column always fits its parent — what overflows is
+// the fixed-width SVG inside the pane's own `overflow: auto`. Measured on the
+// reported case: outer 156/156, pane 736/108.
+import { cleanup, render } from '@testing-library/react'
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import '../../index.css'
+import { MarkdownEditor } from './MarkdownEditor.js'
+
+// Tailwind decides every width here, so the sheet has to be live before a
+// measurement is taken — without it every box measures 0 and an "is it
+// narrower than the pane" assertion passes VACUOUSLY.
+beforeAll(async () => {
+  await vi.waitFor(() => {
+    const probe = document.createElement('div')
+    probe.className = 'w-full'
+    document.body.append(probe)
+    const applied = getComputedStyle(probe).width !== 'auto'
+    probe.remove()
+    if (!applied) throw new Error('index.css not applied yet')
+  })
+})
+
+// Read mode: what the phone report was taken in, and the only mode where the
+// preview owns the full pane. The stored default is 'split'.
+//
+// RESTORED after every test, not merely set: localStorage is shared by every
+// file in the browser project, so a mode left behind here reaches the split
+// tests as their starting state — observed as four unrelated failures in
+// split-and-scroll.browser.test.tsx, which is a far more confusing report
+// than anything this file asserts.
+const VIEW_MODE_KEY = 'whiteboard.markdown-view-mode'
+beforeEach(() => window.localStorage.setItem(VIEW_MODE_KEY, 'read'))
+afterEach(() => {
+  cleanup()
+  window.localStorage.removeItem(VIEW_MODE_KEY)
+  for (const host of document.querySelectorAll('body > div[style*="width"]')) host.remove()
+})
+
+const BODY = ['# Title', '', 'あらあ たらたはた たたたああああ ああああ', '', '---', ''].join('\n')
+
+function mountAt(width: number) {
+  const host = document.createElement('div')
+  host.style.cssText = `width:${width}px;height:600px`
+  document.body.append(host)
+  return render(<MarkdownEditor value={BODY} onChange={() => {}} />, { container: host })
+}
+
+describe('a phone-width markdown editor', () => {
+  // Two tests, not four: preview-width.test.ts already pins the arithmetic at
+  // every width with its own mutation checks. What only a real browser can
+  // say is whether the SVG ends up inside the box, and adding files to this
+  // project measurably slows every other one — so this file buys exactly the
+  // two facts the unit test cannot reach.
+
+  // 320 rather than the reported 390: with the rail correctly hidden, 390
+  // fits even under the old arithmetic, so a test only there would pass
+  // whichever formula is in place.
+  it('settles with the preview inside its pane, not scrolling sideways', async () => {
+    const { getByTestId } = mountAt(320)
+    // Waits for the LAID-OUT width, not the first frame: the preview renders
+    // once at `maxWidth` before the ResizeObserver reports the container.
+    await vi.waitFor(() => {
+      const pane = getByTestId('markdown-preview-pane')
+      expect(pane.clientWidth).toBeGreaterThan(0)
+      expect(pane.scrollWidth).toBeLessThanOrEqual(pane.clientWidth)
+    })
+  })
+
+  it('still shows the rail where the container can afford it', async () => {
+    // Only the POSITIVE is asserted here. The narrow case cannot be pinned in
+    // this layer honestly: the rail is gated on blocks the preview produces
+    // asynchronously, so "absent" and "not arrived yet" are indistinguishable
+    // without a handle neither component exposes — and a check that passes
+    // either way is worse than none. Verified by deleting the gate and
+    // watching nothing go red. `railFits` in preview-width.test.ts pins the
+    // decision itself, mutation-check included; the wiring it feeds is one
+    // `railAffordable &&` at the use site.
+    const { findByTestId } = mountAt(1000)
+    expect(await findByTestId('markdown-minimap-rail')).toBeTruthy()
+  })
+})
