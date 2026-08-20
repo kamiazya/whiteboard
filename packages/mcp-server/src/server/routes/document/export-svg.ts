@@ -11,6 +11,7 @@ import {
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
+import { documentExists } from '../../store/document-store.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -35,6 +36,18 @@ export function createDocumentSvgExportRouter() {
     'post',
     'export-svg',
     async (c, workspaceId, path) => {
+      // The same guard the PNG route carries, and for the same reason: the
+      // headless path answers a missing document with an EMPTY one, so a
+      // typoed path would otherwise return 200 and a valid-looking SVG of
+      // nothing. Its absence here was the asymmetry, not a decision.
+      if (!(await documentExists(workspaceId, path))) {
+        const errBody: ExportErrorBody = {
+          error: 'canvas_not_found',
+          message: `Canvas not found: ${workspaceId}/${path}`,
+        }
+        return c.json(errBody, 404)
+      }
+
       const rawText = await c.req.text()
       let body: ExportSvgRequest = {}
       if (rawText.length > 0) {
