@@ -22,6 +22,7 @@ import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
+import { focusEditable } from '../test-utils/focus-editable.js'
 
 function render(ui: ReactElement) {
   return rtlRender(
@@ -278,7 +279,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // body/facet independence, not the fresh-note autofocus guarantee that
     // test 1 above already pins (see its focus-wait comment for why exact
     // contentDOM identity is required).
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await waitFor(
       () => {
         expect(document.activeElement).toBe(editable)
