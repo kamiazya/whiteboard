@@ -331,47 +331,41 @@ export class IndexedDBStore implements BrowserLocalStore {
 
   async listDocuments(): Promise<DocumentSnapshot[]> {
     const db = await openWhiteboardDb(this.dbName)
-    return new Promise((resolve, reject) => {
-      const tx = db.transaction('documents', 'readonly')
-      const cursorReq = tx.objectStore('documents').openCursor()
-      const results: DocumentSnapshot[] = []
-      cursorReq.onsuccess = () => {
-        const cursor = cursorReq.result
-        if (!cursor) return
-        // Hydrate through the single parse boundary; skip a corrupt/legacy row
-        // instead of throwing so it cannot blank the whole list.
-        const parsed = documentSnapshotSchema.safeParse(cursor.value)
-        if (parsed.success) results.push(parsed.data)
-        cursor.continue()
-      }
-      cursorReq.onerror = () => reject(cursorReq.error)
-      tx.oncomplete = () => {
-        contentUpdatedAt(
-          db,
-          results.map((row) => row.documentId),
-        )
-          .then((stamps) => {
-            db.close()
-            resolve(
-              results.map((row) => ({
-                ...row,
-                updatedAt: newerOf(row.updatedAt, stamps.get(row.documentId)),
-              })),
-            )
-          })
-          .catch((err: unknown) => {
-            db.close()
-            reject(err)
-          })
-      }
-      tx.onerror = () => {
-        db.close()
-        reject(tx.error)
-      }
-      tx.onabort = () => {
-        db.close()
-        reject(tx.error ?? new Error('transaction aborted'))
-      }
-    })
+    // One `finally` rather than a close on each exit path. This method has
+    // five ways out — cursor error, transaction error, abort, the join
+    // resolving, the join rejecting — and one of them was missing its close.
+    // An unclosed connection blocks the next version upgrade, which surfaces
+    // in whatever runs next rather than here, so "remember to close on every
+    // branch" is not a discipline worth relying on.
+    try {
+      const rows = await new Promise<DocumentSnapshot[]>((resolve, reject) => {
+        const tx = db.transaction('documents', 'readonly')
+        const cursorReq = tx.objectStore('documents').openCursor()
+        const results: DocumentSnapshot[] = []
+        cursorReq.onsuccess = () => {
+          const cursor = cursorReq.result
+          if (!cursor) return
+          // Hydrate through the single parse boundary; skip a corrupt/legacy
+          // row instead of throwing so it cannot blank the whole list.
+          const parsed = documentSnapshotSchema.safeParse(cursor.value)
+          if (parsed.success) results.push(parsed.data)
+          cursor.continue()
+        }
+        cursorReq.onerror = () => reject(cursorReq.error)
+        tx.oncomplete = () => resolve(results)
+        tx.onerror = () => reject(tx.error)
+        tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
+      })
+      const stamps = await contentUpdatedAt(
+        db,
+        rows.map((row) => row.documentId),
+      )
+      return rows.map((row) => ({
+        ...row,
+        updatedAt: newerOf(row.updatedAt, stamps.get(row.documentId)),
+      }))
+    } finally {
+      db.close()
+    }
   }
 }
