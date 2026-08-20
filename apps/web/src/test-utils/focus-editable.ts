@@ -52,6 +52,12 @@ export async function focusEditable(element: Element): Promise<void> {
           'being queried and being focused. Re-query it inside the step that focuses it.',
       )
     }
+    // The window first: measured in CI, the failing case is
+    // `document.hasFocus()=false`, and an element in an unfocused document
+    // cannot become its activeElement however many times focus() is called.
+    // Several browser pages run in parallel and only one can hold focus, so
+    // this asks for it back rather than assuming the frame still has it.
+    window.focus()
     ;(element as HTMLElement).focus()
     // The message carries what DID have focus, and whether the document had
     // any: three different causes reached this line in CI and none of them was
