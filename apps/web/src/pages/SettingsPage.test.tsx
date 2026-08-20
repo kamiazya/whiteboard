@@ -335,6 +335,42 @@ describe('SettingsPage — Connections', () => {
     expect(within(mobile).getByText(/not connected/i)).toBeTruthy()
   })
 
+  // Fonts are the daemon's, not this browser's: it is the daemon that
+  // rasterises an export, so an empty list would be the wrong answer here.
+  it('/settings/fonts says a daemon is needed before it offers any font', () => {
+    renderAt('/settings/fonts')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(within(mobile).getByText(/not connected/i)).toBeTruthy()
+    expect(within(mobile).queryByRole('button', { name: /^Install / })).toBeNull()
+  })
+
+  it('/settings/fonts lists the daemon catalogue when one is connected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/fonts')) {
+          return jsonResponse({
+            fonts: [
+              {
+                id: 'noto-sans-jp',
+                family: 'Noto Sans JP',
+                scripts: ['Japanese'],
+                license: 'OFL-1.1',
+                approxBytes: 9_589_900,
+                installed: false,
+              },
+            ],
+          })
+        }
+        return jsonResponse({}, 404)
+      }),
+    )
+    renderAt('/settings/fonts', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(await within(mobile).findByRole('button', { name: 'Install Noto Sans JP' })).toBeTruthy()
+  })
+
   it('renders the paired-origins and storage cards when a daemon is provided', async () => {
     vi.stubGlobal(
       'fetch',

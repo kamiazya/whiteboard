@@ -1,6 +1,6 @@
 # ADR-0012: A user installs a font by naming it, and the daemon keeps it
 
-**Status:** Accepted — not yet implemented
+**Status:** Accepted — implemented (daemon route + settings picker)
 
 ## Context
 
@@ -42,6 +42,15 @@ read it as a file.**
 
 Google Fonts is the source. It is the one the user knows, and picking a single
 well-known catalogue keeps the first version legible.
+
+Concretely, the pinned template resolves against **`google/fonts` on
+`raw.githubusercontent.com`** — the Google Fonts catalogue's own repository —
+because that serves the real `.ttf` in ONE hop. Decided while implementing;
+the two alternatives both fail on this ADR's own terms. `fonts.googleapis.com`
+is the two-hop shape decision 1 rejects, and it only offers `woff2`, which
+resvg's font database cannot decode. `fonts.gstatic.com` addresses files by a
+version-and-hash path that cannot be derived from a family name, so a template
+built on it would not be a template.
 
 ### 1. The input is a family NAME, never a URL
 
