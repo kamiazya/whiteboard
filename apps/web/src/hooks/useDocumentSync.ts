@@ -1,4 +1,7 @@
-import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import {
+  createBrowserMeasureText,
+  withViewerFontEmbedded,
+} from '@kamiazya/whiteboard-canvas-viewer'
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
@@ -330,8 +333,12 @@ export function useDocumentSync(
       if (format === 'svg') {
         return new Blob([svg], { type: 'image/svg+xml' })
       }
+      // The face has to travel INSIDE the document: `ensureViewerFontLoaded`
+      // registers it on this page, and an `<img>`-rendered SVG cannot see the
+      // page's fonts, so without this the exported PNG is drawn in whatever
+      // system font the browser picks — not the one on screen.
       const png = await rasterizeSvgToPng(
-        svg,
+        await withViewerFontEmbedded(svg),
         Math.max(1, Math.round(bounds.w)),
         Math.max(1, Math.round(bounds.h)),
       )

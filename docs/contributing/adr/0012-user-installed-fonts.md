@@ -110,6 +110,26 @@ different direction:
 | daemon only | system fallback | the chosen font |
 | browser only | the chosen font | tofu |
 
+**Correction, measured after this was written: there are THREE surfaces, not
+two.** The table above says "exported" as if the browser and the daemon export
+the same way. They do not, and the web editor's own export is a third answer:
+
+A page's registered `FontFace` does not reach an SVG rendered inside an
+`<img>`, which is how the browser rasterises a PNG. Measured directly: a face
+with `status: 'loaded'` on the document renders there byte-identically to a
+family name nobody has registered at all. So the browser's exported PNG used
+whatever the operating system offered — not the vendored Roboto the editor
+draws with, and not anything a user installs into the daemon.
+
+The first attempt to measure this said the opposite, because the machine had
+Roboto as a system font; the control that settled it was running the same probe
+on an origin with zero registered faces.
+
+The fix is `withViewerFontEmbedded`: the face travels inside the document as a
+`data:` URI, which is not a resource load and does survive that boundary (same
+probe: 714x46 becomes 722x41). It applies to the PNG path only — a saved `.svg`
+would grow by ~466 KB to carry a face any viewer with Roboto already has.
+
 So a font is not a boolean. Each surface reports what it resolved, the same
 discipline `undrawable` already follows for the export path: a missing font is
 a **declared degradation**, never silence.
