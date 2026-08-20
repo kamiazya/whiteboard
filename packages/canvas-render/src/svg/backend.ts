@@ -16,9 +16,9 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { collectDefs } from './defs.js'
-import { hoistInheritedAttrs } from './hoist.js'
 import type { PaintAttrs, SvgBoxAttrs, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
+import { hoistInheritedAttrs } from './hoist.js'
 import { serializeSvg } from './serialize.js'
 import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
