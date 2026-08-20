@@ -1,6 +1,6 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb } from './browser-idb.js'
-import { loroRecordEnvelopeSchema } from './loro-store.js'
+import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 import { documentSnapshotSchema } from './whiteboard-client.js'
 
