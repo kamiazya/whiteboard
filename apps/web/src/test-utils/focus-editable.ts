@@ -32,6 +32,20 @@ import { expect, vi } from 'vitest'
  */
 export async function focusEditable(element: Element): Promise<void> {
   await vi.waitFor(() => {
+    // focus() INSIDE the retry, not once before it. CodeMirror's contentDOM is
+    // not focusable until the view has finished mounting, and a `focus()` that
+    // lands before then is a silent no-op — so calling it once and then merely
+    // WAITING can never recover: the wait re-checks a condition nothing is
+    // still trying to satisfy. Locally the view is ready and the first call
+    // takes; in CI it is not, and a whole file failed with
+    // `expected <body> to be <div spellcheck="false" …>` — this assertion,
+    // reporting that focus never moved.
+    //
+    // A detached node is called out rather than waited on: it can never take
+    // focus, so the retry is the one thing that cannot help it, and the
+    // assertion below cannot tell that case apart from the not-yet-mounted
+    // one. "activeElement is <body>" is equally what a reference held across
+    // a re-render looks like, which is a different fix at a different place.
     if (!element.isConnected) {
       throw new Error(
         'focusEditable: the editable is no longer in the document — it was replaced between ' +
@@ -39,6 +53,9 @@ export async function focusEditable(element: Element): Promise<void> {
       )
     }
     ;(element as HTMLElement).focus()
+    // The message carries what DID have focus, and whether the document had
+    // any: three different causes reached this line in CI and none of them was
+    // distinguishable from the others.
     expect(
       document.activeElement,
       `focusEditable: focus did not land. document.hasFocus()=${document.hasFocus()}, ` +

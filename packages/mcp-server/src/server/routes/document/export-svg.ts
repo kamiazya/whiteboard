@@ -89,6 +89,7 @@ export function createDocumentSvgExportRouter() {
 
       let svg: string
       let undrawable: readonly string[]
+      let unresolvedFamilies: readonly string[]
       try {
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
@@ -97,6 +98,7 @@ export function createDocumentSvgExportRouter() {
         })
         svg = result.svg
         undrawable = result.undrawable
+        unresolvedFamilies = result.unresolvedFamilies
       } catch (err) {
         const errBody: ExportErrorBody = {
           error: 'headless_export_failed',
@@ -111,7 +113,11 @@ export function createDocumentSvgExportRouter() {
       // Typed rather than a bare literal so the contract, not this handler,
       // decides what an export answers with — the PNG route and this one had
       // already drifted into two different response shapes.
-      const response: ExportResponse = { filePath, undrawable: [...undrawable] }
+      const response: ExportResponse = {
+        filePath,
+        undrawable: [...undrawable],
+        unresolvedFamilies: [...unresolvedFamilies],
+      }
       return c.json(response)
     },
     bodyLimit({
