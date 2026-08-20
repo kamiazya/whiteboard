@@ -67,6 +67,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
   layoutSpatialEdges,
@@ -3728,8 +3729,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     color: editorTextFill(theme),
                     fontFamily: SPATIAL_THEME_FONT_FAMILY,
                     fontSize: BODY_FONT_SIZE_PX,
-                    // The rendered layout advances one font-size per line.
-                    lineHeight: `${BODY_FONT_SIZE_PX}px`,
+                    // The overlay must advance by the SAME line box the
+                    // committed render uses, or the text moves under the
+                    // cursor on entering edit mode. Shared constant, not a
+                    // second copy of the number — these were equal until the
+                    // markdown theme took body line height to 1.5.
+                    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
                     padding: SPATIAL_THEME_GEOMETRY.paddingPx,
                     borderRadius: resolved.radius,
                   }

@@ -110,6 +110,43 @@ with the *finding*, not the mechanism: "before — 170px through B" beats
 convert -density 150 tmp/screenshots/figure.svg tmp/screenshots/figure.png
 ```
 
+**Trap — ImageMagick is not an SVG renderer, and fails by DROPPING things.**
+It ignores `fill-opacity` (a 12%-alpha code panel painted as a solid slab of
+the full colour) and it can drop `<text>` outright, reporting only
+`non-conforming drawing primitive definition 'SF'` on stderr — which reads
+like a warning and is actually "your figure has no words in it". Both were
+observed on one markdown-body figure whose SVG was verified correct by
+grepping its own `fill=` attributes. Anything relying on alpha or on text
+must go through **resvg**, the renderer the product itself uses:
+
+```bash
+# from packages/mcp-server, where @resvg/resvg-js and the vendored faces live
+node -e "…new Resvg(svg, {font:{fontFiles, loadSystemFonts:false, defaultFontFamily:'Roboto'}})…"
+```
+
+Keep ImageMagick for what it is good at — `-border`, `+append`, composing
+finished PNGs side by side.
+
+**Trap — resvg only has the vendored Roboto** (ADR-0011), so a figure about
+anything the browser renders differently (a mono face, a CJK script) is not
+showing what a user sees. When the figure IS about that, render it in the
+`web-browser` vitest project instead, where a real measurer and real system
+fonts exist, and screenshot the DOM:
+
+```ts
+await page.screenshot({ path: '../../tmp/screenshots/figure.png', element: host })
+```
+
+Note the path: vite's `server.fs` refuses anything outside the project, so
+`/tmp/...` fails with `Access denied` — write inside the repo.
+
+**Trap — a synthetic measurer plus a real rasteriser is a lie.** A figure laid
+out with `createFakeMeasure` (0.6em per character) and painted by resvg with
+real Roboto metrics puts every glyph at coordinates computed for a font that
+is not the one drawing it. It reads as bizarre extra spacing between runs and
+looks like a layout bug in the code under test. Measure and paint with the
+same face, or do not make the figure.
+
 ## 4. Look at it, then attach it
 
 **Read the PNG before uploading.** Half the failures above are invisible in

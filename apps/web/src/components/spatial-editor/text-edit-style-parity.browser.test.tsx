@@ -4,7 +4,11 @@
 // engines still differ — CSS vs the injected measurer — a documented
 // ceiling, not pinned here.)
 
-import { BODY_FONT_SIZE_PX, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
+import {
+  BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
+  SPATIAL_THEME_GEOMETRY,
+} from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -48,8 +52,11 @@ it('the edit overlay box styling equals the rendered chrome (shared theme produc
   const resolved = createEditorAppearance('light').resolveNode(node)
   expect(editor.style.borderRadius).toBe(`${resolved.radius}px`)
   expect(editor.style.padding).toBe(`${SPATIAL_THEME_GEOMETRY.paddingPx}px`)
-  // The rendered layout advances one font-size per line (mdast-blocks);
-  // the overlay's line height restates that invariant.
-  expect(editor.style.lineHeight).toBe(`${BODY_FONT_SIZE_PX}px`)
+  // The overlay advances by the same LINE BOX the committed render uses
+  // (mdast-blocks' `BODY_LINE_HEIGHT_PX`), which is what stops the text
+  // moving under the cursor when someone double-clicks a node. This
+  // assertion is why that defect never shipped: it was written when the two
+  // constants were equal and caught the moment they stopped being.
+  expect(editor.style.lineHeight).toBe(`${BODY_LINE_HEIGHT_PX}px`)
   expect(editor.style.fontSize).toBe(`${BODY_FONT_SIZE_PX}px`)
 })

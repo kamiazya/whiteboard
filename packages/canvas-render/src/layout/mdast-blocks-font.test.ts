@@ -8,8 +8,10 @@
 // via `resolveLabel()`; this covers the markdown body path.
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
+import type { MeasureText } from '../measure.js'
 import type { Scene, SceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
@@ -85,28 +87,63 @@ const root: MdastRoot = {
   ],
 }
 
+/**
+ * A measurer that records which family every string was measured in. The
+ * invariant is per-RUN, not per-scene: a code run is deliberately measured
+ * AND declared in the mono family, so "one family everywhere" would now be
+ * the wrong assertion. Recording the pairs pins the thing that actually
+ * matters — a run declares the family its own x coordinates came from.
+ */
+function recordingMeasure() {
+  const base = createFakeMeasure()
+  const seen = new Map<string, Set<string>>()
+  const spy: MeasureText = (text, font) => {
+    const families = seen.get(text) ?? new Set<string>()
+    families.add(font.family)
+    seen.set(text, families)
+    return base(text, font)
+  }
+  return { measure: spy, seen }
+}
+
 describe('layoutMdastBlocks — declared font family matches the measured one', () => {
-  it('stamps the measuring family onto every emitted text run, at every depth', () => {
+  it('declares, on every run at every depth, a family that run was measured in', () => {
+    const { measure: spy, seen } = recordingMeasure()
     const scene = layoutMdastBlocks(root, {
-      measure,
+      measure: spy,
       maxWidth: 600,
       fontFamily: 'GuardFamily',
     })
     const runs = collectRuns(scene)
     expect(runs.length).toBeGreaterThan(8)
     for (const run of runs) {
-      expect(run.appearance?.fontFamily, `run "${run.text}"`).toBe('GuardFamily')
+      const declared = run.appearance?.fontFamily
+      expect(declared, `run "${run.text}" declares no family`).toBeDefined()
+      expect(
+        seen.get(run.text)?.has(declared as string),
+        `run "${run.text}" declares ${declared} but was never measured in it`,
+      ).toBe(true)
     }
   })
 
-  it('never emits a run whose declared family differs from another run in the same scene', () => {
+  it("uses exactly two families: the caller's for prose, the mono one for code", () => {
     const scene = layoutMdastBlocks(root, {
       measure,
       maxWidth: 600,
       fontFamily: 'OneFamily',
     })
-    const families = new Set(collectRuns(scene).map((run) => run.appearance?.fontFamily))
-    expect([...families]).toEqual(['OneFamily'])
+    const runs = collectRuns(scene)
+    // Code runs are the ONLY exception to the caller's family, and they are
+    // the reason the old "one family per scene" form of this guard had to
+    // go. Splitting by the `code` flag keeps the exception explicit: a
+    // prose run picking up the mono family would still fail here.
+    for (const run of runs) {
+      expect(run.appearance?.fontFamily, `run "${run.text}"`).toBe(
+        run.code === true ? MARKDOWN_THEME.monoFontFamily : 'OneFamily',
+      )
+    }
+    expect(runs.some((run) => run.code === true)).toBe(true)
+    expect(runs.some((run) => run.code !== true)).toBe(true)
   })
 })
 
@@ -128,8 +165,8 @@ describe('measured-vs-declared font SIZE on markdown runs', () => {
     )
     const heading = runs.find((run) => run.text === 'Title')
     const body = runs.find((run) => run.text === 'body')
-    expect(heading?.appearance?.fontSize).toBe(32)
-    expect(body?.appearance?.fontSize).toBe(16)
+    expect(heading?.appearance?.fontSize).toBe(MARKDOWN_THEME.headingFontSizePx[1])
+    expect(body?.appearance?.fontSize).toBe(MARKDOWN_THEME.bodyFontSizePx)
   })
 
   it('list items draw their marker glyph (bullet / ordinal) as a measured run', () => {
