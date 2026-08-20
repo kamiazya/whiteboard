@@ -125,13 +125,23 @@ describe('frame containment scoreboard', () => {
 /**
  * 11 corpus cases x 3 widths x 3 height fractions = 99 cells.
  *
- * `crossed: 13` is the cells whose box is 40% of the natural height, i.e.
+ * `crossed: 10` is the cells whose box is 40% of the natural height, i.e.
  * too small for even one LINE — keep-first paints that line and there is no
  * third option short of not rendering the node. Every 0.8 cell is contained,
  * which was not true before lists were trimmed to their fitting items: a
  * list escaped its frame at 0.8 while every prose case survived.
  *
- * `hidden: 3` is `ja-heading` at 0.4, where a whole heading block is dropped
- * rather than shown crossing the frame.
+ * It was 13 until keep-first's unit became a LINE rather than a BLOCK
+ * (`firstLineOfBlocks`): three of those cells were a multi-line first block
+ * painted whole, so they crossed by the height of every line after the
+ * first. That is a real improvement in this debt figure, not a re-pin — the
+ * three cells are contained now, and the remaining ten are the irreducible
+ * case where a single line is taller than the box.
+ *
+ * `hidden` was 3 — `ja-heading` at 0.4, where a whole heading block is
+ * dropped rather than shown crossing the frame. Compressing the heading
+ * scale for node width (32/24/20 -> 24/20/17) made that heading short enough
+ * to keep, so it is 2. An improvement in the figure, not a re-pin: nothing
+ * about hiding changed, the content simply fits now.
  */
-const PINNED_DEBT: Debt = { hidden: 3, crossed: 13 }
+const PINNED_DEBT: Debt = { hidden: 2, crossed: 10 }

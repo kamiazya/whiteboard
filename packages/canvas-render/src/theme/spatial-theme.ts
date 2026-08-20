@@ -78,6 +78,7 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
     resolveEdge: (edge: CanvasEdge) => ({
       stroke: presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
     }),
+    resolveSyntax: () => palette.syntax,
     resolveLabel: () => ({
       fill: palette.labelFill,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,

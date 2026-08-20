@@ -148,10 +148,9 @@ function newerOf(metadata: string, content: string | undefined): string {
 
 export class IndexedDBStore implements BrowserLocalStore {
   /**
-   * Only tests pass this, and they must: browser tests share an origin, so a
-   * file that deletes `whiteboard` between cases does so while another file is
-   * mid-fixture, and the failure lands there rather than here. `IdbDocumentIndex`
-   * takes the same parameter for the same reason.
+   * Which database to talk to. Production never passes it; a browser test
+   * does, so its fixtures cannot collide with another test FILE's — they
+   * share an origin, and therefore one `whiteboard` database.
    */
   constructor(private readonly dbName?: string) {}
 

@@ -27,6 +27,7 @@ import {
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { highlightCode } from '../../lib/syntax-highlight.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
 export interface RenderCanvasCoreOptions {
@@ -58,6 +59,7 @@ export function renderCanvasToSvgWith(
     appearance: createEditorAppearance(options.theme ?? 'light'),
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,
+    highlightCode,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds })

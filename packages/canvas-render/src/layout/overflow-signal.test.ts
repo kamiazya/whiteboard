@@ -11,6 +11,8 @@ import { describe, expect, it } from 'vitest'
 import { sceneDigest } from '../scene-digest.js'
 import type { Scene, ShapeSceneNode } from '../scene-graph.js'
 import { createCorpusMeasure } from '../test-utils/text-wrapping-corpus.js'
+import { SPATIAL_THEME_GEOMETRY } from '../theme/spatial-geometry.js'
+import { BODY_LINE_HEIGHT_PX } from './mdast-blocks.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 const APPEARANCE = {
@@ -142,5 +144,76 @@ describe('sceneDigest reports a node whose content did not fit', () => {
   it('carries the same fact the chrome does', () => {
     expect(chrome(layout(56, THREE_PARAGRAPHS)).truncated).toBe(true)
     expect(chrome(layout(400, THREE_PARAGRAPHS)).truncated).toBeUndefined()
+  })
+})
+
+describe('a box too small for even ONE line', () => {
+  // Keep-first says a text node never renders empty. Its unit has to be a
+  // LINE: keeping the first BLOCK painted a two-line paragraph inside a
+  // one-line box and reported `truncated: false`, because it counted blocks
+  // and the paragraph was one. Unreachable while a line box equalled its
+  // font size — a 16px line always fit the smallest box in use — and reached
+  // the moment line height went to 1.5.
+  const ONE_LONG_PARAGRAPH: MdastRoot = {
+    type: 'root',
+    children: [paragraph('これは日本語のテキストで折り返します')],
+  }
+
+  it('keeps one LINE, not the whole first block', () => {
+    const painted = runs(layout(32, ONE_LONG_PARAGRAPH))
+
+    expect(painted.length).toBe(1)
+  })
+
+  it('says so, instead of reporting a box that overflows as complete', () => {
+    expect(chrome(layout(32, ONE_LONG_PARAGRAPH)).truncated).toBe(true)
+    expect(runs(layout(32, ONE_LONG_PARAGRAPH)).at(-1)?.truncated).toBe(true)
+  })
+
+  // Derived, not pinned: the box that "holds both lines" is a fact about the
+  // theme's line height plus the node padding, and a literal stops being that
+  // box the moment either moves.
+  const TWO_LINE_BOX_PX = Math.ceil(2 * BODY_LINE_HEIGHT_PX + 2 * SPATIAL_THEME_GEOMETRY.paddingPx)
+
+  it('leaves the same paragraph alone in a box that holds both lines', () => {
+    const painted = runs(layout(TWO_LINE_BOX_PX, ONE_LONG_PARAGRAPH))
+
+    expect(painted.length).toBe(2)
+    expect(painted.some((run) => run.truncated)).toBe(false)
+    expect(chrome(layout(TWO_LINE_BOX_PX, ONE_LONG_PARAGRAPH)).truncated).toBeUndefined()
+  })
+})
+
+describe('a run cut sideways is hidden content too', () => {
+  // A code line and an atomic inline run cannot wrap, so keeping them inside
+  // the box means CUTTING them. That is the same loss as a dropped block and
+  // owes the same signal — counting only dropped blocks left it silent.
+  const wideCode: MdastRoot = {
+    type: 'root',
+    children: [
+      {
+        type: 'code',
+        lang: null,
+        meta: null,
+        value: 'const veryLongIdentifierName = computeSomething(alpha, beta, gamma)',
+      },
+    ],
+  }
+
+  it('reports the node as truncated even when every block fits vertically', () => {
+    const scene = layout(400, wideCode)
+    const shape = scene.nodes.find((node) => node.kind === 'shape') as ShapeSceneNode | undefined
+    expect(shape?.truncated).toBe(true)
+  })
+
+  it('reaches sceneDigest, which is what an agent reads', () => {
+    const digest = sceneDigest(layout(400, wideCode))
+    expect(digest.nodes.find((node) => node.id === 'n1')?.truncated).toBe(true)
+  })
+
+  it('stays quiet when nothing was cut', () => {
+    const scene = layout(400, { type: 'root', children: [paragraph('short')] })
+    const shape = scene.nodes.find((node) => node.kind === 'shape') as ShapeSceneNode | undefined
+    expect(shape?.truncated).toBeUndefined()
   })
 })

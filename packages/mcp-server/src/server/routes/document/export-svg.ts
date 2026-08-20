@@ -3,7 +3,7 @@ import { dirname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { nanoid } from 'nanoid'
-import type { ExportErrorBody } from '../../../shared/api-contracts/export.js'
+import type { ExportErrorBody, ExportResponse } from '../../../shared/api-contracts/export.js'
 import {
   type ExportSvgRequest,
   exportSvgRequestSchema,
@@ -11,6 +11,7 @@ import {
 import { getDataDir } from '../../config.js'
 import { exportCanvasHeadlessSvg } from '../../export/headless-export.js'
 import { OutputPathError, validateOutputPath } from '../../output-path.js'
+import { documentExists } from '../../store/document-store.js'
 import { toDocumentOutputPathErrorBody } from '../document-output-path-error.js'
 import { onDocumentAction } from './path-route.js'
 
@@ -35,6 +36,18 @@ export function createDocumentSvgExportRouter() {
     'post',
     'export-svg',
     async (c, workspaceId, path) => {
+      // The same guard the PNG route carries, and for the same reason: the
+      // headless path answers a missing document with an EMPTY one, so a
+      // typoed path would otherwise return 200 and a valid-looking SVG of
+      // nothing. Its absence here was the asymmetry, not a decision.
+      if (!(await documentExists(workspaceId, path))) {
+        const errBody: ExportErrorBody = {
+          error: 'canvas_not_found',
+          message: `Canvas not found: ${workspaceId}/${path}`,
+        }
+        return c.json(errBody, 404)
+      }
+
       const rawText = await c.req.text()
       let body: ExportSvgRequest = {}
       if (rawText.length > 0) {
@@ -75,6 +88,7 @@ export function createDocumentSvgExportRouter() {
       }
 
       let svg: string
+      let undrawable: readonly string[]
       try {
         const result = await exportCanvasHeadlessSvg({
           workspaceId,
@@ -82,6 +96,7 @@ export function createDocumentSvgExportRouter() {
           options: { padding: body.padding, frameId: body.frameId, theme: body.theme },
         })
         svg = result.svg
+        undrawable = result.undrawable
       } catch (err) {
         const errBody: ExportErrorBody = {
           error: 'headless_export_failed',
@@ -93,7 +108,11 @@ export function createDocumentSvgExportRouter() {
       const filePath = outputPath ?? defaultSvgExportPath(workspaceId, path)
       await mkdir(dirname(filePath), { recursive: true })
       await writeFile(filePath, svg, 'utf-8')
-      return c.json({ filePath })
+      // Typed rather than a bare literal so the contract, not this handler,
+      // decides what an export answers with — the PNG route and this one had
+      // already drifted into two different response shapes.
+      const response: ExportResponse = { filePath, undrawable: [...undrawable] }
+      return c.json(response)
     },
     bodyLimit({
       maxSize: EXPORT_OPTIONS_BODY_LIMIT_BYTES,

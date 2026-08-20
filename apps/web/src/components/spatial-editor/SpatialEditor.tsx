@@ -67,6 +67,7 @@ import type {
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
   layoutSpatialEdges,
@@ -3347,6 +3348,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // canvas-render's SVG serializer is the SOLE producer of this
             // string and escapes text/attrs (see svg/format.ts) — the same
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: canvas-render's serializer is the SOLE producer and escapes text/attrs (svg/format.ts)
             dangerouslySetInnerHTML={{ __html: dragStatic?.svg ?? svg }}
           />
           {liveEdges !== undefined && (
@@ -3361,6 +3363,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
               dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
             />
           )}
@@ -3376,6 +3379,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
               dangerouslySetInnerHTML={{ __html: liveNode.svg }}
             />
           )}
@@ -3728,8 +3732,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                     color: editorTextFill(theme),
                     fontFamily: SPATIAL_THEME_FONT_FAMILY,
                     fontSize: BODY_FONT_SIZE_PX,
-                    // The rendered layout advances one font-size per line.
-                    lineHeight: `${BODY_FONT_SIZE_PX}px`,
+                    // The overlay must advance by the SAME line box the
+                    // committed render uses, or the text moves under the
+                    // cursor on entering edit mode. Shared constant, not a
+                    // second copy of the number — these were equal until the
+                    // markdown theme took body line height to 1.5.
+                    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
                     padding: SPATIAL_THEME_GEOMETRY.paddingPx,
                     borderRadius: resolved.radius,
                   }

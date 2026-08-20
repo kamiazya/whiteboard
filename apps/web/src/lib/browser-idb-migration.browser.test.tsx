@@ -17,9 +17,44 @@ import { DB_VERSION, openWhiteboardDb } from './browser-idb.js'
 import { IndexedDBStore } from './browser-local-store.js'
 import { LoroStore } from './loro-store.js'
 
+/**
+ * This file's own database.
+ *
+ * Twelve browser test files touch the shared `whiteboard` database, and they
+ * share an origin — so IndexedDB is one global object across all of them. Only
+ * this file deliberately parks that database at OLD versions to exercise the
+ * upgrades, which makes it the one file whose fixtures can block another's
+ * open (and be blocked by it) with `another tab has this app open at an older
+ * version`. The name is a parameter precisely so this file can stop
+ * participating; nothing was passing it.
+ */
+const MIGRATION_DB = 'whiteboard-migration-test'
+
+/**
+ * Give a fixture connection the same manners the app's own opener has.
+ *
+ * `openWhiteboardDb` sets `onversionchange` so a live connection steps aside
+ * when something needs a newer version. A raw `indexedDB.open` here does not,
+ * and that asymmetry is the whole failure: a fixture connection that outlives
+ * its `await` — every one of these resolves from a request callback while
+ * `db.close()` still waits on `tx.oncomplete` — holds the database at its old
+ * version, and the next open blocks with `another tab has this app open at an
+ * older version`, reported against whichever test happens to be running.
+ *
+ * Closing promptly would also work and is not enough on its own: it makes the
+ * window small rather than absent, which is why this file passed locally for
+ * two attempts while CI kept failing. Stepping aside removes the window.
+ *
+ * The one connection that must NOT do this is the deliberately stubborn one in
+ * `cross-tab upgrades`, which exists to prove what happens without it.
+ */
+function letFixtureStepAside(db: IDBDatabase): void {
+  db.onversionchange = () => db.close()
+}
+
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(MIGRATION_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })
@@ -28,7 +63,7 @@ async function clearDb(): Promise<void> {
 /** Seed a pre-v3 ("v2 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
 async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 2)
+    const req = indexedDB.open(MIGRATION_DB, 2)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -37,6 +72,7 @@ async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -69,17 +105,32 @@ async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
   })
 }
 
-/** Reads a 'documents' row directly via raw IDB, bypassing documentSnapshotSchema. */
+/**
+ * Reads a 'documents' row directly via raw IDB, bypassing documentSnapshotSchema.
+ *
+ * Version-less on purpose: it must read what is there without running the
+ * app's upgrade. That makes closing before resolving load-bearing rather than
+ * tidy — this connection sits at whatever version the fixture seeded (7, say),
+ * and the next `openWhiteboardDb` asks for DB_VERSION. Resolving first lets
+ * the test proceed while an OLD-version connection is still open, and that
+ * open is then blocked: `another tab has this app open at an older version`,
+ * reported against whichever test ran next.
+ */
 async function readRawDocumentsRow(documentId: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard')
+    const req = indexedDB.open(MIGRATION_DB)
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction('documents', 'readonly')
       const getReq = tx.objectStore('documents').get(documentId)
-      getReq.onsuccess = () => resolve(getReq.result)
       getReq.onerror = () => reject(getReq.error)
-      tx.oncomplete = () => db.close()
+      // Resolve from `oncomplete`, AFTER the close — never from the request's
+      // own success, which fires while the connection is still open.
+      tx.oncomplete = () => {
+        db.close()
+        resolve(getReq.result)
+      }
     }
     req.onerror = () => reject(req.error)
   })
@@ -88,7 +139,7 @@ async function readRawDocumentsRow(documentId: string): Promise<unknown> {
 /** Seed a pre-v4 ("v3 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
 async function seedV3Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 3)
+    const req = indexedDB.open(MIGRATION_DB, 3)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -97,6 +148,7 @@ async function seedV3Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -123,7 +175,7 @@ async function seedV3Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
 /** Seed a pre-v5 ("v4 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
 async function seedV4Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 4)
+    const req = indexedDB.open(MIGRATION_DB, 4)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -133,6 +185,7 @@ async function seedV4Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases', 'canvasFiles'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -160,7 +213,7 @@ async function seedV4Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
 /** Seed a pre-v6 ("v5 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
 async function seedV5Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 5)
+    const req = indexedDB.open(MIGRATION_DB, 5)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -173,6 +226,7 @@ async function seedV5Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(
         ['meta', 'canvases', 'loroCanvases', 'canvasFiles', 'reconnectKeypairs'],
         'readwrite',
@@ -208,7 +262,7 @@ async function seedV5Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
 /** Seed a pre-v7 ("v6 shape") fixture DB via raw IDB, bypassing the app's opener/schema. */
 async function seedV6Fixture(documentId: string, loroSnapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 6)
+    const req = indexedDB.open(MIGRATION_DB, 6)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -218,6 +272,7 @@ async function seedV6Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases', 'canvasFiles'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -243,13 +298,15 @@ async function seedV6Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
 }
 
 async function metaKeys(): Promise<string[]> {
-  const db = await openWhiteboardDb()
+  const db = await openWhiteboardDb(MIGRATION_DB)
   return new Promise((resolve, reject) => {
     const tx = db.transaction('meta', 'readonly')
     const req = tx.objectStore('meta').getAllKeys()
-    req.onsuccess = () => resolve(req.result.map(String).sort())
     req.onerror = () => reject(req.error)
-    tx.oncomplete = () => db.close()
+    tx.oncomplete = () => {
+      db.close()
+      resolve(req.result.map(String).sort())
+    }
   })
 }
 
@@ -267,7 +324,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     doc.getList('elements').push({ id: 'canonical-el' })
     await seedV6Fixture(documentId, doc.export({ mode: 'snapshot' }))
 
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     // Read before asserting, and assert after: a failed expect() between the
     // open and the close would leak the connection, and every later test in
     // this file would then meet a database clearDb cannot delete.
@@ -298,7 +355,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // them alone. A copy that lost its key or its value fails the count above
     // even though the store-name assertion passed.
 
-    const metaStore = new IndexedDBStore()
+    const metaStore = new IndexedDBStore(MIGRATION_DB)
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
@@ -308,7 +365,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     expect((await metaStore.load(documentId)).kind).toBe('not-found')
     expect(await metaStore.listDocuments()).toEqual([])
     // The bytes go with it rather than lingering as storage nothing names.
-    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
   })
 
   it('renames the meta pointer key, then clears it because v8 discarded its target', async () => {
@@ -321,11 +378,11 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // document it named is gone — a pointer at a discarded document would
     // resume the editor into nothing.
     expect(await metaKeys()).toEqual([])
-    expect(await new IndexedDBStore().getDefaultDocumentId()).toBeNull()
+    expect(await new IndexedDBStore(MIGRATION_DB).getDefaultDocumentId()).toBeNull()
   })
 
   it('is a no-op for a fresh install, which never had the old stores', async () => {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     expect([...db.objectStoreNames].sort()).toEqual([
       'documentFiles',
       'documentIndex',
@@ -362,7 +419,7 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
       JSON.stringify({ origin: 'http://localhost:3099', secret: 'stale-secret' }),
     )
 
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     // Erasure invariant: the credential surface is gone by construction —
     // no reader can reach it because there is no longer anywhere to read it
     // from.
@@ -378,9 +435,9 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     expect(fileCount).toBe(1)
 
     // Discarded with its document — see the note below.
-    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
 
-    const metaStore = new IndexedDBStore()
+    const metaStore = new IndexedDBStore(MIGRATION_DB)
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
@@ -403,7 +460,7 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
   })
 
   it('a fresh install at the current version never creates reconnectKeypairs', async () => {
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
     expect([...db.objectStoreNames].sort()).toEqual([
       'documentFiles',
@@ -432,7 +489,7 @@ describe('IndexedDB v4 -> v5', () => {
     const loroSnapshot = doc.export({ mode: 'snapshot' })
     await seedV4Fixture(documentId, loroSnapshot)
 
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     // v4 -> current spans the v4->v5 store creation AND the v5->v6 removal
     // in one upgrade transaction (a multi-version jump fires
     // onupgradeneeded once, not once per intermediate version), so the net
@@ -449,9 +506,9 @@ describe('IndexedDB v4 -> v5', () => {
     expect(fileCount).toBe(1)
 
     // Discarded with its document — see the note below.
-    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
 
-    const metaStore = new IndexedDBStore()
+    const metaStore = new IndexedDBStore(MIGRATION_DB)
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
@@ -478,14 +535,14 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     const loroSnapshot = doc.export({ mode: 'snapshot' })
     await seedV3Fixture(documentId, loroSnapshot)
 
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     expect(db.objectStoreNames.contains('documentFiles')).toBe(true)
     db.close()
 
     // Discarded with its document — see the note below.
-    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
 
-    const metaStore = new IndexedDBStore()
+    const metaStore = new IndexedDBStore(MIGRATION_DB)
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
@@ -515,7 +572,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // current DB_VERSION. This half is the durable one: every version bump
     // since has had to keep it true, and a VersionError here is a bricked app
     // for anyone who has not opened the tab in a while.
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     db.close()
 
     // (b) Nothing else survives. A v2 row carries no workspace and no path —
@@ -523,11 +580,11 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // Loro record. What the pre-v3 `scene` strip did to this row on the way
     // through is no longer observable; the guard that it must not THROW on a
     // corrupt row still is, and is the next test.
-    const metaStore = new IndexedDBStore()
+    const metaStore = new IndexedDBStore(MIGRATION_DB)
     expect(await readRawDocumentsRow(documentId)).toBeUndefined()
     expect((await metaStore.load(documentId)).kind).toBe('not-found')
     expect(await metaStore.listDocuments()).toEqual([])
-    expect((await new LoroStore().load(documentId)).kind).toBe('not-found')
+    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
     expect(await metaStore.getDefaultDocumentId()).toBeNull()
   })
 
@@ -536,7 +593,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // inside the upgrade cursor — that would abort the transaction and brick the
     // DB open for the user.
     await new Promise<void>((resolve, reject) => {
-      const req = indexedDB.open('whiteboard', 2)
+      const req = indexedDB.open(MIGRATION_DB, 2)
       req.onupgradeneeded = (event) => {
         const db = (event.target as IDBOpenDBRequest).result
         if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -545,6 +602,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
       }
       req.onsuccess = () => {
         const db = req.result
+        letFixtureStepAside(db)
         const tx = db.transaction('canvases', 'readwrite')
         // A corrupt non-object value stored under a key.
         tx.objectStore('canvases').put(null, 'corrupt-row')
@@ -565,7 +623,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
 
     // Opening through the shared opener at v3 must complete (guard prevents the
     // `in` TypeError from aborting the upgrade).
-    const db = await openWhiteboardDb()
+    const db = await openWhiteboardDb(MIGRATION_DB)
     expect(db.version).toBe(DB_VERSION)
     db.close()
   })
@@ -583,8 +641,11 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // Opening at the (hypothetically reverted) old version 2 does not run
     // onupgradeneeded at all, so the legacy 'scene' field is still present.
     const rawDb = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open('whiteboard', 2)
-      req.onsuccess = () => resolve(req.result)
+      const req = indexedDB.open(MIGRATION_DB, 2)
+      req.onsuccess = () => {
+        letFixtureStepAside(req.result)
+        resolve(req.result)
+      }
       req.onerror = () => reject(req.error)
     })
     const raw = await new Promise<unknown>((resolve, reject) => {
@@ -605,7 +666,7 @@ async function seedV7Fixture(rows: {
   defaultDocumentId?: string
 }): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', 7)
+    const req = indexedDB.open(MIGRATION_DB, 7)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       for (const name of ['meta', 'documents', 'loroDocuments', 'documentFiles']) {
@@ -614,6 +675,7 @@ async function seedV7Fixture(rows: {
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'documents', 'loroDocuments'], 'readwrite')
       if (rows.defaultDocumentId !== undefined) {
         tx.objectStore('meta').put(rows.defaultDocumentId, 'defaultDocumentId')
@@ -639,13 +701,15 @@ async function seedV7Fixture(rows: {
 }
 
 async function storeKeys(name: string): Promise<string[]> {
-  const db = await openWhiteboardDb()
+  const db = await openWhiteboardDb(MIGRATION_DB)
   return new Promise((resolve, reject) => {
     const tx = db.transaction(name, 'readonly')
     const req = tx.objectStore(name).getAllKeys()
-    req.onsuccess = () => resolve(req.result as string[])
     req.onerror = () => reject(req.error)
-    tx.oncomplete = () => db.close()
+    tx.oncomplete = () => {
+      db.close()
+      resolve(req.result as string[])
+    }
   })
 }
 
@@ -694,7 +758,7 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
 
     expect(await readRawDocumentsRow(POST_PATH_ID)).toEqual(row)
     expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
-    expect(await new IndexedDBStore().getDefaultDocumentId()).toBe(POST_PATH_ID)
+    expect(await new IndexedDBStore(MIGRATION_DB).getDefaultDocumentId()).toBe(POST_PATH_ID)
   })
 
   it('discards only the pre-path rows when a store holds both', async () => {
@@ -719,7 +783,7 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
 
     expect(await storeKeys('documents')).toEqual([POST_PATH_ID])
     expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
-    expect(await new IndexedDBStore().getDefaultDocumentId()).toBe(POST_PATH_ID)
+    expect(await new IndexedDBStore(MIGRATION_DB).getDefaultDocumentId()).toBe(POST_PATH_ID)
   })
 
   it('survives a corrupt (non-object) row rather than aborting the whole upgrade', async () => {
@@ -757,11 +821,11 @@ describe('cross-tab upgrades', () => {
     // its own version and the upgrade below never fires — the request sits in
     // `blocked` forever, which in the app is an editor that never loads and
     // no error to explain why.
-    const idle = await openWhiteboardDb()
+    const idle = await openWhiteboardDb(MIGRATION_DB)
 
     let blocked = false
     const upgraded = await new Promise<boolean>((resolve) => {
-      const req = indexedDB.open('whiteboard', DB_VERSION + 1)
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
       req.onblocked = () => {
         blocked = true
       }
@@ -781,6 +845,30 @@ describe('cross-tab upgrades', () => {
     expect({ upgraded, blocked }).toEqual({ upgraded: true, blocked: false })
   })
 
+  // Deterministic, unlike the CI failure it explains: the fixture connection is
+  // deliberately left open at an old version, so no scheduling luck is
+  // involved. With the manners `letFixtureStepAside` gives it, the upgrade
+  // below goes through; without them it is blocked, which is exactly what CI
+  // kept reporting against unrelated tests.
+  it('is not blocked by a fixture connection left open at an older version', async () => {
+    const held = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION - 1)
+      req.onsuccess = () => {
+        letFixtureStepAside(req.result)
+        resolve(req.result)
+      }
+      req.onerror = () => reject(req.error)
+    })
+
+    try {
+      const db = await openWhiteboardDb(MIGRATION_DB)
+      expect(db.version).toBe(DB_VERSION)
+      db.close()
+    } finally {
+      held.close()
+    }
+  })
+
   it('rejects with a message a caller can show when a connection that will NOT self-close holds the old version', async () => {
     // The other half, and the one the self-close cannot cover: a tab still
     // running a pre-v8 bundle has no `onversionchange` handler, so it sits on
@@ -789,7 +877,7 @@ describe('cross-tab upgrades', () => {
     // file store — awaits a promise that has no outcome, which in the app is an
     // editor that never loads with nothing on screen to explain why.
     const stubborn = await new Promise<IDBDatabase>((resolve, reject) => {
-      const req = indexedDB.open('whiteboard', DB_VERSION - 1)
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION - 1)
       req.onsuccess = () => resolve(req.result)
       req.onerror = () => reject(req.error)
     })
@@ -800,7 +888,7 @@ describe('cross-tab upgrades', () => {
       // whole per-test timeout (measured: 120s) reporting the same thing this
       // says in three.
       const outcome = await Promise.race([
-        openWhiteboardDb().then(
+        openWhiteboardDb(MIGRATION_DB).then(
           (db) => {
             db.close()
             return 'resolved'

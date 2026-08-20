@@ -19,9 +19,25 @@ describe('MarkdownEditor (real browser)', () => {
 
     const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
     expect(editable).not.toBeNull()
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
+    if (!editable)
+      throw new Error('expected a contenteditable CodeMirror host')
 
-    await userEvent.click(editable)
+      // focus(), not click(). A click waits for the element to be "visible,
+      // enabled and stable", and the preview pane beside this one re-renders
+      // through real Canvas 2D text measurement — under a saturated run the
+      // layout keeps settling and that actionability check never passes. It is
+      // not slowness: this test costs 369ms idle and spends the entire 60s
+      // budget in CI, which is a wait for a condition, not a slow pass.
+      //
+      // What the test is about is that typing produces onChange, so focus is a
+      // precondition to establish rather than an interaction to perform. Exact
+      // contentDOM identity is what real keyboard delivery depends on —
+      // `BrowserLocalIndexPage.flow.browser.test.tsx` asserts the same thing for
+      // the same reason.
+    ;(editable as HTMLElement).focus()
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(editable)
+    })
     await userEvent.keyboard('# Hello world')
 
     expect(onChange).toHaveBeenCalled()

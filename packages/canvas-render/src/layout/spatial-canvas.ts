@@ -41,6 +41,7 @@ import { computeEdgeJumps } from './edge-jumps.js'
 import { edgeLabelAnchor } from './edge-label-anchor.js'
 import {
   type FittedBlocks,
+  firstLineOfBlocks,
   fitBlocksToHeight,
   layoutMdastBlocks,
   type MdastLayoutOptions,
@@ -141,6 +142,7 @@ export interface SpatialLayoutOptions {
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  readonly highlightCode?: MdastLayoutOptions['highlightCode']
   /**
    * Resolves one reference — a file node's `file`, or a group's
    * `background` — to everything the caller knows about it. Absent, or
@@ -272,8 +274,18 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
     measure: options.measure,
     maxWidth,
     // Body content is measured and declared with the SAME family the label
-    // path resolves, so one theme drives every glyph in a node.
+    // path resolves, so one theme drives every glyph in a node — and painted
+    // with the SAME fill, for the same reason. `resolveLabel` is already the
+    // seam for "a degraded body fallback run"; a body that renders owes its
+    // colour to the same producer as one that does not.
     fontFamily: options.appearance.resolveLabel().fontFamily ?? 'sans-serif',
+    ...(options.appearance.resolveLabel().fill !== undefined
+      ? { textFill: options.appearance.resolveLabel().fill }
+      : {}),
+    ...(options.appearance.resolveSyntax !== undefined
+      ? { syntax: options.appearance.resolveSyntax() }
+      : {}),
+    ...(options.highlightCode !== undefined ? { highlightCode: options.highlightCode } : {}),
     ...(options.renderMath !== undefined ? { renderMath: options.renderMath } : {}),
     ...(options.renderDiagram !== undefined ? { renderDiagram: options.renderDiagram } : {}),
     ...(options.resolveEmbed !== undefined ? { resolveEmbed: options.resolveEmbed } : {}),
@@ -407,12 +419,8 @@ function fitTextBody(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): FittedBlocks {
-  return (
-    fitSceneInNode(scene, node, options) ?? {
-      nodes: scene.nodes.slice(0, 1),
-      truncated: scene.nodes.length > 1,
-    }
-  )
+  // Keep-first's unit is a LINE, not a block: see `firstLineOfBlocks`.
+  return fitSceneInNode(scene, node, options) ?? firstLineOfBlocks(scene.nodes)
 }
 
 function composeTextNode(

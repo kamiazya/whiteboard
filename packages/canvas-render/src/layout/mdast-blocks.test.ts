@@ -1,6 +1,7 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
@@ -420,8 +421,16 @@ describe('layoutMdastBlocks — text run baseline', () => {
     expect(heading?.kind).toBe('heading')
     if (heading?.kind !== 'heading') throw new Error('unreachable')
     const [run] = heading.runs
-    // fake measure: ascent = fontSizePx * 0.8
-    expect(run.baseline).toBe(32 * 0.8)
+    // Half-leading, as CSS does it: the line box is taller than the font, and
+    // the surplus splits evenly above and below, so the baseline sits at
+    // (lineHeight - fontSize) / 2 + ascent rather than at the ascent alone.
+    // A heading's line height is 1.25 (fake measure: ascent = fontSize * 0.8).
+    // Read from the theme rather than pinned: the RULE is what this test
+    // guards, and a literal here goes stale on every type-scale change.
+    const fontSizePx = MARKDOWN_THEME.headingFontSizePx[1]
+    const lineHeightPx = fontSizePx * MARKDOWN_THEME.headingLineHeight
+    expect(run.baseline).toBe((lineHeightPx - fontSizePx) / 2 + fontSizePx * 0.8)
+    expect(run.bbox.h).toBe(lineHeightPx)
     // bbox.y must stay the line TOP (unaffected by baseline) so sceneBounds
     // keeps measuring a true top-left box.
     expect(run.bbox.y).toBe(0)
@@ -694,7 +703,9 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
     expect(paragraph.runs.map((r) => r.text)).toEqual(['inline code', 'and a', 'link', 'too.'])
 
     const [code, andA, link, too] = paragraph.runs
-    const fontSize = code.appearance?.fontSize ?? 0
+    // The boundary space is a BODY-font advance even when it follows a code
+    // run: only the code run itself changes family and size.
+    const fontSize = andA.appearance?.fontSize ?? 0
     expect(fontSize).toBeGreaterThan(0)
     const spaceWidth = measure(' ', {
       family: 'sans-serif',
@@ -703,7 +714,13 @@ describe('layoutMdastBlocks — whitespace at inline-run boundaries', () => {
       style: 'normal',
       sizePx: fontSize,
     }).advanceWidth
-    expect(andA.bbox.x).toBeCloseTo(code.bbox.x + code.bbox.w + spaceWidth, 5)
+    // A code run's backdrop padding is occupied space, like CSS horizontal
+    // padding: its bbox.x already sits one pad in, and one more pad separates
+    // its right edge from whatever follows. Without that the pill would be
+    // painted over by the next word.
+    const codePad = code.backdropPadXPx ?? 0
+    expect(codePad).toBeGreaterThan(0)
+    expect(andA.bbox.x).toBeCloseTo(code.bbox.x + code.bbox.w + codePad + spaceWidth, 5)
     expect(link.bbox.x).toBeCloseTo(andA.bbox.x + andA.bbox.w + spaceWidth, 5)
     expect(too.bbox.x).toBeCloseTo(link.bbox.x + link.bbox.w + spaceWidth, 5)
   })
@@ -867,5 +884,108 @@ describe('layoutMdastBlocks — embed body resolution', () => {
     const paragraph = scene.nodes[0]
     if (paragraph.kind !== 'paragraph') throw new Error('unreachable')
     expect(paragraph.runs.map((r) => r.text)).toEqual(['see', 'Target note'])
+  })
+})
+
+describe('layoutMdastBlocks — a fenced line is fitted to its panel', () => {
+  // The fake measure is 0.6em per character, and code sets at 85% of the
+  // 16px body, so a character is 8.16px wide.
+  const maxWidth = 200
+  const root: MdastRoot = {
+    type: 'root',
+    children: [
+      {
+        type: 'code',
+        lang: null,
+        meta: null,
+        value: 'const veryLongIdentifierName = computeSomething(alpha, beta)\nok()',
+      },
+    ],
+  }
+
+  it('keeps every run inside the panel, not merely inside the node', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth })
+    const code = scene.nodes.find((node) => node.kind === 'codeBlock')
+    if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
+    const panelRight = code.bbox.x + code.bbox.w
+    for (const run of code.runs ?? []) {
+      expect(run.bbox.x + run.bbox.w).toBeLessThanOrEqual(panelRight)
+    }
+  })
+
+  it('marks the run it cut, and leaves the one that fits alone', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth })
+    const code = scene.nodes.find((node) => node.kind === 'codeBlock')
+    if (code === undefined || code.kind !== 'codeBlock') throw new Error('expected a codeBlock')
+    expect((code.runs ?? []).map((run) => run.truncated)).toEqual([true, undefined])
+    expect(code.runs?.[1]?.text).toBe('ok()')
+  })
+})
+
+describe('layoutMdastBlocks — a table row is as tall as its tallest cell', () => {
+  const root: MdastRoot = {
+    type: 'root',
+    children: [
+      {
+        type: 'table',
+        align: [],
+        children: [
+          {
+            type: 'tableRow',
+            children: [
+              { type: 'tableCell', children: [{ type: 'text', value: 'k' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'v' }] },
+            ],
+          },
+          {
+            type: 'tableRow',
+            children: [
+              { type: 'tableCell', children: [{ type: 'text', value: 'one' }] },
+              {
+                type: 'tableCell',
+                children: [
+                  { type: 'text', value: 'a cell whose content is long enough that it must wrap' },
+                ],
+              },
+            ],
+          },
+          {
+            type: 'tableRow',
+            children: [
+              { type: 'tableCell', children: [{ type: 'text', value: 'two' }] },
+              { type: 'tableCell', children: [{ type: 'text', value: 'second row' }] },
+            ],
+          },
+        ],
+      },
+    ],
+  }
+
+  it('never paints a cell run below its own row', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth: 240 })
+    const table = scene.nodes.find((node) => node.kind === 'table')
+    if (table?.kind !== 'table') throw new Error('expected a table')
+    for (const row of table.rows) {
+      const rowBottom = row.bbox.y + row.bbox.h
+      for (const cell of row.cells) {
+        for (const run of cell.runs) {
+          expect(run.bbox.y + run.bbox.h).toBeLessThanOrEqual(rowBottom)
+        }
+      }
+    }
+  })
+
+  it('stacks the rows without overlap and reports the total height', () => {
+    const scene = layoutMdastBlocks(root, { ...options, maxWidth: 240 })
+    const table = scene.nodes.find((node) => node.kind === 'table')
+    if (table?.kind !== 'table') throw new Error('expected a table')
+    const rows = table.rows
+    for (const [index, row] of rows.entries()) {
+      const next = rows[index + 1]
+      if (next !== undefined) expect(row.bbox.y + row.bbox.h).toBeLessThanOrEqual(next.bbox.y)
+    }
+    const last = rows[rows.length - 1]
+    if (last === undefined) throw new Error('expected rows')
+    expect(table.bbox.y + table.bbox.h).toBeGreaterThanOrEqual(last.bbox.y + last.bbox.h)
   })
 })

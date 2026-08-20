@@ -45,6 +45,17 @@ export interface Appearance {
   readonly fontFamily?: string
   readonly fontSize?: number
   /**
+   * Alpha applied to the fill. Distinct from folding the alpha into `fill`
+   * because it is the only way to tint something whose colour is INHERITED:
+   * a markdown body run carries no `fill` (see markdown-theme.ts), so a
+   * muted run has to modulate whatever the host set rather than name a
+   * colour of its own. Emitted as `fill-opacity`, which SVG 1.1 defines
+   * for every renderer here including resvg — an 8-digit hex would not be.
+   */
+  readonly fillOpacity?: number
+  /** Alpha applied to the stroke, for the same reason as `fillOpacity`. */
+  readonly strokeOpacity?: number
+  /**
    * Label underlay color (the canvas surface), so a label sitting ON an
    * edge line stays readable: the backend emits a stroke-only copy of the
    * text behind the fill text. Consumed for text runs only; absent keeps
@@ -72,6 +83,16 @@ export interface TextRunNode {
    */
   readonly truncated?: true
   readonly appearance?: Appearance
+  /**
+   * A filled box painted BEHIND this run, inset from `bbox` by
+   * `backdropPadXPx`. Inline code's tinted panel is the only user today.
+   * Separate from `appearance` because that one paints the glyphs: a run
+   * needs to name a background colour without naming a text colour, which
+   * a single Appearance cannot express.
+   */
+  readonly backdrop?: Appearance
+  /** Horizontal bleed (px) of `backdrop` past the run's own box. */
+  readonly backdropPadXPx?: number
   /**
    * Distance (px) from `bbox.y` (the line TOP) down to the text baseline,
    * i.e. the measured font ascent. `bbox` stays a true top-left box either
@@ -156,31 +177,56 @@ export interface ListBlockNode {
 export interface CodeBlockNode {
   readonly kind: 'codeBlock'
   readonly bbox: BoundingBox
+  /** The fence's source, kept verbatim for provenance and copy. */
   readonly value: string
   readonly lang?: string
+  /**
+   * One run per SOURCE line, already positioned. SVG `<text>` collapses a
+   * newline to a space, so a single element carrying `value` paints the
+   * whole fence on one line inside a box sized for many — the runs are what
+   * make a fence render as a fence.
+   */
+  readonly runs?: readonly TextRunNode[]
+  /** Panel painted behind `runs`, filling `bbox`. */
+  readonly appearance?: Appearance
+  /** Corner radius (px) of that panel. */
+  readonly radius?: number
 }
 
 export interface BlockquoteNode {
   readonly kind: 'blockquote'
   readonly bbox: BoundingBox
+  /** The quoted blocks, preceded by the accent bar as a `shape`. */
   readonly children: readonly SceneNode[]
+  /** Applied to the group, so quoted prose inherits a muted fill. */
+  readonly appearance?: Appearance
 }
 
 export interface ThematicBreakNode {
   readonly kind: 'thematicBreak'
   readonly bbox: BoundingBox
+  readonly appearance?: Appearance
 }
 
 export interface TableCellSceneNode {
   readonly kind: 'tableCell'
   readonly bbox: BoundingBox
   readonly runs: readonly TextRunNode[]
+  /** Cell border, drawn as a stroked rect over `bbox`. */
+  readonly appearance?: Appearance
 }
 
 export interface TableRowSceneNode {
   readonly kind: 'tableRow'
   readonly bbox: BoundingBox
   readonly cells: readonly TableCellSceneNode[]
+  /** True for the header row, whose cells are laid out bold. */
+  readonly header?: boolean
+  /**
+   * Hairline separator along the row's BOTTOM edge — the whole of a table's
+   * chrome. Absent on the last row, which needs no line under it.
+   */
+  readonly appearance?: Appearance
 }
 
 export interface TableBlockNode {

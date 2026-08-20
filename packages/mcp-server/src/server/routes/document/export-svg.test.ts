@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Hono } from 'hono'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { exportResponseSchema } from '../../../shared/api-contracts/export.js'
 
 let tempDir: string
 
@@ -15,13 +16,22 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
+// The route now refuses a path that does not exist, so the metadata lookup is
+// stubbed true for every case; the not-found case overrides it.
+const mockDocumentExists = vi.fn<(workspaceId: string, path: string) => Promise<boolean>>(
+  async () => true,
+)
+vi.mock('../../store/document-store.js', () => ({
+  documentExists: (workspaceId: string, path: string) => mockDocumentExists(workspaceId, path),
+}))
+
 const mockExportCanvasHeadlessSvg =
   vi.fn<
     (args: {
       workspaceId: string
       path: string
       options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
-    }) => Promise<{ svg: string }>
+    }) => Promise<{ svg: string; undrawable: readonly string[] }>
   >()
 vi.mock('../../export/headless-export.js', () => ({
   exportCanvasHeadlessSvg: (args: {
@@ -43,7 +53,9 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-export-svg-test-'))
     mockExportCanvasHeadlessSvg.mockReset()
-    mockExportCanvasHeadlessSvg.mockResolvedValue({ svg: '<svg><rect/></svg>' })
+    mockDocumentExists.mockReset()
+    mockDocumentExists.mockResolvedValue(true)
+    mockExportCanvasHeadlessSvg.mockResolvedValue({ svg: '<svg><rect/></svg>', undrawable: [] })
   })
 
   afterEach(async () => {
@@ -63,6 +75,39 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     )
     const written = await readFile(body.filePath, 'utf-8')
     expect(written.trim().startsWith('<svg')).toBe(true)
+  })
+
+  // The same report as the PNG route, and deliberately the same field: what
+  // differs is the loss, not the finding. An SVG still carries these
+  // characters as `<text>`, so a viewer whose system has the face reads them
+  // — only rasterising is lossy. A caller relaying this to a person owes them
+  // that distinction.
+  it('answers 404 for a path that does not exist, rather than an empty SVG', async () => {
+    mockDocumentExists.mockResolvedValue(false)
+
+    const res = await makeApp().request('/api/w/s1/document/no-such-canvas/export-svg', {
+      method: 'POST',
+    })
+
+    // Without the guard this is a 200 and a well-formed SVG of nothing, which
+    // a caller cannot tell from a canvas that is genuinely empty.
+    expect(res.status).toBe(404)
+    expect(await res.json()).toMatchObject({ error: 'canvas_not_found' })
+    expect(mockExportCanvasHeadlessSvg).not.toHaveBeenCalled()
+  })
+
+  it('reports the characters the export renderer had no glyph for', async () => {
+    mockExportCanvasHeadlessSvg.mockResolvedValue({
+      svg: '<svg><rect/></svg>',
+      undrawable: ['日'],
+    })
+
+    const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
+      method: 'POST',
+    })
+
+    expect(res.status).toBe(200)
+    expect(exportResponseSchema.parse(await res.json()).undrawable).toEqual(['日'])
   })
 
   it('generates distinct default filePaths for two exports in the same millisecond', async () => {

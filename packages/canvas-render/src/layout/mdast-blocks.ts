@@ -9,6 +9,7 @@ import { LineBreaker } from 'css-line-break'
 import type { MeasureText } from '../measure.js'
 import { clampAdvance } from '../measure.js'
 import type {
+  Appearance,
   BlockquoteNode,
   CodeBlockNode,
   EmbedPlaceholderNode,
@@ -21,6 +22,7 @@ import type {
   RawHtmlNode,
   Scene,
   SceneNode,
+  ShapeSceneNode,
   SvgFragmentNode,
   TableBlockNode,
   TableCellSceneNode,
@@ -30,30 +32,55 @@ import type {
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
 import { escapeXmlText } from '../svg/format.js'
+import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
 import { jaModel } from '../vendor/budoux/ja-model.js'
 import { Parser } from '../vendor/budoux/parser.js'
 import { fitToWidth } from './truncate.js'
 
 /**
- * Minimal layout constants. Deliberately NOT a theme/design-token system
- * (that is the deferred theme layer, slice 4) — just enough fixed geometry
- * to make block layout deterministic. Revisit if a future slice needs
- * per-canvas overrides.
+ * Every layout constant comes from ONE theme object (theme/markdown-theme.ts),
+ * calibrated to GitHub's rendered-markdown surface. Read once here so the
+ * rest of the file reads as geometry rather than as a table of numbers, and
+ * so restyling stays a data change.
  */
-const HEADING_FONT_SIZE_PX: Readonly<Record<1 | 2 | 3 | 4 | 5 | 6, number>> = {
-  1: 32,
-  2: 28,
-  3: 24,
-  4: 20,
-  5: 18,
-  6: 16,
+const T = MARKDOWN_THEME
+const HEADING_FONT_SIZE_PX = T.headingFontSizePx
+export const BODY_FONT_SIZE_PX = T.bodyFontSizePx
+const BLOCK_GAP_PX = T.blockGapPx
+const LIST_INDENT_PX = T.listIndentPx
+/**
+ * Height of one body line box. EXPORTED because the editor's text overlay
+ * has to advance by the same amount: a CodeMirror overlay styled at a
+ * different line height than the committed render makes the text jump the
+ * instant someone double-clicks a node, and every line after the first sits
+ * somewhere the reader did not leave it. It used to be safe to write
+ * `lineHeight: BODY_FONT_SIZE_PX` there because the two were equal; they are
+ * not any more, so the coupling is a shared constant instead of a comment.
+ */
+export const BODY_LINE_HEIGHT_PX = T.bodyFontSizePx * T.bodyLineHeight
+const CODE_FONT_SIZE_PX = T.bodyFontSizePx * T.codeFontScale
+const CODE_LINE_HEIGHT_PX = CODE_FONT_SIZE_PX * T.codeLineHeight
+const THEMATIC_BREAK_HEIGHT_PX = T.thematicBreakHeightPx
+
+/**
+ * Every piece of markdown chrome, drawn as one neutral at an opacity: the
+ * code surface, the blockquote rail, a table's row separators, the thematic
+ * break. There is no stroked variant — a markdown body draws surfaces and
+ * hairlines, never an outline around content.
+ */
+function panelPaint(opacity: number): Appearance {
+  return { fill: T.chromeColor, fillOpacity: opacity }
 }
-export const BODY_FONT_SIZE_PX = 16
-const BLOCK_GAP_PX = 8
-const LIST_INDENT_PX = 24
-const TABLE_ROW_HEIGHT_PX = 24
-const CODE_LINE_HEIGHT_PX = 20
-const THEMATIC_BREAK_HEIGHT_PX = 1
+
+/**
+ * Where a line's glyphs sit inside a line box taller than the font. CSS
+ * calls it half-leading: the extra height splits evenly above and below, so
+ * a 16px run in a 24px box has 4px of air on each side rather than sitting
+ * on the box's top edge.
+ */
+function baselineIn(lineHeightPx: number, fontSizePx: number, ascent: number): number {
+  return (lineHeightPx - fontSizePx) / 2 + ascent
+}
 
 function bodyFont(
   family: string,
@@ -72,6 +99,23 @@ function bodyFont(
   }
 }
 
+/**
+ * The closed set of things a code token can be. Five roles including plain
+ * (a token with no role), not forty TextMate scopes: at 10-12px inside a
+ * node, finer resolution is discarded on the way out, and each role has to
+ * hold its own contrast floor against the code surface.
+ */
+export type CodeTokenRole = 'keyword' | 'string' | 'number' | 'comment'
+
+export interface CodeToken {
+  readonly text: string
+  /** Absent means plain — the token paints as body text. */
+  readonly role?: CodeTokenRole
+}
+
+/** One array per source line, in source order. */
+export type CodeTokenLines = readonly (readonly CodeToken[])[]
+
 export interface MdastLayoutOptions {
   readonly measure: MeasureText
   readonly maxWidth: number
@@ -85,6 +129,40 @@ export interface MdastLayoutOptions {
    * "declared family" could drift; one field cannot.
    */
   readonly fontFamily: string
+  /**
+   * The fill every body run is painted with — the theme's per-mode text
+   * colour, supplied by the caller exactly as `fontFamily` is.
+   *
+   * Body runs used to carry NO fill and inherit one from whatever ancestor
+   * the host set, which put the most-read colour on the canvas outside the
+   * one appearance producer and outside the contrast tests that guard the
+   * rest of it. Muted runs still modulate it with `fillOpacity` rather than
+   * naming a second colour, so "muted" tracks the mode for free.
+   *
+   * Absent, runs carry no fill and inherit, as before — the SVG is then only
+   * legible where an ancestor sets one.
+   */
+  readonly textFill?: string
+  /**
+   * Tokenises a fenced block for syntax highlighting — one array per SOURCE
+   * line, each token carrying a ROLE rather than a colour. Same injected-
+   * seam class as `renderMath`/`renderDiagram`: this package is allowed two
+   * third-party dependencies and a highlighter is not going to be the third,
+   * so the grammars live in whichever composition root wants them.
+   *
+   * Roles, not colours, so the palette stays with the one appearance
+   * producer instead of being duplicated into every root that installs a
+   * highlighter — which is exactly the multi-producer divergence the theme
+   * layer exists to delete.
+   *
+   * TOTAL from this side: a throw, `undefined`, an unknown language, or a
+   * line count that disagrees with the source all fall back to plain code.
+   * The source is the authority on how many lines a fence has, because that
+   * is what the block's height is computed from.
+   */
+  readonly highlightCode?: (lang: string, value: string) => CodeTokenLines | undefined
+  /** The fill for each token role. Absent, a tokenised run paints as body text. */
+  readonly syntax?: Partial<Readonly<Record<CodeTokenRole, string>>>
   /**
    * Renders a math source string to an SVG fragment. Optional composition-
    * root seam — MathJax itself is never imported by this package. Absent a
@@ -167,6 +245,19 @@ function defaultRenderMath(value: string): string {
 
 interface Cursor {
   y: number
+  /**
+   * Left origin every run and block box is offset by. Only a blockquote
+   * moves it (indenting its content past the accent bar); it is threaded on
+   * the cursor rather than through `MdastLayoutOptions` because it is
+   * internal bookkeeping, not a caller-facing knob. Lists indent through
+   * `listItem.bbox.x` and an SVG transform instead — adding a third
+   * transform boundary would break translate-scene.ts's invariant.
+   */
+  x: number
+}
+
+function isFinitePositive(value: number | undefined): value is number {
+  return typeof value === 'number' && Number.isFinite(value) && value > 0
 }
 
 function measureRunWidth(
@@ -311,6 +402,7 @@ function layoutPhrasing(
   options: MdastLayoutOptions,
   fontSizePx: number,
   style: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = {},
+  lineHeightPx: number = fontSizePx * T.bodyLineHeight,
 ): PhrasingLayout {
   const runs: TextRunNode[] = []
   const line = { x: 0, index: 0 }
@@ -320,13 +412,27 @@ function layoutPhrasing(
     text: string,
     extra: Partial<TextRunNode>,
     runStyle: { emphasis?: boolean; strong?: boolean; deleted?: boolean },
+    // Inline code is measured AND declared in the mono family at its own
+    // size: the measured-vs-declared invariant this file holds for body
+    // runs applies just as hard to a run that changes both.
+    font: { family: string; sizePx: number } = { family: options.fontFamily, sizePx: fontSizePx },
   ) => {
-    const metrics = options.measure(text, bodyFont(options.fontFamily, fontSizePx, runStyle))
+    const metrics = options.measure(text, bodyFont(font.family, font.sizePx, runStyle))
     const width = clampAdvance(metrics.advanceWidth)
-    const baseline = clampAdvance(metrics.ascent)
+    const baseline = clampAdvance(baselineIn(lineHeightPx, font.sizePx, metrics.ascent))
+    // A run with a backdrop occupies its padding IN FLOW, exactly as CSS
+    // horizontal padding does. Without this the pill is drawn wider than the
+    // cursor advanced and the next run paints over its right edge — observed
+    // as `layoutMdastBlocks` running into the word after it.
+    const padX = isFinitePositive(extra.backdropPadXPx) ? extra.backdropPadXPx : 0
     runs.push({
       kind: 'textRun',
-      bbox: { x: line.x, y: cursor.y + line.index * fontSizePx, w: width, h: fontSizePx },
+      bbox: {
+        x: cursor.x + line.x + padX,
+        y: cursor.y + line.index * lineHeightPx,
+        w: width,
+        h: lineHeightPx,
+      },
       baseline,
       text,
       ...runStyle,
@@ -336,9 +442,14 @@ function layoutPhrasing(
       // MdastLayoutOptions.fontFamily) — a run drawn at the host's inherited
       // size would render every measured wrap width wrong and flatten the
       // heading hierarchy.
-      appearance: { ...extra.appearance, fontFamily: options.fontFamily, fontSize: fontSizePx },
+      appearance: {
+        ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+        ...extra.appearance,
+        fontFamily: font.family,
+        fontSize: font.sizePx,
+      },
     })
-    line.x += width
+    line.x += width + 2 * padX
   }
 
   const wrapAndPush = (
@@ -422,21 +533,32 @@ function layoutPhrasing(
     // reads as a complete formula that is simply wrong, where cut code or
     // cut markup reads as cut. Overflowing is the lesser harm.
     truncatable = true,
+    font?: { family: string; sizePx: number },
   ) => {
     if (!wrappable) {
       // Atomic: never SPLIT, because an interior space in a code span or an
       // HTML tag is not a word boundary. Cutting it is the only way left to
       // keep it inside the box, and the run says so.
+      const atomicFont = font ?? { family: options.fontFamily, sizePx: fontSizePx }
+      // A backdrop's padding is part of what the run occupies, so it comes
+      // out of the fit budget too — otherwise the pill is cut to the wrap
+      // width and its padding paints past it.
+      const padX = isFinitePositive(extra.backdropPadXPx) ? extra.backdropPadXPx : 0
       const fitted =
         canWrap && truncatable
           ? fitToWidth(
               text,
-              bodyFont(options.fontFamily, fontSizePx, runStyle),
+              bodyFont(atomicFont.family, atomicFont.sizePx, runStyle),
               options.measure,
-              options.maxWidth - line.x,
+              options.maxWidth - line.x - 2 * padX,
             )
           : { text }
-      pushRun(fitted.text, { ...extra, ...(fitted.truncated ? { truncated: true } : {}) }, runStyle)
+      pushRun(
+        fitted.text,
+        { ...extra, ...(fitted.truncated ? { truncated: true } : {}) },
+        runStyle,
+        atomicFont,
+      )
       return
     }
     // XML — and therefore an SVG <text> element — strips leading/trailing
@@ -501,7 +623,18 @@ function layoutPhrasing(
           emit(child.value, {}, currentStyle)
           break
         case 'inlineCode':
-          emit(child.value, { code: true }, currentStyle, false)
+          emit(
+            child.value,
+            {
+              code: true,
+              backdrop: panelPaint(T.panelOpacity),
+              backdropPadXPx: T.inlineCodePaddingXPx,
+            },
+            currentStyle,
+            false,
+            true,
+            { family: T.monoFontFamily, sizePx: CODE_FONT_SIZE_PX },
+          )
           break
         case 'break':
           line.x = 0
@@ -577,6 +710,74 @@ function layoutPhrasing(
   return { runs, lineCount: line.index + 1, inkWidth }
 }
 
+/**
+ * Column widths sized to CONTENT, then scaled to fit. An equal split made a
+ * two-word column as wide as a sentence, which is most of why the old table
+ * read as floating text rather than as a table; GitHub sizes to content the
+ * same way. Scaling down (rather than clipping) keeps the table inside the
+ * column, and the floor stops a scaled column from collapsing under its own
+ * padding.
+ */
+function tableColumnWidths(
+  node: Extract<MdastFlowContent, { type: 'table' }>,
+  columnCount: number,
+  options: MdastLayoutOptions,
+): number[] {
+  const natural = Array.from({ length: columnCount }, () => 0)
+  for (const row of node.children) {
+    for (const [index, cell] of row.children.entries()) {
+      const text = cellPlainText(cell.children)
+      const ink = measureRunWidth(options.measure, options.fontFamily, text, BODY_FONT_SIZE_PX, {
+        strong: true,
+      })
+      natural[index] = Math.max(natural[index] ?? 0, ink + 2 * T.tableCellPaddingXPx)
+    }
+  }
+  const total = natural.reduce((sum, w) => sum + w, 0)
+  if (!Number.isFinite(options.maxWidth) || options.maxWidth <= 0 || total <= options.maxWidth) {
+    return natural
+  }
+  const minimum = 2 * T.tableCellPaddingXPx + BODY_FONT_SIZE_PX
+  const scale = options.maxWidth / total
+  return natural.map((w) => Math.max(w * scale, minimum))
+}
+
+/** A cell's text with no styling, for width measurement only. */
+function cellPlainText(children: readonly MdastCellPhrasingContent[]): string {
+  let text = ''
+  for (const child of children) {
+    if ('value' in child && typeof child.value === 'string') text += child.value
+    else if ('children' in child && Array.isArray(child.children)) {
+      text += cellPlainText(child.children as readonly MdastCellPhrasingContent[])
+    }
+  }
+  return text
+}
+
+/**
+ * The `highlightCode` seam, guarded to the never-throw rule its siblings
+ * follow. Anything unusable — a throw, `undefined`, a non-array, or a line
+ * count that disagrees with the source — degrades to one plain token per
+ * line, which is exactly what the block rendered before highlighting existed.
+ */
+function tokenizeCode(
+  lang: string,
+  value: string,
+  lineCount: number,
+  options: MdastLayoutOptions,
+): CodeTokenLines {
+  const plain: CodeTokenLines = value.split('\n').map((text) => [{ text }])
+  if (options.highlightCode === undefined) return plain
+  let tokenized: CodeTokenLines | undefined
+  try {
+    tokenized = options.highlightCode(lang, value)
+  } catch {
+    return plain
+  }
+  if (!Array.isArray(tokenized) || tokenized.length !== lineCount) return plain
+  return tokenized.every((line) => Array.isArray(line)) ? tokenized : plain
+}
+
 function layoutBlock(
   node: MdastFlowContent,
   cursor: Cursor,
@@ -589,17 +790,25 @@ function layoutBlock(
 ): SceneNode {
   switch (node.type) {
     case 'heading': {
+      // A heading belongs to what FOLLOWS it, so it takes more air above
+      // than below — the asymmetry is what makes a long body scan as
+      // sections. Not applied to a leading heading, which would otherwise
+      // start the body with a blank band.
+      if (cursor.y > 0) cursor.y += T.headingSpaceAbovePx
       const fontSizePx = HEADING_FONT_SIZE_PX[node.depth]
+      const lineHeightPx = fontSizePx * T.headingLineHeight
       const { runs, lineCount, inkWidth } = layoutPhrasing(
         node.children,
         cursor,
         options,
         fontSizePx,
+        {},
+        lineHeightPx,
       )
-      const height = lineCount * fontSizePx
+      const height = lineCount * lineHeightPx
       const heading: HeadingBlockNode = {
         kind: 'heading',
-        bbox: { x: 0, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
+        bbox: { x: cursor.x, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
         level: node.depth,
         runs,
       }
@@ -619,10 +828,10 @@ function layoutBlock(
         options,
         BODY_FONT_SIZE_PX,
       )
-      const height = lineCount * BODY_FONT_SIZE_PX
+      const height = lineCount * BODY_LINE_HEIGHT_PX
       const paragraph: ParagraphBlockNode = {
         kind: 'paragraph',
-        bbox: { x: 0, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
+        bbox: { x: cursor.x, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
         runs,
       }
       cursor.y += height + BLOCK_GAP_PX
@@ -630,13 +839,33 @@ function layoutBlock(
     }
     case 'blockquote': {
       const startY = cursor.y
-      const children = node.children.map((child) =>
-        layoutBlock(child, cursor, options, depth, embedPath),
+      const startX = cursor.x
+      const indent = T.blockquoteBarWidthPx + T.blockquoteGapPx
+      const indented: MdastLayoutOptions = { ...options, maxWidth: options.maxWidth - indent }
+      cursor.x = startX + indent
+      const quoted = node.children.map((child) =>
+        layoutBlock(child, cursor, indented, depth, embedPath),
       )
+      cursor.x = startX
+      // The last quoted block left a trailing block gap INSIDE the quote;
+      // the bar and the box end at the content, and the gap belongs after.
+      const contentEnd = cursor.y - BLOCK_GAP_PX
+      const bar: ShapeSceneNode = {
+        kind: 'shape',
+        bbox: {
+          x: startX,
+          y: startY,
+          w: T.blockquoteBarWidthPx,
+          h: Math.max(contentEnd - startY, 0),
+        },
+        radius: T.blockquoteBarWidthPx / 2,
+        appearance: panelPaint(T.borderOpacity),
+      }
       const quote: BlockquoteNode = {
         kind: 'blockquote',
-        bbox: { x: 0, y: startY, w: options.maxWidth, h: cursor.y - startY },
-        children,
+        bbox: { x: startX, y: startY, w: options.maxWidth, h: Math.max(contentEnd - startY, 0) },
+        children: [bar, ...quoted],
+        appearance: { fillOpacity: T.mutedTextOpacity },
       }
       return quote
     }
@@ -653,9 +882,12 @@ function layoutBlock(
           embedPath,
         ),
       )
+      // `layoutListItem` closes each item with the tighter intra-list gap;
+      // the list as a whole is still followed by a full block gap.
+      cursor.y += BLOCK_GAP_PX - T.listItemGapPx
       const list: ListBlockNode = {
         kind: 'list',
-        bbox: { x: 0, y: startY, w: options.maxWidth, h: cursor.y - startY },
+        bbox: { x: cursor.x, y: startY, w: options.maxWidth, h: cursor.y - startY - BLOCK_GAP_PX },
         ordered,
         depth,
         items,
@@ -675,12 +907,62 @@ function layoutBlock(
         }
       }
       const lines = node.value.split('\n')
-      const height = lines.length * CODE_LINE_HEIGHT_PX
+      const height = lines.length * CODE_LINE_HEIGHT_PX + 2 * T.codeBlockPaddingPx
+      const font = bodyFont(T.monoFontFamily, CODE_FONT_SIZE_PX)
+      // One run per SOURCE line. A single `<text>` carrying the whole fence
+      // paints it on one line — SVG collapses the newlines — so the code ran
+      // off the right edge of a box sized for every line.
+      // A code line never wraps — its indentation and its identity as one
+      // source line are the point — so the only way to keep it inside the
+      // panel is to cut it, exactly as an atomic inline run is cut.
+      const innerWidth = options.maxWidth - 2 * T.codeBlockPaddingPx
+      const tokenLines = tokenizeCode(node.lang ?? '', node.value, lines.length, options)
+      const runs: TextRunNode[] = tokenLines.flatMap((tokens, index) => {
+        const y = cursor.y + T.codeBlockPaddingPx + index * CODE_LINE_HEIGHT_PX
+        const baselineOf = (ascent: number) =>
+          clampAdvance(baselineIn(CODE_LINE_HEIGHT_PX, CODE_FONT_SIZE_PX, ascent))
+        const out: TextRunNode[] = []
+        let x = 0
+        for (const token of tokens) {
+          // The line's budget is shared across its tokens: fitting each one
+          // against the full width would let a highlighted line run out of
+          // the panel that a plain one is cut to stay inside.
+          const fitted = fitToWidth(token.text, font, options.measure, innerWidth - x)
+          if (fitted.text === '') break
+          const metrics = options.measure(fitted.text, font)
+          const fill = token.role !== undefined ? options.syntax?.[token.role] : undefined
+          out.push({
+            kind: 'textRun' as const,
+            bbox: {
+              x: cursor.x + T.codeBlockPaddingPx + x,
+              y,
+              w: clampAdvance(metrics.advanceWidth),
+              h: CODE_LINE_HEIGHT_PX,
+            },
+            baseline: baselineOf(metrics.ascent),
+            text: fitted.text,
+            code: true,
+            ...(fitted.truncated ? { truncated: true as const } : {}),
+            appearance: {
+              ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+              ...(fill !== undefined ? { fill } : {}),
+              fontFamily: T.monoFontFamily,
+              fontSize: CODE_FONT_SIZE_PX,
+            },
+          })
+          x += clampAdvance(metrics.advanceWidth)
+          if (fitted.truncated) break
+        }
+        return out
+      })
       const code: CodeBlockNode = {
         kind: 'codeBlock',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
+        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: height },
         value: node.value,
         ...(node.lang ? { lang: node.lang } : {}),
+        runs,
+        appearance: panelPaint(T.panelOpacity),
+        radius: T.cornerRadiusPx,
       }
       cursor.y += height + BLOCK_GAP_PX
       return code
@@ -688,16 +970,17 @@ function layoutBlock(
     case 'html': {
       const rawHtml: RawHtmlNode = {
         kind: 'rawHtml',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: BODY_FONT_SIZE_PX },
+        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: BODY_LINE_HEIGHT_PX },
         value: node.value,
       }
-      cursor.y += BODY_FONT_SIZE_PX + BLOCK_GAP_PX
+      cursor.y += BODY_LINE_HEIGHT_PX + BLOCK_GAP_PX
       return rawHtml
     }
     case 'thematicBreak': {
       const hr: ThematicBreakNode = {
         kind: 'thematicBreak',
-        bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: THEMATIC_BREAK_HEIGHT_PX },
+        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: THEMATIC_BREAK_HEIGHT_PX },
+        appearance: panelPaint(T.borderOpacity),
       }
       cursor.y += THEMATIC_BREAK_HEIGHT_PX + BLOCK_GAP_PX
       return hr
@@ -717,30 +1000,55 @@ function layoutBlock(
     }
     case 'table': {
       const startY = cursor.y
-      const colWidth = node.children[0]
-        ? options.maxWidth / Math.max(node.children[0].children.length, 1)
-        : options.maxWidth
-      const rows: TableRowSceneNode[] = node.children.map((row) => {
+      const columnCount = Math.max(...node.children.map((row) => row.children.length), 1)
+      const columnWidths = tableColumnWidths(node, columnCount, options)
+      const tableWidth = columnWidths.reduce((total, w) => total + w, 0)
+      const rows: TableRowSceneNode[] = node.children.map((row, rowIndex) => {
         const rowY = cursor.y
-        const cells: TableCellSceneNode[] = row.children.map((cell, cellIndex) => {
-          const { runs } = layoutPhrasing(cell.children, { y: rowY }, options, BODY_FONT_SIZE_PX)
-          return {
-            kind: 'tableCell',
-            bbox: { x: cellIndex * colWidth, y: rowY, w: colWidth, h: TABLE_ROW_HEIGHT_PX },
-            runs,
-          }
+        // The first mdast table row IS the header; GitHub bolds it and
+        // starts its zebra on the row after, so the parity check counts
+        // from the header exactly as `tr:nth-child(2n)` does.
+        const header = rowIndex === 0
+        const last = rowIndex === node.children.length - 1
+        let x = cursor.x
+        // Cells are laid out BEFORE the row has a height: a column narrow
+        // enough to wrap its content is reachable (tableColumnWidths scales
+        // columns down to fit), and a row fixed at one line box would paint
+        // the overflow across the row below it.
+        const laid = row.children.map((cell, cellIndex) => {
+          const width = columnWidths[cellIndex] ?? 0
+          const cellX = x
+          x += width
+          const { runs, lineCount } = layoutPhrasing(
+            cell.children,
+            { y: rowY + T.tableCellPaddingYPx, x: T.tableCellPaddingXPx },
+            { ...options, maxWidth: width - 2 * T.tableCellPaddingXPx },
+            BODY_FONT_SIZE_PX,
+            header ? { strong: true } : {},
+          )
+          return { cellX, width, runs, lineCount }
         })
-        cursor.y += TABLE_ROW_HEIGHT_PX
+        const rowHeight =
+          Math.max(...laid.map((cell) => cell.lineCount), 1) * BODY_LINE_HEIGHT_PX +
+          2 * T.tableCellPaddingYPx
+        const cells: TableCellSceneNode[] = laid.map((cell) => ({
+          kind: 'tableCell',
+          bbox: { x: cell.cellX, y: rowY, w: cell.width, h: rowHeight },
+          runs: cell.runs,
+        }))
+        cursor.y += rowHeight
         return {
           kind: 'tableRow',
-          bbox: { x: 0, y: rowY, w: options.maxWidth, h: TABLE_ROW_HEIGHT_PX },
+          bbox: { x: cursor.x, y: rowY, w: tableWidth, h: rowHeight },
           cells,
+          ...(header ? { header: true } : {}),
+          ...(last ? {} : { appearance: panelPaint(T.borderOpacity) }),
         }
       })
       cursor.y += BLOCK_GAP_PX
       const table: TableBlockNode = {
         kind: 'table',
-        bbox: { x: 0, y: startY, w: options.maxWidth, h: cursor.y - startY - BLOCK_GAP_PX },
+        bbox: { x: cursor.x, y: startY, w: tableWidth, h: cursor.y - startY - BLOCK_GAP_PX },
         rows,
       }
       return table
@@ -820,19 +1128,29 @@ function layoutListItem(
   if (item.checked === null || item.checked === undefined) {
     const markerText = ordinal !== undefined ? `${ordinal}.` : '\u2022'
     const metrics = options.measure(markerText, bodyFont(options.fontFamily, BODY_FONT_SIZE_PX))
+    const markerWidth = clampAdvance(metrics.advanceWidth)
     children.unshift({
       kind: 'textRun',
       bbox: {
-        x: -LIST_INDENT_PX,
+        // Right-aligned against the content edge, not parked at the far side
+        // of the gutter — see `listMarkerGapPx`.
+        x: -(markerWidth + T.listMarkerGapPx),
         y: startY,
-        w: clampAdvance(metrics.advanceWidth),
-        h: BODY_FONT_SIZE_PX,
+        w: markerWidth,
+        h: BODY_LINE_HEIGHT_PX,
       },
-      baseline: clampAdvance(metrics.ascent),
+      baseline: clampAdvance(baselineIn(BODY_LINE_HEIGHT_PX, BODY_FONT_SIZE_PX, metrics.ascent)),
       text: markerText,
-      appearance: { fontFamily: options.fontFamily, fontSize: BODY_FONT_SIZE_PX },
+      appearance: {
+        ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
+        fontFamily: options.fontFamily,
+        fontSize: BODY_FONT_SIZE_PX,
+      },
     })
   }
+  // Prose blocks each close with a full block gap; inside a list that reads
+  // as items drifting apart, so the item's own trailing gap is tightened.
+  cursor.y -= BLOCK_GAP_PX - T.listItemGapPx
   return {
     kind: 'listItem',
     bbox: {
@@ -896,7 +1214,7 @@ function layoutEmbedBlock(
  * separate HTML renderer.
  */
 export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions): Scene {
-  const cursor: Cursor = { y: 0 }
+  const cursor: Cursor = { y: 0, x: 0 }
   const nodes = root.children.map((child) => layoutBlock(child, cursor, options, 0))
   return { nodes }
 }
@@ -978,7 +1296,90 @@ export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number
     break
   }
   if (kept.length < nodes.length) truncated = true
-  return { nodes: truncated ? markLastRun(kept) : kept, truncated }
+  // A run cut sideways is content the reader cannot see, exactly like a
+  // dropped block — an atomic inline run or a code line, neither of which can
+  // wrap. Counted here rather than at each producer so every caller of this
+  // one seam reports it, and only vertical loss needs `markLastRun`: a cut
+  // run is already its own visible signal.
+  const nodesToKeep = truncated ? markLastRun(kept) : kept
+  return { nodes: nodesToKeep, truncated: truncated || anyRunTruncated(nodesToKeep) }
+}
+
+/** Whether any run anywhere under `nodes` was cut to fit its width. */
+function anyRunTruncated(nodes: readonly SceneNode[]): boolean {
+  return nodes.some((node) => {
+    if (node.kind === 'edge') return false
+    if (node.kind === 'textRun') return node.truncated === true
+    const branching = node as SceneNode & {
+      runs?: readonly SceneNode[]
+      children?: readonly SceneNode[]
+      items?: readonly SceneNode[]
+      cells?: readonly SceneNode[]
+      rows?: readonly SceneNode[]
+    }
+    return (['runs', 'children', 'items', 'cells', 'rows'] as const).some((key) => {
+      const branch = branching[key]
+      return branch !== undefined && anyRunTruncated(branch)
+    })
+  })
+}
+
+/**
+ * The smallest non-empty rendering of `nodes`: the first block cut to its
+ * FIRST LINE. This is keep-first's unit, and it has to be a line for the same
+ * reason `fitBlocksToHeight` steps down to lines — "a text node never renders
+ * empty" must not quietly mean "renders its whole first block, however tall".
+ *
+ * The hole this closes was only reachable once a line box grew past its font
+ * size: while one line always fit the smallest box anyone used, nothing ever
+ * asked for a fallback below block granularity. A caller keeping the first
+ * BLOCK painted a two-line paragraph inside a one-line box AND reported
+ * `truncated: false`, because it counted blocks and the paragraph was one —
+ * so an agent reading `wb_scene_digest` was told nothing was hidden while the
+ * frame was visibly overflowing.
+ *
+ * Blocks whose children are not lines (`blockquote`/`table`/`code`, the
+ * `subtreeOffsetX` transform-boundary class) are kept whole, exactly as
+ * `trimBlock` keeps them.
+ */
+export function firstLineOfBlocks(nodes: readonly SceneNode[]): FittedBlocks {
+  const first = nodes[0]
+  if (first === undefined || first.kind === 'edge') return { nodes: [], truncated: false }
+  const cut = firstLineOfBlock(first)
+  const truncated = nodes.length > 1 || cut.dropped
+  return { nodes: truncated ? markLastRun([cut.node]) : [cut.node], truncated }
+}
+
+function firstLineOfBlock(block: Exclude<SceneNode, { kind: 'edge' }>): {
+  node: SceneNode
+  dropped: boolean
+} {
+  if (block.kind === 'list') {
+    const first = block.items[0]
+    if (first === undefined) return { node: block, dropped: false }
+    return {
+      node: {
+        ...block,
+        items: [first],
+        bbox: { ...block.bbox, h: first.bbox.y + first.bbox.h - block.bbox.y },
+      },
+      dropped: block.items.length > 1,
+    }
+  }
+  if (block.kind !== 'paragraph' && block.kind !== 'heading') return { node: block, dropped: false }
+  const head = block.runs[0]
+  if (head === undefined) return { node: block, dropped: false }
+  // Runs sharing a `bbox.y` are one wrapped line — a line can be several runs
+  // when styling changes mid-line.
+  const runs = block.runs.filter((run) => run.bbox.y === head.bbox.y)
+  return {
+    node: {
+      ...block,
+      runs,
+      bbox: { ...block.bbox, h: head.bbox.y + head.bbox.h - block.bbox.y },
+    },
+    dropped: runs.length < block.runs.length,
+  }
 }
 
 function trimBlock(

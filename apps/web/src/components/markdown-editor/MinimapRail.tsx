@@ -15,6 +15,7 @@
 
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { cn } from '../../lib/utils.js'
+import { RAIL_WIDTH_PX } from './preview-width.js'
 import {
   type RailBlock,
   railGeometry,
@@ -30,8 +31,6 @@ export interface MinimapRailProps {
   readonly onSeek: (documentY: number) => void
   readonly className?: string
 }
-
-export const RAIL_WIDTH_PX = 56
 
 export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRailProps) {
   const railRef = useRef<HTMLDivElement | null>(null)
@@ -73,8 +72,10 @@ export function MinimapRail({ blocks, viewport, onSeek, className }: MinimapRail
   }
 
   return (
-    // biome-ignore lint/a11y/noStaticElementInteractions: the rail duplicates scrolling, which the panes themselves already expose to the keyboard; it is a pointer shortcut, not the only route
-    // biome-ignore lint/a11y/useKeyWithClickEvents: same rationale — no keyboard-only user depends on this element
+    // Pointer-only on purpose, and `aria-hidden`: the rail duplicates
+    // scrolling that the panes themselves already expose to the keyboard, so
+    // it is a shortcut rather than the only route. No keyboard-only user
+    // depends on it.
     <div
       ref={railRef}
       data-testid="markdown-minimap-rail"

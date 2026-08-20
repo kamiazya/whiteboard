@@ -72,7 +72,11 @@ function foldDeltas(snapshot: Uint8Array, deltas: readonly Uint8Array[]): Uint8A
  * rather than surfacing as throws inside the hook's onSnapshot/onRemoteUpdate.
  */
 export class LoroStore {
-  /** Only tests pass this; see `IndexedDBStore`'s note on why it exists. */
+  /**
+   * Which database to talk to. Production never passes it; a browser test
+   * does, so its fixtures cannot collide with another test FILE's — they
+   * share an origin, and therefore one `whiteboard` database.
+   */
   constructor(private readonly dbName?: string) {}
 
   /**
