@@ -53,11 +53,14 @@ function mountAt(width: number, body = BODY) {
 }
 
 describe('a phone-width markdown editor', () => {
-  // Two tests, not four: preview-width.test.ts already pins the arithmetic at
-  // every width with its own mutation checks. What only a real browser can
-  // say is whether the SVG ends up inside the box, and adding files to this
-  // project measurably slows every other one — so this file buys exactly the
-  // two facts the unit test cannot reach.
+  // Two tests and three mounts, deliberately: preview-width.test.ts already
+  // pins the arithmetic at every width with its own mutation checks, and each
+  // mount here is a whole editor. This project's wall clock is load-sensitive
+  // enough that a file's cost lands on OTHER files' timeouts, so this one
+  // buys only the facts a unit test cannot reach — that the SVG ends up
+  // inside the pane, and that the rail waits for something to scroll. The
+  // container-width gate is left to `railFits`; asserting it here needed a
+  // fourth mount and said nothing the unit test does not.
 
   // 320 rather than the reported 390: with the rail correctly hidden, 390
   // fits even under the old arithmetic, so a test only there would pass
@@ -96,18 +99,5 @@ describe('a phone-width markdown editor', () => {
         { timeout: 1200 },
       ),
     ).rejects.toThrow()
-  })
-
-  it('still shows the rail where the container can afford it', async () => {
-    // Only the POSITIVE is asserted here. The narrow case cannot be pinned in
-    // this layer honestly: the rail is gated on blocks the preview produces
-    // asynchronously, so "absent" and "not arrived yet" are indistinguishable
-    // without a handle neither component exposes — and a check that passes
-    // either way is worse than none. Verified by deleting the gate and
-    // watching nothing go red. `railFits` in preview-width.test.ts pins the
-    // decision itself, mutation-check included; the wiring it feeds is one
-    // `railAffordable &&` at the use site.
-    const { findByTestId } = mountAt(1000, LONG_BODY)
-    expect(await findByTestId('markdown-minimap-rail')).toBeTruthy()
   })
 })
