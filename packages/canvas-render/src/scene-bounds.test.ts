@@ -347,11 +347,17 @@ describe('sceneBounds', () => {
       }) as Record<string, string>
     )['./svg/backend.ts']
 
-    const translating = [
-      ...backendSource.matchAll(/function (render\w+)\([^)]*\)[^{]*\{([^}]*)\}/g),
-    ]
-      .filter(([, , body]) => body.includes('transform="translate('))
-      .map(([, name]) => name)
+    // A renderer emits a transform by writing a `transform:` attribute onto
+    // its VNode; ownership is the nearest preceding `function renderX(`
+    // declaration. Comments discussing transforms don't match the attribute
+    // spelling, so they cannot produce false positives.
+    const functionStarts = [...backendSource.matchAll(/function (render\w+)\(/g)].map((m) => ({
+      name: m[1],
+      index: m.index ?? 0,
+    }))
+    const translating = [...backendSource.matchAll(/transform: `translate\(/g)].map(
+      (m) => functionStarts.filter((f) => f.index < (m.index ?? 0)).at(-1)?.name,
+    )
 
     expect(new Set(translating)).toEqual(new Set(['renderListItem', 'renderTableCell']))
   })
