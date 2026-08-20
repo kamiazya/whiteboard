@@ -25,6 +25,11 @@ export function collectDefs(children: ReadonlyArray<SvgChild>): ReadonlyArray<Sv
     for (const def of child.defs ?? []) {
       if (seen.has(def.id)) continue
       seen.add(def.id)
+      // A definition's own node may declare the definitions IT depends on
+      // (a mask carrying its gradient). Visit it before pushing so a
+      // dependency is emitted ahead of its dependent; `seen` is marked
+      // first, so mutually dependent definitions terminate.
+      visit(def.node)
       collected.push(def)
     }
     for (const inner of child.children ?? []) visit(inner)
