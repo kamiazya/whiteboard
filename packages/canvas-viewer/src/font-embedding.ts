@@ -65,6 +65,13 @@ export async function withViewerFontEmbedded(svg: string): Promise<string> {
   if (dataUri === null) return svg
 
   // After the opening tag, so the rule is in scope for every element below it.
+  //
+  // The naive scan for the first `>` is sound because canvas-render is the
+  // sole producer and its root element carries only `xmlns`, numeric
+  // `width`/`height`, a formatted `viewBox` and a theme colour — none of which
+  // can contain one. XML does permit a raw `>` inside a quoted attribute
+  // value, so a root attribute that ever carries document content would need a
+  // real scan rather than this.
   const openTagEnd = svg.indexOf('>')
   if (openTagEnd === -1) return svg
   const style = `<defs><style>@font-face{font-family:'${VIEWER_FONT_FAMILY}';src:url('${dataUri}') format('truetype');}</style></defs>`
