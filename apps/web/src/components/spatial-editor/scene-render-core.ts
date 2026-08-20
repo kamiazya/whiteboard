@@ -29,9 +29,9 @@ import {
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import { highlightCode } from '@kamiazya/whiteboard-canvas-render/highlight'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { highlightCode } from '../../lib/syntax-highlight.js'
 import { createEditorAppearance } from './editor-appearance.js'
 
 export interface RenderCanvasCoreOptions {

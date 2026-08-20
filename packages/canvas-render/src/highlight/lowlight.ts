@@ -1,4 +1,11 @@
-// The composition root's half of canvas-render's `highlightCode` seam.
+// The default implementation of this package's own `highlightCode` seam.
+//
+// Lives behind the `/highlight` subpath, not the barrel: the seam exists so a
+// caller can supply any tokeniser, and the main entry must not drag a
+// highlighter into a consumer that renders no code. Three surfaces need the
+// same one — the editor, the read-only viewer (and through it the MCP Apps
+// widget), and export — and canvas-render is the only package all three can
+// see, so a shared default beats the same table written out three times.
 //
 // lowlight (highlight.js) rather than shiki, decided by measurement: for the
 // same six languages and the same five roles, shiki's smallest viable build
@@ -12,7 +19,7 @@
 //
 // The seam carries roles, never colours: the palette belongs to
 // canvas-render's one appearance producer, which holds the contrast floors.
-import type { CodeTokenLines, CodeTokenRole } from '@kamiazya/whiteboard-canvas-render'
+
 import bash from 'highlight.js/lib/languages/bash'
 import css from 'highlight.js/lib/languages/css'
 import javascript from 'highlight.js/lib/languages/javascript'
@@ -23,6 +30,7 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { createLowlight } from 'lowlight'
+import type { CodeTokenLines, CodeTokenRole } from '../layout/mdast-blocks.js'
 
 // Registered eagerly and never on demand: a fence's language is only known
 // mid-layout, and layout is synchronous — an await there would either block

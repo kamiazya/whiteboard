@@ -9,6 +9,7 @@ import {
   layoutSpatialCanvas,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
+import { highlightCode } from '@kamiazya/whiteboard-canvas-render/highlight'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 
@@ -68,6 +69,11 @@ export function composeCanvasScene(
   return layoutSpatialCanvas(canvas, {
     measure,
     appearance: MCP_SCENE_APPEARANCE,
+    // The same tokeniser the editor and the viewer use. Without it an
+    // exported PNG drew code plain while the editor coloured it — the class
+    // of divergence this repo keeps paying for, and the one `wb_scene_render`
+    // hands to an agent as its picture of the document.
+    highlightCode,
     onDegrade,
     ...(references === undefined ? {} : { resolveReference: (ref: string) => references.get(ref) }),
   })
