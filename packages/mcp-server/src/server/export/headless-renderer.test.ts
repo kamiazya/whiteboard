@@ -42,7 +42,7 @@ async function importRenderer() {
 
 import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
 import { buildSpatialScene } from './headless-renderer.js'
-import { createOpentypeMeasureText } from './measure-text.js'
+import { createOpentypeMeasureText, loadExportFonts } from './measure-text.js'
 
 describe('emphasis survives the whole export pipeline', () => {
   it('a real PNG render selects the vendored bold/italic faces — styled pixels differ from plain', async () => {
@@ -366,5 +366,47 @@ describe('headless-renderer', () => {
   afterEach(() => {
     vi.doUnmock('./measure-text.js')
     vi.doUnmock('./export-font.js')
+  })
+})
+
+describe('an export says which declared families it could not provide', () => {
+  // The case that exists today, end to end: a fenced code block declares the
+  // markdown theme's mono chain, and the export has the vendored Latin face
+  // and nothing else. Every character is drawn — in the wrong face — so
+  // `undrawable` is empty and only this answer says anything happened.
+  const CODE_CANVAS: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'n1',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 320,
+        height: 200,
+        text: '```ts\nconst x = 1\n```',
+      },
+    ],
+    edges: [],
+  }
+
+  it('reports the mono chain a fenced block declares, while undrawable stays empty', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const result = await renderSpatialCanvasToSvg(CODE_CANVAS, {})
+    expect(result.undrawable).toEqual([])
+    expect(result.unresolvedFamilies.join(' ')).toContain('ui-monospace')
+  })
+
+  it('says nothing for a canvas whose text declares only the export family', async () => {
+    // Guards the vacuous pass: with no face loaded, `unresolvedFamilies`
+    // answers `[]` for EVERY canvas by design, so this assertion would hold
+    // while the report was inert. The mono case above is what proves the
+    // machinery runs; this proves it can also stay quiet.
+    expect((await loadExportFonts()).length).toBeGreaterThan(0)
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const plain: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 320, height: 120, text: 'plain prose' }],
+      edges: [],
+    }
+    expect((await renderSpatialCanvasToSvg(plain, {})).unresolvedFamilies).toEqual([])
   })
 })

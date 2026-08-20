@@ -28,6 +28,7 @@ function mountBound(initialBody: string) {
   const utils = render(
     <div style={{ width: 800, height: 300 }}>
       <MarkdownEditor
+        initialViewMode="write"
         value={initialBody}
         onChange={() => {}}
         previewDebounceMs={0}
@@ -40,8 +41,7 @@ function mountBound(initialBody: string) {
 
 it('typing in the editor lands in the Loro body container', async () => {
   const { doc, container } = mountBound('hello ')
-  const cm = container.querySelector('.cm-content') as HTMLElement
-  await focusEditable(cm)
+  await focusEditable(() => container.querySelector('.cm-content'))
   await userEvent.keyboard('{End}world')
   await vi.waitFor(() => {
     expect(doc.getText('body').toString()).toBe('hello world')
@@ -50,8 +50,7 @@ it('typing in the editor lands in the Loro body container', async () => {
 
 it('a remote edit merges into the editor and shifts the caret exactly', async () => {
   const { doc, container } = mountBound('alpha omega')
-  const cm = container.querySelector('.cm-content') as HTMLElement
-  await focusEditable(cm)
+  await focusEditable(() => container.querySelector('.cm-content'))
   // Park the caret between the words: after "alpha " (position 6).
   await userEvent.keyboard(
     '{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}',

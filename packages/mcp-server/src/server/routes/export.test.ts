@@ -47,6 +47,7 @@ const mockExportCanvasHeadless =
       width: number
       height: number
       undrawable: readonly string[]
+      unresolvedFamilies: readonly string[]
     }>
   >()
 
@@ -109,6 +110,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -133,6 +135,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
 
     mockGetClientCount.mockReturnValue(0)
@@ -163,6 +166,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
     vi.useFakeTimers()
@@ -215,7 +219,14 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       () =>
         new Promise((resolve) => {
           setTimeout(
-            () => resolve({ png: Buffer.from('slow-png'), width: 10, height: 10, undrawable: [] }),
+            () =>
+              resolve({
+                png: Buffer.from('slow-png'),
+                width: 10,
+                height: 10,
+                undrawable: [],
+                unresolvedFamilies: [],
+              }),
             50,
           )
         }),
@@ -231,6 +242,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -251,6 +263,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -276,6 +289,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -325,6 +339,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 100,
       height: 50,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -347,6 +362,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -365,6 +381,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: ['日', '本'],
+      unresolvedFamilies: [],
     })
 
     const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
@@ -380,6 +397,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: [],
+      unresolvedFamilies: [],
     })
 
     const res = await makeApp().request('/api/w/s1/document/canvas-a/export', { method: 'POST' })
@@ -399,12 +417,19 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
     vi.mocked(nanoid).mockReturnValueOnce('aaaaaa').mockReturnValueOnce('aaaaaa')
 
     mockExportCanvasHeadless
-      .mockResolvedValueOnce({ png: Buffer.from('first-png'), width: 1, height: 1, undrawable: [] })
+      .mockResolvedValueOnce({
+        png: Buffer.from('first-png'),
+        width: 1,
+        height: 1,
+        undrawable: [],
+        unresolvedFamilies: [],
+      })
       .mockResolvedValueOnce({
         png: Buffer.from('second-png'),
         width: 1,
         height: 1,
         undrawable: [],
+        unresolvedFamilies: [],
       })
     const app = makeApp()
     vi.useFakeTimers()
@@ -432,6 +457,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
 
@@ -465,6 +491,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'subdir', 'custom.excalidraw.png')
@@ -571,6 +598,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'pre-existing.png')
@@ -594,6 +622,7 @@ describe('POST /api/w/:workspaceId/document/:path/export - error handling', () =
       width: 1,
       height: 1,
       undrawable: [],
+      unresolvedFamilies: [],
     })
     const app = makeApp()
     const outputPath = join(tempDir, 's1', 'exports', 'replace.png')

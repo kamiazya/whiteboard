@@ -1,5 +1,5 @@
 import { cleanup, fireEvent, render, waitFor } from '@testing-library/react'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, describe, expect, it } from 'vitest'
 import { useDocumentOutline } from '../../hooks/useDocumentOutline.js'
 import { useMarkdownOutline } from '../../hooks/useMarkdownOutline.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -18,7 +18,6 @@ const LONGER =
 // layout-worker-pool.test.ts cannot reach it: a dispatch that only breaks
 // under real postMessage ordering is exactly what stranded this once.
 describe('the rail in write mode', () => {
-  beforeEach(() => window.localStorage.setItem('whiteboard.markdown-view-mode', 'write'))
   afterEach(() => {
     window.localStorage.clear()
     cleanup()
@@ -27,7 +26,12 @@ describe('the rail in write mode', () => {
   it('lays the document out through the worker pool, with no preview mounted', async () => {
     const { container, rerender } = render(
       <div style={{ width: '900px', height: '400px' }}>
-        <MarkdownEditor value={LONG} onChange={() => undefined} className="h-full" />
+        <MarkdownEditor
+          initialViewMode="write"
+          value={LONG}
+          onChange={() => undefined}
+          className="h-full"
+        />
       </div>,
     )
     const bars = () =>
@@ -41,7 +45,12 @@ describe('the rail in write mode', () => {
 
     rerender(
       <div style={{ width: '900px', height: '400px' }}>
-        <MarkdownEditor value={LONGER} onChange={() => undefined} className="h-full" />
+        <MarkdownEditor
+          initialViewMode="write"
+          value={LONGER}
+          onChange={() => undefined}
+          className="h-full"
+        />
       </div>,
     )
 
@@ -54,7 +63,12 @@ describe('the rail in write mode', () => {
   it('scrolls the source to the position pressed', async () => {
     const { container } = render(
       <div style={{ width: '900px', height: '300px' }}>
-        <MarkdownEditor value={LONG} onChange={() => undefined} className="h-full" />
+        <MarkdownEditor
+          initialViewMode="write"
+          value={LONG}
+          onChange={() => undefined}
+          className="h-full"
+        />
       </div>,
     )
     const rail = await waitFor(

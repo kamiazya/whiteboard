@@ -124,11 +124,9 @@ describe('DaemonDocumentPage markdown editing', () => {
     )
 
     // Markdown editor mounts with the daemon-held body; spatial never does.
-    const editable = await waitFor(
+    await waitFor(
       () => {
-        const el = document.querySelector('[contenteditable="true"]')
-        expect(el).not.toBeNull()
-        return el as HTMLElement
+        expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
       },
       { timeout: 10_000 },
     )
@@ -137,8 +135,11 @@ describe('DaemonDocumentPage markdown editing', () => {
     })
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
 
-    await focusEditable(editable)
-    await waitFor(() => expect(document.activeElement).toBe(editable), { timeout: 10_000 })
+    const resolveEditable = () => document.querySelector('[contenteditable="true"]')
+    await focusEditable(resolveEditable)
+    await waitFor(() => expect(document.activeElement).toBe(resolveEditable()), {
+      timeout: 10_000,
+    })
     // A click lands the cursor wherever the pointer hit; pin it to the end
     // so the typed suffix has one deterministic destination.
     await userEvent.keyboard('{Control>}{End}{/Control}')

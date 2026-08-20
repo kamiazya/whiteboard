@@ -347,11 +347,24 @@ describe('sceneBounds', () => {
       }) as Record<string, string>
     )['./svg/backend.ts']
 
-    const translating = [
-      ...backendSource.matchAll(/function (render\w+)\([^)]*\)[^{]*\{([^}]*)\}/g),
-    ]
-      .filter(([, , body]) => body.includes('transform="translate('))
-      .map(([, name]) => name)
+    // A renderer emits a transform by writing a `transform:` attribute onto
+    // its VNode; ownership is the nearest preceding renderer declaration
+    // (`function renderX(` or `const renderX = `). Comments discussing
+    // transforms don't match the attribute spelling, so they cannot produce
+    // false positives. The occurrence COUNT is pinned first and separately:
+    // attribution by nearest-preceding-declaration could credit a new
+    // emitter to a renderer already in the expected set (e.g. an arrow
+    // function the declaration regex missed, defined right after one of the
+    // two), and the count catches that case regardless of attribution.
+    const occurrences = [...backendSource.matchAll(/transform: `translate\(/g)]
+    expect(occurrences).toHaveLength(2)
+
+    const declarationStarts = [
+      ...backendSource.matchAll(/(?:function|const)\s+(render\w+)\s*[=(]/g),
+    ].map((m) => ({ name: m[1], index: m.index ?? 0 }))
+    const translating = occurrences.map(
+      (m) => declarationStarts.filter((f) => f.index < (m.index ?? 0)).at(-1)?.name,
+    )
 
     expect(new Set(translating)).toEqual(new Set(['renderListItem', 'renderTableCell']))
   })

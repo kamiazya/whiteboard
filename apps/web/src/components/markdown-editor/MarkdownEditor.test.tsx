@@ -231,4 +231,34 @@ describe('MarkdownEditor', () => {
     expect(header.textContent).toContain('q3')
     expect(header.textContent).toContain('infra')
   })
+
+  // The isolation seam browser tests depend on: files share one origin's
+  // localStorage AND run in parallel, so a mount that reads the shared
+  // preference inherits whatever a concurrent file last wrote — measured as
+  // eleven keymap tests failing on `focus()` against a display:none source
+  // pane whenever a neighbour had seeded 'read'. Both directions matter and
+  // are pinned separately below.
+  it('initialViewMode wins over the persisted preference', () => {
+    window.localStorage.setItem('whiteboard.markdown-view-mode', 'read')
+
+    const { getByTestId } = render(
+      <MarkdownEditor value="# Hi" onChange={() => {}} initialViewMode="write" />,
+    )
+
+    expect(getByTestId('markdown-source-wrap').style.display).not.toBe('none')
+  })
+
+  it('mode changes on an explicitly-seeded mount stay OUT of the shared preference', () => {
+    window.localStorage.setItem('whiteboard.markdown-view-mode', 'split')
+    const { getByRole } = render(
+      <MarkdownEditor value="# Hi" onChange={() => {}} initialViewMode="write" />,
+    )
+
+    fireEvent.click(getByRole('button', { name: 'Read' }))
+
+    // Half an isolation — read the prop, still write the store — would leave
+    // this mount poisoning every concurrent reader the moment a test clicks
+    // a toolbar mode button.
+    expect(window.localStorage.getItem('whiteboard.markdown-view-mode')).toBe('split')
+  })
 })

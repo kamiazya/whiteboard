@@ -8,7 +8,7 @@
 // the fixed-width SVG inside the pane's own `overflow: auto`. Measured on the
 // reported case: outer 156/156, pane 736/108.
 import { cleanup, render } from '@testing-library/react'
-import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest'
 import '../../index.css'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
@@ -34,11 +34,8 @@ beforeAll(async () => {
 // tests as their starting state — observed as four unrelated failures in
 // split-and-scroll.browser.test.tsx, which is a far more confusing report
 // than anything this file asserts.
-const VIEW_MODE_KEY = 'whiteboard.markdown-view-mode'
-beforeEach(() => window.localStorage.setItem(VIEW_MODE_KEY, 'read'))
 afterEach(() => {
   cleanup()
-  window.localStorage.removeItem(VIEW_MODE_KEY)
   for (const host of document.querySelectorAll('body > div[style*="width"]')) host.remove()
 })
 
@@ -49,7 +46,9 @@ function mountAt(width: number, body = BODY) {
   const host = document.createElement('div')
   host.style.cssText = `width:${width}px;height:600px`
   document.body.append(host)
-  return render(<MarkdownEditor value={body} onChange={() => {}} />, { container: host })
+  return render(<MarkdownEditor initialViewMode="read" value={body} onChange={() => {}} />, {
+    container: host,
+  })
 }
 
 describe('a phone-width markdown editor', () => {

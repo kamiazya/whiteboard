@@ -31,7 +31,11 @@ const mockExportCanvasHeadlessSvg =
       workspaceId: string
       path: string
       options?: { padding?: number; frameId?: string; theme?: 'light' | 'dark' }
-    }) => Promise<{ svg: string; undrawable: readonly string[] }>
+    }) => Promise<{
+      svg: string
+      undrawable: readonly string[]
+      unresolvedFamilies: readonly string[]
+    }>
   >()
 vi.mock('../../export/headless-export.js', () => ({
   exportCanvasHeadlessSvg: (args: {
@@ -55,7 +59,11 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     mockExportCanvasHeadlessSvg.mockReset()
     mockDocumentExists.mockReset()
     mockDocumentExists.mockResolvedValue(true)
-    mockExportCanvasHeadlessSvg.mockResolvedValue({ svg: '<svg><rect/></svg>', undrawable: [] })
+    mockExportCanvasHeadlessSvg.mockResolvedValue({
+      svg: '<svg><rect/></svg>',
+      undrawable: [],
+      unresolvedFamilies: [],
+    })
   })
 
   afterEach(async () => {
@@ -100,6 +108,7 @@ describe('POST /api/w/:workspaceId/document/:path/export-svg', () => {
     mockExportCanvasHeadlessSvg.mockResolvedValue({
       svg: '<svg><rect/></svg>',
       undrawable: ['日'],
+      unresolvedFamilies: [],
     })
 
     const res = await makeApp().request('/api/w/s1/document/canvas-a/export-svg', {
