@@ -15,7 +15,12 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
-import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref } from './format.js'
+import { collectDefs } from './defs.js'
+import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
+import { formatCoord, sanitizeHref, trustedHref } from './format.js'
+import { hoistInheritedAttrs } from './hoist.js'
+import { serializeSvg } from './serialize.js'
+import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 /**
  * Decorative/presentational elements (backgrounds, dividers, group
@@ -23,11 +28,11 @@ import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref } from './forma
  * `role="presentation"` so a screen reader does not announce them; text
  * runs and links keep their natural implicit role.
  */
-const PRESENTATION_ATTR = 'role="presentation"'
+const PRESENTATION = 'presentation'
 
-function rectAttrs(bbox: BoundingBox): string {
+function rectAttrs(bbox: BoundingBox): SvgBoxAttrs {
   // Fixed declaration order: x, y, width, height.
-  return `x="${formatCoord(bbox.x)}" y="${formatCoord(bbox.y)}" width="${formatCoord(bbox.w)}" height="${formatCoord(bbox.h)}"`
+  return { x: bbox.x, y: bbox.y, width: bbox.w, height: bbox.h }
 }
 
 function isFiniteBox(box: BoundingBox): boolean {
@@ -48,32 +53,20 @@ function isPositiveLength(value: number | undefined): value is number {
   return isNonNegativeLength(value) && value > 0
 }
 
-function withLeadingSpace(attrs: string): string {
-  return attrs === '' ? '' : ` ${attrs}`
-}
-
 /**
  * Presence-only presentation attributes for a shape/text-run/edge, in the
  * fixed order `fill stroke stroke-width font-family font-size`. An absent
  * or unusable field is omitted rather than defaulted — see the
  * `Appearance` doc comment for why the backend never invents a value.
  */
-function appearanceAttrs(appearance?: Appearance): string {
-  if (!appearance) return ''
-  const parts: string[] = []
-  if (isNonEmptyString(appearance.fill)) parts.push(`fill="${escapeXmlAttr(appearance.fill)}"`)
-  if (isNonEmptyString(appearance.stroke)) {
-    parts.push(`stroke="${escapeXmlAttr(appearance.stroke)}"`)
-  }
-  if (isNonNegativeLength(appearance.strokeWidth)) {
-    parts.push(`stroke-width="${formatCoord(appearance.strokeWidth)}"`)
-  }
-  if (isNonEmptyString(appearance.fontFamily)) {
-    parts.push(`font-family="${escapeXmlAttr(appearance.fontFamily)}"`)
-  }
-  if (isNonNegativeLength(appearance.fontSize)) {
-    parts.push(`font-size="${formatCoord(appearance.fontSize)}"`)
-  }
+function appearanceAttrs(appearance?: Appearance): PaintAttrs {
+  if (!appearance) return {}
+  const attrs: PaintAttrs = {}
+  if (isNonEmptyString(appearance.fill)) attrs.fill = appearance.fill
+  if (isNonEmptyString(appearance.stroke)) attrs.stroke = appearance.stroke
+  if (isNonNegativeLength(appearance.strokeWidth)) attrs['stroke-width'] = appearance.strokeWidth
+  if (isNonEmptyString(appearance.fontFamily)) attrs['font-family'] = appearance.fontFamily
+  if (isNonNegativeLength(appearance.fontSize)) attrs['font-size'] = appearance.fontSize
   // Emitted after `fill` so the pair reads together; `1` is the SVG initial
   // value, so it is omitted to keep an opacity-free scene byte-identical.
   if (
@@ -81,16 +74,16 @@ function appearanceAttrs(appearance?: Appearance): string {
     Number.isFinite(appearance.fillOpacity) &&
     appearance.fillOpacity !== 1
   ) {
-    parts.push(`fill-opacity="${formatCoord(appearance.fillOpacity)}"`)
+    attrs['fill-opacity'] = appearance.fillOpacity
   }
   if (
     typeof appearance.strokeOpacity === 'number' &&
     Number.isFinite(appearance.strokeOpacity) &&
     appearance.strokeOpacity !== 1
   ) {
-    parts.push(`stroke-opacity="${formatCoord(appearance.strokeOpacity)}"`)
+    attrs['stroke-opacity'] = appearance.strokeOpacity
   }
-  return parts.join(' ')
+  return attrs
 }
 
 /**
@@ -116,10 +109,10 @@ const TEXT_HALO_PAD_PX = 2
 const BACKDROP_RADIUS_PX = 6
 
 /** Inline emphasis the layout measured for — painted, or the flags are lies. */
-function emphasisAttrs(run: TextRunNode): string {
-  const parts: string[] = []
-  if (run.strong === true) parts.push('font-weight="700"')
-  if (run.emphasis === true) parts.push('font-style="italic"')
+function emphasisAttrs(run: TextRunNode): TextEmphasisAttrs {
+  const attrs: TextEmphasisAttrs = {}
+  if (run.strong === true) attrs['font-weight'] = '700'
+  if (run.emphasis === true) attrs['font-style'] = 'italic'
   // A link is underlined rather than recolored because this backend is never
   // handed a palette: a run's fill is INHERITED from whatever host group the
   // SVG is dropped into, which is what lets one scene render on the editor's
@@ -129,8 +122,8 @@ function emphasisAttrs(run: TextRunNode): string {
     ...(run.deleted === true ? ['line-through'] : []),
     ...(run.link ? ['underline'] : []),
   ]
-  if (decorations.length > 0) parts.push(`text-decoration="${decorations.join(' ')}"`)
-  return parts.length > 0 ? ` ${parts.join(' ')}` : ''
+  if (decorations.length > 0) attrs['text-decoration'] = decorations.join(' ')
+  return attrs
 }
 
 /**
@@ -147,26 +140,26 @@ const FADE_MASK_ID = 'wb-truncation-fade'
  * it scales to each run rather than needing a definition per run. Verified
  * honoured by resvg (the PNG export path) as well as browsers — a fully black
  * mask renders byte-identically to an empty canvas there.
+ *
+ * Declared on each truncated run and hoisted by `collectDefs`, so the
+ * document's `<defs>` appears exactly when something references the mask —
+ * the presence-only rule as a mechanism instead of a bespoke scene walk.
  */
-const FADE_DEFS =
-  `<defs><linearGradient id="${FADE_MASK_ID}-gradient" x1="0" y1="0" x2="1" y2="0">` +
-  '<stop offset="0.75" stop-color="#ffffff"/><stop offset="1" stop-color="#000000"/>' +
-  `</linearGradient><mask id="${FADE_MASK_ID}" maskContentUnits="objectBoundingBox">` +
-  `<rect x="0" y="0" width="1" height="1" fill="url(#${FADE_MASK_ID}-gradient)"/>` +
-  '</mask></defs>'
-
-/** Whether anything in the scene needs `FADE_DEFS`; nothing is emitted if not. */
-function hasTruncatedRun(nodes: readonly SceneNode[]): boolean {
-  const stack: SceneNode[] = [...nodes]
-  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
-    if (node.kind === 'textRun' && node.truncated === true) return true
-    for (const key of ['runs', 'children', 'items', 'rows', 'cells'] as const) {
-      const children = (node as unknown as Record<string, unknown>)[key]
-      if (Array.isArray(children)) stack.push(...(children as SceneNode[]))
-    }
-  }
-  return false
-}
+const FADE_DEFS: ReadonlyArray<SvgDef> = [
+  {
+    id: `${FADE_MASK_ID}-gradient`,
+    node: el('linearGradient', { id: `${FADE_MASK_ID}-gradient`, x1: 0, y1: 0, x2: 1, y2: 0 }, [
+      el('stop', { offset: 0.75, 'stop-color': '#ffffff' }),
+      el('stop', { offset: 1, 'stop-color': '#000000' }),
+    ]),
+  },
+  {
+    id: FADE_MASK_ID,
+    node: el('mask', { id: FADE_MASK_ID, maskContentUnits: 'objectBoundingBox' }, [
+      el('rect', { x: 0, y: 0, width: 1, height: 1, fill: `url(#${FADE_MASK_ID}-gradient)` }),
+    ]),
+  },
+]
 
 /**
  * The tinted box behind a run (inline code today). Bleeds `backdropPadXPx`
@@ -175,79 +168,108 @@ function hasTruncatedRun(nodes: readonly SceneNode[]): boolean {
  * the line above. A non-finite bbox renders as nothing rather than reaching
  * `formatCoord`, which throws by contract.
  */
-function renderBackdrop(run: TextRunNode): string {
-  if (run.backdrop === undefined || !isFiniteBox(run.bbox)) return ''
+function renderBackdrop(run: TextRunNode): SvgChild {
+  if (run.backdrop === undefined || !isFiniteBox(run.bbox)) return []
   const pad = isNonNegativeLength(run.backdropPadXPx) ? run.backdropPadXPx : 0
-  const appearance = withLeadingSpace(appearanceAttrs(run.backdrop))
   const box = {
     x: run.bbox.x - pad,
     y: run.bbox.y,
     w: run.bbox.w + 2 * pad,
     h: run.bbox.h,
   }
-  return `<rect ${rectAttrs(box)} rx="${formatCoord(BACKDROP_RADIUS_PX)}"${appearance}/>`
+  return el('rect', {
+    ...rectAttrs(box),
+    rx: BACKDROP_RADIUS_PX,
+    ...appearanceAttrs(run.backdrop),
+  })
 }
 
-function renderTextRun(run: TextRunNode): string {
-  const appearance =
-    withLeadingSpace(appearanceAttrs(run.appearance)) +
-    emphasisAttrs(run) +
-    (run.truncated === true ? ` mask="url(#${FADE_MASK_ID})"` : '')
-  const position = `x="${formatCoord(run.bbox.x)}" y="${formatCoord(textBaselineY(run))}"`
-  const body = escapeXmlText(run.text)
+function renderTextRun(run: TextRunNode): SvgChild {
   const halo = run.appearance?.halo
   // A surface-colored pill under the whole text box (a glyph-outline halo
   // leaves the crossed line peeking through word spaces), so a label
   // sitting ON an edge stays readable end to end.
-  const underlay =
+  const underlay: SvgChild =
     halo !== undefined && halo.length > 0
-      ? `<rect x="${formatCoord(run.bbox.x - TEXT_HALO_PAD_PX)}" y="${formatCoord(run.bbox.y - TEXT_HALO_PAD_PX)}" width="${formatCoord(run.bbox.w + 2 * TEXT_HALO_PAD_PX)}" height="${formatCoord(run.bbox.h + 2 * TEXT_HALO_PAD_PX)}" rx="${formatCoord(TEXT_HALO_PAD_PX)}" fill="${escapeXmlAttr(halo)}"/>`
-      : ''
-  // Painted before the halo underlay so a run can carry both without the
-  // panel hiding the halo; inline code uses this for its tinted pill.
-  const backdrop = renderBackdrop(run)
-  // A code run's whitespace is CONTENT: XML collapses it otherwise, and a
-  // fenced line loses the indentation that says what nests inside what.
-  const space = run.code === true ? ' xml:space="preserve"' : ''
-  const text = `${backdrop}${underlay}<text ${position}${appearance}${space}>${body}</text>`
-  if (!run.link) return text
-  const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.documentId
-  return `<a href="${escapeXmlAttr(href)}">${text}</a>`
+      ? el('rect', {
+          x: run.bbox.x - TEXT_HALO_PAD_PX,
+          y: run.bbox.y - TEXT_HALO_PAD_PX,
+          width: run.bbox.w + 2 * TEXT_HALO_PAD_PX,
+          height: run.bbox.h + 2 * TEXT_HALO_PAD_PX,
+          rx: TEXT_HALO_PAD_PX,
+          fill: halo,
+        })
+      : []
+  const textEl = el(
+    'text',
+    {
+      x: run.bbox.x,
+      y: textBaselineY(run),
+      ...appearanceAttrs(run.appearance),
+      ...emphasisAttrs(run),
+      mask: run.truncated === true ? `url(#${FADE_MASK_ID})` : undefined,
+      // A code run's whitespace is CONTENT: XML collapses it otherwise, and a
+      // fenced line loses the indentation that says what nests inside what.
+      'xml:space': run.code === true ? 'preserve' : undefined,
+    },
+    [run.text],
+  )
+  const text = run.truncated === true ? withDefs(textEl, FADE_DEFS) : textEl
+  // The backdrop is painted before the halo underlay so a run can carry both
+  // without the panel hiding the halo; inline code uses this for its tinted
+  // pill.
+  const content: SvgChild = [renderBackdrop(run), underlay, text]
+  if (!run.link) return content
+  const href =
+    run.link.kind === 'link' ? sanitizeHref(run.link.href) : trustedHref(run.link.documentId)
+  return el('a', { href }, [content])
 }
 
 /**
  * The box chrome of a spatial canvas node. A non-finite bbox field is a
- * layout bug this package must not crash on — it renders as the empty
- * string rather than reaching `formatCoord`, which throws by contract.
+ * layout bug this package must not crash on — it renders as nothing rather
+ * than reaching `formatCoord`, which throws by contract.
  */
-function renderShape(node: ShapeSceneNode): string {
-  if (!isFiniteBox(node.bbox)) return ''
-  const rx = isPositiveLength(node.radius) ? ` rx="${formatCoord(node.radius)}"` : ''
-  const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
-  return `<rect ${rectAttrs(node.bbox)}${rx}${appearance}/>`
+function renderShape(node: ShapeSceneNode): SvgChild {
+  if (!isFiniteBox(node.bbox)) return []
+  return el('rect', {
+    ...rectAttrs(node.bbox),
+    rx: isPositiveLength(node.radius) ? node.radius : undefined,
+    ...appearanceAttrs(node.appearance),
+  })
 }
 
-function renderListItem(item: ListItemNode): string {
+function renderListItem(item: ListItemNode): SvgChild {
   const tx = item.bbox.x
-  const transform = tx !== 0 ? ` transform="translate(${formatCoord(tx)},0)"` : ''
-  return `<g${transform}>${item.children.map(renderNode).join('')}</g>`
+  return el(
+    'g',
+    tx !== 0 ? { transform: `translate(${formatCoord(tx)},0)` } : undefined,
+    item.children.map(renderNode),
+  )
 }
 
-function renderTableCell(cell: TableCellSceneNode): string {
+function renderTableCell(cell: TableCellSceneNode): SvgChild {
   const tx = cell.bbox.x
-  const transform = tx !== 0 ? ` transform="translate(${formatCoord(tx)},0)"` : ''
-  return `<g${transform}>${cell.runs.map(renderTextRun).join('')}</g>`
+  return el(
+    'g',
+    tx !== 0 ? { transform: `translate(${formatCoord(tx)},0)` } : undefined,
+    cell.runs.map(renderTextRun),
+  )
 }
 
-function renderTableRow(row: TableRowSceneNode): string {
+function renderTableRow(row: TableRowSceneNode): SvgChild {
   // A hairline on the row's bottom edge is the whole of a table's chrome —
   // no cell grid, no zebra wash. Drawn at the row's own y so it separates
   // this row from the next rather than boxing either.
-  const separator =
+  const separator: SvgChild =
     row.appearance !== undefined && isFiniteBox(row.bbox)
-      ? `<rect ${rectAttrs({ x: row.bbox.x, y: row.bbox.y + row.bbox.h - 1, w: row.bbox.w, h: 1 })}${withLeadingSpace(appearanceAttrs(row.appearance))} ${PRESENTATION_ATTR}/>`
-      : ''
-  return `<g>${separator}${row.cells.map(renderTableCell).join('')}</g>`
+      ? el('rect', {
+          ...rectAttrs({ x: row.bbox.x, y: row.bbox.y + row.bbox.h - 1, w: row.bbox.w, h: 1 }),
+          ...appearanceAttrs(row.appearance),
+          role: PRESENTATION,
+        })
+      : []
+  return el('g', undefined, [separator, row.cells.map(renderTableCell)])
 }
 
 /**
@@ -260,15 +282,20 @@ function renderTableRow(row: TableRowSceneNode): string {
  * before layout carried them, which still renders through the old path
  * rather than nothing.
  */
-function renderCodeBlock(node: CodeBlockNode): string {
-  const panel =
+function renderCodeBlock(node: CodeBlockNode): SvgChild {
+  const panel: SvgChild =
     node.appearance !== undefined && isFiniteBox(node.bbox)
-      ? `<rect ${rectAttrs(node.bbox)}${isPositiveLength(node.radius) ? ` rx="${formatCoord(node.radius)}"` : ''}${withLeadingSpace(appearanceAttrs(node.appearance))} ${PRESENTATION_ATTR}/>`
-      : ''
+      ? el('rect', {
+          ...rectAttrs(node.bbox),
+          rx: isPositiveLength(node.radius) ? node.radius : undefined,
+          ...appearanceAttrs(node.appearance),
+          role: PRESENTATION,
+        })
+      : []
   if (node.runs === undefined) {
-    return `${panel}<text ${rectAttrs(node.bbox)} xml:space="preserve">${escapeXmlText(node.value)}</text>`
+    return [panel, el('text', { ...rectAttrs(node.bbox), 'xml:space': 'preserve' }, [node.value])]
   }
-  return `${panel}${node.runs.map(renderTextRun).join('')}`
+  return [panel, node.runs.map(renderTextRun)]
 }
 
 type EdgePoint = { readonly x: number; readonly y: number }
@@ -350,16 +377,20 @@ function roundedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[] 
   return parts.join(' ')
 }
 
-function renderNode(node: SceneNode): string {
+function pointsAttr(points: readonly EdgePoint[]): string {
+  return points.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
+}
+
+function renderNode(node: SceneNode): SvgChild {
   switch (node.kind) {
     case 'textRun':
       return renderTextRun(node)
     case 'heading':
-      return `<g>${node.runs.map(renderTextRun).join('')}</g>`
+      return el('g', undefined, node.runs.map(renderTextRun))
     case 'paragraph':
-      return `<g>${node.runs.map(renderTextRun).join('')}</g>`
+      return el('g', undefined, node.runs.map(renderTextRun))
     case 'list':
-      return `<g>${node.items.map(renderListItem).join('')}</g>`
+      return el('g', undefined, node.items.map(renderListItem))
     case 'codeBlock':
       return renderCodeBlock(node)
     case 'blockquote':
@@ -368,20 +399,28 @@ function renderNode(node: SceneNode): string {
       // colour that would be wrong in one of the two host themes. The bar
       // child sets its own value, and a descendant's own presentation
       // attribute wins over the inherited one (it does not multiply).
-      return `<g${withLeadingSpace(appearanceAttrs(node.appearance))} ${PRESENTATION_ATTR}>${node.children.map(renderNode).join('')}</g>`
+      return el(
+        'g',
+        { ...appearanceAttrs(node.appearance), role: PRESENTATION },
+        node.children.map(renderNode),
+      )
     case 'group':
-      return `<g ${PRESENTATION_ATTR}>${node.children.map(renderNode).join('')}</g>`
+      return el('g', { role: PRESENTATION }, node.children.map(renderNode))
     case 'thematicBreak':
-      return `<rect ${rectAttrs(node.bbox)}${withLeadingSpace(appearanceAttrs(node.appearance))} ${PRESENTATION_ATTR}/>`
+      return el('rect', {
+        ...rectAttrs(node.bbox),
+        ...appearanceAttrs(node.appearance),
+        role: PRESENTATION,
+      })
     case 'table':
-      return `<g>${node.rows.map(renderTableRow).join('')}</g>`
+      return el('g', undefined, node.rows.map(renderTableRow))
     case 'rawHtml':
       // Raw HTML has no independently-verifiable well-formedness guarantee
       // (it is caller-supplied Markdown-embedded HTML), so it is escaped as
       // text rather than injected verbatim like a trusted SVG fragment.
-      return `<text ${rectAttrs(node.bbox)}>${escapeXmlText(node.value)}</text>`
+      return el('text', rectAttrs(node.bbox), [node.value])
     case 'unresolvedReference':
-      return `<g ${PRESENTATION_ATTR}/>`
+      return el('g', { role: PRESENTATION })
     case 'svgFragment': {
       // Precondition: the caller has already validated `svg` is well-formed
       // XML before constructing this node — emitted verbatim, not escaped.
@@ -396,15 +435,11 @@ function renderNode(node: SceneNode): string {
       const { x, y, w, h } = node.bbox
       const positioned =
         Number.isFinite(x) && Number.isFinite(y) && Number.isFinite(w) && Number.isFinite(h)
+      const role = node.role === 'presentation' ? PRESENTATION : undefined
       if (!positioned) {
-        return node.role === 'presentation'
-          ? `<g ${PRESENTATION_ATTR}>${node.svg}</g>`
-          : `<g>${node.svg}</g>`
+        return el('g', role === undefined ? undefined : { role }, [rawXml(node.svg)])
       }
-      const attrs = `x="${formatCoord(x)}" y="${formatCoord(y)}" width="${formatCoord(w)}" height="${formatCoord(h)}" overflow="visible"`
-      return node.role === 'presentation'
-        ? `<svg ${attrs} ${PRESENTATION_ATTR}>${node.svg}</svg>`
-        : `<svg ${attrs}>${node.svg}</svg>`
+      return el('svg', { x, y, width: w, height: h, overflow: 'visible', role }, [rawXml(node.svg)])
     }
     case 'embedPlaceholder':
       // SVG <text> y is the BASELINE, so the box TOP would paint the title
@@ -412,25 +447,43 @@ function renderNode(node: SceneNode): string {
       // preceding block. The node carries no measured ascent (it is not a
       // text run), so the baseline is derived from the box: 0.8 matches the
       // ascent ratio the measurer contract documents for body text.
-      return `<a href="#${escapeXmlAttr(node.documentId)}"><text x="${formatCoord(node.bbox.x)}" y="${formatCoord(node.bbox.y + node.bbox.h * 0.8)}">${escapeXmlText(node.title)}</text></a>`
+      return el('a', { href: trustedHref(`#${node.documentId}`) }, [
+        el('text', { x: node.bbox.x, y: node.bbox.y + node.bbox.h * 0.8 }, [node.title]),
+      ])
     case 'embedResolved':
-      return `<g>${node.children.map(renderNode).join('')}</g>`
+      return el('g', undefined, node.children.map(renderNode))
     case 'edge': {
-      const points = node.path.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
-      const appearance = withLeadingSpace(appearanceAttrs(node.appearance))
+      const appearance = appearanceAttrs(node.appearance)
       // `fill="none"` is not decoration. SVG's initial fill is black and a
       // <polyline> fills the region its points enclose, so a bent edge would
       // paint a solid wedge across its own corner in whatever fill the
       // surrounding document inherits — invisible while every path had two
       // points, glaring the moment routing started bending them. A <path>
-      // needs it for exactly the same reason.
+      // needs it for exactly the same reason. It is declared before the
+      // appearance spread, matching the string backend's emission order (an
+      // edge appearance never carries a fill of its own).
       const jumps = node.jumps ?? []
       const polyline =
         node.rounded === true
-          ? `<path d="${roundedPathData(node.path, jumps)}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+          ? el('path', {
+              d: roundedPathData(node.path, jumps),
+              fill: 'none',
+              ...appearance,
+              role: PRESENTATION,
+            })
           : jumps.length > 0
-            ? `<path d="${jumpedPathData(node.path, jumps)}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
-            : `<polyline points="${points}" fill="none"${appearance} ${PRESENTATION_ATTR}/>`
+            ? el('path', {
+                d: jumpedPathData(node.path, jumps),
+                fill: 'none',
+                ...appearance,
+                role: PRESENTATION,
+              })
+            : el('polyline', {
+                points: pointsAttr(node.path),
+                fill: 'none',
+                ...appearance,
+                role: PRESENTATION,
+              })
       // Arrowheads are filled triangles in the edge's stroke color, drawn
       // after (over) the polyline. Geometry comes from the shared helper so
       // sceneBounds always agrees on how far the wings reach.
@@ -438,19 +491,11 @@ function renderNode(node: SceneNode): string {
       // No stroke means the polyline itself is invisible (SVG's default
       // stroke is none) — the arrow must match it, not fall back to the
       // polygon's default black fill and float detached.
-      const arrowFill =
-        typeof stroke === 'string' && stroke.length > 0
-          ? ` fill="${escapeXmlAttr(stroke)}"`
-          : ' fill="none"'
-      const arrows = edgeArrowPolygons(node)
-        .map((arrow) => {
-          const arrowPoints = arrow.points
-            .map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`)
-            .join(' ')
-          return `<polygon points="${arrowPoints}"${arrowFill} ${PRESENTATION_ATTR}/>`
-        })
-        .join('')
-      return `${polyline}${arrows}`
+      const arrowFill = typeof stroke === 'string' && stroke.length > 0 ? stroke : 'none'
+      const arrows = edgeArrowPolygons(node).map((arrow) =>
+        el('polygon', { points: pointsAttr(arrow.points), fill: arrowFill, role: PRESENTATION }),
+      )
+      return [polyline, arrows]
     }
     case 'shape':
       return renderShape(node)
@@ -459,12 +504,17 @@ function renderNode(node: SceneNode): string {
       // per this package's canonical-serialization rule. Aspect is always
       // preserved; alt renders as a <title> child (the SVG accessible-name
       // mechanism), absence marks the image as presentation.
-      const title =
-        node.alt !== undefined && node.alt.length > 0
-          ? `<title>${escapeXmlText(node.alt)}</title>`
-          : ''
-      const roleAttr = title === '' ? ` ${PRESENTATION_ATTR}` : ''
-      return `<image ${rectAttrs(node.bbox)} href="${escapeXmlAttr(node.href)}" preserveAspectRatio="xMidYMid ${node.fit === 'cover' ? 'slice' : 'meet'}"${roleAttr}>${title}</image>`
+      const hasAlt = node.alt !== undefined && node.alt.length > 0
+      return el(
+        'image',
+        {
+          ...rectAttrs(node.bbox),
+          href: node.href,
+          preserveAspectRatio: `xMidYMid ${node.fit === 'cover' ? 'slice' : 'meet'}`,
+          role: hasAlt ? undefined : PRESENTATION,
+        },
+        hasAlt ? [el('title', undefined, [node.alt as string])] : [],
+      )
     }
   }
 }
@@ -540,9 +590,11 @@ function resolveDimension(explicit: number | undefined, fallback: number): numbe
   return explicit !== undefined && Number.isFinite(explicit) && explicit >= 0 ? explicit : fallback
 }
 
-function renderBackgroundRect(box: BoundingBox, background: string): string {
-  return `<rect ${rectAttrs(box)} fill="${escapeXmlAttr(background)}" ${PRESENTATION_ATTR}/>`
+function renderBackgroundRect(box: BoundingBox, background: string): SvgChild {
+  return el('rect', { ...rectAttrs(box), fill: background, role: PRESENTATION })
 }
+
+const SVG_XMLNS = 'http://www.w3.org/2000/svg'
 
 /**
  * Serializes a decorated scene to an SVG string. Pure, no DOM — the same
@@ -560,27 +612,71 @@ function renderBackgroundRect(box: BoundingBox, background: string): string {
  * per-node visual attribute — the one exemption to this package's
  * no-visual-attributes rule) when `background` is set.
  */
-export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
-  const body = scene.nodes.map(renderNode).join('')
-  // Presence-only, exactly like an absent appearance attribute: a scene with
-  // nothing truncated emits the same bytes it always has.
-  const defs = hasTruncatedRun(scene.nodes) ? FADE_DEFS : ''
+/**
+ * The document's assembled pieces, shared by `renderSceneToSvg` and the
+ * keyed renderer (svg/keyed.ts) so the two can never disagree on root
+ * attributes, defs, background, or per-entry bodies. `body` holds exactly
+ * one (possibly empty) child per top-level scene entry, hoisted, in
+ * document order — the unit the keyed renderer wraps and the scene-diff
+ * scoreboard counts.
+ */
+export interface SvgDocumentParts {
+  /** Fixed order: xmlns [width height viewBox fill] — the envelope rule. */
+  readonly rootAttrs: SvgElements['svg']
+  readonly defs: SvgChild
+  readonly background: SvgChild
+  readonly body: ReadonlyArray<SvgChild>
+}
+
+export function buildSvgDocumentParts(
+  scene: Scene,
+  options?: SvgDocumentOptions,
+): SvgDocumentParts {
+  // Hoisting runs before defs collection only by convention — it preserves
+  // `defs` declarations on rebuilt nodes, so the order is not load-bearing.
+  const body = scene.nodes.map(renderNode).map(hoistInheritedAttrs)
+  // Presence-only, exactly like an absent appearance attribute: a scene
+  // declaring no definitions emits the same bytes it always has.
+  const collected = collectDefs(body)
+  const defs: SvgChild =
+    collected.length > 0
+      ? el(
+          'defs',
+          undefined,
+          collected.map((def) => def.node),
+        )
+      : []
 
   if (!hasEnvelopeOptions(options)) {
-    return `<svg xmlns="http://www.w3.org/2000/svg">${defs}${body}</svg>`
+    return { rootAttrs: { xmlns: SVG_XMLNS }, defs, background: [], body }
   }
 
   const viewBox = resolveViewBox(scene, options)
   const width = resolveDimension(options.width, viewBox.w)
   const height = resolveDimension(options.height, viewBox.h)
   const viewBoxAttr = `${formatCoord(viewBox.x)} ${formatCoord(viewBox.y)} ${formatCoord(viewBox.w)} ${formatCoord(viewBox.h)}`
-  const background =
-    options.background !== undefined ? renderBackgroundRect(viewBox, options.background) : ''
-  // Fixed root-attribute order: xmlns width height viewBox fill.
-  const textFillAttr =
-    typeof options.textFill === 'string' && options.textFill.length > 0
-      ? ` fill="${escapeXmlAttr(options.textFill)}"`
-      : ''
+  const background: SvgChild =
+    options.background !== undefined ? renderBackgroundRect(viewBox, options.background) : []
 
-  return `<svg xmlns="http://www.w3.org/2000/svg" width="${formatCoord(width)}" height="${formatCoord(height)}" viewBox="${viewBoxAttr}"${textFillAttr}>${defs}${background}${body}</svg>`
+  return {
+    // Fixed root-attribute order: xmlns width height viewBox fill.
+    rootAttrs: {
+      xmlns: SVG_XMLNS,
+      width,
+      height,
+      viewBox: viewBoxAttr,
+      fill:
+        typeof options.textFill === 'string' && options.textFill.length > 0
+          ? options.textFill
+          : undefined,
+    },
+    defs,
+    background,
+    body,
+  }
+}
+
+export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
+  const parts = buildSvgDocumentParts(scene, options)
+  return serializeSvg(el('svg', parts.rootAttrs, [parts.defs, parts.background, parts.body]))
 }

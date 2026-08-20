@@ -7,6 +7,7 @@ export type {
   CodeToken,
   CodeTokenLines,
   CodeTokenRole,
+  FittedBlocks,
   MdastLayoutOptions,
   RenderedSvgFragment,
 } from './layout/mdast-blocks.js'
@@ -20,6 +21,7 @@ export type {
 export type {
   FacetCardData,
   ResolvedReference,
+  SpatialContentCache,
   SpatialLayoutDegradation,
   SpatialLayoutOptions,
 } from './layout/spatial-canvas.js'
@@ -42,6 +44,7 @@ export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './
 export { MIN_SCENE_EXTENT_PX, sceneBounds } from './scene-bounds.js'
 export type { SceneDigest } from './scene-digest.js'
 export { sceneDigest, sceneDigestSchema } from './scene-digest.js'
+export { sceneEntryKeys } from './scene-entry-keys.js'
 export type {
   Appearance,
   BlockquoteNode,
@@ -72,6 +75,8 @@ export type {
 export type { SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
+export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
+export { renderSceneToKeyedSvg } from './svg/keyed.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
 export type { SpatialGeometry } from './theme/spatial-geometry.js'
 export { SPATIAL_THEME_GEOMETRY } from './theme/spatial-geometry.js'

@@ -271,20 +271,22 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     await userEvent.click(switcher)
     await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
-    const editable = await waitFor(() => {
-      const el = document.querySelector('[contenteditable="true"]')
-      expect(el).not.toBeNull()
-      return el as HTMLElement
+    await waitFor(() => {
+      expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
     // Click-focus (matching every other CodeMirror typing suite in this
     // repo) rather than relying on autofocus: this test's subject is
     // body/facet independence, not the fresh-note autofocus guarantee that
     // test 1 above already pins (see its focus-wait comment for why exact
     // contentDOM identity is required).
-    await focusEditable(editable)
+    const resolveEditable = () => document.querySelector('[contenteditable="true"]')
+    await focusEditable(resolveEditable)
+    // Re-resolved, not the retained reference: a contentDOM swap between the
+    // grab and here would leave focusEditable succeeding on the live node
+    // while this assertion compares against the dead one.
     await waitFor(
       () => {
-        expect(document.activeElement).toBe(editable)
+        expect(document.activeElement).toBe(resolveEditable())
       },
       { timeout: 10_000 },
     )

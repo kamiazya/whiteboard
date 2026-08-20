@@ -27,6 +27,7 @@
 // `document` on evaluation, and a worker has none — importing it throws
 // `document is not defined` before a single message is handled.
 
+import type { SpatialContentCache } from '@kamiazya/whiteboard-canvas-render'
 import { ensureViewerFontLoaded } from '@kamiazya/whiteboard-canvas-viewer/font-loading'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer/measure-text'
 import {
@@ -34,6 +35,8 @@ import {
   renderMarkdownPreview,
 } from '../components/markdown-editor/render-preview.js'
 import { renderCanvasToSvgWith } from '../components/spatial-editor/scene-render-core.js'
+import type { ResolvedTheme } from '../hooks/useThemeMode'
+import { createSpatialContentCache } from './content-cache'
 import {
   composeReferenceSeam,
   FONT_DEGRADED,
@@ -46,6 +49,19 @@ import {
 } from './layout-worker-protocol.js'
 
 const measure = createBrowserMeasureText()
+
+// One content cache per theme, for the worker's whole lifetime. Sound
+// because this worker REFUSES to lay out until its font face is loaded
+// (the FONT_DEGRADED gate below), so `measure` behaves identically for
+// every request it ever serves — theme is the only remaining cache axis.
+const contentCaches = new Map<ResolvedTheme, SpatialContentCache>()
+function contentCacheFor(theme: ResolvedTheme): SpatialContentCache {
+  const existing = contentCaches.get(theme)
+  if (existing !== undefined) return existing
+  const cache = createSpatialContentCache()
+  contentCaches.set(theme, cache)
+  return cache
+}
 
 // Registration is idempotent and memoized inside the loader, but the FIRST
 // request must wait for it: measuring before the face lands produces
@@ -150,6 +166,7 @@ self.onmessage = async (
       measure,
       theme: request.theme,
       resolveReference: composeReferenceSeam({ labels, missing: missingRefs }),
+      contentCache: contentCacheFor(request.theme),
     })
     const response: LayoutResponse = {
       type: 'laid-out',

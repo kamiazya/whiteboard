@@ -16,12 +16,16 @@
 import type {
   BoundingBox,
   EdgeAnchorPair,
+  KeyedSvgRender,
   MeasureText,
   ResolvedReference,
   Scene,
+  SpatialContentCache,
+  SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   layoutSpatialCanvasWithAnchors,
+  renderSceneToKeyedSvg,
   renderSceneToSvg,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -35,6 +39,14 @@ export interface RenderCanvasCoreOptions {
   readonly theme?: ResolvedTheme
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  /**
+   * canvas-render's text-node body memo (see SpatialContentCache's caller
+   * contract: one cache per measure+theme, dropped when either changes).
+   * Never crosses to the layout worker — the worker keeps its own per-theme
+   * cache, sound because it refuses to lay out before its font is loaded,
+   * so its measurer is stable for its whole serving lifetime.
+   */
+  readonly contentCache?: SpatialContentCache
 }
 
 export interface RenderedCanvas {
@@ -59,9 +71,28 @@ export function renderCanvasToSvgWith(
     appearance: createEditorAppearance(options.theme ?? 'light'),
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,
+    contentCache: options.contentCache,
     highlightCode,
   })
   const bounds = sceneBounds(scene)
-  const svg = renderSceneToSvg(scene, { width: bounds.w, height: bounds.h, viewBox: bounds })
+  const svg = renderSceneToSvg(scene, documentEnvelope(bounds))
   return { svg, bounds, scene, anchors }
+}
+
+/** The ONE producer of the editor surface's document-envelope options, so
+ * the plain string and the keyed projection below can never disagree. */
+function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
+  return { width: bounds.w, height: bounds.h, viewBox: bounds }
+}
+
+/**
+ * The keyed projection of an already-rendered canvas, derived on the main
+ * thread from the scene the worker (or sync path) already delivered —
+ * stringification is ~3ms at 40 nodes against a 66-125ms layout, so the
+ * worker protocol stays untouched. Same envelope as `RenderedCanvas.svg`.
+ */
+export function renderedCanvasKeyed(
+  rendered: Pick<RenderedCanvas, 'scene' | 'bounds'>,
+): KeyedSvgRender {
+  return renderSceneToKeyedSvg(rendered.scene, documentEnvelope(rendered.bounds))
 }
