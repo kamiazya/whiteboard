@@ -1,5 +1,5 @@
 import { Hono } from 'hono'
-import { scheduleAutoCompact, setAutoCompactTrigger } from '../store/document-store.js'
+import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
 import { setBroadcastFn } from './document/_shared.js'
 import { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } from './document/auto-version.js'
@@ -48,12 +48,9 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   // Auto-compact debounce: every successful saveDocument reschedules a per-
   // canvas compaction. The 30s default lets active editing sessions burst
   // without thrashing the op-log; once the user pauses, the shallow-snapshot
-  // runs in the background. Tests can override the trigger via
-  // setAutoCompactTrigger(null) before assertions if they want to isolate
-  // the save path from the compact path.
-  setAutoCompactTrigger((workspaceId, path) => {
-    scheduleAutoCompact(workspaceId, path, versionStore)
-  })
+  // runs in the background. A test that wants the save path isolated from the
+  // compact path calls `uninstallAutoCompact()`.
+  installAutoCompact(versionStore)
 
   app.route('/', createWorkspacesRouter())
   app.route('/', createDocumentMetadataRouter())

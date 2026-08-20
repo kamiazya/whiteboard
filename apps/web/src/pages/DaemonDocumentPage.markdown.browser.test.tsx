@@ -27,6 +27,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import '../index.css'
+import { focusEditable } from '../test-utils/focus-editable.js'
 
 function render(ui: ReactElement) {
   return rtlRender(
@@ -136,7 +137,7 @@ describe('DaemonDocumentPage markdown editing', () => {
     })
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
 
-    await userEvent.click(editable)
+    await focusEditable(editable)
     await waitFor(() => expect(document.activeElement).toBe(editable), { timeout: 10_000 })
     // A click lands the cursor wherever the pointer hit; pin it to the end
     // so the typed suffix has one deterministic destination.

@@ -3390,6 +3390,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
               dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
             />
           )}
@@ -3405,6 +3406,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
               dangerouslySetInnerHTML={{ __html: liveNode.svg }}
             />
           )}
