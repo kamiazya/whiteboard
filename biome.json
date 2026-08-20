@@ -50,6 +50,9 @@
         "noArrayIndexKey": "off",
         "useBiomeIgnoreFolder": "off"
       },
+      "security": {
+        "noDangerouslySetInnerHtml": "error"
+      },
       "style": {
         "noNonNullAssertion": "off",
         "useImportType": "warn"

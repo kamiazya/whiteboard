@@ -116,6 +116,7 @@ export function CanvasViewer({
         overflow: 'hidden',
         margin: 0,
       }}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: canvas-render's serializer is the SOLE producer and escapes &/</> in text and quotes in attributes (see this file's doc comment)
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )

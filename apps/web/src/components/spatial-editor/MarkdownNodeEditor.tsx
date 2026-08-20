@@ -155,7 +155,6 @@ export function MarkdownNodeEditor({
     }
     // Mount-once by design: initialText is the seed, later parent renders
     // must not reset the document under the caret.
-    // biome-ignore lint/correctness/useExhaustiveDependencies: see above
   }, [])
 
   return (
