@@ -99,8 +99,10 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
+import { createSpatialContentCache } from '../../lib/content-cache.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
+import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
@@ -163,6 +165,7 @@ import {
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
+import { renderedCanvasKeyed } from './scene-render-core.js'
 import {
   EMPTY_SELECTION,
   reduceSelection,
@@ -759,6 +762,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // `resolveReferenceContent` rides along UNCOMPOSED so the worker gate can
     // still tell content (which cannot be serialized) from label/missing
     // (which already cross as data).
+    // One text-node body memo per measure+theme (the cache's validity
+    // contract); rides fileSeamOptions so every synchronous render path in
+    // this component — the committed fallback, the drag backdrop, the live
+    // resize node — shares it. It never crosses to the layout worker
+    // (LayoutRequest carries plain data only); the worker keeps its own.
+    const contentCache = useMemo(
+      () => createSpatialContentCache(),
+      // eslint-disable-next-line react-hooks/exhaustive-deps -- theme and
+      // measure invalidate cached layout; nothing else does.
+      [resolvedMeasure, theme],
+    )
     const fileSeamOptions = useMemo(
       () => ({
         resolveReference: composeReferenceSeam({
@@ -768,21 +782,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         }),
         resolveReferenceContent: resolveReference,
         expandFileNode,
+        contentCache,
       }),
-      [resolveReference, fileRefLabelMap, missingRefSet, expandFileNode],
+      [resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, contentCache],
     )
     // The COMMITTED scene, laid out in a worker when it can be. The drag
     // layers below keep their own synchronous paths: a gesture already has a
     // fast route through carried-side caching, and a round trip per frame
     // would be the wrong trade there. This is the path that blocks on every
     // node added and every drag dropped.
-    const { svg, bounds, scene, anchors } = useWorkerScene(
+    const { bounds, scene, anchors } = useWorkerScene(
       canvas,
       { measure: resolvedMeasure, theme },
       fileSeamOptions,
       fileRefOptions,
       missingFileRefs,
     )
+    // The committed surface's keyed projection, derived from the scene the
+    // worker (or sync path) delivered — ~3ms of stringify against the
+    // 66-125ms layout, so the worker protocol stays plain-data. The patch
+    // container below consumes it; the plain `svg` string is no longer
+    // read here.
+    const keyed = useMemo(() => renderedCanvasKeyed({ scene, bounds }), [scene, bounds])
     // Routed edge paths in canvas coordinates, for edge hit-testing and the
     // selection highlight. Edges have no area, so selection is a
     // distance-to-polyline test against a zoom-adjusted tolerance. The
@@ -996,7 +1017,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // which a fresh pass over a newer canvas is not.
       return {
         carried,
-        svg: rendered.svg,
+        keyed: renderedCanvasKeyed(rendered),
         bounds: rendered.bounds,
         measure,
         committedAnchors: gestureCommitted.anchors,
@@ -1013,6 +1034,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       theme,
       fileSeamOptions,
     ])
+    // The committed surface's mount-once container (see the JSX below):
+    // during a gesture it patches to the drag backdrop, on drop back to the
+    // committed render — both through the same keyed reconciliation.
+    const canvasContentRef = useKeyedSvg(dragStatic?.keyed ?? keyed)
 
     useImperativeHandle(
       forwardedRef,
@@ -3345,10 +3370,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               left: (dragStatic?.bounds ?? bounds).x,
               top: (dragStatic?.bounds ?? bounds).y,
             }}
-            // canvas-render's SVG serializer is the SOLE producer of this
-            // string and escapes text/attrs (see svg/format.ts) — the same
-            // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
-            dangerouslySetInnerHTML={{ __html: dragStatic?.svg ?? svg }}
+            // Mount-once keyed patching (use-keyed-svg.ts): every byte that
+            // lands in this container is still canvas-render's serializer
+            // output — the patcher only decides WHICH groups to replace —
+            // so CanvasViewer.tsx's single-producer injection reasoning
+            // carries over unchanged, and untouched groups keep their DOM
+            // nodes across commits (selection, focus, animations survive).
+            ref={canvasContentRef}
           />
           {liveEdges !== undefined && (
             <div

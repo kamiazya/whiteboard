@@ -7,6 +7,7 @@ export type {
   CodeToken,
   CodeTokenLines,
   CodeTokenRole,
+  FittedBlocks,
   MdastLayoutOptions,
   RenderedSvgFragment,
 } from './layout/mdast-blocks.js'
