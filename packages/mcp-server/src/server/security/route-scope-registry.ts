@@ -153,6 +153,15 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: ['runtime:admin'] }
   }
 
+  // Fonts (ADR-0012). Installing one makes the daemon issue an outbound
+  // request and write to its own data directory, changing what every later
+  // export renders — daemon-level configuration, so it sits at the same admin
+  // tier as the other routes that mutate daemon state, not at canvas:write.
+  // Reading the catalogue is harmless and answers a picker.
+  if (path === '/api/fonts' || path.startsWith('/api/fonts/')) {
+    return { kind: 'scoped', scopes: [isWrite ? 'runtime:admin' : 'runtime:read'] }
+  }
+
   // POST /api/ws-ticket (ADR-0005): mints a WS connection ticket bound to
   // the caller's own OAuth grant scopes. canvas:read is the floor any live
   // grant is assumed to hold — the minted ticket never carries more than

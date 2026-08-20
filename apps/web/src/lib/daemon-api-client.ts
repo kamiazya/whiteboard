@@ -8,9 +8,13 @@ import {
   documentApiUrl,
   documentOkfV1ResponseSchema,
   documentsApiUrl,
+  type InstallFontResponse,
+  installFontResponseSchema,
   type ListDocumentsResponse,
+  type ListFontsResponse,
   type ListWorkspacesResponse,
   listDocumentsResponseSchema,
+  listFontsResponseSchema,
   listWorkspacesResponseSchema,
   type RenameDocumentPathRequest,
   type RenameDocumentPathResponse,
@@ -215,6 +219,35 @@ export function getDocumentOkfV1(
     fetchFn,
     `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/okf`,
     documentOkfV1ResponseSchema,
+  )
+}
+
+// ---- fonts (ADR-0012: the daemon keeps what it renders with) ----
+
+export function listFonts(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+): Promise<ListFontsResponse> {
+  return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/fonts`, listFontsResponseSchema)
+}
+
+/**
+ * Install one catalogued font.
+ *
+ * The argument is a catalogue id and there is deliberately no URL variant:
+ * the daemon builds the request from a pinned template, so no caller — this
+ * one, or an agent that talked one into it — can choose where it reaches.
+ */
+export function installFont(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  fontId: string,
+): Promise<InstallFontResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/fonts/${encodeURIComponent(fontId)}/install`,
+    installFontResponseSchema,
+    { method: 'POST' },
   )
 }
 

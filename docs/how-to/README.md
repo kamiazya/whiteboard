@@ -8,6 +8,8 @@ Guides:
 - **[self-host-with-docker](self-host-with-docker.md)** — run Whiteboard in server mode for a team.
 - **[connect-to-local-daemon](connect-to-local-daemon.md)** — detect a local daemon from the web
   app and copy browser-local canvases onto it.
+- **[install-fonts-for-export](install-fonts-for-export.md)** — stop exports rendering Japanese,
+  Chinese, Korean and other scripts as empty boxes.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas
   view inline in an MCP Apps-compatible AI chat client (currently unavailable — see the page's
   notice).
