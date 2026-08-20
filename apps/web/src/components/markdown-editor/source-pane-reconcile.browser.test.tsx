@@ -38,7 +38,7 @@ describe('SourcePane external value reconciliation (real browser)', () => {
     const onChange = vi.fn()
     const { rerender } = render(<MarkdownEditor value="abcdef" onChange={onChange} />)
 
-    await focusEditable(editableOf())
+    await focusEditable(editableOf)
     await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}')
 
     // Appended beyond the caret — nothing the caret sits on has moved, so it
@@ -54,7 +54,7 @@ describe('SourcePane external value reconciliation (real browser)', () => {
     const onChange = vi.fn()
     const { rerender } = render(<MarkdownEditor value="abc" onChange={onChange} />)
 
-    await focusEditable(editableOf())
+    await focusEditable(editableOf)
     await userEvent.keyboard('{End}')
 
     // Prepended: the caret must follow the text it was anchored after, so it

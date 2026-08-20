@@ -279,7 +279,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // body/facet independence, not the fresh-note autofocus guarantee that
     // test 1 above already pins (see its focus-wait comment for why exact
     // contentDOM identity is required).
-    await focusEditable(editable)
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     await waitFor(
       () => {
         expect(document.activeElement).toBe(editable)

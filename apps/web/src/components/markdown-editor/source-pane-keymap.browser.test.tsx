@@ -21,9 +21,8 @@ afterEach(cleanup)
 function mountEditor() {
   const onChange = vi.fn()
   const utils = render(<MarkdownEditor value="" onChange={onChange} />)
-  const editable = utils
-    .getByTestId('markdown-source-pane')
-    .querySelector('[contenteditable="true"]') as HTMLElement
+  const editable = () =>
+    utils.getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
   return { onChange, editable }
 }
 

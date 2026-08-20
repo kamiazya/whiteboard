@@ -16,14 +16,25 @@ import { expect, vi } from 'vitest'
  * so this waits for `document.activeElement` to BE the element rather than to
  * contain it: focus sitting on an ancestor drops the keystrokes silently.
  *
+ * It takes a RESOLVER, not an element, and re-resolves on every retry. Under a
+ * loaded run the contentDOM grabbed right after `render()` can be swapped
+ * before the focus call, and `focus()` on a disconnected element is a spec'd
+ * no-op — `document.activeElement` stays `<body>`, which is verbatim what CI
+ * printed while the same file passed on any idle machine. A held element is a
+ * snapshot; only re-resolving follows the swap.
+ *
  * Use this only where the click exists to establish focus. A click on a
  * specific `.cm-line` also places the caret at that position, and replacing it
  * with `focus()` would move the caret to wherever CodeMirror last had it — a
  * different test.
  */
-export async function focusEditable(element: Element): Promise<void> {
-  ;(element as HTMLElement).focus()
+export async function focusEditable(resolveEditable: () => Element | null): Promise<void> {
   await vi.waitFor(() => {
+    const element = resolveEditable()
+    expect(element, 'no editable to focus').not.toBeNull()
+    if (document.activeElement !== element) {
+      ;(element as HTMLElement).focus()
+    }
     expect(document.activeElement).toBe(element)
   })
 }
