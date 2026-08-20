@@ -5,6 +5,7 @@ import {
   RAIL_MIN_CONTAINER_WIDTH_PX,
   RAIL_WIDTH_PX,
   railFits,
+  railScrollable,
 } from './preview-width.js'
 
 const read = (containerWidth: number, railWidth = RAIL_WIDTH_PX) =>
@@ -53,5 +54,23 @@ describe('the rail is affordable only beside a document at its measure', () => {
 
   it('stays hidden until the container has been measured, so it never flashes in and out', () => {
     expect(railFits(null)).toBe(false)
+  })
+})
+
+describe('the rail is a scrollbar, so it appears only when there is scrolling to do', () => {
+  it('stays away while the whole document is on screen', () => {
+    expect(railScrollable({ contentHeight: 400, viewportHeight: 600 })).toBe(false)
+  })
+
+  it('appears once the document runs past the bottom', () => {
+    expect(railScrollable({ contentHeight: 900, viewportHeight: 600 })).toBe(true)
+  })
+
+  it('ignores a sub-pixel overhang, which is rounding rather than content', () => {
+    expect(railScrollable({ contentHeight: 600.4, viewportHeight: 600 })).toBe(false)
+  })
+
+  it('says no before anything has been measured', () => {
+    expect(railScrollable({ contentHeight: 0, viewportHeight: 0 })).toBe(false)
   })
 })

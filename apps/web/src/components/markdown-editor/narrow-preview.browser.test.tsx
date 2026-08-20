@@ -43,12 +43,13 @@ afterEach(() => {
 })
 
 const BODY = ['# Title', '', 'あらあ たらたはた たたたああああ ああああ', '', '---', ''].join('\n')
+const LONG_BODY = [BODY, ...Array.from({ length: 60 }, (_, i) => `\nparagraph ${i}\n`)].join('\n')
 
-function mountAt(width: number) {
+function mountAt(width: number, body = BODY) {
   const host = document.createElement('div')
   host.style.cssText = `width:${width}px;height:600px`
   document.body.append(host)
-  return render(<MarkdownEditor value={BODY} onChange={() => {}} />, { container: host })
+  return render(<MarkdownEditor value={body} onChange={() => {}} />, { container: host })
 }
 
 describe('a phone-width markdown editor', () => {
@@ -72,6 +73,31 @@ describe('a phone-width markdown editor', () => {
     })
   })
 
+  it('keeps the rail away while the whole document is on screen', async () => {
+    // The rail doubles as the pane's scrollbar, so a document that fits has
+    // nothing for it to mark or seek. Asserted against a LONG document in the
+    // same window first: that is what makes "absent" mean absent rather than
+    // "the blocks have not arrived yet" — the trap that let an earlier
+    // version of this file pass with the gate deleted.
+    const long = mountAt(1000, LONG_BODY)
+    expect(await long.findByTestId('markdown-minimap-rail')).toBeTruthy()
+    const short = mountAt(1000)
+    await vi.waitFor(() =>
+      expect(short.getByTestId('markdown-preview-pane').clientWidth).toBeGreaterThan(0),
+    )
+    // Asserts the rail never ARRIVES. A plain null check here passes while it
+    // is merely still on its way, which is indistinguishable from absence and
+    // left the gate's removal green when it was written that way.
+    await expect(
+      vi.waitFor(
+        () => {
+          if (short.queryByTestId('markdown-minimap-rail') === null) throw new Error('not yet')
+        },
+        { timeout: 1200 },
+      ),
+    ).rejects.toThrow()
+  })
+
   it('still shows the rail where the container can afford it', async () => {
     // Only the POSITIVE is asserted here. The narrow case cannot be pinned in
     // this layer honestly: the rail is gated on blocks the preview produces
@@ -81,7 +107,7 @@ describe('a phone-width markdown editor', () => {
     // watching nothing go red. `railFits` in preview-width.test.ts pins the
     // decision itself, mutation-check included; the wiring it feeds is one
     // `railAffordable &&` at the use site.
-    const { findByTestId } = mountAt(1000)
+    const { findByTestId } = mountAt(1000, LONG_BODY)
     expect(await findByTestId('markdown-minimap-rail')).toBeTruthy()
   })
 })

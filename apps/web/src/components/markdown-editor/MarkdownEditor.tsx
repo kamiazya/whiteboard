@@ -31,6 +31,7 @@ import {
   previewColumnMaxWidth,
   RAIL_WIDTH_PX,
   railFits,
+  railScrollable,
 } from './preview-width.js'
 import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
@@ -306,6 +307,9 @@ export function MarkdownEditor({
   // handler — these have to be state.
   const [railBlocks, setRailBlocks] = useState<readonly RailBlock[]>([])
   const [railViewport, setRailViewport] = useState({ top: 0, height: 0 })
+  // Whether the pane the rail maps has anything to scroll. Read from the same
+  // element on the same tick as the viewport above, for the same reason.
+  const [railHasScroll, setRailHasScroll] = useState(false)
 
   // Container width drives the split fallback and the preview's adaptive
   // layout width. `null` (pre-observation, or jsdom without ResizeObserver)
@@ -489,6 +493,12 @@ export function MarkdownEditor({
       const top = documentYForLine(anchorsRef.current, api.topVisibleLine(), tail)
       const bottom = documentYForLine(anchorsRef.current, api.bottomVisibleLine(), tail)
       setRailViewport({ top, height: Math.max(0, bottom - top) })
+      setRailHasScroll(
+        railScrollable({
+          contentHeight: scroller.scrollHeight,
+          viewportHeight: scroller.clientHeight,
+        }),
+      )
       setRailBlocks(blocks)
     }
     sync()
@@ -511,6 +521,12 @@ export function MarkdownEditor({
             preview.scrollTop
           : 0
       setRailViewport({ top: preview.scrollTop - svgTop, height: preview.clientHeight })
+      setRailHasScroll(
+        railScrollable({
+          contentHeight: preview.scrollHeight,
+          viewportHeight: preview.clientHeight,
+        }),
+      )
       setRailBlocks(blocksRef.current)
     }
     sync()
@@ -702,7 +718,7 @@ export function MarkdownEditor({
             </div>
           </div>
         )}
-        {!previewEmpty && railAffordable && railBlocks.length > 0 && (
+        {!previewEmpty && railAffordable && railHasScroll && railBlocks.length > 0 && (
           // The bars are the same in every mode — they describe the document,
           // not the pane. Only what a press moves differs: the preview when
           // one is on screen, otherwise the source through its anchors.

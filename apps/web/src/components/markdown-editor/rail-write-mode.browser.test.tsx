@@ -7,6 +7,11 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 const SHORT = '# One\n\nJust a line.\n'
 const LONG =
   SHORT + Array.from({ length: 14 }, (_, i) => `\n## Section ${i}\n\nSome prose here.\n`).join('')
+// Both documents below must actually SCROLL their pane: the rail doubles as
+// the scrollbar and is hidden when there is nothing to scroll, so a document
+// that fits draws no bars to count.
+const LONGER =
+  LONG + Array.from({ length: 14 }, (_, i) => `\n## Later ${i}\n\nMore prose here.\n`).join('')
 
 // Write mode renders no preview, so nothing on the main thread lays the
 // document out — this is the path where a real worker does it. The fakes in
@@ -22,7 +27,7 @@ describe('the rail in write mode', () => {
   it('lays the document out through the worker pool, with no preview mounted', async () => {
     const { container, rerender } = render(
       <div style={{ width: '900px', height: '400px' }}>
-        <MarkdownEditor value={SHORT} onChange={() => undefined} className="h-full" />
+        <MarkdownEditor value={LONG} onChange={() => undefined} className="h-full" />
       </div>,
     )
     const bars = () =>
@@ -32,15 +37,15 @@ describe('the rail in write mode', () => {
     // The condition this test exists for: no preview ever rendered, so the
     // bars cannot have come from one.
     expect(container.querySelector('[data-testid="markdown-preview-scroll"]')).toBeNull()
-    const short = bars()
+    const fewer = bars()
 
     rerender(
       <div style={{ width: '900px', height: '400px' }}>
-        <MarkdownEditor value={LONG} onChange={() => undefined} className="h-full" />
+        <MarkdownEditor value={LONGER} onChange={() => undefined} className="h-full" />
       </div>,
     )
 
-    await waitFor(() => expect(bars()).toBeGreaterThan(short), { timeout: 15_000 })
+    await waitFor(() => expect(bars()).toBeGreaterThan(fewer), { timeout: 15_000 })
   })
 
   // The rail replaces the scrollbar, so pressing it has to MOVE something.

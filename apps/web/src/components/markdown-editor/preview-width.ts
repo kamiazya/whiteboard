@@ -30,6 +30,33 @@ const QUANTUM_PX = 64
 const SVG_PADDING_PX = 2 * PREVIEW_PADDING_PX
 
 /**
+ * Whether the rail has a job: it doubles as the pane's scrollbar, so a
+ * document that fits on screen gives it nothing to mark and nothing to seek.
+ * Showing it there is chrome standing next to content it cannot help with —
+ * which on a phone is most of what makes the editor look busy.
+ *
+ * A sub-pixel overhang is rounding, not content; anything under a whole pixel
+ * would otherwise flicker the rail in and out as the layout settles.
+ *
+ * ponytail: the input depends on the output — hiding the rail widens the pane
+ * by RAIL_WIDTH_PX, which re-wraps the document shorter, which can remove the
+ * very overflow that hid it. Only documents whose height crosses the viewport
+ * within that band can oscillate, and none has been observed across the
+ * browser suite. If one ever is, the fix is to stop the rail taking width from
+ * the document at all (overlay it, as the spatial editor's minimap does) —
+ * hysteresis here would only make the flip slower, not absent.
+ */
+export function railScrollable({
+  contentHeight,
+  viewportHeight,
+}: {
+  readonly contentHeight: number
+  readonly viewportHeight: number
+}): boolean {
+  return viewportHeight > 0 && contentHeight - viewportHeight >= 1
+}
+
+/**
  * The width the document column is capped at, for the width the body was
  * typeset to. The other half of the same sum as `previewWidth` — kept beside
  * it because splitting the two is what let the column be 16px narrower than
