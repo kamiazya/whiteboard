@@ -34,7 +34,10 @@ const sources = import.meta.glob('../../**/*.browser.test.{ts,tsx}', {
 // also writing localStorage is the hazard; reading it stays legitimate in a
 // file that never writes.
 const NAMES_THE_KEY = /markdown-view-mode/
-const WRITES_LOCAL_STORAGE = /localStorage\s*\.?\s*\.?setItem|localStorage\s*\.\s*setItem/
+// Any `.setItem(` call, not one adjacent to the literal `localStorage`: a
+// file can alias the storage object (`const storage = window.localStorage`)
+// and the adjacency form goes blind — the same alias trap, one level up.
+const WRITES_LOCAL_STORAGE = /\.\s*setItem\s*\(/
 
 function offendingFiles(entries: Record<string, string>): string[] {
   return Object.entries(entries)
@@ -65,6 +68,14 @@ describe('the shared markdown view-mode preference', () => {
       offendingFiles({
         'x.browser.test.tsx':
           "const KEY = 'whiteboard.markdown-view-mode'\nlocalStorage.setItem(KEY, 'read')",
+      }),
+    ).toEqual(['x.browser.test.tsx'])
+    // The storage OBJECT aliased, not just the key — the second tell must
+    // not require the literal `localStorage` beside the call.
+    expect(
+      offendingFiles({
+        'x.browser.test.tsx':
+          "const storage = window.localStorage\nstorage.setItem('whiteboard.markdown-view-mode', 'read')",
       }),
     ).toEqual(['x.browser.test.tsx'])
     // Reading without writing stays clean.
