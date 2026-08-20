@@ -1,5 +1,6 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb } from './browser-idb.js'
+import { loroRecordEnvelopeSchema } from './loro-store.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 import { documentSnapshotSchema } from './whiteboard-client.js'
 
@@ -101,6 +102,50 @@ export class MemoryStore implements BrowserLocalStore {
   }
 }
 
+/**
+ * The last time a document's CONTENT changed, from the Loro record that every
+ * content write stamps — or `undefined` for a document whose content has never
+ * been written.
+ *
+ * The metadata row carries its own `updatedAt`, and it is not this: it is
+ * written at create and at rename and nowhere else, so a document edited for
+ * an hour reports its creation time. The list sorts by this field and renders
+ * "Xd ago" from it, and `useDocumentFileSeams` reads it as the staleness
+ * stamp whose whole job is to move when an edit lands.
+ *
+ * Read rather than written because there is nowhere to write it from: content
+ * goes through `BrowserLocalBackend` and `LoroStore`, neither of which knows
+ * about the metadata store, and bumping the row per keystroke would need a
+ * debounce this file does not have. The join costs one extra read per
+ * document; see the measurement in the commit that added it.
+ */
+async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<string, string>> {
+  if (ids.length === 0) return new Map()
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction('loroDocuments', 'readonly')
+    const store = tx.objectStore('loroDocuments')
+    const stamps = new Map<string, string>()
+    for (const id of ids) {
+      const req = store.get(id)
+      req.onsuccess = () => {
+        // Only the envelope's own field, through its schema: a record this
+        // parser rejects is one `LoroStore.load` would call corrupt, and
+        // taking a timestamp off it would dress a broken record as fresh.
+        const parsed = loroRecordEnvelopeSchema.safeParse(req.result)
+        if (parsed.success) stamps.set(id, parsed.data.updatedAt)
+      }
+    }
+    tx.oncomplete = () => resolve(stamps)
+    tx.onerror = () => reject(tx.error)
+  })
+}
+
+/** The later of the two, so neither clock can move a document backwards. */
+function newerOf(metadata: string, content: string | undefined): string {
+  if (content === undefined) return metadata
+  return content.localeCompare(metadata) > 0 ? content : metadata
+}
+
 export class IndexedDBStore implements BrowserLocalStore {
   async getDefaultDocumentId(): Promise<string | null> {
     const db = await openWhiteboardDb()
@@ -134,20 +179,37 @@ export class IndexedDBStore implements BrowserLocalStore {
 
   async load(id: string): Promise<LoadResult> {
     const db = await openWhiteboardDb()
-    return new Promise((resolve) => {
-      const tx = db.transaction('documents', 'readonly')
-      const req = tx.objectStore('documents').get(id)
-      req.onsuccess = () => {
-        if (req.result === undefined) {
-          resolve({ kind: 'not-found' })
-          return
+    // One connection for both reads — `load` is on the editor's resume path
+    // and opening twice per read buys nothing — and one `finally` for closing
+    // it, so the not-found and corrupted branches cannot leak it. An unclosed
+    // connection is what blocks the next version upgrade, so the cost of
+    // getting this wrong lands far from here.
+    try {
+      const result = await new Promise<LoadResult>((resolve) => {
+        const tx = db.transaction('documents', 'readonly')
+        const req = tx.objectStore('documents').get(id)
+        req.onsuccess = () => {
+          if (req.result === undefined) {
+            resolve({ kind: 'not-found' })
+            return
+          }
+          const parsed = documentSnapshotSchema.safeParse(req.result)
+          resolve(parsed.success ? { kind: 'ok', snapshot: parsed.data } : { kind: 'corrupted' })
         }
-        const parsed = documentSnapshotSchema.safeParse(req.result)
-        resolve(parsed.success ? { kind: 'ok', snapshot: parsed.data } : { kind: 'corrupted' })
+        req.onerror = () => resolve({ kind: 'corrupted' })
+      })
+      if (result.kind !== 'ok') return result
+      const stamps = await contentUpdatedAt(db, [id])
+      return {
+        kind: 'ok',
+        snapshot: {
+          ...result.snapshot,
+          updatedAt: newerOf(result.snapshot.updatedAt, stamps.get(id)),
+        },
       }
-      req.onerror = () => resolve({ kind: 'corrupted' })
-      tx.oncomplete = () => db.close()
-    })
+    } finally {
+      db.close()
+    }
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
@@ -276,8 +338,23 @@ export class IndexedDBStore implements BrowserLocalStore {
       }
       cursorReq.onerror = () => reject(cursorReq.error)
       tx.oncomplete = () => {
-        db.close()
-        resolve(results)
+        contentUpdatedAt(
+          db,
+          results.map((row) => row.documentId),
+        )
+          .then((stamps) => {
+            db.close()
+            resolve(
+              results.map((row) => ({
+                ...row,
+                updatedAt: newerOf(row.updatedAt, stamps.get(row.documentId)),
+              })),
+            )
+          })
+          .catch((err: unknown) => {
+            db.close()
+            reject(err)
+          })
       }
       tx.onerror = () => {
         db.close()
