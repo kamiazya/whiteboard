@@ -214,6 +214,34 @@ async function mergeAndSaveSnapshotLocked(
 // overwrite defaults to false so canvas_create does not destroy existing
 // data by mistake. Normal incremental saves (WS updates, live-doc and
 // restore writes, compactDocument) must pass overwrite: true.
+/**
+ * Called after every successful `saveDocument`.
+ *
+ * A plain notification, not a compaction hook. This module used to name the
+ * subscriber it happened to have — the auto-compact debouncer — which is how
+ * the store came to know about compaction at all. It does not need to: what it
+ * has to say is "this document changed", and who cares is not its business.
+ *
+ * A subscriber that throws is logged and swallowed. A save that already
+ * succeeded must not be reported as failed because a listener misbehaved.
+ */
+export type DocumentSavedListener = (workspaceId: string, path: string) => void
+
+let documentSavedListener: DocumentSavedListener | null = null
+
+export function setDocumentSavedListener(listener: DocumentSavedListener | null): void {
+  documentSavedListener = listener
+}
+
+function notifyDocumentSaved(workspaceId: string, path: string): void {
+  if (documentSavedListener === null) return
+  try {
+    documentSavedListener(workspaceId, path)
+  } catch (err) {
+    getLogger('document-store').warning({ workspaceId, path, err }, 'document-saved listener threw')
+  }
+}
+
 export async function saveDocument(
   workspaceId: string,
   path: string,
@@ -302,16 +330,7 @@ export async function saveDocument(
         )
       }
     }
-    // Hand off to the auto-compact debouncer when one is registered. Wired
-    // by the route layer (where versionStore is in scope) so this module
-    // does not depend on the version-store concrete type.
-    if (autoCompactTrigger) {
-      try {
-        autoCompactTrigger(workspaceId, path)
-      } catch (err) {
-        getLogger('document-store').warning({ workspaceId, path, err }, 'autoCompactTrigger threw')
-      }
-    }
+    notifyDocumentSaved(workspaceId, path)
   })
 }
 
@@ -680,151 +699,6 @@ export async function readLatestCompactedAt(): Promise<number | null> {
   const value = row?.maxAt ?? null
   return value === null || typeof value !== 'number' ? null : value
 }
-
-// ── auto-compact debouncer ────────────────────────────────────────────
-// saveDocument calls a registered trigger after every write. The route layer
-// wires that trigger to scheduleAutoCompact below; tests can register a spy
-// instead to verify call ordering. Per-canvas timers coalesce a burst of
-// edits into a single compaction once the editing pause exceeds debounceMs.
-type AutoCompactTrigger = (workspaceId: string, path: string) => void
-let autoCompactTrigger: AutoCompactTrigger | null = null
-
-// Shared by setAutoCompactTrigger(null) and disposeAutoCompact() so the two
-// cancellation paths can never drift out of sync with each other.
-function clearAllAutoCompactTimers(): void {
-  for (const t of autoCompactTimers.values()) clearTimeout(t)
-  autoCompactTimers.clear()
-}
-
-// Resetting the trigger to null also drains any pending debounced timers so
-// a subsequent test's tempDir is not surprised by a stray compactDocument
-// firing on a removed directory. This stays synchronous by contract — it
-// cancels only timers that have not fired yet, and deliberately does not
-// await in-flight compactions (see disposeAutoCompact for that superset).
-export function setAutoCompactTrigger(fn: AutoCompactTrigger | null): void {
-  if (fn === null) {
-    clearAllAutoCompactTimers()
-  }
-  autoCompactTrigger = fn
-}
-
-const AUTO_COMPACT_DEBOUNCE_MS = 30_000
-const autoCompactTimers = new Map<string, ReturnType<typeof setTimeout>>()
-
-// Tracks compactDocument() calls that have already fired but not yet settled.
-// A Set of the promises themselves (not a Map keyed by workspaceId/path) is
-// required: two overlapping compactions for the same key must both stay
-// tracked until they individually settle, since a keyed map with an
-// unconditional delete-on-settle would let a still-in-flight entry get
-// dropped by an unrelated compaction for the same key finishing first.
-const inFlightAutoCompacts = new Set<Promise<unknown>>()
-
-// True only for the duration of a disposeAutoCompact() call. An in-flight
-// compaction's loadDocument() can run legacy migration, which calls
-// saveDocument(), which re-invokes the registered auto-compact trigger and
-// tries to schedule a fresh timer for the same key — see disposeAutoCompact's
-// loop comment below. Without this guard, that reschedule's timer and
-// disposeAutoCompact's next clear-and-recheck pass race each other: whichever
-// one is scheduled first on the event loop wins, and under load the timer
-// can fire (starting a real compaction) before the loop gets back around to
-// cancel it. disposeAutoCompact's own loop still correctly waits for a
-// compaction that wins that race, so this was never a leak, but the outcome
-// was nondeterministic. Refusing new timers for the whole disposal removes
-// the race instead of relying on winning it.
-// A counter rather than a boolean: overlapping disposeAutoCompact() calls
-// (parallel DB dispose hooks, test teardown racing an explicit call) must not
-// let the first finisher drop the guard while another disposal is still
-// draining.
-let disposingAutoCompactCount = 0
-
-export function scheduleAutoCompact(
-  workspaceId: string,
-  path: string,
-  versionStore: VersionStore,
-  options: { debounceMs?: number } = {},
-): void {
-  if (disposingAutoCompactCount > 0) return
-  const key = `${workspaceId}/${path}`
-  const existing = autoCompactTimers.get(key)
-  if (existing) clearTimeout(existing)
-  const timer = setTimeout(() => {
-    autoCompactTimers.delete(key)
-    const compaction = compactDocument(workspaceId, path, versionStore)
-      .then((result) => {
-        if (result.compacted) {
-          getLogger('auto-compact').info(
-            {
-              workspaceId,
-              path,
-              beforeBytes: result.beforeBytes,
-              afterBytes: result.afterBytes,
-            },
-            'compacted',
-          )
-        }
-      })
-      .catch((err) => {
-        getLogger('auto-compact').warning({ workspaceId, path, err }, 'failed')
-      })
-      .finally(() => {
-        inFlightAutoCompacts.delete(compaction)
-      })
-    inFlightAutoCompacts.add(compaction)
-  }, options.debounceMs ?? AUTO_COMPACT_DEBOUNCE_MS)
-  // Do not keep the event loop alive just for this debounce. Node will
-  // still flush the compaction if anything else (HTTP, WS) holds the
-  // loop open; in tests we explicitly wait for the timeout.
-  if (typeof timer === 'object' && 'unref' in timer && typeof timer.unref === 'function') {
-    timer.unref()
-  }
-  autoCompactTimers.set(key, timer)
-}
-
-// Awaitable superset of setAutoCompactTrigger(null): cancels every pending
-// timer AND waits for every already-fired compaction to settle, so a caller
-// that awaits this is guaranteed no compactDocument call can still reach the
-// DB driver afterward. Registered as a DB dispose hook (below) so disposing
-// a store's DB always drains this state first, without every dispose call
-// site having to remember to call it manually. Idempotent: calling it with
-// nothing pending simply resolves immediately, and scheduleAutoCompact works
-// again afterward (a fresh call re-populates both trackers).
-export async function disposeAutoCompact(): Promise<void> {
-  disposingAutoCompactCount++
-  try {
-    // A single clear-then-await pass is not enough: an in-flight compaction's
-    // loadDocument() can run legacy migration, which calls saveDocument(), which
-    // re-invokes the registered auto-compact trigger *while we are still
-    // awaiting the first batch*. scheduleAutoCompact refuses that reschedule
-    // outright (the guard counter is non-zero for this whole call), so this
-    // loop's job is just to drain whatever was already in flight or already
-    // timer-scheduled before disposal began.
-    for (;;) {
-      clearAllAutoCompactTimers()
-      const inFlight = Array.from(inFlightAutoCompacts)
-      if (inFlight.length === 0) break
-      await Promise.allSettled(inFlight)
-    }
-  } finally {
-    disposingAutoCompactCount--
-  }
-}
-
-// Test-only introspection, matching the `_destinationCountForTests` pattern
-// in log.ts: lets tests poll for "a compaction has fired and is mid-flight"
-// without a bespoke gate inside compactDocument itself.
-export function _inFlightAutoCompactCountForTests(): number {
-  return inFlightAutoCompacts.size
-}
-
-// Test-only introspection: lets a test deterministically wait until
-// disposeAutoCompact() has begun (and is therefore refusing reschedules)
-// before triggering a reschedule attempt, instead of racing a wall-clock
-// delay against dispose's await window.
-export function _isDisposingAutoCompactForTests(): boolean {
-  return disposingAutoCompactCount > 0
-}
-
-registerDbDisposeHook(disposeAutoCompact)
 
 // ── list workspaces from the workspaces table ──
 export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
