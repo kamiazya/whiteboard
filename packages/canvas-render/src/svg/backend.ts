@@ -16,6 +16,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { collectDefs } from './defs.js'
+import { hoistInheritedAttrs } from './hoist.js'
 import type { PaintAttrs, SvgBoxAttrs, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
 import { serializeSvg } from './serialize.js'
@@ -612,7 +613,9 @@ const SVG_XMLNS = 'http://www.w3.org/2000/svg'
  * no-visual-attributes rule) when `background` is set.
  */
 export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
-  const body = scene.nodes.map(renderNode)
+  // Hoisting runs before defs collection only by convention — it preserves
+  // `defs` declarations on rebuilt nodes, so the order is not load-bearing.
+  const body = scene.nodes.map(renderNode).map(hoistInheritedAttrs)
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.
   const collected = collectDefs(body)
