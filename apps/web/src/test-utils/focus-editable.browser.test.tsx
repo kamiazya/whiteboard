@@ -1,9 +1,7 @@
-// The failure this helper exists to survive, made deterministic: CI kept
-// printing `expected <body> … to be <div …>` from focus waits while the same
-// files passed on any idle machine. The mechanism is spec'd, not timing —
-// `focus()` on a disconnected element is a no-op — so it can be pinned by
-// detaching on purpose instead of hoping a loaded run swaps the contentDOM
-// at the right moment.
+// Every failure mode this helper has actually produced in CI, made
+// deterministic. The symptom was always the same — `expected <body> … to be
+// <div …>` — while the causes were four different things; each is pinned
+// under conditions that force it, so none can be quietly reintroduced.
 
 import { afterEach, describe, expect, it } from 'vitest'
 import { focusEditable } from './focus-editable.js'
@@ -12,7 +10,7 @@ afterEach(() => {
   document.body.replaceChildren()
 })
 
-function editableDiv(): HTMLElement {
+function editable(): HTMLElement {
   const el = document.createElement('div')
   el.contentEditable = 'true'
   document.body.appendChild(el)
@@ -21,34 +19,22 @@ function editableDiv(): HTMLElement {
 
 describe('focusEditable', () => {
   it('focuses what the resolver answers', async () => {
-    const el = editableDiv()
+    const el = editable()
 
     await focusEditable(() => el)
 
     expect(document.activeElement).toBe(el)
   })
 
-  it('follows a swap: the node grabbed at mount is replaced before focus', async () => {
-    // What a loaded run does to a `const editable = …querySelector(…)` taken
-    // right after render(): the editor re-creates its contentDOM and the held
-    // node goes stale. A resolver re-queries, so it follows.
-    const first = editableDiv()
-    first.remove()
-    const second = editableDiv()
-
-    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
-
-    expect(document.activeElement).toBe(second)
-    expect(document.activeElement).not.toBe(first)
-  })
-
   it('re-resolves per retry: an editable that appears only after the wait began', async () => {
-    // The discriminating case. A swap completed BEFORE the call is caught by
-    // resolving once at entry too; only a node that arrives DURING the wait
-    // separates per-retry resolution from a single resolve — and that is the
-    // loaded-run reality, where the contentDOM lands late.
+    // The discriminating case for the resolver signature. A swap completed
+    // BEFORE the call is satisfied by resolving once at entry too; only a node
+    // that arrives DURING the wait separates per-retry resolution from a
+    // single resolve — and that is the loaded-run reality, where the
+    // contentDOM lands late. The first version of this suite swapped before
+    // calling, and the resolve-once mutation stayed green against it.
     setTimeout(() => {
-      editableDiv()
+      editable()
     }, 120)
 
     await focusEditable(() => document.querySelector('[contenteditable="true"]'))
@@ -56,15 +42,45 @@ describe('focusEditable', () => {
     expect((document.activeElement as HTMLElement).isContentEditable).toBe(true)
   })
 
-  it('fails loudly on a resolver frozen to a detached node, because focus() cannot take', async () => {
-    // The OLD shape — an element held by value — reduced to its essence. The
-    // browser leaves activeElement on <body> (focus on a disconnected element
-    // is a spec'd no-op), so the wait can only time out. Pinned so the helper
-    // is never quietly reverted to taking an element again.
-    const held = editableDiv()
-    held.remove()
+  it('names the frozen-resolver case instead of timing out on a dead node', async () => {
+    // A reference held across a re-render, the repo's sixth flake shape. A
+    // detached node cannot take focus and never will, so waiting is the one
+    // thing that cannot help — say so rather than spend the budget.
+    const el = editable()
+    el.remove()
 
-    await expect(focusEditable(() => held)).rejects.toThrow(/expected/)
-    expect(document.activeElement).toBe(document.body)
-  }, 10_000)
+    await expect(focusEditable(() => el)).rejects.toThrow(/no longer in the document/i)
+  })
+
+  it('names the unrendered case — display:none is how Read mode hides the pane', async () => {
+    const el = editable()
+    el.style.display = 'none'
+
+    await expect(focusEditable(() => el)).rejects.toThrow(/not rendered/i)
+  })
+
+  it('recovers when something else takes focus first', async () => {
+    // Focus is retried on every attempt rather than called once before the
+    // wait: a neighbour's leftover keystrokes can steal it after the call and
+    // before it settles, and waiting alone never gets it back.
+    const el = editable()
+    const thief = editable()
+    // Steals on `focusin`, so the theft is guaranteed to land exactly when
+    // focus arrives rather than racing a timer the retry can outrun.
+    let steals = 0
+    const steal = () => {
+      if (steals < 2) {
+        steals += 1
+        thief.focus()
+      }
+    }
+    el.addEventListener('focusin', steal)
+    try {
+      await focusEditable(() => el)
+    } finally {
+      el.removeEventListener('focusin', steal)
+    }
+    expect(steals).toBe(2)
+    expect(document.activeElement).toBe(el)
+  })
 })

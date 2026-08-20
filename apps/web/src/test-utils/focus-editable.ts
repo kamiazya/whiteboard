@@ -16,34 +16,62 @@ import { expect, vi } from 'vitest'
  * so this waits for `document.activeElement` to BE the element rather than to
  * contain it: focus sitting on an ancestor drops the keystrokes silently.
  *
- * It takes a RESOLVER, not an element, and re-resolves on every retry. Under a
- * loaded run the contentDOM grabbed right after `render()` can be swapped
- * before the focus call, and `focus()` on a disconnected element is a spec'd
- * no-op — `document.activeElement` stays `<body>`, which is verbatim what CI
- * printed while the same file passed on any idle machine. A held element is a
- * snapshot; only re-resolving follows the swap.
- *
  * Use this only where the click exists to establish focus. A click on a
  * specific `.cm-line` also places the caret at that position, and replacing it
  * with `focus()` would move the caret to wherever CodeMirror last had it — a
  * different test.
+ *
+ * Everything below is re-done on EVERY attempt, because each step can be
+ * invalidated between attempts by state this test does not own:
+ *
+ * - It takes a RESOLVER, not an element. A node grabbed right after `render()`
+ *   is a snapshot; under load the contentDOM lands late or is swapped, and
+ *   `focus()` on a disconnected element is a spec'd no-op. Only re-resolving
+ *   follows the swap — an element held by value is the repo's sixth flake
+ *   shape wearing a helper.
+ * - `window.focus()` before the element focus. Several browser pages run in
+ *   parallel and only ONE can hold focus; measured in CI, the failing case is
+ *   `document.hasFocus()=false`, and an element in an unfocused document
+ *   cannot become its activeElement however many times focus() is called.
+ * - An unrendered editable is named outright: the source pane is display:none
+ *   whenever the editor is in Read mode, `focus()` on an element that is not
+ *   being rendered is a no-op, and "activeElement is <body>" says nothing
+ *   about why. Seeding the shared view-mode preference to 'read' reproduces a
+ *   whole file of those verbatim — see `initialViewMode` on MarkdownEditor.
  */
 export async function focusEditable(resolveEditable: () => Element | null): Promise<void> {
   await vi.waitFor(() => {
     const element = resolveEditable()
-    expect(element, 'no editable to focus').not.toBeNull()
-    // `focus()` on an element that is not being RENDERED is a spec'd no-op,
-    // and the resulting failure — activeElement still <body> after a full
-    // second — says nothing about why. display:none is how it actually
-    // happens here: the source pane is hidden whenever the editor is in Read
-    // mode, so name that cause outright instead of printing a body diff.
+    expect(
+      element,
+      'focusEditable: the resolver answered null — no editable in the DOM',
+    ).not.toBeNull()
+    if (!(element as Element).isConnected) {
+      // A resolver that answers a detached node is frozen over a captured
+      // reference — retrying cannot help, so say so instead of spending the
+      // budget.
+      throw new Error(
+        'focusEditable: the resolver answered a node that is no longer in the document — ' +
+          'resolve from the live DOM, not a captured reference.',
+      )
+    }
     expect(
       (element as HTMLElement).checkVisibility(),
-      'editable is not rendered (display:none — is the editor in Read mode?)',
+      'focusEditable: editable is not rendered (display:none — is the editor in Read mode?)',
     ).toBe(true)
-    if (document.activeElement !== element) {
-      ;(element as HTMLElement).focus()
-    }
-    expect(document.activeElement).toBe(element)
+    window.focus()
+    ;(element as HTMLElement).focus()
+    // The message carries what DID have focus, and whether the document had
+    // any: three different causes reached this line in CI and none of them was
+    // distinguishable from the others.
+    expect(
+      document.activeElement,
+      `focusEditable: focus did not land. document.hasFocus()=${document.hasFocus()}, ` +
+        `activeElement=<${document.activeElement?.tagName.toLowerCase() ?? 'none'}${
+          document.activeElement instanceof HTMLElement && document.activeElement.className !== ''
+            ? ` class="${document.activeElement.className}"`
+            : ''
+        }>`,
+    ).toBe(element)
   })
 }

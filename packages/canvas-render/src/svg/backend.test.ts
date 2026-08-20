@@ -494,8 +494,11 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     const svg = renderSceneToSvg(scene)
+    // The run's appearance rides the enclosing group via SVG inheritance
+    // (attribute hoisting); the non-inherited text-decoration stays on the
+    // <text>, and the link wrapper still wraps.
     expect(svg).toContain(
-      '<a href="https://example.com"><text x="0" y="0" fill="#111" font-family="Inter" font-size="14" text-decoration="underline">styled link</text></a>',
+      '<g fill="#111" font-family="Inter" font-size="14"><a href="https://example.com"><text x="0" y="0" text-decoration="underline">styled link</text></a></g>',
     )
   })
 

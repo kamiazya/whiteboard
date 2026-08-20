@@ -171,6 +171,39 @@ export interface SpatialLayoutOptions {
    * editor decides by on-screen size, export by intrinsic size.
    */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  /**
+   * Optional memo for a text node's laid-out body. Content is laid out in
+   * ORIGIN-RELATIVE coordinates and placed by `placeInNode`, so a cached
+   * value is position-independent by construction: keyed by the node's
+   * text and box size only. Everything else that shapes content —
+   * `measure`, the appearance resolver, `geometry`, `parseBody`, the mdast
+   * seams — is deliberately NOT in the key: the CALLER owns the cache's
+   * lifetime and must discard it when any of those change (in practice:
+   * one cache per document+theme, dropped on theme/font switches). Cached
+   * values are shared between scenes and must be treated as immutable,
+   * which scene nodes already are.
+   *
+   * Only the success path is cached. The parse-failure fallback recomputes
+   * every run so `onDegrade` keeps firing — a cache must change timings,
+   * never what the caller is told.
+   *
+   * Measured before building (the instrument-first rule): content layout
+   * is 15-18ms of a 66-125ms full layout on the scene-diff corpus with the
+   * arithmetic test measurer — edge routing dominates — so this memo buys
+   * roughly the content share, more under a real (Canvas/opentype)
+   * measurer whose per-call cost is far above the fake's.
+   */
+  readonly contentCache?: SpatialContentCache
+}
+
+/**
+ * The store behind `SpatialLayoutOptions.contentCache`. Deliberately a
+ * plain get/set pair rather than a Map subtype, so a caller can wrap an
+ * LRU, a WeakRef map, or a plain object without this package caring.
+ */
+export interface SpatialContentCache {
+  get(key: string): FittedBlocks | undefined
+  set(key: string, value: FittedBlocks): void
 }
 
 /**
@@ -428,13 +461,28 @@ function composeTextNode(
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
   const maxWidth = contentWidth(node.width, options)
+  // Position deliberately absent from the key: the cached value is
+  // origin-relative (see `contentCache`'s contract), so a moved node hits.
+  const cacheKey =
+    options.contentCache === undefined
+      ? undefined
+      : JSON.stringify([node.width, node.height, node.text])
+  const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks
-  try {
-    const laid = layoutMdastBlocks(options.parseBody(node.text), mdastOptionsFor(maxWidth, options))
-    body = fitTextBody(laid, node, options)
-  } catch (err) {
-    options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
-    body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
+  if (cached !== undefined) {
+    body = cached
+  } else {
+    try {
+      const laid = layoutMdastBlocks(
+        options.parseBody(node.text),
+        mdastOptionsFor(maxWidth, options),
+      )
+      body = fitTextBody(laid, node, options)
+      if (cacheKey !== undefined) options.contentCache?.set(cacheKey, body)
+    } catch (err) {
+      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: node.id, err })
+      body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
+    }
   }
   return [
     chromeWithFit(node, options, body.truncated),

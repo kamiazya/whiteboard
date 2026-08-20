@@ -79,15 +79,26 @@ export default defineConfig({
     // A timeout costs nothing while tests pass; it only decides how long a
     // genuinely hung test takes to report.
     //
-    // 30s was not enough either, and the measurements say the budget is the
-    // only lever that works. The costliest test here (a markdown embed that
-    // types into real CodeMirror and lays the preview out through the render
-    // pipeline) takes 1.5s with its file alone and 1.6s with the twelve
+    // 30s was not enough either. The costliest test here (a markdown embed
+    // that types into real CodeMirror and lays the preview out through the
+    // render pipeline) takes 1.5s with its file alone and 1.6s with the twelve
     // IndexedDB-heavy page files running together — but 30–39s once all 115
-    // browser files are in flight. Neither of the obvious causes survives
-    // contact: cutting `--maxWorkers` to 4 made it WORSE (33–39s, and 40%
-    // more wall clock), and the IndexedDB-contention theory is refuted by
-    // the 1.6s twelve-file run.
+    // browser files are in flight. Cutting `--maxWorkers` to 4 made it WORSE
+    // (33–39s, and 40% more wall clock), and the IndexedDB-contention theory
+    // is refuted by the 1.6s twelve-file run.
+    //
+    // This comment used to conclude from that that the budget is the only
+    // lever that works. It is not, and the reasoning was wrong in a way worth
+    // recording: those numbers are not machine time at all. `focusEditable`'s
+    // diagnostic reported `document.hasFocus()=false` on its first CI run —
+    // several browser pages run in parallel and only ONE can hold focus, so a
+    // test in an unfocused page waits out its whole budget on a condition
+    // nothing can satisfy. That single fact explains every observation above:
+    // why the victim rotates, why every one passes in isolation, and why
+    // FEWER workers made it worse rather than better (same contention, longer
+    // run). Asking for focus back removed ten of eleven browser failures in
+    // one run, so the budget's real job is narrower than it looked — it
+    // bounds a genuinely hung test, and nothing else.
     //
     // What makes the overrun expensive is the collateral: vitest abandons the
     // test but its in-flight `userEvent.keyboard` keeps typing, so the NEXT
