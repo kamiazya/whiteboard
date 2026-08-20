@@ -1,12 +1,14 @@
 /**
  * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createDocument /
- * switchDocument against the real IndexedDBStore + LoroStore, proving id-addressed
+ * switchDocument against the real LocalStoreDouble + LoroStore, proving id-addressed
  * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
+
 import { act, cleanup, renderHook, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { useBrowserLocalDocumentController } from './use-browser-local-document-controller.js'
 
@@ -36,9 +38,9 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('createDocument twice persists both, and listDocuments returns both by their real id', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const loro = new LoroStore()
-    const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
+    const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
 
     let idA = ''
@@ -64,9 +66,9 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('two documents hold independent elements in loroCanvases — writing to one never leaks into the other', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const loro = new LoroStore()
-    const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
+    const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await act(async () => {})
 
     let idA = ''
@@ -96,9 +98,8 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
   })
 
   it('switchDocument swaps the current snapshot and the persisted default pointer, A -> B -> A', async () => {
-    const store = new IndexedDBStore()
-    const loro = new LoroStore()
-    const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
+    const store = new IdbDocumentIndex()
+    const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
     const idA = result.current.snapshot!.documentId
 
@@ -111,19 +112,19 @@ describe('multi-canvas foundation (real IndexedDB)', () => {
       await result.current.switchDocument(idB)
     })
     expect(result.current.snapshot?.documentId).toBe(idB)
-    expect(await store.getDefaultDocumentId()).toBe(idB)
+    expect(await new IdbDefaultDocumentPointer().get()).toBe(idB)
 
     await act(async () => {
       await result.current.switchDocument(idA)
     })
     expect(result.current.snapshot?.documentId).toBe(idA)
-    expect(await store.getDefaultDocumentId()).toBe(idA)
+    expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
   })
 
   it('duplicateDocument deep-copies the Loro doc: later source edits never leak', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const loro = new LoroStore()
-    const { result } = renderHook(() => useBrowserLocalDocumentController(store, loro))
+    const { result } = renderHook(() => useBrowserLocalDocumentController(store))
     await waitFor(() => expect(result.current.snapshot).not.toBeNull())
     const sourceId = result.current.snapshot!.documentId
     await loro.save(sourceId, snapshotWithElements([{ id: 'original-element' }]))

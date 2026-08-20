@@ -1,3 +1,4 @@
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 /**
  * The two header rows own different SCOPES.
  *
@@ -12,7 +13,6 @@ import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { MemoryStore } from '../lib/browser-local-store.js'
 import { BrowserLocalDocumentPage } from '../pages/BrowserLocalDocumentPage.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
 import '../index.css'
@@ -79,14 +79,14 @@ describe('top bar scopes', () => {
 
 describe('fullscreen ground', () => {
   it('paints the fullscreen target itself, not just the body behind it', async () => {
-    // MemoryStore, not IndexedDBStore: every browser test file shares one
+    // LocalStoreDouble, not LocalStoreDouble: every browser test file shares one
     // origin, so a sibling file's `indexedDB.deleteDatabase('whiteboard')`
     // lands mid-load here and the page never leaves its loading state. The
     // assertion is about a CSS ground, so the storage backend is incidental.
     render(
       <div style={{ height: '400px' }}>
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalDocumentPage store={new MemoryStore()} />
+          <BrowserLocalDocumentPage store={new LocalStoreDouble().index} />
         </MemoryRouter>
       </div>,
     )

@@ -106,7 +106,19 @@ export function idbContentClock(dbName?: string): ContentClock {
   }
 }
 
-export const noContentClock: ContentClock = async () => new Map()
+/**
+ * Creates the browser-local workspace if this device has never had one.
+ *
+ * The port distinguishes an absent workspace from an empty one — a list
+ * against an unknown id is a `WorkspaceNotFoundError`, not `[]` — and nothing
+ * on the browser side owns "first run". So every path that would be the first
+ * to touch the index calls this first. It is a `put`, so calling it on every
+ * create costs one no-op write and removes the need for anyone to know
+ * whether they are first.
+ */
+export async function ensureLocalWorkspace(index: DocumentIndex): Promise<void> {
+  await index.createWorkspace({ workspaceId: LOCAL_WORKSPACE_ID })
+}
 
 export async function listLocalDocuments(
   index: DocumentIndex,

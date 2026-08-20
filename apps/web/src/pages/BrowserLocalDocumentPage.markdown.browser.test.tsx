@@ -1,3 +1,6 @@
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { listLocalDocuments } from '../lib/local-document-summary.js'
+import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 /**
  * Markdown-canvas 導線 (real IndexedDB + real CodeMirror): create a markdown
  * note through the top bar's "New markdown note…" item, type into the real
@@ -17,7 +20,6 @@ import type { ReactElement } from 'react'
 import { MemoryRouter, useLocation } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { IndexedDBStore, LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import { waitForMenuClosed } from '../test-utils/menu.js'
@@ -105,7 +107,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('New markdown note… opens the markdown editor; the typed body survives a remount', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const first = render(<BrowserLocalDocumentPage store={store} />)
 
     // Fresh DB boots into a spatial canvas.
@@ -173,7 +175,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a markdown canvas has no display-settings gear — edge routing is spatial-only', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
 
     // Fresh DB boots into a spatial canvas: the gear is offered there.
@@ -200,7 +202,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('the title survives a remount and renames the canvas in the switcher', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const first = render(<BrowserLocalDocumentPage store={store} />)
 
     await screen.findByTestId('mock-spatial-editor')
@@ -244,7 +246,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // stores the name twice, which is the state it exists to rule out.
     // By kind, not by index: the workspace still holds the initial spatial
     // canvas this flow started from.
-    const entry = (await store.listDocuments()).find((row) => row.kind === 'markdown')
+    const entry = (await listLocalDocuments(store)).find((row) => row.kind === 'markdown')
     expect(entry?.name).toBe('リリース計画')
     const loaded = await new LoroStore().load(entry?.documentId ?? '')
     expect(loaded.kind).toBe('ok')
@@ -257,7 +259,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('keeps the body when core facets are written, and vice versa', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const first = render(<BrowserLocalDocumentPage store={store} />)
 
     await screen.findByTestId('mock-spatial-editor')
@@ -311,7 +313,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('flushes a title edit that is still debounced when the page goes away', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     const first = render(<BrowserLocalDocumentPage store={store} />)
 
     await screen.findByTestId('mock-spatial-editor')
@@ -351,15 +353,12 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a spatial canvas gets the same properties bar, and its title round-trips', async () => {
-    const store = new IndexedDBStore()
-    await store.setDefaultDocumentId('0JNRVY147ADGKPSWZ258BEHMQT')
-    await store.save({
-      documentId: '0JNRVY147ADGKPSWZ258BEHMQT',
-      workspaceId: 'local',
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, {
       path: 'diagram-a',
       name: 'Diagram A',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'spatial' as const,
+      kind: 'spatial',
+      makeDefault: true,
     })
     const first = render(<BrowserLocalDocumentPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
@@ -400,17 +399,14 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('spatial documents still open the spatial editor after a markdown note exists', async () => {
-    const store = new IndexedDBStore()
+    const store = new IdbDocumentIndex()
     // Distinctly-named spatial canvas so the round trip back to it is
     // unambiguous (the fresh markdown note is also 'untitled').
-    await store.setDefaultDocumentId('0JNRVY147ADGKPSWZ258BEHMQT')
-    await store.save({
-      documentId: '0JNRVY147ADGKPSWZ258BEHMQT',
-      workspaceId: 'local',
+    await seedIdbDocument(store, {
       path: 'diagram-a-2',
       name: 'Diagram A',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'spatial' as const,
+      kind: 'spatial',
+      makeDefault: true,
     })
     render(<BrowserLocalDocumentPage store={store} />)
     await screen.findByTestId('mock-spatial-editor')
@@ -451,25 +447,18 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   // `linkTargets` is optional, so the verb quietly degrades to its bracket
   // wrap while typecheck and every component test stay green.
   it("offers the page's own documents to the link picker", async () => {
-    const store = new IndexedDBStore()
-    await store.save({
-      documentId: '0SWZ258BEHMQTX0369CFJNRVY1',
-      workspaceId: 'local',
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, {
       path: 'neighbour-note',
       name: 'Neighbour note',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'markdown' as const,
+      kind: 'markdown',
     })
-    const HERE = '01BX5ZZKBKACTAV9WEVGEMMVAA'
-    await store.save({
-      documentId: HERE,
-      workspaceId: LOCAL_WORKSPACE_ID,
+    await seedIdbDocument(store, {
       path: 'this-note',
       name: 'This note',
-      updatedAt: '2026-05-24T00:00:01.000Z',
-      kind: 'markdown' as const,
+      kind: 'markdown',
+      makeDefault: true,
     })
-    await store.setDefaultDocumentId(HERE)
     render(<BrowserLocalDocumentPage store={store} />)
 
     const editable = await waitFor(
@@ -490,26 +479,18 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a [[Name]] wikiLink resolves against the canvas list and clicking it opens that note', async () => {
-    const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-    const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
-    const store = new IndexedDBStore()
-    await store.save({
-      documentId: TARGET_ID,
-      workspaceId: LOCAL_WORKSPACE_ID,
+    const store = new IdbDocumentIndex()
+    const TARGET_ID = await seedIdbDocument(store, {
       path: 'target-note',
       name: 'Target note',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'markdown' as const,
+      kind: 'markdown',
     })
-    await store.save({
-      documentId: SOURCE_ID,
-      workspaceId: LOCAL_WORKSPACE_ID,
+    await seedIdbDocument(store, {
       path: 'source-note',
       name: 'Source note',
-      updatedAt: '2026-05-24T00:00:01.000Z',
-      kind: 'markdown' as const,
+      kind: 'markdown',
+      makeDefault: true,
     })
-    await store.setDefaultDocumentId(SOURCE_ID)
     // The router's pathname is the navigation contract under test; the page
     // itself shows no raw id anywhere a query could reach.
     function LocationProbe() {
@@ -562,30 +543,22 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it("a block ![[embed]] renders the target note's body inline in the preview", async () => {
-    const TARGET_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-    const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
-    const store = new IndexedDBStore()
-    await store.save({
-      documentId: TARGET_ID,
-      workspaceId: LOCAL_WORKSPACE_ID,
+    const store = new IdbDocumentIndex()
+    const TARGET_ID = await seedIdbDocument(store, {
       path: 'embed-target',
       name: 'Embed target',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'markdown' as const,
+      kind: 'markdown',
     })
-    await store.save({
-      documentId: SOURCE_ID,
-      workspaceId: LOCAL_WORKSPACE_ID,
+    await seedIdbDocument(store, {
       path: 'embed-source',
       name: 'Embed source',
-      updatedAt: '2026-05-24T00:00:01.000Z',
-      kind: 'markdown' as const,
+      kind: 'markdown',
+      makeDefault: true,
     })
     // Seed the target's Loro body through the same store the page loads from.
     const targetDoc = new Loro()
     targetDoc.getText('body').insert(0, 'unmistakable embedded body text')
     await new LoroStore().save(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
-    await store.setDefaultDocumentId(SOURCE_ID)
     render(<BrowserLocalDocumentPage store={store} />)
 
     const editable = await waitFor(
@@ -623,17 +596,14 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // now write the container, but documents in the old shape are already in
     // stores — and only a real browser can show what CodeMirror actually
     // displays for one, which is the half a hook test cannot reach.
-    const LEGACY_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
     const LEGACY_BODY = 'body stored as an okf-body node'
 
-    async function seedLegacyNote(store: IndexedDBStore, name: string): Promise<void> {
-      await store.save({
-        documentId: LEGACY_ID,
-        workspaceId: LOCAL_WORKSPACE_ID,
+    async function seedLegacyNote(store: IdbDocumentIndex, name: string): Promise<string> {
+      const legacyId = await seedIdbDocument(store, {
         path: 'legacy-note',
         name,
-        updatedAt: '2026-05-24T00:00:00.000Z',
-        kind: 'markdown' as const,
+        kind: 'markdown',
+        makeDefault: true,
       })
       const doc = new Loro()
       writeSpatialCanvas(doc, {
@@ -651,7 +621,11 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
         edges: [],
       })
       doc.commit()
-      await new LoroStore().save(LEGACY_ID, doc.export({ mode: 'snapshot' }))
+      // Overwrites the empty record `seedIdbDocument` wrote: this suite is
+      // about a body stored as a spatial text node, which is the shape a
+      // pre-OKF note has on disk.
+      await new LoroStore().save(legacyId, doc.export({ mode: 'snapshot' }))
+      return legacyId
     }
 
     it('stays editable without losing the body it opened with', async () => {
@@ -666,9 +640,8 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       // over, so an assertion at mount can pass on a frame that is about to
       // be replaced. By the reopen there is no path that puts the old body
       // on screen unless it really was converted and persisted.
-      const store = new IndexedDBStore()
+      const store = new IdbDocumentIndex()
       await seedLegacyNote(store, 'Legacy note')
-      await store.setDefaultDocumentId(LEGACY_ID)
       const first = render(<BrowserLocalDocumentPage store={store} />)
 
       const editable = await waitFor(
@@ -700,18 +673,14 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     })
 
     it('renders as an ![[embed]] target', async () => {
-      const SOURCE_ID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
-      const store = new IndexedDBStore()
-      await seedLegacyNote(store, 'Legacy embed target')
-      await store.save({
-        documentId: SOURCE_ID,
-        workspaceId: LOCAL_WORKSPACE_ID,
+      const store = new IdbDocumentIndex()
+      const LEGACY_ID = await seedLegacyNote(store, 'Legacy embed target')
+      await seedIdbDocument(store, {
         path: 'embed-source',
         name: 'Embed source',
-        updatedAt: '2026-05-24T00:00:01.000Z',
-        kind: 'markdown' as const,
+        kind: 'markdown',
+        makeDefault: true,
       })
-      await store.setDefaultDocumentId(SOURCE_ID)
       render(<BrowserLocalDocumentPage store={store} />)
 
       const editable = await waitFor(

@@ -14,7 +14,13 @@
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DB_VERSION, openWhiteboardDb } from './browser-idb.js'
-import { IndexedDBStore } from './browser-local-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
+import {
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  listLocalDocuments,
+  loadLocalDocument,
+} from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
 /**
@@ -29,6 +35,21 @@ import { LoroStore } from './loro-store.js'
  * participating; nothing was passing it.
  */
 const MIGRATION_DB = 'whiteboard-migration-test'
+
+/**
+ * The migrated database read back through the production wiring, rather than
+ * through a test double: what this file asserts is what a real user's next
+ * session would see after the upgrade ran.
+ */
+function migratedLocal() {
+  const index = new IdbDocumentIndex(MIGRATION_DB)
+  const clock = idbContentClock(MIGRATION_DB)
+  return {
+    listDocuments: () => listLocalDocuments(index, clock),
+    load: (documentId: string) => loadLocalDocument(index, documentId, clock),
+    getDefaultDocumentId: () => new IdbDefaultDocumentPointer(MIGRATION_DB).get(),
+  }
+}
 
 /**
  * Give a fixture connection the same manners the app's own opener has.
@@ -99,37 +120,6 @@ async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
       tx.onerror = () => {
         db.close()
         reject(tx.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
-}
-
-/**
- * Reads a 'documents' row directly via raw IDB, bypassing documentSnapshotSchema.
- *
- * Version-less on purpose: it must read what is there without running the
- * app's upgrade. That makes closing before resolving load-bearing rather than
- * tidy — this connection sits at whatever version the fixture seeded (7, say),
- * and the next `openWhiteboardDb` asks for DB_VERSION. Resolving first lets
- * the test proceed while an OLD-version connection is still open, and that
- * open is then blocked: `another tab has this app open at an older version`,
- * reported against whichever test ran next.
- */
-async function readRawDocumentsRow(documentId: string): Promise<unknown> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(MIGRATION_DB)
-    req.onsuccess = () => {
-      const db = req.result
-      letFixtureStepAside(db)
-      const tx = db.transaction('documents', 'readonly')
-      const getReq = tx.objectStore('documents').get(documentId)
-      getReq.onerror = () => reject(getReq.error)
-      // Resolve from `oncomplete`, AFTER the close — never from the request's
-      // own success, which fires while the connection is still open.
-      tx.oncomplete = () => {
-        db.close()
-        resolve(getReq.result)
       }
     }
     req.onerror = () => reject(req.error)
@@ -335,7 +325,6 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     expect(storeNames).toEqual([
       'documentFiles',
       'documentIndex',
-      'documents',
       'loroDocuments',
       'meta',
       'workspaces',
@@ -355,14 +344,14 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // them alone. A copy that lost its key or its value fails the count above
     // even though the store-name assertion passed.
 
-    const metaStore = new IndexedDBStore(MIGRATION_DB)
+    const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
     // Everything a pre-path fixture holds therefore ends here — this migration
     // path converges on an empty document store, by decision, not by accident.
-    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
-    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await migratedLocal().load(documentId)).toBeNull()
+    expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
     // The bytes go with it rather than lingering as storage nothing names.
     expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
@@ -378,7 +367,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // document it named is gone — a pointer at a discarded document would
     // resume the editor into nothing.
     expect(await metaKeys()).toEqual([])
-    expect(await new IndexedDBStore(MIGRATION_DB).getDefaultDocumentId()).toBeNull()
+    expect(await migratedLocal().getDefaultDocumentId()).toBeNull()
   })
 
   it('is a no-op for a fresh install, which never had the old stores', async () => {
@@ -386,7 +375,6 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     expect([...db.objectStoreNames].sort()).toEqual([
       'documentFiles',
       'documentIndex',
-      'documents',
       'loroDocuments',
       'meta',
       'workspaces',
@@ -437,14 +425,14 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     // Discarded with its document — see the note below.
     expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
 
-    const metaStore = new IndexedDBStore(MIGRATION_DB)
+    const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
     // Everything a pre-path fixture holds therefore ends here — this migration
     // path converges on an empty document store, by decision, not by accident.
-    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
-    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await migratedLocal().load(documentId)).toBeNull()
+    expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
 
     // purgeLegacyReconnectCredentials() is exercised directly here (rather
@@ -465,7 +453,6 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     expect([...db.objectStoreNames].sort()).toEqual([
       'documentFiles',
       'documentIndex',
-      'documents',
       'loroDocuments',
       'meta',
       'workspaces',
@@ -508,14 +495,14 @@ describe('IndexedDB v4 -> v5', () => {
     // Discarded with its document — see the note below.
     expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
 
-    const metaStore = new IndexedDBStore(MIGRATION_DB)
+    const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
     // Everything a pre-path fixture holds therefore ends here — this migration
     // path converges on an empty document store, by decision, not by accident.
-    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
-    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await migratedLocal().load(documentId)).toBeNull()
+    expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
   })
 })
@@ -542,14 +529,14 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     // Discarded with its document — see the note below.
     expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
 
-    const metaStore = new IndexedDBStore(MIGRATION_DB)
+    const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
     // no path, because there is nothing to migrate it to without inventing an
     // address, and an invented one is indistinguishable from a chosen one.
     // Everything a pre-path fixture holds therefore ends here — this migration
     // path converges on an empty document store, by decision, not by accident.
-    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
-    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    expect(await migratedLocal().load(documentId)).toBeNull()
+    expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
   })
 })
@@ -580,12 +567,12 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // Loro record. What the pre-v3 `scene` strip did to this row on the way
     // through is no longer observable; the guard that it must not THROW on a
     // corrupt row still is, and is the next test.
-    const metaStore = new IndexedDBStore(MIGRATION_DB)
-    expect(await readRawDocumentsRow(documentId)).toBeUndefined()
-    expect((await metaStore.load(documentId)).kind).toBe('not-found')
+    const metaStore = migratedLocal()
+    expect(await migratedLocal().load(documentId)).toBeNull()
+    expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
     expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
-    expect(await metaStore.getDefaultDocumentId()).toBeNull()
+    expect(await migratedLocal().getDefaultDocumentId()).toBeNull()
   })
 
   it('upgrades without aborting when a legacy canvases row is a non-object (corrupt data)', async () => {
@@ -733,7 +720,7 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
       defaultDocumentId: PRE_PATH_ID,
     })
 
-    expect(await storeKeys('documents')).toEqual([])
+    expect(await migratedLocal().listDocuments()).toEqual([])
     // The bytes go too: a Loro record no document names is unreachable
     // storage that nothing would ever clean up.
     expect(await storeKeys('loroDocuments')).toEqual([])
@@ -756,9 +743,11 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
       defaultDocumentId: POST_PATH_ID,
     })
 
-    expect(await readRawDocumentsRow(POST_PATH_ID)).toEqual(row)
+    expect(await migratedLocal().listDocuments()).toEqual([
+      { ...row, updatedAt: expect.any(String) },
+    ])
     expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
-    expect(await new IndexedDBStore(MIGRATION_DB).getDefaultDocumentId()).toBe(POST_PATH_ID)
+    expect(await migratedLocal().getDefaultDocumentId()).toBe(POST_PATH_ID)
   })
 
   it('discards only the pre-path rows when a store holds both', async () => {
@@ -781,14 +770,14 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
       defaultDocumentId: POST_PATH_ID,
     })
 
-    expect(await storeKeys('documents')).toEqual([POST_PATH_ID])
+    expect((await migratedLocal().listDocuments()).map((d) => d.documentId)).toEqual([POST_PATH_ID])
     expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
-    expect(await new IndexedDBStore(MIGRATION_DB).getDefaultDocumentId()).toBe(POST_PATH_ID)
+    expect(await migratedLocal().getDefaultDocumentId()).toBe(POST_PATH_ID)
   })
 
   it('survives a corrupt (non-object) row rather than aborting the whole upgrade', async () => {
     await seedV7Fixture({ documents: [['junk', 42]], loro: ['junk'] })
-    expect(await storeKeys('documents')).toEqual([])
+    expect(await migratedLocal().listDocuments()).toEqual([])
   })
 })
 
@@ -806,7 +795,7 @@ describe('v6 -> v8 in one upgrade (the discard must see what the v7 copy produce
     doc.getList('elements').push({ id: 'el' })
     await seedV6Fixture('pre-path-v6', doc.export({ mode: 'snapshot' }))
 
-    expect(await storeKeys('documents')).toEqual([])
+    expect(await migratedLocal().listDocuments()).toEqual([])
     expect(await storeKeys('loroDocuments')).toEqual([])
   })
 })
@@ -907,5 +896,61 @@ describe('cross-tab upgrades', () => {
       await new Promise((r) => setTimeout(r, 300))
       await clearDb()
     }
+  })
+})
+
+describe('IndexedDB v9 -> v10 (backfills the index)', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('carries every surviving document into the index', async () => {
+    // v9 added the index stores EMPTY and said the bespoke `documents` store
+    // would keep serving reads "until its call sites move". They have moved,
+    // and nothing else reads `documents` any more — so without this backfill
+    // an upgrading user opens the app to an empty list with their bytes still
+    // on disk, which is the worst shape a data loss can take.
+    await seedV7Fixture({
+      documents: [
+        [
+          POST_PATH_ID,
+          {
+            documentId: POST_PATH_ID,
+            workspaceId: 'local',
+            path: 'design/login',
+            name: 'Login',
+            updatedAt: '2026-01-01T00:00:00.000Z',
+            kind: 'spatial',
+          },
+        ],
+      ],
+      loro: [POST_PATH_ID],
+      defaultDocumentId: POST_PATH_ID,
+    })
+
+    const local = migratedLocal()
+    expect(await local.listDocuments()).toEqual([
+      {
+        documentId: POST_PATH_ID,
+        workspaceId: 'local',
+        path: 'design/login',
+        name: 'Login',
+        // The content record's stamp ('x', what the fixture wrote there), not
+        // the discarded row's own `updatedAt`. That field was written on
+        // create and rename and never on an edit, so carrying it forward
+        // would migrate a wrong answer into the new shape.
+        updatedAt: 'x',
+        kind: 'spatial',
+      },
+    ])
+    expect(await migratedLocal().getDefaultDocumentId()).toBe(POST_PATH_ID)
+  })
+
+  it('creates the workspace even with no documents to carry', async () => {
+    // The port distinguishes an absent workspace from an empty one, and the
+    // page shows that difference as "Failed to load documents from this
+    // browser." A user who had nothing to migrate must still land on an
+    // empty state.
+    await seedV7Fixture({ documents: [] })
+    expect(await migratedLocal().listDocuments()).toEqual([])
   })
 })

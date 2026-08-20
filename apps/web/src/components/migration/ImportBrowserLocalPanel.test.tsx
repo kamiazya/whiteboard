@@ -1,10 +1,11 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOCAL_WORKSPACE_ID, MemoryStore } from '../../lib/browser-local-store.js'
+import { LOCAL_WORKSPACE_ID } from '../../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
+import { LocalStoreDouble } from '../../test-utils/local-index.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 
 // The panel loads a Loro snapshot by DOCUMENT ID and creates the destination
@@ -13,9 +14,9 @@ import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
 //
 // Written out rather than derived from the path: a derivation both produced
 // non-ULIDs (`my-canvas` → a trailing `-`, which Crockford base32 has no
-// symbol for) and collided any two paths sharing a prefix. MemoryStore does
+// symbol for) and collided any two paths sharing a prefix. LocalStoreDouble does
 // not parse what it is given, so neither would have failed a test here — but
-// IndexedDBStore skips a row `documentSnapshotSchema` rejects, so the fixture
+// LocalStoreDouble skips a row `documentSnapshotSchema` rejects, so the fixture
 // would stop representing what production actually stores.
 const DOCUMENT_IDS: Record<string, string> = {
   c1: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
@@ -66,8 +67,8 @@ describe('ImportBrowserLocalPanel', () => {
   beforeEach(() => localStorage.clear())
   afterEach(cleanup)
 
-  it('lists documents from the injected BrowserLocalStore', async () => {
-    const store = new MemoryStore()
+  it('lists documents from the injected LocalStoreDouble', async () => {
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('c1', 'Alpha'))
     await store.save(makeCanvas('c2', 'Beta'))
 
@@ -75,7 +76,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={vi.fn()}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={makeLoroStore({})}
         settingsStore={createUserSettingsStore()}
       />,
@@ -86,7 +88,7 @@ describe('ImportBrowserLocalPanel', () => {
   })
 
   it("threads each canvas's kind into the create request (markdown stays markdown)", async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('c1', 'Notes', 'markdown'))
     const daemonFetch = vi
       .fn()
@@ -97,7 +99,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={daemonFetch}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={makeLoroStore({
           [documentIdFor('c1')]: { kind: 'ok', snapshot: snapshotFor('c1') },
         })}
@@ -125,11 +128,13 @@ describe('ImportBrowserLocalPanel', () => {
   it('renders an empty state, disables import, and makes zero calls when there are no documents', async () => {
     const daemonFetch = vi.fn()
     const settingsStore = createUserSettingsStore()
+    const store = new LocalStoreDouble()
     render(
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={daemonFetch}
-        browserLocalStore={new MemoryStore()}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={makeLoroStore({})}
         settingsStore={settingsStore}
       />,
@@ -142,7 +147,7 @@ describe('ImportBrowserLocalPanel', () => {
   })
 
   it('reports per-canvas success/failure and writes lastImportedAt only when >=1 succeeded', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('c1', 'Good'))
     await store.save(makeCanvas('c2', 'Bad'))
 
@@ -162,7 +167,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={daemonFetch}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={loroStore}
         settingsStore={settingsStore}
       />,
@@ -179,7 +185,7 @@ describe('ImportBrowserLocalPanel', () => {
   })
 
   it('recovers when a loro load throws mid-batch: later documents still import, button re-enables', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('c1', 'Thrower'))
     await store.save(makeCanvas('c2', 'Good'))
 
@@ -199,7 +205,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={daemonFetch}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={loroStore}
         settingsStore={settingsStore}
       />,
@@ -221,14 +228,15 @@ describe('ImportBrowserLocalPanel', () => {
   })
 
   it('shows the empty state instead of loading forever when listDocuments rejects', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     store.listDocuments = vi.fn().mockRejectedValue(new Error('IndexedDB blocked'))
 
     render(
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={vi.fn()}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={makeLoroStore({})}
         settingsStore={createUserSettingsStore()}
       />,
@@ -238,7 +246,7 @@ describe('ImportBrowserLocalPanel', () => {
   })
 
   it('does not write lastImportedAt when every canvas fails', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('c1', 'Bad'))
     const loroStore = makeLoroStore({ [documentIdFor('c1')]: { kind: 'corrupt-snapshot' } })
     const settingsStore = createUserSettingsStore()
@@ -247,7 +255,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={vi.fn()}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={loroStore}
         settingsStore={settingsStore}
       />,
@@ -260,7 +269,7 @@ describe('ImportBrowserLocalPanel', () => {
   })
 
   it('does not mutate the source store during import (copy-first)', async () => {
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('c1', 'Alpha'))
     const before = await store.listDocuments()
 
@@ -273,7 +282,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={daemonFetch}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={makeLoroStore({
           [documentIdFor('c1')]: { kind: 'ok', snapshot: snapshotFor('alpha') },
         })}
@@ -292,7 +302,7 @@ describe('ImportBrowserLocalPanel', () => {
     // Two local documents can no longer collide with EACH OTHER — a local path
     // is unique in its own store. What still collides is the destination: the
     // daemon workspace may already hold a document at this path.
-    const store = new MemoryStore()
+    const store = new LocalStoreDouble()
     await store.save(makeCanvas('my-canvas', 'My Canvas!'))
 
     const takenPaths = new Set<string>(['my-canvas'])
@@ -311,7 +321,8 @@ describe('ImportBrowserLocalPanel', () => {
       <ImportBrowserLocalPanel
         workspaceId="ws1"
         daemonFetch={daemonFetch}
-        browserLocalStore={store}
+        browserLocalStore={store.index}
+        browserLocalClock={store.clock}
         loroStore={makeLoroStore({
           [documentIdFor('my-canvas')]: { kind: 'ok', snapshot: snapshotFor('a') },
         })}

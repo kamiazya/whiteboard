@@ -9,7 +9,8 @@ import {
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
@@ -34,7 +35,9 @@ async function clearDb(): Promise<void> {
   })
 }
 
-async function renderLoaded(store = new IndexedDBStore()) {
+async function renderLoaded(
+  store: IdbDocumentIndex = new IdbDocumentIndex(),
+): Promise<IdbDocumentIndex> {
   render(<BrowserLocalDocumentPage store={store} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
@@ -70,13 +73,13 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     // Not yet deleted: the cleanup-completed screen has not been shown, and the
     // canvas row is still present in the store.
     expect(screen.queryByTestId('cleanup-completed')).toBeNull()
-    const list = await store.listDocuments()
+    const list = await listLocalDocuments(store)
     expect(list.length).toBeGreaterThan(0)
   })
 
   it('confirming deletion shows the cleanup-completed view and removes the canvas row', async () => {
     const store = await renderLoaded()
-    const beforeIds = (await store.listDocuments()).map((c) => c.documentId)
+    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     expect(beforeIds.length).toBeGreaterThan(0)
 
     const dialog = await openDeleteDialog()
@@ -87,7 +90,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
-    const afterIds = (await store.listDocuments()).map((c) => c.documentId)
+    const afterIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     for (const id of beforeIds) {
       expect(afterIds).not.toContain(id)
     }
@@ -145,7 +148,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
 
   it('confirming delete while a save is pending flushes and deletes exactly once', async () => {
     let store = await renderLoaded()
-    const beforeIds = (await store.listDocuments()).map((c) => c.documentId)
+    const beforeIds = (await listLocalDocuments(store)).map((c) => c.documentId)
 
     // Put the header persistence state into "pending" by renaming, then
     // immediately open+confirm the delete dialog before the debounce fires.
@@ -198,7 +201,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     await waitFor(() => expect(screen.getByTestId('cleanup-completed')).toBeInTheDocument(), {
       timeout: 5000,
     })
-    const afterIds = (await store.listDocuments()).map((c) => c.documentId)
+    const afterIds = (await listLocalDocuments(store)).map((c) => c.documentId)
     for (const id of beforeIds) {
       expect(afterIds).not.toContain(id)
     }

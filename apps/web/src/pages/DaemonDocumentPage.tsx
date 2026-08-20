@@ -44,6 +44,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
+import type { ContentClock } from '../lib/local-document-summary.js'
 import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellDaemonAuthError } from '../lib/shell-status-store.js'
@@ -87,6 +88,7 @@ export interface DaemonDocumentPageProps {
   // previously worked browser-local can copy those documents onto this
   // daemon workspace. Absent in tests/embedders that don't need the flow.
   browserLocalStore?: DocumentIndex
+  browserLocalClock?: ContentClock
   // Wired to WorkspaceTopBar's own "Back to canvas list" button. Absent
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
@@ -102,6 +104,7 @@ export function DaemonDocumentPage({
   onContinueBrowserLocal,
   createBackend,
   browserLocalStore,
+  browserLocalClock,
   onNavigateBack,
 }: DaemonDocumentPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
@@ -714,6 +717,7 @@ export function DaemonDocumentPage({
                         daemonFetch={daemonFetch}
                         daemonBaseUrl={daemonBaseUrl}
                         browserLocalStore={browserLocalStore}
+                        browserLocalClock={browserLocalClock}
                       />
                     </Suspense>
                   </ErrorBoundary>

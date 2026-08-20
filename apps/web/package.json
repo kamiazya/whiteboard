@@ -72,7 +72,6 @@
     "@vitest/browser-playwright": "catalog:",
     "@vitest/web-worker": "^4.1.10",
     "decode-named-character-reference": "^1.3.0",
-    "fake-indexeddb": "^6.2.5",
     "fast-check": "^4.7.0",
     "msw": "^2.15.0",
     "playwright": "1.61.1",

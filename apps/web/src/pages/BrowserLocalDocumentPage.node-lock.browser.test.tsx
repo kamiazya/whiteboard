@@ -16,7 +16,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { IndexedDBStore } from '../lib/browser-local-store.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import {
   clearWhiteboardDb,
   createNodeCommand,
@@ -57,7 +57,7 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js')
 
 async function mountPage(): Promise<void> {
-  render(<BrowserLocalDocumentPage store={new IndexedDBStore()} />)
+  render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
   await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
     timeout: 5000,
   })

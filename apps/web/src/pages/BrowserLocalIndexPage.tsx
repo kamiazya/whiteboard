@@ -3,10 +3,10 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DocumentListView } from '../components/document-list/DocumentListView.js'
-import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
+  ensureLocalWorkspace,
   IdbDefaultDocumentPointer,
   idbContentClock,
   LOCAL_WORKSPACE_ID,
@@ -14,7 +14,10 @@ import {
 } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import type { LoroStoreLike } from './use-browser-local-document-controller.js'
+import {
+  createSeededDocument,
+  type LoroStoreLike,
+} from './use-browser-local-document-controller.js'
 
 export interface BrowserLocalIndexPageProps {
   index: DocumentIndex
@@ -46,7 +49,12 @@ export function BrowserLocalIndexPage({
 
   useEffect(() => {
     let cancelled = false
-    listLocalDocuments(index, clock)
+    // On a device that has never created a document there is no workspace to
+    // list, and the port answers that with an error rather than an empty
+    // list. Ensuring it here is what makes a first visit render the empty
+    // state instead of "Failed to load documents from this browser."
+    ensureLocalWorkspace(index)
+      .then(() => listLocalDocuments(index, clock))
       .then((all) => {
         if (!cancelled) setSnapshots(all)
       })
@@ -113,23 +121,14 @@ export function BrowserLocalIndexPage({
         // already taken. A failed read falls back to numbering from nothing,
         // which the index's own uniqueness check then refuses rather than
         // duplicating an address.
-        const taken = (await listLocalDocuments(index, clock).catch(() => [])).map(
-          (row) => row.path,
-        )
-        const entry = await index.createDocument({
-          workspaceId: LOCAL_WORKSPACE_ID,
-          path: newDocumentPathIn('', taken),
-          kind,
-        })
-        // Seeded here too. `updatedAt` comes from the content record's own
-        // envelope, so a document created without one has no last-edited time
-        // to report — and this page used to be one of the three create paths
-        // that skipped the seed.
-        await loro.save(entry.documentId, loro.createEmptySnapshot())
+        // The editor's create path, not a second one beside it: numbering,
+        // the content seed, and the rollback on a failed seed are all things
+        // this page used to do differently or not at all.
+        const created = await createSeededDocument(index, loro, clock, undefined, kind)
         // Repointed so a later plain load resumes in the new document — the
         // same contract the editor's own create/switch flows keep.
-        await pointer.set(entry.documentId)
-        onOpenDocument(entry.path)
+        await pointer.set(created.documentId)
+        onOpenDocument(created.path)
       } catch {
         setError('Failed to create a canvas in this browser.')
       } finally {

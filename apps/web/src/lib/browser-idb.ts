@@ -73,6 +73,16 @@ const DB_NAME = 'whiteboard'
  * claiming a path is one `add()` that fails on conflict rather than a read
  * followed by a write two callers could interleave.
  *
+ * v9 -> v10: backfills those two stores from the bespoke `documents` store
+ * and then drops it. v9 created them empty on the promise that `documents`
+ * would keep serving reads "until its call sites move"; this is that move.
+ * The row shapes already agree — v8 left every surviving row carrying a
+ * `workspaceId` and a `path` — so the backfill is a copy, not a conversion.
+ * The `workspaces` row is written even when there is nothing to copy: the
+ * port answers a list against an unknown workspace with an error rather than
+ * an empty list, so a user who had no documents must still get a workspace or
+ * their first visit reads as a failure.
+ *
  * Cross-tab upgrades are handled rather than accepted from v8 on: every
  * connection this module opens closes itself on `versionchange`, so a newer
  * tab's upgrade is not blocked by an older one sitting idle, and a block that
@@ -80,7 +90,7 @@ const DB_NAME = 'whiteboard'
  * message a caller can show instead of hanging on a request that never
  * settles.
  */
-export const DB_VERSION = 9
+export const DB_VERSION = 10
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -159,14 +169,17 @@ function isPathAddressed(value: unknown): boolean {
   )
 }
 
-function discardPrePathDocuments(tx: IDBTransaction): void {
+function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
   const documents = tx.objectStore('documents')
   const loro = tx.objectStore('loroDocuments')
   const meta = tx.objectStore('meta')
   const cursorReq = documents.openCursor()
   cursorReq.onsuccess = () => {
     const cursor = cursorReq.result
-    if (!cursor) return
+    if (!cursor) {
+      done()
+      return
+    }
     if (!isPathAddressed(cursor.value)) {
       const key = cursor.primaryKey
       cursor.delete()
@@ -177,6 +190,46 @@ function discardPrePathDocuments(tx: IDBTransaction): void {
       pointer.onsuccess = () => {
         if (pointer.result === key) meta.delete('defaultDocumentId')
       }
+    }
+    cursor.continue()
+  }
+}
+
+/**
+ * Copies every surviving `documents` row into the `DocumentIndex` stores, then
+ * drops `documents`.
+ *
+ * The workspace rows come from the documents themselves rather than from a
+ * hardcoded `'local'`: this store never held more than one workspace, but
+ * reading it from the data is the version that stays correct if it ever did.
+ * `LOCAL_WORKSPACE_ID` is still written unconditionally, because that is the
+ * one the browser-local UI opens.
+ */
+function backfillDocumentIndex(tx: IDBTransaction): void {
+  const documents = tx.objectStore('documents')
+  const workspaces = tx.objectStore(WORKSPACES_STORE)
+  const index = tx.objectStore(DOCUMENT_INDEX_STORE)
+  workspaces.put({ workspaceId: 'local' }, 'local')
+  const cursorReq = documents.openCursor()
+  cursorReq.onsuccess = () => {
+    const cursor = cursorReq.result
+    if (!cursor) {
+      // Only once the walk is done: deleting the store mid-cursor would end
+      // the walk with rows still uncopied.
+      tx.db.deleteObjectStore('documents')
+      return
+    }
+    const row = cursor.value
+    if (isPathAddressed(row)) {
+      const { workspaceId, documentId, path, kind, name } = row
+      workspaces.put({ workspaceId }, workspaceId)
+      index.put({
+        workspaceId,
+        documentId,
+        path,
+        kind,
+        ...(name === undefined || name === path ? {} : { name }),
+      })
     }
     cursor.continue()
   }
@@ -228,7 +281,14 @@ export function openWhiteboardDb(dbName: string = DB_NAME): Promise<IDBDatabase>
       let pendingCopies = RENAMED_STORES.length
       const onCopyDone = () => {
         pendingCopies -= 1
-        if (pendingCopies === 0) discardPrePathDocuments(tx)
+        if (pendingCopies === 0) {
+          // Ordered, for the same reason the discard is: the backfill walks
+          // `documents`, which the rename copies are still filling, and the
+          // discard decides which of those rows are worth carrying. Reading
+          // before either drains sees an empty store and silently indexes
+          // nothing.
+          discardPrePathDocuments(tx, () => backfillDocumentIndex(tx))
+        }
       }
       for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to, onCopyDone)
     }

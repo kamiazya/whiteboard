@@ -6,6 +6,7 @@ import { deriveCopyName } from '../lib/derive-copy-name.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
+  ensureLocalWorkspace,
   IdbDefaultDocumentPointer,
   idbContentClock,
   LOCAL_WORKSPACE_ID,
@@ -79,7 +80,7 @@ export interface BrowserLocalDocumentController {
  * The index row is rolled back if the content write fails, so a failed create
  * never leaves a document with nothing behind it.
  */
-async function createSeededDocument(
+export async function createSeededDocument(
   index: DocumentIndex,
   loro: LoroStoreLike,
   clock: ContentClock,
@@ -87,6 +88,7 @@ async function createSeededDocument(
   kind: DocumentSnapshot['kind'] = 'spatial',
   content?: Uint8Array,
 ): Promise<DocumentSnapshot> {
+  await ensureLocalWorkspace(index)
   const taken = (await listLocalDocuments(index, clock).catch(() => [])).map((row) => row.path)
   const trimmed = name?.trim()
   const entry = await index.createDocument({
@@ -111,25 +113,53 @@ async function createSeededDocument(
   return snap
 }
 
+/**
+ * What the browser-local editor is wired to.
+ *
+ * Named rather than positional because the bespoke store's single object
+ * became four collaborators, and three of them are optional — a positional
+ * list that long makes the common call site a row of `undefined`, and puts
+ * the two IndexedDB-backed ones in an order nobody can read back.
+ */
+export interface BrowserLocalControllerDeps {
+  loro?: LoroStoreLike
+  /**
+   * A document PATH requested by the URL (e.g. a bookmarked /local/:path deep
+   * link), read once at mount. The URL addresses a document the way the daemon
+   * does — by workspace-relative path, not by id — so this resolves through
+   * the list before loading. Takes priority over the default-document pointer,
+   * which it also repoints on success so a later plain (no deep link) load
+   * resumes here — the same contract switchDocument already has. A
+   * stale/moved path falls back to the normal flow rather than showing an
+   * error: a dead bookmark must not dead-end the user.
+   */
+  initialPath?: string
+  /**
+   * The two things `DocumentIndex` does not own. Defaulted so production wires
+   * nothing extra, and injectable because both read IndexedDB, which the jsdom
+   * test project does not have.
+   */
+  pointer?: DefaultDocumentPointer
+  clock?: ContentClock
+}
+
+// Module-level rather than per-call defaults: these are stateless handles on
+// the same IndexedDB, and one identity apiece keeps a re-render from minting a
+// new collaborator the effect deps would have to ignore.
+const defaultLoroStore = /* @__PURE__ */ new LoroStore()
+const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
+const defaultClock: ContentClock = (ids) => idbContentClock()(ids)
+
 export function useBrowserLocalDocumentController(
   index: DocumentIndex,
-  loro: LoroStoreLike = new LoroStore(),
-  // A document PATH requested by the URL (e.g. a bookmarked /local/:path
-  // deep link), read once at mount. The URL addresses a document the way the
-  // daemon does — by workspace-relative path, not by id — so this resolves
-  // through the list before loading. Takes priority over the store's own
-  // "default canvas" pointer, which it also repoints on success so a later
-  // plain (no deep link) load resumes here — the same contract switchDocument
-  // already has. A stale/moved path falls back to the normal flow rather
-  // than showing an error: a dead bookmark must not dead-end the user.
-  initialPath?: string,
-  // The two things `DocumentIndex` does not own. Defaulted so production wires
-  // nothing extra, and injectable because both read IndexedDB, which the jsdom
-  // test project does not have. After `initialPath` so every existing
-  // three-argument call site keeps meaning what it meant.
-  pointer: DefaultDocumentPointer = new IdbDefaultDocumentPointer(),
-  clock: ContentClock = idbContentClock(),
+  deps: BrowserLocalControllerDeps = {},
 ): BrowserLocalDocumentController {
+  const {
+    loro = defaultLoroStore,
+    initialPath,
+    pointer = defaultPointer,
+    clock = defaultClock,
+  } = deps
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
     kind: 'saved',
@@ -194,7 +224,9 @@ export function useBrowserLocalDocumentController(
           await indexRef.current.setDocumentName({
             workspaceId: LOCAL_WORKSPACE_ID,
             documentId: snap.documentId,
-            name: snap.name,
+            // Omitted when it equals the path, which is how the index spells
+            // "no name of its own" — see `toSnapshot`'s fallback.
+            ...(snap.name === snap.path ? {} : { name: snap.name }),
           })
           setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
           return true
@@ -308,7 +340,12 @@ export function useBrowserLocalDocumentController(
       // current before the immediate flushSave below reads it.
       const base = pendingSnapshotRef.current ?? snapshotRef.current
       if (base === null) return Promise.resolve()
-      const normalized = name.trim() || 'untitled'
+      // A cleared name becomes the PATH, not an 'untitled' sentinel: the
+      // index stores an unnamed document by omitting `name`, and the listing
+      // projects the path back. A literal sentinel was a third state that
+      // agreed with neither, and it stopped matching the moment paths started
+      // being numbered ('untitled-2' is an ordinary path, not a sentinel).
+      const normalized = name.trim() || base.path
       const updated: DocumentSnapshot = {
         ...base,
         name: normalized,
@@ -382,6 +419,13 @@ export function useBrowserLocalDocumentController(
             documentId: existingId,
           })
           if (stale !== null) {
+            // Cleared BEFORE the row goes, and not left for the repoint
+            // below to overwrite: if that repoint then fails, a pointer still
+            // naming the deleted document would make the next plain load
+            // degrade instead of starting clean. The bespoke store got this
+            // for free — its `del` cleared the pointer as it deleted — and
+            // deleting by path has no such coupling, so the clear is explicit.
+            await pointerRef.current.clear()
             await indexRef.current.deleteDocument({
               workspaceId: LOCAL_WORKSPACE_ID,
               path: stale.path,

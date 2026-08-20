@@ -2,7 +2,7 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useEffect, useState } from 'react'
 import { getAppLogger } from '../../lib/app-logger.js'
 import { DEFAULT_DAEMON_BASE_URL } from '../../lib/daemon-probe.js'
-import { listLocalDocuments } from '../../lib/local-document-summary.js'
+import { type ContentClock, listLocalDocuments } from '../../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
@@ -21,6 +21,9 @@ interface ImportBrowserLocalPanelProps {
   daemonFetch: typeof globalThis.fetch
   daemonBaseUrl?: string
   browserLocalStore: DocumentIndex
+  /** Last-edited times, which the index does not hold. Injected for the same
+   *  reason the store is: it reads IndexedDB, and a jsdom test has none. */
+  browserLocalClock?: ContentClock
   loroStore: ImportLoroStoreLike
   settingsStore: UserSettingsStore
 }
@@ -41,6 +44,7 @@ export function ImportBrowserLocalPanel({
   daemonFetch,
   daemonBaseUrl = DEFAULT_DAEMON_BASE_URL,
   browserLocalStore,
+  browserLocalClock,
   loroStore,
   settingsStore,
 }: ImportBrowserLocalPanelProps) {
@@ -50,7 +54,7 @@ export function ImportBrowserLocalPanel({
 
   useEffect(() => {
     let cancelled = false
-    listLocalDocuments(browserLocalStore)
+    listLocalDocuments(browserLocalStore, browserLocalClock)
       .then((list) => {
         if (!cancelled) setDocuments(list)
       })
@@ -63,7 +67,7 @@ export function ImportBrowserLocalPanel({
     return () => {
       cancelled = true
     }
-  }, [browserLocalStore])
+  }, [browserLocalStore, browserLocalClock])
 
   async function handleImport() {
     if (!documents || documents.length === 0) return

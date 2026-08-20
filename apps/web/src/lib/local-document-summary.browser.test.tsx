@@ -12,11 +12,10 @@ import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
-  clearDefaultDocumentId,
-  getDefaultDocumentId,
+  IdbDefaultDocumentPointer,
+  idbContentClock,
   LOCAL_WORKSPACE_ID,
   listLocalDocuments,
-  setDefaultDocumentId,
 } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
@@ -56,7 +55,7 @@ describe('local document summary', () => {
     })
     await writeContent(entry.documentId)
 
-    const [row] = await listLocalDocuments(index, DB_NAME)
+    const [row] = await listLocalDocuments(index, idbContentClock(DB_NAME))
     expect(row?.documentId).toBe(entry.documentId)
     expect(row?.path).toBe('notes')
     expect(row?.name).toBe('Notes')
@@ -77,7 +76,7 @@ describe('local document summary', () => {
     })
     await writeContent(entry.documentId)
 
-    const [row] = await listLocalDocuments(index, DB_NAME)
+    const [row] = await listLocalDocuments(index, idbContentClock(DB_NAME))
     expect(row?.name).toBe('archive/untitled')
   })
 
@@ -93,18 +92,19 @@ describe('local document summary', () => {
       kind: 'spatial',
     })
 
-    const rows = await listLocalDocuments(index, DB_NAME)
+    const rows = await listLocalDocuments(index, idbContentClock(DB_NAME))
     expect(rows).toHaveLength(1)
     expect(rows[0]?.updatedAt).toBe(new Date(0).toISOString())
   })
 
   it('remembers, and forgets, which document a plain load resumes into', async () => {
-    expect(await getDefaultDocumentId(DB_NAME)).toBeNull()
+    const pointer = new IdbDefaultDocumentPointer(DB_NAME)
+    expect(await pointer.get()).toBeNull()
 
-    await setDefaultDocumentId('01ARZ3NDEKTSV4RRFFQ69G5FAV', DB_NAME)
-    expect(await getDefaultDocumentId(DB_NAME)).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    await pointer.set('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    expect(await pointer.get()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
 
-    await clearDefaultDocumentId(DB_NAME)
-    expect(await getDefaultDocumentId(DB_NAME)).toBeNull()
+    await pointer.clear()
+    expect(await pointer.get()).toBeNull()
   })
 })

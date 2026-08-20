@@ -50,6 +50,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
+import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -94,6 +95,13 @@ const log = getAppLogger('browser-local-document-page')
 
 interface BrowserLocalDocumentPageProps {
   store: DocumentIndex
+  /**
+   * The two app-side concerns `DocumentIndex` does not own. Defaulted inside
+   * the controller, so production passes neither; a jsdom test passes both,
+   * because the real ones read IndexedDB.
+   */
+  pointer?: DefaultDocumentPointer
+  clock?: ContentClock
   // Injectable so tests can avoid the real LoroStore's IndexedDB dependency
   // (jsdom does not implement IndexedDB); production callers rely on the
   // controller hook's own default.
@@ -111,13 +119,15 @@ interface BrowserLocalDocumentPageProps {
 // own message; the other states are not shown as raw enum tokens.
 
 /**
- * The canvas name as a TITLE. `untitled` is the store's sentinel for an
- * unnamed canvas (`renameDocument` normalises a cleared name to it), so it
- * becomes the empty string here and the title box falls back to its
- * placeholder rather than showing the sentinel as a real name.
+ * The canvas name as a TITLE.
+ *
+ * A name equal to the document's own path is one nobody chose: the index
+ * stores an unnamed document by omitting `name`, and the listing projects the
+ * path back so a row always has something to show. The title box wants the
+ * opposite — the placeholder, not the address — so that case becomes empty.
  */
-function titleOf(name: string | null): string {
-  return name === null || name === 'untitled' ? '' : name
+function titleOf(name: string | null, path: string | null): string {
+  return name === null || name === path ? '' : name
 }
 
 export function BrowserLocalDocumentPage({
@@ -125,6 +135,8 @@ export function BrowserLocalDocumentPage({
   loro,
   capabilities = BROWSER_LOCAL_CAPABILITIES,
   initialPath,
+  pointer,
+  clock,
 }: BrowserLocalDocumentPageProps) {
   const {
     loro: resolvedLoro,
@@ -139,7 +151,7 @@ export function BrowserLocalDocumentPage({
     createDocument,
     switchDocument,
     duplicateDocument,
-  } = useBrowserLocalDocumentController(store, loro, initialPath)
+  } = useBrowserLocalDocumentController(store, { loro, initialPath, pointer, clock })
   const location = useLocation()
   const navigate = useNavigate()
 
@@ -723,7 +735,7 @@ export function BrowserLocalDocumentPage({
           key={documentId ?? 'no-canvas'}
           status={<SaveStatusChip state={pageState.persistence} />}
           actions={canvasRowActions}
-          title={titleOf(documentName)}
+          title={titleOf(documentName, documentPath)}
           onTitleChange={onTitleChange}
           facets={markdownDoc.coreFacets}
           onFacetsChange={markdownDoc.setCoreFacets}
@@ -741,7 +753,7 @@ export function BrowserLocalDocumentPage({
         status={<SaveStatusChip state={pageState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
-        title={titleOf(documentName)}
+        title={titleOf(documentName, documentPath)}
         onTitleChange={onTitleChange}
       />
     )
@@ -870,7 +882,7 @@ export function BrowserLocalDocumentPage({
                   autoFocus: true,
                   theme: resolvedTheme,
                   meta: markdownDoc.coreFacets,
-                  title: titleOf(documentName),
+                  title: titleOf(documentName, documentPath),
                   resolveAlias,
                   linkTargets,
                   onOpenDocument: (id) => navigateToDocument(id),

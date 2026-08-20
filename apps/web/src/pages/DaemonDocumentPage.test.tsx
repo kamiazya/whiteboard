@@ -14,10 +14,11 @@ import {
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { LOCAL_WORKSPACE_ID, MemoryStore } from '../lib/browser-local-store.js'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
+import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import { getShellDaemonAuthError } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 function MemoryRouterWrapper({ children }: { children: ReactNode }) {
@@ -2111,7 +2112,7 @@ describe('DaemonDocumentPage', () => {
 
   describe('browser-local import panel', () => {
     it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
-      const browserLocalStore = new MemoryStore()
+      const browserLocalStore = new LocalStoreDouble()
       await browserLocalStore.save({
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
         workspaceId: LOCAL_WORKSPACE_ID,
@@ -2126,7 +2127,8 @@ describe('DaemonDocumentPage', () => {
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
-            browserLocalStore={browserLocalStore}
+            browserLocalStore={browserLocalStore.index}
+            browserLocalClock={browserLocalStore.clock}
           />,
           { container: document.body },
         )
@@ -2145,15 +2147,16 @@ describe('DaemonDocumentPage', () => {
     })
 
     it('does not touch the browser-local store until the disclosure is opened', async () => {
-      const browserLocalStore = new MemoryStore()
-      const listSpy = vi.spyOn(browserLocalStore, 'listDocuments')
+      const browserLocalStore = new LocalStoreDouble()
+      const listSpy = vi.spyOn(browserLocalStore.index, 'listDocuments')
 
       await act(async () => {
         render(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
-            browserLocalStore={browserLocalStore}
+            browserLocalStore={browserLocalStore.index}
+            browserLocalClock={browserLocalStore.clock}
           />,
           { container: document.body },
         )
