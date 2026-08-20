@@ -1,6 +1,9 @@
 import { describe, expect, it } from 'vitest'
+import { sanitizeHref } from './format.js'
 import { serializeSvg, serializeSvgChunks } from './serialize.js'
 import { el, rawXml } from './vnode.js'
+
+const box = { y: 0, width: 1, height: 1 }
 
 describe('serializeSvg', () => {
   it('emits attributes in insertion order with number values through formatCoord', () => {
@@ -9,12 +12,12 @@ describe('serializeSvg', () => {
   })
 
   it('omits attributes whose value is undefined (presence-only)', () => {
-    const node = el('rect', { x: 0, rx: undefined, fill: undefined })
-    expect(serializeSvg(node)).toBe('<rect x="0"/>')
+    const node = el('rect', { x: 0, ...box, rx: undefined, fill: undefined })
+    expect(serializeSvg(node)).toBe('<rect x="0" y="0" width="1" height="1"/>')
   })
 
   it('escapes string attribute values including quotes', () => {
-    const node = el('a', { href: 'https://e.com/?a=1&b="x"<y>' }, [])
+    const node = el('a', { href: sanitizeHref('https://e.com/?a=1&b="x"<y>') }, [])
     expect(serializeSvg(node)).toBe(
       '<a href="https://e.com/?a=1&amp;b=&quot;x&quot;&lt;y&gt;"></a>',
     )
@@ -33,15 +36,17 @@ describe('serializeSvg', () => {
   it('self-closes when children are absent but pairs tags when children are an empty array', () => {
     expect(serializeSvg(el('g', { role: 'presentation' }))).toBe('<g role="presentation"/>')
     expect(serializeSvg(el('g', undefined, []))).toBe('<g></g>')
-    expect(serializeSvg(el('image', { x: 0 }, []))).toBe('<image x="0"></image>')
+    expect(serializeSvg(el('title', undefined, []))).toBe('<title></title>')
   })
 
   it('flattens nested child arrays in document order', () => {
     const node = el('g', undefined, [
-      [el('rect', { x: 1 }), [el('rect', { x: 2 })]],
-      el('rect', { x: 3 }),
+      [el('rect', { x: 1, ...box }), [el('rect', { x: 2, ...box })]],
+      el('rect', { x: 3, ...box }),
     ])
-    expect(serializeSvg(node)).toBe('<g><rect x="1"/><rect x="2"/><rect x="3"/></g>')
+    expect(serializeSvg(node)).toBe(
+      '<g><rect x="1" y="0" width="1" height="1"/><rect x="2" y="0" width="1" height="1"/><rect x="3" y="0" width="1" height="1"/></g>',
+    )
   })
 
   it('recurses into element children', () => {
@@ -54,11 +59,11 @@ describe('serializeSvg', () => {
   })
 
   it('joins to the same bytes the chunk generator yields', () => {
-    const node = el('svg', { xmlns: 'x' }, [el('rect', { x: 1 }), 'txt', rawXml('<g/>')])
+    const node = el('svg', { xmlns: 'x' }, [el('rect', { x: 1, ...box }), 'txt', rawXml('<g/>')])
     expect([...serializeSvgChunks(node)].join('')).toBe(serializeSvg(node))
   })
 
   it('throws on a non-finite number attribute (formatCoord contract: a layout bug, not a serializer one)', () => {
-    expect(() => serializeSvg(el('rect', { x: Number.NaN }))).toThrow(RangeError)
+    expect(() => serializeSvg(el('rect', { x: Number.NaN, ...box }))).toThrow(RangeError)
   })
 })

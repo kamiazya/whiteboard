@@ -113,13 +113,36 @@ function normalizeHrefForSchemeCheck(href: string): string {
   return href.replace(ASCII_TAB_OR_NEWLINE, '').replace(LEADING_C0_OR_SPACE, '')
 }
 
+declare const safeHrefBrand: unique symbol
+
+/**
+ * A navigation href that has passed `sanitizeHref`, or that this package
+ * composed itself from a value the host resolves (`trustedHref`). The
+ * `<a href>` attribute accepts only this brand, so a caller cannot hand a
+ * raw markdown URL to the serializer without the scheme check — the
+ * compile-time form of the invariant `sanitizeHref`'s doc comment states.
+ */
+export type SafeHref = string & { readonly [safeHrefBrand]: true }
+
 /**
  * Returns `href` unchanged when it has no scheme (relative/hash link) or an
  * allow-listed scheme, otherwise `#` — never throws, degrades to a safe
  * same-page anchor rather than rejecting the whole render.
  */
-export function sanitizeHref(href: string): string {
+export function sanitizeHref(href: string): SafeHref {
   const match = URL_SCHEME_PATTERN.exec(normalizeHrefForSchemeCheck(href))
-  if (!match) return href
-  return SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? href : '#'
+  if (!match) return href as SafeHref
+  return (SAFE_URL_SCHEMES.has(match[1].toLowerCase()) ? href : '#') as SafeHref
+}
+
+/**
+ * Brands an href this package COMPOSES itself rather than receives from
+ * markdown: a `#fragment` built from a document id, or a wiki-link's
+ * document reference. Those are resolved by the host application, not the
+ * browser's URL parser, so the scheme allow-list does not apply — the
+ * XML-escaping in the serializer still does. Never pass caller-supplied
+ * link URLs here; those go through `sanitizeHref`.
+ */
+export function trustedHref(href: string): SafeHref {
+  return href as SafeHref
 }

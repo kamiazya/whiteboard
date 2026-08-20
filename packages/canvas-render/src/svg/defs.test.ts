@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { collectDefs } from './defs.js'
+import { trustedHref } from './format.js'
 import { el, rawXml, type SvgDef, withDefs } from './vnode.js'
 
 const gradient: SvgDef = { id: 'grad', node: el('linearGradient', { id: 'grad' }) }
@@ -7,11 +8,16 @@ const mask: SvgDef = { id: 'mask', node: el('mask', { id: 'mask' }) }
 
 describe('collectDefs', () => {
   it('returns nothing for a tree with no declarations', () => {
-    expect(collectDefs([el('g', undefined, [el('rect', { x: 0 }), 'text'])])).toEqual([])
+    const rect = el('rect', { x: 0, y: 0, width: 1, height: 1 })
+    expect(collectDefs([el('g', undefined, [rect, 'text'])])).toEqual([])
   })
 
   it('collects a declaration from a deeply nested element', () => {
-    const tree = [el('g', undefined, [el('a', { href: '#x' }, [withDefs(el('text'), [gradient])])])]
+    const tree = [
+      el('g', undefined, [
+        el('a', { href: trustedHref('#x') }, [withDefs(el('text', { x: 0, y: 0 }), [gradient])]),
+      ]),
+    ]
     expect(collectDefs(tree)).toEqual([gradient])
   })
 

@@ -6,6 +6,8 @@
  * attribute ordering cannot diverge per call site.
  */
 
+import type { SvgElements, SvgTagName } from './elements.js'
+
 /**
  * `undefined` means the attribute is omitted — the presence-only rule
  * (an absent field is never defaulted) expressed as a type. Numbers are
@@ -70,6 +72,18 @@ export function withDefs(node: SvgVNode, defs: ReadonlyArray<SvgDef>): SvgVNode 
   return { ...node, defs }
 }
 
+/**
+ * Builds one element VNode. The public signature is constrained by the
+ * typed element table (elements.ts): only emitted element names, only
+ * their declared attributes, numbers where `formatCoord` is the contract.
+ * The VNode itself stores attrs loosely — the table is a construction-time
+ * gate, not a runtime shape.
+ */
+export function el<T extends SvgTagName>(
+  tag: T,
+  attrs?: SvgElements[T],
+  children?: ReadonlyArray<SvgChild>,
+): SvgVNode
 export function el(tag: string, attrs?: SvgAttrs, children?: ReadonlyArray<SvgChild>): SvgVNode {
   return {
     tag,

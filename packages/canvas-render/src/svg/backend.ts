@@ -16,17 +16,10 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { collectDefs } from './defs.js'
-import { formatCoord, sanitizeHref } from './format.js'
+import type { PaintAttrs, SvgBoxAttrs, TextEmphasisAttrs } from './elements.js'
+import { formatCoord, sanitizeHref, trustedHref } from './format.js'
 import { serializeSvg } from './serialize.js'
-import {
-  el,
-  rawXml,
-  type SvgAttrs,
-  type SvgAttrValue,
-  type SvgChild,
-  type SvgDef,
-  withDefs,
-} from './vnode.js'
+import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 /**
  * Decorative/presentational elements (backgrounds, dividers, group
@@ -36,7 +29,7 @@ import {
  */
 const PRESENTATION = 'presentation'
 
-function rectAttrs(bbox: BoundingBox): SvgAttrs {
+function rectAttrs(bbox: BoundingBox): SvgBoxAttrs {
   // Fixed declaration order: x, y, width, height.
   return { x: bbox.x, y: bbox.y, width: bbox.w, height: bbox.h }
 }
@@ -65,9 +58,9 @@ function isPositiveLength(value: number | undefined): value is number {
  * or unusable field is omitted rather than defaulted — see the
  * `Appearance` doc comment for why the backend never invents a value.
  */
-function appearanceAttrs(appearance?: Appearance): SvgAttrs {
+function appearanceAttrs(appearance?: Appearance): PaintAttrs {
   if (!appearance) return {}
-  const attrs: Record<string, SvgAttrValue> = {}
+  const attrs: PaintAttrs = {}
   if (isNonEmptyString(appearance.fill)) attrs.fill = appearance.fill
   if (isNonEmptyString(appearance.stroke)) attrs.stroke = appearance.stroke
   if (isNonNegativeLength(appearance.strokeWidth)) attrs['stroke-width'] = appearance.strokeWidth
@@ -115,8 +108,8 @@ const TEXT_HALO_PAD_PX = 2
 const BACKDROP_RADIUS_PX = 6
 
 /** Inline emphasis the layout measured for — painted, or the flags are lies. */
-function emphasisAttrs(run: TextRunNode): SvgAttrs {
-  const attrs: Record<string, SvgAttrValue> = {}
+function emphasisAttrs(run: TextRunNode): TextEmphasisAttrs {
+  const attrs: TextEmphasisAttrs = {}
   if (run.strong === true) attrs['font-weight'] = '700'
   if (run.emphasis === true) attrs['font-style'] = 'italic'
   // A link is underlined rather than recolored because this backend is never
@@ -226,7 +219,8 @@ function renderTextRun(run: TextRunNode): SvgChild {
   // pill.
   const content: SvgChild = [renderBackdrop(run), underlay, text]
   if (!run.link) return content
-  const href = run.link.kind === 'link' ? sanitizeHref(run.link.href) : run.link.documentId
+  const href =
+    run.link.kind === 'link' ? sanitizeHref(run.link.href) : trustedHref(run.link.documentId)
   return el('a', { href }, [content])
 }
 
@@ -452,7 +446,7 @@ function renderNode(node: SceneNode): SvgChild {
       // preceding block. The node carries no measured ascent (it is not a
       // text run), so the baseline is derived from the box: 0.8 matches the
       // ascent ratio the measurer contract documents for body text.
-      return el('a', { href: `#${node.documentId}` }, [
+      return el('a', { href: trustedHref(`#${node.documentId}`) }, [
         el('text', { x: node.bbox.x, y: node.bbox.y + node.bbox.h * 0.8 }, [node.title]),
       ])
     case 'embedResolved':
