@@ -27,13 +27,16 @@ const {
   deleteDocument,
   renameDocumentPath,
   ConflictError,
-  scheduleAutoCompact,
-  setAutoCompactTrigger,
-  disposeAutoCompact,
   getDocumentKind,
+  setDocumentSavedListener,
+} = await import('./document-store.js')
+const {
+  scheduleAutoCompact,
+  uninstallAutoCompact,
+  disposeAutoCompact,
   _inFlightAutoCompactCountForTests,
   _isDisposingAutoCompactForTests,
-} = await import('./document-store.js')
+} = await import('./auto-compact.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -1740,15 +1743,15 @@ describe('auto-compact', () => {
   })
 
   afterEach(async () => {
-    setAutoCompactTrigger(null)
+    uninstallAutoCompact()
     await disposeAutoCompact()
     await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('saveDocument invokes the registered auto-compact trigger', async () => {
+  it('saveDocument notifies the registered document-saved listener', async () => {
     const trigger = vi.fn<(workspaceId: string, path: string) => void>()
-    setAutoCompactTrigger(trigger)
+    setDocumentSavedListener(trigger)
     await saveDocument('session1', 'foo', new LoroDoc())
     expect(trigger).toHaveBeenCalledTimes(1)
     expect(trigger).toHaveBeenCalledWith('session1', 'foo')
@@ -1880,7 +1883,7 @@ describe('auto-compact disposal', () => {
   })
 
   afterEach(async () => {
-    setAutoCompactTrigger(null)
+    uninstallAutoCompact()
     await disposeAutoCompact()
     if (!disposedDb) {
       await teardownIsolatedDb()
@@ -1937,7 +1940,7 @@ describe('auto-compact disposal', () => {
     const store = await buildCompactableCanvas('big')
     const logs = captureLogsForTests('warning')
 
-    // Do NOT call setAutoCompactTrigger(null) here — the point of this test
+    // Do NOT call uninstallAutoCompact() here — the point of this test
     // is that DB disposal alone (without that manual call) must cancel the
     // pending timer.
     scheduleAutoCompact('session1', 'big', store, { debounceMs: 20 })
@@ -2120,7 +2123,7 @@ describe('auto-compact disposal', () => {
     )
   })
 
-  it('composes with setAutoCompactTrigger(null) in either order without dropping in-flight work', async () => {
+  it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
     const store = await buildCompactableCanvas('composed')
     const { getDb } = await import('./db/index.js')
 
@@ -2145,9 +2148,9 @@ describe('auto-compact disposal', () => {
       { timeout: 2000 },
     )
 
-    // setAutoCompactTrigger(null) stays synchronous and timer-only: it must
+    // uninstallAutoCompact() stays synchronous and timer-only: it must
     // not swallow the in-flight compaction that is already running.
-    setAutoCompactTrigger(null)
+    uninstallAutoCompact()
     await disposeAutoCompact()
 
     expect(await readLastCompactedAt()).not.toBeNull()
