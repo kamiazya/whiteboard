@@ -15,9 +15,18 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
+import { collectDefs } from './defs.js'
 import { formatCoord, sanitizeHref } from './format.js'
 import { serializeSvg } from './serialize.js'
-import { el, rawXml, type SvgAttrs, type SvgAttrValue, type SvgChild } from './vnode.js'
+import {
+  el,
+  rawXml,
+  type SvgAttrs,
+  type SvgAttrValue,
+  type SvgChild,
+  type SvgDef,
+  withDefs,
+} from './vnode.js'
 
 /**
  * Decorative/presentational elements (backgrounds, dividers, group
@@ -137,29 +146,26 @@ const FADE_MASK_ID = 'wb-truncation-fade'
  * it scales to each run rather than needing a definition per run. Verified
  * honoured by resvg (the PNG export path) as well as browsers — a fully black
  * mask renders byte-identically to an empty canvas there.
+ *
+ * Declared on each truncated run and hoisted by `collectDefs`, so the
+ * document's `<defs>` appears exactly when something references the mask —
+ * the presence-only rule as a mechanism instead of a bespoke scene walk.
  */
-const FADE_DEFS = el('defs', undefined, [
-  el('linearGradient', { id: `${FADE_MASK_ID}-gradient`, x1: 0, y1: 0, x2: 1, y2: 0 }, [
-    el('stop', { offset: 0.75, 'stop-color': '#ffffff' }),
-    el('stop', { offset: 1, 'stop-color': '#000000' }),
-  ]),
-  el('mask', { id: FADE_MASK_ID, maskContentUnits: 'objectBoundingBox' }, [
-    el('rect', { x: 0, y: 0, width: 1, height: 1, fill: `url(#${FADE_MASK_ID}-gradient)` }),
-  ]),
-])
-
-/** Whether anything in the scene needs `FADE_DEFS`; nothing is emitted if not. */
-function hasTruncatedRun(nodes: readonly SceneNode[]): boolean {
-  const stack: SceneNode[] = [...nodes]
-  for (let node = stack.pop(); node !== undefined; node = stack.pop()) {
-    if (node.kind === 'textRun' && node.truncated === true) return true
-    for (const key of ['runs', 'children', 'items', 'rows', 'cells'] as const) {
-      const children = (node as unknown as Record<string, unknown>)[key]
-      if (Array.isArray(children)) stack.push(...(children as SceneNode[]))
-    }
-  }
-  return false
-}
+const FADE_DEFS: ReadonlyArray<SvgDef> = [
+  {
+    id: `${FADE_MASK_ID}-gradient`,
+    node: el('linearGradient', { id: `${FADE_MASK_ID}-gradient`, x1: 0, y1: 0, x2: 1, y2: 0 }, [
+      el('stop', { offset: 0.75, 'stop-color': '#ffffff' }),
+      el('stop', { offset: 1, 'stop-color': '#000000' }),
+    ]),
+  },
+  {
+    id: FADE_MASK_ID,
+    node: el('mask', { id: FADE_MASK_ID, maskContentUnits: 'objectBoundingBox' }, [
+      el('rect', { x: 0, y: 0, width: 1, height: 1, fill: `url(#${FADE_MASK_ID}-gradient)` }),
+    ]),
+  },
+]
 
 /**
  * The tinted box behind a run (inline code today). Bleeds `backdropPadXPx`
@@ -200,7 +206,7 @@ function renderTextRun(run: TextRunNode): SvgChild {
           fill: halo,
         })
       : []
-  const text = el(
+  const textEl = el(
     'text',
     {
       x: run.bbox.x,
@@ -214,6 +220,7 @@ function renderTextRun(run: TextRunNode): SvgChild {
     },
     [run.text],
   )
+  const text = run.truncated === true ? withDefs(textEl, FADE_DEFS) : textEl
   // The backdrop is painted before the halo underlay so a run can carry both
   // without the panel hiding the halo; inline code uses this for its tinted
   // pill.
@@ -612,9 +619,17 @@ const SVG_XMLNS = 'http://www.w3.org/2000/svg'
  */
 export function renderSceneToSvg(scene: Scene, options?: SvgDocumentOptions): string {
   const body = scene.nodes.map(renderNode)
-  // Presence-only, exactly like an absent appearance attribute: a scene with
-  // nothing truncated emits the same bytes it always has.
-  const defs: SvgChild = hasTruncatedRun(scene.nodes) ? FADE_DEFS : []
+  // Presence-only, exactly like an absent appearance attribute: a scene
+  // declaring no definitions emits the same bytes it always has.
+  const collected = collectDefs(body)
+  const defs: SvgChild =
+    collected.length > 0
+      ? el(
+          'defs',
+          undefined,
+          collected.map((def) => def.node),
+        )
+      : []
 
   if (!hasEnvelopeOptions(options)) {
     return serializeSvg(el('svg', { xmlns: SVG_XMLNS }, [defs, body]))

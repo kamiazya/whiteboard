@@ -48,6 +48,26 @@ export interface SvgVNode {
    * load-bearing for byte-identical output, not cosmetic.
    */
   readonly children?: ReadonlyArray<SvgChild>
+  /**
+   * Shared definitions this element depends on (`<mask>`, `<linearGradient>`,
+   * …). Declared where the dependency arises; `collectDefs` (defs.ts) hoists
+   * them into the document's single `<defs>` element, deduplicated by `id` —
+   * so a definition is emitted only when something in the tree actually
+   * references it (presence-only, mechanized). Ids must be derived from the
+   * definition's CONTENT (never a counter or randomness): same id ⇒ same
+   * bytes is what makes a repeated id across several inline-injected SVGs
+   * harmless, and what keeps first-occurrence-wins deduplication sound.
+   */
+  readonly defs?: ReadonlyArray<SvgDef>
+}
+
+export interface SvgDef {
+  readonly id: string
+  readonly node: SvgVNode
+}
+
+export function withDefs(node: SvgVNode, defs: ReadonlyArray<SvgDef>): SvgVNode {
+  return { ...node, defs }
 }
 
 export function el(tag: string, attrs?: SvgAttrs, children?: ReadonlyArray<SvgChild>): SvgVNode {
