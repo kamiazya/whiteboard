@@ -101,10 +101,10 @@ export function DocumentPreview({
         {state.kind === 'drawn' ? (
           // The same injection the editor's preview pane uses: the SVG comes
           // from this app's own renderer, over the document's own content.
-          // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output, as the markdown preview pane does
           <div
             data-testid="preview-render"
             className="size-full [&>svg]:size-full"
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
             dangerouslySetInnerHTML={{ __html: fitSvgToBox(state.svg) }}
           />
         ) : (

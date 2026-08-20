@@ -66,15 +66,14 @@ export function DocumentThumbnail({ document, loadRender, className }: DocumentT
           />
         )
       ) : (
-        // eslint-disable-next-line react/no-danger -- the SVG is produced by
-        // this app's own renderer from the document's own content, never by a
-        // remote party; it is the same injection the editor's preview uses.
-        // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output, as the markdown preview pane does
+        // The SVG is produced by this app's own renderer from the document's
+        // own content, never by a remote party.
         // The rule lives on the span that actually PARENTS the svg. jsdom has
         // no layout, so a selector aimed one level too high still passes every
         // test and draws a 2000px canvas inside a 24px row in a real browser.
         <span
           className="size-full [&>svg]:size-full"
+          // biome-ignore lint/security/noDangerouslySetInnerHtml: same-origin render output from canvas-render, as the markdown preview pane does
           dangerouslySetInnerHTML={{ __html: fitSvgToBox(drawn.svg) }}
         />
       )}

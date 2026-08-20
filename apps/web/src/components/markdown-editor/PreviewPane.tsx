@@ -101,6 +101,7 @@ export function PreviewPane({
       // (var() included) — `inherit` is ignored, so inheritance alone leaves
       // a visited wikiLink near-invisible.
       style={{ overflow: 'auto', fill, '--preview-fill': fill } as CSSProperties}
+      // biome-ignore lint/security/noDangerouslySetInnerHtml: canvas-render's SVG serializer is the sole producer of this string and escapes text and attribute values (svg/format.ts)
       dangerouslySetInnerHTML={{ __html: svg }}
     />
   )
