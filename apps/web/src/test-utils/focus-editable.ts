@@ -20,18 +20,56 @@ import { expect, vi } from 'vitest'
  * specific `.cm-line` also places the caret at that position, and replacing it
  * with `focus()` would move the caret to wherever CodeMirror last had it — a
  * different test.
+ *
+ * `focus()` is re-issued on EVERY attempt rather than once before the wait.
+ * Focus is shared mutable state across a whole browser project: a neighbour's
+ * leftover keystrokes, or its still-settling layout, can take it back after
+ * the call and before it settles, and waiting alone never gets it back. And a
+ * detached node is reported by name — it can never take focus, so waiting is
+ * the one thing that cannot help, and "activeElement is <body>" says nothing
+ * about which of the two happened. That message is what a whole file of
+ * failures looked like in CI, eleven times, with no way to tell them apart.
  */
 export async function focusEditable(element: Element): Promise<void> {
-  // focus() INSIDE the retry, not once before it. CodeMirror's contentDOM is
-  // not focusable until the view has finished mounting, and a `focus()` that
-  // lands before then is a silent no-op — so calling it once and then merely
-  // WAITING can never recover: the wait re-checks a condition nothing is
-  // still trying to satisfy. Locally the view is ready and the first call
-  // takes; in CI it is not, and a whole file failed with
-  // `expected <body> to be <div spellcheck="false" …>` — this assertion,
-  // reporting that focus never moved.
   await vi.waitFor(() => {
+    // focus() INSIDE the retry, not once before it. CodeMirror's contentDOM is
+    // not focusable until the view has finished mounting, and a `focus()` that
+    // lands before then is a silent no-op — so calling it once and then merely
+    // WAITING can never recover: the wait re-checks a condition nothing is
+    // still trying to satisfy. Locally the view is ready and the first call
+    // takes; in CI it is not, and a whole file failed with
+    // `expected <body> to be <div spellcheck="false" …>` — this assertion,
+    // reporting that focus never moved.
+    //
+    // A detached node is called out rather than waited on: it can never take
+    // focus, so the retry is the one thing that cannot help it, and the
+    // assertion below cannot tell that case apart from the not-yet-mounted
+    // one. "activeElement is <body>" is equally what a reference held across
+    // a re-render looks like, which is a different fix at a different place.
+    if (!element.isConnected) {
+      throw new Error(
+        'focusEditable: the editable is no longer in the document — it was replaced between ' +
+          'being queried and being focused. Re-query it inside the step that focuses it.',
+      )
+    }
+    // The window first: measured in CI, the failing case is
+    // `document.hasFocus()=false`, and an element in an unfocused document
+    // cannot become its activeElement however many times focus() is called.
+    // Several browser pages run in parallel and only one can hold focus, so
+    // this asks for it back rather than assuming the frame still has it.
+    window.focus()
     ;(element as HTMLElement).focus()
-    expect(document.activeElement).toBe(element)
+    // The message carries what DID have focus, and whether the document had
+    // any: three different causes reached this line in CI and none of them was
+    // distinguishable from the others.
+    expect(
+      document.activeElement,
+      `focusEditable: focus did not land. document.hasFocus()=${document.hasFocus()}, ` +
+        `activeElement=<${document.activeElement?.tagName.toLowerCase() ?? 'none'}${
+          document.activeElement instanceof HTMLElement && document.activeElement.className !== ''
+            ? ` class="${document.activeElement.className}"`
+            : ''
+        }>`,
+    ).toBe(element)
   })
 }
