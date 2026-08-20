@@ -84,84 +84,105 @@ export type DocumentPickerState =
   | { readonly mode: 'create'; readonly point?: Point }
   | { readonly mode: 'retarget'; readonly nodeId: string }
 
+/**
+ * Everything the menu can DO, as one object.
+ *
+ * The menu is a command surface: thirty-six flat props made it read as a
+ * component with thirty-six concerns, when twenty of them were the same
+ * concern — verbs the editor exposes, the set the keyboard shortcuts invoke
+ * too. Dialog-opening setters are included deliberately: from the menu's side
+ * "edit this label" and "add a link" are commands, and that they happen to be
+ * implemented as state setters is the editor's business.
+ *
+ * Data, predicates, and the image-insertion refs stay flat: they answer what
+ * the menu SHOWS, not what it does.
+ */
+export interface CanvasCommands {
+  readonly applyResult: (result: GestureResult) => void
+  readonly applyBoxMoves: (moves: readonly BoxMove[]) => boolean
+  readonly copySelection: () => ClipboardFragment | null
+  /** Cut-flavoured copy: also records the cut surface for paste to reconnect. */
+  readonly cutSelection: () => ClipboardFragment | null
+  readonly pasteClipboard: (at?: Point) => boolean
+  readonly duplicateSelection: () => boolean
+  readonly reorderSelection: (placement: 'forward' | 'backward' | 'front' | 'back') => void
+  readonly groupSelection: (memberIds: readonly string[]) => void
+  readonly createNodeAt: (point: Point) => void
+  readonly createGroupAtViewportCenter: (at?: Point) => void
+  readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
+  readonly onOpenFileRef?: (file: string, subpath?: string) => void
+  readonly onAddImage?: (file: File) => Promise<string | undefined>
+  readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
+  readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
+  readonly setEdgeLabelEditId: (id: string | null) => void
+  readonly setGroupLabelEditId: (id: string | null) => void
+  readonly setSelectedEdgeId: (id: string | null) => void
+  readonly setLinkDialog: (state: LinkDialogState | null) => void
+  readonly setDocumentPicker: (state: DocumentPickerState | null) => void
+}
+
 export interface CanvasContextMenuProps {
+  readonly commands: CanvasCommands
   readonly contextMenu: ContextMenuTarget
   readonly setContextMenu: (target: ContextMenuTarget | null) => void
   readonly canvas: SpatialCanvas
   readonly canvasRef: MutableRefObject<SpatialCanvas>
   readonly theme: ResolvedTheme
   readonly gestureState: GestureState
-  readonly applyResult: (result: GestureResult) => void
   readonly isEdgeLocked: (edgeId: string) => boolean
-  readonly onToggleEdgeLock?: (edgeId: string, locked: boolean) => void
-  readonly setEdgeLabelEditId: (id: string | null) => void
-  readonly setSelectedEdgeId: (id: string | null) => void
-  readonly setGroupLabelEditId: (id: string | null) => void
-  readonly pasteClipboard: (at?: Point) => boolean
-  readonly createNodeAt: (point: Point) => void
-  readonly createGroupAtViewportCenter: (at?: Point) => void
-  readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly fileRefOptions?: readonly FileRefOption[]
-  readonly setDocumentPicker: (state: DocumentPickerState | null) => void
-  readonly onAddImage?: (file: File) => Promise<string | undefined>
   readonly pendingImagePointRef: MutableRefObject<Point | null>
   readonly imageInputRef: MutableRefObject<HTMLInputElement | null>
   readonly pendingBackgroundGroupIdRef: MutableRefObject<string | null>
   readonly isLocked: (nodeId: string) => boolean
-  readonly onToggleNodeLock?: (nodeId: string, locked: boolean) => void
-  readonly applyBoxMoves: (moves: readonly BoxMove[]) => boolean
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
-  readonly groupSelection: (memberIds: readonly string[]) => void
   readonly isImageFileRef?: (file: string) => boolean
   readonly missingFileRef?: (file: string) => boolean
-  readonly onOpenFileRef?: (file: string, subpath?: string) => void
-  readonly openLinkNode: (node: Extract<SpatialNode, { type: 'link' }>) => void
-  readonly copySelection: () => ClipboardFragment | null
-  /** Cut-flavoured copy: also records the cut surface for paste to reconnect. */
-  readonly cutSelection: () => ClipboardFragment | null
-  readonly duplicateSelection: () => boolean
-  readonly reorderSelection: (placement: 'forward' | 'backward' | 'front' | 'back') => void
 }
 
 export function CanvasContextMenu({
+  commands,
   contextMenu,
   setContextMenu,
   canvas,
   canvasRef,
   theme,
   gestureState,
-  applyResult,
   isEdgeLocked,
-  onToggleEdgeLock,
-  setEdgeLabelEditId,
-  setSelectedEdgeId,
-  setGroupLabelEditId,
-  pasteClipboard,
-  createNodeAt,
-  createGroupAtViewportCenter,
-  setLinkDialog,
   fileRefOptions,
-  setDocumentPicker,
-  onAddImage,
   pendingImagePointRef,
   imageInputRef,
   pendingBackgroundGroupIdRef,
   isLocked,
-  onToggleNodeLock,
-  applyBoxMoves,
   extraIds,
   selectedId,
-  groupSelection,
   isImageFileRef,
   missingFileRef,
-  onOpenFileRef,
-  openLinkNode,
-  copySelection,
-  cutSelection,
-  duplicateSelection,
-  reorderSelection,
 }: CanvasContextMenuProps) {
+  const {
+    applyResult,
+    applyBoxMoves,
+    copySelection,
+    cutSelection,
+    pasteClipboard,
+    duplicateSelection,
+    reorderSelection,
+    groupSelection,
+    createNodeAt,
+    createGroupAtViewportCenter,
+    openLinkNode,
+    onOpenFileRef,
+    onAddImage,
+    onToggleNodeLock,
+    onToggleEdgeLock,
+    setEdgeLabelEditId,
+    setGroupLabelEditId,
+    setSelectedEdgeId,
+    setLinkDialog,
+    setDocumentPicker,
+  } = commands
+
   // Both derive from whether the host wired the matching toggle callback —
   // without one, the menu has nothing to call, so the affordance stays
   // hidden rather than offering a lock that can never be released.
