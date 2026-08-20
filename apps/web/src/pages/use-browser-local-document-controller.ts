@@ -1,9 +1,17 @@
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeToSnapshot } from '../components/migration/import-browser-local.js'
-import { newDocumentPathIn, takenPathsIn } from '../components/workspace-files/new-document-path.js'
-import type { BrowserLocalStore } from '../lib/browser-local-store.js'
-import { LOCAL_WORKSPACE_ID } from '../lib/browser-local-store.js'
+import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
+import {
+  type ContentClock,
+  type DefaultDocumentPointer,
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  LOCAL_WORKSPACE_ID,
+  listLocalDocuments,
+  loadLocalDocument,
+} from '../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
@@ -54,24 +62,57 @@ export interface BrowserLocalDocumentController {
   duplicateDocument(): Promise<DocumentSnapshot>
 }
 
-function createCanvasSnapshot(
-  documentId: string,
-  path: string,
+/**
+ * Create a document AND seed its content record, as one operation.
+ *
+ * The seed is not optional bookkeeping. `updatedAt` now comes from the content
+ * record's own envelope — the metadata row has no timestamp of its own, and
+ * the port's `DocumentEntry` carries none — so a document created without one
+ * has no last-edited time to report. It is also what lets a switch onto a
+ * never-edited document find something to load.
+ *
+ * Three of the five create paths used to skip it (first boot, startFresh, and
+ * the list page) while `createDocument` did it and said why. Routing them all
+ * through here is what makes that inconsistency unrepresentable rather than
+ * merely fixed.
+ *
+ * The index row is rolled back if the content write fails, so a failed create
+ * never leaves a document with nothing behind it.
+ */
+async function createSeededDocument(
+  index: DocumentIndex,
+  loro: LoroStoreLike,
+  clock: ContentClock,
   name?: string,
   kind: DocumentSnapshot['kind'] = 'spatial',
-): DocumentSnapshot {
-  return {
-    documentId,
+  content?: Uint8Array,
+): Promise<DocumentSnapshot> {
+  const taken = (await listLocalDocuments(index, clock).catch(() => [])).map((row) => row.path)
+  const trimmed = name?.trim()
+  const entry = await index.createDocument({
     workspaceId: LOCAL_WORKSPACE_ID,
-    path,
-    name: name?.trim() || 'untitled',
-    updatedAt: new Date().toISOString(),
+    path: newDocumentPathIn('', taken),
     kind,
+    ...(trimmed ? { name: trimmed } : {}),
+  })
+  try {
+    await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
+  } catch (err) {
+    try {
+      await index.deleteDocument({ workspaceId: LOCAL_WORKSPACE_ID, path: entry.path })
+    } catch {
+      // Rollback is best-effort; a stray index row is harmless next to
+      // reporting a create that did not happen.
+    }
+    throw err
   }
+  const snap = await loadLocalDocument(index, entry.documentId, clock)
+  if (snap === null) throw new Error('created document vanished before it could be read')
+  return snap
 }
 
 export function useBrowserLocalDocumentController(
-  store: BrowserLocalStore,
+  index: DocumentIndex,
   loro: LoroStoreLike = new LoroStore(),
   // A document PATH requested by the URL (e.g. a bookmarked /local/:path
   // deep link), read once at mount. The URL addresses a document the way the
@@ -82,6 +123,12 @@ export function useBrowserLocalDocumentController(
   // already has. A stale/moved path falls back to the normal flow rather
   // than showing an error: a dead bookmark must not dead-end the user.
   initialPath?: string,
+  // The two things `DocumentIndex` does not own. Defaulted so production wires
+  // nothing extra, and injectable because both read IndexedDB, which the jsdom
+  // test project does not have. After `initialPath` so every existing
+  // three-argument call site keeps meaning what it meant.
+  pointer: DefaultDocumentPointer = new IdbDefaultDocumentPointer(),
+  clock: ContentClock = idbContentClock(),
 ): BrowserLocalDocumentController {
   const [snapshot, setSnapshot] = useState<DocumentSnapshot | null>(null)
   const [persistence, setPersistence] = useState<BrowserLocalPersistenceState>({
@@ -92,8 +139,12 @@ export function useBrowserLocalDocumentController(
   const [cleanupError, setCleanupError] = useState<string | null>(null)
 
   // Stable refs so timer callbacks always see current state without re-creating
-  const storeRef = useRef(store)
-  storeRef.current = store
+  const indexRef = useRef(index)
+  indexRef.current = index
+  const pointerRef = useRef(pointer)
+  pointerRef.current = pointer
+  const clockRef = useRef(clock)
+  clockRef.current = clock
   const loroRef = useRef(loro)
   loroRef.current = loro
   const setPersistenceRef = useRef(setPersistence)
@@ -138,7 +189,13 @@ export function useBrowserLocalDocumentController(
       setPersistenceRef.current((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt ?? null }))
       const promise = (async (): Promise<boolean> => {
         try {
-          await storeRef.current.save(snap)
+          // A rename is the only mutation that reaches the save path, and the
+          // index keys it by id so the document does not move.
+          await indexRef.current.setDocumentName({
+            workspaceId: LOCAL_WORKSPACE_ID,
+            documentId: snap.documentId,
+            name: snap.name,
+          })
           setPersistenceRef.current({ kind: 'saved', lastSavedAt: new Date().toISOString() })
           return true
         } catch {
@@ -167,47 +224,55 @@ export function useBrowserLocalDocumentController(
 
     async function load() {
       if (initialPath !== undefined) {
-        // A store that cannot list is indistinguishable from a path that is
-        // not there, and both fall through to the same place. Letting the read
-        // throw instead would dead-end EVERY deep link on a degraded store —
-        // and App mounts this page only with a path, so that is every mount.
-        const listed = await storeRef.current.listDocuments().catch(() => [])
+        // An index that cannot resolve is indistinguishable from a path that
+        // is not there, and both fall through to the same place. Letting the
+        // read throw instead would dead-end EVERY deep link on a degraded
+        // store — and App mounts this page only with a path, so that is every
+        // mount.
+        const requested = await indexRef.current
+          .resolveDocument({ workspaceId: LOCAL_WORKSPACE_ID, path: initialPath })
+          .catch(() => null)
         if (cancelled) return
-        const requestedId = listed.find((entry) => entry.path === initialPath)?.documentId
-        if (requestedId !== undefined) {
-          const requested = await storeRef.current.load(requestedId)
+        if (requested !== null) {
+          const snap = await loadLocalDocument(
+            indexRef.current,
+            requested.documentId,
+            clockRef.current,
+          )
           if (cancelled) return
-          if (requested.kind === 'ok') {
-            await storeRef.current.setDefaultDocumentId(requestedId)
-            if (!cancelled) setSnapshot(requested.snapshot)
+          if (snap !== null) {
+            await pointerRef.current.set(requested.documentId)
+            if (!cancelled) setSnapshot(snap)
             return
           }
         }
-        // Not found / corrupted: silently fall through to the normal
-        // default-canvas flow below rather than showing a degraded banner —
-        // a stale bookmark must not dead-end the user.
+        // Not found: silently fall through to the normal default-document flow
+        // below rather than showing a degraded banner — a stale bookmark must
+        // not dead-end the user.
       }
 
-      let id = await storeRef.current.getDefaultDocumentId()
+      const id = await pointerRef.current.get()
       if (cancelled) return
 
       if (id === null) {
-        id = storeRef.current.generateId()
-        const taken = await takenPathsIn(storeRef.current)
+        const created = await createSeededDocument(
+          indexRef.current,
+          loroRef.current,
+          clockRef.current,
+        )
         if (cancelled) return
-        const newSnapshot = createCanvasSnapshot(id, newDocumentPathIn('', taken))
-        await storeRef.current.setDefaultDocumentId(id)
-        await storeRef.current.save(newSnapshot)
-        if (!cancelled) setSnapshot(newSnapshot)
+        await pointerRef.current.set(created.documentId)
+        if (!cancelled) setSnapshot(created)
         return
       }
 
-      const result = await storeRef.current.load(id)
+      const snap = await loadLocalDocument(indexRef.current, id, clockRef.current)
       if (cancelled) return
-      if (result.kind === 'ok') {
-        setSnapshot(result.snapshot)
+      if (snap !== null) {
+        setSnapshot(snap)
       } else {
-        // corrupted or not-found: generic safe copy, no raw error
+        // The pointer names a document the index no longer has. Generic safe
+        // copy, no raw error.
         setPersistenceRef.current({
           kind: 'degraded',
           reason: 'load-failed',
@@ -277,11 +342,19 @@ export function useBrowserLocalDocumentController(
       setCleanupError('The canvas could not be safely removed. Your copy has been kept.')
       return
     }
-    const id = await storeRef.current.getDefaultDocumentId()
+    const id = await pointerRef.current.get()
     if (id === null) return
     try {
-      const result = await storeRef.current.del(id)
-      if (!result.deleted) return // pointer-mismatch or not-found: silent no-op
+      const entry = await indexRef.current.resolveDocumentById({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        documentId: id,
+      })
+      if (entry === null) return // the pointer names nothing: silent no-op
+      await indexRef.current.deleteDocument({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: entry.path,
+      })
+      await pointerRef.current.clear()
       setSnapshot(null)
       setCleanupCompleted(true)
     } catch {
@@ -292,36 +365,43 @@ export function useBrowserLocalDocumentController(
 
   const startFresh = useCallback(async () => {
     setCleanupError(null)
-    const id = storeRef.current.generateId()
-    const taken = (await storeRef.current.listDocuments()).map((row) => row.path)
-    const fresh = createCanvasSnapshot(id, newDocumentPathIn('', taken))
+    let fresh: DocumentSnapshot
     try {
-      // Save the new canvas BEFORE repointing the default id, so a failed write never
-      // leaves the pointer aimed at an unsaved canvas (which would reload as degraded).
-      await storeRef.current.save(fresh)
-      const existingId = await storeRef.current.getDefaultDocumentId()
-      // del() only removes the canvas the default pointer currently aims at (and clears
-      // the pointer as it goes), so the old canvas must be dropped BEFORE repointing —
-      // calling it after setDefaultDocumentId(id) always pointer-mismatches and leaks the row.
-      if (existingId !== null && existingId !== id) {
+      // Create BEFORE repointing, so a failed create never leaves the pointer
+      // aimed at a document that does not exist (which would reload degraded).
+      fresh = await createSeededDocument(indexRef.current, loroRef.current, clockRef.current)
+      const existingId = await pointerRef.current.get()
+      // Order no longer matters here. The old `del` removed only the document
+      // the pointer aimed at and cleared it as it went, so the drop had to
+      // precede the repoint or it silently no-op'd; deleting by path has no
+      // such coupling.
+      if (existingId !== null && existingId !== fresh.documentId) {
         try {
-          await storeRef.current.del(existingId)
+          const stale = await indexRef.current.resolveDocumentById({
+            workspaceId: LOCAL_WORKSPACE_ID,
+            documentId: existingId,
+          })
+          if (stale !== null) {
+            await indexRef.current.deleteDocument({
+              workspaceId: LOCAL_WORKSPACE_ID,
+              path: stale.path,
+            })
+          }
         } catch {
-          // Dropping the old canvas is best-effort; failure must not abort recovery.
+          // Dropping the old document is best-effort; failure must not abort recovery.
         }
       }
-      await storeRef.current.setDefaultDocumentId(id)
+      await pointerRef.current.set(fresh.documentId)
     } catch {
       // Recovery itself failed. If the failure landed on the final setDefaultDocumentId, the
       // freshly-saved canvas is written but never pointed to — del() can't reach it (it only
       // removes the current default), so drop the orphan via the pointer-independent
       // removeDocument. Best-effort: cleanup failure must not mask the degraded view, which
       // keeps the user on a retry-able state instead of showing "Saved" over a dangling pointer.
-      try {
-        await storeRef.current.removeDocument?.(id)
-      } catch {
-        // Orphan cleanup is best-effort; leaving a stray empty record is harmless.
-      }
+      // No orphan cleanup here any more: `createSeededDocument` rolls its own
+      // index row back when the content write fails, and a failure after that
+      // point leaves a document that is complete and simply not pointed at —
+      // which the next create numbers around rather than trips over.
       setPersistenceRef.current({
         kind: 'degraded',
         reason: 'recovery-failed',
@@ -336,7 +416,7 @@ export function useBrowserLocalDocumentController(
   }, [])
 
   const listDocuments = useCallback((): Promise<DocumentSnapshot[]> => {
-    return storeRef.current.listDocuments()
+    return listLocalDocuments(indexRef.current, clockRef.current)
   }, [])
 
   const createDocument = useCallback(
@@ -344,32 +424,7 @@ export function useBrowserLocalDocumentController(
       name?: string,
       kind: DocumentSnapshot['kind'] = 'spatial',
     ): Promise<DocumentSnapshot> => {
-      const id = storeRef.current.generateId()
-      const existing = await storeRef.current.listDocuments()
-      const fresh = createCanvasSnapshot(
-        id,
-        newDocumentPathIn(
-          '',
-          existing.map((row) => row.path),
-        ),
-        name,
-        kind,
-      )
-      // Metadata first, then the Loro doc: if the Loro write fails, the
-      // metadata row is rolled back so a failed create never leaves an
-      // orphan metadata row with no backing Loro doc.
-      await storeRef.current.save(fresh)
-      try {
-        await loroRef.current.save(id, loroRef.current.createEmptySnapshot())
-      } catch (err) {
-        try {
-          await storeRef.current.removeDocument?.(id)
-        } catch {
-          // Orphan cleanup is best-effort; leaving a stray metadata row is harmless.
-        }
-        throw err
-      }
-      return fresh
+      return createSeededDocument(indexRef.current, loroRef.current, clockRef.current, name, kind)
     },
     [],
   )
@@ -383,32 +438,27 @@ export function useBrowserLocalDocumentController(
       if (generation !== switchGenerationRef.current) return false // superseded while flushing
       if (!flushed) return false
       try {
-        const result = await storeRef.current.load(id)
+        const loaded = await loadLocalDocument(indexRef.current, id, clockRef.current)
         if (generation !== switchGenerationRef.current) return false // superseded while loading
-        if (result.kind === 'not-found') {
+        if (loaded === null) {
           // A missing target is a RECOVERABLE miss, not a degraded store: it
-          // is exactly what a stale /local/:id bookmark produces, and parking
+          // is exactly what a stale /local/:path bookmark produces, and parking
           // the page on a degraded screen would dead-end the user. Leave the
-          // current canvas untouched and let the caller decide (the page
-          // replaces the URL with the still-loaded canvas).
+          // current document untouched and let the caller decide (the page
+          // replaces the URL with the still-loaded document).
+          //
+          // There is no longer a third outcome here. `load` used to answer
+          // 'corrupted' for a metadata row that would not parse; the index
+          // either holds the document or it does not, and whether its CONTENT
+          // reads is `LoroStore.load`'s answer to give, on the path that
+          // actually reads bytes. The degraded branch that used to sit here
+          // said "could not be switched" about a document that had switched.
           return false
         }
-        if (result.kind !== 'ok') {
-          // Unreadable/corrupt record: surface it the same way the
-          // initial-mount load does. Current snapshot and default pointer are
-          // left untouched — the still-current canvas view is not corrupted.
-          setPersistenceRef.current((p) => ({
-            kind: 'degraded',
-            reason: 'switch-failed',
-            message: 'The canvas could not be switched.',
-            lastSavedAt: p.lastSavedAt ?? null,
-          }))
-          return false
-        }
-        await storeRef.current.setDefaultDocumentId(id)
+        await pointerRef.current.set(id)
         if (generation !== switchGenerationRef.current) return false // superseded while persisting the pointer
-        snapshotRef.current = result.snapshot
-        setSnapshot(result.snapshot)
+        snapshotRef.current = loaded
+        setSnapshot(loaded)
         // Clear any stale degraded banner left over from the previous canvas —
         // a successful switch to a freshly-loaded, in-sync canvas should not keep
         // showing an error from before the switch.
@@ -448,32 +498,22 @@ export function useBrowserLocalDocumentController(
     }
     const mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
 
-    const existingList = await storeRef.current.listDocuments()
-    const existingNames = new Set(existingList.map((c) => c.name))
-    const newName = deriveCopyName(source.name, existingNames)
-
-    const id = storeRef.current.generateId()
-    const fresh = createCanvasSnapshot(
-      id,
-      newDocumentPathIn(
-        '',
-        existingList.map((row) => row.path),
-      ),
-      newName,
+    const existingNames = new Set(
+      (await listLocalDocuments(indexRef.current, clockRef.current)).map((row) => row.name),
     )
-    await storeRef.current.save(fresh)
-    try {
-      await loroRef.current.save(id, mergedSnapshot)
-    } catch (err) {
-      try {
-        await storeRef.current.removeDocument?.(id)
-      } catch {
-        // Orphan cleanup is best-effort; leaving a stray metadata row is harmless.
-      }
-      throw err
-    }
+    const fresh = await createSeededDocument(
+      indexRef.current,
+      loroRef.current,
+      clockRef.current,
+      deriveCopyName(source.name, existingNames),
+      source.kind,
+      // The copy is seeded with the SOURCE's merged bytes rather than an empty
+      // document — that is the whole point of a duplicate, and the seeding
+      // helper takes content for exactly this caller.
+      mergedSnapshot,
+    )
 
-    await switchDocument(id)
+    await switchDocument(fresh.documentId)
     return fresh
   }, [flushSave, switchDocument])
 

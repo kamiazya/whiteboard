@@ -85,42 +85,66 @@ function toSnapshot(entry: DocumentEntry, updatedAt: string | undefined): Docume
   }
 }
 
+/**
+ * Where a document's last-write time comes from. Injected because the default
+ * reads IndexedDB, and the jsdom test project has none — a page test wants the
+ * projection, not the storage. `noContentClock` is the honest stand-in: every
+ * document reports the epoch, which is what a document with no content record
+ * reports anyway.
+ */
+export type ContentClock = (ids: string[]) => Promise<Map<string, string>>
+
+export function idbContentClock(dbName?: string): ContentClock {
+  return async (ids) => {
+    if (ids.length === 0) return new Map()
+    const db = await openWhiteboardDb(dbName)
+    try {
+      return await contentUpdatedAt(db, ids)
+    } finally {
+      db.close()
+    }
+  }
+}
+
+export const noContentClock: ContentClock = async () => new Map()
+
 export async function listLocalDocuments(
   index: DocumentIndex,
-  dbName?: string,
+  clock: ContentClock = idbContentClock(),
 ): Promise<DocumentSnapshot[]> {
   const entries = await index.listDocuments({ workspaceId: LOCAL_WORKSPACE_ID })
   if (entries.length === 0) return []
-  const db = await openWhiteboardDb(dbName)
-  try {
-    const stamps = await contentUpdatedAt(
-      db,
-      entries.map((entry) => entry.documentId),
-    )
-    return entries.map((entry) => toSnapshot(entry, stamps.get(entry.documentId)))
-  } finally {
-    db.close()
-  }
+  const stamps = await clock(entries.map((entry) => entry.documentId))
+  return entries.map((entry) => toSnapshot(entry, stamps.get(entry.documentId)))
 }
 
 /** The same projection for one document, or null when the index has no such id. */
 export async function loadLocalDocument(
   index: DocumentIndex,
   documentId: string,
-  dbName?: string,
+  clock: ContentClock = idbContentClock(),
 ): Promise<DocumentSnapshot | null> {
   const entry = await index.resolveDocumentById({ workspaceId: LOCAL_WORKSPACE_ID, documentId })
   if (entry === null) return null
-  const db = await openWhiteboardDb(dbName)
-  try {
-    const stamps = await contentUpdatedAt(db, [documentId])
-    return toSnapshot(entry, stamps.get(documentId))
-  } finally {
-    db.close()
-  }
+  const stamps = await clock([documentId])
+  return toSnapshot(entry, stamps.get(documentId))
 }
 
 const DEFAULT_POINTER_KEY = 'defaultDocumentId'
+
+/**
+ * Which document a plain load resumes into.
+ *
+ * An interface rather than two module functions for the same reason the clock
+ * above is injected: the real one is IndexedDB, and a jsdom page test has
+ * none. It is also the shape the controller already expects of its
+ * dependencies — it takes its index and its Loro store the same way.
+ */
+export interface DefaultDocumentPointer {
+  get(): Promise<string | null>
+  set(documentId: string): Promise<void>
+  clear(): Promise<void>
+}
 
 function metaTransaction<T>(
   db: IDBDatabase,
@@ -139,30 +163,48 @@ function metaTransaction<T>(
   })
 }
 
-export async function getDefaultDocumentId(dbName?: string): Promise<string | null> {
-  const db = await openWhiteboardDb(dbName)
-  try {
-    const value = await metaTransaction(db, 'readonly', (store) => store.get(DEFAULT_POINTER_KEY))
+export class IdbDefaultDocumentPointer implements DefaultDocumentPointer {
+  constructor(private readonly dbName?: string) {}
+
+  private async withDb<T>(
+    mode: IDBTransactionMode,
+    body: (store: IDBObjectStore) => IDBRequest<T>,
+  ): Promise<T> {
+    const db = await openWhiteboardDb(this.dbName)
+    try {
+      return await metaTransaction(db, mode, body)
+    } finally {
+      db.close()
+    }
+  }
+
+  async get(): Promise<string | null> {
+    const value = await this.withDb('readonly', (store) => store.get(DEFAULT_POINTER_KEY))
     return (value as string | undefined) ?? null
-  } finally {
-    db.close()
+  }
+
+  async set(documentId: string): Promise<void> {
+    await this.withDb('readwrite', (store) => store.put(documentId, DEFAULT_POINTER_KEY))
+  }
+
+  async clear(): Promise<void> {
+    await this.withDb('readwrite', (store) => store.delete(DEFAULT_POINTER_KEY))
   }
 }
 
-export async function setDefaultDocumentId(documentId: string, dbName?: string): Promise<void> {
-  const db = await openWhiteboardDb(dbName)
-  try {
-    await metaTransaction(db, 'readwrite', (store) => store.put(documentId, DEFAULT_POINTER_KEY))
-  } finally {
-    db.close()
-  }
-}
+/** The pointer a test gets when it is testing a page, not persistence. */
+export class InMemoryDefaultDocumentPointer implements DefaultDocumentPointer {
+  private documentId: string | null = null
 
-export async function clearDefaultDocumentId(dbName?: string): Promise<void> {
-  const db = await openWhiteboardDb(dbName)
-  try {
-    await metaTransaction(db, 'readwrite', (store) => store.delete(DEFAULT_POINTER_KEY))
-  } finally {
-    db.close()
+  async get(): Promise<string | null> {
+    return this.documentId
+  }
+
+  async set(documentId: string): Promise<void> {
+    this.documentId = documentId
+  }
+
+  async clear(): Promise<void> {
+    this.documentId = null
   }
 }

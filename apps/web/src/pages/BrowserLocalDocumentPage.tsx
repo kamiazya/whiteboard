@@ -1,6 +1,7 @@
 import { serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
@@ -45,7 +46,6 @@ import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { browserLocalDocumentPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
-import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
@@ -93,7 +93,7 @@ const TOP_BAR_FALLBACK_HEIGHT = 'h-12'
 const log = getAppLogger('browser-local-document-page')
 
 interface BrowserLocalDocumentPageProps {
-  store: BrowserLocalStore
+  store: DocumentIndex
   // Injectable so tests can avoid the real LoroStore's IndexedDB dependency
   // (jsdom does not implement IndexedDB); production callers rely on the
   // controller hook's own default.

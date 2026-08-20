@@ -1,7 +1,8 @@
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useEffect, useState } from 'react'
 import { getAppLogger } from '../../lib/app-logger.js'
-import type { BrowserLocalStore } from '../../lib/browser-local-store.js'
 import { DEFAULT_DAEMON_BASE_URL } from '../../lib/daemon-probe.js'
+import { listLocalDocuments } from '../../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../../lib/loro-store.js'
 import type { UserSettingsStore } from '../../lib/user-settings-store.js'
 import type { DocumentSnapshot } from '../../lib/whiteboard-client.js'
@@ -19,7 +20,7 @@ interface ImportBrowserLocalPanelProps {
   workspaceId: string
   daemonFetch: typeof globalThis.fetch
   daemonBaseUrl?: string
-  browserLocalStore: BrowserLocalStore
+  browserLocalStore: DocumentIndex
   loroStore: ImportLoroStoreLike
   settingsStore: UserSettingsStore
 }
@@ -49,8 +50,7 @@ export function ImportBrowserLocalPanel({
 
   useEffect(() => {
     let cancelled = false
-    browserLocalStore
-      .listDocuments()
+    listLocalDocuments(browserLocalStore)
       .then((list) => {
         if (!cancelled) setDocuments(list)
       })

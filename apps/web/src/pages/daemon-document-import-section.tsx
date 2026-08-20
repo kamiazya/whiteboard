@@ -1,6 +1,6 @@
+import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useState } from 'react'
 import { ImportBrowserLocalPanel } from '../components/migration/ImportBrowserLocalPanel.js'
-import type { BrowserLocalStore } from '../lib/browser-local-store.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 
@@ -8,7 +8,7 @@ export interface DaemonDocumentImportSectionProps {
   workspaceId: string
   daemonFetch: typeof fetch
   daemonBaseUrl?: string
-  browserLocalStore: BrowserLocalStore
+  browserLocalStore: DocumentIndex
 }
 
 /**
