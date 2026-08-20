@@ -30,6 +30,28 @@ import { LoroStore } from './loro-store.js'
  */
 const MIGRATION_DB = 'whiteboard-migration-test'
 
+/**
+ * Give a fixture connection the same manners the app's own opener has.
+ *
+ * `openWhiteboardDb` sets `onversionchange` so a live connection steps aside
+ * when something needs a newer version. A raw `indexedDB.open` here does not,
+ * and that asymmetry is the whole failure: a fixture connection that outlives
+ * its `await` — every one of these resolves from a request callback while
+ * `db.close()` still waits on `tx.oncomplete` — holds the database at its old
+ * version, and the next open blocks with `another tab has this app open at an
+ * older version`, reported against whichever test happens to be running.
+ *
+ * Closing promptly would also work and is not enough on its own: it makes the
+ * window small rather than absent, which is why this file passed locally for
+ * two attempts while CI kept failing. Stepping aside removes the window.
+ *
+ * The one connection that must NOT do this is the deliberately stubborn one in
+ * `cross-tab upgrades`, which exists to prove what happens without it.
+ */
+function letFixtureStepAside(db: IDBDatabase): void {
+  db.onversionchange = () => db.close()
+}
+
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
     const req = indexedDB.deleteDatabase(MIGRATION_DB)
@@ -50,6 +72,7 @@ async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -82,17 +105,32 @@ async function seedV2Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
   })
 }
 
-/** Reads a 'documents' row directly via raw IDB, bypassing documentSnapshotSchema. */
+/**
+ * Reads a 'documents' row directly via raw IDB, bypassing documentSnapshotSchema.
+ *
+ * Version-less on purpose: it must read what is there without running the
+ * app's upgrade. That makes closing before resolving load-bearing rather than
+ * tidy — this connection sits at whatever version the fixture seeded (7, say),
+ * and the next `openWhiteboardDb` asks for DB_VERSION. Resolving first lets
+ * the test proceed while an OLD-version connection is still open, and that
+ * open is then blocked: `another tab has this app open at an older version`,
+ * reported against whichever test ran next.
+ */
 async function readRawDocumentsRow(documentId: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(MIGRATION_DB)
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction('documents', 'readonly')
       const getReq = tx.objectStore('documents').get(documentId)
-      getReq.onsuccess = () => resolve(getReq.result)
       getReq.onerror = () => reject(getReq.error)
-      tx.oncomplete = () => db.close()
+      // Resolve from `oncomplete`, AFTER the close — never from the request's
+      // own success, which fires while the connection is still open.
+      tx.oncomplete = () => {
+        db.close()
+        resolve(getReq.result)
+      }
     }
     req.onerror = () => reject(req.error)
   })
@@ -110,6 +148,7 @@ async function seedV3Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -146,6 +185,7 @@ async function seedV4Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases', 'canvasFiles'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -186,6 +226,7 @@ async function seedV5Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(
         ['meta', 'canvases', 'loroCanvases', 'canvasFiles', 'reconnectKeypairs'],
         'readwrite',
@@ -231,6 +272,7 @@ async function seedV6Fixture(documentId: string, loroSnapshot: Uint8Array): Prom
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'canvases', 'loroCanvases', 'canvasFiles'], 'readwrite')
       tx.objectStore('meta').put(documentId, 'defaultCanvasId')
       tx.objectStore('canvases').put(
@@ -260,9 +302,11 @@ async function metaKeys(): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction('meta', 'readonly')
     const req = tx.objectStore('meta').getAllKeys()
-    req.onsuccess = () => resolve(req.result.map(String).sort())
     req.onerror = () => reject(req.error)
-    tx.oncomplete = () => db.close()
+    tx.oncomplete = () => {
+      db.close()
+      resolve(req.result.map(String).sort())
+    }
   })
 }
 
@@ -558,6 +602,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
       }
       req.onsuccess = () => {
         const db = req.result
+        letFixtureStepAside(db)
         const tx = db.transaction('canvases', 'readwrite')
         // A corrupt non-object value stored under a key.
         tx.objectStore('canvases').put(null, 'corrupt-row')
@@ -597,7 +642,10 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     // onupgradeneeded at all, so the legacy 'scene' field is still present.
     const rawDb = await new Promise<IDBDatabase>((resolve, reject) => {
       const req = indexedDB.open(MIGRATION_DB, 2)
-      req.onsuccess = () => resolve(req.result)
+      req.onsuccess = () => {
+        letFixtureStepAside(req.result)
+        resolve(req.result)
+      }
       req.onerror = () => reject(req.error)
     })
     const raw = await new Promise<unknown>((resolve, reject) => {
@@ -627,6 +675,7 @@ async function seedV7Fixture(rows: {
     }
     req.onsuccess = () => {
       const db = req.result
+      letFixtureStepAside(db)
       const tx = db.transaction(['meta', 'documents', 'loroDocuments'], 'readwrite')
       if (rows.defaultDocumentId !== undefined) {
         tx.objectStore('meta').put(rows.defaultDocumentId, 'defaultDocumentId')
@@ -656,9 +705,11 @@ async function storeKeys(name: string): Promise<string[]> {
   return new Promise((resolve, reject) => {
     const tx = db.transaction(name, 'readonly')
     const req = tx.objectStore(name).getAllKeys()
-    req.onsuccess = () => resolve(req.result as string[])
     req.onerror = () => reject(req.error)
-    tx.oncomplete = () => db.close()
+    tx.oncomplete = () => {
+      db.close()
+      resolve(req.result as string[])
+    }
   })
 }
 
@@ -792,6 +843,30 @@ describe('cross-tab upgrades', () => {
     // turning one failed test into a hung file.
     idle.close()
     expect({ upgraded, blocked }).toEqual({ upgraded: true, blocked: false })
+  })
+
+  // Deterministic, unlike the CI failure it explains: the fixture connection is
+  // deliberately left open at an old version, so no scheduling luck is
+  // involved. With the manners `letFixtureStepAside` gives it, the upgrade
+  // below goes through; without them it is blocked, which is exactly what CI
+  // kept reporting against unrelated tests.
+  it('is not blocked by a fixture connection left open at an older version', async () => {
+    const held = await new Promise<IDBDatabase>((resolve, reject) => {
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION - 1)
+      req.onsuccess = () => {
+        letFixtureStepAside(req.result)
+        resolve(req.result)
+      }
+      req.onerror = () => reject(req.error)
+    })
+
+    try {
+      const db = await openWhiteboardDb(MIGRATION_DB)
+      expect(db.version).toBe(DB_VERSION)
+      db.close()
+    } finally {
+      held.close()
+    }
   })
 
   it('rejects with a message a caller can show when a connection that will NOT self-close holds the old version', async () => {
