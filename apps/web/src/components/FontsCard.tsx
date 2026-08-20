@@ -14,8 +14,16 @@ type ListState =
   | { kind: 'error'; message: string }
   | { kind: 'loaded'; fonts: readonly FontCatalogueItem[] }
 
-function formatSize(bytes: number): string {
-  return `${Math.round(bytes / 1_000_000)} MB`
+/**
+ * Rounding to whole megabytes is right for the CJK faces this list exists for
+ * (9–18 MB) and prints "0 MB" for the small ones — the catalogue's Hebrew face
+ * is 113 KB. A size the user reads before committing to a download must never
+ * round to nothing.
+ */
+export function formatSize(bytes: number): string {
+  return bytes < 1_000_000
+    ? `${Math.round(bytes / 1_000)} KB`
+    : `${Math.round(bytes / 1_000_000)} MB`
 }
 
 /**

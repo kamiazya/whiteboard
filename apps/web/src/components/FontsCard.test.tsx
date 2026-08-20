@@ -1,7 +1,7 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
-import { FontsCard } from './FontsCard.js'
+import { FontsCard, formatSize } from './FontsCard.js'
 
 afterEach(cleanup)
 
@@ -40,6 +40,17 @@ function renderCard(fetchImpl: (url: string, init?: RequestInit) => Promise<Resp
   )
   return fetchFn
 }
+
+describe('formatSize', () => {
+  // Whole megabytes suit the CJK faces this list exists for and print "0 MB"
+  // for the small ones. A size shown before a download must not round away.
+  it('never rounds a real file down to nothing', () => {
+    expect(formatSize(112_640)).toBe('113 KB')
+    expect(formatSize(218_652)).toBe('219 KB')
+    expect(formatSize(9_589_900)).toBe('10 MB')
+    expect(formatSize(17_772_300)).toBe('18 MB')
+  })
+})
 
 describe('FontsCard', () => {
   it('lists the catalogue, and offers Install only for what the daemon lacks', async () => {
