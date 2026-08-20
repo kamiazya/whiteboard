@@ -47,7 +47,7 @@ import {
 import { getDb, registerDbDisposeHook } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictDoc, getOrLoad } from './doc-cache.js'
+import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
@@ -151,6 +151,36 @@ async function saveSnapshotLocked(
 // doc was the last writer. A stored snapshot that fails to import falls
 // back to plain overwrite — the pre-flip semantics for an unreadable
 // snapshot — with a warning.
+/**
+ * Brings `doc` up to the stored bytes when it is behind them, and does
+ * nothing when it is not.
+ *
+ * Used on BOTH sides, and for the same reason from opposite directions: a
+ * writer must not overwrite work it never saw, and a reader must not serve
+ * a cached document someone else has since written past. The read side is
+ * what makes the resident LRU self-correcting — every write would otherwise
+ * have to remember to evict, and the MCP tools cannot: they address
+ * documents by id and have no idea what path a document is cached under.
+ *
+ * Throws rather than logging, so each caller can say what its own failure
+ * costs — an overwrite on the write side, stale bytes on the read side.
+ */
+async function importStoredIfBehind(
+  documentStore: LibsqlDocumentStore,
+  documentId: string,
+  doc: LoroDoc,
+): Promise<void> {
+  const docRef = { kind: 'document' as const, documentId }
+  const stored = await documentStore.readFrontier({ docRef })
+  if (stored === null) return
+  const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
+  // `undefined` means the two histories diverged — neither is a prefix of the
+  // other — which is still a reason to merge, not to ignore.
+  if (comparison !== undefined && comparison >= 0) return
+  const existing = await documentStore.loadSnapshot({ docRef })
+  if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
+}
+
 async function mergeAndSaveSnapshotLocked(
   documentStore: LibsqlDocumentStore,
   workspaceId: string,
@@ -159,22 +189,13 @@ async function mergeAndSaveSnapshotLocked(
 ): Promise<number> {
   const docRef = { kind: 'document' as const, documentId }
   return withDocumentWriteLock(documentId, async () => {
-    const stored = await documentStore.readFrontier({ docRef })
-    if (stored !== null) {
-      const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
-      if (comparison === undefined || comparison < 0) {
-        try {
-          const existing = await documentStore.loadSnapshot({ docRef })
-          if (existing !== null) {
-            doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
-          }
-        } catch (err) {
-          getLogger('document').warning(
-            { workspaceId, documentId, err: err as Error },
-            'stored snapshot failed to merge before save; overwriting',
-          )
-        }
-      }
+    try {
+      await importStoredIfBehind(documentStore, documentId, doc)
+    } catch (err) {
+      getLogger('document').warning(
+        { workspaceId, documentId, err: err as Error },
+        'stored snapshot failed to merge before save; overwriting',
+      )
     }
     const snapshot = doc.export({ mode: 'snapshot' })
     const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
@@ -367,6 +388,27 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
  * only when a *fresh* instance is the point.
  */
 export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc> {
+  // Only a HIT can be stale; a miss is about to load the stored bytes anyway.
+  // Paying the two small indexed reads here rather than on every call keeps
+  // the common path unchanged.
+  const cached = peekDoc(workspaceId, path)
+  if (cached !== undefined) {
+    try {
+      const db = await dbReady()
+      const documentId = await getDocumentIdByPath(db, workspaceId, path)
+      if (documentId) {
+        await importStoredIfBehind(await documentStoreReady(), documentId, cached)
+      }
+    } catch (err) {
+      // Serving the cached document is the honest fallback: it is what this
+      // process last knew, and refusing to answer would turn a stale read
+      // into a failed one.
+      getLogger('document').warning(
+        { workspaceId, path, err: err as Error },
+        'could not refresh cached document from the store; serving cached bytes',
+      )
+    }
+  }
   return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path))
 }
 
