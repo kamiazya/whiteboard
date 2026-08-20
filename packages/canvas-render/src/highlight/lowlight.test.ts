@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
-import { highlightCode } from './syntax-highlight.js'
+import { highlightCode } from './lowlight.js'
 
-describe('the lowlight side of canvas-render highlightCode seam', () => {
+describe('the default implementation of the highlightCode seam', () => {
   it('returns one array per SOURCE line, which is what the seam validates on', () => {
     const source = 'const x = 1\n// note\n'
     const lines = highlightCode('ts', source)

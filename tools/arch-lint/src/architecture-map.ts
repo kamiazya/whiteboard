@@ -54,7 +54,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // BudouX (phrase boundaries for Japanese) is deliberately NOT here: it is
     // vendored under src/vendor/budoux, because depending on it drags in
     // linkedom and the native canvas package and breaks the published build.
-    allowedThirdParty: ['zod', 'css-line-break'],
+    // lowlight/highlight.js: the DEFAULT implementation of this package's own
+    // `highlightCode` seam, behind the `/highlight` subpath so the barrel
+    // never drags a highlighter into a consumer that renders no code. It sits
+    // here because canvas-render is the only package all three surfaces that
+    // render a markdown body can see — the editor, the viewer (and the MCP
+    // Apps widget through it), and export — and the alternative is the same
+    // scope-to-role table written out three times. Pure JS, no DOM and no
+    // `node:*`, so it holds on Node, the browser and a Worker alike.
+    allowedThirdParty: ['zod', 'css-line-break', 'lowlight', 'highlight.js'],
   },
   '@kamiazya/whiteboard-ports': {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],

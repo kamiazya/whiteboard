@@ -5,6 +5,7 @@ import {
   renderSceneToSvg,
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
+import { highlightCode } from '@kamiazya/whiteboard-canvas-render/highlight'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
@@ -79,6 +80,11 @@ export function CanvasViewer({
     const scene = layoutSpatialCanvas(canvas, {
       measure: resolvedMeasure,
       appearance: VIEWER_APPEARANCE,
+      // The same tokeniser the editor and export use. A viewer that showed
+      // code plain while the editor coloured it would be a divergence in the
+      // one place the two are meant to agree — this component renders what
+      // the editor renders, minus the ability to change it.
+      highlightCode,
       ...(resolveReference === undefined ? {} : { resolveReference }),
       // No onDegrade: the viewer degrades silently by choice — it has no
       // logger to report through, and a malformed body/unrecognized node
