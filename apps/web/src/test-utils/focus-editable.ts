@@ -20,10 +20,33 @@ import { expect, vi } from 'vitest'
  * specific `.cm-line` also places the caret at that position, and replacing it
  * with `focus()` would move the caret to wherever CodeMirror last had it — a
  * different test.
+ *
+ * `focus()` is re-issued on EVERY attempt rather than once before the wait.
+ * Focus is shared mutable state across a whole browser project: a neighbour's
+ * leftover keystrokes, or its still-settling layout, can take it back after
+ * the call and before it settles, and waiting alone never gets it back. And a
+ * detached node is reported by name — it can never take focus, so waiting is
+ * the one thing that cannot help, and "activeElement is <body>" says nothing
+ * about which of the two happened. That message is what a whole file of
+ * failures looked like in CI, eleven times, with no way to tell them apart.
  */
 export async function focusEditable(element: Element): Promise<void> {
-  ;(element as HTMLElement).focus()
   await vi.waitFor(() => {
-    expect(document.activeElement).toBe(element)
+    if (!element.isConnected) {
+      throw new Error(
+        'focusEditable: the editable is no longer in the document — it was replaced between ' +
+          'being queried and being focused. Re-query it inside the step that focuses it.',
+      )
+    }
+    ;(element as HTMLElement).focus()
+    expect(
+      document.activeElement,
+      `focusEditable: focus did not land. document.hasFocus()=${document.hasFocus()}, ` +
+        `activeElement=<${document.activeElement?.tagName.toLowerCase() ?? 'none'}${
+          document.activeElement instanceof HTMLElement && document.activeElement.className !== ''
+            ? ` class="${document.activeElement.className}"`
+            : ''
+        }>`,
+    ).toBe(element)
   })
 }
