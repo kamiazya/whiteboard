@@ -15,7 +15,9 @@ afterEach(() => {
 describe('MarkdownEditor (real browser)', () => {
   it('typing real characters into the source pane produces onChange with the expected document', async () => {
     const onChange = vi.fn()
-    const { getByTestId } = render(<MarkdownEditor value="" onChange={onChange} />)
+    const { getByTestId } = render(
+      <MarkdownEditor initialViewMode="split" value="" onChange={onChange} />,
+    )
 
     const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
     expect(editable).not.toBeNull()
@@ -48,7 +50,7 @@ describe('MarkdownEditor (real browser)', () => {
   it('the catalog Bold wraps the live selection without collapsing it', async () => {
     const onChange = vi.fn()
     const { getByTestId, getByRole } = render(
-      <MarkdownEditor value="make this bold" onChange={onChange} />,
+      <MarkdownEditor initialViewMode="split" value="make this bold" onChange={onChange} />,
     )
 
     const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
@@ -75,9 +77,15 @@ describe('MarkdownEditor (real browser)', () => {
     // SECOND run following a styled first run — it equals the first run's
     // real measured width. jsdom has no Canvas 2D backend and falls back to
     // a ratio-based measurer, so this is genuinely browser-only signal.
-    const short = render(<MarkdownEditor value="**hi** end" onChange={() => {}} />)
+    const short = render(
+      <MarkdownEditor initialViewMode="split" value="**hi** end" onChange={() => {}} />,
+    )
     const long = render(
-      <MarkdownEditor value="**a much longer bold phrase** end" onChange={() => {}} />,
+      <MarkdownEditor
+        initialViewMode="split"
+        value="**a much longer bold phrase** end"
+        onChange={() => {}}
+      />,
     )
 
     // Scoped to each render's own container: `getByTestId` on the render
@@ -106,7 +114,9 @@ describe('MarkdownEditor (real browser)', () => {
   })
 
   it('mounts and unmounts cleanly with no dangling CodeMirror view or thrown error', () => {
-    const { unmount } = render(<MarkdownEditor value="content" onChange={() => {}} />)
+    const { unmount } = render(
+      <MarkdownEditor initialViewMode="split" value="content" onChange={() => {}} />,
+    )
     expect(() => unmount()).not.toThrow()
   })
 })

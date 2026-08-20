@@ -1,36 +1,62 @@
-// `focusEditable` is what eleven browser tests depend on to receive a
-// keystroke at all, so when it fails it has to say WHY. It failed across a
-// whole file in CI with `expected <body>… to be <div spellcheck=…>`, which
-// names the symptom and none of the three things that produce it.
+// Every failure mode this helper has actually produced in CI, made
+// deterministic. The symptom was always the same — `expected <body> … to be
+// <div …>` — while the causes were four different things; each is pinned
+// under conditions that force it, so none can be quietly reintroduced.
+
 import { afterEach, describe, expect, it } from 'vitest'
 import { focusEditable } from './focus-editable.js'
 
 afterEach(() => {
-  for (const el of document.querySelectorAll('[data-focus-fixture]')) el.remove()
+  document.body.replaceChildren()
 })
 
 function editable(): HTMLElement {
   const el = document.createElement('div')
   el.contentEditable = 'true'
-  el.setAttribute('data-focus-fixture', '')
-  document.body.append(el)
+  document.body.appendChild(el)
   return el
 }
 
 describe('focusEditable', () => {
-  it('focuses a live editable', async () => {
+  it('focuses what the resolver answers', async () => {
     const el = editable()
-    await focusEditable(el)
+
+    await focusEditable(() => el)
+
     expect(document.activeElement).toBe(el)
   })
 
-  it('names the detached case instead of timing out on a dead node', async () => {
-    // The shape this repo has now hit three times: a reference held across a
-    // re-render. A detached node cannot take focus and never will, so waiting
-    // is the one thing that cannot help — say so rather than spend the budget.
+  it('re-resolves per retry: an editable that appears only after the wait began', async () => {
+    // The discriminating case for the resolver signature. A swap completed
+    // BEFORE the call is satisfied by resolving once at entry too; only a node
+    // that arrives DURING the wait separates per-retry resolution from a
+    // single resolve — and that is the loaded-run reality, where the
+    // contentDOM lands late. The first version of this suite swapped before
+    // calling, and the resolve-once mutation stayed green against it.
+    setTimeout(() => {
+      editable()
+    }, 120)
+
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
+
+    expect((document.activeElement as HTMLElement).isContentEditable).toBe(true)
+  })
+
+  it('names the frozen-resolver case instead of timing out on a dead node', async () => {
+    // A reference held across a re-render, the repo's sixth flake shape. A
+    // detached node cannot take focus and never will, so waiting is the one
+    // thing that cannot help — say so rather than spend the budget.
     const el = editable()
     el.remove()
-    await expect(focusEditable(el)).rejects.toThrow(/no longer in the document/i)
+
+    await expect(focusEditable(() => el)).rejects.toThrow(/no longer in the document/i)
+  })
+
+  it('names the unrendered case — display:none is how Read mode hides the pane', async () => {
+    const el = editable()
+    el.style.display = 'none'
+
+    await expect(focusEditable(() => el)).rejects.toThrow(/not rendered/i)
   })
 
   it('recovers when something else takes focus first', async () => {
@@ -50,7 +76,7 @@ describe('focusEditable', () => {
     }
     el.addEventListener('focusin', steal)
     try {
-      await focusEditable(el)
+      await focusEditable(() => el)
     } finally {
       el.removeEventListener('focusin', steal)
     }
