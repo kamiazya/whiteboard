@@ -91,8 +91,13 @@ export function createExportRouter() {
 
       let pngBuffer: Buffer
       let undrawable: readonly string[]
+      let unresolvedFamilies: readonly string[]
       try {
-        ;({ png: pngBuffer, undrawable } = await renderHeadless(workspaceId, path, body))
+        ;({
+          png: pngBuffer,
+          undrawable,
+          unresolvedFamilies,
+        } = await renderHeadless(workspaceId, path, body))
       } catch (err) {
         const errBody: ExportErrorBody = {
           error: 'headless_export_failed',
@@ -105,7 +110,11 @@ export function createExportRouter() {
         outputPath !== undefined
           ? await writeExplicitOutput(outputPath, pngBuffer)
           : await writeDefaultOutput(workspaceId, path, pngBuffer)
-      const response: ExportResponse = { filePath, undrawable: [...undrawable] }
+      const response: ExportResponse = {
+        filePath,
+        undrawable: [...undrawable],
+        unresolvedFamilies: [...unresolvedFamilies],
+      }
       return c.json(response)
     },
     bodyLimit({
@@ -128,7 +137,11 @@ async function renderHeadless(
   workspaceId: string,
   path: string,
   body: z.infer<typeof exportRequestSchema>,
-): Promise<{ png: Buffer; undrawable: readonly string[] }> {
+): Promise<{
+  png: Buffer
+  undrawable: readonly string[]
+  unresolvedFamilies: readonly string[]
+}> {
   const result = await exportCanvasHeadless({
     workspaceId,
     path,
@@ -140,7 +153,11 @@ async function renderHeadless(
       theme: body.theme,
     },
   })
-  return { png: result.png, undrawable: result.undrawable }
+  return {
+    png: result.png,
+    undrawable: result.undrawable,
+    unresolvedFamilies: result.unresolvedFamilies,
+  }
 }
 
 // A plain PNG: the headless renderer no longer embeds scene JSON, so a

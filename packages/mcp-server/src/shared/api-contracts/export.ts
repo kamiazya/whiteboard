@@ -37,6 +37,21 @@ export const exportResponseSchema = z.object({
    * `POST /api/fonts/:id/install` (ADR-0012).
    */
   undrawable: z.array(z.string()),
+  /**
+   * Font families this render DECLARED that no loaded face provides. resvg
+   * drew them in the fallback, so unlike `undrawable` nothing is missing on
+   * the page — the text is legible and in the wrong face, which is why it
+   * needs saying rather than showing.
+   *
+   * The other half of ADR-0011 decision 3: the resolved font set is part of
+   * the render contract. `undrawable` is family-blind by construction — it
+   * asks whether ANY loaded face has a glyph, never whether the face a run
+   * named was among them — so this is the door that report cannot see
+   * through. Empty is the normal answer.
+   *
+   * Install a family with `POST /api/fonts/:id/install` (ADR-0012).
+   */
+  unresolvedFamilies: z.array(z.string()),
 })
 
 // Shared error body. The route emits this for invalid_request /

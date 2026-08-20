@@ -39,8 +39,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { getLogger } from '../log.js'
 import { EXPORT_FONT_FAMILY, resolveExportFontFaces } from './export-font.js'
 import { installedFontFiles } from './installed-fonts.js'
-import { createOpentypeMeasureText } from './measure-text.js'
+import { createOpentypeMeasureText, loadExportFonts } from './measure-text.js'
 import { undrawableCharacters } from './undrawable-characters.js'
+import { unresolvedFamilies } from './unresolved-families.js'
 
 // Export never has its own theme switch (the composition root always
 // exports light, see package-canvas-render.md decision #8), so this
@@ -97,6 +98,13 @@ export interface HeadlessExportResult {
    * logged where it happens.
    */
   undrawable: readonly string[]
+  /**
+   * Font families this render DECLARED that no loaded face provides, so
+   * resvg drew them in the fallback. Distinct from `undrawable`, which is
+   * family-blind: every character can be present and still be painted in the
+   * wrong face, which is a silent loss rather than a visible one.
+   */
+  unresolvedFamilies: readonly string[]
 }
 
 export interface HeadlessSvgExportResult {
@@ -108,6 +116,8 @@ export interface HeadlessSvgExportResult {
    * the PNG of the same canvas would lose.
    */
   undrawable: readonly string[]
+  /** Same question as `HeadlessExportResult.unresolvedFamilies`. */
+  unresolvedFamilies: readonly string[]
 }
 
 interface HeadlessExporter {
@@ -164,22 +174,54 @@ export function buildSpatialScene(
   })
 }
 
+/**
+ * The SVG and the scene it came from. The scene is returned rather than
+ * rebuilt because the caller needs it to report which declared font families
+ * this render could not resolve, and laying the canvas out twice to answer
+ * that would cost the whole of layout for a report.
+ */
 function buildSvg(
   canvas: SpatialCanvas,
   options: HeadlessExportOptions,
   measure: MeasureText,
-): string {
+): { svg: string; scene: Scene } {
   // `theme` is an explicit per-request argument — the invariant that a
   // user's ambient UI theme never changes exported bytes is untouched.
   const mode: ExportThemeMode = options.theme === 'dark' ? 'dark' : 'light'
   const scene = buildSpatialScene(canvas, measure, mode)
-  return renderSceneToSvgString(scene, {
+  const svg = renderSceneToSvgString(scene, {
     padding: options.padding ?? DEFAULT_PADDING_PX,
     background: themeBackground(options),
     // Dark node chrome uses transparent fills, so body runs sit directly on
     // the dark background — the root-level inheritable fill is what keeps
     // them legible. Light stays byte-identical (no root fill).
     ...(mode === 'dark' ? { textFill: SPATIAL_DARK_PALETTE.labelFill } : {}),
+  })
+  return { svg, scene }
+}
+
+/**
+ * The families the loaded faces actually provide, for `unresolvedFamilies`.
+ *
+ * The name lives under a PLATFORM record, and which one a face carries is not
+ * fixed — the vendored Roboto has `windows` and nothing else, while
+ * opentype.js's typings advertise a flat `names.fontFamily` that is undefined
+ * there. Reading only the typed path returned no families at all, which made
+ * every declaration resolve against an empty set and the report silently
+ * empty. All three shapes are read, and the English entry preferred because
+ * that is what a `font-family` declaration is written against.
+ */
+async function availableFamilies(): Promise<readonly string[]> {
+  const fonts = await loadExportFonts()
+  return fonts.flatMap((font) => {
+    const names = font.names as unknown as Record<string, Record<string, unknown> | undefined>
+    for (const record of [names.windows, names.macintosh, names]) {
+      const family = record?.fontFamily as Record<string, string> | string | undefined
+      const name =
+        typeof family === 'string' ? family : (family?.en ?? Object.values(family ?? {})[0])
+      if (typeof name === 'string' && name !== '') return [name]
+    }
+    return []
   })
 }
 
@@ -210,7 +252,7 @@ async function buildExporter(): Promise<HeadlessExporter> {
 
   return {
     async render(canvas, options) {
-      const svg = buildSvg(canvas, options, measure)
+      const { svg, scene } = buildSvg(canvas, options, measure)
       const scale = options.scale ?? 1
       // A non-finite, zero, or negative scale is not a valid zoom factor for
       // resvg (it throws on a zero/negative target size) — degrade to an
@@ -232,10 +274,16 @@ async function buildExporter(): Promise<HeadlessExporter> {
         width: png.width,
         height: png.height,
         undrawable,
+        unresolvedFamilies: await reportUnresolvedFamilies(scene),
       }
     },
     async renderSvg(canvas, options) {
-      return { svg: buildSvg(canvas, options, measure), undrawable: await reportUndrawable(canvas) }
+      const { svg, scene } = buildSvg(canvas, options, measure)
+      return {
+        svg,
+        undrawable: await reportUndrawable(canvas),
+        unresolvedFamilies: await reportUnresolvedFamilies(scene),
+      }
     },
   }
 }
@@ -247,6 +295,17 @@ async function buildExporter(): Promise<HeadlessExporter> {
  * per-character case, and it is logged per render because it depends on the
  * canvas rather than on the install.
  */
+async function reportUnresolvedFamilies(scene: Scene): Promise<readonly string[]> {
+  const families = unresolvedFamilies(scene, await availableFamilies())
+  if (families.length > 0) {
+    log.warning(
+      { families },
+      'export declared font families no loaded face provides; drawn in the fallback',
+    )
+  }
+  return families
+}
+
 async function reportUndrawable(canvas: SpatialCanvas): Promise<readonly string[]> {
   const undrawable = await undrawableCharacters(canvas)
   if (undrawable.length > 0) {
