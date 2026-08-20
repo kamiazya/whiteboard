@@ -40,7 +40,7 @@ async function importRenderer() {
   return import('./headless-renderer.js')
 }
 
-import { renderSceneToSvg } from '@kamiazya/whiteboard-canvas-render'
+import { renderSceneToSvg, SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
 import { buildSpatialScene } from './headless-renderer.js'
 import { createOpentypeMeasureText, loadExportFonts } from './measure-text.js'
 
@@ -408,5 +408,59 @@ describe('an export says which declared families it could not provide', () => {
       edges: [],
     }
     expect((await renderSpatialCanvasToSvg(plain, {})).unresolvedFamilies).toEqual([])
+  })
+})
+
+describe('an export colours code the way the editor does', () => {
+  const CODE_CANVAS: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'n1',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 360,
+        height: 220,
+        text: '```ts\n// note\nexport const x = "hi"\n```',
+      },
+    ],
+    edges: [],
+  }
+
+  it('paints keyword, string and comment runs from the light syntax palette', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const { svg } = await renderSpatialCanvasToSvg(CODE_CANVAS, {})
+    const { syntax } = SPATIAL_LIGHT_PALETTE
+    expect(svg).toContain(syntax.keyword)
+    expect(svg).toContain(syntax.string)
+    expect(svg).toContain(syntax.comment)
+  })
+
+  it('splits one source line into several runs, which is what colour requires', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const { svg } = await renderSpatialCanvasToSvg(CODE_CANVAS, {})
+    // Three source lines; colouring the middle one costs it extra <text>
+    // elements, so a plain render cannot reach this count.
+    expect(svg.match(/<text/g)?.length ?? 0).toBeGreaterThan(3)
+  })
+
+  it('leaves a fence in an unknown language plain rather than guessing', async () => {
+    const { renderSpatialCanvasToSvg } = await importRenderer()
+    const plain: SpatialCanvas = {
+      nodes: [
+        {
+          id: 'n1',
+          type: 'text',
+          x: 0,
+          y: 0,
+          width: 360,
+          height: 160,
+          text: '```brainfuck\n+++\n```',
+        },
+      ],
+      edges: [],
+    }
+    const { svg } = await renderSpatialCanvasToSvg(plain, {})
+    expect(svg).not.toContain(SPATIAL_LIGHT_PALETTE.syntax.keyword)
   })
 })

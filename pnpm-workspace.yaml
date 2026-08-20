@@ -13,6 +13,12 @@ catalog:
   # react family — a single instance is mandatory (Provider/Consumer Context)
   react: "^19"
   react-dom: "^19"
+  # the markdown code highlighter, shared by every surface that renders a
+  # body: the editor, the read-only viewer, and export. One version, because
+  # a scope-to-role table read against two different highlight.js releases is
+  # a divergence nothing would report.
+  "highlight.js": "^11.12.0"
+  lowlight: "^3.3.0"
   # cross-process contract cores — one version everywhere
   zod: "^4.4.2"
   loro-crdt: "1.13.6"
