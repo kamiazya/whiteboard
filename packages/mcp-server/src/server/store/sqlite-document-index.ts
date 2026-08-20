@@ -17,12 +17,14 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  findDescendantPath,
+  isSelfOrDescendant,
+  planSubtreeMove,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { findDescendantPath, isSelfOrDescendant, planSubtreeMove } from './document-path-tree.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**

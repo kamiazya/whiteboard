@@ -123,6 +123,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-mcp',
+      '@kamiazya/whiteboard-ports',
     ],
     allowedThirdParty: [],
   },

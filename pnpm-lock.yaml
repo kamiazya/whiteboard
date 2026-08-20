@@ -152,6 +152,9 @@ importers:
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../../packages/model
+      '@kamiazya/whiteboard-ports':
+        specifier: workspace:*
+        version: link:../../packages/ports
       '@lezer/highlight':
         specifier: ^1.2.1
         version: 1.2.3
