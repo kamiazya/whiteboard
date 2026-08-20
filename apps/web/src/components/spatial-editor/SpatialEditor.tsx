@@ -3348,6 +3348,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             // canvas-render's SVG serializer is the SOLE producer of this
             // string and escapes text/attrs (see svg/format.ts) — the same
             // already-reviewed reasoning as CanvasViewer.tsx's identical sink.
+            // biome-ignore lint/security/noDangerouslySetInnerHtml: canvas-render's serializer is the SOLE producer and escapes text/attrs (svg/format.ts)
             dangerouslySetInnerHTML={{ __html: dragStatic?.svg ?? svg }}
           />
           {liveEdges !== undefined && (
@@ -3362,6 +3363,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
               dangerouslySetInnerHTML={{ __html: liveEdges.svg }}
             />
           )}
@@ -3377,6 +3379,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               }}
               // Same trusted producer as the committed scene (canvas-render's
               // escaping serializer).
+              // biome-ignore lint/security/noDangerouslySetInnerHtml: same trusted producer as the committed scene
               dangerouslySetInnerHTML={{ __html: liveNode.svg }}
             />
           )}
