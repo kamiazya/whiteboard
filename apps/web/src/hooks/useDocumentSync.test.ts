@@ -11,6 +11,7 @@
  */
 
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
@@ -20,6 +21,14 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, renderHook } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, expectTypeOf, it, vi } from 'vitest'
+
+// Only the embedding function is faked; the rest of canvas-viewer stays real.
+const { embedSpy } = vi.hoisted(() => ({ embedSpy: vi.fn(async (svg: string) => svg) }))
+vi.mock('@kamiazya/whiteboard-canvas-viewer', async (importOriginal) => ({
+  ...(await importOriginal<typeof import('@kamiazya/whiteboard-canvas-viewer')>()),
+  withViewerFontEmbedded: embedSpy,
+}))
+
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { applyCommand } from '../components/spatial-editor/commands.js'
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
@@ -615,6 +624,31 @@ describe('useDocumentSync', () => {
       expect(blob).not.toBeNull()
       expect(blob?.type).toBe('image/svg+xml')
       expect(blob?.size).toBeGreaterThan(0)
+    })
+
+    // The wiring half. That an embedded face actually changes a rasterised
+    // SVG is proved in canvas-viewer's own browser test, under a family name
+    // no system font can match; asserting it on pixels HERE would be vacuous
+    // on any machine that happens to have Roboto installed.
+    it('embeds the viewer face for png, and leaves a saved svg alone', async () => {
+      const backend = makeFakeBackend()
+      const { result } = renderHook(() => useDocumentSync(backend))
+      await hydrate(backend, TEXT_CANVAS)
+      embedSpy.mockClear()
+
+      await act(async () => {
+        await result.current.exportScene('svg')
+      })
+      // A saved .svg names the family without carrying it: embedding would add
+      // ~466 KB for a face any viewer with Roboto already has.
+      expect(embedSpy).not.toHaveBeenCalled()
+
+      await act(async () => {
+        await result.current.exportScene('png')
+      })
+      expect(embedSpy).toHaveBeenCalledTimes(1)
+      // What it embeds into is the rendered scene, not some other string.
+      expect(embedSpy.mock.calls[0]?.[0]).toContain('<svg')
     })
 
     it('derives the svg from the empty canvas (still non-null) before any snapshot has arrived', async () => {

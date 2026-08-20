@@ -6,6 +6,7 @@
 export type { CanvasViewerProps } from './CanvasViewer.js'
 export { CanvasViewer } from './CanvasViewer.js'
 export { VIEWER_FONT_FAMILY } from './font.js'
+export { withViewerFontEmbedded } from './font-embedding.js'
 export { ensureViewerFontLoaded, type ViewerFontStatus } from './font-loading.js'
 export { createBrowserMeasureText } from './measure-text.js'
 export type { CanvasViewerHandle, MountCanvasViewerOptions } from './mount.js'

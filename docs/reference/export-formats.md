@@ -49,6 +49,12 @@ The web editor's canvas row (More actions → Export) saves the current canvas a
 SVG or PNG, rendered with the light theme regardless of the UI theme so an
 export's bytes never depend on a display preference.
 
+The PNG a browser export produces carries the editor's own font inside the
+image data it rasterises from, so it draws the text the editor showed rather
+than whatever font the operating system offers. A saved `.svg` names the family
+instead of carrying it — a viewer with Roboto renders it identically, and one
+without it gets a smaller file.
+
 **Copy as JSON Canvas** (same menu) puts the extended-mode JSON Canvas
 document on the clipboard as plain text — the quickest way to hand the exact
 canvas to another tool or a debugging session from any device.
