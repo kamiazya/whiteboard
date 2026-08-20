@@ -1,5 +1,5 @@
 /**
- * Real-IndexedDB browser test: seeds the actual LocalStoreDouble + LoroStore
+ * Real-IndexedDB browser test: seeds the actual IdbDocumentIndex + LoroStore
  * with two documents (one with deltas), imports both, and asserts copy-first
  * — after import the source store's contents are byte-identical.
  */

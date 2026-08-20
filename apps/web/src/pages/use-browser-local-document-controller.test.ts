@@ -758,7 +758,7 @@ describe('useBrowserLocalDocumentController', () => {
       expect(result.current.persistence.kind).toBe('saved')
     })
 
-    it('falls back to the default document when the list read itself fails', async () => {
+    it('falls back to the default document when the path read itself fails', async () => {
       // The deep link is resolved by listing, so a store that cannot list is
       // indistinguishable from a path that is not there — and the fallback is
       // the same. This is the reachable version of the create path's own
@@ -768,7 +768,7 @@ describe('useBrowserLocalDocumentController', () => {
       const base = new LocalStoreDouble()
       await base.setDefaultDocumentId(C1)
       await base.save(snap)
-      base.index.listDocuments = () => Promise.reject(new Error('idb blocked'))
+      base.index.resolveDocument = () => Promise.reject(new Error('idb blocked'))
       const { result } = renderHook(() =>
         useBrowserLocalDocumentController(base.index, {
           loro: base.loro,

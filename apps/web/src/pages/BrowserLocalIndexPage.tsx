@@ -32,11 +32,21 @@ export interface BrowserLocalIndexPageProps {
 // renders, minus its daemon-only capabilities (no thumbnails, no workspace
 // selector). Rows come straight from the store; the editor page owns
 // everything after onOpenDocument fires.
+// Module-level, NOT default parameters. A default in the parameter list is
+// evaluated on every render, so `idbContentClock()` hands back a new function
+// identity each time; the load effect depends on it, `setSnapshots` stores a
+// new array, the render mints another clock, and the effect runs again without
+// end. Measured on the production wiring (index + onOpenDocument only): 464
+// index reads and still climbing after half a second.
+const defaultLoroStore = /* @__PURE__ */ new LoroStore()
+const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
+const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
+
 export function BrowserLocalIndexPage({
   index,
-  loro = new LoroStore(),
-  pointer = new IdbDefaultDocumentPointer(),
-  clock = idbContentClock(),
+  loro = defaultLoroStore,
+  pointer = defaultPointer,
+  clock = defaultClock,
   onOpenDocument,
 }: BrowserLocalIndexPageProps) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
@@ -97,10 +107,21 @@ export function BrowserLocalIndexPage({
     setDeleting(true)
     setDeleteError(null)
     try {
-      // If this was the document the default pointer resumes into, the
-      // pointer dangles deliberately — the editor's resume path already falls
-      // back safely on an id the index no longer holds.
+      // Resolved BEFORE the delete, because afterwards there is nothing left
+      // to compare the pointer against. A pointer still naming the deleted
+      // document does not degrade gracefully: the editor's resume path
+      // reports 'The canvas data could not be read.', so an ordinary delete
+      // would hand the user an error screen the next time they open the
+      // editor.
+      const pointed = await pointer.get()
+      const target = await index.resolveDocument({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path: pendingDelete.path,
+      })
       await index.deleteDocument({ workspaceId: LOCAL_WORKSPACE_ID, path: pendingDelete.path })
+      if (pointed !== null && target !== null && pointed === target.documentId) {
+        await pointer.clear()
+      }
       setSnapshots(await listLocalDocuments(index, clock))
       setPendingDelete(null)
     } catch {
@@ -108,7 +129,7 @@ export function BrowserLocalIndexPage({
     } finally {
       setDeleting(false)
     }
-  }, [index, clock, pendingDelete])
+  }, [index, clock, pointer, pendingDelete])
 
   const handleCreate = useCallback(
     async (kind: DocumentKind) => {

@@ -194,6 +194,32 @@ describe('BrowserLocalIndexPage', () => {
     expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
   })
 
+  it('clears the default pointer when the deleted canvas was the one it named', async () => {
+    // A pointer left naming a deleted document does NOT degrade gracefully:
+    // the editor's resume path reports 'The canvas data could not be read.'
+    // and the user meets an error screen after an ordinary delete.
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'pointed-at',
+        name: 'Pointed At',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    await store.setDefaultDocumentId('0CFJNRVY147ADGKPSWZ258BEHM')
+    renderPage(store)
+    await screen.findAllByTestId('document-list-card')
+
+    fireEvent.click(screen.getByRole('button', { name: 'Delete Pointed At' }))
+    const dialog = await screen.findByRole('alertdialog')
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+
+    expect(await store.getDefaultDocumentId()).toBeNull()
+  })
+
   it('confirming Delete removes the canvas; deleting the last one returns the empty state', async () => {
     const store = await seededStore([
       {

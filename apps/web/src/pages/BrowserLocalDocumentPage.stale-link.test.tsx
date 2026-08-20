@@ -185,12 +185,16 @@ describe('stale /local/:path deep link', () => {
     const held = new Promise<void>((resolve) => {
       releaseList = resolve
     })
-    const listDocuments = store.listDocuments.bind(store)
+    // Held at the INDEX, which is what the page's listing actually reads.
+    // The double's own `listDocuments` is not on that path any more, so
+    // suspending it suspended nothing and the test covered the fast case
+    // twice.
+    const listDocuments = store.index.listDocuments.bind(store.index)
     let calls = 0
-    store.listDocuments = async () => {
+    store.index.listDocuments = async (input) => {
       calls += 1
       if (calls === 2) await held
-      return listDocuments()
+      return listDocuments(input)
     }
 
     const router = createMemoryRouter(

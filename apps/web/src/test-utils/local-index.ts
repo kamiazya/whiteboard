@@ -68,6 +68,12 @@ export function seedLocal(
   defaultDocumentId?: string,
 ): SeededLocal {
   const index = new InMemoryDocumentIndex()
+  // Registered up front. `seed` adds the workspace as a side effect, so a
+  // double that is seeded works by accident — but `seedLocal([])` and a
+  // `LocalStoreDouble` read before its first `save` would answer
+  // `WorkspaceNotFoundError` where production answers an empty list, which is
+  // the one case a test of the empty state most wants to reach.
+  void index.createWorkspace({ workspaceId: LOCAL_WORKSPACE_ID })
   const stamps = new Map<string, string>()
   for (const snapshot of snapshots) {
     index.seed({
@@ -102,6 +108,7 @@ export function seedLocal(
  */
 export class LocalStoreDouble {
   readonly index = new InMemoryDocumentIndex()
+
   readonly pointer = new InMemoryDefaultDocumentPointer()
   readonly loro = new InMemoryLoroStore()
   readonly #stamps = new Map<string, string>()
@@ -110,6 +117,13 @@ export class LocalStoreDouble {
     new Map(
       ids.flatMap((id) => (this.#stamps.has(id) ? [[id, this.#stamps.get(id) as string]] : [])),
     )
+
+  constructor() {
+    // See `seedLocal` above: an unseeded double must still LIST, not throw.
+    // The in-memory index registers the workspace synchronously, so the
+    // promise is complete before any caller can observe it.
+    void this.index.createWorkspace({ workspaceId: LOCAL_WORKSPACE_ID })
+  }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
     this.index.seed({

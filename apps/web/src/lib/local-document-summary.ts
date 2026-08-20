@@ -88,9 +88,9 @@ function toSnapshot(entry: DocumentEntry, updatedAt: string | undefined): Docume
 /**
  * Where a document's last-write time comes from. Injected because the default
  * reads IndexedDB, and the jsdom test project has none — a page test wants the
- * projection, not the storage. `noContentClock` is the honest stand-in: every
- * document reports the epoch, which is what a document with no content record
- * reports anyway.
+ * projection, not the storage. A test that does not care supplies
+ * `async () => new Map()`, and every document then reports the epoch — which
+ * is what a document with no content record reports anyway.
  */
 export type ContentClock = (ids: string[]) => Promise<Map<string, string>>
 

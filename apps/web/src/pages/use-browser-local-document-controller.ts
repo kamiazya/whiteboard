@@ -148,7 +148,7 @@ export interface BrowserLocalControllerDeps {
 // new collaborator the effect deps would have to ignore.
 const defaultLoroStore = /* @__PURE__ */ new LoroStore()
 const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDocumentPointer()
-const defaultClock: ContentClock = (ids) => idbContentClock()(ids)
+const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
 export function useBrowserLocalDocumentController(
   index: DocumentIndex,

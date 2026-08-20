@@ -229,7 +229,7 @@ describe('ImportBrowserLocalPanel', () => {
 
   it('shows the empty state instead of loading forever when listDocuments rejects', async () => {
     const store = new LocalStoreDouble()
-    store.listDocuments = vi.fn().mockRejectedValue(new Error('IndexedDB blocked'))
+    store.index.listDocuments = vi.fn().mockRejectedValue(new Error('IndexedDB blocked'))
 
     render(
       <ImportBrowserLocalPanel

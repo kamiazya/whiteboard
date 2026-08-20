@@ -1,6 +1,6 @@
 /**
  * S-C1 multi-canvas foundation (real IndexedDB): listDocuments / createDocument /
- * switchDocument against the real LocalStoreDouble + LoroStore, proving id-addressed
+ * switchDocument against the real IdbDocumentIndex + LoroStore, proving id-addressed
  * isolation between documents rather than relying on the fake-indexeddb node tests.
  */
 
