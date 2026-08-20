@@ -87,7 +87,7 @@ self.onmessage = async (
         self.postMessage(failed)
         return
       }
-      const { svg, blocks } = renderMarkdownPreview(request.body, {
+      const { keyed, blocks } = renderMarkdownPreview(request.body, {
         measure,
         maxWidth: request.maxWidth,
       })
@@ -98,7 +98,7 @@ self.onmessage = async (
       const done: MarkdownRenderResponse = {
         type: 'markdown-render-done',
         id: request.id,
-        svg,
+        svg: keyed.svg,
         bounds: { x: 0, y: 0, w: right, h: bottom },
       }
       self.postMessage(done)
