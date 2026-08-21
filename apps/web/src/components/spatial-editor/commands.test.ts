@@ -641,14 +641,17 @@ describe('create-edge', () => {
 })
 
 // The routing style belongs to the canvas, so the command that sets it names
-// no node. It is the first command that edits the canvas ENVELOPE rather than
-// its contents.
+// no node. Stored as the visual.edges/v0 facet (ADR-0013); writing it also
+// removes the legacy edgeRouting preference — the write is where the
+// migration persists.
 describe('set-edge-routing', () => {
   const empty: SpatialCanvas = { nodes: [], edges: [] }
+  const edgesFacet = (canvas: SpatialCanvas) => canvas['x-whiteboard']?.facets?.['visual.edges/v0']
 
-  it('records the style on the canvas', () => {
+  it('records the style as the visual.edges facet', () => {
     const next = applyCommand(empty, { kind: 'set-edge-routing', style: 'orthogonal' })
-    expect(next['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+    expect(edgesFacet(next)).toEqual({ routing: 'orthogonal' })
+    expect(next['x-whiteboard']).not.toHaveProperty('edgeRouting')
   })
 
   it('leaves nodes and edges untouched', () => {
@@ -671,18 +674,32 @@ describe('set-edge-routing', () => {
     expect(reverted).not.toHaveProperty('x-whiteboard')
   })
 
-  it('keeps any other canvas-level extension it does not own', () => {
+  // The write is where the legacy preference migrates: the resolved current
+  // value seeds the merge, the facet takes over, and the legacy key goes.
+  it('migrates a legacy edgeRouting canvas on first write, keeping the other field', () => {
+    const legacy: SpatialCanvas = {
+      ...empty,
+      'x-whiteboard': { edgeRouting: { style: 'curved', lineJumps: 'arc' } },
+    }
+    const next = applyCommand(legacy, { kind: 'set-edge-routing', style: 'orthogonal' })
+
+    expect(edgesFacet(next)).toEqual({ routing: 'orthogonal', lineJumps: 'arc' })
+    expect(next['x-whiteboard']).not.toHaveProperty('edgeRouting')
+  })
+
+  it('keeps facets it does not own', () => {
     const withOther: SpatialCanvas = {
       ...empty,
-      'x-whiteboard': { edgeRouting: { style: 'curved' } },
+      'x-whiteboard': { facets: { 'someone.else/v1': { keep: true } } },
     }
     const next = applyCommand(withOther, { kind: 'set-edge-routing', style: 'orthogonal' })
 
-    expect(next['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+    expect(next['x-whiteboard']?.facets?.['someone.else/v1']).toEqual({ keep: true })
+    expect(edgesFacet(next)).toEqual({ routing: 'orthogonal' })
   })
 
-  // Style and jumps live in the same edgeRouting object but are independent
-  // settings — reverting one must never erase the other.
+  // Routing and jumps are fields of one facet but independent settings —
+  // reverting one must never erase the other.
   it('reverting the style to straight keeps the line-jumps setting', () => {
     const withJumps = applyCommand(
       applyCommand(empty, { kind: 'set-edge-routing', style: 'orthogonal' }),
@@ -690,25 +707,26 @@ describe('set-edge-routing', () => {
     )
     const reverted = applyCommand(withJumps, { kind: 'set-edge-routing', style: 'straight' })
 
-    expect(reverted['x-whiteboard']?.edgeRouting).toEqual({ lineJumps: 'arc' })
+    expect(edgesFacet(reverted)).toEqual({ lineJumps: 'arc' })
   })
 })
 
 describe('set-line-jumps', () => {
   const empty: SpatialCanvas = { nodes: [], edges: [] }
+  const edgesFacet = (canvas: SpatialCanvas) => canvas['x-whiteboard']?.facets?.['visual.edges/v0']
 
-  it('records arc on the canvas and keeps the routing style', () => {
+  it('records arc on the facet and keeps the routing style', () => {
     const styled = applyCommand(empty, { kind: 'set-edge-routing', style: 'curved' })
     const jumped = applyCommand(styled, { kind: 'set-line-jumps', lineJumps: 'arc' })
 
-    expect(jumped['x-whiteboard']?.edgeRouting).toEqual({ style: 'curved', lineJumps: 'arc' })
+    expect(edgesFacet(jumped)).toEqual({ routing: 'curved', lineJumps: 'arc' })
   })
 
   // Same no-trace rule as the routing style: default settings serialize as
   // if never touched.
   it('turning jumps off leaves no trace', () => {
     const jumped = applyCommand(empty, { kind: 'set-line-jumps', lineJumps: 'arc' })
-    expect(jumped['x-whiteboard']?.edgeRouting).toEqual({ lineJumps: 'arc' })
+    expect(edgesFacet(jumped)).toEqual({ lineJumps: 'arc' })
 
     const off = applyCommand(jumped, { kind: 'set-line-jumps', lineJumps: 'none' })
     expect(off).not.toHaveProperty('x-whiteboard')
@@ -720,7 +738,8 @@ describe('set-line-jumps', () => {
       lineJumps: 'arc',
     })
     const off = applyCommand(both, { kind: 'set-line-jumps', lineJumps: 'none' })
-    expect(off['x-whiteboard']?.edgeRouting).toEqual({ style: 'curved' })
+
+    expect(edgesFacet(off)).toEqual({ routing: 'curved' })
   })
 })
 
