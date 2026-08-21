@@ -177,3 +177,24 @@ describe('resolveFacetPayload', () => {
     })
   })
 })
+
+describe('malformed keys — every registry method has an explicit branch', () => {
+  const registry = createFacetRegistry([samplePlugin])
+  const malformed = ['not a key', 'example.sample', 'example/v0', 'Example.sample/v0']
+
+  it.each(malformed)('targetsOf answers undefined for %s', (key) => {
+    expect(registry.targetsOf(key)).toBeUndefined()
+  })
+
+  it.each(malformed)('validateFacetWrite rejects %s, naming the malformation', (key) => {
+    const result = registry.validateFacetWrite(key, {})
+    expect(result.ok).toBe(false)
+    if (!result.ok) expect(result.message).toContain('malformed')
+  })
+
+  // Dropped, NOT passthrough: a malformed stored key is unreadable data the
+  // drop-not-fail read rule skips — passing it through would launder it.
+  it.each(malformed)('resolveFacetPayload drops %s', (key) => {
+    expect(registry.resolveFacetPayload(key, {})).toEqual({ kind: 'dropped' })
+  })
+})

@@ -31,7 +31,8 @@
         "facets": {
           "type": "object",
           "propertyNames": {
-            "type": "string"
+            "type": "string",
+            "pattern": "^[a-z][a-z0-9-]*\\.[a-z][a-z0-9-]*\\/v[0-9]+$"
           },
           "additionalProperties": {}
         }

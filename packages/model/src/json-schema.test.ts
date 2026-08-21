@@ -3,6 +3,7 @@
 // Zod schemas generate (CI fails on drift). Regenerate deliberately with:
 //   pnpm vitest run --project model-node json-schema -u
 import { describe, expect, it } from 'vitest'
+import { EXTENSION_FACET_KEY_PATTERN } from './facets.js'
 import { xWhiteboardJsonSchema } from './json-schema.js'
 
 describe('x-whiteboard JSON Schema artifact', () => {
@@ -21,5 +22,19 @@ describe('x-whiteboard JSON Schema artifact', () => {
     // Neither def re-declares a root `$schema` of its own.
     expect('$schema' in defs.canvasExtension).toBe(false)
     expect('$schema' in defs.nodeExtension).toBe(false)
+  })
+
+  it('the canvas facets bucket publishes the facet-key grammar, not any-string keys', () => {
+    // extensionFacetsSchema enforces its key grammar in a superRefine, which
+    // z.toJSONSchema cannot see — without the explicit injection the
+    // published schema would accept keys the code rejects, drifting exactly
+    // the way this artifact exists to prevent.
+    const schema = xWhiteboardJsonSchema()
+    const defs = schema.$defs as Record<string, Record<string, unknown>>
+    const facets = (defs.canvasExtension.properties as Record<string, Record<string, unknown>>)
+      .facets
+    expect(facets).toBeDefined()
+    const propertyNames = facets?.propertyNames as Record<string, unknown>
+    expect(propertyNames.pattern).toBe(EXTENSION_FACET_KEY_PATTERN.source)
   })
 })

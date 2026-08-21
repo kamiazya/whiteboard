@@ -239,10 +239,13 @@ async function main() {
     'Facets are OKF frontmatter',
   )
 
-  // A REGISTERED facet's payload is validated on write (ADR-0013 decision 6):
-  // the bundled visual.edges facet rejects an out-of-enum routing value.
-  // (It would also be rejected as canvas-target; either way the write must
-  // fail rather than store an invalid registered payload.)
+  // A REGISTERED facet is checked on write (ADR-0013 decision 6). What this
+  // step provably exercises is the TARGET check: visual.edges is
+  // canvas-target, and this document-writing tool rejects it before the
+  // payload schema is consulted. The schema-invalid branch for a
+  // document-target registered facet is covered at the unit layer
+  // (facet-set.test.ts) — the bundled registry has no document-target facet
+  // for this smoke to send.
   await expectToolError(
     'wb_facet_set',
     {
@@ -250,7 +253,7 @@ async function main() {
       documentId: named.documentId,
       facets: { 'visual.edges/v0': { routing: 'spiral' } },
     },
-    'with an invalid registered payload',
+    'with a canvas-target registered facet',
     'visual.edges/v0',
   )
   console.log('[e2e] wb_facet_set → registered-facet validation rejects an invalid payload')

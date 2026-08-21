@@ -9,9 +9,11 @@
   write-side validation (`validateFacetWrite`, ADR-0013 decision 6) and
   read-side compat resolution (`resolveFacetPayload`, decision 7 — stepwise
   chain, drop-not-fail, newer-than-registered preserved).
-- The bundled `visual` plugin and its facet schemas, plus resolvers that give
-  consumers one read path (`resolveCanvasEdgeStyle`: facet first, legacy
-  `x-whiteboard.edgeRouting` fallback).
+- The bundled `visual` plugin and its facet schemas, plus resolvers
+  (`resolveCanvasEdgeStyle`: facet first, legacy `x-whiteboard.edgeRouting`
+  fallback). WIRING STATUS: foundation — canvas-render's layout and the
+  editor still read the legacy key directly; the visual.edges UI rewiring
+  increment adopts this resolver and is what makes the facet user-reachable.
 
 ## What does NOT belong here
 
