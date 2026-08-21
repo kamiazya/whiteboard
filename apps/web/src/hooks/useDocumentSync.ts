@@ -228,6 +228,11 @@ export function useDocumentSync(
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
     setCoreFacetsState(undefined)
+    // And the failure reason, for the same reason and with a sharper
+    // consequence: it describes ONE document, and carried across a switch it
+    // turns the next one — which may be perfectly readable — into an error
+    // screen the page cannot distinguish from a real failure.
+    setBackendError(null)
 
     if (backend === null) {
       sessionRef.current = null

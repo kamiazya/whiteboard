@@ -23,7 +23,11 @@ import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 const DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-unreadable-content')
 
 vi.mock('../components/spatial-editor/index.js', () => ({
-  SpatialEditor: () => null,
+  // Renders a marker rather than null: "the editor did not render" is the
+  // guarantee this file exists for — an unreadable document must not be
+  // editable, because the next save would overwrite bytes that are intact —
+  // and a null mock makes that unassertable.
+  SpatialEditor: () => <div data-testid="mock-spatial-editor" />,
 }))
 
 function render(ui: ReactElement): ReturnType<typeof rtlRender> {
@@ -61,6 +65,9 @@ describe('a document this build cannot read', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toMatch(/saved by a newer version/i)
     })
+    // The half that protects the document: no editor, so nothing can save
+    // over it.
+    expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
   })
 
   it('says the data is corrupt when the bytes are not Loro', async () => {
@@ -74,5 +81,39 @@ describe('a document this build cannot read', () => {
     await waitFor(() => {
       expect(screen.getByRole('alert').textContent).toMatch(/could not be read/i)
     })
+    expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
+  })
+
+  it('stops reporting the failure once a readable document is opened', async () => {
+    // The reason is state, and state that nothing clears outlives what it was
+    // about. A switch from an unreadable document to a sound one would carry
+    // the first one's failure across and turn the second into an error screen.
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const broken = await index.createDocument({
+      workspaceId: 'local',
+      path: 'broken',
+      name: 'Broken',
+      kind: 'spatial',
+    })
+    await seedSyncDocument(broken.documentId, { raw: { v: 99 } }, DB)
+    const sound = await index.createDocument({
+      workspaceId: 'local',
+      path: 'sound',
+      name: 'Sound',
+      kind: 'spatial',
+    })
+    await new IdbDefaultDocumentPointer(DB).set(broken.documentId)
+
+    const view = render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+
+    // Reopen at the sound document's path, the way the switcher does.
+    view.unmount()
+    await new IdbDefaultDocumentPointer(DB).set(sound.documentId)
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
+
+    await waitFor(() => expect(screen.getByTestId('mock-spatial-editor')).toBeTruthy())
+    expect(screen.queryByRole('alert')).toBeNull()
   })
 })
