@@ -2,6 +2,7 @@ import type { MdastLayoutOptions, MeasureText, Scene } from '@kamiazya/whiteboar
 import {
   type KeyedSvgRender,
   layoutMdastBlocks,
+  MARKDOWN_THEME_DOCUMENT,
   renderSceneToKeyedSvg,
   SPATIAL_THEME_FONT_FAMILY,
   sceneBounds,
@@ -190,6 +191,13 @@ function layoutScene(
       measure,
       maxWidth,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
+      // A page, not an object. This pane runs to a readable measure, where the
+      // node scale — cut so a heading cannot eat a third of a 280px box —
+      // reads timid. Set on `layoutScene` rather than at the preview's own
+      // call so the minimap rail, which maps THESE blocks, is laid out from
+      // the same metrics; two scales here would have the rail marking a
+      // document the reader is not looking at.
+      theme: MARKDOWN_THEME_DOCUMENT,
       ...(resolveEmbed !== undefined ? { resolveEmbed } : {}),
       ...(renderMath !== undefined ? { renderMath } : {}),
       ...(renderDiagram !== undefined ? { renderDiagram } : {}),
