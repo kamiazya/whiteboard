@@ -2,6 +2,7 @@ import {
   apiErrorReason,
   type CreateDocumentResponse,
   createDocumentResponseSchema,
+  createGrantResponseSchema,
   type DeleteDocumentResponse,
   type DocumentOkfV1Response,
   deleteDocumentResponseSchema,
@@ -25,7 +26,7 @@ import {
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { z } from 'zod'
+import type { z } from 'zod'
 // Re-exported so existing callers keep one import site; the implementation
 // lives in its own module so a SharedWorker can use it without this file's
 // schema graph.
@@ -253,10 +254,7 @@ export function installFont(
 
 // ---- pairing-grant flow (daemon-origin consent page) ----
 
-const createPairingGrantResponseSchema = z
-  .object({ grantId: z.string(), origin: z.string(), code: z.string() })
-  .strict()
-export type CreatePairingGrantResponse = z.infer<typeof createPairingGrantResponseSchema>
+export type CreatePairingGrantResponse = z.infer<typeof createGrantResponseSchema>
 
 /** Same-origin call from the daemon-served /pair page; the daemon token is
  *  the R3-injected one. The credential goes through createDaemonFetch rather
@@ -278,5 +276,5 @@ export async function createPairingGrant(
   if (!res.ok) {
     throw new Error(`grant request failed (${res.status})`)
   }
-  return createPairingGrantResponseSchema.parse(await res.json())
+  return createGrantResponseSchema.parse(await res.json())
 }

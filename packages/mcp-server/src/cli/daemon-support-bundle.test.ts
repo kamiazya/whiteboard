@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { runDaemonSupportBundle } from './daemon-support-bundle.js'
+import { main } from './dispatcher.js'
 
 let root: string
 
@@ -148,7 +149,6 @@ describe('runDaemonSupportBundle helper', () => {
 
 describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
   it('drives main(): writes one JSON object to stdout, no stderr, files on disk', async () => {
-    const { main } = await import('./dispatcher.js')
     const dataDir = join(root, 'cli-data')
     const outputDir = join(root, 'cli-out')
 
@@ -183,7 +183,6 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
   })
 
   it('missing --output-dir: exit 64, stdout empty, stderr usage error', async () => {
-    const { main } = await import('./dispatcher.js')
     const {
       result: exitCode,
       stdout,
@@ -195,7 +194,6 @@ describe('CLI dispatcher: whiteboard daemon support-bundle --json', () => {
   })
 
   it('usage block lists support-bundle for unknown subcommand', async () => {
-    const { main } = await import('./dispatcher.js')
     const {
       result: exitCode,
       stdout,

@@ -2,6 +2,11 @@
 // the surface, and the edit has to land back in the canvas. Each part has its
 // own test; only the page can answer whether they are connected.
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'

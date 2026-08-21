@@ -72,6 +72,9 @@ describe('resolveServerDeps', () => {
 
 describe('ports TOKENS identity', () => {
   it('is the same Symbol across separate imports (global registry)', async () => {
+    // lazy-import: a second import of the same specifier IS the subject —
+    // the test proves TOKENS symbols survive separate imports via the global
+    // symbol registry.
     const reimported = await import('@kamiazya/whiteboard-ports')
     expect(reimported.TOKENS.DocumentStore).toBe(TOKENS.DocumentStore)
     expect(typeof TOKENS.DocumentStore).toBe('symbol')

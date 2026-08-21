@@ -15,6 +15,11 @@
  * backend/IndexedDB sync layer underneath, which remains real.
  */
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
@@ -74,12 +79,9 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
 
   it('persists a node across remount and never writes a __placeholder__ row', async () => {
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const next = textNodeCanvas('reload-regression-node', 10, 10)
@@ -112,12 +114,9 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
     cleanup()
     latestMountedCanvases = []
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
 
     // The restored scene must include the node written before remount.
     await waitFor(

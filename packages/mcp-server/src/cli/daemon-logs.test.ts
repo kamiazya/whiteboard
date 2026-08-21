@@ -2,6 +2,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { DaemonRecordParseResult } from '../daemon/daemon-record.js'
 import { daemonLogEntrySchema } from '../shared/diagnostics/log-jsonl.js'
 import { runDaemonLogs } from './daemon-logs.js'
+import { main } from './dispatcher.js'
 
 function parseJsonLines(stream: string): unknown[] {
   if (stream === '') return []
@@ -259,7 +260,6 @@ describe('CLI dispatcher: whiteboard daemon logs --json', () => {
   }
 
   it('drives the real main(): `daemon logs --json --data-dir=<empty>` writes JSONL to stdout exactly once with no array wrapper, no stderr', async () => {
-    const { main } = await import('./dispatcher.js')
     const dataDir = '/this/path/does/not/exist-cli-logs-test'
 
     const {
@@ -281,7 +281,6 @@ describe('CLI dispatcher: whiteboard daemon logs --json', () => {
   })
 
   it('drives the real main() twice: concatenated stdout is valid multi-entry JSONL, NOT a single JSON document', async () => {
-    const { main } = await import('./dispatcher.js')
     const dataDir = '/this/path/does/not/exist-cli-logs-test'
 
     const { stdout } = await captureStdio(async () => {
@@ -306,7 +305,6 @@ describe('CLI dispatcher: whiteboard daemon logs --json', () => {
     // gate. We pass a deliberately-unknown subcommand to confirm the
     // dispatcher's exit-64 path is what would catch a `logs`-removal
     // mutation.
-    const { main } = await import('./dispatcher.js')
     const {
       result: exitCode,
       stdout,

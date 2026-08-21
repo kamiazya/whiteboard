@@ -1,6 +1,8 @@
 import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
+import { createWhiteboardCommands } from '../commands/create-commands.js'
 import type { WhiteboardCommands } from '../commands/index.js'
+import { BROWSER_LOCAL_CAPABILITIES } from '../provider.js'
 import { webMcpTools } from './tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from './use-browser-tool-registry.js'
 import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
@@ -255,8 +257,6 @@ describe('useBrowserToolRegistry', () => {
     // Real commands.getAppContext validates via its Zod input schema
     // (assertValidInput) and rejects extra keys — exercised here with the
     // real command layer via fakeCommands()'s sibling, createWhiteboardCommands.
-    const { createWhiteboardCommands } = await import('../commands/create-commands.js')
-    const { BROWSER_LOCAL_CAPABILITIES } = await import('../provider.js')
     const realCommands = createWhiteboardCommands({
       current: {
         provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },

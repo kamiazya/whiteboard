@@ -19,7 +19,13 @@ import { z } from 'zod'
  */
 // z.custom pins the inferred type to Uint8Array<ArrayBuffer> (matching lib:ES2020+DOM),
 // which is narrower than the z.instanceof(Uint8Array) result (Uint8Array<ArrayBufferLike>).
-const uint8ArraySchema = z.custom<Uint8Array>((v) => v instanceof Uint8Array)
+// Judged by tag rather than `instanceof`: a structured clone can hand back a
+// Uint8Array built by another realm's constructor (fake-indexeddb under the
+// jsdom test project does; an `instanceof` check silently rejects the record
+// and the read reports the epoch instead of the stored stamp).
+const uint8ArraySchema = z.custom<Uint8Array>(
+  (v) => ArrayBuffer.isView(v) && Object.prototype.toString.call(v) === '[object Uint8Array]',
+)
 
 export const loroRecordEnvelopeSchema = z.object({
   v: z.literal(1),

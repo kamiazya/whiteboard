@@ -1,6 +1,11 @@
 import { McpServer } from '@modelcontextprotocol/server'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { type CapturedLogsHandle, captureLogsForTests, getLogger } from '../log.js'
+import {
+  _destinationCountForTests,
+  type CapturedLogsHandle,
+  captureLogsForTests,
+  getLogger,
+} from '../log.js'
 import { wireMcpLogging } from './logging.js'
 
 function makeServer() {
@@ -90,7 +95,6 @@ describe('wireMcpLogging', () => {
     // createMcpServer, so the destination has to come back
     // automatically when the server closes — otherwise every per-request
     // server permanently grows the destination set.
-    const { _destinationCountForTests } = await import('../log.js')
     const baseline = _destinationCountForTests()
 
     for (let i = 0; i < 20; i++) {
