@@ -31,6 +31,9 @@ import {
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-history-nav')
 
 type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
 

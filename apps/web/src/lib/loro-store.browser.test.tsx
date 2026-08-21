@@ -6,13 +6,16 @@
 
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { DB_VERSION } from './browser-idb.js'
 import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 import { LoroStore } from './loro-store.js'
 
+const ISOLATED_DB = claimIsolatedWhiteboardDb('loro-store')
+
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })
@@ -220,7 +223,7 @@ describe('LoroStore (real IndexedDB)', () => {
 function openLoroDb(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     // Open at the CURRENT DB_VERSION so upgrade runs if needed
-    const req = indexedDB.open('whiteboard', DB_VERSION)
+    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')

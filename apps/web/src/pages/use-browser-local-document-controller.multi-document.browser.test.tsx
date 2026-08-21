@@ -10,11 +10,16 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { useBrowserLocalDocumentController } from './use-browser-local-document-controller.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb(
+  'use-browser-local-document-controller-multi-document',
+)
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })

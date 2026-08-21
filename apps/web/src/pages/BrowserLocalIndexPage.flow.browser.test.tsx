@@ -14,6 +14,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocalindexpage-flow')
 
 vi.mock('../components/spatial-editor/index.js', () => ({
   SpatialEditor: (_props: { canvas: SpatialCanvas }) => <div data-testid="mock-spatial-editor" />,
@@ -38,7 +41,10 @@ function renderApp() {
 describe('browser-local list landing (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
-    localStorage.clear()
+    // Only the keys this page reads — storages are origin-shared across
+    // parallel test files.
+    localStorage.removeItem('whiteboard.markdown-view-mode')
+    sessionStorage.removeItem('wb.lastTool')
   })
 
   afterEach(() => {

@@ -11,11 +11,14 @@ import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
 import { listLocalDocuments } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { createUserSettingsStore } from '../../lib/user-settings-store.js'
+import { claimIsolatedWhiteboardDb } from '../../test-utils/isolated-whiteboard-db.js'
 import { ImportBrowserLocalPanel } from './ImportBrowserLocalPanel.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('importbrowserlocalpanel')
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })
@@ -31,7 +34,7 @@ function jsonResponse(body: unknown, status = 200): Response {
 describe('ImportBrowserLocalPanel (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearDb()
-    localStorage.clear()
+    localStorage.removeItem('whiteboard.markdown-view-mode')
   })
   afterEach(cleanup)
 

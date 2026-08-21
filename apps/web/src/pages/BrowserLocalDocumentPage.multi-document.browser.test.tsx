@@ -34,6 +34,9 @@ import {
 } from '../test-utils/browser-local-document.js'
 import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-multi-document')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.

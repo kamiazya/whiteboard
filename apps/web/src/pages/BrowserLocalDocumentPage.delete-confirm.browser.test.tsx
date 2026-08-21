@@ -14,6 +14,9 @@ import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-delete-confirm')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
@@ -29,7 +32,7 @@ function render(ui: ReactElement) {
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })

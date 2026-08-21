@@ -10,8 +10,11 @@ import type {
 } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { DB_VERSION } from './browser-idb.js'
 import { BrowserLocalBackend } from './browser-local-backend.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('browser-local-backend')
 
 // Generous timeout: async IDB reads under CI load can take well over the
 // 200ms fixed sleeps this file used to rely on. Waiting on the concrete
@@ -21,7 +24,7 @@ const WAIT_TIMEOUT = 10_000
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })
@@ -460,7 +463,7 @@ describe('BrowserLocalBackend', () => {
 
 async function forceInvalidLoroRecord(documentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', DB_VERSION)
+    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -494,7 +497,7 @@ async function forceInvalidLoroRecord(documentId: string): Promise<void> {
 
 async function forceRecordWithBadDelta(documentId: string, snapshot: Uint8Array): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', DB_VERSION)
+    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -529,7 +532,7 @@ async function forceRecordWithBadDelta(documentId: string, snapshot: Uint8Array)
 
 async function forceCorruptFileRecord(_canvasId: string, fileId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', DB_VERSION)
+    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
@@ -557,7 +560,7 @@ async function forceCorruptFileRecord(_canvasId: string, fileId: string): Promis
 
 async function forceCorruptRecord(documentId: string): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.open('whiteboard', DB_VERSION)
+    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
     req.onupgradeneeded = (event) => {
       const db = (event.target as IDBOpenDBRequest).result
       if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')

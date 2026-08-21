@@ -12,7 +12,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
+
+claimIsolatedWhiteboardDb('browserlocalindexpage-defaults')
 
 describe('list page, production wiring', () => {
   beforeEach(clearWhiteboardDb)

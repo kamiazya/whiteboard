@@ -8,7 +8,10 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-open-in-editor')
 
 type OnChange = (next: SpatialCanvas, command: unknown) => void
 type OpenInEditor = (nodeId: string, text: string) => void
@@ -38,7 +41,7 @@ describe('open in editor (page seam)', () => {
   })
 
   afterEach(() => {
-    window.localStorage.clear()
+    window.localStorage.removeItem('whiteboard.markdown-view-mode')
   })
 
   it("opens the page's editing surface on the node body the canvas hands over", async () => {

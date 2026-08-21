@@ -6,6 +6,9 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // Real app styles so layout assertions measure the shipped geometry.
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-rename')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
@@ -21,7 +24,7 @@ function render(ui: ReactElement) {
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })
