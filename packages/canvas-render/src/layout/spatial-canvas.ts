@@ -24,8 +24,15 @@
 // reproducibility does not need a sort to hold: document order is already
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
+
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-facet-engine'
+import type {
+  CanvasEdge,
+  EdgeRoutingStyle,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
@@ -912,6 +919,7 @@ function composeEdge(
   canvas: SpatialCanvas,
   edge: CanvasEdge,
   options: ResolvedLayoutOptions,
+  routingStyle: EdgeRoutingStyle | undefined,
   anchors: EdgeAnchorPair | undefined,
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
@@ -921,7 +929,7 @@ function composeEdge(
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
   const routed = pullEdgeOntoOutlines(
-    routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style, anchors),
+    routeEdge(canvas.nodes, edge, routingStyle, anchors),
     canvas,
     edge,
     options.nodeOutlines,
@@ -1117,18 +1125,23 @@ function composeEdgesAndLabels(
 ): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // One anchor pass for the whole edge set: fan-out needs to see every end
   // sharing a side, which a per-edge route cannot.
+  // Facet-aware by DEFAULT (visual.edges/v0 first, legacy edgeRouting
+  // fallback): resolution lives here rather than at the call sites for the
+  // same reason the tokeniser default does — every surface that lays a
+  // canvas out wants it, and the one that forgets draws different routes.
+  const edgeStyle = resolveCanvasEdgeStyle(canvas)
   const anchors = assignEdgeAnchors(
     canvas.nodes,
     canvas.edges,
-    canvas['x-whiteboard']?.edgeRouting?.style,
+    edgeStyle.style,
     resolved.edgeSideOverrides,
   )
   const routedEdges = canvas.edges.map((edge) =>
-    composeEdge(canvas, edge, resolved, anchors.get(edge.id)),
+    composeEdge(canvas, edge, resolved, edgeStyle.style, anchors.get(edge.id)),
   )
   // Canvas-wide today; the same resolution is where a per-edge
   // x-whiteboard override slots in later without touching the pipeline.
-  const lineJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+  const lineJumps = edgeStyle.lineJumps ?? 'none'
   const jumpsByEdge = lineJumps === 'arc' ? computeEdgeJumps(routedEdges) : undefined
   const edgeContent =
     jumpsByEdge === undefined

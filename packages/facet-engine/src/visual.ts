@@ -61,7 +61,7 @@ export type EdgeRouting = z.infer<typeof edgeRoutingSchema>
  */
 export function resolveCanvasEdgeStyle(
   canvas: SpatialCanvas,
-  registry: FacetRegistry,
+  registry: FacetRegistry = bundledFacetRegistry,
 ): EdgeRouting {
   const extension = canvas['x-whiteboard']
   const stored = extension?.facets?.[VISUAL_EDGES_KEY]
