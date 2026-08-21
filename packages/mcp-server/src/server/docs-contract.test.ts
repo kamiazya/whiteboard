@@ -48,6 +48,7 @@ describe('docs/ contract', () => {
       'packages/mcp-server': 'mcp',
       'packages/model': 'model',
       'packages/ports': 'ports',
+      'packages/facet-engine': 'facet-engine',
       'packages/codec': 'codec',
       'packages/canvas-render': 'canvas-render',
       'packages/loro-adapter': 'workspace',

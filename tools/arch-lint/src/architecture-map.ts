@@ -68,6 +68,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
+  // The facet ENGINE (ADR-0013): definePlugin/defineFacet, the registry,
+  // write validation and compat resolution, plus the bundled `visual`
+  // plugin. Machinery, not schemas — which is why it is not in model (whose
+  // rule excludes runtime behavior beyond validation). Pure zod over model
+  // types, so it holds on Node, the browser and a worker alike.
+  '@kamiazya/whiteboard-facet-engine': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
+    allowedThirdParty: ['zod'],
+  },
   '@kamiazya/whiteboard-loro-adapter': {
     // Deliberately NOT ports: this package adapts loro-crdt to the model and
     // knows nothing about where a document sits, so it implements no port.
@@ -88,6 +97,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-render',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-loro-adapter',
+      '@kamiazya/whiteboard-facet-engine',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
