@@ -65,3 +65,32 @@ it('extended mode keeps the canvas-level x-whiteboard through a round trip', () 
   expect(result.ok).toBe(true)
   expect(result.ok && result.value['x-whiteboard']).toEqual({ edgeRouting: { style: 'curved' } })
 })
+
+it('extended mode keeps the canvas-level facets bucket through a round trip', () => {
+  const canvas: SpatialCanvas = {
+    nodes: [],
+    edges: [],
+    'x-whiteboard': {
+      edgeRouting: { style: 'curved' },
+      facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+    },
+  }
+  const result = parseSpatial(serializeSpatial(canvas, 'extended'))
+
+  expect(result.ok).toBe(true)
+  expect(result.ok && result.value['x-whiteboard']).toEqual({
+    edgeRouting: { style: 'curved' },
+    facets: { 'visual.edges/v0': { routing: 'orthogonal' } },
+  })
+})
+
+it('strict mode drops the facets bucket with the rest of x-whiteboard (one uniform rule)', () => {
+  const canvas: SpatialCanvas = {
+    nodes: [],
+    edges: [],
+    'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'curved' } } },
+  }
+  const text = serializeSpatial(canvas, 'strict')
+  expect(text).not.toContain('x-whiteboard')
+  expect(text).not.toContain('facets')
+})

@@ -31,8 +31,8 @@ paths:
 ## Dependency rules
 
 - Runtime dependencies: `model`, `codec`, `canvas-render`,
-  `ports`, `loro-adapter`, `hono`, and `zod` (via `catalog:` or
-  `workspace:*`).
+  `ports`, `facet-engine`, `loro-adapter`, `hono`, and `zod` (via `catalog:`
+  or `workspace:*`).
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`),
   `inversify`.
 - Enforced by `tools/arch-lint` (`arch-lint-node` vitest project) and the

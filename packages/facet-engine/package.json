@@ -1,9 +1,9 @@
 {
-  "name": "@kamiazya/whiteboard-server-core",
+  "name": "@kamiazya/whiteboard-facet-engine",
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Server core: /api/v1 Hono routes and MCP tool definitions, exposed as createServer(deps).",
+  "description": "The facet engine (ADR-0013): definePlugin/defineFacet factories, the plugin registry, write-side payload validation, compat-chain payload resolution, and the bundled `visual` plugin. Pure zod machinery — no storage, rendering, or transport.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -19,14 +19,7 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-canvas-render": "workspace:*",
-    "@kamiazya/whiteboard-codec": "workspace:*",
-    "@kamiazya/whiteboard-facet-engine": "workspace:*",
-    "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
-    "@kamiazya/whiteboard-ports": "workspace:*",
-    "hono": "^4.12.34",
-    "loro-crdt": "catalog:",
     "zod": "catalog:"
   },
   "devDependencies": {

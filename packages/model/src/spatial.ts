@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
@@ -154,6 +155,20 @@ export const edgeRoutingSchema = z.object({
  */
 export const canvasExtensionSchema = z.object({
   edgeRouting: edgeRoutingSchema.optional(),
+  /**
+   * Canvas-target facets (ADR-0013 decision 5): the spatial counterpart of a
+   * markdown document's `facets` bucket, carrying `{namespace}.{name}/v{n}`
+   * keyed payloads. The rendering preferences above are slated to fold INTO
+   * this bucket as canvas-target facets; until then both coexist and the
+   * facet takes precedence where both speak (the engine's resolver owns that
+   * rule).
+   *
+   * `.catch(undefined)` on the BUCKET, not the whole extension: facets is a
+   * record schema that rejects on any malformed key, and without its own
+   * catch one bad key would take the sibling preferences down with it. A bad
+   * bucket costs the bucket; edgeRouting and the canvas survive.
+   */
+  facets: extensionFacetsSchema.optional().catch(undefined),
 })
 
 export type CanvasExtension = z.infer<typeof canvasExtensionSchema>

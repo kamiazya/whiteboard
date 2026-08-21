@@ -1,4 +1,10 @@
 import {
+  bundledPlugins,
+  createFacetRegistry,
+  defineFacet,
+  definePlugin,
+} from '@kamiazya/whiteboard-facet-engine'
+import {
   readFacets,
   writeDocumentKind,
   writeSpatialCanvas,
@@ -6,13 +12,14 @@ import {
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
+import { z } from 'zod'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
-import { DocumentKindMismatchError } from './errors.js'
+import { DocumentKindMismatchError, FacetWriteRejectedError } from './errors.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -183,5 +190,93 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     })
 
     expect(result.facets).toEqual({ 'example.sample/v1': { status: 'open' } })
+  })
+})
+
+describe('registered-facet validation (ADR-0013 decision 6)', () => {
+  const documentTicket = definePlugin({
+    id: 'ticket',
+    facets: [
+      defineFacet({
+        name: 'sample',
+        version: 'v0',
+        targets: ['document'],
+        schema: z.object({ status: z.enum(['open', 'done']) }),
+      }),
+    ],
+  })
+  const registry = createFacetRegistry([...bundledPlugins, documentTicket])
+
+  async function setupWith(registryOverride = registry) {
+    const documentStore = new FakeDocumentStore()
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createFacetSetTool({ ...makeDeps(documentStore), facetRegistry: registryOverride })
+    return tool
+  }
+
+  test('accepts a registered facet with a valid payload', async () => {
+    const tool = await setupWith()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      facets: { 'ticket.sample/v0': { status: 'open' } },
+    })
+    expect(result.facets).toEqual({ 'ticket.sample/v0': { status: 'open' } })
+  })
+
+  test('rejects a registered facet with an invalid payload, storing nothing', async () => {
+    const tool = await setupWith()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        facets: { 'ticket.sample/v0': { status: 'nope' } },
+      }),
+    ).rejects.toThrow(FacetWriteRejectedError)
+  })
+
+  test('rejects a write to a registered facet under a non-current version key', async () => {
+    const tool = await setupWith()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        facets: { 'ticket.sample/v3': { status: 'open' } },
+      }),
+    ).rejects.toThrow(/ticket\.sample\/v0/)
+  })
+
+  test("rejects a canvas-target facet on a document (targets are the definition's to declare)", async () => {
+    const tool = await setupWith()
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        facets: { 'visual.edges/v0': { routing: 'curved' } },
+      }),
+    ).rejects.toThrow(/canvas/)
+  })
+
+  test('still passes an unregistered facet through unvalidated', async () => {
+    const tool = await setupWith()
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      facets: { 'someone.else/v9': { anything: ['goes'] } },
+    })
+    expect(result.facets).toEqual({ 'someone.else/v9': { anything: ['goes'] } })
+  })
+
+  test('the bundled registry is the default when deps carry none', async () => {
+    const documentStore = new FakeDocumentStore()
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
+    const tool = createFacetSetTool(makeDeps(documentStore))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        facets: { 'visual.edges/v0': { routing: 'spiral' } },
+      }),
+    ).rejects.toThrow(FacetWriteRejectedError)
   })
 })

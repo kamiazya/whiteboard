@@ -1,3 +1,4 @@
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import { readDocumentKind, readFacets, writeFacets } from '@kamiazya/whiteboard-loro-adapter'
 import {
   documentIdSchema,
@@ -9,7 +10,7 @@ import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
 import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
-import { DocumentKindMismatchError } from './errors.js'
+import { DocumentKindMismatchError, FacetWriteRejectedError } from './errors.js'
 
 /**
  * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
@@ -63,7 +64,31 @@ export function createFacetSetTool(deps: ServerDeps) {
         )
       }
 
-      const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...input.facets }
+      // Write-side validation (ADR-0013 decision 6): a REGISTERED facet's
+      // payload must satisfy its schema, its key must be the current
+      // version, and this tool writes documents — a facet whose targets
+      // exclude 'document' cannot land here. Unregistered facets pass
+      // through unvalidated (round-trip safety for other tools' facets).
+      // Registered payloads are stored as the schema's PARSED value, so a
+      // registered write is normalized the way every schema'd contract is.
+      const registry = deps.facetRegistry ?? bundledFacetRegistry
+      const validated: Record<string, unknown> = {}
+      for (const [key, payload] of Object.entries(input.facets)) {
+        const targets = registry.targetsOf(key)
+        if (targets !== undefined && !targets.includes('document')) {
+          throw new FacetWriteRejectedError(
+            key,
+            `its targets are [${targets.join(', ')}], and wb_facet_set writes a document`,
+          )
+        }
+        const result = registry.validateFacetWrite(key, payload)
+        if (!result.ok) {
+          throw new FacetWriteRejectedError(key, result.message)
+        }
+        validated[key] = result.value
+      }
+
+      const mergedFacets: ExtensionFacets = { ...readFacets(doc), ...validated }
       writeFacets(doc, mergedFacets)
 
       await saveDocumentSnapshot(deps, input.documentId, doc)

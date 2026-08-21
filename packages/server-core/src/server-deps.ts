@@ -1,4 +1,5 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 
 /**
@@ -84,4 +85,10 @@ export interface ServerDeps {
    * would stop being headless. Absent means nobody is told anything.
    */
   clientNotifier?: CanvasClientNotifier
+  /**
+   * The facet registry validating registered-facet writes (ADR-0013
+   * decision 6). Optional: absent means the bundled plugins — a composition
+   * root overrides it only when a deployment configures its own plugin set.
+   */
+  facetRegistry?: FacetRegistry
 }

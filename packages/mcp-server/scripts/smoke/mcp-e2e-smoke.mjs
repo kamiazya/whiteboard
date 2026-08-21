@@ -239,6 +239,25 @@ async function main() {
     'Facets are OKF frontmatter',
   )
 
+  // A REGISTERED facet is checked on write (ADR-0013 decision 6). What this
+  // step provably exercises is the TARGET check: visual.edges is
+  // canvas-target, and this document-writing tool rejects it before the
+  // payload schema is consulted. The schema-invalid branch for a
+  // document-target registered facet is covered at the unit layer
+  // (facet-set.test.ts) — the bundled registry has no document-target facet
+  // for this smoke to send.
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId: named.documentId,
+      facets: { 'visual.edges/v0': { routing: 'spiral' } },
+    },
+    'with a canvas-target registered facet',
+    'visual.edges/v0',
+  )
+  console.log('[e2e] wb_facet_set → registered-facet validation rejects an invalid payload')
+
   // The seed the rest of this flow needs: two nodes and the edge between
   // them, drawn the way an agent actually draws — one call, explicit
   // geometry (a later step tidies, and a tidy that moves nothing proves

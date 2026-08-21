@@ -11,7 +11,7 @@ export const coreFacetsSchema = z.object({
 
 export type CoreFacets = z.infer<typeof coreFacetsSchema>
 
-const EXTENSION_FACET_KEY_PATTERN = /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/
+export const EXTENSION_FACET_KEY_PATTERN = /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/
 
 /**
  * Extension facets live under the reserved root key `facets`, keyed by

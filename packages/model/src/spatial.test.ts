@@ -309,6 +309,30 @@ describe('canvas-level x-whiteboard', () => {
     expect(spatialCanvasSchema.parse({ nodes: [], edges: [] })['x-whiteboard']).toBeUndefined()
   })
 
+  it('carries a canvas-target facets bucket beside the rendering preferences', () => {
+    const parsed = spatialCanvasSchema.parse(
+      canvasWith({
+        edgeRouting: { style: 'orthogonal' },
+        facets: { 'visual.edges/v0': { routing: 'curved' } },
+      }),
+    )
+    expect(parsed['x-whiteboard']).toEqual({
+      edgeRouting: { style: 'orthogonal' },
+      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    })
+  })
+
+  it('a malformed facet key costs the facets bucket only, never the sibling preferences', () => {
+    const parsed = spatialCanvasSchema.parse(
+      canvasWith({
+        edgeRouting: { style: 'orthogonal' },
+        facets: { 'not a key': {} },
+      }),
+    )
+    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
+    expect(parsed.nodes).toEqual([])
+  })
+
   // Same escape-hatch rule the node-level key follows: a payload this version
   // cannot read costs the setting, never the document.
   it('silently drops an unreadable payload rather than failing the canvas', () => {
