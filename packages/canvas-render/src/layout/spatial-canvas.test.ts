@@ -168,6 +168,50 @@ describe('layoutSpatialCanvas', () => {
     expect(label?.appearance?.fill).toBe('#303030')
   })
 
+  it('routes by the visual.edges facet when the canvas carries one', () => {
+    // The facet is the successor of the legacy edgeRouting preference
+    // (ADR-0013); resolution is canvas-render's own default so every
+    // surface — editor, export, viewer, widget — reads the same answer.
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const scene = layoutSpatialCanvas(
+      {
+        ...canvas([a, b], [edge]),
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      },
+      baseOptions(),
+    )
+    const routed = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+    )
+    expect(routed).toBeDefined()
+    // Diagonal neighbours under orthogonal routing draw an L, never a
+    // straight two-point segment.
+    expect(routed?.path.length).toBeGreaterThan(2)
+  })
+
+  it('the facet takes whole-value precedence over the legacy edgeRouting preference', () => {
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const scene = layoutSpatialCanvas(
+      {
+        ...canvas([a, b], [edge]),
+        'x-whiteboard': {
+          edgeRouting: { style: 'orthogonal' },
+          facets: { 'visual.edges/v0': { routing: 'straight' } },
+        },
+      },
+      baseOptions(),
+    )
+    const routed = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+    )
+    expect(routed).toBeDefined()
+    expect(routed?.path.length).toBe(2)
+  })
+
   it('centers a multi-segment edge label at the arc-length midpoint, not a corner vertex', () => {
     // Diagonal neighbours route as an L with unequal legs; the label must
     // sit halfway along the DRAWN line (the same anchor the editor's

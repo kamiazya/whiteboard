@@ -6,14 +6,14 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
-| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, zod, css-line-break, lowlight |
+| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, facet-engine, zod, css-line-break, lowlight |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution, bundled `visual` plugin | model, zod |
 | `packages/loro-adapter` | LoroDoc<->model bridge | model, ports, loro-crdt |
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, facet-engine, hono, zod, loro-crdt |
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
 
 **A third-party dependency is judged by that criterion, not by a quota.** The
 `allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has

@@ -9,6 +9,7 @@
  * Radix owns dismissal (outside click, Escape) and returns focus to the
  * gear, so a keyboard user never falls to <body>.
  */
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { SlidersHorizontal } from 'lucide-react'
 import { useEffect, useRef } from 'react'
@@ -47,8 +48,12 @@ export function CanvasDisplaySettings({ canvas, onChange }: CanvasDisplaySetting
     onChange(running, command)
   }
 
-  const currentRouting = canvas['x-whiteboard']?.edgeRouting?.style ?? 'straight'
-  const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+  // Facet-first (visual.edges/v0), legacy edgeRouting fallback — the same
+  // resolution the renderer defaults to, so the checked segment always
+  // matches what the canvas draws.
+  const current = resolveCanvasEdgeStyle(canvas)
+  const currentRouting = current.style ?? 'straight'
+  const currentJumps = current.lineJumps ?? 'none'
 
   return (
     <Popover>

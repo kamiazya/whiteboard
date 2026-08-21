@@ -45,7 +45,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // codec: the mdast body parser this package DEFAULTS to. Every consumer
     // already bundles codec to pass it in, so the dependency adds nothing to
     // any bundle and removes the same line from seven call sites.
-    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-codec'],
+    // facet-engine: resolveCanvasEdgeStyle is the DEFAULT read for edge
+    // style (facet first, legacy x-whiteboard.edgeRouting fallback) — the
+    // lowlight lesson again: an opt-in resolution step at four call sites
+    // is a step that gets missed, so the shared renderer owns the default.
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-facet-engine',
+    ],
     // css-line-break: deciding WHERE a line may break is this package's own
     // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
     // which is where Japanese kinsoku lives), not something to hand-roll from
@@ -142,6 +150,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-mcp',
       '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-facet-engine',
     ],
     allowedThirdParty: [],
   },

@@ -149,6 +149,9 @@ importers:
       '@kamiazya/whiteboard-codec':
         specifier: workspace:*
         version: link:../../packages/codec
+      '@kamiazya/whiteboard-facet-engine':
+        specifier: workspace:*
+        version: link:../../packages/facet-engine
       '@kamiazya/whiteboard-loro-adapter':
         specifier: workspace:*
         version: link:../../packages/loro-adapter
@@ -315,6 +318,9 @@ importers:
       '@kamiazya/whiteboard-codec':
         specifier: workspace:*
         version: link:../codec
+      '@kamiazya/whiteboard-facet-engine':
+        specifier: workspace:*
+        version: link:../facet-engine
       '@kamiazya/whiteboard-model':
         specifier: workspace:*
         version: link:../model

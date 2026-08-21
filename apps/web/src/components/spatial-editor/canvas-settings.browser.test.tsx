@@ -2,11 +2,15 @@
 // pick applies the canvas-wide command immediately and keeps it open for
 // the next tweak, consecutive picks chain under a deferred parent, and
 // dismissal returns focus to the gear.
+import type { VisualEdgesFacet } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
+
+const edgesFacetOf = (canvas: SpatialCanvas) =>
+  canvas['x-whiteboard']?.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
 
 afterEach(cleanup)
 
@@ -56,14 +60,14 @@ it('a pick applies canvas-wide and keeps the popover open; current values are ma
   fireEvent.click(option('Curved') as HTMLElement)
 
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('curved')
+    expect(edgesFacetOf(latest.canvas)?.routing).toBe('curved')
   })
   expect(menu()).toBeTruthy()
   expect(option('Curved')?.getAttribute('aria-pressed')).toBe('true')
 
   fireEvent.click(option('On') as HTMLElement)
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting?.lineJumps).toBe('arc')
+    expect(edgesFacetOf(latest.canvas)?.lineJumps).toBe('arc')
   })
 })
 
@@ -91,8 +95,8 @@ it('consecutive picks both survive a deferred parent', async () => {
   fireEvent.click(option('On') as HTMLElement)
 
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting).toEqual({
-      style: 'orthogonal',
+    expect(edgesFacetOf(latest.canvas)).toEqual({
+      routing: 'orthogonal',
       lineJumps: 'arc',
     })
   })
