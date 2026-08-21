@@ -2,6 +2,7 @@ import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ServerDeps } from './server-deps.js'
+import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
 import { createCanvasEditTool } from './tools/canvas-edit.js'
 import { createCanvasRenderSvgTool } from './tools/canvas-render-svg.js'
@@ -102,6 +103,21 @@ export function createServer(deps: ServerDeps) {
   // (workspace file tree) can open one without an MCP client. Deliberately
   // still OKF-specific: this is a different surface from the MCP tools, and
   // the tree wants markdown regardless of what wb_document_get would choose.
+  app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks', async (c) => {
+    const parsed = backlinksInputSchema.safeParse({
+      workspaceId: c.req.param('workspaceId'),
+      documentId: c.req.param('documentId'),
+    })
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    try {
+      return c.json(await computeBacklinks(deps, parsed.data))
+    } catch (err) {
+      return mapDocumentError(c, err)
+    }
+  })
+
   app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/okf', async (c) => {
     const parsed = exportOkfInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
