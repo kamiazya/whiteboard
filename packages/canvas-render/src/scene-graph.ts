@@ -166,6 +166,20 @@ export interface IconSceneNode {
   readonly appearance?: Appearance
 }
 
+/**
+ * An emoji badge drawn as a single centered text glyph sized to `bbox`
+ * (the smaller side). The glyph's color comes from the emoji font itself,
+ * so unlike `IconSceneNode` there is no appearance to assign. A bbox-only
+ * leaf for bounds/translate/scale, like `ImageSceneNode`. Rendering
+ * depends on the host's emoji font: the resvg PNG export path ships only
+ * a Roboto face, so there the glyph degrades to that font's fallback.
+ */
+export interface EmojiSceneNode {
+  readonly kind: 'emoji'
+  readonly bbox: BoundingBox
+  readonly emoji: string
+}
+
 /** Semantic provenance for an inline link-like run. Never flattened away. */
 export type LinkProvenance =
   | { readonly kind: 'link'; readonly href: string; readonly title?: string }
@@ -393,6 +407,7 @@ export type SceneNode =
   | ShapeSceneNode
   | ImageSceneNode
   | IconSceneNode
+  | EmojiSceneNode
 
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {

@@ -71,6 +71,8 @@ export type SvgElements = {
   rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
+  // 'middle' is the only anchor emitted: body runs are left-anchored by
+  // omission (the initial value), and only the emoji glyph centers itself.
   text: PaintAttrs &
     TextEmphasisAttrs & {
       x: number
@@ -78,6 +80,7 @@ export type SvgElements = {
       width?: number
       height?: number
       mask?: string
+      'text-anchor'?: 'middle'
       'xml:space'?: 'preserve'
     }
   a: { href: SafeHref }

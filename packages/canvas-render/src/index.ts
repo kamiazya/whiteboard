@@ -59,6 +59,7 @@ export type {
   Dimensions,
   EmbedPlaceholderNode,
   EmbedResolvedNode,
+  EmojiSceneNode,
   GroupSceneNode,
   HeadingBlockNode,
   IconSceneNode,
@@ -80,8 +81,9 @@ export type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from './scene-graph.js'
-export type { SvgDocumentOptions } from './svg/backend.js'
+export type { IconTable, SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
+export type { LucideIconElement } from './vendor/lucide/icons.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
 export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
 export { renderSceneToKeyedSvg } from './svg/keyed.js'
