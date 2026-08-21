@@ -197,6 +197,18 @@ describe('review regressions (CodeRabbit #953)', () => {
     })
   })
 
+  it('a one-axis-degenerate polygon contains only its own segment, not the infinite line', () => {
+    // Collinear vertices zero every cross product, so without a bounds
+    // check the loop accepts the whole line through the segment.
+    const zeroWidth = { x: 5, y: 0, w: 0, h: 60 }
+    expect(outlineContains('diamond', zeroWidth, { x: 5, y: 45 })).toBe(true)
+    expect(outlineContains('diamond', zeroWidth, { x: 5, y: 1000 })).toBe(false)
+    expect(outlineContains('diamond', zeroWidth, { x: 5, y: -1 })).toBe(false)
+    const zeroHeight = { x: 0, y: 5, w: 60, h: 0 }
+    expect(outlineContains('hexagon', zeroHeight, { x: 30, y: 5 })).toBe(true)
+    expect(outlineContains('hexagon', zeroHeight, { x: 1000, y: 5 })).toBe(false)
+  })
+
   it('cylinder entry: an approach into the top-left cap region lands on the cap boundary', () => {
     // The cap is the one region where containment is not a single convex
     // quadratic — this pins that the bisection's convex-along-the-ray

@@ -214,14 +214,25 @@ function convexPolygonContains(
   points: ReadonlyArray<{ readonly x: number; readonly y: number }>,
   point: { readonly x: number; readonly y: number },
 ): boolean {
-  // A zero-area box collapses every vertex onto one point, so every cross
-  // product below is 0 and the loop would accept the whole plane. Match
-  // the ellipse's degenerate rule: only the point itself is inside.
+  // Degenerate boxes collapse the vertices onto one point or one segment,
+  // zeroing every cross product below — the loop alone would accept the
+  // whole plane (point case) or the whole infinite line (segment case).
+  // Bounding the point to the vertex box first makes both answer only
+  // their own point/segment, and is a no-op for a real convex polygon: a
+  // point outside the vertex box is outside the polygon anyway.
   const first = points[0]
   if (first === undefined) return false
-  if (points.every((p) => p.x === first.x && p.y === first.y)) {
-    return point.x === first.x && point.y === first.y
+  let minX = first.x
+  let maxX = first.x
+  let minY = first.y
+  let maxY = first.y
+  for (const p of points) {
+    minX = Math.min(minX, p.x)
+    maxX = Math.max(maxX, p.x)
+    minY = Math.min(minY, p.y)
+    maxY = Math.max(maxY, p.y)
   }
+  if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) return false
   for (let i = 0; i < points.length; i++) {
     const a = points[i]
     const b = points[(i + 1) % points.length]
