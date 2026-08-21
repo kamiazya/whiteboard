@@ -10,7 +10,8 @@ import { openWhiteboardDb, SYNC_DOCUMENTS_STORE } from '../lib/browser-idb.js'
  * is what these fixtures exist to pin — so the fixture has to be able to write
  * a record the store itself would refuse to produce.
  *
- * `record: null` writes the envelope raw, for the unknown-version case.
+ * Pass `{ raw }` to write a value verbatim — an envelope from a version this
+ * build does not know, or one that parses as nothing.
  */
 export async function seedSyncDocument(
   documentId: string,

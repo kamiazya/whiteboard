@@ -307,9 +307,20 @@ function carryLoroDocuments(tx: IDBTransaction): void {
       tx.db.deleteObjectStore('loroDocuments')
       return
     }
+    const documentId = String(cursor.primaryKey)
     const parsed = loroRecordEnvelopeSchema.safeParse(cursor.value)
-    if (parsed.success) {
-      const documentId = String(cursor.primaryKey)
+    if (!parsed.success) {
+      // Carried VERBATIM rather than skipped. A record this build cannot
+      // parse is one written by a newer one, or one that is damaged — and
+      // both are things `loadSnapshot` reports as an unreadable document,
+      // which is a recoverable answer. Skipping it here would delete it with
+      // the store at the end of this walk, turning "your build is old" into
+      // "your document is gone" and destroying the bytes on the way.
+      sync.put(cursor.value, `document:${documentId}`)
+      cursor.continue()
+      return
+    }
+    {
       const { manifest, chunks } = chunkSnapshot(parsed.data.snapshot, LEGACY_MAX_CHUNK_BYTES)
       sync.put(
         {

@@ -11,6 +11,7 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  SaveCompactedSnapshotInput,
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
@@ -103,12 +104,22 @@ export class InMemoryDocumentStore implements DocumentStore {
     })
   }
 
-  /** One operation, so a concurrent append cannot land between the save and
-   *  the clear and be dropped. */
-  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
-    await this.saveSnapshot(input)
+  /**
+   * ONE map write, with no `await` between reading the record and replacing
+   * it. Delegating to `saveSnapshot` and then clearing looked equivalent and
+   * was not: the await let a concurrent `appendDeltas` land in between, and
+   * the clear then threw away an update that could not be in the snapshot.
+   */
+  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
     const key = docRefKey(input.docRef)
-    this.docs.set(key, { ...this.getRecord(key), deltas: [] })
+    const existing = this.getRecord(key)
+    this.docs.set(key, {
+      snapshot: { manifest: input.manifest, chunks: input.chunks.map(cloneChunk) },
+      frontier: cloneBytes(input.frontier),
+      // Exactly the superseded prefix. Anything appended after the caller
+      // folded is not in the snapshot and stays.
+      deltas: existing.deltas.slice(input.supersededDeltaCount),
+    })
   }
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {

@@ -91,7 +91,11 @@ async function mountPage(): Promise<void> {
  * and the write follows behind it.
  */
 async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
-  await vi.waitFor(
+  // Testing Library's `waitFor`, not vitest's. `configure({ asyncUtilTimeout })`
+  // at the top of this file governs the former only — `vi.waitFor` defaults to
+  // 1000ms, which at this file's 200ms interval is about five attempts for the
+  // one condition the remount below depends on.
+  await waitFor(
     async () => {
       const id = (await new IdbDefaultDocumentPointer().get()) ?? ''
       const loaded = await new LoroStore().load(id)

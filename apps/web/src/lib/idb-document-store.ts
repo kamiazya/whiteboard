@@ -29,6 +29,7 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  SaveCompactedSnapshotInput,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
@@ -68,11 +69,32 @@ const syncRecordSchema = z
         }),
         chunks: z.array(chunkSchema),
       })
+      // The port's own manifest/chunk agreement, checked HERE rather than
+      // trusted. A record whose manifest and chunks disagree cannot be served
+      // as a `LoadSnapshotResult` — the result schema refines on exactly this
+      // — so accepting it would mean answering with a shape the contract says
+      // is invalid, or silently answering `null` for data that is present.
+      .refine(
+        (snap) =>
+          snap.chunks.length === snap.manifest.chunkCount &&
+          snap.chunks.reduce((sum, chunk) => sum + chunk.bytes.byteLength, 0) ===
+            snap.manifest.totalBytes,
+        { message: 'chunks must match manifest.chunkCount and sum to manifest.totalBytes' },
+      )
       .nullable(),
     frontier: storedBytesSchema.nullable(),
     deltas: z.array(storedBytesSchema),
   })
   .strict()
+  // One direction only. A SNAPSHOT with no frontier is a record
+  // `loadSnapshot` can answer nothing but `null` for — indistinguishable from
+  // a document that was never saved, which is the distinction this store
+  // exists to keep. The reverse is ordinary: `appendDeltas` on a document
+  // with no snapshot yet is explicitly legal, and leaves a frontier and a log
+  // with nothing to anchor them.
+  .refine((record) => record.snapshot === null || record.frontier !== null, {
+    message: 'a stored snapshot must carry the frontier it was saved with',
+  })
 
 type SyncRecord = z.infer<typeof syncRecordSchema>
 
@@ -227,9 +249,9 @@ export class IdbDocumentStore implements DocumentStore {
    * save and the clear and be silently dropped. That window is the whole
    * reason this is an operation rather than two calls at the call site.
    */
-  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
     const key = docRefKey(input.docRef)
-    await this.#read('readwrite', key, async (_record, tx) => {
+    await this.#read('readwrite', key, async (record, tx) => {
       const next: SyncRecord = {
         v: 1,
         snapshot: {
@@ -237,8 +259,10 @@ export class IdbDocumentStore implements DocumentStore {
           chunks: input.chunks.map((chunk) => ({ ...chunk, bytes: copy(chunk.bytes) })),
         },
         frontier: copy(input.frontier),
-        // The half `saveSnapshot` does not do: the log is in the snapshot now.
-        deltas: [],
+        // The half `saveSnapshot` does not do — but only the SUPERSEDED
+        // prefix. Anything appended after the caller folded is not in the
+        // snapshot, so clearing the whole log would lose it.
+        deltas: record.deltas.slice(input.supersededDeltaCount),
       }
       await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
     })

@@ -11,6 +11,7 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  SaveCompactedSnapshotInput,
   SaveSnapshotInput,
   SnapshotChunk,
 } from '@kamiazya/whiteboard-ports'
@@ -177,7 +178,7 @@ export class LibsqlDocumentStore implements DocumentStore {
    * One transaction, so a concurrent `appendDeltas` cannot land between the
    * save and the clear and be silently dropped.
    */
-  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
     const docKey = docRefKey(input.docRef)
     const frontierBlob = toBlob(input.frontier)
     await this.db.transaction().execute(async (trx) => {
@@ -212,8 +213,26 @@ export class LibsqlDocumentStore implements DocumentStore {
           )
           .execute()
       }
-      // The half `saveSnapshot` does not do: the log is in the snapshot now.
-      await trx.deleteFrom('documentDeltas').where('docKey', '=', docKey).execute()
+      // The half `saveSnapshot` does not do — but only the SUPERSEDED prefix.
+      // Everything appended after the caller folded is not in the snapshot,
+      // so clearing the whole log would lose it. The transaction makes this
+      // and the write above one operation; the count makes it the right one.
+      if (input.supersededDeltaCount > 0) {
+        await trx
+          .deleteFrom('documentDeltas')
+          .where('docKey', '=', docKey)
+          .where(
+            'seq',
+            'in',
+            trx
+              .selectFrom('documentDeltas')
+              .select('seq')
+              .where('docKey', '=', docKey)
+              .orderBy('seq', 'asc')
+              .limit(input.supersededDeltaCount),
+          )
+          .execute()
+      }
       await upsertFrontier(trx, docKey, input.frontier)
     })
     log.debug({ docKey, chunkCount: input.manifest.chunkCount }, 'saved compacted snapshot')

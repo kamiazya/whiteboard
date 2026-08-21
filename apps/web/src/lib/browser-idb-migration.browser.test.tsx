@@ -1018,6 +1018,21 @@ describe('IndexedDB v11 -> v12 (carries content to the port)', () => {
     expect(stamps.get(POST_PATH_ID)).toBe('2026-08-01T00:00:00.000Z')
   })
 
+  it('carries a record it cannot parse instead of destroying it', async () => {
+    // The migration deletes `loroDocuments` at the end of its walk, so a
+    // record it skips is a record it DESTROYS. Both things that reach this
+    // path — an envelope from a newer build, and a damaged one — are answers
+    // `loadSnapshot` can still give ("unreadable"), and that is recoverable
+    // where "gone" is not.
+    await seedV7Fixture({
+      documents: [],
+      loroRecord: [POST_PATH_ID, { v: 99, fromTheFuture: true }],
+    })
+
+    const result = await new LoroStore(MIGRATION_DB).load(POST_PATH_ID)
+    expect(result.kind).toBe('unsupported-version')
+  })
+
   it('drops the old store rather than leaving a second copy', async () => {
     await seedV7Fixture({ documents: [] })
     const db = await openWhiteboardDb(MIGRATION_DB)

@@ -64,7 +64,10 @@ export function describeDocumentStoreConformance(
   const OTHER: DocRef = { kind: 'document', documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ' }
   // Same id STRING as a workspace would use, different kind. The key a store
   // derives has to keep these apart.
-  const TREE: DocRef = { kind: 'workspace-tree', workspaceId: 'local' }
+  // The SAME identifier string as DOC, so a store that keys on the id alone
+  // and drops `kind` fails the case below. With two different strings it
+  // passes without ever exercising what it claims to.
+  const TREE: DocRef = { kind: 'workspace-tree', workspaceId: DOC.documentId }
 
   // Annotated with the buffer parameter so this compiles the same way under
   // every consumer's lib: a bare `Uint8Array` is `Uint8Array<ArrayBufferLike>`
@@ -270,6 +273,7 @@ export function describeDocumentStoreConformance(
           docRef: DOC,
           ...chunked([bytes(1, 2, 3)]),
           frontier: bytes(3),
+          supersededDeltaCount: 2,
         })
 
         const loaded = await store.loadSnapshot({ docRef: DOC })
@@ -293,10 +297,50 @@ export function describeDocumentStoreConformance(
           docRef: DOC,
           ...chunked([bytes(1)]),
           frontier: bytes(1),
+          supersededDeltaCount: 0,
         })
         expect(
           (await store.loadDeltas({ docRef: OTHER, sinceFrontier: bytes() })).updates.length,
         ).toBe(1)
+      })
+    })
+
+    it('saveCompactedSnapshot does not drop an append that races it', async () => {
+      // The whole reason this is ONE operation. A store that saves the
+      // snapshot, yields, and then clears the log has a window where an
+      // append lands and is thrown away — and the appended update is NOT in
+      // the compacted snapshot, because the caller folded before it existed.
+      //
+      // Started without awaiting, so the append is issued while the
+      // compaction is in flight rather than after it. Either outcome is
+      // correct — the store may serialise them — but the update must not
+      // VANISH: it is either in the log or the compaction happened first.
+      await withStore(async (store) => {
+        await store.saveSnapshot({ docRef: DOC, ...chunked([bytes(1)]), frontier: bytes(1) })
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+        })
+
+        const compacting = store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1, 2)]),
+          frontier: bytes(2),
+          // One entry folded: `[2]`. `[3]` had not arrived.
+          supersededDeltaCount: 1,
+        })
+        const appending = store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(3)], newFrontier: bytes(3) },
+        })
+        await Promise.all([compacting, appending])
+
+        const { updates } = await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })
+        // `[3]` MUST survive. It cannot be in the compacted snapshot: the
+        // caller folded before it existed. So a store that cleared it lost an
+        // edit — which is the only outcome this case rejects, and an empty
+        // log is exactly that outcome rather than an alternative to it.
+        expect(updates.map((update) => [...update])).toContainEqual([3])
       })
     })
 

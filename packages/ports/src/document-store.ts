@@ -56,6 +56,22 @@ export const saveSnapshotInputSchema = z
   .refine(manifestChunksConsistent, manifestChunksConsistencyIssue)
 export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
 
+/**
+ * A snapshot that already contains the first `supersededDeltaCount` entries of
+ * the document's delta log.
+ *
+ * The COUNT is what makes the operation safe, and leaving it out is not a
+ * simplification — it is a lost update. A caller folds a log it has read; by
+ * the time the store writes, another append may have arrived. "Clear the log"
+ * would take that one too, and it cannot be in the snapshot, because it did
+ * not exist when the caller folded. Naming how many were superseded lets the
+ * store drop exactly those and keep the rest.
+ */
+export const saveCompactedSnapshotInputSchema = saveSnapshotInputSchema.safeExtend({
+  supersededDeltaCount: z.number().int().min(0),
+})
+export type SaveCompactedSnapshotInput = z.infer<typeof saveCompactedSnapshotInputSchema>
+
 export const appendDeltasInputSchema = z
   .object({ docRef: docRefSchema, deltaBatch: deltaBatchSchema })
   .strict()
@@ -107,14 +123,18 @@ export interface DocumentStore {
    * promise and it is not one a flag should carry: an ordinary save leaves
    * the log alone, because a snapshot and the updates after it are both
    * live. Folding is the caller's — it needs the CRDT runtime, which a store
-   * does not have — so this operation is "I folded; the log is redundant
-   * now", and it is one operation because doing it as save-then-clear gives
-   * a window where a concurrent append is dropped.
+   * does not have — so this operation is "I folded the first N; those are
+   * redundant now", and it is ONE operation because doing it as
+   * save-then-clear gives a window where a concurrent append is dropped.
    *
-   * Without it a log has no way to stop growing while the document lives:
+   * Drops exactly `supersededDeltaCount` entries, oldest first, and keeps
+   * everything after them. An append that arrives while this is in flight
+   * therefore survives — it is not in the snapshot and it is not superseded.
+   *
+   * Without this a log has no way to stop growing while the document lives:
    * `deleteDoc` is the only other thing that clears one.
    */
-  saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void>
+  saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void>
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>
   loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult>
   readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult>

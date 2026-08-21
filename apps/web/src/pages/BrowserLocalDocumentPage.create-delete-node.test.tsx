@@ -178,16 +178,10 @@ describe('BrowserLocalDocumentPage create/delete-node persistence (real IndexedD
     latestMountedCanvases = []
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    await waitFor(
-      () => {
-        const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
-        expect(restoredIds).toContain('created-node')
-      },
-      // The RELOAD's budget, not the mount's. Reading a document back is two
-      // IndexedDB round trips behind the `DocumentStore` port plus a Loro
-      // import, and under fake-indexeddb on a loaded runner that does not fit
-      // the 5s the first mount is given. Measured: green locally, red in CI.,
-    )
+    await waitFor(() => {
+      const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
+      expect(restoredIds).toContain('created-node')
+    })
 
     // Now delete it and confirm it stays gone after a further remount.
     await waitFor(() => expect(latestOnChange).not.toBeNull())

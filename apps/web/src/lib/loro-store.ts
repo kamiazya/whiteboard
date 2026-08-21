@@ -133,7 +133,20 @@ export class LoroStore {
     return new Loro().export({ mode: 'snapshot' })
   }
 
+  /**
+   * Serialised against this instance's writes, not just against each other.
+   *
+   * The read is two port calls — the snapshot, then the log — and a
+   * compaction landing between them would hand back a PRE-compaction snapshot
+   * with a POST-compaction (emptied) log: a document missing every edit the
+   * fold had just absorbed. Nothing re-reads afterwards, so that stale answer
+   * is what the editor would open.
+   */
   async load(documentId: string): Promise<LoroLoadResult> {
+    return this.#serialise(documentId, () => this.#loadInner(documentId))
+  }
+
+  async #loadInner(documentId: string): Promise<LoroLoadResult> {
     const docRef = refOf(documentId)
     let stored: Awaited<ReturnType<IdbDocumentStore['loadSnapshot']>>
     try {
@@ -241,6 +254,11 @@ export class LoroStore {
           manifest,
           chunks,
           frontier: EMPTY_FRONTIER,
+          // What the fold consumed: the log AS READ. The new delta is folded
+          // in too but was never written, so it is not part of the count —
+          // and anything appended since this read is neither superseded nor
+          // in the snapshot, which is exactly what the count protects.
+          supersededDeltaCount: existing.length,
         })
       }
       await this.#touch(documentId)
