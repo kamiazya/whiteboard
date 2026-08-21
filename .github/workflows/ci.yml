@@ -114,6 +114,15 @@ jobs:
     runs-on: ubuntu-latest
     # Run on bare ubuntu-latest with the pre-installed system Chrome.
     timeout-minutes: 15
+    # Sharded like test-unit: the browser job is the longest in the workflow
+    # (5.0min measured on a green main) AND its flake family is contention-
+    # shaped — parallel pages in one browser fighting over focus and origin
+    # state — so halving the files per runner attacks both at once. Verified
+    # locally that the shards partition exactly: 69+69 of 138 files,
+    # 410+342 of 752 tests, no overlap and no loss.
+    strategy:
+      matrix:
+        shard: [1, 2]
     env:
       WHITEBOARD_CHROME_PATH: /usr/bin/google-chrome-stable
     steps:
@@ -128,9 +137,9 @@ jobs:
       # steps, so a new browser-mode project (e.g. canvas-render-browser) is
       # covered by CI the moment it's added to that script, not only when
       # someone remembers to add a matching CI step.
-      - name: Test browser projects (web-browser, canvas-viewer-browser, canvas-render-browser)
+      - name: Test browser projects (shard ${{ matrix.shard }}/2)
         timeout-minutes: 12
-        run: pnpm test:browser
+        run: pnpm test:browser --shard=${{ matrix.shard }}/2
 
   sbom-npm:
     # Standing regression job: generate:sbom:npm only ran in release.yml before
