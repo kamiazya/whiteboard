@@ -168,6 +168,35 @@ describe('layoutSpatialCanvas', () => {
     expect(label?.appearance?.fill).toBe('#303030')
   })
 
+  it('draws the silhouette the visual.shape facet asks for, with no option wired', () => {
+    const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
+    const shaped = {
+      ...node,
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' as const } } },
+    }
+    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+    const chrome = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+    )
+    expect(chrome?.shape).toBe('hexagon')
+  })
+
+  it('an explicit nodeOutlines option overrides the facet for that node', () => {
+    const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
+    const shaped = {
+      ...node,
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' as const } } },
+    }
+    const scene = layoutSpatialCanvas(
+      canvas([shaped]),
+      baseOptions({ nodeOutlines: { a: 'ellipse' } }),
+    )
+    const chrome = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+    )
+    expect(chrome?.shape).toBe('ellipse')
+  })
+
   it('routes by the visual.edges facet when the canvas carries one', () => {
     // The facet is the successor of the legacy edgeRouting preference
     // (ADR-0013); resolution is canvas-render's own default so every

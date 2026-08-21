@@ -26,7 +26,7 @@
 // the same SVG twice regardless.
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-facet-engine'
+import { resolveCanvasEdgeStyle, resolveNodeShape } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
   EdgeRoutingStyle,
@@ -1053,6 +1053,7 @@ export function layoutSpatialCanvasWithAnchors(
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
+    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines),
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
@@ -1178,4 +1179,28 @@ export function layoutSpatialEdges(
     embedDepth: 0,
     fitToBox: true,
   }).content
+}
+
+/**
+ * The effective silhouette per node: the visual.shape/v0 facet is the
+ * DEFAULT source (same rule as edge style — resolution lives in the shared
+ * renderer so every surface draws the same picture), and an explicit
+ * `nodeOutlines` entry overrides the facet for that node. The facet enum
+ * and NodeOutlineKind are the same vocabulary; the assignment below is the
+ * compile-time check, and a test pins it.
+ */
+function resolveNodeOutlines(
+  canvas: SpatialCanvas,
+  explicit: Readonly<Record<string, NodeOutlineKind>> | undefined,
+): Readonly<Record<string, NodeOutlineKind>> | undefined {
+  let fromFacets: Record<string, NodeOutlineKind> | undefined
+  for (const node of canvas.nodes) {
+    const kind: NodeOutlineKind | undefined = resolveNodeShape(node)
+    if (kind !== undefined) {
+      fromFacets ??= {}
+      fromFacets[node.id] = kind
+    }
+  }
+  if (fromFacets === undefined) return explicit
+  return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }
 }
