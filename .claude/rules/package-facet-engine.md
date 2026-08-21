@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/facet-engine/**"
+---
+
 # facet-engine — the facet engine (ADR-0013)
 
 ## What belongs here
