@@ -2,6 +2,7 @@ import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edge-rounding.js'
+import { nodeOutline } from '../layout/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -232,6 +233,28 @@ function renderTextRun(run: TextRunNode): SvgChild {
  */
 function renderShape(node: ShapeSceneNode): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
+  // Non-rect silhouettes come from the shared decomposition (one producer
+  // for drawing and hit-testing — layout/node-outline.ts); an absent
+  // `shape` stays the historic rect byte-for-byte.
+  if (node.shape !== undefined) {
+    const outline = nodeOutline(node.shape, node.bbox)
+    if (outline === null) return []
+    switch (outline.kind) {
+      case 'ellipse':
+        return el('ellipse', {
+          cx: outline.cx,
+          cy: outline.cy,
+          rx: outline.rx,
+          ry: outline.ry,
+          ...appearanceAttrs(node.appearance),
+        })
+      case 'polygon':
+        return el('polygon', {
+          points: pointsAttr(outline.points),
+          ...appearanceAttrs(node.appearance),
+        })
+    }
+  }
   return el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,

@@ -109,6 +109,13 @@ export interface TextRunNode {
  * spatial node kind today, so ellipse/polygon/path are not added
  * speculatively (see package-canvas-render.md).
  */
+/**
+ * Non-rect node silhouettes. `rect` is deliberately unrepresentable: an
+ * absent `shape` field IS the rect, so a second spelling of it cannot
+ * exist. Geometry derives from the bbox via `layout/node-outline.ts`.
+ */
+export type NodeOutlineKind = 'ellipse' | 'diamond'
+
 export interface ShapeSceneNode {
   readonly kind: 'shape'
   /**
@@ -130,8 +137,17 @@ export interface ShapeSceneNode {
    */
   readonly id?: string
   readonly bbox: BoundingBox
-  /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely. */
+  /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely.
+   * Applies to the rect form only — ignored when `shape` is set. */
   readonly radius?: number
+  /**
+   * Non-rect silhouette, derived at draw time from `bbox` by the shared
+   * decomposition in `layout/node-outline.ts` (one producer for drawing
+   * AND hit-testing). Absent = the historic rect, byte-identical to
+   * before this field existed. A kind, never stored coordinates, so
+   * translate/scale need no knowledge of it.
+   */
+  readonly shape?: NodeOutlineKind
   readonly appearance?: Appearance
 }
 

@@ -89,7 +89,10 @@ export type SvgElements = {
     'marker-end'?: string
     role?: SvgRole
   }
-  polygon: { points: string; fill: string; role?: SvgRole }
+  // Outline polygons inherit paint presence-only like rect; marker content
+  // keeps passing an explicit fill.
+  polygon: PaintAttrs & { points: string; role?: SvgRole }
+  ellipse: PaintAttrs & { cx: number; cy: number; rx: number; ry: number; role?: SvgRole }
   marker: {
     id: string
     markerWidth: number
