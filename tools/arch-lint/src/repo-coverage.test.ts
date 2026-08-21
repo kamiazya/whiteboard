@@ -108,12 +108,27 @@ describe('shared-layer boundary lint (real source coverage)', () => {
       expect(violations).toHaveLength(0)
     })
 
-    it(`${packageDir}/package.json has no unlisted third-party dependency`, () => {
+    it(`${packageDir}/package.json declares every third-party dependency it uses`, () => {
       const manifest = JSON.parse(
         readFileSync(join(REPO_ROOT, packageDir, 'package.json'), 'utf-8'),
       )
       const violations = checkAllowedDependencies(manifest)
-      expect(violations).toHaveLength(0)
+      // The message names the criterion and the fix. Read as a bare
+      // "unlisted dependency" this check teaches that the shared layer is
+      // closed, which it is not — the bar is that a dependency runs unchanged
+      // on Node, the browser and Workers and does not break the published
+      // build, and the list records the ones checked against it.
+      expect(
+        violations,
+        violations.length === 0
+          ? ''
+          : `${violations.map((v) => v.dependencyName).join(', ')} is not recorded in ` +
+              `allowedThirdParty for ${manifest.name}. If it runs unchanged on Node, the ` +
+              'browser and Workers and does not break the published build, add it to ' +
+              'architecture-map.ts with a note saying what you checked — that is the fix, ' +
+              'not a workaround. If it does not (BudouX drags in linkedom and the native ' +
+              'canvas package), vendor it or keep it out of the shared layer.',
+      ).toHaveLength(0)
     })
   }
 })
