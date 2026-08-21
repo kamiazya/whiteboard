@@ -22,19 +22,37 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * an existing node type (a diagram becomes a `file` node pointing at an
  * image) rather than through a variant only this project can read.
  */
-export const xWhiteboardSchema = z.object({
-  kind: z.literal('embed'),
+export const xWhiteboardSchema = z.union([
+  z.object({
+    kind: z.literal('embed'),
+    /**
+     * The DOCUMENT this node embeds. Written into exported JSON Canvas files
+     * and published as `docs/reference/x-whiteboard.schema.json`, so this is a
+     * format contract and not only a name: a document stored with the previous
+     * spelling loses its embed on read. Renamed anyway at 0.0.x with no users,
+     * because a format that says `canvasId` for a document id teaches the wrong
+     * model to everyone who reads the published schema.
+     */
+    documentId: documentIdSchema,
+    versionRef: z.string().min(1).optional(),
+    facets: extensionFacetsSchema.optional().catch(undefined),
+  }),
   /**
-   * The DOCUMENT this node embeds. Written into exported JSON Canvas files
-   * and published as `docs/reference/x-whiteboard.schema.json`, so this is a
-   * format contract and not only a name: a document stored with the previous
-   * spelling loses its embed on read. Renamed anyway at 0.0.x with no users,
-   * because a format that says `canvasId` for a document id teaches the wrong
-   * model to everyone who reads the published schema.
+   * Node-target facets without an embed (ADR-0013 decision 5): payload only,
+   * so the node-level content-only rule holds. `.strict()`, so a broken
+   * embed (`kind` present, `documentId` missing/invalid) fails this variant
+   * too instead of being silently stripped down to its facets — the outer
+   * `.catch(undefined)` then drops the extension whole, exactly as before
+   * this variant existed. The facets bucket carries its own catch for the
+   * same reason the canvas-level one does: a bad key costs the bucket, not
+   * its siblings.
    */
-  documentId: documentIdSchema,
-  versionRef: z.string().min(1).optional(),
-})
+  z
+    .object({
+      facets: extensionFacetsSchema.optional().catch(undefined),
+    })
+    .strict(),
+])
 
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 

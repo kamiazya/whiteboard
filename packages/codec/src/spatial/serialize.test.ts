@@ -94,3 +94,26 @@ it('strict mode drops the facets bucket with the rest of x-whiteboard (one unifo
   expect(text).not.toContain('x-whiteboard')
   expect(text).not.toContain('facets')
 })
+
+it('extended mode keeps node-level facets (with and without an embed) through a round trip', () => {
+  const canvas: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'n1',
+        type: 'text',
+        text: 'shaped',
+        x: 0,
+        y: 0,
+        width: 100,
+        height: 50,
+        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' } } },
+      },
+    ],
+    edges: [],
+  }
+  const result = parseSpatial(serializeSpatial(canvas, 'extended'))
+  expect(result.ok).toBe(true)
+  expect(result.ok && result.value.nodes[0]?.['x-whiteboard']).toEqual({
+    facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+  })
+})

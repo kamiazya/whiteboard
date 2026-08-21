@@ -40,26 +40,50 @@
       "additionalProperties": false
     },
     "nodeExtension": {
-      "type": "object",
-      "properties": {
-        "kind": {
-          "type": "string",
-          "const": "embed"
+      "anyOf": [
+        {
+          "type": "object",
+          "properties": {
+            "kind": {
+              "type": "string",
+              "const": "embed"
+            },
+            "documentId": {
+              "type": "string",
+              "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
+            },
+            "versionRef": {
+              "type": "string",
+              "minLength": 1
+            },
+            "facets": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "required": [
+            "kind",
+            "documentId"
+          ],
+          "additionalProperties": false
         },
-        "documentId": {
-          "type": "string",
-          "pattern": "^[0-7][0-9A-HJKMNP-TV-Z]{25}$"
-        },
-        "versionRef": {
-          "type": "string",
-          "minLength": 1
+        {
+          "type": "object",
+          "properties": {
+            "facets": {
+              "type": "object",
+              "propertyNames": {
+                "type": "string"
+              },
+              "additionalProperties": {}
+            }
+          },
+          "additionalProperties": false
         }
-      },
-      "required": [
-        "kind",
-        "documentId"
-      ],
-      "additionalProperties": false
+      ]
     }
   }
 }
