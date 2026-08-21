@@ -87,21 +87,26 @@ async function advanceTimersAndFlush(ms: number): Promise<void> {
 // until the expected call count lands. The "not called BEFORE the interval"
 // half of each test stays exact -- only the fire step gets slack, and a
 // genuinely dead timer still fails within maxSteps.
+/**
+ * Wait for `fn` to reach `calls` invocations — WITHOUT touching the fake
+ * clock. Every call site advances the clock to the interval boundary itself
+ * first, so the only thing left to wait out is threadpool/microtask latency.
+ *
+ * This helper deliberately CANNOT advance the clock. Its previous form
+ * stepped 1000ms per retry — the same span as the sweep interval — and the
+ * sweeper arms its next timer in the pass's `finally`, so a lagging
+ * completion landing mid-step could arm and then FIRE the next interval
+ * inside the same step: `expected 1 call, got 2`, on main, in a test that
+ * was only trying to wait. A wait that can make the thing it is waiting for
+ * happen again is not a wait.
+ */
 async function advanceUntilCalls(
   fn: { mock: { calls: unknown[] } },
   calls: number,
-  stepMs = 1000,
   maxSteps = 50,
 ): Promise<void> {
   for (let i = 0; i < maxSteps && fn.mock.calls.length < calls; i++) {
-    if (stepMs > 0) {
-      await advanceTimersAndFlush(stepMs)
-    } else {
-      // Real-wait only: for passes already started (direct tick()), where
-      // advancing the fake clock is irrelevant and only threadpool time is
-      // missing.
-      await flushRealAsync()
-    }
+    await flushRealAsync()
   }
 }
 
@@ -233,7 +238,7 @@ describe('createFileGcSweeper single-flight', () => {
     })
     sweeper.start()
     await advanceTimersAndFlush(1000)
-    await advanceUntilCalls(purge, 1, 0)
+    await advanceUntilCalls(purge, 1)
     expect(purgeCalls).toBe(1)
 
     // Advance several more intervals while the first pass's purge is still
@@ -275,7 +280,7 @@ describe('createFileGcSweeper single-flight', () => {
     // Wait (condition-based) until the pass's discovery + DB containment
     // check + purge call have actually landed before the second tick()
     // races in -- fixed flush turns are not enough on slow-disk runners.
-    await advanceUntilCalls(purge, 1, 0)
+    await advanceUntilCalls(purge, 1)
     const second = sweeper.tick()
     expect(purgeCalls).toBe(1)
 
@@ -612,6 +617,40 @@ describe('createFileGcSweeper per-workspace isolation', () => {
       await sweeper.stop()
     } finally {
       cap.restore()
+    }
+  })
+})
+
+describe('advanceUntilCalls vs the interval boundary', () => {
+  // The exact flake that failed on main: every call site advances the clock
+  // TO the interval boundary first, so the helper's only remaining job is to
+  // wait out threadpool/microtask latency. A helper that advances the clock
+  // while it waits can cross into the NEXT interval and fire a second sweep —
+  // with the old stepMs=1000 default, one slow discovery was enough for
+  // `expected 1 call, got 2`. Slow discovery is forced here instead of hoped
+  // for, so this is deterministic where CI was probabilistic.
+  it('a slow async discovery does not make the wait fire a second sweep', async () => {
+    const purge = vi.fn(async () => ({ purgedCount: 0, purgedBytes: 0 }))
+    const sweeper = createFileGcSweeper({
+      intervalMs: 1000,
+      listWorkspaces: async () => {
+        // Off the fake clock entirely: real event-loop turns, like a slow
+        // DB read on a loaded CI runner.
+        for (let i = 0; i < 3; i++) {
+          await new Promise<void>((resolve) => realSetImmediate(resolve))
+        }
+        return [{ workspaceId: 'ws_slow' }]
+      },
+      discoverFsWorkspaces: async () => [],
+      purge,
+    })
+    sweeper.start()
+    try {
+      await advanceTimersAndFlush(1000)
+      await advanceUntilCalls(purge, 1)
+      expect(purge).toHaveBeenCalledTimes(1)
+    } finally {
+      await sweeper.stop()
     }
   })
 })
