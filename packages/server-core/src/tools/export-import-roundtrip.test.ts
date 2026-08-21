@@ -61,9 +61,9 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
       'tags:',
       '  - idea',
       '  - browser',
-      'view: kanban/1',
+      'view: example.kanban/v1',
       'facets:',
-      '  note/1:',
+      '  example.note/v1:',
       '    status: idea',
       '---',
       'Body text.',
@@ -77,8 +77,8 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
       'Future: browser-extension auto-connect to the local daemon',
     )
     expect(result.frontmatter.tags).toEqual(['idea', 'browser'])
-    expect(result.frontmatter.view).toBe('kanban/1')
-    expect(result.frontmatter.facets).toEqual({ 'note/1': { status: 'idea' } })
+    expect(result.frontmatter.view).toBe('example.kanban/v1')
+    expect(result.frontmatter.facets).toEqual({ 'example.note/v1': { status: 'idea' } })
   })
 
   test('preserves facets with arbitrary domain keys through the LoroDoc persistence layer', async () => {
@@ -88,7 +88,7 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
       '---',
       'type: issue',
       'facets:',
-      '  example/1:',
+      '  example.sample/v1:',
       '    status: open',
       '    priority: high',
       '---',
@@ -98,7 +98,9 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
 
     const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
-    expect(result.frontmatter.facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
+    expect(result.frontmatter.facets).toEqual({
+      'example.sample/v1': { status: 'open', priority: 'high' },
+    })
   })
 
   test('an empty (facets-only) body round-trips to an empty body', async () => {
@@ -118,7 +120,8 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
   test('re-import after export is idempotent: the second import produces the same LoroDoc state', async () => {
     const { store, documentSet, deps } = await setupTools()
 
-    const markdown = '---\ntype: note\nfacets:\n  kanban/1:\n    status: todo\n---\nOriginal body.'
+    const markdown =
+      '---\ntype: note\nfacets:\n  example.kanban/v1:\n    status: todo\n---\nOriginal body.'
     await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
     const exported = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
@@ -129,7 +132,7 @@ describe('wb_document_set -> OKF export composed round-trip', () => {
     })
     const doc = await loadDoc(store, DOCUMENT_ID)
 
-    expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
+    expect(readFacets(doc)).toEqual({ 'example.kanban/v1': { status: 'todo' } })
     expect(readMarkdownBody(doc)).toBe('Original body.')
   })
 })
@@ -266,7 +269,7 @@ describe('error paths do not silently produce corrupt output', () => {
     // JS NaN, which has no round-trippable YAML representation) imports
     // successfully but must fail the composed export rather than silently
     // emitting corrupt YAML.
-    const markdown = '---\ntype: note\nfacets:\n  bad/1:\n    value: .nan\n---\nBody.'
+    const markdown = '---\ntype: note\nfacets:\n  example.bad/v1:\n    value: .nan\n---\nBody.'
     await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
 
     await expect(

@@ -379,7 +379,7 @@ describe('facets bridge', () => {
 
   test('round-trips a single facet domain', () => {
     const doc = makeDoc()
-    const facets: ExtensionFacets = { 'kanban/1': { status: 'in-progress' } }
+    const facets: ExtensionFacets = { 'example.kanban/v1': { status: 'in-progress' } }
 
     writeFacets(doc, facets)
 
@@ -389,8 +389,8 @@ describe('facets bridge', () => {
   test('round-trips multiple facet domains', () => {
     const doc = makeDoc()
     const facets: ExtensionFacets = {
-      'kanban/1': { status: 'in-progress' },
-      'priority/1': { level: 'high' },
+      'example.kanban/v1': { status: 'in-progress' },
+      'example.priority/v1': { level: 'high' },
     }
 
     writeFacets(doc, facets)
@@ -401,15 +401,15 @@ describe('facets bridge', () => {
   test('merges new facet keys with existing ones on write', () => {
     const doc = makeDoc()
 
-    writeFacets(doc, { 'kanban/1': { status: 'todo' } })
+    writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
     writeFacets(doc, {
-      'kanban/1': { status: 'done' },
-      'priority/1': { level: 'low' },
+      'example.kanban/v1': { status: 'done' },
+      'example.priority/v1': { level: 'low' },
     })
 
     expect(readFacets(doc)).toEqual({
-      'kanban/1': { status: 'done' },
-      'priority/1': { level: 'low' },
+      'example.kanban/v1': { status: 'done' },
+      'example.priority/v1': { level: 'low' },
     })
   })
 
@@ -417,26 +417,26 @@ describe('facets bridge', () => {
     const doc = makeDoc()
 
     writeFacets(doc, {
-      'kanban/1': { status: 'todo' },
-      'priority/1': { level: 'low' },
+      'example.kanban/v1': { status: 'todo' },
+      'example.priority/v1': { level: 'low' },
     })
-    writeFacets(doc, { 'kanban/1': { status: 'todo' } })
+    writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
 
-    expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
+    expect(readFacets(doc)).toEqual({ 'example.kanban/v1': { status: 'todo' } })
   })
 
   test('CRDT merge: two docs add different facet domains', () => {
     const doc1 = new LoroDoc()
     const doc2 = new LoroDoc()
 
-    writeFacets(doc1, { 'kanban/1': { status: 'todo' } })
-    writeFacets(doc2, { 'priority/1': { level: 'high' } })
+    writeFacets(doc1, { 'example.kanban/v1': { status: 'todo' } })
+    writeFacets(doc2, { 'example.priority/v1': { level: 'high' } })
 
     doc1.import(doc2.export({ mode: 'snapshot' }))
 
     expect(readFacets(doc1)).toEqual({
-      'kanban/1': { status: 'todo' },
-      'priority/1': { level: 'high' },
+      'example.kanban/v1': { status: 'todo' },
+      'example.priority/v1': { level: 'high' },
     })
   })
 
@@ -525,7 +525,7 @@ describe('core facets bridge', () => {
     const meta: StoredCoreFacets = {
       type: 'note',
       tags: ['idea', 'browser'],
-      view: 'kanban/1',
+      view: 'example.kanban/v1',
       facetsRaw: { customKey: 'value' },
     }
 
@@ -546,7 +546,7 @@ describe('core facets bridge', () => {
   test('a later write replaces the whole document meta: an omitted optional field disappears', () => {
     const doc = makeDoc()
 
-    writeCoreFacets(doc, { type: 'note', view: 'kanban/1', tags: ['a'] })
+    writeCoreFacets(doc, { type: 'note', view: 'example.kanban/v1', tags: ['a'] })
     writeCoreFacets(doc, { type: 'note' })
 
     expect(readCoreFacets(doc)).toEqual({ type: 'note' })
@@ -554,20 +554,20 @@ describe('core facets bridge', () => {
 
   test('writing core meta never touches the extension facets bucket', () => {
     const doc = makeDoc()
-    writeFacets(doc, { 'kanban/1': { status: 'todo' } })
+    writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
 
     writeCoreFacets(doc, { type: 'note', tags: ['untouched-adjacent'] })
 
-    expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
+    expect(readFacets(doc)).toEqual({ 'example.kanban/v1': { status: 'todo' } })
   })
 
   test('writing extension facets never touches the core meta bucket', () => {
     const doc = makeDoc()
-    writeCoreFacets(doc, { type: 'note', view: 'kanban/1' })
+    writeCoreFacets(doc, { type: 'note', view: 'example.kanban/v1' })
 
-    writeFacets(doc, { 'kanban/1': { status: 'todo' } })
+    writeFacets(doc, { 'example.kanban/v1': { status: 'todo' } })
 
-    expect(readCoreFacets(doc)).toEqual({ type: 'note', view: 'kanban/1' })
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', view: 'example.kanban/v1' })
   })
 
   test('CRDT merge: two docs independently write different core-meta fields converge on both', () => {
@@ -590,11 +590,11 @@ describe('core facets bridge', () => {
   test('drops a single corrupt field but keeps the rest when type is still valid', () => {
     const doc = makeDoc()
     doc.getMap('core').set('type', 'note')
-    doc.getMap('core').set('view', 'kanban/1')
+    doc.getMap('core').set('view', 'example.kanban/v1')
     doc.getMap('core').set('tags', 'not-an-array')
     doc.commit()
 
-    expect(readCoreFacets(doc)).toEqual({ type: 'note', view: 'kanban/1' })
+    expect(readCoreFacets(doc)).toEqual({ type: 'note', view: 'example.kanban/v1' })
   })
 
   test('returns undefined when the required type field is missing or invalid', () => {

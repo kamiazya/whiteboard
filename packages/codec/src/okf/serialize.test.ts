@@ -8,21 +8,21 @@ describe('serializeOkf', () => {
       frontmatter: {
         type: 'note',
         facets: {
-          'zeta/1': { z: 1 },
-          'alpha/2': { a: 1 },
-          'mu/1': { m: 1 },
+          'zeta.z/v1': { z: 1 },
+          'alpha.a/v2': { a: 1 },
+          'mu.m/v1': { m: 1 },
         },
       },
       body: 'hello',
     })
 
     const facetsBlock = text.slice(text.indexOf('facets:'), text.indexOf('body:') || undefined)
-    const firstKeyIndex = ['alpha/2', 'mu/1', 'zeta/1']
+    const firstKeyIndex = ['alpha.a/v2', 'mu.m/v1', 'zeta.z/v1']
       .map((key) => facetsBlock.indexOf(key))
       .filter((index) => index !== -1)
     expect(firstKeyIndex).toEqual([...firstKeyIndex].sort((a, b) => a - b))
-    expect(facetsBlock.indexOf('alpha/2')).toBeLessThan(facetsBlock.indexOf('mu/1'))
-    expect(facetsBlock.indexOf('mu/1')).toBeLessThan(facetsBlock.indexOf('zeta/1'))
+    expect(facetsBlock.indexOf('alpha.a/v2')).toBeLessThan(facetsBlock.indexOf('mu.m/v1'))
+    expect(facetsBlock.indexOf('mu.m/v1')).toBeLessThan(facetsBlock.indexOf('zeta.z/v1'))
   })
 
   it('round-trips a minimal document through parseOkf', () => {
@@ -39,7 +39,7 @@ describe('serializeOkf', () => {
   it('surfaces a typed error instead of throwing when a facet value is not yaml-safe', () => {
     expect(() =>
       serializeOkf({
-        frontmatter: { type: 'note', facets: { 'x/1': { bad: Number.NaN } } },
+        frontmatter: { type: 'note', facets: { 'x.y/v1': { bad: Number.NaN } } },
         body: '',
       }),
     ).toThrow(/yaml-safe/)

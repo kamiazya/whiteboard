@@ -17,7 +17,7 @@ describe('coreFacetsSchema', () => {
       type: 'note',
       title: 'My note',
       tags: ['a', 'b'],
-      view: 'kanban/1',
+      view: 'example.board',
     })
     expect(result.success).toBe(true)
   })
@@ -37,22 +37,34 @@ describe('coreFacetsSchema', () => {
 })
 
 describe('extensionFacetsSchema', () => {
-  it('accepts a well-formed {domain}/{version} key and preserves the payload verbatim', () => {
-    const payload = { kanban: { columns: ['todo', 'done'] } }
-    const result = extensionFacetsSchema.safeParse({ 'kanban/1': payload.kanban })
+  it('accepts a well-formed {namespace}.{name}/v{n} key and preserves the payload verbatim', () => {
+    const payload = { shape: { kind: 'hexagon' } }
+    const result = extensionFacetsSchema.safeParse({ 'visual.shape/v0': payload.shape })
     expect(result.success).toBe(true)
     if (result.success) {
-      expect(result.data['kanban/1']).toEqual(payload.kanban)
+      expect(result.data['visual.shape/v0']).toEqual(payload.shape)
     }
+  })
+
+  it('accepts hyphenated namespace and name segments', () => {
+    const result = extensionFacetsSchema.safeParse({ 'my-plugin.edge-style/v12': {} })
+    expect(result.success).toBe(true)
   })
 
   it.each([
     'kanban',
     'kanban/',
-    'Kanban/1',
-    'kanban/v1',
-    '/1',
-    'kanban//1',
+    'kanban/1', // the pre-ADR-0013 unnamespaced numeric grammar
+    'shape/v0', // no namespace — every facet belongs to a plugin
+    'Visual.shape/v0',
+    'visual.Shape/v0',
+    'visual.shape/1',
+    'visual.shape/v',
+    'visual..shape/v0',
+    '.shape/v0',
+    'visual./v0',
+    'visual.shape.extra/v0',
+    '/v1',
   ])('rejects (not silently drops) a malformed key %s', (badKey) => {
     const result = extensionFacetsSchema.safeParse({ [badKey]: {} })
     expect(result.success).toBe(false)
@@ -121,7 +133,7 @@ describe('storedCoreFacetsSchema', () => {
       type: 'note',
       title: 'My note',
       tags: ['a', 'b'],
-      view: 'kanban/1',
+      view: 'example.board',
       facetsRaw: { someFutureKey: 'value' },
     })
     expect(result.success).toBe(true)

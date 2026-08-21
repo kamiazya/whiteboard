@@ -36,12 +36,13 @@ export const coreFacetsArbitrary = fc.record(
   { requiredKeys: ['type'] },
 )
 
-const domainArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
-const versionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => String(n))
+// Namespace = owning plugin id, name = the facet within it (ADR-0013).
+const facetSegmentArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
+const facetVersionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => `v${n}`)
 
 const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
-  .tuple(domainArbitrary, versionArbitrary)
-  .map(([domain, version]) => `${domain}/${version}`)
+  .tuple(facetSegmentArbitrary, facetSegmentArbitrary, facetVersionArbitrary)
+  .map(([namespace, name, version]) => `${namespace}.${name}/${version}`)
 
 /**
  * `fc.jsonValue()` can place an own `__proto__` key inside a generated

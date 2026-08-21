@@ -185,7 +185,11 @@ describe('toFacetCard', () => {
     // preserved by the model but have no agreed presentation.
     // `readCoreFacets` returns core facets PLUS `facetsRaw`, so the extra key
     // really does arrive at runtime even though the parameter narrows it away.
-    const facets = { type: 'note', view: 'kanban/1', facetsRaw: { owner: 'x' } } as CoreFacets
+    const facets = {
+      type: 'note',
+      view: 'example.kanban/v1',
+      facetsRaw: { owner: 'x' },
+    } as CoreFacets
     const card = toFacetCard('spec-a1b2c3', facets)
     expect(card?.rows).toEqual([{ label: 'type', value: 'note' }])
   })
