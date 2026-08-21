@@ -34,7 +34,6 @@ import {
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
 } from '@kamiazya/whiteboard-canvas-render'
-import { highlightCode } from '@kamiazya/whiteboard-canvas-render/highlight'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 
 import { getLogger } from '../log.js'
@@ -171,9 +170,6 @@ export function buildSpatialScene(
   return layoutSpatialCanvas(canvas, {
     measure,
     appearance: EXPORT_APPEARANCE_BY_MODE[mode],
-    // The same tokeniser the editor and the viewer use, so an exported PNG
-    // colours code the way the screen it came from does.
-    highlightCode,
     onDegrade,
   })
 }
