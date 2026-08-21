@@ -14,12 +14,14 @@ pnpm install
 pnpm --filter @kamiazya/whiteboard-web dev   # open http://localhost:5173
 ```
 
-The page lands on your canvas list. On a fresh browser it's empty — click
-**Create a canvas** (or the **+** menu, which also offers a markdown note)
-and the new canvas opens ready to draw; the list is where you come back to
-switch between canvases later.
+The page lands on your document browser. On a fresh browser it's empty —
+click **Create a canvas** and the new canvas opens ready to draw. Once you
+have documents, the browser shows them as a folder tree with a preview pane:
+click a card to preview it, **Open** to edit it, and use the toolbar to
+search everything, create markdown notes and canvases, or move a document to
+a new path.
 
-![Browser-local canvas list](../assets/browser-local-list.png)
+![Browser-local document browser](../assets/browser-local-list.png)
 
 A fresh canvas starts empty. Double-click empty canvas space to make a note
 and start typing immediately, or open the **+** menu in the bottom dock: tap

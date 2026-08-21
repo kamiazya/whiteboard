@@ -9,6 +9,7 @@ import {
   DaemonApiError,
   getDocumentOkfV1,
   getDocumentSnapshot,
+  getWorkspaceNames,
   listDocuments,
   renameDocumentPath,
 } from './daemon-api-client.js'
@@ -30,7 +31,15 @@ export function createDaemonFilesSource(
   return {
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       try {
-        const res = await listDocuments(daemonFetch, daemonBaseUrl, workspaceId)
+        // Names ride alongside the list for their pinned[] — pin order is
+        // workspace state the /documents response does not carry. A failed
+        // names fetch degrades to "nothing pinned", never to a failed list,
+        // matching what the grid page did.
+        const [res, names] = await Promise.all([
+          listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
+          getWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
+        ])
+        const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
         return res.documents.map((entry) => ({
           // An older daemon omits the id; the path stands in, as it does
           // everywhere else that reads this list.
@@ -39,6 +48,7 @@ export function createDaemonFilesSource(
           ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
           ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+          ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),
         }))
       } catch (err) {
         if (err instanceof DaemonApiError && err.status === 404) {

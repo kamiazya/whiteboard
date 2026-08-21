@@ -1,14 +1,16 @@
 import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import type { WorkspaceDocumentEntry } from '../components/workspace-files/document-entry.js'
 import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from '../components/workspace-files/files-source.js'
+import type { LoroStoreLike } from '../pages/use-browser-local-document-controller.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
+  type ContentClock,
   ensureLocalWorkspace,
   idbContentClock,
   LOCAL_WORKSPACE_ID,
@@ -24,10 +26,21 @@ import { LoroStore } from './loro-store.js'
  * uses, so the browser and the editor cannot disagree about what exists or
  * what it currently says.
  */
-export function createLocalFilesSource(): WorkspaceFilesSource {
-  const index = new IdbDocumentIndex()
-  const loro = new LoroStore()
-  const clock = idbContentClock()
+export function createLocalFilesSource(
+  deps: {
+    // Injectable so the page can hand the panel the SAME stores it was
+    // given: two IdbDocumentIndex instances happen to agree because they
+    // open one database, but an injected test double does not have that
+    // luck, and the panel silently reading a different store than the page
+    // is exactly the split this parameter closes.
+    index?: DocumentIndex
+    loro?: LoroStoreLike
+    clock?: ContentClock
+  } = {},
+): WorkspaceFilesSource {
+  const index = deps.index ?? new IdbDocumentIndex()
+  const loro = deps.loro ?? new LoroStore()
+  const clock = deps.clock ?? idbContentClock()
 
   async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
     const loaded = await loro.load(entry.documentId)
@@ -44,7 +57,7 @@ export function createLocalFilesSource(): WorkspaceFilesSource {
 
   return {
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
-      let entries: Awaited<ReturnType<IdbDocumentIndex['listDocuments']>>
+      let entries: Awaited<ReturnType<DocumentIndex['listDocuments']>>
       try {
         entries = await index.listDocuments({ workspaceId: LOCAL_WORKSPACE_ID })
       } catch (err) {

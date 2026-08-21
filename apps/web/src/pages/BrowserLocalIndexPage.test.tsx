@@ -36,8 +36,17 @@ function renderPage(store: LocalStoreDouble) {
   return { onOpenDocument, ...utils }
 }
 
+// The folder pane selects on click; opening goes through the preview pane's
+// Open button — the same two-step the daemon page's panel uses.
+async function selectCard(title: string) {
+  const titles = await screen.findAllByTestId('card-title')
+  const hit = titles.find((el) => el.textContent === title)
+  if (!hit) throw new Error(`no card titled ${title}`)
+  fireEvent.click(hit.closest('button') as HTMLElement)
+}
+
 describe('BrowserLocalIndexPage', () => {
-  it('lists snapshots most-recent first with name and kind marker', async () => {
+  it('lists documents in the folder pane with name and kind marker', async () => {
     const store = await seededStore([
       {
         documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
@@ -58,15 +67,16 @@ describe('BrowserLocalIndexPage', () => {
     ])
     renderPage(store)
 
-    const cards = await screen.findAllByTestId('document-list-card')
-    expect(cards).toHaveLength(2)
-    expect(within(cards[0]!).getByText('Meeting Notes')).toBeTruthy()
-    expect(within(cards[0]!).getByText(/markdown/i)).toBeTruthy()
-    expect(within(cards[1]!).getByText('Trip Plan')).toBeTruthy()
-    expect(within(cards[1]!).queryByText(/markdown/i)).toBeNull()
+    // The panel is a file browser: path order, not recency — recency
+    // ordering retired with the grid.
+    const titles = await screen.findAllByTestId('card-title')
+    expect(titles.map((el) => el.textContent)).toEqual(['Meeting Notes', 'Trip Plan'])
+    const subtitles = screen.getAllByTestId('card-subtitle')
+    expect(subtitles[0]?.textContent).toContain('markdown')
+    expect(subtitles[1]?.textContent).not.toContain('markdown')
   })
 
-  it('opens a canvas by its path on card click', async () => {
+  it('opens a document via the preview pane after selecting its card', async () => {
     const store = await seededStore([
       {
         documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
@@ -79,11 +89,12 @@ describe('BrowserLocalIndexPage', () => {
     ])
     const { onOpenDocument } = renderPage(store)
 
-    fireEvent.click((await screen.findAllByTestId('document-list-card'))[0]!)
+    await selectCard('Solo')
+    fireEvent.click(await screen.findByRole('button', { name: 'Open' }))
     expect(onOpenDocument).toHaveBeenCalledWith('solo')
   })
 
-  it('creates a markdown canvas from the + menu, repoints the default, and opens it', async () => {
+  it('creates a markdown document from the panel toolbar without leaving the browser', async () => {
     const store = await seededStore([
       {
         documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
@@ -95,23 +106,18 @@ describe('BrowserLocalIndexPage', () => {
       },
     ])
     const { onOpenDocument } = renderPage(store)
-    await screen.findAllByTestId('document-list-card')
+    await screen.findAllByTestId('card-title')
 
-    fireEvent.pointerDown(screen.getByRole('button', { name: 'New canvas' }), {
-      button: 0,
-      ctrlKey: false,
+    // The panel's create is in-place: the document appears in the pane and
+    // the user stays in the browser. Auto-open (and the default-pointer
+    // repoint that rides with it) lives only on the onboarding path now.
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+
+    await waitFor(async () => {
+      const all = await store.listDocuments()
+      expect(all.some((s) => s.kind === 'markdown')).toBe(true)
     })
-    fireEvent.pointerUp(await screen.findByRole('menuitem', { name: 'New markdown note' }))
-
-    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
-    const newPath = onOpenDocument.mock.calls[0]![0] as string
-    expect(newPath).not.toBe('existing')
-    const all = await store.listDocuments()
-    const created = all.find((s) => s.path === newPath)
-    expect(created?.kind).toBe('markdown')
-    // The default pointer is by id, the callback is by path — the two
-    // addresses have to agree on one document.
-    expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
+    expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
   it('empty store shows the empty state whose action creates a spatial canvas', async () => {
@@ -124,6 +130,9 @@ describe('BrowserLocalIndexPage', () => {
     const newPath = onOpenDocument.mock.calls[0]![0] as string
     const created = (await store.listDocuments()).find((s) => s.path === newPath)
     expect(created?.kind).toBe('spatial')
+    // The default pointer is by id, the callback is by path — the two
+    // addresses have to agree on one document.
+    expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
   })
 
   it('creates exactly one canvas for two presses inside a single tick', async () => {
@@ -182,16 +191,16 @@ describe('BrowserLocalIndexPage', () => {
       },
     ])
     renderPage(store)
-    await screen.findAllByTestId('document-list-card')
+    await selectCard('Keep Me')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Keep Me' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText(/Delete "Keep Me"\?/)).toBeTruthy()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(await store.listDocuments()).toHaveLength(1)
-    expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
+    expect(screen.getAllByTestId('card-title')).toHaveLength(1)
   })
 
   it('clears the default pointer when the deleted canvas was the one it named', async () => {
@@ -210,9 +219,9 @@ describe('BrowserLocalIndexPage', () => {
     ])
     await store.setDefaultDocumentId('0CFJNRVY147ADGKPSWZ258BEHM')
     renderPage(store)
-    await screen.findAllByTestId('document-list-card')
+    await selectCard('Pointed At')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Pointed At' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
@@ -232,9 +241,9 @@ describe('BrowserLocalIndexPage', () => {
       },
     ])
     const { onOpenDocument } = renderPage(store)
-    await screen.findAllByTestId('document-list-card')
+    await selectCard('Doomed')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Doomed' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
@@ -258,9 +267,9 @@ describe('BrowserLocalIndexPage', () => {
     ])
     store.index.deleteDocument = () => Promise.reject(new Error('quota exceeded'))
     renderPage(store)
-    await screen.findAllByTestId('document-list-card')
+    await selectCard('Sticky')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Sticky' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
@@ -272,7 +281,7 @@ describe('BrowserLocalIndexPage', () => {
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
-    expect(screen.getAllByTestId('document-list-card')).toHaveLength(1)
+    expect(screen.getAllByTestId('card-title')).toHaveLength(1)
   })
 
   it('shows each name over its own real path, which is never derived from that name', async () => {
@@ -300,10 +309,12 @@ describe('BrowserLocalIndexPage', () => {
     ])
     renderPage(store)
 
-    const cards = await screen.findAllByTestId('document-list-card')
-    expect(within(cards[0]!).getByText('構成図')).toBeTruthy()
-    expect(within(cards[0]!).getByTestId('canvas-secondary').textContent).toBe('diagrams/structure')
-    expect(within(cards[1]!).getByText('設計メモ')).toBeTruthy()
-    expect(within(cards[1]!).getByTestId('canvas-secondary').textContent).toBe('notes/design')
+    // The panel projects the path as STRUCTURE (folders + breadcrumb +
+    // preview), not as a second line — but the same invariant holds: the
+    // folder is named from the path, never from the display name.
+    // Both the tree and the folder pane offer the folder; either works.
+    fireEvent.click((await screen.findAllByRole('button', { name: 'Open folder diagrams' }))[0]!)
+    await selectCard('構成図')
+    expect((await screen.findByTestId('okf-preview')).textContent).toContain('diagrams/structure')
   })
 })
