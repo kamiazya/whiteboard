@@ -61,10 +61,18 @@ export type SvgElements = {
   }
   // data-wb-key is the keyed renderer's patch handle (svg/keyed.ts) —
   // emitted only in keyed mode, never by the plain document renderer.
-  g: PaintAttrs & { transform?: string; role?: SvgRole; 'data-wb-key'?: string }
+  g: PaintAttrs & {
+    transform?: string
+    'stroke-linecap'?: 'round'
+    'stroke-linejoin'?: 'round'
+    role?: SvgRole
+    'data-wb-key'?: string
+  }
   rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
+  // 'middle' is the only anchor emitted: body runs are left-anchored by
+  // omission (the initial value), and only the glyph badge centers itself.
   text: PaintAttrs &
     TextEmphasisAttrs & {
       x: number
@@ -72,6 +80,7 @@ export type SvgElements = {
       width?: number
       height?: number
       mask?: string
+      'text-anchor'?: 'middle'
       'xml:space'?: 'preserve'
     }
   a: { href: SafeHref }
@@ -82,14 +91,25 @@ export type SvgElements = {
     'marker-end'?: string
     role?: SvgRole
   }
+  // `fill` became optional when outline silhouettes joined the path users
+  // (presence-only paint like rect). EDGES must still declare fill="none"
+  // explicitly — SVG's initial black fill paints a wedge across a bent
+  // path — which their byte-level tests pin now that the type cannot.
   path: PaintAttrs & {
     d: string
-    fill: string
     'marker-start'?: string
     'marker-end'?: string
     role?: SvgRole
   }
-  polygon: { points: string; fill: string; role?: SvgRole }
+  // Outline polygons inherit paint presence-only like rect; marker content
+  // keeps passing an explicit fill.
+  polygon: PaintAttrs & { points: string; role?: SvgRole }
+  ellipse: PaintAttrs & { cx: number; cy: number; rx: number; ry: number; role?: SvgRole }
+  circle: PaintAttrs & { cx: number; cy: number; r: number; role?: SvgRole }
+  symbol: { id: string; viewBox: string }
+  // `href` is a package-composed fragment reference (`#wb-icon-…`), not a
+  // navigation target, so it stays a plain string rather than SafeHref.
+  use: PaintAttrs & { href: string; x: number; y: number; width: number; height: number }
   marker: {
     id: string
     markerWidth: number

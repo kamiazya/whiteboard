@@ -2,7 +2,7 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboar
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneEntryKeys } from './scene-entry-keys.js'
-import type { Scene } from './scene-graph.js'
+import type { NodeOutlineKind, Scene } from './scene-graph.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import { createSpatialTheme } from './theme/spatial-theme.js'
 
@@ -155,5 +155,35 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
   it('deleting one edge removes exactly its own entry — surviving routes are untouched', () => {
     const edited = layout({ ...canvas, edges: canvas.edges.filter((e) => e.id !== 'e10a') })
     expect(diffCount(base, edited)).toEqual({ changed: 1, total: 177 })
+  })
+})
+
+describe('decorated-scene column (outline decorations vs group reuse)', () => {
+  const layoutWith = (
+    canvas: SpatialCanvas,
+    nodeOutlines: Readonly<Record<string, NodeOutlineKind>>,
+  ): Scene =>
+    layoutSpatialCanvas(canvas, {
+      measure: createFakeMeasure(),
+      appearance: createSpatialTheme({ mode: 'light' }),
+      nodeOutlines,
+    })
+
+  it('decorating two nodes with outlines touches exactly their two chrome groups', () => {
+    // On this grid the neighbours are axis-aligned, so every edge anchor
+    // sits at a side midpoint — a TANGENT point of both outlines — and the
+    // rim pull-in moves nothing: decoration costs only the decorated
+    // chrome. An off-axis anchor would add its edge's group to the count,
+    // which is the number to re-pin if the corpus ever gains one.
+    const { canvas } = buildCanvas()
+    const decorated = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
+    expect(diffCount(layout(canvas), decorated)).toEqual({ changed: 2, total: 178 })
+  })
+
+  it("swapping one node's outline kind replaces exactly that node's chrome group", () => {
+    const { canvas } = buildCanvas()
+    const before = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
+    const after = layoutWith(canvas, { n5: 'diamond', n12: 'hexagon' })
+    expect(diffCount(before, after)).toEqual({ changed: 1, total: 178 })
   })
 })

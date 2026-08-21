@@ -2,6 +2,7 @@ import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edge-rounding.js'
+import { nodeOutline } from '../layout/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -15,6 +16,7 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
+import { LUCIDE_ICONS, LUCIDE_VIEWBOX, type LucideIconElement } from '../vendor/lucide/icons.js'
 import { collectDefs } from './defs.js'
 import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
@@ -232,6 +234,57 @@ function renderTextRun(run: TextRunNode): SvgChild {
  */
 function renderShape(node: ShapeSceneNode): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
+  // Non-rect silhouettes come from the shared decomposition (one producer
+  // for drawing and hit-testing — layout/node-outline.ts); an absent
+  // `shape` stays the historic rect byte-for-byte.
+  if (node.shape !== undefined) {
+    const outline = nodeOutline(node.shape, node.bbox)
+    if (outline === null) return []
+    switch (outline.kind) {
+      case 'ellipse':
+        return el('ellipse', {
+          cx: outline.cx,
+          cy: outline.cy,
+          rx: outline.rx,
+          ry: outline.ry,
+          ...appearanceAttrs(node.appearance),
+        })
+      case 'polygon':
+        return el('polygon', {
+          points: pointsAttr(outline.points),
+          ...appearanceAttrs(node.appearance),
+        })
+      case 'cylinder': {
+        const { x, y, w, h, ry } = outline
+        const rx = w / 2
+        const top = y + ry
+        const bottom = y + h - ry
+        const arc = (sweep: 0 | 1, toX: number, atY: number) =>
+          `A ${formatCoord(rx)} ${formatCoord(ry)} 0 0 ${sweep} ${formatCoord(toX)} ${formatCoord(atY)}`
+        const silhouette = [
+          `M ${formatCoord(x)} ${formatCoord(top)}`,
+          arc(1, x + w, top),
+          `L ${formatCoord(x + w)} ${formatCoord(bottom)}`,
+          arc(1, x, bottom),
+          'Z',
+        ].join(' ')
+        // The lid is the visible lower half of the top cap — stroke-only
+        // ink INSIDE the silhouette, so bounds/hit keep reading the bbox.
+        const lid = [`M ${formatCoord(x)} ${formatCoord(top)}`, arc(0, x + w, top)].join(' ')
+        const paint = appearanceAttrs(node.appearance)
+        return [
+          el('path', { d: silhouette, ...paint }),
+          el('path', {
+            d: lid,
+            fill: 'none',
+            stroke: paint.stroke,
+            'stroke-width': paint['stroke-width'],
+            'stroke-opacity': paint['stroke-opacity'],
+          }),
+        ]
+      }
+    }
+  }
   return el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,
@@ -239,12 +292,12 @@ function renderShape(node: ShapeSceneNode): SvgChild {
   })
 }
 
-function renderListItem(item: ListItemNode): SvgChild {
+function renderListItem(item: ListItemNode, icons?: IconTable): SvgChild {
   const tx = item.bbox.x
   return el(
     'g',
     tx !== 0 ? { transform: `translate(${formatCoord(tx)},0)` } : undefined,
-    item.children.map(renderNode),
+    item.children.map((child) => renderNode(child, icons)),
   )
 }
 
@@ -414,7 +467,53 @@ function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
   }
 }
 
-function renderNode(node: SceneNode): SvgChild {
+function renderIconElement(element: LucideIconElement): SvgChild {
+  switch (element.tag) {
+    case 'path':
+      return el('path', { d: element.d })
+    case 'rect':
+      return el('rect', {
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        rx: element.rx,
+      })
+    case 'circle':
+      return el('circle', { cx: element.cx, cy: element.cy, r: element.r })
+    case 'ellipse':
+      return el('ellipse', { cx: element.cx, cy: element.cy, rx: element.rx, ry: element.ry })
+  }
+}
+
+/** Baseline drop below the bbox center, as a fraction of the glyph size —
+ * roughly half a typical glyph cap height, so the badge reads centered. */
+const GLYPH_BASELINE_FACTOR = 0.35
+
+/**
+ * Caller-supplied icon geometry, merged over the vendored table (caller
+ * wins on a shared name). Plain data — a record of primitive elements in
+ * the 24x24 lucide viewBox — so a composition root can feed any icon set
+ * (a full lucide dependency, a facet distribution's own glyphs) without
+ * this package depending on one, and the table survives `postMessage`.
+ */
+export type IconTable = Readonly<Record<string, ReadonlyArray<LucideIconElement>>>
+
+/**
+ * `Array.isArray` and not a bare `!== undefined`: both tables are plain
+ * objects, so a prototype-inherited name (`toString`) answers a function,
+ * which must degrade like any unknown name rather than throw downstream.
+ */
+function lookupIcon(
+  name: string,
+  icons: IconTable | undefined,
+): ReadonlyArray<LucideIconElement> | undefined {
+  const fromCaller = icons === undefined ? undefined : icons[name]
+  const geometry = fromCaller ?? LUCIDE_ICONS[name]
+  return Array.isArray(geometry) ? geometry : undefined
+}
+
+function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
   switch (node.kind) {
     case 'textRun':
       return renderTextRun(node)
@@ -423,7 +522,11 @@ function renderNode(node: SceneNode): SvgChild {
     case 'paragraph':
       return el('g', undefined, node.runs.map(renderTextRun))
     case 'list':
-      return el('g', undefined, node.items.map(renderListItem))
+      return el(
+        'g',
+        undefined,
+        node.items.map((item) => renderListItem(item, icons)),
+      )
     case 'codeBlock':
       return renderCodeBlock(node)
     case 'blockquote':
@@ -435,10 +538,14 @@ function renderNode(node: SceneNode): SvgChild {
       return el(
         'g',
         { ...appearanceAttrs(node.appearance), role: PRESENTATION },
-        node.children.map(renderNode),
+        node.children.map((child) => renderNode(child, icons)),
       )
     case 'group':
-      return el('g', { role: PRESENTATION }, node.children.map(renderNode))
+      return el(
+        'g',
+        { role: PRESENTATION },
+        node.children.map((child) => renderNode(child, icons)),
+      )
     case 'thematicBreak':
       return el('rect', {
         ...rectAttrs(node.bbox),
@@ -484,7 +591,11 @@ function renderNode(node: SceneNode): SvgChild {
         el('text', { x: node.bbox.x, y: node.bbox.y + node.bbox.h * 0.8 }, [node.title]),
       ])
     case 'embedResolved':
-      return el('g', undefined, node.children.map(renderNode))
+      return el(
+        'g',
+        undefined,
+        node.children.map((child) => renderNode(child, icons)),
+      )
     case 'edge': {
       const appearance = appearanceAttrs(node.appearance)
       // `fill="none"` is not decoration. SVG's initial fill is black and a
@@ -549,6 +660,61 @@ function renderNode(node: SceneNode): SvgChild {
     }
     case 'shape':
       return renderShape(node)
+    case 'icon': {
+      if (!isFiniteBox(node.bbox)) return []
+      const geometry = lookupIcon(node.icon, icons)
+      if (geometry === undefined) return []
+      const id = `wb-icon-${idToken(node.icon)}`
+      const def: SvgDef = {
+        id,
+        node: el('symbol', { id, viewBox: LUCIDE_VIEWBOX }, [
+          // Lucide's stroke styling lives ON the definition (fill none,
+          // stroke-width 2, round caps/joins); only the stroke COLOR
+          // inherits from each referencing <use>, so one def serves every
+          // color-assigned node.
+          el(
+            'g',
+            {
+              fill: 'none',
+              'stroke-width': 2,
+              'stroke-linecap': 'round',
+              'stroke-linejoin': 'round',
+            },
+            geometry.map(renderIconElement),
+          ),
+        ]),
+      }
+      const paint = appearanceAttrs(node.appearance)
+      const use = el('use', {
+        href: `#${id}`,
+        x: node.bbox.x,
+        y: node.bbox.y,
+        width: node.bbox.w,
+        height: node.bbox.h,
+        stroke: paint.stroke,
+        'stroke-opacity': paint['stroke-opacity'],
+      })
+      return withDefs(use, [def])
+    }
+    case 'glyph': {
+      if (!isFiniteBox(node.bbox) || node.glyph.length === 0) return []
+      // A single glyph sized to the smaller bbox side and centered via
+      // text-anchor plus a fixed baseline offset. The offset approximates
+      // vertical centering without dominant-baseline, whose resolution
+      // differs across renderers (browsers vs resvg) and would break the
+      // pixel-agreement this backend otherwise keeps.
+      const size = Math.min(node.bbox.w, node.bbox.h)
+      return el(
+        'text',
+        {
+          x: node.bbox.x + node.bbox.w / 2,
+          y: node.bbox.y + node.bbox.h / 2 + size * GLYPH_BASELINE_FACTOR,
+          'font-size': size,
+          'text-anchor': 'middle',
+        },
+        [node.glyph],
+      )
+    }
     case 'image': {
       // Fixed attribute order (x y width height href preserveAspectRatio)
       // per this package's canonical-serialization rule. Aspect is always
@@ -594,6 +760,10 @@ export interface SvgDocumentOptions {
    *  that carry their own fill are unaffected (nearest-ancestor wins). An
    *  empty or non-string value is omitted, never defaulted. */
   readonly textFill?: string
+  /** Extra icon geometry for `IconSceneNode` resolution, merged over the
+   *  vendored set (see `IconTable`). A resolution input, not document
+   *  chrome — it does NOT activate the envelope. */
+  readonly icons?: IconTable
 }
 
 function hasEnvelopeOptions(
@@ -686,7 +856,9 @@ export function buildSvgDocumentParts(
   // they preserve `defs` declarations on rebuilt nodes, so the order is not
   // load-bearing. Applied per top-level node: passes are group-local by
   // construction (see transform.ts).
-  const body = scene.nodes.map(renderNode).map((node) => applyOptimizationPasses(node))
+  const body = scene.nodes
+    .map((node) => renderNode(node, options?.icons))
+    .map((node) => applyOptimizationPasses(node))
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.
   const collected = collectDefs(body)
