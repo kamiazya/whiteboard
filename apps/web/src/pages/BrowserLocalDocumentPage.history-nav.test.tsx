@@ -10,6 +10,11 @@
  * input.
  */
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
@@ -94,12 +99,9 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       </div>,
     )
 
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
@@ -173,7 +175,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       },
       { timeout: 5000 },
     )
-    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeInTheDocument())
+    await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy())
     // The editor must actually be showing canvas A now — the assertions above
     // only establish that the navigation and the store agree about which
     // canvas is current.

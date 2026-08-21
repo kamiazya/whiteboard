@@ -10,6 +10,11 @@
  * this suite's subject is the backend/IndexedDB sync layer, not gesture input.
  */
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
@@ -87,12 +92,9 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   it('edits A, New switches to empty B, switching back to A restores the edited node', async () => {
     const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(
@@ -187,12 +189,9 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   it('persists an edit made inside the 300ms debounce before switching canvas', async () => {
     const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      {
-        timeout: 5000,
-      },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const idA = await waitFor(

@@ -9,6 +9,11 @@
  * command shape a real create/delete gesture would report.
  */
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
@@ -77,10 +82,9 @@ describe('BrowserLocalDocumentPage create/delete-node persistence (real IndexedD
     // The mobile path: no keyboard exists, so the cluster button must drive
     // the same Loro UndoManager the Cmd/Ctrl+Z shortcut does.
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const created = textNodeCanvas('undo-probe-node', 20, 20)
@@ -131,10 +135,9 @@ describe('BrowserLocalDocumentPage create/delete-node persistence (real IndexedD
 
   it('a created node survives remount, and a deleted one stays gone', async () => {
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
 
     const created = textNodeCanvas('created-node', 20, 20)
@@ -161,10 +164,9 @@ describe('BrowserLocalDocumentPage create/delete-node persistence (real IndexedD
     cleanup()
     latestMountedCanvases = []
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(
       () => {
         const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
@@ -190,10 +192,9 @@ describe('BrowserLocalDocumentPage create/delete-node persistence (real IndexedD
     cleanup()
     latestMountedCanvases = []
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(
-      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
-      { timeout: 5000 },
-    )
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
+      timeout: 5000,
+    })
     await waitFor(
       () => {
         const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
