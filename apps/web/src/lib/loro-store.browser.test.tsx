@@ -4,6 +4,10 @@
  * Real browser tests because IndexedDB requires a browser environment.
  */
 
+// Stays in REAL-browser mode on purpose: this file is part of the real-IDB
+// fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
+// approximates). IndexedDB-only suites with no such stake run in jsdom via
+// fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
