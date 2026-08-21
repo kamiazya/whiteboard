@@ -10,6 +10,11 @@
  * `onToggleNodeLock` without synthesising pointer input.
  */
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement, ReactNode } from 'react'
@@ -61,7 +66,7 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 
 async function mountPage(): Promise<void> {
   render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
     timeout: 5000,
   })
   await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
