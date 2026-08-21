@@ -20,7 +20,7 @@ import {
   seedDoc,
 } from '../test-utils/fake-document-store.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
-import { DocumentKindMismatchError, FacetWriteRejectedError } from './errors.js'
+import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError } from './errors.js'
 import { createFacetSetTool, facetSetInputSchema } from './facet-set.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -365,6 +365,24 @@ describe('node-target writes (nodeId)', () => {
         facets: { 'visual.shape/v0': { kind: 'hexagon' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
+  })
+
+  test('a nodeId write against a kind-less document reports the node missing, not a fabricated kind', async () => {
+    // A freshly created document has no declared kind and therefore no
+    // canvas — the honest answer is "that node does not exist here", never
+    // "is a markdown document" about a document that declared nothing.
+    const documentStore = new FakeDocumentStore()
+    await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
+    await seedDoc(documentStore, DOCUMENT_ID, () => {})
+    const tool = createFacetSetTool(makeDeps(documentStore))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        nodeId: 'n1',
+        facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+      }),
+    ).rejects.toThrow(NodeNotFoundError)
   })
 
   test('rejects a nodeId the canvas does not have', async () => {

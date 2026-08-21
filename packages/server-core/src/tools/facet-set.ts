@@ -98,10 +98,16 @@ export function createFacetSetTool(deps: ServerDeps) {
 
       if (input.nodeId !== undefined) {
         const nodeId = input.nodeId
+        // A kind-less document (freshly created, nothing declared) has no
+        // canvas, so the node cannot exist — report THAT, rather than
+        // fabricating a kind for the mismatch message.
+        if (kind === undefined) {
+          throw new NodeNotFoundError(input.documentId, nodeId)
+        }
         if (kind !== 'spatial') {
           throw new DocumentKindMismatchError(
             input.documentId,
-            kind ?? 'markdown',
+            kind,
             "Node-target facets live on a spatial document's node. Omit nodeId to set facets on a markdown document.",
           )
         }
