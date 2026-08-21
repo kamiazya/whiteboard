@@ -135,6 +135,19 @@ describe('BrowserLocalIndexPage', () => {
     expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
   })
 
+  it('empty store also offers a markdown note, creating and opening one', async () => {
+    const store = new LocalStoreDouble()
+    const { onOpenDocument } = renderPage(store)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'New markdown note' }))
+
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
+    const newPath = onOpenDocument.mock.calls[0]![0] as string
+    const created = (await store.listDocuments()).find((s) => s.path === newPath)
+    expect(created?.kind).toBe('markdown')
+    expect(await store.getDefaultDocumentId()).toBe(created?.documentId)
+  })
+
   it('creates exactly one canvas for two presses inside a single tick', async () => {
     // Pins the createDisabled wiring: React flushes `creating` before a
     // second click can dispatch on the now-disabled button.

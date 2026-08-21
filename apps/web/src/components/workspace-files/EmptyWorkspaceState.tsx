@@ -1,16 +1,21 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import EmptyMark from '../../brand/empty-mark.svg?react'
 
 /**
  * The onboarding empty state both index pages show before a workspace has
  * any documents. It lives beside the panel but renders INSTEAD of it: a
- * three-pane browser of nothing teaches less than one sentence and one
- * button, and arrivals from a shared link have no other page to learn from.
+ * three-pane browser of nothing teaches less than one sentence and two
+ * buttons, and arrivals from a shared link have no other page to learn from.
+ *
+ * Both kinds are offered because this is the one moment a user cannot reach
+ * the panel's own create buttons — an empty state that could only make a
+ * canvas turned a writing-first arrival away at the door.
  */
 export function EmptyWorkspaceState({
   onCreate,
   disabled,
 }: {
-  onCreate: () => void
+  onCreate: (kind: DocumentKind) => void
   disabled?: boolean
 }) {
   return (
@@ -23,14 +28,24 @@ export function EmptyWorkspaceState({
         A canvas is a space for notes you place and connect. Everything stays in this browser — no
         account, no upload.
       </p>
-      <button
-        type="button"
-        disabled={disabled}
-        onClick={onCreate}
-        className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
-      >
-        Create a canvas
-      </button>
+      <div className="flex items-center gap-2">
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onCreate('spatial')}
+          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          Create a canvas
+        </button>
+        <button
+          type="button"
+          disabled={disabled}
+          onClick={() => onCreate('markdown')}
+          className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+        >
+          New markdown note
+        </button>
+      </div>
     </div>
   )
 }

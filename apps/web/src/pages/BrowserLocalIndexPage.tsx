@@ -182,7 +182,7 @@ export function BrowserLocalIndexPage({
         // The onboarding state renders INSTEAD of the panel: a three-pane
         // browser of nothing teaches less than one sentence and one button,
         // and this button also OPENS what it creates.
-        <EmptyWorkspaceState onCreate={() => void handleCreate('spatial')} disabled={creating} />
+        <EmptyWorkspaceState onCreate={(kind) => void handleCreate(kind)} disabled={creating} />
       ) : snapshots !== null ? (
         <WorkspaceFilesPanel
           source={filesSource}

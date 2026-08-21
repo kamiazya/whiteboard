@@ -1141,6 +1141,26 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual([['ws-a', 'untitled']])
   })
 
+  it('the empty state also offers a markdown note, sending its kind and opening it', async () => {
+    // The onboarding moment is where a writing-first user arrives too — an
+    // empty state that can only make a canvas turns them away at the door.
+    const kinds: Array<string | undefined> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: { 'ws-a': [] },
+      onCreateDocument: (_workspaceId, _path, kind) => kinds.push(kind),
+    })
+    const onOpenDocument = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+
+    await screen.findByText('No documents yet')
+    fireEvent.click(screen.getByRole('button', { name: 'New markdown note' }))
+
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
+    expect(kinds).toEqual(['markdown'])
+  })
+
   it('renders the panel as the one document surface, with no view toggle left', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
