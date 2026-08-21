@@ -45,3 +45,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0010](0010-canvas-edit-batch-tool.md) | One batch tool for spatial editing, and why it is not `apply` | Accepted |
 | [ADR-0011](0011-font-distribution.md) | Fonts are installed by whoever needs them, not bundled | Accepted — provider registry not built yet |
 | [ADR-0012](0012-user-installed-fonts.md) | A user installs a font by naming it, and the daemon keeps it | Accepted — not yet implemented; extends ADR-0011 |
+| [ADR-0013](0013-facet-system.md) | The facet system — plugins, versioned facet keys, and the meaning/display split | Accepted — key grammar landed; supersedes ADR-0009 decision 3 |

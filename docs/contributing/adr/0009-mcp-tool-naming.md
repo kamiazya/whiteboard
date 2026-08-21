@@ -29,6 +29,17 @@
 > for a spatial document's lost `type`/`tags` — workspace-level metadata —
 > remains unbuilt.
 
+> **Addendum (2026-08-22): decision 3 is superseded by
+> [ADR-0013](0013-facet-system.md).** The alternative this ADR rejected —
+> facets as format-agnostic metadata — is adopted there *with* the safeguard
+> whose absence justified the rejection here: facet schemas are registered at
+> distribution time, so the format-agnostic bucket can no longer breed
+> accidental conventions (the `issue/1` failure). OKF core frontmatter
+> (`type`/`tags`) stays a markdown-document concern exactly as decided here;
+> what ADR-0013 widens is where *extension* facets may attach (documents,
+> the canvas, nodes), under a `{namespace}.{name}/v{n}` key grammar. The
+> reasoning below is kept as written — a decision record is history.
+
 ## Context
 
 This started as a tidy-up of MCP tool names and turned into a model

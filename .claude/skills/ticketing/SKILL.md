@@ -51,7 +51,7 @@ wb_document_set   → { workspaceId: "default", canvasId, markdown: "<updated OK
 ### Updating facets only
 
 ```
-wb_facet_set → { workspaceId: "default", canvasId, facets: { "<domain>/1": { … } } }
+wb_facet_set → { workspaceId: "default", canvasId, facets: { "<namespace>.<name>/v0": { … } }  # key grammar per ADR-0013 }
 ```
 
 ### Resolving / deleting

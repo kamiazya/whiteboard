@@ -31,12 +31,12 @@ describe('wb_facet_set tool', () => {
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'kanban/1': { status: 'todo' } },
+      facets: { 'example.kanban/v1': { status: 'todo' } },
     })
 
     expect(result).toEqual({
       documentId: DOCUMENT_ID,
-      facets: { 'kanban/1': { status: 'todo' } },
+      facets: { 'example.kanban/v1': { status: 'todo' } },
     })
   })
 
@@ -48,7 +48,7 @@ describe('wb_facet_set tool', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'kanban/1': { status: 'todo' } },
+      facets: { 'example.kanban/v1': { status: 'todo' } },
     })
 
     const loaded = await store.loadSnapshot({
@@ -59,7 +59,7 @@ describe('wb_facet_set tool', () => {
     if (loaded !== null) {
       doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
     }
-    expect(readFacets(doc)).toEqual({ 'kanban/1': { status: 'todo' } })
+    expect(readFacets(doc)).toEqual({ 'example.kanban/v1': { status: 'todo' } })
   })
 
   test('merges a new facet domain with an existing one instead of replacing it', async () => {
@@ -70,17 +70,17 @@ describe('wb_facet_set tool', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'kanban/1': { status: 'todo' } },
+      facets: { 'example.kanban/v1': { status: 'todo' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'priority/1': { level: 'high' } },
+      facets: { 'example.priority/v1': { level: 'high' } },
     })
 
     expect(result.facets).toEqual({
-      'kanban/1': { status: 'todo' },
-      'priority/1': { level: 'high' },
+      'example.kanban/v1': { status: 'todo' },
+      'example.priority/v1': { level: 'high' },
     })
   })
 
@@ -92,15 +92,15 @@ describe('wb_facet_set tool', () => {
     await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'kanban/1': { status: 'todo' } },
+      facets: { 'example.kanban/v1': { status: 'todo' } },
     })
     const result = await tool.execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'kanban/1': { status: 'done' } },
+      facets: { 'example.kanban/v1': { status: 'done' } },
     })
 
-    expect(result.facets).toEqual({ 'kanban/1': { status: 'done' } })
+    expect(result.facets).toEqual({ 'example.kanban/v1': { status: 'done' } })
   })
 
   test('throws WorkspaceDocumentNotFoundError when workspaceId does not actually own documentId', async () => {
@@ -112,12 +112,12 @@ describe('wb_facet_set tool', () => {
       tool.execute({
         workspaceId: 'ws-other',
         documentId: DOCUMENT_ID,
-        facets: { 'kanban/1': { status: 'todo' } },
+        facets: { 'example.kanban/v1': { status: 'todo' } },
       }),
     ).rejects.toThrow(WorkspaceDocumentNotFoundError)
   })
 
-  test('rejects a facet key outside the {domain}/{version} pattern', () => {
+  test('rejects a facet key outside the {namespace}.{name}/v{n} pattern', () => {
     expect(() =>
       facetSetInputSchema.parse({
         workspaceId: WORKSPACE_ID,
@@ -147,7 +147,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
       createFacetSetTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
-        facets: { 'example/1': { status: 'open' } },
+        facets: { 'example.sample/v1': { status: 'open' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
   })
@@ -161,7 +161,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
       createFacetSetTool(makeDeps(store)).execute({
         workspaceId: WORKSPACE_ID,
         documentId: DOCUMENT_ID,
-        facets: { 'example/1': { status: 'open' } },
+        facets: { 'example.sample/v1': { status: 'open' } },
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
@@ -179,9 +179,9 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
     const result = await createFacetSetTool(makeDeps(store)).execute({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
-      facets: { 'example/1': { status: 'open' } },
+      facets: { 'example.sample/v1': { status: 'open' } },
     })
 
-    expect(result.facets).toEqual({ 'example/1': { status: 'open' } })
+    expect(result.facets).toEqual({ 'example.sample/v1': { status: 'open' } })
   })
 })

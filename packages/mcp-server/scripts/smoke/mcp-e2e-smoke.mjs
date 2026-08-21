@@ -225,7 +225,7 @@ async function main() {
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
     documentId: named.documentId,
-    facets: { 'e2e/1': { note: 'before-save' } },
+    facets: { 'e2e.check/v1': { note: 'before-save' } },
   })
   if (facets.documentId !== named.documentId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
@@ -234,7 +234,7 @@ async function main() {
 
   await expectToolError(
     'wb_facet_set',
-    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e/1': { note: 'nope' } } },
+    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e.check/v1': { note: 'nope' } } },
     'on a spatial document',
     'Facets are OKF frontmatter',
   )
@@ -704,7 +704,7 @@ async function main() {
     '  - smoke',
     '  - e2e',
     'facets:',
-    '  issue/1:',
+    '  example.sample/v1:',
     '    status: open',
     '---',
     'Imported body.',
@@ -726,7 +726,7 @@ async function main() {
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)
   }
-  if (!exported.frontmatter.facets?.['issue/1']) {
+  if (!exported.frontmatter.facets?.['example.sample/v1']) {
     throw new Error(
       `canvas_export_okf facets missing after import: ${JSON.stringify(exported.frontmatter)}`,
     )

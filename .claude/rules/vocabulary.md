@@ -10,7 +10,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 |---|---|---|
 | **Workspace** | the tree that holds documents; owns placement (`segment`, derived `alias`) and naming (display name) | anything about a document's content |
 | **Document** | the unit a workspace contains. Has a kind | a canvas |
-| **Facet** | OKF frontmatter (`type`, `tags`, extension `{domain}/{version}` buckets) | metadata on a JSON Canvas document — that concept does not exist yet |
+| **Facet** | a namespaced, versioned, schema'd attribute group attached to an object — key grammar `{namespace}.{name}/v{n}`, registered by a plugin at distribution time ([ADR-0013](../../docs/contributing/adr/0013-facet-system.md)). OKF core frontmatter (`type`, `tags`) stays a markdown-document concern | a runtime-definable schema, or anything with a privileged "core" namespace — no facet is core; only the engine is |
 | **Body** | an OKF document's markdown body | a spatial document's content |
 | **Node** / **Edge** | JSON Canvas elements | anything in an OKF document |
 | **Canvas** | the spatial surface, and the JSON Canvas format | the container a workspace holds — that is a Document |

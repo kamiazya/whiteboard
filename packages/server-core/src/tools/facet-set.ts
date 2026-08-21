@@ -12,7 +12,7 @@ import { loadOrCreateDocument, saveDocumentSnapshot } from './document-io.js'
 import { DocumentKindMismatchError } from './errors.js'
 
 /**
- * `extensionFacetsSchema` already enforces the `{domain}/{version}` key
+ * `extensionFacetsSchema` already enforces the `{namespace}.{name}/v{n}` key
  * pattern (model's `EXTENSION_FACET_KEY_PATTERN`), so a caller can
  * never use this tool to set a core facet (`type`/`title`/`tags`/`view`) or
  * the raw `facets` root key itself — those don't match the pattern and are
