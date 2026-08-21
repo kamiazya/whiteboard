@@ -1,13 +1,9 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it, vi } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 
-const base = {
-  daemonFetch: globalThis.fetch,
-  daemonBaseUrl: 'http://127.0.0.1:3099',
-  workspaceId: 'ws',
-}
 const spatial = { documentId: 'c1', path: 'a/b', kind: 'spatial' as const }
 const markdown = { documentId: 'c2', path: 'notes', kind: 'markdown' as const }
 
@@ -15,39 +11,31 @@ describe('createRowOutlineLoader', () => {
   // Kind decides where the shape comes from, and reading the wrong endpoint
   // would either 404 or answer with a shape of the wrong thing.
   it('reads a spatial document’s snapshot, not its OKF', async () => {
-    const getSnapshot = vi.fn(async () => new Uint8Array())
-    const getOkf = vi.fn(async () => ({ markdown: '' }))
-    await createRowOutlineLoader({ ...base, getSnapshot, getOkf })(spatial)
-    expect(getSnapshot).toHaveBeenCalledOnce()
-    expect(getOkf).not.toHaveBeenCalled()
+    const source = fakeFilesSource()
+    await createRowOutlineLoader({ source })(spatial)
+    expect(source.loadSpatialSnapshot).toHaveBeenCalledOnce()
+    expect(source.loadMarkdown).not.toHaveBeenCalled()
   })
 
   it('reads a markdown document’s OKF, not its snapshot', async () => {
-    const getSnapshot = vi.fn(async () => new Uint8Array())
-    const getOkf = vi.fn(async () => ({ markdown: '' }))
-    await createRowOutlineLoader({ ...base, getSnapshot, getOkf })(markdown)
-    expect(getOkf).toHaveBeenCalledOnce()
-    expect(getSnapshot).not.toHaveBeenCalled()
+    const source = fakeFilesSource()
+    await createRowOutlineLoader({ source })(markdown)
+    expect(source.loadMarkdown).toHaveBeenCalledOnce()
+    expect(source.loadSpatialSnapshot).not.toHaveBeenCalled()
   })
 
-  it('addresses a spatial document by path and a markdown one by id', async () => {
-    const seen: string[] = []
-    const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async (_f, _u, _w, path) => {
-        seen.push(`snapshot:${path}`)
-        return new Uint8Array()
-      },
-      getOkf: async (_f, _u, _w, documentId) => {
-        seen.push(`okf:${documentId}`)
-        return { markdown: '' }
-      },
-    })
+  it('hands each read the whole entry, so the source can address either way', async () => {
+    // The daemon serves a snapshot at the PATH and OKF by the ID; the local
+    // store keys everything by id. Passing the entry — not one field chosen
+    // here — is what lets each source pick its own address, which is the
+    // decision this loader used to make for them and got to be daemon-only by
+    // making.
+    const source = fakeFilesSource()
+    const load = createRowOutlineLoader({ source })
     await load(spatial)
     await load(markdown)
-    // The path is the address a snapshot is served at; the id is what the
-    // OKF read takes. Swapping them 404s.
-    expect(seen).toEqual(['snapshot:a/b', 'okf:c2'])
+    expect(source.loadSpatialSnapshot).toHaveBeenCalledWith(spatial)
+    expect(source.loadMarkdown).toHaveBeenCalledWith(markdown)
   })
 
   // The branch that actually produces a miniature. Every other test here
@@ -64,9 +52,7 @@ describe('createRowOutlineLoader', () => {
       return blocks
     }
     const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async () => new Uint8Array(),
-      getOkf: async () => ({ markdown: '# Title\n\nProse.\n' }),
+      source: fakeFilesSource({ loadMarkdown: async () => '# Title\n\nProse.\n' }),
       layoutMarkdown,
     })
 
@@ -78,9 +64,7 @@ describe('createRowOutlineLoader', () => {
 
   it('answers null when the layout refuses', async () => {
     const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async () => new Uint8Array(),
-      getOkf: async () => ({ markdown: '# Title\n' }),
+      source: fakeFilesSource({ loadMarkdown: async () => '# Title\n' }),
       layoutMarkdown: async () => null,
     })
     await expect(load(markdown)).resolves.toBeNull()
@@ -100,9 +84,7 @@ describe('createRowOutlineLoader', () => {
     const snapshot = doc.export({ mode: 'snapshot' })
 
     const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async () => snapshot,
-      getOkf: async () => ({ markdown: '' }),
+      source: fakeFilesSource({ loadSpatialSnapshot: async () => snapshot }),
     })
 
     const rects = await load(spatial)
@@ -114,29 +96,25 @@ describe('createRowOutlineLoader', () => {
   // the whole tree down with it.
   it('answers null rather than throwing when the read fails', async () => {
     const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async () => {
-        throw new Error('offline')
-      },
-      getOkf: async () => ({ markdown: '' }),
+      source: fakeFilesSource({
+        loadSpatialSnapshot: async () => {
+          throw new Error('offline')
+        },
+      }),
     })
     await expect(load(spatial)).resolves.toBeNull()
   })
 
   it('answers null rather than laying out an empty markdown document', async () => {
     const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async () => new Uint8Array(),
-      getOkf: async () => ({ markdown: '   \n' }),
+      source: fakeFilesSource({ loadMarkdown: async () => '   \n' }),
     })
     await expect(load(markdown)).resolves.toBeNull()
   })
 
   it('answers null for a snapshot that is not a document', async () => {
     const load = createRowOutlineLoader({
-      ...base,
-      getSnapshot: async () => new Uint8Array([1, 2, 3]),
-      getOkf: async () => ({ markdown: '' }),
+      source: fakeFilesSource({ loadMarkdown: async () => '' }),
     })
     await expect(load(spatial)).resolves.toBeNull()
   })

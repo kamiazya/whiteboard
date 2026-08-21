@@ -1,4 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
+import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
 import { createRowRenderLoader, type RowRenderDeps } from './load-row-render.js'
 
 const SVG = '<svg xmlns="http://www.w3.org/2000/svg"><rect/></svg>'
@@ -6,12 +7,8 @@ const BOUNDS = { x: 0, y: 0, w: 640, h: 200 }
 
 function deps(over: Partial<RowRenderDeps> = {}): RowRenderDeps {
   return {
-    daemonFetch: vi.fn() as unknown as typeof globalThis.fetch,
-    daemonBaseUrl: 'http://d',
-    workspaceId: 'default',
+    source: fakeFilesSource({ loadMarkdown: vi.fn(async () => '# Hi') }),
     theme: 'light',
-    getSnapshot: vi.fn(async () => new Uint8Array()),
-    getOkf: vi.fn(async () => ({ markdown: '# Hi' })),
     renderMarkdown: vi.fn(async () => ({ svg: SVG, bounds: BOUNDS })),
     renderSpatial: vi.fn(async () => ({ svg: SVG, bounds: BOUNDS })),
     readCanvas: vi.fn(() => ({ nodes: [], edges: [] })),
@@ -32,14 +29,14 @@ describe('createRowRenderLoader', () => {
       svg: SVG,
       bounds: BOUNDS,
     })
-    expect(d.getOkf).toHaveBeenCalledWith(d.daemonFetch, 'http://d', 'default', 'd1')
+    expect(d.source.loadMarkdown).toHaveBeenCalledWith(
+      expect.objectContaining({ documentId: 'd1' }),
+    )
     expect(d.renderMarkdown).toHaveBeenCalledWith('# Hi', expect.any(Number))
-    expect(d.getSnapshot).not.toHaveBeenCalled()
+    expect(d.source.loadSpatialSnapshot).not.toHaveBeenCalled()
   })
 
-  // Spatial reads by PATH and markdown by id — two different routes, and
-  // sending either one the other's key is a 404 that reads as "no picture".
-  it('renders a spatial document from its snapshot, by path', async () => {
+  it('renders a spatial document from its snapshot', async () => {
     const d = deps()
     const load = createRowRenderLoader(d)
 
@@ -47,9 +44,13 @@ describe('createRowRenderLoader', () => {
       svg: SVG,
       bounds: BOUNDS,
     })
-    expect(d.getSnapshot).toHaveBeenCalledWith(d.daemonFetch, 'http://d', 'default', 'deep/one')
+    // The whole entry, so the source addresses it its own way — the daemon
+    // by path, the local store by id.
+    expect(d.source.loadSpatialSnapshot).toHaveBeenCalledWith(
+      expect.objectContaining({ path: 'deep/one' }),
+    )
     expect(d.renderSpatial).toHaveBeenCalledWith({ nodes: [], edges: [] }, 'light')
-    expect(d.getOkf).not.toHaveBeenCalled()
+    expect(d.source.loadMarkdown).not.toHaveBeenCalled()
   })
 
   it('carries the theme, so a dark row is not drawn in light ink', async () => {
@@ -61,7 +62,7 @@ describe('createRowRenderLoader', () => {
   // An empty body lays out to nothing; asking the pool for it spends a slot
   // to produce a blank picture.
   it('answers null for an empty body without touching the pool', async () => {
-    const d = deps({ getOkf: vi.fn(async () => ({ markdown: '   \n  ' })) })
+    const d = deps({ source: fakeFilesSource({ loadMarkdown: async () => '   \n  ' }) })
     expect(
       await createRowRenderLoader(d)({ documentId: 'd1', path: 'a', kind: 'markdown' }),
     ).toBeNull()
@@ -72,8 +73,10 @@ describe('createRowRenderLoader', () => {
   // list of forty rows must not be brought down by one unreadable document.
   it('answers null when the read throws', async () => {
     const d = deps({
-      getOkf: vi.fn(async () => {
-        throw new Error('403')
+      source: fakeFilesSource({
+        loadMarkdown: async () => {
+          throw new Error('403')
+        },
       }),
     })
     expect(

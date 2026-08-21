@@ -1,8 +1,10 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { DocumentListView } from '../components/document-list/DocumentListView.js'
+import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
@@ -12,6 +14,7 @@ import {
   LOCAL_WORKSPACE_ID,
   listLocalDocuments,
 } from '../lib/local-document-summary.js'
+import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import {
@@ -56,6 +59,14 @@ export function BrowserLocalIndexPage({
   // and a handler-side `if (creating) return` reads a stale closure in
   // exactly the same-tick case it would have to catch.
   const [creating, setCreating] = useState(false)
+  // The same two projections the daemon page offers, so the browser is one
+  // surface across both modes rather than a grid here and a tree there.
+  const [view, setView] = useState<'grid' | 'tree'>('grid')
+  const filesSource = useMemo(() => createLocalFilesSource(), [])
+  // Deletions happen in this page's dialog, behind the panel's back — the
+  // panel re-reads whenever this identity changes, exactly as on the daemon
+  // page.
+  const [filesRevision, setFilesRevision] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -123,6 +134,9 @@ export function BrowserLocalIndexPage({
         await pointer.clear()
       }
       setSnapshots(await listLocalDocuments(index, clock))
+      // The tree view holds its own copy of the list; this identity change is
+      // its signal to re-read, same contract as the daemon page's `revision`.
+      setFilesRevision((revision) => revision + 1)
       setPendingDelete(null)
     } catch {
       setDeleteError('Failed to delete the canvas from this browser.')
@@ -162,12 +176,41 @@ export function BrowserLocalIndexPage({
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
       <h1 className="sr-only">Canvases</h1>
+      <div className="mb-2 flex items-center">
+        <div className="ml-auto flex items-center gap-0.5 rounded-md border p-0.5">
+          <button
+            type="button"
+            aria-label="Grid view"
+            aria-pressed={view === 'grid'}
+            onClick={() => setView('grid')}
+            className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+          >
+            <LayoutGrid className="size-4" />
+          </button>
+          <button
+            type="button"
+            aria-label="Tree view"
+            aria-pressed={view === 'tree'}
+            onClick={() => setView('tree')}
+            className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
+          >
+            <ListTree className="size-4" />
+          </button>
+        </div>
+      </div>
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}
         </div>
       )}
-      {snapshots === null && !error ? (
+      {view === 'tree' ? (
+        <WorkspaceFilesPanel
+          source={filesSource}
+          onOpenDocument={onOpenDocument}
+          onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
+          revision={filesRevision}
+        />
+      ) : snapshots === null && !error ? (
         <div
           role="status"
           aria-label="Loading documents"

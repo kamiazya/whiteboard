@@ -26,6 +26,7 @@ import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
+import type { WorkspaceFilesSource } from './files-source.js'
 
 export interface DocumentRender {
   readonly svg: string
@@ -41,23 +42,9 @@ export interface DocumentRender {
 const ROW_LAYOUT_WIDTH = 640
 
 export interface RowRenderDeps {
-  readonly daemonFetch: typeof globalThis.fetch
-  readonly daemonBaseUrl: string
-  readonly workspaceId: string
+  readonly source: WorkspaceFilesSource
   /** Spatial rendering resolves its palette from this; markdown takes its ink from CSS. */
   readonly theme: ResolvedTheme
-  readonly getSnapshot: (
-    fetchFn: typeof globalThis.fetch,
-    baseUrl: string,
-    workspaceId: string,
-    path: string,
-  ) => Promise<Uint8Array>
-  readonly getOkf: (
-    fetchFn: typeof globalThis.fetch,
-    baseUrl: string,
-    workspaceId: string,
-    documentId: string,
-  ) => Promise<{ markdown: string }>
   /**
    * The two renders and the snapshot decode are injected like the reads
    * above, so the branch that actually produces a picture is assertable
@@ -103,22 +90,12 @@ export function createRowRenderLoader(deps: RowRenderDeps) {
   return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
     try {
       if (document.kind === 'markdown') {
-        const { markdown } = await deps.getOkf(
-          deps.daemonFetch,
-          deps.daemonBaseUrl,
-          deps.workspaceId,
-          document.documentId,
-        )
+        const markdown = await deps.source.loadMarkdown(document)
         if (markdown.trim() === '') return null
         return await (deps.renderMarkdown ?? renderMarkdownInPool)(markdown, ROW_LAYOUT_WIDTH)
       }
 
-      const bytes = await deps.getSnapshot(
-        deps.daemonFetch,
-        deps.daemonBaseUrl,
-        deps.workspaceId,
-        document.path,
-      )
+      const bytes = await deps.source.loadSpatialSnapshot(document)
       const canvas = (deps.readCanvas ?? decodeCanvas)(bytes)
       return await (deps.renderSpatial ?? renderSpatialInPool)(canvas, deps.theme)
     } catch {
