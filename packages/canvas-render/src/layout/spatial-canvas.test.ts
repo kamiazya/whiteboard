@@ -4,6 +4,7 @@ import { describe, expect, it, vi } from 'vitest'
 import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { outlineContains } from './node-outline.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
 import {
@@ -179,6 +180,60 @@ describe('layoutSpatialCanvas', () => {
       (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
     )
     expect(chrome?.shape).toBe('hexagon')
+  })
+
+  it('a shaped node lays its text inside the silhouette, never across the outline', () => {
+    // The box is the RECT's content area; a silhouette is inscribed in it,
+    // so rect-based placement puts the first line straight through an
+    // ellipse's rim and a cylinder's lid. Every content corner must satisfy
+    // the same containment the outline itself is drawn and hit-tested by.
+    for (const kind of ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const) {
+      const bbox = { x: 0, y: 0, w: 200, h: 100 }
+      const shaped = {
+        ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'inset me' }),
+        'x-whiteboard': { facets: { 'visual.shape/v0': { kind } } },
+      }
+      const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+      const content = scene.nodes.filter((n) => n.kind !== 'shape' && 'bbox' in n)
+      expect(content.length, kind).toBeGreaterThan(0)
+      for (const n of content) {
+        if (!('bbox' in n)) continue
+        const { x, y, w, h } = n.bbox
+        const corners = [
+          { x, y },
+          { x: x + w, y },
+          { x, y: y + h },
+          { x: x + w, y: y + h },
+        ]
+        for (const corner of corners) {
+          expect(
+            outlineContains(kind, bbox, corner),
+            `${kind} content corner ${JSON.stringify(corner)}`,
+          ).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('short content in a shaped node sits vertically centered; a plain rect stays top-aligned', () => {
+    // Policy: inscribed box + vertical centering when the content fits
+    // (an overflowing body fills the box, so centering degrades to the
+    // top-aligned truncate+fade contract untouched). Rect nodes keep their
+    // exact top-aligned placement — byte-stable for every existing canvas.
+    const shaped = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'ellipse' as const } } },
+    }
+    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+    const block = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(block).toBeDefined()
+    const blockCenter = (block?.bbox.y ?? 0) + (block?.bbox.h ?? 0) / 2
+    expect(Math.abs(blockCenter - 50)).toBeLessThan(6)
+
+    const plain = textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'one line' })
+    const plainScene = layoutSpatialCanvas(canvas([plain]), baseOptions())
+    const plainBlock = plainScene.nodes.find((n) => n.kind === 'paragraph')
+    expect(plainBlock?.bbox.y).toBe(NODE_PADDING_PX)
   })
 
   it('an explicit nodeOutlines option overrides the facet for that node', () => {

@@ -169,21 +169,25 @@ describe('decorated-scene column (outline decorations vs group reuse)', () => {
       nodeOutlines,
     })
 
-  it('decorating two nodes with outlines touches exactly their two chrome groups', () => {
+  it("decorating two nodes with outlines touches exactly those nodes' chrome and content", () => {
     // On this grid the neighbours are axis-aligned, so every edge anchor
     // sits at a side midpoint — a TANGENT point of both outlines — and the
-    // rim pull-in moves nothing: decoration costs only the decorated
-    // chrome. An off-axis anchor would add its edge's group to the count,
-    // which is the number to re-pin if the corpus ever gains one.
+    // rim pull-in moves nothing: decoration costs the decorated chrome PLUS
+    // that node's own content, which re-lays against the silhouette's
+    // inscribed box (3 groups per decorated node here). An off-axis anchor
+    // would add its edge's group to the count, which is the number to
+    // re-pin if the corpus ever gains one.
     const { canvas } = buildCanvas()
     const decorated = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
-    expect(diffCount(layout(canvas), decorated)).toEqual({ changed: 2, total: 178 })
+    expect(diffCount(layout(canvas), decorated)).toEqual({ changed: 6, total: 178 })
   })
 
-  it("swapping one node's outline kind replaces exactly that node's chrome group", () => {
+  it("swapping one node's outline kind replaces that node's chrome and repositions its content", () => {
     const { canvas } = buildCanvas()
     const before = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
     const after = layoutWith(canvas, { n5: 'diamond', n12: 'hexagon' })
-    expect(diffCount(before, after)).toEqual({ changed: 1, total: 178 })
+    // Total is one below the decorate case: the diamond's inscribed box is
+    // smaller than the ellipse's, so n5 fits one block fewer.
+    expect(diffCount(before, after)).toEqual({ changed: 3, total: 177 })
   })
 })

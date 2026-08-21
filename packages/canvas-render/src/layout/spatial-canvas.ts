@@ -55,7 +55,7 @@ import {
   layoutMdastBlocks,
   type MdastLayoutOptions,
 } from './mdast-blocks.js'
-import { type NodeOutlineKind, outlineEntryPoint } from './node-outline.js'
+import { type NodeOutlineKind, outlineContentBox, outlineEntryPoint } from './node-outline.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
@@ -360,8 +360,26 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
   }
 }
 
-function contentWidth(nodeWidth: number, options: ResolvedLayoutOptions): number {
-  const width = nodeWidth - 2 * options.geometry.paddingPx
+/**
+ * The box a node's content lays out against: the silhouette's inscribed box
+ * for a shaped node, the node box itself otherwise. Natural sizing
+ * (`fitToBox: false`) stays rect-based — it asks how big the BOX must be,
+ * and the inscribed mapping would have to be inverted, not applied.
+ * ponytail: auto-fit under-sizes a shaped node; invert outlineContentBox in
+ * naturalNodeContentSize when shaped auto-fit matters.
+ *
+ * The placement policy (inscribed box + vertical centering below) is fixed
+ * today; a later visual text-placement facet resolves per node HERE, the
+ * same seam `resolveNodeOutlines` fills for the silhouette itself.
+ */
+function nodeContentBounds(node: SpatialNode, options: ResolvedLayoutOptions): BoundingBox {
+  const box = { x: node.x, y: node.y, w: node.width, h: node.height }
+  if (!options.fitToBox) return box
+  return outlineContentBox(options.nodeOutlines?.[node.id], box)
+}
+
+function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number {
+  const width = nodeContentBounds(node, options).w - 2 * options.geometry.paddingPx
   const floor = options.geometry.minContentWidthPx
   return Number.isFinite(width) && width > floor ? width : floor
 }
@@ -443,7 +461,22 @@ function placeInNode(
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
   const padding = options.geometry.paddingPx
-  return translateScene(content, node.x + padding, node.y + padding).nodes
+  const bounds = nodeContentBounds(node, options)
+  // A SHAPED node centers content that fits vertically — the diagram-symbol
+  // convention (Excalidraw/draw.io). An overflowing body fills the inscribed
+  // box, so the offset is 0 and the top-aligned truncate+fade contract is
+  // untouched; a plain rect never gets an offset, keeping every existing
+  // canvas byte-identical.
+  let dy = 0
+  if (options.fitToBox && options.nodeOutlines?.[node.id] !== undefined) {
+    const innerH = bounds.h - 2 * padding
+    const contentH = Math.max(
+      0,
+      ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
+    )
+    if (contentH < innerH) dy = (innerH - contentH) / 2
+  }
+  return translateScene(content, bounds.x + padding, bounds.y + padding + dy).nodes
 }
 
 /** Gap between a container's outside label and its frame's top edge. */
@@ -497,13 +530,20 @@ function composeTextNode(
   node: Extract<SpatialNode, { type: 'text' }>,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const maxWidth = contentWidth(node.width, options)
+  const maxWidth = contentWidth(node, options)
   // Position deliberately absent from the key: the cached value is
   // origin-relative (see `contentCache`'s contract), so a moved node hits.
+  // The silhouette is part of the key: a shaped node lays out against its
+  // inscribed box, so the same (width, height, text) fits differently.
   const cacheKey =
     options.contentCache === undefined
       ? undefined
-      : JSON.stringify([node.width, node.height, node.text])
+      : JSON.stringify([
+          node.width,
+          node.height,
+          node.text,
+          options.nodeOutlines?.[node.id] ?? null,
+        ])
   const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks
   if (cached !== undefined) {
@@ -586,6 +626,11 @@ function composeFileEmbed(
 
   const childScene = layoutSpatialCanvasInternalScene(child, {
     ...options,
+    // Silhouettes resolve per CANVAS, keyed by that canvas's own node ids:
+    // spreading the parent's map both drops the child's facets and leaks a
+    // same-id root node's shape into the embedded canvas. Explicit per-node
+    // overrides are root-keyed by contract, so they do not descend.
+    nodeOutlines: resolveNodeOutlines(child, undefined),
     embedPath: new Set([...options.embedPath, node.file]),
     embedDepth: options.embedDepth + 1,
   })
@@ -654,8 +699,9 @@ function contentBox(
   options: ResolvedLayoutOptions,
 ): { readonly w: number; readonly h: number } | undefined {
   const padding = options.geometry.paddingPx
-  const w = node.width - 2 * padding
-  const h = node.height - 2 * padding
+  const bounds = nodeContentBounds(node, options)
+  const w = bounds.w - 2 * padding
+  const h = bounds.h - 2 * padding
   return w > 0 && h > 0 ? { w, h } : undefined
 }
 
@@ -693,7 +739,7 @@ function fitBodyInNode(
   // box" reported the label's height for a small box and the body's for a
   // large one.
   if (options.fitToBox && contentBox(node, options) === undefined) return undefined
-  const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
+  const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node, options), options))
   return fitSceneInNode(body, node, options)
 }
 
@@ -865,7 +911,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
             chrome,
             ...placeInNode(
               node,
-              { nodes: [labelRun(label, options, contentWidth(node.width, options))] },
+              { nodes: [labelRun(label, options, contentWidth(node, options))] },
               options,
             ),
           ]
@@ -894,7 +940,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
             chrome,
             ...placeInNode(
               node,
-              { nodes: [labelRun(label, options, contentWidth(node.width, options))] },
+              { nodes: [labelRun(label, options, contentWidth(node, options))] },
               options,
             ),
           ]
