@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { nodeOutline, outlineContains } from './node-outline.js'
+import { nodeOutline, outlineContains, outlineEntryPoint } from './node-outline.js'
 
 const box = { x: 10, y: 20, w: 100, h: 60 }
 
@@ -127,5 +127,42 @@ describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
     // Above the top cap's crown is outside; the crown's own center is inside.
     expect(outlineContains('cylinder', box, { x: 12, y: 21 })).toBe(false)
     expect(outlineContains('cylinder', box, { x: 60, y: 21 })).toBe(true)
+  })
+})
+
+describe('outlineEntryPoint — where a segment entering the box first meets the outline', () => {
+  it('ellipse: a horizontal approach lands on the rim, not the bbox border', () => {
+    // Approaching the box's left edge midpoint from the left: the rim IS
+    // the border there (tangent point), so the point stays put.
+    const tangent = outlineEntryPoint('ellipse', box, { x: -40, y: 50 }, { x: 10, y: 50 })
+    expect(tangent.x).toBeCloseTo(10, 3)
+    expect(tangent.y).toBeCloseTo(50, 3)
+    // Approaching a corner-adjacent border point: the rim sits INSIDE the
+    // bbox along the approach line, so the entry point is pulled inward.
+    const pulled = outlineEntryPoint('ellipse', box, { x: 60, y: -40 }, { x: 85, y: 20 })
+    expect(outlineContains('ellipse', box, pulled)).toBe(true)
+    expect(pulled.y).toBeGreaterThan(20)
+    // The returned point is ON the boundary: nudging back along the
+    // approach direction leaves the outline.
+    expect(outlineContains('ellipse', box, { x: pulled.x - 0.5, y: pulled.y - 1.2 })).toBe(false)
+  })
+
+  it('diamond: a corner-ward approach is pulled to the sloped side', () => {
+    const pulled = outlineEntryPoint('diamond', box, { x: -40, y: -10 }, { x: 20, y: 26 })
+    expect(outlineContains('diamond', box, pulled)).toBe(true)
+    expect(pulled.x).toBeGreaterThan(20)
+  })
+
+  it('is total: a segment that never enters the outline returns the terminal unchanged', () => {
+    const kept = outlineEntryPoint('ellipse', box, { x: -40, y: 20 }, { x: 10, y: 20 })
+    expect(kept).toEqual({ x: 10, y: 20 })
+    expect(
+      outlineEntryPoint(
+        'ellipse',
+        { x: Number.NaN, y: 0, w: 1, h: 1 },
+        { x: 0, y: 0 },
+        { x: 1, y: 1 },
+      ),
+    ).toEqual({ x: 1, y: 1 })
   })
 })

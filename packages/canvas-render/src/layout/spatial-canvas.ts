@@ -31,6 +31,7 @@ import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
+  BoundingBox,
   ResolvedEdgeNode,
   Scene,
   SceneNode,
@@ -47,6 +48,7 @@ import {
   layoutMdastBlocks,
   type MdastLayoutOptions,
 } from './mdast-blocks.js'
+import { type NodeOutlineKind, outlineEntryPoint } from './node-outline.js'
 import { scaleScene } from './scale-scene.js'
 import type { SpatialAppearanceResolver } from './spatial-appearance.js'
 import {
@@ -123,6 +125,15 @@ export interface SpatialLayoutOptions {
    * through the full pipeline.
    */
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
+  /**
+   * Non-rect silhouettes per node id, threaded onto each node's chrome
+   * shape and consulted when finishing edge routes (a terminal on the
+   * bbox border is pulled onto the outline rim via `outlineEntryPoint`).
+   * Plain DATA — a record, never a resolver function — for the same
+   * reason as `ResolvedReference`: it must cross `postMessage` so worker
+   * layout keeps working when outlines are wired.
+   */
+  readonly nodeOutlines?: Readonly<Record<string, NodeOutlineKind>>
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
@@ -350,11 +361,13 @@ function contentWidth(nodeWidth: number, options: ResolvedLayoutOptions): number
 
 function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
+  const shape = options.nodeOutlines?.[node.id]
   return {
     kind: 'shape',
     id: node.id,
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
     ...(resolved.radius !== undefined ? { radius: resolved.radius } : {}),
+    ...(shape !== undefined ? { shape } : {}),
     ...(resolved.appearance !== undefined ? { appearance: resolved.appearance } : {}),
   }
 }
@@ -907,9 +920,58 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
-  const routed = routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style, anchors)
+  const routed = pullEdgeOntoOutlines(
+    routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style, anchors),
+    canvas,
+    edge,
+    options.nodeOutlines,
+  )
   const appearance = options.appearance.resolveEdge(edge)
   return appearance === undefined ? routed : { ...routed, appearance }
+}
+
+/**
+ * A route terminates ON the endpoint's bbox border, which for every
+ * inscribed outline is OUTSIDE the silhouette except at tangent points —
+ * an arrowhead would float off an ellipse's shoulder. Each end whose node
+ * declares an outline is pulled inward along its own approach segment via
+ * `outlineEntryPoint`, AFTER routing: the router and its cost model keep
+ * reading rects, so routing behaviour (and the routing scoreboard) is
+ * untouched by construction.
+ */
+function pullEdgeOntoOutlines(
+  routed: ResolvedEdgeNode,
+  canvas: SpatialCanvas,
+  edge: CanvasEdge,
+  nodeOutlines: Readonly<Record<string, NodeOutlineKind>> | undefined,
+): ResolvedEdgeNode {
+  if (nodeOutlines === undefined || routed.path.length < 2) return routed
+  const boxOf = (id: string): BoundingBox | undefined => {
+    const node = canvas.nodes.find((candidate) => candidate.id === id)
+    return node === undefined ? undefined : { x: node.x, y: node.y, w: node.width, h: node.height }
+  }
+  let path = routed.path
+  const toKind = nodeOutlines[edge.toNode]
+  const toBox = toKind === undefined ? undefined : boxOf(edge.toNode)
+  if (toKind !== undefined && toBox !== undefined) {
+    const last = path[path.length - 1]
+    const inward = path[path.length - 2]
+    if (last !== undefined && inward !== undefined) {
+      const pulled = outlineEntryPoint(toKind, toBox, inward, last)
+      if (pulled !== last) path = [...path.slice(0, -1), pulled]
+    }
+  }
+  const fromKind = nodeOutlines[edge.fromNode]
+  const fromBox = fromKind === undefined ? undefined : boxOf(edge.fromNode)
+  if (fromKind !== undefined && fromBox !== undefined) {
+    const first = path[0]
+    const inward = path[1]
+    if (first !== undefined && inward !== undefined) {
+      const pulled = outlineEntryPoint(fromKind, fromBox, inward, first)
+      if (pulled !== first) path = [pulled, ...path.slice(1)]
+    }
+  }
+  return path === routed.path ? routed : { ...routed, path }
 }
 
 /**

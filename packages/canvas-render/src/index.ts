@@ -1,4 +1,10 @@
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
+export {
+  type NodeOutline,
+  nodeOutline,
+  outlineContains,
+  outlineEntryPoint,
+} from './layout/node-outline.js'
 export { flattenDrawnEdgePath } from './layout/edge-flatten.js'
 export { edgeLabelAnchor } from './layout/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edge-rounding.js'
@@ -61,6 +67,7 @@ export type {
   ParagraphBlockNode,
   RawHtmlNode,
   ResolvedEdgeNode,
+  NodeOutlineKind,
   Scene,
   SceneNode,
   ShapeSceneNode,

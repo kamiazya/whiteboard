@@ -146,6 +146,63 @@ export function outlineContains(
   }
 }
 
+/** Search resolution for the boundary crossing: 2^-32 of the segment
+ * length is far below a hundredth of a pixel at canvas scale. */
+const ENTRY_SEARCH_ITERATIONS = 32
+
+/**
+ * Where the extension of `from -> to` first meets the outline at or beyond
+ * `to` — the edge-anchoring half of the producer. An edge routed against
+ * the bbox terminates ON the bbox border, which for every inscribed
+ * outline is OUTSIDE the silhouette except at tangent points; this pulls
+ * that terminal inward along its approach direction so an arrowhead
+ * touches the rim it appears to point at.
+ *
+ * Derived from `outlineContains` by bisection rather than per-kind
+ * intersection math, deliberately: every outline is convex along the
+ * probed ray, one implementation serves all kinds, and the boundary the
+ * anchor lands on is BY CONSTRUCTION the same one hit-testing answers
+ * for — nothing to drift, no parity test needed. Total: if the probed
+ * span never enters the outline (or any input is non-finite), `to` is
+ * returned unchanged.
+ */
+export function outlineEntryPoint(
+  kind: NodeOutlineKind,
+  box: BoundingBox,
+  from: { readonly x: number; readonly y: number },
+  to: { readonly x: number; readonly y: number },
+): { readonly x: number; readonly y: number } {
+  if (!isFiniteBox(box)) return to
+  if (![from.x, from.y, to.x, to.y].every(Number.isFinite)) return to
+  if (outlineContains(kind, box, to)) return to
+  // Probe from `to` toward the box center — the deepest point the
+  // continuation of the approach can meaningfully reach inside a convex
+  // outline that contains the center.
+  const center = { x: box.x + box.w / 2, y: box.y + box.h / 2 }
+  const dx = to.x - from.x
+  const dy = to.y - from.y
+  const length = Math.hypot(dx, dy)
+  // With no usable approach direction, fall back to probing straight at
+  // the center so a degenerate edge still lands on the boundary.
+  const dirX = length > 0 ? dx / length : center.x - to.x
+  const dirY = length > 0 ? dy / length : center.y - to.y
+  // The farthest useful probe: past the center the ray is leaving again.
+  const span = Math.hypot(center.x - to.x, center.y - to.y)
+  const dirLength = Math.hypot(dirX, dirY)
+  if (!(dirLength > 0) || !Number.isFinite(span)) return to
+  const far = { x: to.x + (dirX / dirLength) * span, y: to.y + (dirY / dirLength) * span }
+  if (!outlineContains(kind, box, far)) return to
+  let lo = 0 // outside
+  let hi = 1 // inside
+  for (let i = 0; i < ENTRY_SEARCH_ITERATIONS; i++) {
+    const mid = (lo + hi) / 2
+    const point = { x: to.x + (far.x - to.x) * mid, y: to.y + (far.y - to.y) * mid }
+    if (outlineContains(kind, box, point)) hi = mid
+    else lo = mid
+  }
+  return { x: to.x + (far.x - to.x) * hi, y: to.y + (far.y - to.y) * hi }
+}
+
 /** Clockwise convex polygon containment: the point must not lie strictly on
  * the outward side of any edge. */
 function convexPolygonContains(
