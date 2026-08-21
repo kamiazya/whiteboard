@@ -212,7 +212,7 @@ it('the worker markdown SVG is the main-thread markdown SVG', async () => {
 
   expect(fromWorker.type).toBe('markdown-render-done')
   if (fromWorker.type !== 'markdown-render-done') return
-  expect(fromWorker.svg).toBe(onMain.svg)
+  expect(fromWorker.svg).toBe(onMain.keyed.svg)
   expect(fromWorker.bounds.w).toBeGreaterThan(0)
   expect(fromWorker.bounds.h).toBeGreaterThan(0)
 }, 60_000)

@@ -2,6 +2,7 @@ import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canva
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { type CSSProperties, type MutableRefObject, useEffect, useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
+import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import { editorTextFill } from '../spatial-editor/editor-appearance.js'
 import type { RailBlock } from './rail-geometry.js'
 import { type PreviewBlockAnchor, renderMarkdownPreview } from './render-preview.js'
@@ -37,20 +38,24 @@ export interface PreviewPaneProps {
 }
 
 /**
- * Renders `value` through the SVG string produced by
- * `renderMarkdownPreviewSvg` (codec -> canvas-render). Injecting that
- * string via `dangerouslySetInnerHTML` carries the same soundness rationale
- * as `packages/canvas-viewer/src/CanvasViewer.tsx`: canvas-render's
- * serializer is the SOLE producer of this string and escapes text content
- * (`&`/`<`/`>`) and attribute values (`"`/`'`) — there is no untrusted-HTML
- * injection path here. The one addition to that reasoning: `renderMath` /
- * `renderDiagram` fragments are emitted verbatim by the backend, so they
- * must come only from engines safe against untrusted document text —
- * MathJax typesets into its own glyph paths, and mermaid runs at
- * securityLevel 'strict' (see markdown-fragment-renderers.ts). Do not add
- * a sanitizer dependency; if this string ever stops being canvas-render's
- * own output plus those two engines' fragments, this reasoning no longer
- * holds and must be revisited.
+ * Renders `value` through the keyed SVG projection produced by
+ * `renderMarkdownPreview` (codec -> canvas-render), mounted once and DOM-
+ * patched per change (lib/keyed-svg-patcher.ts): a keystroke replaces only
+ * the edited block's group, so decoded images, running diagrams and
+ * animations in untouched blocks survive, and block moves glide (FLIP).
+ * Every byte the patcher injects is still canvas-render's serializer
+ * output, carrying the same soundness rationale as
+ * `packages/canvas-viewer/src/CanvasViewer.tsx`: the serializer is the
+ * SOLE producer and escapes text content (`&`/`<`/`>`) and attribute
+ * values (`"`/`'`) — there is no untrusted-HTML injection path here. The
+ * one addition to that reasoning: `renderMath` / `renderDiagram` fragments
+ * are emitted verbatim by the backend, so they must come only from engines
+ * safe against untrusted document text — MathJax typesets into its own
+ * glyph paths, and mermaid runs at securityLevel 'strict' (see
+ * markdown-fragment-renderers.ts). Do not add a sanitizer dependency; if
+ * these bytes ever stop being canvas-render's own output plus those two
+ * engines' fragments, this reasoning no longer holds and must be
+ * revisited.
  */
 export function PreviewPane({
   value,
@@ -65,7 +70,7 @@ export function PreviewPane({
   anchorsRef,
   blocksRef,
 }: PreviewPaneProps) {
-  const { svg, anchors, blocks } = useMemo(
+  const { keyed, anchors, blocks } = useMemo(
     () =>
       renderMarkdownPreview(value, {
         measure,
@@ -101,8 +106,7 @@ export function PreviewPane({
       // (var() included) — `inherit` is ignored, so inheritance alone leaves
       // a visited wikiLink near-invisible.
       style={{ overflow: 'auto', fill, '--preview-fill': fill } as CSSProperties}
-      // biome-ignore lint/security/noDangerouslySetInnerHtml: canvas-render's SVG serializer is the sole producer of this string and escapes text and attribute values (svg/format.ts)
-      dangerouslySetInnerHTML={{ __html: svg }}
+      ref={useKeyedSvg(keyed)}
     />
   )
 }

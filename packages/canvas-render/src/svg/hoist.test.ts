@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { svgPaintTreeArb } from '../test-utils/svg-vnode-arbitraries.js'
 import { hoistInheritedAttrs } from './hoist.js'
 import { serializeSvg } from './serialize.js'
 import type { SvgAttrs, SvgAttrValue, SvgChild, SvgVNode } from './vnode.js'
@@ -151,40 +152,8 @@ function resolvePaint(
   for (const inner of child.children ?? []) resolvePaint(inner, paint, out)
 }
 
-const paintArb = fc.record(
-  {
-    fill: fc.constantFrom('#111111', '#404040'),
-    'font-family': fc.constantFrom('Roboto', 'serif'),
-    'font-size': fc.constantFrom(14, 16),
-    'stroke-width': fc.constantFrom(1, 2),
-  },
-  { requiredKeys: [] },
-)
-
-const leafArb: fc.Arbitrary<SvgVNode> = fc.oneof(
-  paintArb.map((paint) => node('text', { x: 0, y: 0, ...paint }, ['t'])),
-  paintArb.map((paint) => node('rect', { x: 0, y: 0, width: 1, height: 1, ...paint })),
-)
-
-const treeArb: fc.Arbitrary<SvgVNode> = fc.letrec<{ tree: SvgVNode }>((tie) => ({
-  tree: fc.oneof(
-    { maxDepth: 3, withCrossShrink: true },
-    leafArb,
-    fc
-      .tuple(
-        fc.constantFrom('g', 'a'),
-        paintArb,
-        fc.option(fc.constant('presentation' as const), { nil: undefined }),
-        fc.array(tie('tree'), { maxLength: 4 }),
-      )
-      .map(([tag, paint, role, children]) =>
-        node(tag, { ...paint, ...(role === undefined ? {} : { role }) }, children),
-      ),
-  ),
-})).tree
-
 describe('hoistInheritedAttrs (PBT)', () => {
-  fcTest.prop([treeArb], withDefaults())(
+  fcTest.prop([svgPaintTreeArb], withDefaults())(
     'preserves every element sequence, computed paint, and non-paint attrs',
     (tree) => {
       const before: Resolved[] = []
@@ -195,7 +164,7 @@ describe('hoistInheritedAttrs (PBT)', () => {
     },
   )
 
-  fcTest.prop([treeArb], withDefaults())('is idempotent', (tree) => {
+  fcTest.prop([svgPaintTreeArb], withDefaults())('is idempotent', (tree) => {
     const once = hoistInheritedAttrs(tree)
     expect(hoistInheritedAttrs(once)).toEqual(once)
   })

@@ -559,7 +559,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
     )
   })
 
-  it('draws a filled destination arrowhead for toEnd=arrow, oriented along the last segment', () => {
+  it('a toEnd=arrow edge references the shared end marker (orientation is orient="auto")', () => {
     const scene: Scene = {
       nodes: [
         {
@@ -577,11 +577,11 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><marker id="wb-arrow-end-none" markerWidth="10" markerHeight="8" refX="10" refY="4" markerUnits="userSpaceOnUse" orient="auto"><polygon points="10,4 0,0 0,8" fill="none"/></marker></defs><polyline points="0,0 30,0" fill="none" marker-end="url(#wb-arrow-end-none)" role="presentation"/></svg>',
     )
   })
 
-  it('draws both arrowheads for fromEnd=arrow toEnd=arrow, source arrow first', () => {
+  it('references start and end markers for fromEnd=arrow toEnd=arrow, start defined first', () => {
     const scene: Scene = {
       nodes: [
         {
@@ -599,11 +599,11 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" fill="none" role="presentation"/><polygon points="0,0 10,-4 10,4" fill="none" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="none" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><marker id="wb-arrow-start-none" markerWidth="10" markerHeight="8" refX="0" refY="4" markerUnits="userSpaceOnUse" orient="auto"><polygon points="0,4 10,0 10,8" fill="none"/></marker><marker id="wb-arrow-end-none" markerWidth="10" markerHeight="8" refX="10" refY="4" markerUnits="userSpaceOnUse" orient="auto"><polygon points="10,4 0,0 0,8" fill="none"/></marker></defs><polyline points="0,0 30,0" fill="none" marker-start="url(#wb-arrow-start-none)" marker-end="url(#wb-arrow-end-none)" role="presentation"/></svg>',
     )
   })
 
-  it('the arrowhead inherits the edge stroke color as its fill', () => {
+  it('the arrowhead marker inherits the edge stroke color as its fill', () => {
     const scene: Scene = {
       nodes: [
         {
@@ -622,7 +622,7 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
       ],
     }
     expect(renderSceneToSvg(scene)).toBe(
-      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 30,0" fill="none" stroke="#888" role="presentation"/><polygon points="30,0 20,4 20,-4" fill="#888" role="presentation"/></svg>',
+      '<svg xmlns="http://www.w3.org/2000/svg"><defs><marker id="wb-arrow-end-_23888" markerWidth="10" markerHeight="8" refX="10" refY="4" markerUnits="userSpaceOnUse" orient="auto"><polygon points="10,4 0,0 0,8" fill="#888"/></marker></defs><polyline points="0,0 30,0" fill="none" stroke="#888" marker-end="url(#wb-arrow-end-_23888)" role="presentation"/></svg>',
     )
   })
 

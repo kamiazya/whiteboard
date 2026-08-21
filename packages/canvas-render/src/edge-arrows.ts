@@ -41,6 +41,61 @@ function arrowAt(
 }
 
 /**
+ * Marker-local arrowhead geometry: the same triangle `arrowAt` places in
+ * canvas space, expressed in a marker viewport so the SVG backend can emit
+ * ONE `<marker>` definition per color instead of a polygon per edge end.
+ * Derived from the same constants, so the drawn ink is identical — the
+ * browser's `orient="auto"` rotation reproduces `arrowAt`'s unit-vector
+ * math (both take the direction of the path's terminal segment), which the
+ * arrowhead pixel goldens pin. Points are tip first, per the emission-
+ * order convention above. `refX`/`refY` place the tip ON the path
+ * endpoint, exactly where `arrowAt` puts it.
+ */
+export const ARROW_MARKER = {
+  width: ARROW_LENGTH,
+  height: ARROW_HALF_WIDTH * 2,
+  end: {
+    refX: ARROW_LENGTH,
+    refY: ARROW_HALF_WIDTH,
+    points: [
+      { x: ARROW_LENGTH, y: ARROW_HALF_WIDTH },
+      { x: 0, y: 0 },
+      { x: 0, y: ARROW_HALF_WIDTH * 2 },
+    ],
+  },
+  // A start arrow points AGAINST the outgoing segment (its tip sits on the
+  // first vertex), so the start marker's triangle points -x rather than
+  // relying on `orient="auto-start-reverse"`, which resvg support is not
+  // established for.
+  start: {
+    refX: 0,
+    refY: ARROW_HALF_WIDTH,
+    points: [
+      { x: 0, y: ARROW_HALF_WIDTH },
+      { x: ARROW_LENGTH, y: 0 },
+      { x: ARROW_LENGTH, y: ARROW_HALF_WIDTH * 2 },
+    ],
+  },
+} as const
+
+/**
+ * Which ends of this edge get an arrowhead — the SAME rule that decides
+ * whether `edgeArrowPolygons` yields a polygon for that end. The backend
+ * must consult this (not `fromEnd`/`toEnd` alone) before attaching a
+ * marker: an end with no usable direction draws nothing as a polygon,
+ * while a marker with `orient="auto"` on a degenerate segment would paint
+ * an arrow at angle 0.
+ */
+export function edgeArrowEnds(edge: ResolvedEdgeNode): { from: boolean; to: boolean } {
+  if (edge.path.length < 2) return { from: false, to: false }
+  const from = edge.fromEnd === 'arrow' && arrowAt(edge.path[0], edge.path[1]) !== null
+  const tip = edge.path[edge.path.length - 1]
+  const inward = edge.path[edge.path.length - 2]
+  const to = edge.toEnd === 'arrow' && arrowAt(tip, inward) !== null
+  return { from, to }
+}
+
+/**
  * The arrowhead polygons of an edge, source arrow first. Total: a
  * degenerate path (fewer than two points, or no finite direction at an
  * end) simply yields no polygon for that end.

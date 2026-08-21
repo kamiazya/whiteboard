@@ -176,10 +176,14 @@ export function buildShapeAppearanceGoldenScene(): Scene {
  */
 export const SHAPE_APPEARANCE_GOLDEN_SVG =
   '<svg xmlns="http://www.w3.org/2000/svg">' +
+  '<defs>' +
+  '<marker id="wb-arrow-end-_23888" markerWidth="10" markerHeight="8" refX="10" refY="4" markerUnits="userSpaceOnUse" orient="auto">' +
+  '<polygon points="10,4 0,0 0,8" fill="#888"/>' +
+  '</marker>' +
+  '</defs>' +
   '<rect x="0" y="0" width="100" height="60" rx="8"/>' +
   '<rect x="120" y="0" width="100" height="60"/>' +
   '<rect x="240" y="0" width="100" height="60" rx="4" fill="#fff" stroke="#000" stroke-width="2"/>' +
   '<g fill="#111" font-family="Inter" font-size="14"><text x="0" y="80">Styled</text></g>' +
-  '<polyline points="0,120 100,120" fill="none" stroke="#888" stroke-width="1.5" role="presentation"/>' +
-  '<polygon points="100,120 90,124 90,116" fill="#888" role="presentation"/>' +
+  '<polyline points="0,120 100,120" fill="none" stroke="#888" stroke-width="1.5" marker-end="url(#wb-arrow-end-_23888)" role="presentation"/>' +
   '</svg>'
