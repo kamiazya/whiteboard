@@ -1,17 +1,23 @@
-import type { DocRef } from '@kamiazya/whiteboard-ports'
+import type { DocRef } from './doc-ref.js'
 
 /**
  * Canonical `docKey` for a DocRef. Encodes `kind` into the key so a document
  * and a `workspace-tree` ref that happen to share the same id string (e.g.
  * during a migration) never collide.
  *
- * This is a STORED value, not an in-memory label: it is the `docKey` column
- * of `documentSnapshots` / `documentSnapshotChunks` / `documentFrontiers` /
- * `documentDeltas`. Changing it means migrating those rows — see
- * `0013-document-dockey-prefix` — and moving every frozen literal that a
- * boot-time routine still writes, which is why `importFsBlobs` and
- * `sweepImportedFsBlobs` take their prefix from here rather than spelling it
- * themselves.
+ * This is a STORED value, not an in-memory label: it is the daemon's `docKey`
+ * column on `documentSnapshots` / `documentSnapshotChunks` /
+ * `documentFrontiers` / `documentDeltas`, and the browser's key into the
+ * matching IndexedDB stores. Changing it means migrating those rows — see
+ * mcp-server's `0013-document-dockey-prefix` — and moving every frozen
+ * literal that a boot-time routine still writes, which is why `importFsBlobs`
+ * and `sweepImportedFsBlobs` take their prefix from here rather than spelling
+ * it themselves.
+ *
+ * It lives in `ports` rather than beside one implementation for the reason
+ * above: two stores that disagree about this string are two stores that
+ * cannot read each other's documents, and nothing would say so at compile
+ * time.
  */
 export function docRefKey(docRef: DocRef): string {
   switch (docRef.kind) {

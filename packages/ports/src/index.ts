@@ -1,6 +1,7 @@
 export * from './blob-store.js'
 export * from './delta.js'
 export * from './doc-ref.js'
+export { DOCUMENT_DOC_KEY_PREFIX, docRefKey } from './doc-ref-key.js'
 export * from './document-index.js'
 export * from './document-path-tree.js'
 export * from './document-store.js'
@@ -9,5 +10,10 @@ export * from './presence.js'
 export * from './snapshot.js'
 export * from './snapshot-helpers.js'
 export * from './snapshot-reassembly-error.js'
+export {
+  isStoredDocumentUnreadableError,
+  type StoredDocumentUnreadableCode,
+  StoredDocumentUnreadableError,
+} from './stored-document-unreadable-error.js'
 export * from './sync-protocol.js'
 export * from './tokens.js'

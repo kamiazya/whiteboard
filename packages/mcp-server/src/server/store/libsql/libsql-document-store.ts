@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   DeleteDocInput,
+  DocRef,
   DocumentStore,
   Frontier,
   LoadDeltasInput,
@@ -10,13 +11,14 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  SaveCompactedSnapshotInput,
   SaveSnapshotInput,
   SnapshotChunk,
 } from '@kamiazya/whiteboard-ports'
+import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import type { Kysely, Transaction } from 'kysely'
 import { getLogger } from '../../log.js'
 import type { DatabaseSchema } from '../db/schema.js'
-import { docRefKey } from '../doc-ref-key.js'
 import { cloneBytes } from '../inmemory/clone-bytes.js'
 
 const log = getLogger('libsql-document-store')
@@ -76,6 +78,16 @@ export class LibsqlDocumentStore implements DocumentStore {
       .executeTakeFirst()
     if (!header) {
       return null
+    }
+    // A header row that cannot describe a snapshot is a record that is THERE
+    // and unreadable, which the port asks to be told apart from absent. This
+    // store has no envelope version to be wrong about — its records are typed
+    // columns — so `malformed` is the only code it can ever report.
+    if (header.maxChunkBytes <= 0 || header.chunkCount < 0 || header.totalBytes < 0) {
+      throw new StoredDocumentUnreadableError(
+        'malformed',
+        `Stored document ${docKey} has a snapshot header that describes no snapshot`,
+      )
     }
 
     const [chunkRows, frontier] = await Promise.all([
@@ -160,6 +172,90 @@ export class LibsqlDocumentStore implements DocumentStore {
     })
 
     log.debug({ docKey, chunkCount: manifest.chunkCount }, 'saved snapshot')
+  }
+
+  /**
+   * One transaction, so a concurrent `appendDeltas` cannot land between the
+   * save and the clear and be silently dropped.
+   */
+  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+    const docKey = docRefKey(input.docRef)
+    const frontierBlob = toBlob(input.frontier)
+    await this.db.transaction().execute(async (trx) => {
+      await trx
+        .insertInto('documentSnapshots')
+        .values({
+          docKey,
+          chunkCount: input.manifest.chunkCount,
+          totalBytes: input.manifest.totalBytes,
+          maxChunkBytes: input.manifest.maxChunkBytes,
+          frontier: frontierBlob,
+        })
+        .onConflict((oc) =>
+          oc.column('docKey').doUpdateSet({
+            chunkCount: input.manifest.chunkCount,
+            totalBytes: input.manifest.totalBytes,
+            maxChunkBytes: input.manifest.maxChunkBytes,
+            frontier: frontierBlob,
+          }),
+        )
+        .execute()
+      await trx.deleteFrom('documentSnapshotChunks').where('docKey', '=', docKey).execute()
+      if (input.chunks.length > 0) {
+        await trx
+          .insertInto('documentSnapshotChunks')
+          .values(
+            input.chunks.map((chunk) => ({
+              docKey,
+              chunkIndex: chunk.index,
+              bytes: toBlob(chunk.bytes),
+            })),
+          )
+          .execute()
+      }
+      // The half `saveSnapshot` does not do — but only the SUPERSEDED prefix.
+      // Everything appended after the caller folded is not in the snapshot,
+      // so clearing the whole log would lose it. The transaction makes this
+      // and the write above one operation; the count makes it the right one.
+      if (input.supersededDeltaCount > 0) {
+        await trx
+          .deleteFrom('documentDeltas')
+          .where('docKey', '=', docKey)
+          .where(
+            'seq',
+            'in',
+            trx
+              .selectFrom('documentDeltas')
+              .select('seq')
+              .where('docKey', '=', docKey)
+              .orderBy('seq', 'asc')
+              .limit(input.supersededDeltaCount),
+          )
+          .execute()
+      }
+      await upsertFrontier(trx, docKey, input.frontier)
+    })
+    log.debug({ docKey, chunkCount: input.manifest.chunkCount }, 'saved compacted snapshot')
+  }
+
+  /**
+   * Write a header row that describes no snapshot. Test-only, and named so at
+   * the call site: the port's conformance suite needs every implementation to
+   * be able to reach the unreadable state.
+   */
+  async writeUnreadableRecord(docRef: DocRef): Promise<void> {
+    const docKey = docRefKey(docRef)
+    await this.db
+      .insertInto('documentSnapshots')
+      .values({
+        docKey,
+        chunkCount: 0,
+        totalBytes: 0,
+        maxChunkBytes: -1,
+        frontier: toBlob(new Uint8Array()),
+      })
+      .onConflict((oc) => oc.column('docKey').doUpdateSet({ maxChunkBytes: -1 }))
+      .execute()
   }
 
   async deleteDoc({ docRef }: DeleteDocInput): Promise<void> {

@@ -2,7 +2,7 @@ import type { Kysely, Migration } from 'kysely'
 
 // Backing store for ports' DocumentStore: a chunked full snapshot
 // (header + ordered chunk rows) plus an append-only delta log, both keyed by
-// docKey (the DocRef-derived string from ../doc-ref-key.ts) so a canvas and
+// docKey (the DocRef-derived string from ports' doc-ref-key.ts) so a canvas and
 // the workspace-tree document never share rows even if their id strings
 // collide. canvasDocFrontiers tracks "latest write wins" across snapshot
 // saves and delta appends independently of either log's own row shape, since

@@ -38,6 +38,13 @@ export function createInMemoryDocumentStore(): DocumentStore {
       const { docRef, manifest, chunks, frontier } = input
       snapshots.set(docRefKey(docRef), structuredClone({ manifest, chunks, frontier }))
     },
+    async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+      // This double keeps no delta log — `appendDeltas` refuses — so
+      // compacting one is just the save. Left as a delegation rather than a
+      // refusal because a route under test may legitimately compact.
+      const { docRef, manifest, chunks, frontier } = input
+      snapshots.set(docRefKey(docRef), structuredClone({ manifest, chunks, frontier }))
+    },
     async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
       throw new Error('appendDeltas is not supported by createInMemoryDocumentStore')
     },

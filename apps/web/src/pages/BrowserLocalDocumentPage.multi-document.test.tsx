@@ -19,6 +19,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
   cleanup,
+  configure,
   fireEvent,
   render as rtlRender,
   screen,
@@ -78,6 +79,20 @@ async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<stri
   return found.path
 }
 
+// These suites came from browser mode, where the per-test budget is 60s, and
+// kept their 10s waits when they moved to jsdom — whose default is 5s, so a
+// wait that actually has to wait can never finish inside its own test. Not
+// theoretical: content persistence now goes through the `DocumentStore` port,
+// which costs two to three IndexedDB round trips where it used to cost one,
+// and `fake-indexeddb` is slower per round trip than the real thing.
+vi.setConfig({ testTimeout: 30_000 })
+// One budget for every wait in the file, rather than a number per call site.
+// These waits came from browser mode with 60s per test; none of them is a
+// deliberate "this must be fast" assertion, and reading a document back is
+// two IndexedDB round trips behind the `DocumentStore` port plus a Loro
+// import — which under fake-indexeddb on a loaded runner does not fit 5s.
+configure({ asyncUtilTimeout: 15_000 })
+
 describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -92,35 +107,31 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   it('edits A, New switches to empty B, switching back to A restores the edited node', async () => {
     const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
-      timeout: 5000,
-    })
-    await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    await waitFor(() => expect(latestOnChange).not.toBeNull())
 
-    const idA = await waitFor(
-      async () => {
-        const heading = screen.getByRole('heading', { level: 1 })
-        expect(heading).toBeTruthy()
-        const id = await new IdbDefaultDocumentPointer().get()
-        expect(id).not.toBeNull()
-        return id as string
-      },
-      { timeout: 5000 },
-    )
+    const idA = await waitFor(async () => {
+      const heading = screen.getByRole('heading', { level: 1 })
+      expect(heading).toBeTruthy()
+      const id = await new IdbDefaultDocumentPointer().get()
+      expect(id).not.toBeNull()
+      return id as string
+    })
 
     const nodeA = textNodeCanvas('multi-canvas-node-a', 10, 10)
 
-    // Re-fire until the write lands in loroCanvases (see reload-elements test
-    // for why: the backend connects asynchronously with no sync signal).
+    // Re-fire until the EDIT lands, not until a record exists: every create
+    // path seeds one, so a poll on "the key is there" is satisfied before any
+    // edit does and stops retrying. See reload-elements for why the re-fire is
+    // needed at all — the backend connects asynchronously with no sync signal.
     await waitFor(
       async () => {
         act(() => {
           latestOnChange!(nodeA, setTextCommand('multi-canvas-node-a'))
         })
-        const keys = await loroDocumentsKeys()
-        expect(keys).toContain(idA)
+        expect(await persistedNodeIds(idA)).toContain('multi-canvas-node-a')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     // Create canvas B and switch to it, via WorkspaceTopBar's switcher dropdown.
@@ -131,14 +142,11 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       fireEvent.pointerUp(newItem)
     })
 
-    const idB = await waitFor(
-      async () => {
-        const id = await new IdbDefaultDocumentPointer().get()
-        expect(id).not.toBe(idA)
-        return id as string
-      },
-      { timeout: 5000 },
-    )
+    const idB = await waitFor(async () => {
+      const id = await new IdbDefaultDocumentPointer().get()
+      expect(id).not.toBe(idA)
+      return id as string
+    })
 
     // B is a fresh canvas: its persisted doc must never contain A's node —
     // asserted straight from IndexedDB so the check is independent of the
@@ -173,15 +181,12 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       fireEvent.pointerUp(itemA)
     })
 
-    await waitFor(
-      () => {
-        const restoredIds = latestMountedCanvases
-          .slice(mountsBeforeSwitchBack)
-          .flatMap((canvas) => canvas.nodes.map((n) => n.id))
-        expect(restoredIds).toContain('multi-canvas-node-a')
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      const restoredIds = latestMountedCanvases
+        .slice(mountsBeforeSwitchBack)
+        .flatMap((canvas) => canvas.nodes.map((n) => n.id))
+      expect(restoredIds).toContain('multi-canvas-node-a')
+    })
 
     expect(await loroDocumentsKeys()).not.toContain('__placeholder__')
   })
@@ -189,21 +194,16 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
   it('persists an edit made inside the 300ms debounce before switching canvas', async () => {
     const store = new IdbDocumentIndex()
     render(<BrowserLocalDocumentPage store={store} />)
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
-      timeout: 5000,
-    })
-    await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    await waitFor(() => expect(latestOnChange).not.toBeNull())
 
-    const idA = await waitFor(
-      async () => {
-        const heading = screen.getByRole('heading', { level: 1 })
-        expect(heading).toBeTruthy()
-        const id = await new IdbDefaultDocumentPointer().get()
-        expect(id).not.toBeNull()
-        return id as string
-      },
-      { timeout: 5000 },
-    )
+    const idA = await waitFor(async () => {
+      const heading = screen.getByRole('heading', { level: 1 })
+      expect(heading).toBeTruthy()
+      const id = await new IdbDefaultDocumentPointer().get()
+      expect(id).not.toBeNull()
+      return id as string
+    })
 
     const warmupNode = textNodeCanvas('multi-canvas-warmup-a', 0, 0)
 
@@ -215,10 +215,11 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
         act(() => {
           latestOnChange!(warmupNode, setTextCommand('multi-canvas-warmup-a'))
         })
-        const keys = await loroDocumentsKeys()
-        expect(keys).toContain(idA)
+        // The warmup EDIT, not merely a record: every create path seeds one,
+        // so a poll on the key existing stops retrying before anything lands.
+        expect(await persistedNodeIds(idA)).toContain('multi-canvas-warmup-a')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     const lateEdit: SpatialCanvas = {
@@ -252,27 +253,21 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       fireEvent.pointerUp(newItem)
     })
 
-    const idB = await waitFor(
-      async () => {
-        const id = await new IdbDefaultDocumentPointer().get()
-        expect(id).not.toBe(idA)
-        return id as string
-      },
-      { timeout: 5000 },
-    )
+    const idB = await waitFor(async () => {
+      const id = await new IdbDefaultDocumentPointer().get()
+      expect(id).not.toBe(idA)
+      return id as string
+    })
     expect(idB).not.toBe(idA)
 
     // The late edit must have landed on A — verified by decoding straight
     // from IndexedDB, independent of the mock SpatialEditor's render timing.
     // The flushed write reaches IDB asynchronously (via the backend's write
     // queue), so this must be polled, never asserted immediately.
-    await waitFor(
-      async () => {
-        const ids = await persistedNodeIds(idA)
-        expect(ids).toContain('multi-canvas-late-edit-a')
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(async () => {
+      const ids = await persistedNodeIds(idA)
+      expect(ids).toContain('multi-canvas-late-edit-a')
+    })
 
     // Never leaked into B.
     expect(await persistedNodeIds(idB)).not.toContain('multi-canvas-late-edit-a')

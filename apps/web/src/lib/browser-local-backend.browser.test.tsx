@@ -15,7 +15,8 @@ import type {
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { DB_VERSION } from './browser-idb.js'
+import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
+import { openWhiteboardDb } from './browser-idb.js'
 import { BrowserLocalBackend } from './browser-local-backend.js'
 
 const ISOLATED_DB = claimIsolatedWhiteboardDb('browser-local-backend')
@@ -466,124 +467,45 @@ describe('BrowserLocalBackend', () => {
 })
 
 async function forceInvalidLoroRecord(documentId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
-      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
-    }
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroDocuments', 'readwrite')
-      // v:1 envelope but snapshot bytes are not valid Loro data
-      tx.objectStore('loroDocuments').put(
-        {
-          v: 1,
-          snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
-          updatedAt: new Date().toISOString(),
-        },
-        documentId,
-      )
-      tx.oncomplete = () => {
-        db.close()
-        resolve()
-      }
-      tx.onerror = () => {
-        db.close()
-        reject(tx.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
+  // A well-formed record whose snapshot bytes are not Loro's.
+  await seedSyncDocument(
+    documentId,
+    { snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]) },
+    ISOLATED_DB,
+  )
 }
 
 async function forceRecordWithBadDelta(documentId: string, snapshot: Uint8Array): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
-      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
-    }
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroDocuments', 'readwrite')
-      // Valid snapshot but invalid delta bytes
-      tx.objectStore('loroDocuments').put(
-        {
-          v: 1,
-          snapshot,
-          deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
-          updatedAt: new Date().toISOString(),
-        },
-        documentId,
-      )
-      tx.oncomplete = () => {
-        db.close()
-        resolve()
-      }
-      tx.onerror = () => {
-        db.close()
-        reject(tx.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
+  // A valid snapshot whose delta log carries bytes that will not import.
+  await seedSyncDocument(
+    documentId,
+    { snapshot, deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])] },
+    ISOLATED_DB,
+  )
 }
 
 async function forceCorruptFileRecord(_canvasId: string, fileId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
-      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
-      if (!db.objectStoreNames.contains('documentFiles')) db.createObjectStore('documentFiles')
-    }
-    req.onsuccess = () => {
-      const db = req.result
+  // The REAL opener, not a hand-rolled schema. This used to create its own
+  // `meta`/`documents`/`loroDocuments`, which meant the fixture's database
+  // drifted from the app's — and once content moved to the `DocumentStore`
+  // port, it was building a database with no `syncDocuments` in it, so the
+  // connect() this test waits on could never load anything.
+  const db = await openWhiteboardDb(ISOLATED_DB)
+  try {
+    await new Promise<void>((resolve, reject) => {
       const tx = db.transaction('documentFiles', 'readwrite')
       // Missing required fields — fails documentFileRecordSchema.safeParse.
       tx.objectStore('documentFiles').put({ v: 1, garbage: true }, fileId)
-      tx.oncomplete = () => {
-        db.close()
-        resolve()
-      }
-      tx.onerror = () => {
-        db.close()
-        reject(tx.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
+      tx.oncomplete = () => resolve()
+      tx.onerror = () => reject(tx.error)
+      tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
+    })
+  } finally {
+    db.close()
+  }
 }
 
 async function forceCorruptRecord(documentId: string): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
-      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
-    }
-    req.onsuccess = () => {
-      const db = req.result
-      const tx = db.transaction('loroDocuments', 'readwrite')
-      tx.objectStore('loroDocuments').put({ v: 99, garbage: true }, documentId)
-      tx.oncomplete = () => {
-        db.close()
-        resolve()
-      }
-      tx.onerror = () => {
-        db.close()
-        reject(tx.error)
-      }
-    }
-    req.onerror = () => reject(req.error)
-  })
+  // An envelope from a version this build does not know.
+  await seedSyncDocument(documentId, { raw: { v: 99, garbage: true } }, ISOLATED_DB)
 }
