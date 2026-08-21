@@ -8,6 +8,10 @@
  * deleted afterwards, because the conformance cases assume an index that
  * starts empty.
  */
+// Stays in REAL-browser mode on purpose: this file is part of the real-IDB
+// fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
+// approximates). IndexedDB-only suites with no such stake run in jsdom via
+// fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe } from 'vitest'
 import { IdbDocumentIndex } from './idb-document-index.js'
