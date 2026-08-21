@@ -26,6 +26,7 @@ import {
   loadLocalDocument,
 } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
+import { purgeLegacyReconnectCredentials } from './purge-legacy-reconnect-credentials.js'
 
 /**
  * This file's own database.
@@ -446,9 +447,6 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     // at app boot in main.tsx; this test verifies the IndexedDB-side and
     // localStorage-side erasure are BOTH complete once a real app boot would
     // have run.
-    const { purgeLegacyReconnectCredentials } = await import(
-      './purge-legacy-reconnect-credentials.js'
-    )
     purgeLegacyReconnectCredentials()
     expect(localStorage.getItem(LEGACY_RECONNECT_SECRET_KEY)).toBeNull()
   })

@@ -2,7 +2,7 @@ import {
   extensionFacetsArbitrary,
   spatialCanvasArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect } from 'vitest'
 import {
   deleteSpatialEdge,
@@ -86,7 +86,6 @@ describe('withSpatialBatch equivalence property', () => {
   )(
     'one batch ≡ sequential helpers on state, and at most one undo step',
     async (canvas, opSpecs) => {
-      const { UndoManager } = await import('loro-crdt')
       const ops: BatchOp[] = opSpecs
       const apply = {
         writeNode: (index: number) => canvas.nodes[index % Math.max(1, canvas.nodes.length)],

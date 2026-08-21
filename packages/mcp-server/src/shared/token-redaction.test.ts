@@ -7,6 +7,8 @@
 // in a record's message or structured fields.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { captureLogsForTests } from '../server/log.js'
+import { apiFetch } from './api-client.js'
+import { DaemonBackend } from './daemon-backend.js'
 import { readDaemonTokenOnce, resetTokenStoreForTests } from './token-store.js'
 
 const SENTINEL_TOKEN = 'sentinel-do-not-log-9f3c2a'
@@ -79,7 +81,6 @@ describe('token redaction: sentinel never reaches a log record', () => {
   it('apiFetch auth-header attachment does not log the sentinel', async () => {
     const capture = captureLogsForTests()
     try {
-      const { apiFetch } = await import('./api-client.js')
       await apiFetch('http://localhost/api/workspaces')
       expect(recordsContainSentinel(capture.records)).toBe(false)
     } finally {
@@ -90,7 +91,6 @@ describe('token redaction: sentinel never reaches a log record', () => {
   it('DaemonBackend.openSocket (incl. simulated auth failure) does not log the sentinel', async () => {
     const capture = captureLogsForTests()
     try {
-      const { DaemonBackend } = await import('./daemon-backend.js')
       const backend = new DaemonBackend('ws-id', 'path', 'http://localhost/')
       backend.connect({
         onSnapshot: () => {},

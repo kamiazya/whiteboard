@@ -1,5 +1,5 @@
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
-import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, test, vi } from 'vitest'
 import {
@@ -97,7 +97,6 @@ describe('wb_version_list tool', () => {
     const doc = await loadDoc(store, DOCUMENT_ID)
     doc.getMap('versions').set('corrupt-version', JSON.stringify({ label: 'bad', frontier: 123 }))
     doc.commit()
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
       docRef: { kind: 'document', documentId: DOCUMENT_ID },
@@ -136,7 +135,6 @@ describe('wb_version_restore tool', () => {
       edges: [],
     })
     doc.commit()
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
       docRef: { kind: 'document', documentId: DOCUMENT_ID },
