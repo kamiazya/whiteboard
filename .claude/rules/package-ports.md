@@ -71,6 +71,19 @@ paths:
   compile-time `expectTypeOf` conformance test per port method in
   `src/types.test.ts`.
 
+## Conformance suites (`src/test-utils/`)
+
+Two ports ship their guarantees as a suite every implementation calls, rather
+than as prose each implementation re-reads:
+`describeDocumentIndexConformance` and `describeBlobStoreConformance`. Each
+takes a factory returning `{ <port>, dispose }`, so the fixture stays with the
+implementation and the assertions stay here.
+
+They must run unchanged in a browser like the rest of the package — the blob
+suite computes its expected digest with `globalThis.crypto.subtle`, never
+`node:crypto`. When a port gains a third implementation, the suite is what it
+is held to; when a port gains a guarantee, the suite is where it is written.
+
 ## Tests
 
 - Vitest project: `ports-node` (registered in root

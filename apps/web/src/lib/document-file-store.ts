@@ -1,22 +1,48 @@
+import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
+import { blobRefSchema } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
-import { openWhiteboardDb } from './browser-idb.js'
+import { DOCUMENT_FILES_STORE } from './browser-idb.js'
+import { IdbBlobStore } from './idb-blob-store.js'
+import { inTransaction, request } from './idb-tx.js'
 
 /**
- * Versioned envelope for image file records persisted in the 'documentFiles'
- * IndexedDB object store. Single parse boundary — every IDB read for
- * canvasFiles goes through this. Type is derived via z.infer; no parallel
- * hand-written interface (mirrors loro-store.ts's loroRecordEnvelopeSchema).
+ * Versioned envelope for the records in the `documentFiles` IndexedDB object
+ * store. Single parse boundary — every read goes through this.
  *
- * v: envelope format version (literal 1). Bump this when the envelope shape
- *    changes in a backward-incompatible way; old/unknown-version records are
- *    treated as a cache miss (get() resolves null) rather than crashing.
+ * There are two shapes because there were two designs:
+ *
+ * - **v1** held the `Blob` itself, keyed by the caller's fileId. Identical
+ *   bytes under two ids were two copies, and nothing could be deleted, so the
+ *   store grew without bound.
+ * - **v2** holds a `BlobRef` instead. The bytes live in the content-addressed
+ *   `BlobStore`, so two ids naming the same image share one copy, and a
+ *   reference can be dropped.
+ *
+ * v1 is still READ, and a v1 record read through `get` is rewritten as v2 on
+ * the spot — the bytes are already in hand, and `BlobStore.put` is idempotent,
+ * so the migration costs one write the first time an old image is displayed.
+ *
+ * ponytail: a v1 record nobody ever reads is never converted. That is
+ * acceptable because it is exactly the record a reference-sweeping GC would
+ * collect anyway; if a sweep is ever written, it converts the remainder.
+ *
+ * An unknown/newer version is a cache miss (`get` resolves null) rather than a
+ * crash.
  */
-export const documentFileRecordSchema = z.object({
-  v: z.literal(1),
-  mimeType: z.string(),
-  created: z.number(),
-  blob: z.instanceof(Blob),
-})
+export const documentFileRecordSchema = z.union([
+  z.object({
+    v: z.literal(1),
+    mimeType: z.string(),
+    created: z.number(),
+    blob: z.instanceof(Blob),
+  }),
+  z.object({
+    v: z.literal(2),
+    mimeType: z.string(),
+    created: z.number(),
+    ref: blobRefSchema,
+  }),
+])
 
 type DocumentFileRecord = z.infer<typeof documentFileRecordSchema>
 
@@ -55,105 +81,126 @@ export function dataUrlToBlob(dataURL: string, fallbackMimeType: string): Blob {
 }
 
 /**
- * DocumentFileStore: persists uploaded image Blobs in the 'documentFiles'
- * IndexedDB object store, keyed by the caller-supplied fileId. Isolated from
- * 'loroDocuments'/'documents' so a schema issue in one store never corrupts
- * reads of the others.
+ * The document's file references: a fileId -> `BlobRef` mapping over the
+ * content-addressed `BlobStore`.
  *
- * Keying is global (not scoped per-canvas): Excalidraw fileIds are
- * content-hashes, so cross-canvas reuse of the same fileId is an acceptable,
- * intentional trade-off. Records are never deleted here, so the store grows
- * unbounded — GC / refcounting is a deliberate follow-up, not an oversight.
+ * The fileId stays the address a document embeds, because it IS one: the
+ * string `newImageRef` builds is written into the document, and the daemon's
+ * file route validates it. Moving documents to content addresses is a change
+ * to a published shape and is not this layer's to make — so the bytes moved
+ * and the address did not, and this class is what sits between them.
+ *
+ * What that buys, both of which the previous store could not have:
+ *
+ * - the same image referenced from two documents is stored once
+ * - a reference can be DROPPED, and the bytes go with it once no other
+ *   reference names them
+ *
+ * Keying is global rather than per-document, unchanged from before: fileIds
+ * are unique per upload, and sharing one across documents is the deduplicating
+ * case rather than a collision.
  */
 export class DocumentFileStore {
+  constructor(
+    private readonly blobs: BlobStore = new IdbBlobStore(),
+    private readonly dbName?: string,
+  ) {}
+
   async put(
     fileId: string,
     entry: { mimeType: string; blob: Blob; created: number },
   ): Promise<void> {
-    const db = await openWhiteboardDb()
-    return new Promise((resolve, reject) => {
-      const record: DocumentFileRecord = {
-        v: 1,
-        mimeType: entry.mimeType,
-        created: entry.created,
-        blob: entry.blob,
-      }
-      // transaction() throws synchronously when the store is missing — e.g.
-      // the v3->v4 upgrade was blocked by a stale tab — so the connection
-      // must be closed here too, not only in the async lifecycle callbacks.
-      let tx: IDBTransaction
-      try {
-        tx = db.transaction('documentFiles', 'readwrite')
-      } catch (err) {
-        db.close()
-        reject(err)
-        return
-      }
-      tx.objectStore('documentFiles').put(record, fileId)
-      tx.oncomplete = () => {
-        db.close()
-        resolve()
-      }
-      tx.onerror = () => {
-        db.close()
-        reject(tx.error)
-      }
-      tx.onabort = () => {
-        db.close()
-        reject(tx.error ?? new Error('transaction aborted'))
-      }
+    const bytes = new Uint8Array(await entry.blob.arrayBuffer())
+    // The bytes first. A mapping written before its blob would, if the write
+    // after it failed, name bytes that are not there — a broken image with a
+    // record claiming otherwise. The other order leaves an unreferenced blob,
+    // which reads as nothing at all and is what the sweep collects.
+    const { ref } = await this.blobs.put({ bytes, contentType: entry.mimeType })
+    const record: DocumentFileRecord = {
+      v: 2,
+      mimeType: entry.mimeType,
+      created: entry.created,
+      ref,
+    }
+    await inTransaction(this.dbName, [DOCUMENT_FILES_STORE], 'readwrite', async (tx) => {
+      await request(tx.objectStore(DOCUMENT_FILES_STORE).put(record, fileId))
     })
   }
 
   /**
-   * Returns the stored Blob for fileId, or null for an unknown id, a
-   * corrupt/unknown-version record, AND a failure to open the database
-   * (VersionError, denied access, etc). Never throws — a damaged record or an
-   * unreachable store degrades to a missing image rather than crashing the
-   * read path.
+   * The stored image for `fileId`, or null for an unknown id, a corrupt or
+   * unknown-version record, a reference whose bytes are gone, AND a failure to
+   * open the database. Never throws — a damaged record or an unreachable
+   * store degrades to a missing image rather than taking the read path with
+   * it.
    */
   async get(fileId: string): Promise<Blob | null> {
-    let db: IDBDatabase
+    let record: DocumentFileRecord | null
     try {
-      db = await openWhiteboardDb()
+      record = await inTransaction(this.dbName, [DOCUMENT_FILES_STORE], 'readonly', async (tx) => {
+        const raw = await request(tx.objectStore(DOCUMENT_FILES_STORE).get(fileId))
+        if (raw === undefined) return null
+        const parsed = documentFileRecordSchema.safeParse(raw)
+        return parsed.success ? parsed.data : null
+      })
     } catch {
       return null
     }
-    return new Promise((resolve) => {
-      // Same synchronous-throw hazard as put(): a missing store must close
-      // the connection and degrade to null, per this method's never-throws
-      // contract.
-      let tx: IDBTransaction
-      try {
-        tx = db.transaction('documentFiles', 'readonly')
-      } catch {
-        db.close()
-        resolve(null)
-        return
-      }
-      const req = tx.objectStore('documentFiles').get(fileId)
-      req.onsuccess = () => {
-        if (req.result === undefined) {
-          resolve(null)
-          return
-        }
-        const parsed = documentFileRecordSchema.safeParse(req.result)
-        resolve(parsed.success ? parsed.data.blob : null)
-      }
-      req.onerror = (e) => {
-        e.preventDefault()
-        db.close()
-        resolve(null)
-      }
-      tx.onerror = () => {
-        db.close()
-        resolve(null)
-      }
-      tx.onabort = () => {
-        db.close()
-        resolve(null)
-      }
-      tx.oncomplete = () => db.close()
-    })
+    if (record === null) return null
+
+    if (record.v === 1) {
+      // Read-through migration: the bytes are in hand, so convert rather than
+      // leave a record that can never be deduplicated or deleted. A failure
+      // here must not cost the caller their image, so the conversion is
+      // best-effort and the original blob is returned either way.
+      void this.put(fileId, {
+        mimeType: record.mimeType,
+        blob: record.blob,
+        created: record.created,
+      }).catch(() => {})
+      return record.blob
+    }
+
+    try {
+      const stored = await this.blobs.get({ ref: record.ref })
+      if (stored === null) return null
+      return new Blob([stored.bytes as BlobPart], { type: record.mimeType })
+    } catch {
+      return null
+    }
+  }
+
+  /**
+   * Drops the reference, and the bytes with it when this was the last one.
+   *
+   * ponytail: the "last one" check is a scan of every reference. A browser
+   * holds tens of these, not millions, and the alternative — a stored
+   * refcount — is a second piece of state that can disagree with the mapping
+   * it counts. Revisit if a real corpus makes the scan visible.
+   */
+  async delete(fileId: string): Promise<void> {
+    const removed = await inTransaction(
+      this.dbName,
+      [DOCUMENT_FILES_STORE],
+      'readwrite',
+      async (tx) => {
+        const store = tx.objectStore(DOCUMENT_FILES_STORE)
+        const raw = await request(store.get(fileId))
+        if (raw === undefined) return null
+        await request(store.delete(fileId))
+        const parsed = documentFileRecordSchema.safeParse(raw)
+        if (!parsed.success || parsed.data.v !== 2) return null
+        const ref: BlobRef = parsed.data.ref
+        // Inside the same transaction as the delete, so a concurrent write
+        // cannot add a reference between the removal and the count.
+        const rest = await request(store.getAll())
+        const stillReferenced = rest.some((row: unknown) => {
+          const other = documentFileRecordSchema.safeParse(row)
+          return other.success && other.data.v === 2 && other.data.ref.digestHex === ref.digestHex
+        })
+        return stillReferenced ? null : ref
+      },
+    )
+    if (removed !== null) await this.blobs.delete({ ref: removed })
   }
 }
