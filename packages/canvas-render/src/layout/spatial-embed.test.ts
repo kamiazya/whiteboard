@@ -418,3 +418,65 @@ describe('file-node facet cards', () => {
     expect(textChromeIndex).toBeGreaterThan(headingIndex)
   })
 })
+
+describe('shape facets inside an embedded canvas', () => {
+  const shapedChild: SpatialCanvas = {
+    nodes: [
+      {
+        id: 'c1',
+        type: 'text',
+        x: 0,
+        y: 0,
+        width: 400,
+        height: 200,
+        text: '',
+        'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' } } },
+      },
+    ],
+    edges: [],
+  }
+
+  it("a child node's visual.shape facet draws its silhouette, same as at the root", () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [fileNode()], edges: [] },
+      baseOptions({
+        resolveReference: () => ({ canvas: shapedChild }),
+        expandFileNode: () => true,
+      }),
+    )
+    const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
+    expect(childShape?.shape).toBe('hexagon')
+  })
+
+  it("a child node NEVER inherits a same-id ROOT node's shape", () => {
+    // The root canvas carries a shaped node whose id collides with the
+    // plain child node — resolution keyed off the root map would leak the
+    // root's silhouette into the embedded document.
+    const root: SpatialCanvas = {
+      nodes: [
+        fileNode(),
+        {
+          id: 'c1',
+          type: 'text',
+          x: 500,
+          y: 100,
+          width: 100,
+          height: 100,
+          text: '',
+          'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'diamond' } } },
+        },
+      ],
+      edges: [],
+    }
+    const scene = layoutSpatialCanvas(
+      root,
+      baseOptions({
+        resolveReference: () => ({ canvas: childCanvas }),
+        expandFileNode: (n) => n.type === 'file',
+      }),
+    )
+    const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
+    expect(childShape).toBeDefined()
+    expect(childShape?.shape).toBeUndefined()
+  })
+})
