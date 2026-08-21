@@ -59,7 +59,7 @@ export type {
   Dimensions,
   EmbedPlaceholderNode,
   EmbedResolvedNode,
-  EmojiSceneNode,
+  GlyphSceneNode,
   GroupSceneNode,
   HeadingBlockNode,
   IconSceneNode,

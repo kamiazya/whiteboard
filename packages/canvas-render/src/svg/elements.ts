@@ -72,7 +72,7 @@ export type SvgElements = {
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
   // 'middle' is the only anchor emitted: body runs are left-anchored by
-  // omission (the initial value), and only the emoji glyph centers itself.
+  // omission (the initial value), and only the glyph badge centers itself.
   text: PaintAttrs &
     TextEmphasisAttrs & {
       x: number

@@ -487,8 +487,8 @@ function renderIconElement(element: LucideIconElement): SvgChild {
 }
 
 /** Baseline drop below the bbox center, as a fraction of the glyph size —
- * roughly half a typical emoji cap height, so the glyph reads centered. */
-const EMOJI_BASELINE_FACTOR = 0.35
+ * roughly half a typical glyph cap height, so the badge reads centered. */
+const GLYPH_BASELINE_FACTOR = 0.35
 
 /**
  * Caller-supplied icon geometry, merged over the vendored table (caller
@@ -696,8 +696,8 @@ function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
       })
       return withDefs(use, [def])
     }
-    case 'emoji': {
-      if (!isFiniteBox(node.bbox) || node.emoji.length === 0) return []
+    case 'glyph': {
+      if (!isFiniteBox(node.bbox) || node.glyph.length === 0) return []
       // A single glyph sized to the smaller bbox side and centered via
       // text-anchor plus a fixed baseline offset. The offset approximates
       // vertical centering without dominant-baseline, whose resolution
@@ -708,11 +708,11 @@ function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
         'text',
         {
           x: node.bbox.x + node.bbox.w / 2,
-          y: node.bbox.y + node.bbox.h / 2 + size * EMOJI_BASELINE_FACTOR,
+          y: node.bbox.y + node.bbox.h / 2 + size * GLYPH_BASELINE_FACTOR,
           'font-size': size,
           'text-anchor': 'middle',
         },
-        [node.emoji],
+        [node.glyph],
       )
     }
     case 'image': {

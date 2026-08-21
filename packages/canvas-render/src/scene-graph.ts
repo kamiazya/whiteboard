@@ -167,17 +167,21 @@ export interface IconSceneNode {
 }
 
 /**
- * An emoji badge drawn as a single centered text glyph sized to `bbox`
- * (the smaller side). The glyph's color comes from the emoji font itself,
- * so unlike `IconSceneNode` there is no appearance to assign. A bbox-only
+ * A character badge drawn as one centered text glyph sized to `bbox` (the
+ * smaller side). Intended for a single visual glyph — an emoji (including
+ * multi-codepoint ZWJ/flag/skin-tone clusters, which SVG text renders as
+ * one glyph with no handling here), a CJK character, a dingbat. Longer
+ * text still renders, centered, and may overflow the box by design — prose
+ * belongs in text runs, not badges. Color comes from the font itself, so
+ * unlike `IconSceneNode` there is no appearance to assign. A bbox-only
  * leaf for bounds/translate/scale, like `ImageSceneNode`. Rendering
- * depends on the host's emoji font: the resvg PNG export path ships only
- * a Roboto face, so there the glyph degrades to that font's fallback.
+ * depends on the host's fonts: the resvg PNG export path ships only a
+ * Roboto face, so emoji degrade to that font's fallback glyph there.
  */
-export interface EmojiSceneNode {
-  readonly kind: 'emoji'
+export interface GlyphSceneNode {
+  readonly kind: 'glyph'
   readonly bbox: BoundingBox
-  readonly emoji: string
+  readonly glyph: string
 }
 
 /** Semantic provenance for an inline link-like run. Never flattened away. */
@@ -407,7 +411,7 @@ export type SceneNode =
   | ShapeSceneNode
   | ImageSceneNode
   | IconSceneNode
-  | EmojiSceneNode
+  | GlyphSceneNode
 
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {
