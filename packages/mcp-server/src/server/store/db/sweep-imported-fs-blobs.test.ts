@@ -1,11 +1,14 @@
 import { access, mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  DOCUMENT_DOC_KEY_PREFIX,
+  reassembleSnapshot,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../../log.js'
-import { DOCUMENT_DOC_KEY_PREFIX } from '../doc-ref-key.js'
 import { closeDb, getDb } from './index.js'
 import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'

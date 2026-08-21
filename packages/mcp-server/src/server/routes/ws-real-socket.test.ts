@@ -1,4 +1,4 @@
-import { DOCUMENT_DOC_KEY_PREFIX } from '../store/doc-ref-key.js'
+import { DOCUMENT_DOC_KEY_PREFIX } from '@kamiazya/whiteboard-ports'
 // Regression test for tmp/issues/ws-real-socket-e2e-needs-injectable-data-dir.md:
 // exercises a REAL WebSocketServer + real `ws` client (not the FakeWebSocket
 // used elsewhere in ws.test.ts) so a Loro binary update travels over an

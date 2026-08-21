@@ -13,10 +13,10 @@ import type {
   SaveSnapshotInput,
   SnapshotChunk,
 } from '@kamiazya/whiteboard-ports'
+import { docRefKey } from '@kamiazya/whiteboard-ports'
 import type { Kysely, Transaction } from 'kysely'
 import { getLogger } from '../../log.js'
 import type { DatabaseSchema } from '../db/schema.js'
-import { docRefKey } from '../doc-ref-key.js'
 import { cloneBytes } from '../inmemory/clone-bytes.js'
 
 const log = getLogger('libsql-document-store')

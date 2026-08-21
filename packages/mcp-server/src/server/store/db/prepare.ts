@@ -1,6 +1,6 @@
+import { DOCUMENT_DOC_KEY_PREFIX } from '@kamiazya/whiteboard-ports'
 import type { Kysely } from 'kysely'
 import { getLogger } from '../../log.js'
-import { DOCUMENT_DOC_KEY_PREFIX } from '../doc-ref-key.js'
 import { getDb } from './index.js'
 import { importFsBlobs } from './migrations/0011-import-fs-blobs.js'
 import { runMigrations } from './migrator.js'

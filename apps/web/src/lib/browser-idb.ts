@@ -90,6 +90,17 @@ const DB_NAME = 'whiteboard'
  * a published address (the daemon's file route validates it) and is not this
  * increment's to change.
  *
+ * v11 -> v12: adds `syncDocuments`, the `DocumentStore` port's store. One
+ * record per `docRefKey`, holding the snapshot manifest, its chunk bytes, the
+ * frontier and the delta log together — the daemon spreads the same state
+ * across four SQL tables because a row is the unit there, and a record is the
+ * unit here, so one `readwrite` transaction over one key gives the port's
+ * atomicity without a join.
+ *
+ * Purely additive, and deliberately NOT where `LoroStore` writes: that store
+ * keeps `loroDocuments` until its callers move, and two writers on one shape
+ * during a transition is how a subtle corruption gets in.
+ *
  * Cross-tab upgrades are handled rather than accepted from v8 on: every
  * connection this module opens closes itself on `versionchange`, so a newer
  * tab's upgrade is not blocked by an older one sitting idle, and a block that
@@ -97,7 +108,7 @@ const DB_NAME = 'whiteboard'
  * message a caller can show instead of hanging on a request that never
  * settles.
  */
-export const DB_VERSION = 11
+export const DB_VERSION = 12
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -110,6 +121,9 @@ export const BLOBS_STORE = 'blobs'
 
 /** Where a document's file references live: fileId -> BlobRef. */
 export const DOCUMENT_FILES_STORE = 'documentFiles'
+
+/** The `DocumentStore` port's store, keyed by `docRefKey`. */
+export const SYNC_DOCUMENTS_STORE = 'syncDocuments'
 
 const RENAMED_STORES: readonly (readonly [from: string, to: string])[] = [
   ['canvases', 'documents'],
@@ -276,6 +290,9 @@ export function openWhiteboardDb(dbName: string = DB_NAME): Promise<IDBDatabase>
       }
       if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
       if (!db.objectStoreNames.contains(BLOBS_STORE)) db.createObjectStore(BLOBS_STORE)
+      if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
+        db.createObjectStore(SYNC_DOCUMENTS_STORE)
+      }
       if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
         const index = db.createObjectStore(DOCUMENT_INDEX_STORE, {
           keyPath: ['workspaceId', 'path'],

@@ -70,7 +70,7 @@ interface RuntimeTable {
 }
 
 // Header row for a chunked DocumentStore snapshot. `docKey` is the
-// DocRef-derived string from ../doc-ref-key.ts. Chunk bytes themselves live
+// DocRef-derived string from ports' doc-ref-key.ts. Chunk bytes themselves live
 // in DocumentSnapshotChunksTable; this row carries only the manifest
 // scalars plus the frontier the snapshot was taken at.
 interface DocumentSnapshotsTable {

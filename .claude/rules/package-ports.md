@@ -73,16 +73,31 @@ paths:
 
 ## Conformance suites (`src/test-utils/`)
 
-Two ports ship their guarantees as a suite every implementation calls, rather
-than as prose each implementation re-reads:
-`describeDocumentIndexConformance` and `describeBlobStoreConformance`. Each
-takes a factory returning `{ <port>, dispose }`, so the fixture stays with the
-implementation and the assertions stay here.
+All three ports ship their guarantees as a suite every implementation calls,
+rather than as prose each implementation re-reads:
+`describeDocumentIndexConformance`, `describeBlobStoreConformance` and
+`describeDocumentStoreConformance`. Each takes a factory returning
+`{ <port>, dispose }`, so the fixture stays with the implementation and the
+assertions stay here.
 
 They must run unchanged in a browser like the rest of the package — the blob
 suite computes its expected digest with `globalThis.crypto.subtle`, never
-`node:crypto`. When a port gains a third implementation, the suite is what it
-is held to; when a port gains a guarantee, the suite is where it is written.
+`node:crypto`, and every `Uint8Array` a suite hands to a port is annotated
+`Uint8Array<ArrayBuffer>`, because a bare `Uint8Array` widens to
+`ArrayBufferLike` under a consumer whose lib includes DOM and then will not
+assign to the port's own DTOs.
+
+**Write the suite before the implementation, and mutation-check it before
+trusting it.** The `DocumentStore` suite was written from three existing
+files (the in-memory double's, the libSQL store's, and a parity property
+between them) and immediately found a real disagreement: the double returned
+chunks in insertion order where the real store sorts by index, which the
+parity property had missed because its generator only ever produced them in
+order. Two implementations agreeing is not the same as a contract.
+
+`docRefKey` lives here for the same reason. It is a STORED key, and two
+stores that spell it differently cannot read each other's documents — with
+nothing to say so at compile time.
 
 ## Tests
 

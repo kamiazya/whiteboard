@@ -14,7 +14,7 @@ import type {
   SnapshotChunk,
   SnapshotManifest,
 } from '@kamiazya/whiteboard-ports'
-import { docRefKey } from '../doc-ref-key.js'
+import { docRefKey } from '@kamiazya/whiteboard-ports'
 import { cloneBytes } from './clone-bytes.js'
 
 interface DocRecord {
@@ -55,7 +55,12 @@ export class InMemoryDocumentStore implements DocumentStore {
     }
     return {
       manifest: record.snapshot.manifest,
-      chunks: record.snapshot.chunks.map(cloneChunk),
+      // Sorted by index, not returned in insertion order: the libSQL store
+      // reads its chunks back through `order by chunkIndex`, so a double that
+      // preserved write order would let a test pass against the double and
+      // fail against the real store — the exact drift the shared conformance
+      // suite exists to catch, and did.
+      chunks: [...record.snapshot.chunks].sort((a, b) => a.index - b.index).map(cloneChunk),
       frontier: cloneBytes(record.frontier),
     }
   }
