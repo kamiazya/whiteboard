@@ -46,6 +46,16 @@ function offendingFiles(entries: Record<string, string>): string[] {
     .sort()
 }
 
+/** A blanket wipe of either origin-shared storage, however the object is reached. */
+const WIPES_STORAGE = /(?:local|session)Storage\s*\.\s*clear\s*\(/
+
+function storageWipers(entries: Record<string, string>): string[] {
+  return Object.entries(entries)
+    .filter(([, source]) => WIPES_STORAGE.test(source))
+    .map(([path]) => path)
+    .sort()
+}
+
 describe('the shared markdown view-mode preference', () => {
   it('scans a real population, so an empty result cannot mean the glob matched nothing', () => {
     expect(Object.keys(sources).length).toBeGreaterThan(20)
@@ -84,6 +94,28 @@ describe('the shared markdown view-mode preference', () => {
         'x.browser.test.tsx':
           "expect(localStorage.getItem('whiteboard.markdown-view-mode')).toBe('split')",
       }),
+    ).toEqual([])
+  })
+})
+
+describe('origin-shared storage', () => {
+  // Nine files used to localStorage.clear() in their hooks — wiping theme,
+  // settings, and the view-mode preference out from under every concurrently
+  // running file, not just their own. removeItem of the keys the file's
+  // subject actually reads is the whole discipline.
+  it('is never blanket-cleared by a browser test', () => {
+    expect(storageWipers(sources)).toEqual([])
+  })
+
+  it('detects both storages, so clean means clean rather than blind', () => {
+    expect(storageWipers({ 'x.browser.test.tsx': 'window.localStorage.clear()' })).toEqual([
+      'x.browser.test.tsx',
+    ])
+    expect(storageWipers({ 'x.browser.test.tsx': 'sessionStorage.clear()' })).toEqual([
+      'x.browser.test.tsx',
+    ])
+    expect(
+      storageWipers({ 'x.browser.test.tsx': "localStorage.removeItem('wb.lastTool')" }),
     ).toEqual([])
   })
 })

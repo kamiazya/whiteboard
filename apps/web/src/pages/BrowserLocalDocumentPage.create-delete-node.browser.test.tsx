@@ -25,6 +25,9 @@ import {
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-create-delete-node')
 
 function render(ui: ReactElement) {
   return rtlRender(

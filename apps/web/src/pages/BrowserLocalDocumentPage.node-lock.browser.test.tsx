@@ -23,6 +23,9 @@ import {
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-node-lock')
 
 function render(ui: ReactElement) {
   return rtlRender(

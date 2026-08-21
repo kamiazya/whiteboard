@@ -55,6 +55,17 @@ function offendingFiles(entries: Record<string, string>): string[] {
     .sort()
 }
 
+/** Touching the SHARED database by its literal name, in either destructive form. */
+const DELETES_SHARED = /deleteDatabase\(\s*['"]whiteboard['"]\s*\)/
+const OPENS_SHARED = /indexedDB\s*\.\s*open\(\s*['"]whiteboard['"]/
+
+function sharedDbTouchers(entries: Record<string, string>): string[] {
+  return Object.entries(entries)
+    .filter(([, source]) => DELETES_SHARED.test(source) || OPENS_SHARED.test(source))
+    .map(([path]) => path)
+    .sort()
+}
+
 describe('a test that parks IndexedDB at an old version', () => {
   it('is compared against a real current version', () => {
     expect(DB_VERSION).toBeGreaterThan(0)
@@ -76,6 +87,31 @@ describe('a test that parks IndexedDB at an old version', () => {
     ).toEqual(['x.test.ts'])
     expect(
       offendingFiles({ 'x.test.ts': "const NAME = 'whiteboard-mine'\nindexedDB.open(NAME, 7)" }),
+    ).toEqual([])
+  })
+})
+
+describe('the shared whiteboard database, by name', () => {
+  // Ten files used to deleteDatabase('whiteboard') in beforeEach — each one
+  // destroying whatever a concurrently-running neighbour had just seeded,
+  // with the failure surfacing in the neighbour. The seam is
+  // claimIsolatedWhiteboardDb(fileTag): the file's whole module graph (page
+  // stores included) resolves a private name, and its deletes hit that name.
+  it('is never opened or deleted by literal name in a browser test', () => {
+    expect(sharedDbTouchers(sources)).toEqual([])
+  })
+
+  it('detects both destructive forms, so clean means clean rather than blind', () => {
+    expect(
+      sharedDbTouchers({ 'x.browser.test.tsx': "indexedDB.deleteDatabase('whiteboard')" }),
+    ).toEqual(['x.browser.test.tsx'])
+    expect(
+      sharedDbTouchers({ 'x.browser.test.tsx': "indexedDB.open('whiteboard', DB_VERSION)" }),
+    ).toEqual(['x.browser.test.tsx'])
+    // The PNG iTXt keyword is also the literal 'whiteboard' — a keyword
+    // argument, not a database touch, and must stay legal.
+    expect(
+      sharedDbTouchers({ 'x.browser.test.tsx': "extractTextFromPng(bytes, 'whiteboard')" }),
     ).toEqual([])
   })
 })

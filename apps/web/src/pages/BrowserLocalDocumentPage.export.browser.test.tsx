@@ -6,6 +6,9 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { extractTextFromPng } from '../lib/png-embed.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-export')
 
 function render(ui: ReactElement) {
   return rtlRender(
@@ -19,7 +22,7 @@ function render(ui: ReactElement) {
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })

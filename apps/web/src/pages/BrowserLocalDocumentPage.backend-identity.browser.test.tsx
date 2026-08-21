@@ -16,6 +16,9 @@ import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-backend-identity')
 
 const constructedFor: string[] = []
 const connectedFor: string[] = []

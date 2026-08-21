@@ -25,6 +25,9 @@ import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
 import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 import { focusEditable } from '../test-utils/focus-editable.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-markdown')
 
 function render(ui: ReactElement) {
   return rtlRender(

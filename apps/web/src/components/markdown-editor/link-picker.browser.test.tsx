@@ -10,7 +10,7 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(() => {
   cleanup()
-  window.localStorage.clear()
+  window.localStorage.removeItem('whiteboard.markdown-view-mode')
 })
 
 const targets: readonly LinkTarget[] = [
