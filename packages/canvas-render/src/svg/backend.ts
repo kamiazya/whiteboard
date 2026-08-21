@@ -279,6 +279,7 @@ function renderShape(node: ShapeSceneNode): SvgChild {
             fill: 'none',
             stroke: paint.stroke,
             'stroke-width': paint['stroke-width'],
+            'stroke-opacity': paint['stroke-opacity'],
           }),
         ]
       }
@@ -644,13 +645,15 @@ function renderNode(node: SceneNode): SvgChild {
           ),
         ]),
       }
+      const paint = appearanceAttrs(node.appearance)
       const use = el('use', {
         href: `#${id}`,
         x: node.bbox.x,
         y: node.bbox.y,
         width: node.bbox.w,
         height: node.bbox.h,
-        stroke: isNonEmptyString(node.appearance?.stroke) ? node.appearance.stroke : undefined,
+        stroke: paint.stroke,
+        'stroke-opacity': paint['stroke-opacity'],
       })
       return withDefs(use, [def])
     }

@@ -951,6 +951,14 @@ function pullEdgeOntoOutlines(
     return node === undefined ? undefined : { x: node.x, y: node.y, w: node.width, h: node.height }
   }
   let path = routed.path
+  // Compare coordinates, not object identity: relying on outlineEntryPoint
+  // returning the very same object on its no-op paths is an unstated
+  // contract, and a fresh-but-equal point must not rewrite the path (the
+  // scene-diff scoreboard pins that untouched edges stay byte-identical).
+  const moved = (
+    a: { readonly x: number; readonly y: number },
+    b: { readonly x: number; readonly y: number },
+  ): boolean => a.x !== b.x || a.y !== b.y
   const toKind = nodeOutlines[edge.toNode]
   const toBox = toKind === undefined ? undefined : boxOf(edge.toNode)
   if (toKind !== undefined && toBox !== undefined) {
@@ -958,7 +966,7 @@ function pullEdgeOntoOutlines(
     const inward = path[path.length - 2]
     if (last !== undefined && inward !== undefined) {
       const pulled = outlineEntryPoint(toKind, toBox, inward, last)
-      if (pulled !== last) path = [...path.slice(0, -1), pulled]
+      if (moved(pulled, last)) path = [...path.slice(0, -1), pulled]
     }
   }
   const fromKind = nodeOutlines[edge.fromNode]
@@ -968,7 +976,7 @@ function pullEdgeOntoOutlines(
     const inward = path[1]
     if (first !== undefined && inward !== undefined) {
       const pulled = outlineEntryPoint(fromKind, fromBox, inward, first)
-      if (pulled !== first) path = [pulled, ...path.slice(1)]
+      if (moved(pulled, first)) path = [pulled, ...path.slice(1)]
     }
   }
   return path === routed.path ? routed : { ...routed, path }

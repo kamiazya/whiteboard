@@ -104,6 +104,11 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
         h: box.h,
         ry: Math.min(box.w * 0.1, box.h / 4),
       }
+    default:
+      // The type is a closed union, but the VALUE will eventually arrive
+      // from stored facet payloads — an unsupported runtime string must
+      // degrade like any other malformed input, never throw downstream.
+      return null
   }
 }
 
@@ -209,6 +214,14 @@ function convexPolygonContains(
   points: ReadonlyArray<{ readonly x: number; readonly y: number }>,
   point: { readonly x: number; readonly y: number },
 ): boolean {
+  // A zero-area box collapses every vertex onto one point, so every cross
+  // product below is 0 and the loop would accept the whole plane. Match
+  // the ellipse's degenerate rule: only the point itself is inside.
+  const first = points[0]
+  if (first === undefined) return false
+  if (points.every((p) => p.x === first.x && p.y === first.y)) {
+    return point.x === first.x && point.y === first.y
+  }
   for (let i = 0; i < points.length; i++) {
     const a = points[i]
     const b = points[(i + 1) % points.length]

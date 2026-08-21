@@ -52,6 +52,23 @@ describe('shape outlines in the SVG backend', () => {
     )
   })
 
+  it("the cylinder lid carries the appearance's stroke-opacity like the silhouette", () => {
+    const faded: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          bbox: { x: 10, y: 20, w: 100, h: 60 },
+          shape: 'cylinder',
+          appearance: { stroke: '#333', strokeOpacity: 0.5 },
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(faded)
+    expect(svg).toContain('stroke="#333" stroke-opacity="0.5"/>')
+    // Both the silhouette and the lid carry the opacity.
+    expect(svg.match(/stroke-opacity="0.5"/g)).toHaveLength(2)
+  })
+
   it('a non-finite bbox on a shaped node renders nothing (never throws)', () => {
     const bad: Scene = {
       nodes: [{ kind: 'shape', bbox: { x: Number.NaN, y: 0, w: 1, h: 1 }, shape: 'ellipse' }],

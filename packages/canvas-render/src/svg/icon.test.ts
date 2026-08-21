@@ -32,6 +32,20 @@ describe('icon nodes render as shared <symbol> defs referenced by <use>', () => 
     expect(svg).toBe('<svg xmlns="http://www.w3.org/2000/svg"></svg>')
   })
 
+  it("the use element carries the appearance's stroke-opacity", () => {
+    const faded: Scene = {
+      nodes: [
+        {
+          kind: 'icon',
+          icon: 'star',
+          bbox: { x: 0, y: 0, w: 16, h: 16 },
+          appearance: { stroke: '#333', strokeOpacity: 0.5 },
+        },
+      ],
+    }
+    expect(renderSceneToSvg(faded)).toContain('stroke="#333" stroke-opacity="0.5"/>')
+  })
+
   it('a non-finite bbox renders nothing', () => {
     const bad: Scene = {
       nodes: [{ kind: 'icon', icon: 'star', bbox: { x: Number.NaN, y: 0, w: 16, h: 16 } }],

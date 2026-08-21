@@ -74,7 +74,7 @@ describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
         { x: 10, y: 50 },
       ],
     })
-    // A tall narrow box caps the inset at w/4 so the side points survive.
+    // A tall narrow box takes the w/4 term; the h/2 cap does not bind.
     expect(nodeOutline('hexagon', { x: 0, y: 0, w: 40, h: 200 })).toEqual({
       kind: 'polygon',
       points: [
@@ -84,6 +84,18 @@ describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
         { x: 30, y: 200 },
         { x: 10, y: 200 },
         { x: 0, y: 100 },
+      ],
+    })
+    // A wide flat box is where the h/2 cap binds, keeping the polygon convex.
+    expect(nodeOutline('hexagon', { x: 0, y: 0, w: 400, h: 20 })).toEqual({
+      kind: 'polygon',
+      points: [
+        { x: 10, y: 0 },
+        { x: 390, y: 0 },
+        { x: 400, y: 10 },
+        { x: 390, y: 20 },
+        { x: 10, y: 20 },
+        { x: 0, y: 10 },
       ],
     })
   })
@@ -164,5 +176,33 @@ describe('outlineEntryPoint — where a segment entering the box first meets the
         { x: 1, y: 1 },
       ),
     ).toEqual({ x: 1, y: 1 })
+  })
+})
+
+describe('review regressions (CodeRabbit #953)', () => {
+  it('a zero-area polygon outline contains ONLY its collapsed vertex, like the ellipse rule', () => {
+    const collapsed = { x: 5, y: 5, w: 0, h: 0 }
+    expect(outlineContains('diamond', collapsed, { x: 5, y: 5 })).toBe(true)
+    expect(outlineContains('diamond', collapsed, { x: 6, y: 5 })).toBe(false)
+    expect(outlineContains('hexagon', collapsed, { x: 40, y: -3 })).toBe(false)
+  })
+
+  it('an unsupported runtime shape value degrades to null / false, never a throw', () => {
+    const bogus = 'blob' as unknown as Parameters<typeof nodeOutline>[0]
+    expect(nodeOutline(bogus, box)).toBeNull()
+    expect(outlineContains(bogus, box, { x: 60, y: 50 })).toBe(false)
+    expect(outlineEntryPoint(bogus, box, { x: -40, y: 50 }, { x: 10, y: 50 })).toEqual({
+      x: 10,
+      y: 50,
+    })
+  })
+
+  it('cylinder entry: an approach into the top-left cap region lands on the cap boundary', () => {
+    // The cap is the one region where containment is not a single convex
+    // quadratic — this pins that the bisection's convex-along-the-ray
+    // assumption holds for the composite silhouette too.
+    const pulled = outlineEntryPoint('cylinder', box, { x: -40, y: 0 }, { x: 14, y: 22 })
+    expect(outlineContains('cylinder', box, pulled)).toBe(true)
+    expect(outlineContains('cylinder', box, { x: pulled.x - 1, y: pulled.y - 0.5 })).toBe(false)
   })
 })
