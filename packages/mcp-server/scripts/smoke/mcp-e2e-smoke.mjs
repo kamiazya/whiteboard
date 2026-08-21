@@ -239,6 +239,22 @@ async function main() {
     'Facets are OKF frontmatter',
   )
 
+  // A REGISTERED facet's payload is validated on write (ADR-0013 decision 6):
+  // the bundled visual.edges facet rejects an out-of-enum routing value.
+  // (It would also be rejected as canvas-target; either way the write must
+  // fail rather than store an invalid registered payload.)
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId: named.documentId,
+      facets: { 'visual.edges/v0': { routing: 'spiral' } },
+    },
+    'with an invalid registered payload',
+    'visual.edges/v0',
+  )
+  console.log('[e2e] wb_facet_set → registered-facet validation rejects an invalid payload')
+
   // The seed the rest of this flow needs: two nodes and the edge between
   // them, drawn the way an agent actually draws — one call, explicit
   // geometry (a later step tidies, and a tidy that moves nothing proves

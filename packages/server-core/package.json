@@ -19,11 +19,12 @@
     "test": "vitest run --config vitest.node.config.ts"
   },
   "dependencies": {
+    "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
+    "@kamiazya/whiteboard-facet-engine": "workspace:*",
+    "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
-    "@kamiazya/whiteboard-canvas-render": "workspace:*",
-    "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "hono": "^4.12.34",
     "loro-crdt": "catalog:",
     "zod": "catalog:"

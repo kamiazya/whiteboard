@@ -77,3 +77,19 @@ export class NotATextNodeError extends Error {
     this.name = 'NotATextNodeError'
   }
 }
+
+/**
+ * Thrown when `wb_facet_set` refuses a facet the registry knows: an invalid
+ * payload for a registered facet, a non-current version key, or a target the
+ * definition does not declare (ADR-0013 decision 6 — write-side validation).
+ * Unregistered facets never reach this: they pass through unvalidated.
+ */
+export class FacetWriteRejectedError extends Error {
+  constructor(
+    public readonly facetKey: string,
+    reason: string,
+  ) {
+    super(`facet "${facetKey}" rejected: ${reason}`)
+    this.name = 'FacetWriteRejectedError'
+  }
+}
