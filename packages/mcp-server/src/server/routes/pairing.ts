@@ -27,8 +27,9 @@
 //   access, so a forged cross-site POST yields the attacker nothing.
 import { createHash } from 'node:crypto'
 import { Hono } from 'hono'
-import { z } from 'zod'
 import {
+  type CreateGrantResponse,
+  createGrantRequestSchema,
   type ListGrantsResponse,
   listGrantsResponseSchema,
   type PairingTokenResponse,
@@ -38,22 +39,6 @@ import {
 import type { DaemonIdentity } from '../security/daemon-identity.js'
 import type { PairingGrantStore } from '../security/pairing-grant-store.js'
 import type { PairingCodeStore, PairingTokenStore } from '../security/pairing-session.js'
-
-const createGrantRequestSchema = z
-  .object({
-    origin: z.string().min(1),
-    codeChallenge: z.string().min(1),
-  })
-  .strict()
-
-const createGrantResponseSchema = z
-  .object({
-    grantId: z.string(),
-    origin: z.string(),
-    code: z.string(),
-  })
-  .strict()
-type CreateGrantResponse = z.infer<typeof createGrantResponseSchema>
 
 function signTokenResponse(
   identity: DaemonIdentity,

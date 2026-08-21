@@ -53,6 +53,27 @@ export const pairingTokenResponseSchema = z
 
 export type PairingTokenResponse = z.infer<typeof pairingTokenResponseSchema>
 
+// POST /api/pairing/grants — the consent page's grant + PKCE-code mint.
+// Shared for the same reason as the token schemas: the daemon route and the
+// browser consent page each parse this shape `.strict()`, so a field landing
+// on only one side is a runtime throw in the browser while CI stays green.
+export const createGrantRequestSchema = z
+  .object({
+    origin: z.string().min(1),
+    codeChallenge: z.string().min(1),
+  })
+  .strict()
+
+export const createGrantResponseSchema = z
+  .object({
+    grantId: z.string(),
+    origin: z.string(),
+    code: z.string(),
+  })
+  .strict()
+
+export type CreateGrantResponse = z.infer<typeof createGrantResponseSchema>
+
 // GET /api/pairing/grants response — shared so the daemon route and the
 // PairedOriginsCard settings UI can never drift apart: a server field
 // addition previously had to land in two independent `.strict()` copies at
