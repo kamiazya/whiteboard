@@ -25,9 +25,9 @@
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import { highlightCode } from '../highlight/lowlight.js'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
