@@ -83,7 +83,6 @@ export type {
 } from './scene-graph.js'
 export type { IconTable, SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
-export type { LucideIconElement } from './vendor/lucide/icons.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
 export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
 export { renderSceneToKeyedSvg } from './svg/keyed.js'
@@ -101,3 +100,4 @@ export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-them
 export { createSpatialTheme } from './theme/spatial-theme.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyNodes } from './tidy.js'
+export type { LucideIconElement } from './vendor/lucide/icons.js'
