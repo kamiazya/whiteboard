@@ -1,0 +1,39 @@
+/**
+ * The browser `BlobStore`, held to the port's own conformance suite — the
+ * same one the daemon's filesystem and in-memory stores pass, so "content
+ * addressed" cannot mean three different things in three places.
+ *
+ * Nothing is asserted here beyond the contract. What this file adds is the
+ * IndexedDB-specific fixture: a real database per case, deleted afterwards,
+ * because every conformance case assumes a store that starts empty.
+ */
+import { describeBlobStoreConformance } from '@kamiazya/whiteboard-ports/test-utils'
+import { describe } from 'vitest'
+import { IdbBlobStore } from './idb-blob-store.js'
+
+// Its OWN database, not the app's — browser tests share an origin, so
+// deleting `whiteboard` between cases would tear it out from under whatever
+// other file is mid-fixture, and the failure would land there.
+const DB_NAME = 'whiteboard-blob-store-conformance'
+
+async function deleteDb(): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.deleteDatabase(DB_NAME)
+    // No `onblocked` resolve: `blocked` means the delete has NOT happened
+    // yet, so resolving there starts the next case against the previous
+    // one's rows. `IdbBlobStore` closes its connection in a `finally`, so
+    // nothing this suite opens outlives its own call.
+    req.onsuccess = () => resolve()
+    req.onerror = () => reject(req.error)
+  })
+}
+
+describe('IdbBlobStore', () => {
+  describeBlobStoreConformance(async () => {
+    await deleteDb()
+    return {
+      store: new IdbBlobStore(DB_NAME),
+      dispose: deleteDb,
+    }
+  })
+})

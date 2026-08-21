@@ -1,4 +1,4 @@
-import { edgeArrowPolygons } from '../edge-arrows.js'
+import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edge-rounding.js'
@@ -18,8 +18,8 @@ import type {
 import { collectDefs } from './defs.js'
 import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
-import { hoistInheritedAttrs } from './hoist.js'
 import { serializeSvg } from './serialize.js'
+import { applyOptimizationPasses } from './transform.js'
 import { el, rawXml, type SvgChild, type SvgDef, withDefs } from './vnode.js'
 
 /**
@@ -381,6 +381,39 @@ function pointsAttr(points: readonly EdgePoint[]): string {
   return points.map((p) => `${formatCoord(p.x)},${formatCoord(p.y)}`).join(' ')
 }
 
+/**
+ * Content-derived id token: every character outside [A-Za-z0-9-] becomes
+ * `_` + its hex code point, so any authored color string yields a valid,
+ * collision-free XML id and the same color always derives the same id
+ * (which is what lets `collectDefs` share one definition per color).
+ */
+function idToken(value: string): string {
+  return [...value]
+    .map((ch) => (/[A-Za-z0-9-]/.test(ch) ? ch : `_${(ch.codePointAt(0) ?? 0).toString(16)}`))
+    .join('')
+}
+
+function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
+  const geometry = ARROW_MARKER[direction]
+  const id = `wb-arrow-${direction}-${idToken(fill)}`
+  return {
+    id,
+    node: el(
+      'marker',
+      {
+        id,
+        markerWidth: ARROW_MARKER.width,
+        markerHeight: ARROW_MARKER.height,
+        refX: geometry.refX,
+        refY: geometry.refY,
+        markerUnits: 'userSpaceOnUse',
+        orient: 'auto',
+      },
+      [el('polygon', { points: pointsAttr(geometry.points), fill })],
+    ),
+  }
+}
+
 function renderNode(node: SceneNode): SvgChild {
   switch (node.kind) {
     case 'textRun':
@@ -463,12 +496,34 @@ function renderNode(node: SceneNode): SvgChild {
       // appearance spread, matching the string backend's emission order (an
       // edge appearance never carries a fill of its own).
       const jumps = node.jumps ?? []
+      // Arrowheads are shared <marker> definitions in the edge's stroke
+      // color, referenced per end — one definition per (direction, color)
+      // instead of a polygon per edge end. Marker geometry derives from the
+      // same constants as `edgeArrowPolygons` (edge-arrows.ts), which
+      // sceneBounds keeps reading for the wings' reach; the arrowhead pixel
+      // goldens pin that the two stay the same ink. Which ends get one is
+      // `edgeArrowEnds` — the polygon renderer's own skip rule — because a
+      // marker on a direction-less end would paint at angle 0 where the
+      // polygon drew nothing.
+      const stroke = node.appearance?.stroke
+      // No stroke means the polyline itself is invisible (SVG's default
+      // stroke is none) — the arrow must match it, not fall back to the
+      // marker content's default black fill and float detached.
+      const arrowFill = typeof stroke === 'string' && stroke.length > 0 ? stroke : 'none'
+      const ends = edgeArrowEnds(node)
+      const startDef = ends.from ? arrowMarkerDef('start', arrowFill) : undefined
+      const endDef = ends.to ? arrowMarkerDef('end', arrowFill) : undefined
+      const markers = {
+        'marker-start': startDef === undefined ? undefined : `url(#${startDef.id})`,
+        'marker-end': endDef === undefined ? undefined : `url(#${endDef.id})`,
+      }
       const polyline =
         node.rounded === true
           ? el('path', {
               d: roundedPathData(node.path, jumps),
               fill: 'none',
               ...appearance,
+              ...markers,
               role: PRESENTATION,
             })
           : jumps.length > 0
@@ -476,26 +531,21 @@ function renderNode(node: SceneNode): SvgChild {
                 d: jumpedPathData(node.path, jumps),
                 fill: 'none',
                 ...appearance,
+                ...markers,
                 role: PRESENTATION,
               })
             : el('polyline', {
                 points: pointsAttr(node.path),
                 fill: 'none',
                 ...appearance,
+                ...markers,
                 role: PRESENTATION,
               })
-      // Arrowheads are filled triangles in the edge's stroke color, drawn
-      // after (over) the polyline. Geometry comes from the shared helper so
-      // sceneBounds always agrees on how far the wings reach.
-      const stroke = node.appearance?.stroke
-      // No stroke means the polyline itself is invisible (SVG's default
-      // stroke is none) — the arrow must match it, not fall back to the
-      // polygon's default black fill and float detached.
-      const arrowFill = typeof stroke === 'string' && stroke.length > 0 ? stroke : 'none'
-      const arrows = edgeArrowPolygons(node).map((arrow) =>
-        el('polygon', { points: pointsAttr(arrow.points), fill: arrowFill, role: PRESENTATION }),
-      )
-      return [polyline, arrows]
+      const defs = [
+        ...(startDef === undefined ? [] : [startDef]),
+        ...(endDef === undefined ? [] : [endDef]),
+      ]
+      return defs.length > 0 ? withDefs(polyline, defs) : polyline
     }
     case 'shape':
       return renderShape(node)
@@ -632,9 +682,11 @@ export function buildSvgDocumentParts(
   scene: Scene,
   options?: SvgDocumentOptions,
 ): SvgDocumentParts {
-  // Hoisting runs before defs collection only by convention — it preserves
-  // `defs` declarations on rebuilt nodes, so the order is not load-bearing.
-  const body = scene.nodes.map(renderNode).map(hoistInheritedAttrs)
+  // Optimization passes run before defs collection only by convention —
+  // they preserve `defs` declarations on rebuilt nodes, so the order is not
+  // load-bearing. Applied per top-level node: passes are group-local by
+  // construction (see transform.ts).
+  const body = scene.nodes.map(renderNode).map((node) => applyOptimizationPasses(node))
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.
   const collected = collectDefs(body)

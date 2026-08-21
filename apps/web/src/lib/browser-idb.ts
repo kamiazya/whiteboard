@@ -107,6 +107,13 @@ export function whiteboardDbName(): string {
  * an empty list, so a user who had no documents must still get a workspace or
  * their first visit reads as a failure.
  *
+ * v10 -> v11: adds `blobs`, the `BlobStore` port's store — content-addressed
+ * bytes keyed by `<algorithm>:<digestHex>`. Purely additive, and nothing is
+ * migrated INTO it: `documentFiles` keeps its own records and gains a
+ * fileId -> ref mapping beside them, because the fileId a document embeds is
+ * a published address (the daemon's file route validates it) and is not this
+ * increment's to change.
+ *
  * Cross-tab upgrades are handled rather than accepted from v8 on: every
  * connection this module opens closes itself on `versionchange`, so a newer
  * tab's upgrade is not blocked by an older one sitting idle, and a block that
@@ -114,12 +121,19 @@ export function whiteboardDbName(): string {
  * message a caller can show instead of hanging on a request that never
  * settles.
  */
-export const DB_VERSION = 10
+export const DB_VERSION = 11
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
 export const WORKSPACES_STORE = 'workspaces'
 export const DOCUMENT_INDEX_STORE = 'documentIndex'
+
+/** The `BlobStore` port's store. Keyed by `<algorithm>:<digestHex>` — the ref
+ * IS the key, which is what makes the store deduplicating by construction. */
+export const BLOBS_STORE = 'blobs'
+
+/** Where a document's file references live: fileId -> BlobRef. */
+export const DOCUMENT_FILES_STORE = 'documentFiles'
 
 const RENAMED_STORES: readonly (readonly [from: string, to: string])[] = [
   ['canvases', 'documents'],
@@ -285,6 +299,7 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
         db.deleteObjectStore('reconnectKeypairs')
       }
       if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
+      if (!db.objectStoreNames.contains(BLOBS_STORE)) db.createObjectStore(BLOBS_STORE)
       if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
         const index = db.createObjectStore(DOCUMENT_INDEX_STORE, {
           keyPath: ['workspaceId', 'path'],

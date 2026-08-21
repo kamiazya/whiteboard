@@ -1,7 +1,8 @@
 import type { MdastLayoutOptions, MeasureText, Scene } from '@kamiazya/whiteboard-canvas-render'
 import {
+  type KeyedSvgRender,
   layoutMdastBlocks,
-  renderSceneToSvg,
+  renderSceneToKeyedSvg,
   SPATIAL_THEME_FONT_FAMILY,
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
@@ -58,7 +59,7 @@ export function renderMarkdownPreviewSvg(
   value: string,
   options: RenderMarkdownPreviewOptions,
 ): string {
-  return renderMarkdownPreview(value, options).svg
+  return renderMarkdownPreview(value, options).keyed.svg
 }
 
 /**
@@ -73,7 +74,10 @@ export interface PreviewBlockAnchor {
 }
 
 export interface RenderedMarkdownPreview {
-  readonly svg: string
+  /** Keyed projection of the preview document: `keyed.svg` is the full
+   * byte-identical document for string consumers (the worker protocol,
+   * `renderMarkdownPreviewSvg`); the groups feed the pane's DOM patcher. */
+  readonly keyed: KeyedSvgRender
   readonly anchors: readonly PreviewBlockAnchor[]
   /**
    * Each top-level block's box, in the SVG's own pixel space — the same
@@ -114,8 +118,8 @@ export function renderMarkdownPreview(
     renderMath,
     renderDiagram,
   })
-  const svg = renderSceneToSvg(scene, { padding: PREVIEW_PADDING_PX, background })
-  return { svg, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
+  const keyed = renderSceneToKeyedSvg(scene, { padding: PREVIEW_PADDING_PX, background })
+  return { keyed, anchors: blockAnchors(value, scene), blocks: blockBoxes(scene) }
 }
 
 /**

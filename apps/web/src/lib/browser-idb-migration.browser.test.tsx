@@ -323,6 +323,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // would keep a second copy of every document readable by anything that
     // still remembers the old name.
     expect(storeNames).toEqual([
+      'blobs',
       'documentFiles',
       'documentIndex',
       'loroDocuments',
@@ -373,6 +374,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
   it('is a no-op for a fresh install, which never had the old stores', async () => {
     const db = await openWhiteboardDb(MIGRATION_DB)
     expect([...db.objectStoreNames].sort()).toEqual([
+      'blobs',
       'documentFiles',
       'documentIndex',
       'loroDocuments',
@@ -451,6 +453,7 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     const db = await openWhiteboardDb(MIGRATION_DB)
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
     expect([...db.objectStoreNames].sort()).toEqual([
+      'blobs',
       'documentFiles',
       'documentIndex',
       'loroDocuments',
