@@ -108,6 +108,7 @@ function makeDeps(overrides: Partial<SessionDeps> = {}): SessionDeps {
   return {
     getOptions: () => ({}),
     onStatusChange: vi.fn(),
+    onBackendError: vi.fn(),
     onRestoreChange: vi.fn(),
     dispatchIdentityEvent: vi.fn(),
     generations: createGenerationCounters(),

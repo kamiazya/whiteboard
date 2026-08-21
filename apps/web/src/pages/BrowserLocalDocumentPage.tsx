@@ -48,6 +48,7 @@ import { browserLocalDocumentPath, parseBrowserLocalRoute } from '../lib/app-rou
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
+import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
@@ -57,7 +58,7 @@ import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { derivePageState } from './browser-local-page-state.js'
+import { derivePageState, refineForContentReadFailure } from './browser-local-page-state.js'
 import {
   type LoroStoreLike,
   useBrowserLocalDocumentController,
@@ -472,7 +473,16 @@ export function BrowserLocalDocumentPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
+    backendError,
   } = useDocumentSync(backend)
+
+  // The second phase of the page state. `pageState` above is derived from what
+  // the INDEX knows; this is what reading the CONTENT said, which can only
+  // arrive after the id it needed came out of that first phase.
+  const renderState = refineForContentReadFailure(
+    pageState,
+    isDocumentReadFailure(backendError) ? backendError : null,
+  )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange)
 
@@ -567,14 +577,14 @@ export function BrowserLocalDocumentPage({
   // schedule another refresh. The snapshot is this canvas's live truth; the
   // list is only the copy the switcher reads for the OTHER documents.
 
-  if (pageState.kind === 'load-degraded') {
+  if (renderState.kind === 'load-degraded') {
     return (
       <div
         role="alert"
         aria-live="assertive"
         className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
-        <p className="max-w-md text-sm text-destructive">{pageState.message}</p>
+        <p className="max-w-md text-sm text-destructive">{renderState.message}</p>
         <button
           type="button"
           onClick={() => void startFresh()}
@@ -586,7 +596,7 @@ export function BrowserLocalDocumentPage({
     )
   }
 
-  if (pageState.kind === 'cleanup-completed') {
+  if (renderState.kind === 'cleanup-completed') {
     return (
       <div
         data-testid="cleanup-completed"
@@ -604,7 +614,7 @@ export function BrowserLocalDocumentPage({
     )
   }
 
-  if (pageState.kind === 'loading') {
+  if (renderState.kind === 'loading') {
     return <DocumentPageSkeleton label="Loading canvas" />
   }
 
@@ -733,7 +743,7 @@ export function BrowserLocalDocumentPage({
         <DocumentProperties
           inline
           key={documentId ?? 'no-canvas'}
-          status={<SaveStatusChip state={pageState.persistence} />}
+          status={<SaveStatusChip state={renderState.persistence} />}
           actions={canvasRowActions}
           title={titleOf(documentName, documentPath)}
           onTitleChange={onTitleChange}
@@ -750,7 +760,7 @@ export function BrowserLocalDocumentPage({
       <DocumentProperties
         inline
         key={documentId ?? 'no-canvas'}
-        status={<SaveStatusChip state={pageState.persistence} />}
+        status={<SaveStatusChip state={renderState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
         title={titleOf(documentName, documentPath)}
@@ -776,7 +786,7 @@ export function BrowserLocalDocumentPage({
         {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for
           accessibility trees. */}
-        <h1 className="sr-only">{pageState.snapshot.name}</h1>
+        <h1 className="sr-only">{renderState.snapshot.name}</h1>
         {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
             switcher, rename, menus — steps aside. The floating control below
             replaces its exit path, Escape still works natively, and the dock
@@ -808,7 +818,7 @@ export function BrowserLocalDocumentPage({
               }
               dataMode="local"
               workspaceId="local"
-              path={pageState.snapshot.path}
+              path={renderState.snapshot.path}
               documents={switcherOptions.map((c) => ({
                 path: c.path,
                 name: c.name,

@@ -21,6 +21,10 @@
 // invariants grep-friendly and lets the helper be tested in isolation
 // (no React renderer required).
 
+import {
+  type DocumentReadFailure,
+  documentReadFailureMessage,
+} from '../lib/document-read-failure.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import type { BrowserLocalPersistenceState } from './use-browser-local-document-controller.js'
 
@@ -66,4 +70,25 @@ export function derivePageState(input: BrowserLocalPageStateInput): BrowserLocal
     return { kind: 'loading' }
   }
   return { kind: 'editing', snapshot: input.snapshot, persistence: input.persistence }
+}
+
+/**
+ * Second phase: what the CONTENT read said, once it has said anything.
+ *
+ * Separate from `derivePageState` because the data flow is genuinely two-step
+ * and pretending otherwise would be circular — the page needs a documentId to
+ * open the content at all, and it gets that from the first phase's `editing`
+ * state. The failure can only arrive after.
+ *
+ * It has to be a page-level state rather than a banner over the editor.
+ * Rendering the editor for a document whose bytes are intact but unreadable
+ * shows an empty canvas, and the next save overwrites them — so a user whose
+ * app is merely out of date would LOSE the document by opening it.
+ */
+export function refineForContentReadFailure(
+  state: BrowserLocalPageState,
+  failure: DocumentReadFailure | null,
+): BrowserLocalPageState {
+  if (failure === null || state.kind !== 'editing') return state
+  return { kind: 'load-degraded', message: documentReadFailureMessage(failure) }
 }
