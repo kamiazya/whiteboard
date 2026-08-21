@@ -19,7 +19,7 @@ const LONGER =
 // under real postMessage ordering is exactly what stranded this once.
 describe('the rail in write mode', () => {
   afterEach(() => {
-    window.localStorage.clear()
+    window.localStorage.removeItem('whiteboard.markdown-view-mode')
     cleanup()
   })
 

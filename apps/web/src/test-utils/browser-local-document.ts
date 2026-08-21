@@ -11,8 +11,8 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
+import { whiteboardDbName } from '../lib/browser-idb.js'
 
-const DB_NAME = 'whiteboard'
 const DOCUMENT_STORE = 'loroDocuments'
 
 type DocumentEnvelope = { snapshot: Uint8Array; deltas?: Uint8Array[] }
@@ -20,7 +20,7 @@ type DocumentEnvelope = { snapshot: Uint8Array; deltas?: Uint8Array[] }
 /** Deletes the app's IndexedDB database. */
 export async function clearWhiteboardDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase(DB_NAME)
+    const req = indexedDB.deleteDatabase(whiteboardDbName())
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
     // If a prior connection isn't fully closed, deleteDatabase fires onblocked
@@ -33,7 +33,7 @@ export async function clearWhiteboardDb(): Promise<void> {
 /** Runs `read` against the canvas object store of the real IndexedDB database. */
 async function withDocumentStore<T>(read: (store: IDBObjectStore) => IDBRequest): Promise<T> {
   return new Promise((resolve, reject) => {
-    const openReq = indexedDB.open(DB_NAME)
+    const openReq = indexedDB.open(whiteboardDbName())
     openReq.onerror = () => reject(openReq.error)
     openReq.onsuccess = () => {
       const db = openReq.result

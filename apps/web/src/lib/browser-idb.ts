@@ -9,6 +9,30 @@
  */
 const DB_NAME = 'whiteboard'
 
+// The name every opener below resolves when its caller passes none. Module
+// state, not a parameter, because page-level browser tests mount whole pages
+// that construct their stores internally — no argument can reach them.
+// Browser test files each run in their own page with their own module graph,
+// so setting this in one file cannot leak into another; what IS shared across
+// files is the origin's IndexedDB itself, which is exactly why every file
+// must claim its own name instead of deleting the shared one out from under
+// its neighbours.
+let activeDbName = DB_NAME
+
+/**
+ * Point this page's openers at a private database. Test seam, same shape as
+ * `openWhiteboardDb(dbName?)`: production never calls it. See
+ * `test-utils/isolated-whiteboard-db.ts` for the helper tests actually use.
+ */
+export function setWhiteboardDbNameForTests(name: string): void {
+  activeDbName = name
+}
+
+/** The database name this page's openers currently resolve. */
+export function whiteboardDbName(): string {
+  return activeDbName
+}
+
 /**
  * The database name is a parameter so a test can have one of its own. Browser
  * tests share an origin, so two FILES touching `whiteboard` interleave: a
@@ -273,7 +297,7 @@ function renameMetaKey(tx: IDBTransaction, from: string, to: string): void {
   }
 }
 
-export function openWhiteboardDb(dbName: string = DB_NAME): Promise<IDBDatabase> {
+export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(dbName, DB_VERSION)
     req.onupgradeneeded = () => {

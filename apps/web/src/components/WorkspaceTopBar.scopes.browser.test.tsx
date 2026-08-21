@@ -80,9 +80,11 @@ describe('top bar scopes', () => {
 describe('fullscreen ground', () => {
   it('paints the fullscreen target itself, not just the body behind it', async () => {
     // In memory, and ALL FOUR of them: every browser test file shares one
-    // origin, so a sibling file's `indexedDB.deleteDatabase('whiteboard')`
-    // lands mid-load here and the page never leaves its loading state. The
-    // assertion is about a CSS ground, so the storage backend is incidental.
+    // origin, and a sibling deleting the shared database used to land
+    // mid-load here, leaving the page stuck loading. Files now claim private
+    // databases (claimIsolatedWhiteboardDb) and a scan bars the shared name,
+    // but in-memory stays right regardless: the assertion is about a CSS
+    // ground, so the storage backend is incidental.
     //
     // All four, not just the index: the page's `loro`, `pointer` and `clock`
     // each default to real IndexedDB, so an in-memory index beside three real

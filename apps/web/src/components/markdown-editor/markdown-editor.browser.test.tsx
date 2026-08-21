@@ -9,7 +9,7 @@ import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(() => {
   cleanup()
-  window.localStorage.clear()
+  window.localStorage.removeItem('whiteboard.markdown-view-mode')
 })
 
 describe('MarkdownEditor (real browser)', () => {

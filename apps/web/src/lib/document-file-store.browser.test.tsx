@@ -4,8 +4,11 @@
  * Real browser context required for IndexedDB.
  */
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BLOBS_STORE, openWhiteboardDb } from './browser-idb.js'
 import { DocumentFileStore, documentFileRecordSchema } from './document-file-store.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('document-file-store')
 
 // Rejects on failure: silently keeping stale fixed-key records would let
 // these persistence tests pass without exercising the current write.
@@ -16,7 +19,7 @@ import { DocumentFileStore, documentFileRecordSchema } from './document-file-sto
 // surfaces as a loud test timeout.
 async function clearDb(): Promise<void> {
   return new Promise((resolve, reject) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => reject(req.error ?? new Error('whiteboard database deletion failed'))
     req.onblocked = () => {

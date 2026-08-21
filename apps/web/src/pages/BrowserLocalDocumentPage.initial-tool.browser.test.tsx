@@ -6,6 +6,9 @@ import { userEvent } from 'vitest/browser'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-initial-tool')
 
 // Real browser + real IndexedDB: the canvas's node count comes from the Loro
 // document the backend actually loads, which is exactly the input the initial
@@ -20,7 +23,7 @@ function render(ui: ReactElement) {
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
-    const req = indexedDB.deleteDatabase('whiteboard')
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
     req.onsuccess = () => resolve()
     req.onerror = () => resolve()
   })
@@ -38,7 +41,9 @@ function pressed(name: string): string | null {
 }
 
 beforeEach(async () => {
-  sessionStorage.clear()
+  // Only the key this suite is about: storages are origin-shared across
+  // parallel test files, and clear() wipes the neighbours' state too.
+  sessionStorage.removeItem('wb.lastTool')
   await clearDb()
 })
 

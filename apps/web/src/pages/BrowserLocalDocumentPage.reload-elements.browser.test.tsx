@@ -30,6 +30,9 @@ import {
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
 import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-reload-elements')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.

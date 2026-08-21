@@ -100,7 +100,9 @@ const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonDocumentPage markdown editing', () => {
   beforeEach(() => {
-    window.localStorage.clear()
+    // Only the keys this page reads: clear() would wipe origin-shared
+    // state out from under concurrently-running files.
+    window.localStorage.removeItem('whiteboard.markdown-view-mode')
     mockListWorkspaces.mockResolvedValue({ workspaces: [{ workspaceId: 'w1' }] })
     mockListDocuments.mockResolvedValue({
       documents: [{ path: 'agent-note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
@@ -108,7 +110,9 @@ describe('DaemonDocumentPage markdown editing', () => {
   })
   afterEach(() => {
     cleanup()
-    window.localStorage.clear()
+    // Only the keys this page reads: clear() would wipe origin-shared
+    // state out from under concurrently-running files.
+    window.localStorage.removeItem('whiteboard.markdown-view-mode')
     vi.clearAllMocks()
   })
 
