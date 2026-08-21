@@ -31,9 +31,11 @@ async function deleteDb(): Promise<void> {
 describe('IdbDocumentStore', () => {
   describeDocumentStoreConformance(async () => {
     await deleteDb()
+    const store = new IdbDocumentStore(DB_NAME)
     return {
-      store: new IdbDocumentStore(DB_NAME),
+      store,
       dispose: deleteDb,
+      writeUnreadableRecord: (docRef) => store.writeUnreadableRecord(docRef),
     }
   })
 })

@@ -11,11 +11,10 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { whiteboardDbName } from '../lib/browser-idb.js'
+import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
+import { LoroStore } from '../lib/loro-store.js'
 
-const DOCUMENT_STORE = 'loroDocuments'
-
-type DocumentEnvelope = { snapshot: Uint8Array; deltas?: Uint8Array[] }
+const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
 
 /** Deletes the app's IndexedDB database. */
 export async function clearWhiteboardDb(): Promise<void> {
@@ -51,30 +50,34 @@ async function withDocumentStore<T>(read: (store: IDBObjectStore) => IDBRequest)
   })
 }
 
-/** Raw keys of the canvas object store, real IndexedDB. */
+/**
+ * The ids of documents that have stored content, real IndexedDB.
+ *
+ * Reads the `DocumentStore` port's store rather than the retired
+ * `loroDocuments`, and strips the `docRefKey` prefix so callers keep speaking
+ * document ids. Kept under its old name because what it ANSWERS has not
+ * changed — only where the answer lives.
+ */
 export async function loroDocumentsKeys(): Promise<string[]> {
-  return withDocumentStore<string[]>((store) => store.getAllKeys())
+  const keys = await withDocumentStore<string[]>((store) => store.getAllKeys())
+  return keys.map((key) => key.replace(/^document:/, ''))
 }
 
-/** Node ids persisted for a given canvas id, decoded straight from IndexedDB. */
+/** Node ids persisted for a given canvas id, decoded through the real store. */
 export async function persistedNodeIds(documentId: string): Promise<string[]> {
-  const envelope = await withDocumentStore<DocumentEnvelope | undefined>((store) =>
-    store.get(documentId),
-  )
-  if (!envelope) {
-    return []
-  }
+  // Through `LoroStore` rather than a hand-decoded envelope: content is behind
+  // the `DocumentStore` port now, so its chunking and its delta log are the
+  // store's business and a test that re-implemented either would be asserting
+  // against its own copy of them.
+  const loaded = await new LoroStore(whiteboardDbName()).load(documentId)
+  if (loaded.kind !== 'ok') return []
 
   const doc = new Loro()
-  doc.import(envelope.snapshot)
-  // Replay deltas recorded after the initial snapshot — a canvas that received
-  // more than one write (e.g. a flushed edit on top of a warmup write) is
-  // stored as snapshot + deltas, not a single snapshot.
-  for (const delta of envelope.deltas ?? []) {
-    doc.import(delta)
-  }
-  // crdt's LoroDoc spatial layout: doc.getMap('nodes') keyed by
-  // nodeId (see package-crdt.md).
+  doc.import(loaded.snapshot)
+  // Replay deltas recorded after the snapshot — a canvas that received more
+  // than one write is stored as snapshot + deltas, not a single snapshot.
+  for (const delta of loaded.deltas ?? []) doc.import(delta)
+  // crdt's LoroDoc spatial layout: doc.getMap('nodes') keyed by nodeId.
   return Object.keys(doc.getMap('nodes').toJSON() as Record<string, unknown>)
 }
 

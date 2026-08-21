@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   DeleteDocInput,
+  DocRef,
   DocumentStore,
   Frontier,
   LoadDeltasInput,
@@ -13,10 +14,17 @@ import type {
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
+  StoredDocumentUnreadableCode,
 } from '@kamiazya/whiteboard-ports'
-import { docRefKey } from '@kamiazya/whiteboard-ports'
+import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { cloneBytes } from './clone-bytes.js'
 
+/**
+ * What a stored record can be. The `unreadable` arm exists so this double can
+ * reach the state a real store reaches on its own — a record written by a
+ * shape the reader does not know — which the port's conformance suite
+ * requires every implementation to be able to produce.
+ */
 interface DocRecord {
   readonly snapshot: {
     readonly manifest: SnapshotManifest
@@ -24,6 +32,7 @@ interface DocRecord {
   } | null
   readonly frontier: Frontier | null
   readonly deltas: readonly Uint8Array[]
+  readonly unreadable?: StoredDocumentUnreadableCode
 }
 
 function emptyRecord(): DocRecord {
@@ -48,8 +57,24 @@ export class InMemoryDocumentStore implements DocumentStore {
     return this.docs.get(key) ?? emptyRecord()
   }
 
+  /**
+   * Put a record this store cannot read under `docRef`. Test-only, and named
+   * so at the call site: the port's conformance suite needs every
+   * implementation to be able to reach that state.
+   */
+  writeUnreadableRecord(docRef: DocRef): void {
+    const key = docRefKey(docRef)
+    this.docs.set(key, { ...this.getRecord(key), unreadable: 'malformed' })
+  }
+
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const record = this.docs.get(docRefKey(input.docRef))
+    if (record?.unreadable !== undefined) {
+      throw new StoredDocumentUnreadableError(
+        record.unreadable,
+        `Stored document ${docRefKey(input.docRef)} is unreadable: ${record.unreadable}`,
+      )
+    }
     if (!record?.snapshot || !record.frontier) {
       return null
     }
@@ -76,6 +101,14 @@ export class InMemoryDocumentStore implements DocumentStore {
       },
       frontier: cloneBytes(input.frontier),
     })
+  }
+
+  /** One operation, so a concurrent append cannot land between the save and
+   *  the clear and be dropped. */
+  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+    await this.saveSnapshot(input)
+    const key = docRefKey(input.docRef)
+    this.docs.set(key, { ...this.getRecord(key), deltas: [] })
   }
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {

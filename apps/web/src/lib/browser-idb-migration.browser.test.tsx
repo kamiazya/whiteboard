@@ -13,7 +13,7 @@
 
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { DB_VERSION, openWhiteboardDb } from './browser-idb.js'
+import { DB_VERSION, openWhiteboardDb, SYNC_DOCUMENTS_STORE } from './browser-idb.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
@@ -324,9 +324,9 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     // still remembers the old name.
     expect(storeNames).toEqual([
       'blobs',
+      'contentTimestamps',
       'documentFiles',
       'documentIndex',
-      'loroDocuments',
       'meta',
       'syncDocuments',
       'workspaces',
@@ -376,9 +376,9 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     const db = await openWhiteboardDb(MIGRATION_DB)
     expect([...db.objectStoreNames].sort()).toEqual([
       'blobs',
+      'contentTimestamps',
       'documentFiles',
       'documentIndex',
-      'loroDocuments',
       'meta',
       'syncDocuments',
       'workspaces',
@@ -456,9 +456,9 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     expect(db.objectStoreNames.contains('reconnectKeypairs')).toBe(false)
     expect([...db.objectStoreNames].sort()).toEqual([
       'blobs',
+      'contentTimestamps',
       'documentFiles',
       'documentIndex',
-      'loroDocuments',
       'meta',
       'syncDocuments',
       'workspaces',
@@ -656,6 +656,8 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
 async function seedV7Fixture(rows: {
   documents: readonly (readonly [key: string, value: unknown])[]
   loro?: readonly string[]
+  /** A hand-written `loroDocuments` envelope, for the v12 carry. */
+  loroRecord?: readonly [key: string, value: unknown]
   defaultDocumentId?: string
 }): Promise<void> {
   return new Promise((resolve, reject) => {
@@ -674,6 +676,9 @@ async function seedV7Fixture(rows: {
         tx.objectStore('meta').put(rows.defaultDocumentId, 'defaultDocumentId')
       }
       for (const [key, value] of rows.documents) tx.objectStore('documents').put(value, key)
+      if (rows.loroRecord) {
+        tx.objectStore('loroDocuments').put(rows.loroRecord[1], rows.loroRecord[0])
+      }
       for (const key of rows.loro ?? []) {
         tx.objectStore('loroDocuments').put(
           { v: 1, snapshot: new Loro().export({ mode: 'snapshot' }), updatedAt: 'x' },
@@ -729,7 +734,7 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
     expect(await migratedLocal().listDocuments()).toEqual([])
     // The bytes go too: a Loro record no document names is unreachable
     // storage that nothing would ever clean up.
-    expect(await storeKeys('loroDocuments')).toEqual([])
+    expect(await storeKeys(SYNC_DOCUMENTS_STORE)).toEqual([])
     // ...and the pointer, or the next load resumes into a document that is gone.
     expect(await metaKeys()).toEqual([])
   })
@@ -752,7 +757,7 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
     expect(await migratedLocal().listDocuments()).toEqual([
       { ...row, updatedAt: expect.any(String) },
     ])
-    expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
+    expect(await storeKeys(SYNC_DOCUMENTS_STORE)).toEqual([`document:${POST_PATH_ID}`])
     expect(await migratedLocal().getDefaultDocumentId()).toBe(POST_PATH_ID)
   })
 
@@ -777,7 +782,7 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
     })
 
     expect((await migratedLocal().listDocuments()).map((d) => d.documentId)).toEqual([POST_PATH_ID])
-    expect(await storeKeys('loroDocuments')).toEqual([POST_PATH_ID])
+    expect(await storeKeys(SYNC_DOCUMENTS_STORE)).toEqual([`document:${POST_PATH_ID}`])
     expect(await migratedLocal().getDefaultDocumentId()).toBe(POST_PATH_ID)
   })
 
@@ -802,7 +807,7 @@ describe('v6 -> v8 in one upgrade (the discard must see what the v7 copy produce
     await seedV6Fixture('pre-path-v6', doc.export({ mode: 'snapshot' }))
 
     expect(await migratedLocal().listDocuments()).toEqual([])
-    expect(await storeKeys('loroDocuments')).toEqual([])
+    expect(await storeKeys(SYNC_DOCUMENTS_STORE)).toEqual([])
   })
 })
 
@@ -958,5 +963,64 @@ describe('IndexedDB v9 -> v10 (backfills the index)', () => {
     // empty state.
     await seedV7Fixture({ documents: [] })
     expect(await migratedLocal().listDocuments()).toEqual([])
+  })
+})
+
+describe('IndexedDB v11 -> v12 (carries content to the port)', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('carries a snapshot, its log and its timestamp across', async () => {
+    // The whole point of the version: content moves to the `DocumentStore`
+    // port's store, and the last-write time to its own. A document left
+    // behind here is a document that opens empty.
+    const doc = new Loro()
+    doc.getMovableList('elements').push('one')
+    doc.commit()
+    const snapshot = doc.export({ mode: 'snapshot' })
+    const before = doc.version()
+    doc.getMovableList('elements').push('two')
+    doc.commit()
+    const delta = doc.export({ mode: 'update', from: before })
+
+    await seedV7Fixture({
+      documents: [
+        [
+          POST_PATH_ID,
+          {
+            documentId: POST_PATH_ID,
+            workspaceId: 'local',
+            path: 'carried',
+            name: 'Carried',
+            updatedAt: 'ignored',
+            kind: 'spatial',
+          },
+        ],
+      ],
+      loroRecord: [
+        POST_PATH_ID,
+        { v: 1, snapshot, updatedAt: '2026-08-01T00:00:00.000Z', deltas: [delta] },
+      ],
+    })
+
+    const store = new LoroStore(MIGRATION_DB)
+    const loaded = await store.load(POST_PATH_ID)
+    expect(loaded.kind).toBe('ok')
+    if (loaded.kind === 'ok') {
+      expect([...loaded.snapshot]).toEqual([...snapshot])
+      // The log travels too: without it the document silently rolls back to
+      // whatever its last snapshot held.
+      expect(loaded.deltas?.length).toBe(1)
+    }
+    const stamps = await idbContentClock(MIGRATION_DB)([POST_PATH_ID])
+    expect(stamps.get(POST_PATH_ID)).toBe('2026-08-01T00:00:00.000Z')
+  })
+
+  it('drops the old store rather than leaving a second copy', async () => {
+    await seedV7Fixture({ documents: [] })
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    const names = [...db.objectStoreNames]
+    db.close()
+    expect(names).not.toContain('loroDocuments')
   })
 })

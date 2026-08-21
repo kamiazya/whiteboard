@@ -33,8 +33,10 @@ describe('LibsqlDocumentStore', () => {
   describeDocumentStoreConformance(async () => {
     const dir = await mkdtemp(join(tmpdir(), 'whiteboard-libsql-doc-store-conformance-'))
     const isolated = await createIsolatedDb({ dataDir: dir })
+    const conformanceStore = new LibsqlDocumentStore(isolated.db)
     return {
-      store: new LibsqlDocumentStore(isolated.db),
+      store: conformanceStore,
+      writeUnreadableRecord: (docRef) => conformanceStore.writeUnreadableRecord(docRef),
       dispose: async () => {
         await isolated.dispose()
         await rm(dir, { recursive: true, force: true })

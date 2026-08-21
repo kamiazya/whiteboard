@@ -87,6 +87,17 @@ suite computes its expected digest with `globalThis.crypto.subtle`, never
 `ArrayBufferLike` under a consumer whose lib includes DOM and then will not
 assign to the port's own DTOs.
 
+A conformance seam may need something an implementation must PROVIDE rather
+than something it answers — `describeDocumentStoreConformance` takes a
+`writeUnreadableRecord` so a store can be put into the state its own reader
+refuses. Make such a seam REQUIRED, not optional: an optional one is skipped
+silently by exactly the implementation that needed checking. And require only
+what every implementation can actually reach — the same seam originally took
+a `code` naming which unreadable shape to write, which had to be dropped
+because `unsupported-version` is not a state a store of typed COLUMNS can be
+in at all. The shared bar is what they can all be held to; the rest belongs
+in each implementation's own test.
+
 **Write the suite before the implementation, and mutation-check it before
 trusting it.** The `DocumentStore` suite was written from three existing
 files (the in-memory double's, the libSQL store's, and a parity property

@@ -21,6 +21,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   DeleteDocInput,
+  DocRef,
   DocumentStore,
   LoadDeltasInput,
   LoadDeltasResult,
@@ -30,7 +31,7 @@ import type {
   ReadFrontierResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
-import { docRefKey } from '@kamiazya/whiteboard-ports'
+import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { SYNC_DOCUMENTS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
@@ -84,6 +85,33 @@ type SyncRecord = z.infer<typeof syncRecordSchema>
 const EMPTY_RECORD: SyncRecord = { v: 1, snapshot: null, frontier: null, deltas: [] }
 
 /**
+ * A stored record, or a refusal that says WHY.
+ *
+ * The two failures are opposite messages to a user: a record from a newer
+ * envelope means their build is old, and one that parses as nothing means
+ * their document is damaged. Answering `null` for either would say "you have
+ * no such document" about data that is sitting right there — which is the
+ * whole reason the port names this failure instead of folding it into the
+ * absent case.
+ *
+ * This store can report both codes because its records ARE versioned
+ * envelopes. The daemon's cannot: its records are typed columns, with no
+ * envelope version to be wrong about.
+ */
+function parseRecord(key: string, raw: unknown): SyncRecord {
+  const parsed = syncRecordSchema.safeParse(raw)
+  if (parsed.success) return parsed.data
+  const version = (raw as { v?: unknown } | null)?.v
+  if (typeof version === 'number' && version !== 1) {
+    throw new StoredDocumentUnreadableError(
+      'unsupported-version',
+      `Stored document ${key} was written in envelope version ${version}`,
+    )
+  }
+  throw new StoredDocumentUnreadableError('malformed', `Stored document ${key} does not parse`)
+}
+
+/**
  * A private copy of every byte array crossing the boundary.
  *
  * Narrower than it looks, and measured rather than assumed: removing it leaves
@@ -116,9 +144,7 @@ export class IdbDocumentStore implements DocumentStore {
   ) {
     return inTransaction(this.dbName, [SYNC_DOCUMENTS_STORE], mode, async (tx) => {
       const raw = await request(tx.objectStore(SYNC_DOCUMENTS_STORE).get(key))
-      const parsed = raw === undefined ? null : syncRecordSchema.safeParse(raw)
-      const record = parsed?.success ? parsed.data : EMPTY_RECORD
-      await body(record, tx)
+      await body(raw === undefined ? EMPTY_RECORD : parseRecord(key, raw), tx)
     })
   }
 
@@ -200,6 +226,41 @@ export class IdbDocumentStore implements DocumentStore {
       result = { frontier: copy(record.frontier) }
     })
     return result
+  }
+
+  /**
+   * One transaction, so a concurrent `appendDeltas` cannot land between the
+   * save and the clear and be silently dropped. That window is the whole
+   * reason this is an operation rather than two calls at the call site.
+   */
+  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+    const key = docRefKey(input.docRef)
+    await this.#read('readwrite', key, async (_record, tx) => {
+      const next: SyncRecord = {
+        v: 1,
+        snapshot: {
+          manifest: input.manifest,
+          chunks: input.chunks.map((chunk) => ({ ...chunk, bytes: copy(chunk.bytes) })),
+        },
+        frontier: copy(input.frontier),
+        // The half `saveSnapshot` does not do: the log is in the snapshot now.
+        deltas: [],
+      }
+      await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
+    })
+  }
+
+  /**
+   * Put a record this store cannot read under `docRef`. Test-only, and named
+   * so at the call site: the port's conformance suite needs every
+   * implementation to be able to reach the unreadable state.
+   */
+  async writeUnreadableRecord(docRef: DocRef): Promise<void> {
+    await inTransaction(this.dbName, [SYNC_DOCUMENTS_STORE], 'readwrite', async (tx) => {
+      await request(
+        tx.objectStore(SYNC_DOCUMENTS_STORE).put({ v: 99, nonsense: true }, docRefKey(docRef)),
+      )
+    })
   }
 
   async deleteDoc(input: DeleteDocInput): Promise<void> {

@@ -7,7 +7,7 @@
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { DB_VERSION } from './browser-idb.js'
+import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 import { LoroStore } from './loro-store.js'
 
@@ -135,9 +135,7 @@ describe('LoroStore (real IndexedDB)', () => {
   })
 
   it('structurally-corrupt record in IDB (unknown v) returns corrupt-snapshot', async () => {
-    const db = await openLoroDb()
-    await writeRaw(db, 'loroDocuments', 'bad-canvas', { v: 99, garbage: true })
-    db.close()
+    await seedSyncDocument('bad-canvas', { raw: { v: 99, garbage: true } })
 
     const store = new LoroStore()
     const result = await store.load('bad-canvas')
@@ -145,14 +143,10 @@ describe('LoroStore (real IndexedDB)', () => {
   })
 
   it('structurally-valid envelope with invalid Loro snapshot bytes returns corrupt-snapshot', async () => {
-    const db = await openLoroDb()
-    // v:1 envelope with bytes that are NOT valid Loro data
-    await writeRaw(db, 'loroDocuments', 'bad-bytes-canvas', {
-      v: 1,
+    // A well-formed record carrying bytes that are NOT valid Loro data.
+    await seedSyncDocument('bad-bytes-canvas', {
       snapshot: new Uint8Array([0xff, 0xfe, 0x00, 0x01]),
-      updatedAt: new Date().toISOString(),
     })
-    db.close()
 
     const store = new LoroStore()
     const result = await store.load('bad-bytes-canvas')
@@ -164,35 +158,14 @@ describe('LoroStore (real IndexedDB)', () => {
     doc.getList('elements').push({ id: 'a' })
     const snapshot = doc.export({ mode: 'snapshot' })
 
-    const db = await openLoroDb()
-    await writeRaw(db, 'loroDocuments', 'bad-delta-canvas', {
-      v: 1,
+    await seedSyncDocument('bad-delta-canvas', {
       snapshot,
       deltas: [new Uint8Array([0xff, 0xfe, 0x00, 0x01])],
-      updatedAt: new Date().toISOString(),
     })
-    db.close()
 
     const store = new LoroStore()
     const result = await store.load('bad-delta-canvas')
     expect(result.kind).toBe('corrupt-delta')
-  })
-
-  it('legacy v1 JSON record in documents store is not-found for LoroStore', async () => {
-    // Seed a v1 JSON record into the legacy 'documents' store
-    const db = await openLoroDb()
-    await writeRaw(db, 'documents', 'legacy-canvas', {
-      id: 'legacy-canvas',
-      name: 'Legacy',
-      scene: { elements: [] },
-      updatedAt: '2026-01-01T00:00:00Z',
-    })
-    db.close()
-
-    const store = new LoroStore()
-    // LoroStore reads from 'loroDocuments', not 'documents' — must return not-found
-    const result = await store.load('legacy-canvas')
-    expect(result.kind).toBe('not-found')
   })
 
   it('appendDelta before any save is a no-op (no snapshot yet)', async () => {
@@ -206,10 +179,7 @@ describe('LoroStore (real IndexedDB)', () => {
   })
 
   it('appendDelta with a corrupt existing record throws so the caller can surface storage-failure', async () => {
-    // Seed a corrupt envelope
-    const db = await openLoroDb()
-    await writeRaw(db, 'loroDocuments', 'corrupt-canvas', { v: 99, garbage: true })
-    db.close()
+    await seedSyncDocument('corrupt-canvas', { raw: { v: 99, garbage: true } })
 
     const store = new LoroStore()
     const delta = new Uint8Array([1, 2, 3])
@@ -219,27 +189,3 @@ describe('LoroStore (real IndexedDB)', () => {
 })
 
 // --- helpers for raw IndexedDB access in tests ---
-
-function openLoroDb(): Promise<IDBDatabase> {
-  return new Promise((resolve, reject) => {
-    // Open at the CURRENT DB_VERSION so upgrade runs if needed
-    const req = indexedDB.open(ISOLATED_DB, DB_VERSION)
-    req.onupgradeneeded = (event) => {
-      const db = (event.target as IDBOpenDBRequest).result
-      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
-      if (!db.objectStoreNames.contains('documents')) db.createObjectStore('documents')
-      if (!db.objectStoreNames.contains('loroDocuments')) db.createObjectStore('loroDocuments')
-    }
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
-
-function writeRaw(db: IDBDatabase, store: string, key: string, value: unknown): Promise<void> {
-  return new Promise((resolve, reject) => {
-    const tx = db.transaction(store, 'readwrite')
-    tx.objectStore(store).put(value, key)
-    tx.oncomplete = () => resolve()
-    tx.onerror = () => reject(tx.error)
-  })
-}

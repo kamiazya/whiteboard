@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import type { DocRef, DocumentStore, SnapshotChunk } from '../index.js'
+import { isStoredDocumentUnreadableError } from '../index.js'
 
 /**
  * The `DocumentStore` guarantees a TypeScript signature cannot carry, as
@@ -24,12 +25,36 @@ import type { DocRef, DocumentStore, SnapshotChunk } from '../index.js'
  *   store that later learns to filter stays compatible.
  */
 export function describeDocumentStoreConformance(
-  makeStore: () => Promise<{ store: DocumentStore; dispose: () => Promise<void> }>,
+  makeStore: () => Promise<{
+    store: DocumentStore
+    dispose: () => Promise<void>
+    /**
+     * Put a record the store cannot read where `docRef`'s record goes.
+     *
+     * REQUIRED rather than optional, and that is deliberate: every store can
+     * reach its own storage, and an optional seam here would let the
+     * guarantee below be silently skipped by exactly the implementation that
+     * needed checking.
+     *
+     * No `code` parameter, because only `malformed` is universal. A store
+     * whose records are versioned ENVELOPES can also be handed one from a
+     * newer version; a store whose records are typed COLUMNS cannot be in
+     * that state at all. So the shared bar is "it throws rather than
+     * answering null", and which codes an implementation can tell apart is
+     * its own test's business.
+     */
+    writeUnreadableRecord: (docRef: DocRef) => Promise<void>
+  }>,
 ): void {
-  async function withStore(body: (store: DocumentStore) => Promise<void>): Promise<void> {
-    const { store, dispose } = await makeStore()
+  async function withStore(
+    body: (
+      store: DocumentStore,
+      writeUnreadableRecord: (docRef: DocRef) => Promise<void>,
+    ) => Promise<void>,
+  ): Promise<void> {
+    const { store, dispose, writeUnreadableRecord } = await makeStore()
     try {
-      await body(store)
+      await body(store, writeUnreadableRecord)
     } finally {
       await dispose()
     }
@@ -229,9 +254,76 @@ export function describeDocumentStoreConformance(
       })
     })
 
+    it('saveCompactedSnapshot replaces the snapshot AND drops the log', async () => {
+      // The one operation `saveSnapshot` is not. Folding needs the CRDT
+      // runtime a store does not have, so the caller folds and then says so —
+      // and it has to be ONE call, because save-then-clear has a window where
+      // a concurrent append is dropped.
+      await withStore(async (store) => {
+        await store.saveSnapshot({ docRef: DOC, ...chunked([bytes(1)]), frontier: bytes(1) })
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(2), bytes(3)], newFrontier: bytes(3) },
+        })
+
+        await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1, 2, 3)]),
+          frontier: bytes(3),
+        })
+
+        const loaded = await store.loadSnapshot({ docRef: DOC })
+        expect(loaded?.chunks.map((chunk) => [...chunk.bytes])).toEqual([[1, 2, 3]])
+        expect((await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })).updates).toEqual(
+          [],
+        )
+        // The frontier is NOT rolled back to before the deltas: they are in
+        // the snapshot now, so the document is still as far along as it was.
+        expect([...((await store.readFrontier({ docRef: DOC }))?.frontier ?? [])]).toEqual([3])
+      })
+    })
+
+    it('saveCompactedSnapshot leaves a neighbour log alone', async () => {
+      await withStore(async (store) => {
+        await store.appendDeltas({
+          docRef: OTHER,
+          deltaBatch: { updates: [bytes(9)], newFrontier: bytes(9) },
+        })
+        await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1)]),
+          frontier: bytes(1),
+        })
+        expect(
+          (await store.loadDeltas({ docRef: OTHER, sinceFrontier: bytes() })).updates.length,
+        ).toBe(1)
+      })
+    })
+
     it('deleting a document that was never there succeeds', async () => {
       await withStore(async (store) => {
         await expect(store.deleteDoc({ docRef: DOC })).resolves.toBeUndefined()
+      })
+    })
+
+    it('throws rather than answering null when a record is there but unreadable', async () => {
+      // The distinction the port exists to preserve. `null` means "no such
+      // document"; a record that is present and unreadable is a document that
+      // IS there, and telling its owner it is missing is the wrong sentence
+      // about their own data.
+      await withStore(async (store, writeUnreadable) => {
+        await writeUnreadable(DOC)
+        await expect(store.loadSnapshot({ docRef: DOC })).rejects.toSatisfy(
+          isStoredDocumentUnreadableError,
+        )
+      })
+    })
+
+    it('an unreadable record does not make its NEIGHBOURS unreadable', async () => {
+      await withStore(async (store, writeUnreadable) => {
+        await store.saveSnapshot({ docRef: OTHER, ...chunked([bytes(5)]), frontier: bytes(5) })
+        await writeUnreadable(DOC)
+        expect(await store.loadSnapshot({ docRef: OTHER })).not.toBeNull()
       })
     })
 

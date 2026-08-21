@@ -6,8 +6,12 @@ describe('InMemoryDocumentStore', () => {
   // Every guarantee this file used to spell out by hand is in the port's own
   // conformance suite now, so three implementations cannot drift into three
   // readings of the same contract.
-  describeDocumentStoreConformance(async () => ({
-    store: new InMemoryDocumentStore(),
-    dispose: async () => {},
-  }))
+  describeDocumentStoreConformance(async () => {
+    const store = new InMemoryDocumentStore()
+    return {
+      store,
+      dispose: async () => {},
+      writeUnreadableRecord: async (docRef) => store.writeUnreadableRecord(docRef),
+    }
+  })
 })

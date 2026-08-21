@@ -53,6 +53,11 @@ export class FakeDocumentStore implements DocumentStore {
     this.saved.set(docRefKey(input.docRef), input)
   }
 
+  /** No delta log here, so compacting one is the save. */
+  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+    this.saved.set(docRefKey(input.docRef), input)
+  }
+
   async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
     throw new Error('not implemented')
   }

@@ -108,15 +108,16 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
 
     const nodeA = textNodeCanvas('multi-canvas-node-a', 10, 10)
 
-    // Re-fire until the write lands in loroCanvases (see reload-elements test
-    // for why: the backend connects asynchronously with no sync signal).
+    // Re-fire until the EDIT lands, not until a record exists: every create
+    // path seeds one, so a poll on "the key is there" is satisfied before any
+    // edit does and stops retrying. See reload-elements for why the re-fire is
+    // needed at all — the backend connects asynchronously with no sync signal.
     await waitFor(
       async () => {
         act(() => {
           latestOnChange!(nodeA, setTextCommand('multi-canvas-node-a'))
         })
-        const keys = await loroDocumentsKeys()
-        expect(keys).toContain(idA)
+        expect(await persistedNodeIds(idA)).toContain('multi-canvas-node-a')
       },
       { timeout: 10000, interval: 600 },
     )
@@ -216,8 +217,9 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
         act(() => {
           latestOnChange!(warmupNode, setTextCommand('multi-canvas-warmup-a'))
         })
-        const keys = await loroDocumentsKeys()
-        expect(keys).toContain(idA)
+        // The warmup EDIT, not merely a record: every create path seeds one,
+        // so a poll on the key existing stops retrying before anything lands.
+        expect(await persistedNodeIds(idA)).toContain('multi-canvas-warmup-a')
       },
       { timeout: 10000, interval: 600 },
     )

@@ -1,6 +1,5 @@
 import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { openWhiteboardDb } from './browser-idb.js'
-import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
+import { CONTENT_TIMESTAMPS_STORE, openWhiteboardDb } from './browser-idb.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
 
 /**
@@ -29,34 +28,30 @@ export const LOCAL_WORKSPACE_ID = 'local'
 async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<string, string>> {
   if (ids.length === 0) return new Map()
   return new Promise((resolve, reject) => {
-    const tx = db.transaction('loroDocuments', 'readonly')
-    const store = tx.objectStore('loroDocuments')
+    // Its own store, not the content record's envelope.
+    //
+    // It used to be a field on the Loro envelope, which meant the listing
+    // parsed a whole snapshot record to read one string — and pulled the
+    // envelope schema's module along with it. Now that content lives behind
+    // the `DocumentStore` port, which has no notion of wall-clock time at
+    // all, the timestamp has its own store and this read touches nothing else.
+    //
+    // The consequence, stated rather than hidden: a document whose content
+    // will not load still contributes the timestamp its last writer stamped,
+    // so it can read as recently edited. That is a last-WRITE time, which is
+    // what this field claims to be; whether the bytes are readable is a
+    // question for whoever loads them.
+    const tx = db.transaction(CONTENT_TIMESTAMPS_STORE, 'readonly')
+    const store = tx.objectStore(CONTENT_TIMESTAMPS_STORE)
     const stamps = new Map<string, string>()
     for (const id of ids) {
       const req = store.get(id)
       req.onsuccess = () => {
-        // The ENVELOPE only. `LoroStore.load` goes further and imports the
-        // bytes to reject a structurally-valid record whose CRDT payload is
-        // corrupt — deliberately not repeated here, because doing it would
-        // import every listed document's snapshot on every list AND put
-        // `loro-crdt` back on the critical path (measured at +24.3 KB gzip,
-        // which is why the schema has its own module).
-        //
-        // The consequence, stated rather than hidden: a corrupt record still
-        // contributes the timestamp its writer stamped, so a document whose
-        // content will not load can still read as recently edited. That is a
-        // last-write time, which is what this field claims to be; whether the
-        // bytes are readable is a question for whoever loads them.
-        const parsed = loroRecordEnvelopeSchema.safeParse(req.result)
-        if (parsed.success) stamps.set(id, parsed.data.updatedAt)
+        if (typeof req.result === 'string') stamps.set(id, req.result)
       }
     }
     tx.oncomplete = () => resolve(stamps)
     tx.onerror = () => reject(tx.error)
-    // Without onabort an aborted transaction leaves this promise pending and
-    // the caller awaits it — a hang rather than a failure. A connection
-    // closing abnormally aborts its active transactions, so this is reachable
-    // without anyone calling abort() directly.
     tx.onabort = () => reject(tx.error ?? new Error('transaction aborted'))
   })
 }

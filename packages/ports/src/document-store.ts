@@ -90,8 +90,31 @@ export type DeleteDocInput = z.infer<typeof deleteDocInputSchema>
  * unit of storage.
  */
 export interface DocumentStore {
+  /**
+   * `null` means the document has no snapshot. It does NOT mean the store
+   * could not read one: a record that is present but unreadable throws
+   * `StoredDocumentUnreadableError`, so a caller can tell "you have no such
+   * document" from "your build cannot read this one" — which are opposite
+   * things to tell a user about their own data.
+   */
   loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult>
   saveSnapshot(input: SaveSnapshotInput): Promise<void>
+  /**
+   * Save a snapshot that already contains everything in the delta log, and
+   * drop the log.
+   *
+   * Separate from `saveSnapshot` because the two differ in exactly one
+   * promise and it is not one a flag should carry: an ordinary save leaves
+   * the log alone, because a snapshot and the updates after it are both
+   * live. Folding is the caller's — it needs the CRDT runtime, which a store
+   * does not have — so this operation is "I folded; the log is redundant
+   * now", and it is one operation because doing it as save-then-clear gives
+   * a window where a concurrent append is dropped.
+   *
+   * Without it a log has no way to stop growing while the document lives:
+   * `deleteDoc` is the only other thing that clears one.
+   */
+  saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void>
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>
   loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult>
   readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult>
