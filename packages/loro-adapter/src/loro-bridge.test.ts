@@ -5,7 +5,7 @@ import type {
   SpatialNode,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
   deleteSpatialEdge,
@@ -346,7 +346,6 @@ describe('loro-bridge', () => {
   })
 
   test('deleteSpatialNode is a single commit: one UndoManager step restores node and edges together', async () => {
-    const { UndoManager } = await import('loro-crdt')
     const doc = makeDoc()
     writeSpatialCanvas(doc, { nodes: [TEXT_NODE, FILE_NODE], edges: [EDGE] })
     const undoManager = new UndoManager(doc, {})
@@ -666,7 +665,6 @@ describe('withSpatialBatch', () => {
   })
 
   test('deleting an ABSENT id inside a batch preserves the helper no-op: no ops, no undo step', async () => {
-    const { UndoManager } = await import('loro-crdt')
     const doc = seeded()
     const undoManager = new UndoManager(doc, { mergeInterval: 0 })
     expect(undoManager.canUndo()).toBe(false)
@@ -679,7 +677,6 @@ describe('withSpatialBatch', () => {
   })
 
   test('one batch of N writes = exactly one undo step (mergeInterval 0 so timing cannot mask it)', async () => {
-    const { UndoManager } = await import('loro-crdt')
     const doc = seeded()
     const before = readSpatialCanvas(doc)
     const undoManager = new UndoManager(doc, { mergeInterval: 0 })
@@ -700,7 +697,6 @@ describe('withSpatialBatch', () => {
   })
 
   test('error contract: a mid-batch throw commits NOTHING; the partial ops stay pending until a later committing write converges the doc', async () => {
-    const { UndoManager } = await import('loro-crdt')
     const doc = seeded()
     const undoManager = new UndoManager(doc, { mergeInterval: 0 })
     expect(() =>
@@ -793,7 +789,6 @@ describe('node lock sidecar', () => {
   })
 
   test('setNodeLock to its current value writes nothing (no empty undo step)', async () => {
-    const { UndoManager } = await import('loro-crdt')
     const doc = seeded()
     setNodeLock(doc, TEXT_NODE.id, true)
     const undoManager = new UndoManager(doc, { mergeInterval: 0 })
@@ -873,7 +868,6 @@ describe('edge lock sidecar', () => {
   })
 
   test('setEdgeLock to its current value writes nothing (no empty undo step)', async () => {
-    const { UndoManager } = await import('loro-crdt')
     const doc = seeded()
     setEdgeLock(doc, EDGE.id, true)
     const undoManager = new UndoManager(doc, { mergeInterval: 0 })

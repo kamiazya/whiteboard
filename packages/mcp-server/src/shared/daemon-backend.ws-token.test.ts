@@ -8,6 +8,7 @@
 // all and was rejected 401, silently losing every edit. These tests pin
 // that the transport's wsToken reaches the upgrade offer.
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { DaemonBackend } from './daemon-backend.js'
 import { resetTokenStoreForTests } from './token-store.js'
 
 class FakeWebSocket {
@@ -65,7 +66,6 @@ describe('DaemonBackend WS credential selection', () => {
   })
 
   it('offers the transport wsToken via the daemon-token subprotocol when no bootstrap global is seeded', async () => {
-    const { DaemonBackend } = await import('./daemon-backend.js')
     const backend = new DaemonBackend('ws1', 'main', 'http://127.0.0.1:3099/', {
       fetch: globalThis.fetch,
       wsToken: () => 'pairing-session-token',
@@ -82,7 +82,6 @@ describe('DaemonBackend WS credential selection', () => {
       location: { origin: 'http://localhost' },
       __WHITEBOARD_DAEMON_TOKEN__: 'bootstrap-token',
     }
-    const { DaemonBackend } = await import('./daemon-backend.js')
     const backend = new DaemonBackend('ws1', 'main', 'http://127.0.0.1:3099/', {
       fetch: globalThis.fetch,
       wsToken: () => 'pairing-session-token',
@@ -95,7 +94,6 @@ describe('DaemonBackend WS credential selection', () => {
   })
 
   it('re-reads a rotated wsToken on every socket attempt', async () => {
-    const { DaemonBackend } = await import('./daemon-backend.js')
     let current = 'first-token'
     const backend = new DaemonBackend('ws1', 'main', 'http://127.0.0.1:3099/', {
       fetch: globalThis.fetch,
@@ -112,7 +110,6 @@ describe('DaemonBackend WS credential selection', () => {
   })
 
   it('keeps the credential-less offer when neither source provides a token', async () => {
-    const { DaemonBackend } = await import('./daemon-backend.js')
     const backend = new DaemonBackend('ws1', 'main', 'http://127.0.0.1:3099/', {
       fetch: globalThis.fetch,
     })

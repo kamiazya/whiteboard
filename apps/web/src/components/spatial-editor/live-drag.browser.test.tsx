@@ -3,6 +3,7 @@
 // scene hides what the ghost layer is already drawing — no duplicate node
 // left behind at the start position. Real pointer input, assertions taken
 // MID-drag before any pointerup.
+import { assignEdgeAnchors } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -357,7 +358,6 @@ it('keeps bystander pins frozen when a layout-worker reply lands mid-gesture', a
     expect(pathsBefore.length).toBeGreaterThan(0)
 
     const lastId = FakeWorker.instances.flatMap((w) => w.requests).at(-1)?.id ?? 1
-    const { assignEdgeAnchors } = await import('@kamiazya/whiteboard-canvas-render')
     FakeWorker.respond({
       type: 'laid-out',
       id: lastId,

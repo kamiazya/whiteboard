@@ -3,7 +3,7 @@
 // of the URL trick (or the cache injection) cannot silently break every store
 // suite at once.
 
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, stat } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { sql } from 'kysely'
@@ -98,9 +98,7 @@ describe('createIsolatedDb (file fallback)', () => {
         .insertInto('workspaces')
         .values({ id: 's', createdAt: 1, updatedAt: 1 })
         .execute()
-      const fs = await import('node:fs/promises')
-      const exists = await fs
-        .stat(join(scratch, 'whiteboard.db'))
+      const exists = await stat(join(scratch, 'whiteboard.db'))
         .then(() => true)
         .catch(() => false)
       expect(exists).toBe(true)

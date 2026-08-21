@@ -16,9 +16,11 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
+import * as dataDirSecureModule from './data-dir-secure.js'
 import {
   DATA_DIR,
   getDataDir,
+  parentIsWritable,
   resetDataDirForTests,
   resolveDataDir,
   setDataDirForTests,
@@ -223,7 +225,6 @@ describe('DATA_DIR does not create directories at import time', () => {
       await rm(homeWhiteboard, { recursive: true, force: true })
 
       // resolveDataDir with parentIsWritable (used by DATA_DIR) does NOT create the dir
-      const { parentIsWritable } = await import('./data-dir-secure.js')
       const result = resolveDataDir({}, { homeDir: tempHome, isWritableDir: parentIsWritable })
       expect(result).toBe(homeWhiteboard)
       expect(existsSync(homeWhiteboard)).toBe(false)
@@ -239,7 +240,6 @@ describe('shared/data-dir-secure.ts module boundary', () => {
     // the HTTP server's static-file middleware. Daemon and CLI code imports
     // this shared module and must not transitively pull in a
     // server-specific path constant.
-    const mod = await import('./data-dir-secure.js')
-    expect('DIST_WEB_APP_DIR' in mod).toBe(false)
+    expect('DIST_WEB_APP_DIR' in dataDirSecureModule).toBe(false)
   })
 })

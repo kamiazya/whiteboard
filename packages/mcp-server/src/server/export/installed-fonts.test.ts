@@ -13,7 +13,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { resetDataDirForTests, setDataDirForTests } from '../../shared/data-dir-secure.js'
 import { syntheticFont } from '../../shared/test-utils/synthetic-font.js'
+import { renderSpatialCanvasToPng } from './headless-renderer.js'
 import { installedFontDir, installedFontFiles } from './installed-fonts.js'
+import { undrawableCharacters } from './undrawable-characters.js'
 
 let dataDir: string
 
@@ -85,7 +87,6 @@ describe('an installed font reaches both the renderer and the report', () => {
   }
 
   it('stops reporting characters it can now draw', async () => {
-    const { undrawableCharacters } = await import('./undrawable-characters.js')
     expect(await undrawableCharacters(CANVAS)).toEqual([COVERED])
 
     await mkdir(installedFontDir(), { recursive: true })
@@ -100,7 +101,6 @@ describe('an installed font reaches both the renderer and the report', () => {
   // own assertion — on the PIXELS, since that is the only place the answer
   // exists.
   it('renders glyphs the vendored face lacks', async () => {
-    const { renderSpatialCanvasToPng } = await import('./headless-renderer.js')
     const tofu = await renderSpatialCanvasToPng(CANVAS, { theme: 'light' })
 
     await mkdir(installedFontDir(), { recursive: true })
