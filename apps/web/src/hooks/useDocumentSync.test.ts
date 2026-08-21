@@ -165,6 +165,35 @@ describe('useDocumentSync', () => {
     expect(result.current.syncStatus).toBe('connected')
   })
 
+  it('reports WHY the backend failed, not only that it did', () => {
+    const backend = makeFakeBackend()
+    const { result } = renderHook(() => useDocumentSync(backend))
+
+    act(() => {
+      backend._ctrl.handlers!.onError?.('unsupported-version')
+    })
+
+    expect(result.current.backendError).toBe('unsupported-version')
+  })
+
+  it('drops the reason when the backend changes, so it cannot outlive its document', () => {
+    // The reason describes ONE document. Carried across a switch it turns the
+    // next document — which may be perfectly readable — into an error screen,
+    // and the page has no way to tell the difference.
+    const broken = makeFakeBackend()
+    const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
+      initialProps: { backend: broken },
+    })
+    act(() => {
+      broken._ctrl.handlers!.onError?.('unsupported-version')
+    })
+    expect(result.current.backendError).toBe('unsupported-version')
+
+    rerender({ backend: makeFakeBackend() })
+
+    expect(result.current.backendError).toBeNull()
+  })
+
   it('sets syncStatus to "error" when onError fires', () => {
     const backend = makeFakeBackend()
     const { result } = renderHook(() => useDocumentSync(backend))

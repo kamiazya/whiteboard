@@ -2,17 +2,25 @@
 // top layer — workspace switcher, rename, menus — which is 48px of chrome
 // nobody entered fullscreen to see. It now steps aside, leaving the canvas
 // and the dock, with one floating way back out.
+// jsdom has no IndexedDB, and the page's backend reads content from a real
+// one. Without this every content read fails — which the page now reports as
+// an unreadable document instead of silently drawing an editor over it, so a
+// suite about fullscreen chrome would otherwise be testing the error screen.
+import 'fake-indexeddb/auto'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // The top bar is React.lazy in the page; loading it in the collection phase
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (the lazy-race
 // flake shape integrator-flow.md documents).
 import '../components/WorkspaceTopBar.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-fullscreen')
 
 beforeEach(() => {
   // jsdom has no fullscreen at all; start each test explicitly OUT of it.
