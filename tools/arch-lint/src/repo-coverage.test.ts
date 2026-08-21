@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { checkAllowedDependencies } from './allowed-deps-check.js'
@@ -6,6 +6,7 @@ import { exemptedBoundaryViolationKinds, KNOWN_IMPORT_CYCLES } from './architect
 import { buildValueImportGraph, findImportCycles } from './cycle-check.js'
 import { checkDependencyDirection } from './direction-check.js'
 import { scanSourceForBoundaryViolations } from './scanner.js'
+import { scanSourceForSceneSeamOmissions } from './scene-seams-check.js'
 
 const REPO_ROOT = join(import.meta.dirname, '..', '..', '..')
 const ARCHITECTURE_MAP_DOC = join(REPO_ROOT, '.claude', 'rules', 'architecture-map.md')
@@ -171,4 +172,59 @@ describe('architecture-map.md doc sync', () => {
   it('names the circular-value-import enforcer', () => {
     expect(doc).toContain('cycle-check.ts')
   })
+})
+
+/**
+ * Every surface that composes a spatial scene for a USER has to pass the seams
+ * whose absence changes the picture rather than falling back to it. Scanned
+ * over real source rather than asserted per call site, because the failure
+ * mode is a call site nobody remembered — including one that did not exist yet
+ * when the seam was added.
+ */
+describe('spatial scene compositions name every required seam', () => {
+  const dirs = [
+    ...SHARED_LAYER_PACKAGES,
+    'packages/canvas-viewer',
+    'packages/mcp-server',
+    'apps/web',
+  ].map((packageDir) => join(REPO_ROOT, packageDir, 'src'))
+
+  const productionFiles = dirs
+    .filter((dir) => existsSync(dir))
+    .flatMap((dir) => listTsFiles(dir, ['.ts', '.tsx']))
+    // Tests compose the same options and legitimately do not care: twenty of
+    // them exist, and making them declare a seam they never render with would
+    // be noise, not a guard.
+    .filter((path) => !/\.(test|bench)\.tsx?$/.test(path))
+
+  it('finds the composition sites at all, so a silent zero cannot pass', () => {
+    const composing = productionFiles.filter((path) =>
+      /layoutSpatialCanvas(WithAnchors)?\(/.test(readFileSync(path, 'utf-8')),
+    )
+    expect(composing.length).toBeGreaterThanOrEqual(4)
+  })
+
+  for (const path of productionFiles) {
+    const text = readFileSync(path, 'utf-8')
+    if (!/layoutSpatialCanvas(WithAnchors)?\(/.test(text)) continue
+    const relativePath = relative(REPO_ROOT, path)
+    it(`${relativePath} passes every required seam`, () => {
+      const omissions = scanSourceForSceneSeamOmissions(relativePath, text)
+      expect(
+        omissions,
+        omissions.length === 0
+          ? ''
+          : omissions
+              .map(
+                (o) =>
+                  `${relativePath}:${o.line} composes a scene without \`${o.seam}\`. ` +
+                  'Omitting it does not fall back to the same picture — it renders a ' +
+                  'different one, and no test on another surface will notice. Pass it, ' +
+                  'or pass it explicitly as undefined if this surface really renders ' +
+                  'without it.',
+              )
+              .join('\n'),
+      ).toHaveLength(0)
+    })
+  }
 })
