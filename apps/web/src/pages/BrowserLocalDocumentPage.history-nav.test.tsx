@@ -19,6 +19,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
   cleanup,
+  configure,
   fireEvent,
   render as rtlRender,
   screen,
@@ -79,6 +80,12 @@ async function pathOf(store: IdbDocumentIndex, documentId: string): Promise<stri
 // which costs two to three IndexedDB round trips where it used to cost one,
 // and `fake-indexeddb` is slower per round trip than the real thing.
 vi.setConfig({ testTimeout: 30_000 })
+// One budget for every wait in the file, rather than a number per call site.
+// These waits came from browser mode with 60s per test; none of them is a
+// deliberate "this must be fast" assertion, and reading a document back is
+// two IndexedDB round trips behind the `DocumentStore` port plus a Loro
+// import — which under fake-indexeddb on a loaded runner does not fit 5s.
+configure({ asyncUtilTimeout: 15_000 })
 
 describe('BrowserLocalDocumentPage browser Back/Forward (browser — real IndexedDB)', () => {
   beforeEach(async () => {
@@ -107,19 +114,14 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       </div>,
     )
 
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
-      timeout: 5000,
-    })
-    await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    await waitFor(() => expect(latestOnChange).not.toBeNull())
 
-    const idA = await waitFor(
-      async () => {
-        const id = await new IdbDefaultDocumentPointer().get()
-        expect(id).not.toBeNull()
-        return id as string
-      },
-      { timeout: 5000 },
-    )
+    const idA = await waitFor(async () => {
+      const id = await new IdbDefaultDocumentPointer().get()
+      expect(id).not.toBeNull()
+      return id as string
+    })
     const pathA = await pathOf(store, idA)
 
     const nodeA = textNodeCanvas('history-nav-node-a', 0, 0)
@@ -130,7 +132,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
         })
         expect(await persistedNodeIds(idA)).toContain('history-nav-node-a')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     // Create canvas B via the switcher's New-canvas control.
@@ -141,20 +143,15 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       fireEvent.pointerUp(newItem)
     })
 
-    const idB = await waitFor(
-      async () => {
-        const id = await new IdbDefaultDocumentPointer().get()
-        expect(id).not.toBe(idA)
-        return id as string
-      },
-      { timeout: 5000 },
-    )
+    const idB = await waitFor(async () => {
+      const id = await new IdbDefaultDocumentPointer().get()
+      expect(id).not.toBe(idA)
+      return id as string
+    })
     const pathB = await pathOf(store, idB)
     expect(pathB).not.toBe(pathA)
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`), {
-      timeout: 5000,
-    })
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`))
 
     const nodeB = textNodeCanvas('history-nav-node-b', 20, 20)
     await waitFor(
@@ -164,7 +161,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
         })
         expect(await persistedNodeIds(idB)).toContain('history-nav-node-b')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     // Back: real browser Back/Forward drives router history the same way
@@ -174,20 +171,15 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       await router.navigate(-1)
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathA}`), {
-      timeout: 5000,
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathA}`))
+    await waitFor(async () => {
+      expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
     })
-    await waitFor(
-      async () => {
-        expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
-      },
-      { timeout: 5000 },
-    )
     await waitFor(() => expect(screen.getByRole('heading', { level: 1 })).toBeTruthy())
     // The editor must actually be showing canvas A now — the assertions above
     // only establish that the navigation and the store agree about which
     // canvas is current.
-    await waitFor(() => expect(mountedNodeIds()).toContain('history-nav-node-a'), { timeout: 5000 })
+    await waitFor(() => expect(mountedNodeIds()).toContain('history-nav-node-a'))
     expect(mountedNodeIds()).not.toContain('history-nav-node-b')
 
     // Forward: back to B.
@@ -195,16 +187,11 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       await router.navigate(1)
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`), {
-      timeout: 5000,
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`))
+    await waitFor(async () => {
+      expect(await new IdbDefaultDocumentPointer().get()).toBe(idB)
     })
-    await waitFor(
-      async () => {
-        expect(await new IdbDefaultDocumentPointer().get()).toBe(idB)
-      },
-      { timeout: 5000 },
-    )
-    await waitFor(() => expect(mountedNodeIds()).toContain('history-nav-node-b'), { timeout: 5000 })
+    await waitFor(() => expect(mountedNodeIds()).toContain('history-nav-node-b'))
     expect(mountedNodeIds()).not.toContain('history-nav-node-a')
   })
 })

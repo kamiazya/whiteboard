@@ -17,7 +17,14 @@
 import 'fake-indexeddb/auto'
 import { readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  configure,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
@@ -71,10 +78,8 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 
 async function mountPage(): Promise<void> {
   render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
-    timeout: 5000,
-  })
-  await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+  await waitFor(() => expect(latestOnChange).not.toBeNull())
 }
 
 /**
@@ -99,7 +104,7 @@ async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
       if (want === 'some') expect(locked).toBeGreaterThan(0)
       else expect(locked).toBe(0)
     },
-    { timeout: 10000, interval: 200 },
+    { interval: 200 },
   )
 }
 
@@ -110,6 +115,12 @@ async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
 // which costs two to three IndexedDB round trips where it used to cost one,
 // and `fake-indexeddb` is slower per round trip than the real thing.
 vi.setConfig({ testTimeout: 30_000 })
+// One budget for every wait in the file, rather than a number per call site.
+// These waits came from browser mode with 60s per test; none of them is a
+// deliberate "this must be fast" assertion, and reading a document back is
+// two IndexedDB round trips behind the `DocumentStore` port plus a Loro
+// import — which under fake-indexeddb on a loaded runner does not fit 5s.
+configure({ asyncUtilTimeout: 15_000 })
 
 describe('BrowserLocalDocumentPage node-lock reload persistence (browser — real IndexedDB)', () => {
   beforeEach(async () => {
@@ -142,7 +153,7 @@ describe('BrowserLocalDocumentPage node-lock reload persistence (browser — rea
           await persistedNodeIds((await new IdbDefaultDocumentPointer().get()) ?? ''),
         ).toContain('lock-probe')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     // Lock it, and confirm the page round-trips the state back to the editor
@@ -154,7 +165,7 @@ describe('BrowserLocalDocumentPage node-lock reload persistence (browser — rea
         })
         expect([...latestLockedIds]).toContain('lock-probe')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     // The lock has to be PERSISTED before the reload, not merely reported
@@ -177,7 +188,7 @@ describe('BrowserLocalDocumentPage node-lock reload persistence (browser — rea
       () => {
         expect([...latestLockedIds]).toContain('lock-probe')
       },
-      { timeout: 10000, interval: 300 },
+      { interval: 300 },
     )
   })
 
@@ -197,7 +208,7 @@ describe('BrowserLocalDocumentPage node-lock reload persistence (browser — rea
           await persistedNodeIds((await new IdbDefaultDocumentPointer().get()) ?? ''),
         ).toContain('unlock-probe')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
     await waitFor(
       () => {
@@ -206,7 +217,7 @@ describe('BrowserLocalDocumentPage node-lock reload persistence (browser — rea
         })
         expect([...latestLockedIds]).toContain('unlock-probe')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
     act(() => {
       latestToggleLock!('unlock-probe', false)
@@ -221,7 +232,6 @@ describe('BrowserLocalDocumentPage node-lock reload persistence (browser — rea
     latestOnChange = null
     await mountPage()
     await waitFor(() => expect([...latestLockedIds]).not.toContain('unlock-probe'), {
-      timeout: 10000,
       interval: 300,
     })
   })
