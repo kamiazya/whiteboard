@@ -6,6 +6,8 @@ one specific task. For a guided first run, start with the [Tutorials](../tutoria
 Guides:
 
 - **[self-host-with-docker](self-host-with-docker.md)** — run Whiteboard in server mode for a team.
+- **[link-documents](link-documents.md)** — write `[[references]]` between documents and read
+  them back through the Connections chip.
 - **[connect-to-local-daemon](connect-to-local-daemon.md)** — detect a local daemon from the web
   app and copy browser-local canvases onto it.
 - **[install-fonts-for-export](install-fonts-for-export.md)** — stop exports rendering Japanese,
