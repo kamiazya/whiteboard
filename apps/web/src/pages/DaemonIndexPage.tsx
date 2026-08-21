@@ -18,6 +18,7 @@ import {
   setDocumentDisplayName,
   updateDocument,
 } from '../lib/daemon-api-client.js'
+import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
@@ -96,6 +97,16 @@ export function DaemonIndexPage({
   const [view, setView] = useState<ViewKey>('grid')
   const [workspaces, setWorkspaces] = useState<string[]>([])
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
+  // One source per (fetch, base, workspace): the panel re-reads whenever the
+  // source identity changes, so this memo is also what scopes it to the
+  // selected workspace.
+  const filesSource = useMemo(
+    () =>
+      selectedWorkspace
+        ? createDaemonFilesSource(daemonFetch, daemonBaseUrl, selectedWorkspace)
+        : null,
+    [daemonFetch, daemonBaseUrl, selectedWorkspace],
+  )
   const [rows, setRows] = useState<DocumentRow[]>([])
   // False from the moment a workspace switch clears rows until its documents
   // fetch settles — rows=[] alone cannot distinguish "still loading" from
@@ -378,15 +389,13 @@ export function DaemonIndexPage({
         )}
 
         {view === 'tree' ? (
-          selectedWorkspace ? (
+          selectedWorkspace && filesSource ? (
             // The wrapper remounts on every grid/tree toggle, so the fade
             // re-runs and the view switch reads as one continuous surface
             // changing shape rather than an instant swap.
             <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
               <WorkspaceFilesPanel
-                daemonFetch={daemonFetch}
-                daemonBaseUrl={daemonBaseUrl}
-                workspaceId={selectedWorkspace}
+                source={filesSource}
                 onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
                 onDuplicateDocument={(path) => void handleDuplicate(path)}
                 onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}

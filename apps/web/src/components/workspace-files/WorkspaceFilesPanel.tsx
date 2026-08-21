@@ -2,20 +2,13 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
-import {
-  createDocument,
-  DaemonApiError,
-  getDocumentOkfV1,
-  getDocumentSnapshot,
-  listDocuments,
-  renameDocumentPath,
-} from '../../lib/daemon-api-client.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { newDocumentPathIn } from './new-document-path.js'
@@ -25,9 +18,12 @@ import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
 export interface WorkspaceFilesPanelProps {
-  daemonFetch: typeof globalThis.fetch
-  daemonBaseUrl: string
-  workspaceId: string
+  /**
+   * Where the documents live. The panel itself no longer knows which mode it
+   * is in — the daemon and the browser-local store each supply one of these,
+   * which is what lets one browser serve both.
+   */
+  source: WorkspaceFilesSource
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
   /**
@@ -74,16 +70,14 @@ export type BrowserColumns = 'one' | 'two'
  * of what the preview shows.
  */
 export function WorkspaceFilesPanel({
-  daemonFetch,
-  daemonBaseUrl,
-  workspaceId,
+  source,
   onOpenDocument,
   onDuplicateDocument,
   onRequestDelete,
   revision,
 }: WorkspaceFilesPanelProps) {
   const { resolvedTheme } = useThemeMode()
-  const [documents, setDocuments] = useState<WorkspaceDocumentEntry[] | null>(null)
+  const [documents, setDocuments] = useState<readonly WorkspaceDocumentEntry[] | null>(null)
   // 'not-found' is a workspace with no v1 tree yet — a calm empty state, not
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
@@ -97,51 +91,16 @@ export function WorkspaceFilesPanel({
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
   const loadRender = useMemo(
-    () =>
-      createRowRenderLoader({
-        daemonFetch,
-        daemonBaseUrl,
-        workspaceId,
-        theme: resolvedTheme,
-        getSnapshot: getDocumentSnapshot,
-        getOkf: getDocumentOkfV1,
-      }),
-    [daemonFetch, daemonBaseUrl, workspaceId, resolvedTheme],
+    () => createRowRenderLoader({ source, theme: resolvedTheme }),
+    [source, resolvedTheme],
   )
 
   // The row-size rendition. Separate from `loadRender` on purpose: it asks
   // the worker for block geometry rather than a serialized SVG, which is
   // both cheaper and the only thing legible at 24px (see DocumentMinimap).
-  const loadOutline = useMemo(
-    () =>
-      createRowOutlineLoader({
-        daemonFetch,
-        daemonBaseUrl,
-        workspaceId,
-        getSnapshot: getDocumentSnapshot,
-        getOkf: getDocumentOkfV1,
-      }),
-    [daemonFetch, daemonBaseUrl, workspaceId],
-  )
+  const loadOutline = useMemo(() => createRowOutlineLoader({ source }), [source])
 
-  // The RICH list, not /api/v1's: that one carries only {documentId, path},
-  // so a row could be labelled by nothing but its path segment and there was
-  // no way to know a document's kind. Both are things the browser shows.
-  const readList = useCallback(
-    () =>
-      listDocuments(daemonFetch, daemonBaseUrl, workspaceId).then((res) =>
-        res.documents.map((entry) => ({
-          // An older daemon omits the id; the path stands in, as it does
-          // everywhere else that reads this list.
-          documentId: entry.id ?? entry.path,
-          path: entry.path,
-          ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
-          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-          ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-        })),
-      ),
-    [daemonFetch, daemonBaseUrl, workspaceId],
-  )
+  const readList = useCallback(() => source.listDocuments(), [source])
 
   useEffect(() => {
     let cancelled = false
@@ -155,7 +114,7 @@ export function WorkspaceFilesPanel({
       })
       .catch((err) => {
         if (cancelled) return
-        setListStatus(err instanceof DaemonApiError && err.status === 404 ? 'not-found' : 'error')
+        setListStatus(err instanceof WorkspaceMissingError ? 'not-found' : 'error')
       })
     return () => {
       cancelled = true
@@ -210,12 +169,12 @@ export function WorkspaceFilesPanel({
         folder,
         (documents ?? []).map((row) => row.path),
       )
-      await createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind)
+      await source.createDocument(path, kind)
       const entries = await readList()
       setDocuments(entries)
       setSelected(entries.find((row) => row.path === path) ?? null)
     },
-    [daemonFetch, daemonBaseUrl, workspaceId, readList, folder, documents],
+    [source, readList, folder, documents],
   )
 
   /**
@@ -244,13 +203,13 @@ export function WorkspaceFilesPanel({
 
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
-      await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, entry.path, newPath)
+      await source.renameDocumentPath(entry.path, newPath)
       const entries = await readList()
       setDocuments(entries)
       setSelected(entries.find((row) => row.path === newPath) ?? null)
       setFolder(newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : '')
     },
-    [daemonFetch, daemonBaseUrl, workspaceId, readList],
+    [source, readList],
   )
 
   /**
@@ -363,6 +322,7 @@ export function WorkspaceFilesPanel({
             <div data-testid="search-results">
               <SearchResults
                 results={searchDocuments(documents, query)}
+                query={query}
                 selectedPath={selected?.path}
                 onSelect={setSelected}
                 renderThumbnail={(entry) => (

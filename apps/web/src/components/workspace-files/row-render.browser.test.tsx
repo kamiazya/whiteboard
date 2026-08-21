@@ -30,13 +30,15 @@ function snapshotBytes(): Uint8Array {
 it('renders a spatial document from its snapshot bytes through the pool', async () => {
   const bytes = snapshotBytes()
   const load = createRowRenderLoader({
-    daemonFetch: globalThis.fetch,
-    daemonBaseUrl: 'http://unused',
-    workspaceId: 'default',
     theme: 'light',
-    getSnapshot: async () => bytes,
-    getOkf: async () => {
-      throw new Error('a spatial document must not be read as OKF')
+    source: {
+      listDocuments: async () => [],
+      createDocument: async () => {},
+      renameDocumentPath: async () => {},
+      loadSpatialSnapshot: async () => bytes,
+      loadMarkdown: async () => {
+        throw new Error('a spatial document must not be read as OKF')
+      },
     },
   })
 

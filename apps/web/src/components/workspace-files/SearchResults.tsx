@@ -4,66 +4,168 @@
  * Every row carries its full path, which the folder view deliberately does
  * not: there, the path is the pane you are standing in and repeating it on
  * every card would be noise. Here it is the only thing that says where the
- * document actually is, and the reason someone searched.
+ * document actually is, and the reason someone searched. (The two surveyed
+ * apps that flatten hierarchy WITHOUT restoring location per row — Finder and
+ * Figma — both carry standing user complaints about exactly that.)
+ *
+ * The matched substring is marked in place, in the title and in the path:
+ * a result list that will not say why a row is present makes the reader
+ * re-run the search with their eyes.
  */
 
-import type { ReactNode } from 'react'
+import { LayoutGrid, List } from 'lucide-react'
+import { type ReactNode, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 export interface SearchResultsProps {
   results: readonly WorkspaceDocumentEntry[]
+  /** The query the results answer, so the match can be shown, not implied. */
+  query: string
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
 }
 
+/**
+ * The text with its first case-insensitive match marked. First only: one
+ * highlight answers "why is this row here", and a title that matches four
+ * times painted four times reads as damage rather than emphasis.
+ */
+function Highlighted({ text, query }: { text: string; query: string }) {
+  const q = query.trim().toLowerCase()
+  if (q === '') return <>{text}</>
+  const at = text.toLowerCase().indexOf(q)
+  if (at === -1) return <>{text}</>
+  return (
+    <>
+      {text.slice(0, at)}
+      <mark data-testid="search-match" className="rounded-sm bg-primary/20 text-inherit">
+        {text.slice(at, at + q.length)}
+      </mark>
+      {text.slice(at + q.length)}
+    </>
+  )
+}
+
+function titleOf(entry: WorkspaceDocumentEntry): string {
+  return entry.name ?? entry.path.split('/').at(-1) ?? entry.path
+}
+
 export function SearchResults({
   results,
+  query,
   selectedPath,
   onSelect,
   renderThumbnail,
   className,
 }: SearchResultsProps) {
+  // List first: the row form carries the path inline beside the title, which
+  // is the stronger answer to "where is this" — the grid trades that density
+  // for a bigger picture, the way Finder's icon view does.
+  const [layout, setLayout] = useState<'list' | 'grid'>('list')
+
   if (results.length === 0) {
     return <p className={cn('text-muted-foreground text-sm', className)}>Nothing matches.</p>
   }
 
+  const thumbnail = (entry: WorkspaceDocumentEntry, sizeClass: string) => (
+    <span
+      className={cn(
+        'bg-muted/40 flex shrink-0 items-center justify-center overflow-hidden rounded',
+        sizeClass,
+      )}
+    >
+      {renderThumbnail?.(entry) ?? (
+        <span data-kind={entry.kind ?? 'markdown'} className="text-muted-foreground text-xs">
+          {entry.kind ?? 'markdown'}
+        </span>
+      )}
+    </span>
+  )
+
   return (
-    <ul className={cn('space-y-1 p-0.5', className)}>
-      {results.map((entry) => (
-        <li key={entry.documentId}>
+    <div className={className}>
+      <div className="mb-1 flex justify-end">
+        <div className="flex items-center gap-0.5 rounded-md border p-0.5">
           <button
             type="button"
-            aria-current={entry.path === selectedPath ? 'true' : undefined}
-            onClick={() => onSelect(entry)}
-            className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 items-center gap-2 rounded-md border p-1.5 text-left aria-[current]:ring-1"
+            aria-label="List results"
+            aria-pressed={layout === 'list'}
+            onClick={() => setLayout('list')}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
           >
-            {/* 80x44, not smaller: measured on a real document, a faithful
-                render is a smear below roughly this and only here do the
-                heading and the blocks separate. Recognising the document is
-                the whole job of a search result, so this is the one list that
-                pays for the height. */}
-            <span className="bg-muted/40 flex h-11 w-20 shrink-0 items-center justify-center overflow-hidden rounded">
-              {renderThumbnail?.(entry) ?? (
-                <span
-                  data-kind={entry.kind ?? 'markdown'}
-                  className="text-muted-foreground text-xs"
-                >
-                  {entry.kind ?? 'markdown'}
-                </span>
-              )}
-            </span>
-            <span className="flex min-w-0 flex-col">
-              <span data-testid="result-title" className="truncate text-sm">
-                {entry.name ?? entry.path.split('/').at(-1)}
-              </span>
-              <span className="text-muted-foreground truncate font-mono text-xs">{entry.path}</span>
-            </span>
+            <List className="size-4" />
           </button>
-        </li>
-      ))}
-    </ul>
+          <button
+            type="button"
+            aria-label="Grid results"
+            aria-pressed={layout === 'grid'}
+            onClick={() => setLayout('grid')}
+            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
+          >
+            <LayoutGrid className="size-4" />
+          </button>
+        </div>
+      </div>
+      {layout === 'list' ? (
+        <ul data-testid="search-results-list" className="space-y-1 p-0.5">
+          {results.map((entry) => (
+            <li key={entry.documentId}>
+              <button
+                type="button"
+                aria-current={entry.path === selectedPath ? 'true' : undefined}
+                onClick={() => onSelect(entry)}
+                className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 items-center gap-2 rounded-md border p-1.5 text-left aria-[current]:ring-1"
+              >
+                {/* 80x44, not smaller: measured on a real document, a faithful
+                    render is a smear below roughly this and only here do the
+                    heading and the blocks separate. Recognising the document is
+                    the whole job of a search result, so this is the one list that
+                    pays for the height. */}
+                {thumbnail(entry, 'h-11 w-20')}
+                <span className="flex min-w-0 flex-col">
+                  <span data-testid="result-title" className="truncate text-sm">
+                    <Highlighted text={titleOf(entry)} query={query} />
+                  </span>
+                  <span className="text-muted-foreground truncate font-mono text-xs">
+                    <Highlighted text={entry.path} query={query} />
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      ) : (
+        <ul
+          data-testid="search-results-grid"
+          className="grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3"
+        >
+          {results.map((entry) => (
+            <li key={entry.documentId}>
+              <button
+                type="button"
+                aria-current={entry.path === selectedPath ? 'true' : undefined}
+                onClick={() => onSelect(entry)}
+                className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 flex-col gap-1.5 rounded-md border p-2 text-left aria-[current]:ring-1"
+              >
+                {thumbnail(entry, 'aspect-[16/9] w-full')}
+                <span className="flex min-w-0 flex-col">
+                  <span data-testid="result-title" className="truncate text-sm">
+                    <Highlighted text={titleOf(entry)} query={query} />
+                  </span>
+                  {/* The path stays on the card. Dropping it here would
+                      reintroduce the Finder/Figma gap the list avoids. */}
+                  <span className="text-muted-foreground truncate font-mono text-xs">
+                    <Highlighted text={entry.path} query={query} />
+                  </span>
+                </span>
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
   )
 }
