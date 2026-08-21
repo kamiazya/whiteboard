@@ -27,6 +27,13 @@
             }
           },
           "additionalProperties": false
+        },
+        "facets": {
+          "type": "object",
+          "propertyNames": {
+            "type": "string"
+          },
+          "additionalProperties": {}
         }
       },
       "additionalProperties": false
