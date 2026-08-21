@@ -78,7 +78,7 @@ export interface MarkdownTheme {
   readonly mutedTextOpacity: number
 }
 
-export const MARKDOWN_THEME: MarkdownTheme = Object.freeze({
+export const MARKDOWN_THEME_NODE: MarkdownTheme = Object.freeze({
   bodyFontSizePx: 16,
   bodyLineHeight: 1.55,
   headingLineHeight: 1.25,
@@ -109,4 +109,25 @@ export const MARKDOWN_THEME: MarkdownTheme = Object.freeze({
   panelOpacity: 0.12,
   borderOpacity: 0.35,
   mutedTextOpacity: 0.7,
+})
+
+/**
+ * The same theme at DOCUMENT scale, for a surface that is a page rather than
+ * an object: the markdown editor's preview pane, which runs to the readable
+ * measure instead of a node's width.
+ *
+ * One theme cannot serve both. `layoutMdastBlocks` lays out a 280px node and a
+ * full-width preview through the same code, and the compression that stops a
+ * heading eating a third of a node leaves the same heading timid on a page.
+ * Two frozen constants rather than a scale factor, because the ratios are not
+ * uniform — a heading compresses harder than a block gap, and h4-h6 do not
+ * move at all, since neither surface may set a heading below its own body.
+ */
+export const MARKDOWN_THEME_DOCUMENT: MarkdownTheme = Object.freeze({
+  ...MARKDOWN_THEME_NODE,
+  headingFontSizePx: Object.freeze({ 1: 30, 2: 24, 3: 19, 4: 16, 5: 16, 6: 16 }),
+  bodyLineHeight: 1.6,
+  blockGapPx: 16,
+  headingSpaceAbovePx: 24,
+  listIndentPx: 28,
 })

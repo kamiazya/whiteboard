@@ -1,7 +1,7 @@
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
+import { MARKDOWN_THEME_NODE } from '../theme/markdown-theme.js'
 import { layoutMdastBlocks } from './mdast-blocks.js'
 
 const measure = createFakeMeasure()
@@ -427,8 +427,8 @@ describe('layoutMdastBlocks — text run baseline', () => {
     // A heading's line height is 1.25 (fake measure: ascent = fontSize * 0.8).
     // Read from the theme rather than pinned: the RULE is what this test
     // guards, and a literal here goes stale on every type-scale change.
-    const fontSizePx = MARKDOWN_THEME.headingFontSizePx[1]
-    const lineHeightPx = fontSizePx * MARKDOWN_THEME.headingLineHeight
+    const fontSizePx = MARKDOWN_THEME_NODE.headingFontSizePx[1]
+    const lineHeightPx = fontSizePx * MARKDOWN_THEME_NODE.headingLineHeight
     expect(run.baseline).toBe((lineHeightPx - fontSizePx) / 2 + fontSizePx * 0.8)
     expect(run.bbox.h).toBe(lineHeightPx)
     // bbox.y must stay the line TOP (unaffected by baseline) so sceneBounds

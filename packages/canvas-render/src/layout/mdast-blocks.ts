@@ -32,7 +32,7 @@ import type {
   UnresolvedReferenceNode,
 } from '../scene-graph.js'
 import { escapeXmlText } from '../svg/format.js'
-import { MARKDOWN_THEME } from '../theme/markdown-theme.js'
+import { MARKDOWN_THEME_NODE, type MarkdownTheme } from '../theme/markdown-theme.js'
 import { jaModel } from '../vendor/budoux/ja-model.js'
 import { Parser } from '../vendor/budoux/parser.js'
 import { fitToWidth } from './truncate.js'
@@ -43,24 +43,22 @@ import { fitToWidth } from './truncate.js'
  * rest of the file reads as geometry rather than as a table of numbers, and
  * so restyling stays a data change.
  */
-const T = MARKDOWN_THEME
-const HEADING_FONT_SIZE_PX = T.headingFontSizePx
-export const BODY_FONT_SIZE_PX = T.bodyFontSizePx
-const BLOCK_GAP_PX = T.blockGapPx
-const LIST_INDENT_PX = T.listIndentPx
-/**
- * Height of one body line box. EXPORTED because the editor's text overlay
- * has to advance by the same amount: a CodeMirror overlay styled at a
- * different line height than the committed render makes the text jump the
- * instant someone double-clicks a node, and every line after the first sits
- * somewhere the reader did not leave it. It used to be safe to write
- * `lineHeight: BODY_FONT_SIZE_PX` there because the two were equal; they are
- * not any more, so the coupling is a shared constant instead of a comment.
- */
-export const BODY_LINE_HEIGHT_PX = T.bodyFontSizePx * T.bodyLineHeight
-const CODE_FONT_SIZE_PX = T.bodyFontSizePx * T.codeFontScale
-const CODE_LINE_HEIGHT_PX = CODE_FONT_SIZE_PX * T.codeLineHeight
-const THEMATIC_BREAK_HEIGHT_PX = T.thematicBreakHeightPx
+// The metrics a NODE is laid out with. Exported because `apps/web`'s edit
+// overlay has to sit on the same line box the render draws, and a node is what
+// it edits — see MdastLayoutOptions.theme for the surface that differs.
+export const BODY_FONT_SIZE_PX = MARKDOWN_THEME_NODE.bodyFontSizePx
+export const BODY_LINE_HEIGHT_PX = bodyLineHeightPx(MARKDOWN_THEME_NODE)
+
+/** Derived metrics, per theme rather than per module. */
+function bodyLineHeightPx(theme: MarkdownTheme): number {
+  return theme.bodyFontSizePx * theme.bodyLineHeight
+}
+function codeFontSizePx(theme: MarkdownTheme): number {
+  return theme.bodyFontSizePx * theme.codeFontScale
+}
+function codeLineHeightPx(theme: MarkdownTheme): number {
+  return codeFontSizePx(theme) * theme.codeLineHeight
+}
 
 /**
  * Every piece of markdown chrome, drawn as one neutral at an opacity: the
@@ -68,8 +66,8 @@ const THEMATIC_BREAK_HEIGHT_PX = T.thematicBreakHeightPx
  * break. There is no stroked variant — a markdown body draws surfaces and
  * hairlines, never an outline around content.
  */
-function panelPaint(opacity: number): Appearance {
-  return { fill: T.chromeColor, fillOpacity: opacity }
+function panelPaint(theme: MarkdownTheme, opacity: number): Appearance {
+  return { fill: theme.chromeColor, fillOpacity: opacity }
 }
 
 /**
@@ -129,6 +127,15 @@ export interface MdastLayoutOptions {
    * "declared family" could drift; one field cannot.
    */
   readonly fontFamily: string
+  /**
+   * The metrics this body is laid out with. Defaults to the NODE theme.
+   *
+   * One theme cannot serve both surfaces this function has: a 280px node on a
+   * canvas, and the markdown editor's preview pane at a readable measure. The
+   * compression that stops a heading eating a third of a node leaves the same
+   * heading timid on a page, so the caller says which it is rendering.
+   */
+  readonly theme?: MarkdownTheme
   /**
    * The fill every body run is painted with — the theme's per-mode text
    * colour, supplied by the caller exactly as `fontFamily` is.
@@ -218,7 +225,7 @@ const EMBED_DEPTH_CAP = 3
 
 /** `resolveEmbed` guarded to the never-throw rule. */
 function tryResolveEmbed(
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
   documentId: string,
 ): { readonly title?: string; readonly root: MdastRoot } | undefined {
   try {
@@ -399,10 +406,10 @@ function blockWidth(maxWidth: number, inkWidth: number): number {
 function layoutPhrasing(
   children: readonly (MdastPhrasingContent | MdastCellPhrasingContent)[],
   cursor: Cursor,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
   fontSizePx: number,
   style: { emphasis?: boolean; strong?: boolean; deleted?: boolean } = {},
-  lineHeightPx: number = fontSizePx * T.bodyLineHeight,
+  lineHeightPx: number = fontSizePx * options.theme.bodyLineHeight,
 ): PhrasingLayout {
   const runs: TextRunNode[] = []
   const line = { x: 0, index: 0 }
@@ -627,13 +634,13 @@ function layoutPhrasing(
             child.value,
             {
               code: true,
-              backdrop: panelPaint(T.panelOpacity),
-              backdropPadXPx: T.inlineCodePaddingXPx,
+              backdrop: panelPaint(options.theme, options.theme.panelOpacity),
+              backdropPadXPx: options.theme.inlineCodePaddingXPx,
             },
             currentStyle,
             false,
             true,
-            { family: T.monoFontFamily, sizePx: CODE_FONT_SIZE_PX },
+            { family: options.theme.monoFontFamily, sizePx: codeFontSizePx(options.theme) },
           )
           break
         case 'break':
@@ -721,23 +728,29 @@ function layoutPhrasing(
 function tableColumnWidths(
   node: Extract<MdastFlowContent, { type: 'table' }>,
   columnCount: number,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
 ): number[] {
   const natural = Array.from({ length: columnCount }, () => 0)
   for (const row of node.children) {
     for (const [index, cell] of row.children.entries()) {
       const text = cellPlainText(cell.children)
-      const ink = measureRunWidth(options.measure, options.fontFamily, text, BODY_FONT_SIZE_PX, {
-        strong: true,
-      })
-      natural[index] = Math.max(natural[index] ?? 0, ink + 2 * T.tableCellPaddingXPx)
+      const ink = measureRunWidth(
+        options.measure,
+        options.fontFamily,
+        text,
+        options.theme.bodyFontSizePx,
+        {
+          strong: true,
+        },
+      )
+      natural[index] = Math.max(natural[index] ?? 0, ink + 2 * options.theme.tableCellPaddingXPx)
     }
   }
   const total = natural.reduce((sum, w) => sum + w, 0)
   if (!Number.isFinite(options.maxWidth) || options.maxWidth <= 0 || total <= options.maxWidth) {
     return natural
   }
-  const minimum = 2 * T.tableCellPaddingXPx + BODY_FONT_SIZE_PX
+  const minimum = 2 * options.theme.tableCellPaddingXPx + options.theme.bodyFontSizePx
   const scale = options.maxWidth / total
   return natural.map((w) => Math.max(w * scale, minimum))
 }
@@ -764,7 +777,7 @@ function tokenizeCode(
   lang: string,
   value: string,
   lineCount: number,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
 ): CodeTokenLines {
   const plain: CodeTokenLines = value.split('\n').map((text) => [{ text }])
   if (options.highlightCode === undefined) return plain
@@ -781,7 +794,7 @@ function tokenizeCode(
 function layoutBlock(
   node: MdastFlowContent,
   cursor: Cursor,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
   depth: number,
   // canvasIds of the embeds currently being laid out on THIS recursion
   // path — the embed-recursion cycle/cap contract, threaded rather than
@@ -794,9 +807,9 @@ function layoutBlock(
       // than below — the asymmetry is what makes a long body scan as
       // sections. Not applied to a leading heading, which would otherwise
       // start the body with a blank band.
-      if (cursor.y > 0) cursor.y += T.headingSpaceAbovePx
-      const fontSizePx = HEADING_FONT_SIZE_PX[node.depth]
-      const lineHeightPx = fontSizePx * T.headingLineHeight
+      if (cursor.y > 0) cursor.y += options.theme.headingSpaceAbovePx
+      const fontSizePx = options.theme.headingFontSizePx[node.depth]
+      const lineHeightPx = fontSizePx * options.theme.headingLineHeight
       const { runs, lineCount, inkWidth } = layoutPhrasing(
         node.children,
         cursor,
@@ -812,7 +825,7 @@ function layoutBlock(
         level: node.depth,
         runs,
       }
-      cursor.y += height + BLOCK_GAP_PX
+      cursor.y += height + options.theme.blockGapPx
       return heading
     }
     case 'paragraph': {
@@ -826,22 +839,22 @@ function layoutBlock(
         node.children,
         cursor,
         options,
-        BODY_FONT_SIZE_PX,
+        options.theme.bodyFontSizePx,
       )
-      const height = lineCount * BODY_LINE_HEIGHT_PX
+      const height = lineCount * bodyLineHeightPx(options.theme)
       const paragraph: ParagraphBlockNode = {
         kind: 'paragraph',
         bbox: { x: cursor.x, y: cursor.y, w: blockWidth(options.maxWidth, inkWidth), h: height },
         runs,
       }
-      cursor.y += height + BLOCK_GAP_PX
+      cursor.y += height + options.theme.blockGapPx
       return paragraph
     }
     case 'blockquote': {
       const startY = cursor.y
       const startX = cursor.x
-      const indent = T.blockquoteBarWidthPx + T.blockquoteGapPx
-      const indented: MdastLayoutOptions = { ...options, maxWidth: options.maxWidth - indent }
+      const indent = options.theme.blockquoteBarWidthPx + options.theme.blockquoteGapPx
+      const indented: ResolvedMdastOptions = { ...options, maxWidth: options.maxWidth - indent }
       cursor.x = startX + indent
       const quoted = node.children.map((child) =>
         layoutBlock(child, cursor, indented, depth, embedPath),
@@ -849,23 +862,23 @@ function layoutBlock(
       cursor.x = startX
       // The last quoted block left a trailing block gap INSIDE the quote;
       // the bar and the box end at the content, and the gap belongs after.
-      const contentEnd = cursor.y - BLOCK_GAP_PX
+      const contentEnd = cursor.y - options.theme.blockGapPx
       const bar: ShapeSceneNode = {
         kind: 'shape',
         bbox: {
           x: startX,
           y: startY,
-          w: T.blockquoteBarWidthPx,
+          w: options.theme.blockquoteBarWidthPx,
           h: Math.max(contentEnd - startY, 0),
         },
-        radius: T.blockquoteBarWidthPx / 2,
-        appearance: panelPaint(T.borderOpacity),
+        radius: options.theme.blockquoteBarWidthPx / 2,
+        appearance: panelPaint(options.theme, options.theme.borderOpacity),
       }
       const quote: BlockquoteNode = {
         kind: 'blockquote',
         bbox: { x: startX, y: startY, w: options.maxWidth, h: Math.max(contentEnd - startY, 0) },
         children: [bar, ...quoted],
-        appearance: { fillOpacity: T.mutedTextOpacity },
+        appearance: { fillOpacity: options.theme.mutedTextOpacity },
       }
       return quote
     }
@@ -884,10 +897,15 @@ function layoutBlock(
       )
       // `layoutListItem` closes each item with the tighter intra-list gap;
       // the list as a whole is still followed by a full block gap.
-      cursor.y += BLOCK_GAP_PX - T.listItemGapPx
+      cursor.y += options.theme.blockGapPx - options.theme.listItemGapPx
       const list: ListBlockNode = {
         kind: 'list',
-        bbox: { x: cursor.x, y: startY, w: options.maxWidth, h: cursor.y - startY - BLOCK_GAP_PX },
+        bbox: {
+          x: cursor.x,
+          y: startY,
+          w: options.maxWidth,
+          h: cursor.y - startY - options.theme.blockGapPx,
+        },
         ordered,
         depth,
         items,
@@ -907,20 +925,24 @@ function layoutBlock(
         }
       }
       const lines = node.value.split('\n')
-      const height = lines.length * CODE_LINE_HEIGHT_PX + 2 * T.codeBlockPaddingPx
-      const font = bodyFont(T.monoFontFamily, CODE_FONT_SIZE_PX)
+      const height =
+        lines.length * codeLineHeightPx(options.theme) + 2 * options.theme.codeBlockPaddingPx
+      const font = bodyFont(options.theme.monoFontFamily, codeFontSizePx(options.theme))
       // One run per SOURCE line. A single `<text>` carrying the whole fence
       // paints it on one line — SVG collapses the newlines — so the code ran
       // off the right edge of a box sized for every line.
       // A code line never wraps — its indentation and its identity as one
       // source line are the point — so the only way to keep it inside the
       // panel is to cut it, exactly as an atomic inline run is cut.
-      const innerWidth = options.maxWidth - 2 * T.codeBlockPaddingPx
+      const innerWidth = options.maxWidth - 2 * options.theme.codeBlockPaddingPx
       const tokenLines = tokenizeCode(node.lang ?? '', node.value, lines.length, options)
       const runs: TextRunNode[] = tokenLines.flatMap((tokens, index) => {
-        const y = cursor.y + T.codeBlockPaddingPx + index * CODE_LINE_HEIGHT_PX
+        const y =
+          cursor.y + options.theme.codeBlockPaddingPx + index * codeLineHeightPx(options.theme)
         const baselineOf = (ascent: number) =>
-          clampAdvance(baselineIn(CODE_LINE_HEIGHT_PX, CODE_FONT_SIZE_PX, ascent))
+          clampAdvance(
+            baselineIn(codeLineHeightPx(options.theme), codeFontSizePx(options.theme), ascent),
+          )
         const out: TextRunNode[] = []
         let x = 0
         for (const token of tokens) {
@@ -934,10 +956,10 @@ function layoutBlock(
           out.push({
             kind: 'textRun' as const,
             bbox: {
-              x: cursor.x + T.codeBlockPaddingPx + x,
+              x: cursor.x + options.theme.codeBlockPaddingPx + x,
               y,
               w: clampAdvance(metrics.advanceWidth),
-              h: CODE_LINE_HEIGHT_PX,
+              h: codeLineHeightPx(options.theme),
             },
             baseline: baselineOf(metrics.ascent),
             text: fitted.text,
@@ -946,8 +968,8 @@ function layoutBlock(
             appearance: {
               ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
               ...(fill !== undefined ? { fill } : {}),
-              fontFamily: T.monoFontFamily,
-              fontSize: CODE_FONT_SIZE_PX,
+              fontFamily: options.theme.monoFontFamily,
+              fontSize: codeFontSizePx(options.theme),
             },
           })
           x += clampAdvance(metrics.advanceWidth)
@@ -961,28 +983,33 @@ function layoutBlock(
         value: node.value,
         ...(node.lang ? { lang: node.lang } : {}),
         runs,
-        appearance: panelPaint(T.panelOpacity),
-        radius: T.cornerRadiusPx,
+        appearance: panelPaint(options.theme, options.theme.panelOpacity),
+        radius: options.theme.cornerRadiusPx,
       }
-      cursor.y += height + BLOCK_GAP_PX
+      cursor.y += height + options.theme.blockGapPx
       return code
     }
     case 'html': {
       const rawHtml: RawHtmlNode = {
         kind: 'rawHtml',
-        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: BODY_LINE_HEIGHT_PX },
+        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: bodyLineHeightPx(options.theme) },
         value: node.value,
       }
-      cursor.y += BODY_LINE_HEIGHT_PX + BLOCK_GAP_PX
+      cursor.y += bodyLineHeightPx(options.theme) + options.theme.blockGapPx
       return rawHtml
     }
     case 'thematicBreak': {
       const hr: ThematicBreakNode = {
         kind: 'thematicBreak',
-        bbox: { x: cursor.x, y: cursor.y, w: options.maxWidth, h: THEMATIC_BREAK_HEIGHT_PX },
-        appearance: panelPaint(T.borderOpacity),
+        bbox: {
+          x: cursor.x,
+          y: cursor.y,
+          w: options.maxWidth,
+          h: options.theme.thematicBreakHeightPx,
+        },
+        appearance: panelPaint(options.theme, options.theme.borderOpacity),
       }
-      cursor.y += THEMATIC_BREAK_HEIGHT_PX + BLOCK_GAP_PX
+      cursor.y += options.theme.thematicBreakHeightPx + options.theme.blockGapPx
       return hr
     }
     case 'definition': {
@@ -1021,16 +1048,16 @@ function layoutBlock(
           x += width
           const { runs, lineCount } = layoutPhrasing(
             cell.children,
-            { y: rowY + T.tableCellPaddingYPx, x: T.tableCellPaddingXPx },
-            { ...options, maxWidth: width - 2 * T.tableCellPaddingXPx },
-            BODY_FONT_SIZE_PX,
+            { y: rowY + options.theme.tableCellPaddingYPx, x: options.theme.tableCellPaddingXPx },
+            { ...options, maxWidth: width - 2 * options.theme.tableCellPaddingXPx },
+            options.theme.bodyFontSizePx,
             header ? { strong: true } : {},
           )
           return { cellX, width, runs, lineCount }
         })
         const rowHeight =
-          Math.max(...laid.map((cell) => cell.lineCount), 1) * BODY_LINE_HEIGHT_PX +
-          2 * T.tableCellPaddingYPx
+          Math.max(...laid.map((cell) => cell.lineCount), 1) * bodyLineHeightPx(options.theme) +
+          2 * options.theme.tableCellPaddingYPx
         const cells: TableCellSceneNode[] = laid.map((cell) => ({
           kind: 'tableCell',
           bbox: { x: cell.cellX, y: rowY, w: cell.width, h: rowHeight },
@@ -1042,13 +1069,18 @@ function layoutBlock(
           bbox: { x: cursor.x, y: rowY, w: tableWidth, h: rowHeight },
           cells,
           ...(header ? { header: true } : {}),
-          ...(last ? {} : { appearance: panelPaint(T.borderOpacity) }),
+          ...(last ? {} : { appearance: panelPaint(options.theme, options.theme.borderOpacity) }),
         }
       })
-      cursor.y += BLOCK_GAP_PX
+      cursor.y += options.theme.blockGapPx
       const table: TableBlockNode = {
         kind: 'table',
-        bbox: { x: cursor.x, y: startY, w: tableWidth, h: cursor.y - startY - BLOCK_GAP_PX },
+        bbox: {
+          x: cursor.x,
+          y: startY,
+          w: tableWidth,
+          h: cursor.y - startY - options.theme.blockGapPx,
+        },
         rows,
       }
       return table
@@ -1066,13 +1098,13 @@ function layoutBlock(
       if (typeof rendered !== 'string') {
         return placeFragment(rendered, cursor, options)
       }
-      const height = node.value.split('\n').length * CODE_LINE_HEIGHT_PX
+      const height = node.value.split('\n').length * codeLineHeightPx(options.theme)
       const fragment: SvgFragmentNode = {
         kind: 'svgFragment',
         bbox: { x: 0, y: cursor.y, w: options.maxWidth, h: height },
         svg: rendered,
       }
-      cursor.y += height + BLOCK_GAP_PX
+      cursor.y += height + options.theme.blockGapPx
       return fragment
     }
   }
@@ -1087,7 +1119,7 @@ function layoutBlock(
 function placeFragment(
   rendered: string | RenderedSvgFragment,
   cursor: Cursor,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
 ): SvgFragmentNode {
   const fragment = typeof rendered === 'string' ? { svg: rendered } : rendered
   const width =
@@ -1097,13 +1129,13 @@ function placeFragment(
   const height =
     fragment.height !== undefined && Number.isFinite(fragment.height) && fragment.height > 0
       ? fragment.height
-      : CODE_LINE_HEIGHT_PX
+      : codeLineHeightPx(options.theme)
   const node: SvgFragmentNode = {
     kind: 'svgFragment',
     bbox: { x: 0, y: cursor.y, w: width, h: height },
     svg: fragment.svg,
   }
-  cursor.y += height + BLOCK_GAP_PX
+  cursor.y += height + options.theme.blockGapPx
   return node
 }
 
@@ -1111,12 +1143,15 @@ function layoutListItem(
   item: MdastListItem,
   ordinal: number | undefined,
   cursor: Cursor,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
   depth: number,
   embedPath: readonly string[],
 ): ListItemNode {
   const startY = cursor.y
-  const indented: MdastLayoutOptions = { ...options, maxWidth: options.maxWidth - LIST_INDENT_PX }
+  const indented: ResolvedMdastOptions = {
+    ...options,
+    maxWidth: options.maxWidth - options.theme.listIndentPx,
+  }
   const children: (ListItemNode['children'][number] | TextRunNode)[] = item.children.map((child) =>
     layoutBlock(child, cursor, indented, depth, embedPath),
   )
@@ -1127,36 +1162,41 @@ function layoutListItem(
   // and drawing a bullet next to it would double the glyphs.
   if (item.checked === null || item.checked === undefined) {
     const markerText = ordinal !== undefined ? `${ordinal}.` : '\u2022'
-    const metrics = options.measure(markerText, bodyFont(options.fontFamily, BODY_FONT_SIZE_PX))
+    const metrics = options.measure(
+      markerText,
+      bodyFont(options.fontFamily, options.theme.bodyFontSizePx),
+    )
     const markerWidth = clampAdvance(metrics.advanceWidth)
     children.unshift({
       kind: 'textRun',
       bbox: {
         // Right-aligned against the content edge, not parked at the far side
         // of the gutter — see `listMarkerGapPx`.
-        x: -(markerWidth + T.listMarkerGapPx),
+        x: -(markerWidth + options.theme.listMarkerGapPx),
         y: startY,
         w: markerWidth,
-        h: BODY_LINE_HEIGHT_PX,
+        h: bodyLineHeightPx(options.theme),
       },
-      baseline: clampAdvance(baselineIn(BODY_LINE_HEIGHT_PX, BODY_FONT_SIZE_PX, metrics.ascent)),
+      baseline: clampAdvance(
+        baselineIn(bodyLineHeightPx(options.theme), options.theme.bodyFontSizePx, metrics.ascent),
+      ),
       text: markerText,
       appearance: {
         ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
         fontFamily: options.fontFamily,
-        fontSize: BODY_FONT_SIZE_PX,
+        fontSize: options.theme.bodyFontSizePx,
       },
     })
   }
   // Prose blocks each close with a full block gap; inside a list that reads
   // as items drifting apart, so the item's own trailing gap is tightened.
-  cursor.y -= BLOCK_GAP_PX - T.listItemGapPx
+  cursor.y -= options.theme.blockGapPx - options.theme.listItemGapPx
   return {
     kind: 'listItem',
     bbox: {
-      x: LIST_INDENT_PX * depth,
+      x: options.theme.listIndentPx * depth,
       y: startY,
-      w: options.maxWidth - LIST_INDENT_PX * depth,
+      w: options.maxWidth - options.theme.listIndentPx * depth,
       h: cursor.y - startY,
     },
     ...(ordinal !== undefined ? { ordinal } : {}),
@@ -1177,7 +1217,7 @@ function layoutListItem(
 function layoutEmbedBlock(
   documentId: string,
   cursor: Cursor,
-  options: MdastLayoutOptions,
+  options: ResolvedMdastOptions,
   embedPath: readonly string[],
 ): EmbedResolvedNode | EmbedPlaceholderNode {
   const startY = cursor.y
@@ -1185,12 +1225,12 @@ function layoutEmbedBlock(
   const placeholder = (reason: EmbedPlaceholderNode['reason']): EmbedPlaceholderNode => {
     const node: EmbedPlaceholderNode = {
       kind: 'embedPlaceholder',
-      bbox: { x: 0, y: startY, w: options.maxWidth, h: BODY_FONT_SIZE_PX },
+      bbox: { x: 0, y: startY, w: options.maxWidth, h: options.theme.bodyFontSizePx },
       documentId,
       title: resolved?.title ?? documentId,
       reason,
     }
-    cursor.y += BODY_FONT_SIZE_PX + BLOCK_GAP_PX
+    cursor.y += options.theme.bodyFontSizePx + options.theme.blockGapPx
     return node
   }
   if (embedPath.includes(documentId)) return placeholder('cycle')
@@ -1215,9 +1255,22 @@ function layoutEmbedBlock(
  */
 export function layoutMdastBlocks(root: MdastRoot, options: MdastLayoutOptions): Scene {
   const cursor: Cursor = { y: 0, x: 0 }
-  const nodes = root.children.map((child) => layoutBlock(child, cursor, options, 0))
+  const resolved = resolveTheme(options)
+  const nodes = root.children.map((child) => layoutBlock(child, cursor, resolved, 0))
   return { nodes }
 }
+
+/**
+ * Every function below reads `theme` unconditionally, so it is resolved once at
+ * the entry rather than defaulted at each of forty reference sites — the same
+ * shape `layoutSpatialCanvas` uses for `parseBody`.
+ */
+export function resolveTheme(options: MdastLayoutOptions): ResolvedMdastOptions {
+  return { ...options, theme: options.theme ?? MARKDOWN_THEME_NODE }
+}
+
+/** `MdastLayoutOptions` after `resolveTheme` — `theme` is no longer optional. */
+export type ResolvedMdastOptions = MdastLayoutOptions & { readonly theme: MarkdownTheme }
 
 export interface FittedBlocks {
   readonly nodes: readonly SceneNode[]
