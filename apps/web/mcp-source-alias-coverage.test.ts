@@ -12,6 +12,8 @@ import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 // package's export map instead — silently stale `dist` on a machine that has
 // built once, and an outright failure on a clean checkout. This test is what
 // turns that drift class into a red test instead of a silent stale build.
+// This file is the alias authority for vitest.browser.config.ts too — do not
+// reintroduce a runtime browser-mode mirror of it (one was deleted here).
 describe('mcpSourceAlias coverage across apps/web configs', () => {
   it.each([
     ['vite.config.ts', viteConfig],
