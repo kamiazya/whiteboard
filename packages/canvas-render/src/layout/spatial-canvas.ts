@@ -25,6 +25,7 @@
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { highlightCode } from '../highlight/lowlight.js'
 import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import type { MeasureText } from '../measure.js'
@@ -142,6 +143,22 @@ export interface SpatialLayoutOptions {
   readonly renderMath?: MdastLayoutOptions['renderMath']
   readonly renderDiagram?: MdastLayoutOptions['renderDiagram']
   readonly resolveEmbed?: MdastLayoutOptions['resolveEmbed']
+  /**
+   * Tokeniser for fenced code. Defaults to this package's own lowlight-backed
+   * implementation, for the same reason `parseBody` defaults to codec's
+   * parser: every surface that lays a markdown body out wants it, and the one
+   * that forgets it does not fall back to the same picture — it renders code
+   * plain while the others colour it.
+   *
+   * That is not hypothetical. It shipped wired at ONE of the four call sites
+   * and left export — the surface the change was for — drawing every fence
+   * plain. Supplying it was made an opt-in step, and an opt-in step in four
+   * places is a step that gets missed.
+   *
+   * Still an option, so a caller can substitute a different tokeniser or pass
+   * a no-op to render plain. What changed is which way round the default
+   * points.
+   */
   readonly highlightCode?: MdastLayoutOptions['highlightCode']
   /**
    * Resolves one reference — a file node's `file`, or a group's
@@ -957,6 +974,7 @@ export function layoutSpatialCanvasWithAnchors(
     ...options,
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
+    highlightCode: options.highlightCode ?? highlightCode,
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
@@ -987,6 +1005,7 @@ export function naturalNodeContentSize(
     ...options,
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
+    highlightCode: options.highlightCode ?? highlightCode,
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: false,
@@ -1071,6 +1090,7 @@ export function layoutSpatialEdges(
     ...options,
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
+    highlightCode: options.highlightCode ?? highlightCode,
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
