@@ -83,7 +83,12 @@ When a preview contradicts a green test, suspect the cache before suspecting the
     breaks it, so a reproduction has to get that order right (the first attempt
     here did not, and its mutation check passed against the unfixed code).
 - **A third shape: `await import()` of a heavy module INSIDE a test body.** It charges the transform-and-load of that whole module graph to the per-test timeout (10s in `mcp-node`), which is ample on an idle machine and the first thing to blow once the full suite runs every project in parallel — aggregate import time there is measured in minutes. It reads as a mysterious load-dependent failure and the message names the test, not the import. Hoist it to a static top-level `import`, where the cost lands in the collection phase that no per-test timeout bounds. A dynamic import is only necessary when the file mocks what it imports (`vi.mock` + top-level `await import` is a different, legitimate shape), so **an in-body `await import()` with no `vi.mock` in the file is the tell**.
-- **A sixth shape: an element reference held across an action that remounts it.** A query
+- **A sixth shape: an element reference held across an action that remounts it.**
+  (Deliberately NOT scan-guarded: a textual rule for "held reference crosses a
+  remounting action" flags ~90% false positives — most held references never
+  cross one. Reader judgement in review, plus `focusEditable`-style
+  resolver-taking helpers where a site genuinely crosses a remount, is the
+  standing decision — audit-triage 2026-08-21.) A query
   resolves, the page swaps, and the assertion reads a node that is no longer in the document —
   reporting the value it had when it was detached. Measured at one such failure:
   `held.isConnected=false held.value='' live.value='Fast switch'`. The typing was always fine;

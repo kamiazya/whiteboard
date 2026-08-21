@@ -11,6 +11,10 @@
  * row must be stripped on upgrade without ever touching the Loro store.
  */
 
+// Stays in REAL-browser mode on purpose: this file is part of the real-IDB
+// fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
+// approximates). IndexedDB-only suites with no such stake run in jsdom via
+// fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { DB_VERSION, openWhiteboardDb, SYNC_DOCUMENTS_STORE } from './browser-idb.js'
@@ -22,6 +26,7 @@ import {
   loadLocalDocument,
 } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
+import { purgeLegacyReconnectCredentials } from './purge-legacy-reconnect-credentials.js'
 
 /**
  * This file's own database.
@@ -444,9 +449,6 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     // at app boot in main.tsx; this test verifies the IndexedDB-side and
     // localStorage-side erasure are BOTH complete once a real app boot would
     // have run.
-    const { purgeLegacyReconnectCredentials } = await import(
-      './purge-legacy-reconnect-credentials.js'
-    )
     purgeLegacyReconnectCredentials()
     expect(localStorage.getItem(LEGACY_RECONNECT_SECRET_KEY)).toBeNull()
   })

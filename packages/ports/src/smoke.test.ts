@@ -15,6 +15,8 @@ describe('ports package smoke', () => {
   // reports as a timeout on a test whose subject is resolvability, not
   // latency. The generous budget belongs to this test, not to the project.
   it('imports the barrel via its package specifier and exercises a full round-trip', async () => {
+    // lazy-import: resolving the barrel through package `exports` is the
+    // subject; the budget comment above prices exactly this cold resolve.
     const pkg = await import('@kamiazya/whiteboard-ports')
 
     const bytes = new Uint8Array([10, 20, 30, 40, 50])

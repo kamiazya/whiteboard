@@ -23,8 +23,10 @@ export * from './document.js'
 export * from './document-url.js'
 export * from './errors.js'
 export * from './fonts.js'
-export type { ListGrantsResponse, PairingTokenResponse } from './pairing.js'
+export type { CreateGrantResponse, ListGrantsResponse, PairingTokenResponse } from './pairing.js'
 export {
+  createGrantRequestSchema,
+  createGrantResponseSchema,
   listGrantsResponseSchema,
   pairingTokenNonceSchema,
   pairingTokenRequestSchema,

@@ -20,7 +20,8 @@ process.env.WHITEBOARD_DATA_DIR = importBaseDir
 
 const { overrideDataDir, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
 const { saveDocument } = await import('./document-store.js')
-const { closeDb } = await import('./db/index.js')
+const { closeDb, getDb } = await import('./db/index.js')
+const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
 
 describe('storage layer follows the effective data dir seam', () => {
   let overrideDir: string
@@ -50,8 +51,6 @@ describe('storage layer follows the effective data dir seam', () => {
     // Canvas content lives in the sqlite db's Libsql snapshot tables now,
     // not a separate blob tree — confirm the row landed under the override
     // dir's db, keyed to the document just saved.
-    const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const db = await getDb(overrideDir)
     const documentId = await getDocumentIdByPath(db, 'ws-seam-test', 'seam-canvas')
     expect(documentId).not.toBeNull()

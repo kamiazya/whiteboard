@@ -2,7 +2,7 @@
 
 Package boundaries are cut by **runtime requirements**, not by feature. The shared layer must run unchanged on Node, the browser, and Cloudflare Workers.
 
-| Package | Role | May depend on |
+| Package | Role | Checked dependencies |
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
@@ -13,6 +13,25 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
 | `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
+
+**A third-party dependency is judged by that criterion, not by a quota.** The
+`allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has
+been checked against it — not a cap, and not a statement that the shared layer
+is closed. A package that runs unchanged on all three runtimes and does not
+break the published build may be added; say in the entry what you checked, the
+way `css-line-break`'s does ("Pure and DOM-free, so it holds in Node, the
+browser and a worker alike — verified before adopting").
+
+What the criterion actually rejects is worth reading, because it is not
+weight: BudouX is *vendored* rather than depended on because depending on it
+drags in linkedom and the native canvas package and breaks the published
+build. Nothing here has ever been refused for being one dependency too many.
+
+This is worded explicitly because the list-shaped enforcement teaches the
+opposite. Faced with adding a highlighter that three packages needed, one
+session read the list as a wall and seriously considered writing the same
+scope-to-role table out three times instead — the dependency was pure JS with
+no DOM and no `node:*`, and met the criterion on sight.
 
 Absolute rules:
 

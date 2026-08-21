@@ -100,6 +100,15 @@ export default defineConfig({
     // one run, so the budget's real job is narrower than it looked — it
     // bounds a genuinely hung test, and nothing else.
     //
+    // Sized on a measurement, not a guess. Post-focus-fix, with the ten
+    // IndexedDB-only suites migrated to jsdom (2026-08-21, 124 files / 716
+    // tests, full parallel run): slowest test 27.0s (the markdown page's
+    // pre-unification body case), p99 9.4s, p95 5.5s, median 0.85s. 60s is
+    // ~2.2x that slowest test, leaving headroom for slower CI hardware while
+    // still bounding the keystroke-leakage collateral below. Re-measure
+    // before changing it; do not tighten toward p99 — the max is the binding
+    // number, and it is one test, not an outlier family.
+    //
     // What makes the overrun expensive is the collateral: vitest abandons the
     // test but its in-flight `userEvent.keyboard` keeps typing, so the NEXT
     // test in the file receives the leftover keystrokes interleaved with its

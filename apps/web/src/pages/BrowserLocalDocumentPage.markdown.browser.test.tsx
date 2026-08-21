@@ -222,7 +222,10 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // workspace header (one chrome row), not a detached strip below it.
     expect(title.closest('header')).toBeTruthy()
     await userEvent.click(title)
-    await userEvent.keyboard('リリース計画')
+    // Non-ASCII goes through fill, not per-key synthesis: characters with no
+    // keycode are synthesized out of band and drop under load (see
+    // browser-test-keyboard-ascii.test.ts).
+    await userEvent.fill(title, 'リリース計画')
     await expectTitleValue('リリース計画')
 
     // The title IS the canvas name — one value in the snapshot row, observed

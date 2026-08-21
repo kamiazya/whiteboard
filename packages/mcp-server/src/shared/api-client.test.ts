@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { readRuntimeConfig, runtimeConfigSchema } from './api-client.js'
+import { apiFetch, readRuntimeConfig, runtimeConfigSchema } from './api-client.js'
 import { resetTokenStoreForTests } from './token-store.js'
 
 describe('runtimeConfigSchema', () => {
@@ -94,7 +94,6 @@ describe('apiFetch auth header (TokenStore-sourced)', () => {
   })
 
   it('attaches Authorization from the TokenStore token, ignoring any daemonToken on the runtime-config global', async () => {
-    const { apiFetch } = await import('./api-client.js')
     let capturedHeaders: Headers | undefined
     const fakeWindow = {
       location: { origin: 'http://localhost' },

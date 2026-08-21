@@ -10,6 +10,11 @@
  * `onToggleNodeLock` without synthesising pointer input.
  */
 
+// jsdom + fake-indexeddb: this suite drives page wiring over IndexedDB
+// persistence with the spatial editor mocked — no browser layout or input
+// fidelity at stake. The real-IDB contract stays pinned by the four
+// browser-mode keeper suites (see loro-store.browser.test.tsx).
+import 'fake-indexeddb/auto'
 import { readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
@@ -66,7 +71,7 @@ const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js
 
 async function mountPage(): Promise<void> {
   render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(), {
+  await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
     timeout: 5000,
   })
   await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
@@ -97,6 +102,14 @@ async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
     { timeout: 10000, interval: 200 },
   )
 }
+
+// These suites came from browser mode, where the per-test budget is 60s, and
+// kept their 10s waits when they moved to jsdom — whose default is 5s, so a
+// wait that actually has to wait can never finish inside its own test. Not
+// theoretical: content persistence now goes through the `DocumentStore` port,
+// which costs two to three IndexedDB round trips where it used to cost one,
+// and `fake-indexeddb` is slower per round trip than the real thing.
+vi.setConfig({ testTimeout: 30_000 })
 
 describe('BrowserLocalDocumentPage node-lock reload persistence (browser — real IndexedDB)', () => {
   beforeEach(async () => {

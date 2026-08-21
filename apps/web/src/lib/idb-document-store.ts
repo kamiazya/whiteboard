@@ -34,7 +34,7 @@ import type {
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
 import { SYNC_DOCUMENTS_STORE } from './browser-idb.js'
-import { inTransaction, request } from './idb-tx.js'
+import { inTransaction, request, storedBytesSchema } from './idb-tx.js'
 
 /**
  * A document's whole sync state, as stored.
@@ -50,16 +50,10 @@ import { inTransaction, request } from './idb-tx.js'
  * legal, and a saved EMPTY snapshot (`chunkCount: 0`) is a document that
  * exists holding no bytes — which the port distinguishes from one never saved.
  */
-// `z.custom` rather than `z.instanceof`, for the reason `loro-record-envelope`
-// gives: under this package's lib (ES2020 + DOM) `z.instanceof(Uint8Array)`
-// infers `Uint8Array<ArrayBufferLike>`, which is wider than the port's DTOs
-// and will not assign to them.
-const uint8ArraySchema = z.custom<Uint8Array>((v) => v instanceof Uint8Array)
-
 const chunkSchema = z.object({
   index: z.number().int().min(0),
   of: z.number().int().min(1),
-  bytes: uint8ArraySchema,
+  bytes: storedBytesSchema,
 })
 
 const syncRecordSchema = z
@@ -75,8 +69,8 @@ const syncRecordSchema = z
         chunks: z.array(chunkSchema),
       })
       .nullable(),
-    frontier: uint8ArraySchema.nullable(),
-    deltas: z.array(uint8ArraySchema),
+    frontier: storedBytesSchema.nullable(),
+    deltas: z.array(storedBytesSchema),
   })
   .strict()
 

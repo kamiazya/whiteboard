@@ -14,6 +14,9 @@
  */
 import { describe, expect, it } from 'vitest'
 import {
+  type CreateGrantResponse,
+  createGrantRequestSchema,
+  createGrantResponseSchema,
   type ListGrantsResponse,
   listGrantsResponseSchema,
   type PairingTokenResponse,
@@ -165,5 +168,34 @@ describe('pairingTokenNonceSchema bounds', () => {
 
   it('rejects a non-base64url string', () => {
     expect(pairingTokenNonceSchema.safeParse('not base64url!!!').success).toBe(false)
+  })
+})
+
+describe('createGrantRequestSchema / createGrantResponseSchema roundtrip', () => {
+  const request = { origin: 'https://app.example', codeChallenge: 'abc123' }
+  const response = { grantId: 'g1', origin: 'https://app.example', code: 'c0de' }
+
+  it('parses a well-formed request and survives the wire format', () => {
+    const parsed = createGrantRequestSchema.parse(JSON.parse(JSON.stringify(request)))
+    expect(parsed).toEqual(request)
+  })
+
+  it('parses a well-formed response and survives the wire format', () => {
+    const parsed: CreateGrantResponse = createGrantResponseSchema.parse(
+      JSON.parse(JSON.stringify(response)),
+    )
+    expect(parsed).toEqual(response)
+  })
+
+  it('rejects an empty origin or codeChallenge', () => {
+    expect(createGrantRequestSchema.safeParse({ ...request, origin: '' }).success).toBe(false)
+    expect(createGrantRequestSchema.safeParse({ ...request, codeChallenge: '' }).success).toBe(
+      false,
+    )
+  })
+
+  it('rejects an extra field on either side (strict)', () => {
+    expect(createGrantRequestSchema.safeParse({ ...request, extra: 1 }).success).toBe(false)
+    expect(createGrantResponseSchema.safeParse({ ...response, extra: 1 }).success).toBe(false)
   })
 })

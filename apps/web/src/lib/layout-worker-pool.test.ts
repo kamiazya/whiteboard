@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { createLayoutWorkerPool, type PoolWorker } from './layout-worker-pool.js'
+import { createLayoutWorkerPool, defaultPoolSize, type PoolWorker } from './layout-worker-pool.js'
 
 /**
  * A worker whose replies the test releases by hand, so "how many ran at
@@ -384,7 +384,6 @@ describe('createLayoutWorkerPool', () => {
 
 describe('pool sizing', () => {
   it('leaves a core for the main thread and caps the fleet', async () => {
-    const { defaultPoolSize } = await import('./layout-worker-pool.js')
     // A thumbnail list is not worth every core: the editor's own worker and
     // the main thread still have to run while it fills.
     expect(defaultPoolSize(1)).toBe(1)

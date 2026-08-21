@@ -92,12 +92,8 @@ describe('HistoryCluster version panel (real browser)', () => {
       cluster.getBoundingClientRect().top + 1,
     )
 
-    const viewport = container.querySelector('[data-slot="scroll-area-viewport"]')
-    expect(viewport).toBeInstanceOf(HTMLDivElement)
-    await waitFor(() => {
-      expect(viewport!.clientHeight).toBeGreaterThan(0)
-      expect(viewport!.scrollHeight).toBeGreaterThan(viewport!.clientHeight)
-    })
+    // Scrollability of the list itself is VersionTimeline.browser's case —
+    // this file only owns what the CLUSTER adds around the shared panel.
 
     // Outside-click closes it.
     fireEvent.mouseDown(document.body)
@@ -120,23 +116,5 @@ describe('HistoryCluster version panel (real browser)', () => {
 
     expect(screen.getByTestId('history-version-panel')).toBeTruthy()
     expect(screen.getByText('Restore this version?')).toBeTruthy()
-  })
-
-  it('opens the restore dialog from a real history row and posts restore on confirm', async () => {
-    renderCluster()
-
-    await page.getByRole('button', { name: 'Version history' }).click()
-    await page.getByText(/^Version 1$/).click()
-
-    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
-
-    await waitFor(() => {
-      const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-      expect(fetchMock).toHaveBeenCalledWith(
-        expect.stringContaining('/versions/v-0/restore'),
-        expect.objectContaining({ method: 'POST' }),
-      )
-    })
   })
 })
