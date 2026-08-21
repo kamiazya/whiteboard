@@ -114,7 +114,7 @@ export interface TextRunNode {
  * absent `shape` field IS the rect, so a second spelling of it cannot
  * exist. Geometry derives from the bbox via `layout/node-outline.ts`.
  */
-export type NodeOutlineKind = 'ellipse' | 'diamond'
+export type NodeOutlineKind = 'ellipse' | 'diamond' | 'hexagon' | 'parallelogram' | 'cylinder'
 
 export interface ShapeSceneNode {
   readonly kind: 'shape'

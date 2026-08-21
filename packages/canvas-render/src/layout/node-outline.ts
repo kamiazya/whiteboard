@@ -28,6 +28,16 @@ export type NodeOutline =
       readonly kind: 'polygon'
       readonly points: ReadonlyArray<{ readonly x: number; readonly y: number }>
     }
+  | {
+      readonly kind: 'cylinder'
+      readonly x: number
+      readonly y: number
+      readonly w: number
+      readonly h: number
+      /** Lid ellipse's vertical radius: a tenth of the width, capped at a
+       * quarter of the height so short nodes keep a visible body. */
+      readonly ry: number
+    }
 
 const isFiniteBox = (box: BoundingBox): boolean =>
   Number.isFinite(box.x) &&
@@ -53,6 +63,46 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
           { x: cx, y: box.y + box.h },
           { x: box.x, y: cy },
         ],
+      }
+    case 'hexagon': {
+      // Pointy-left-right six-gon, clockwise from the top-left corner. The
+      // corner inset is a quarter of the width, capped at half the height
+      // so degenerate proportions stay a valid convex polygon.
+      const inset = Math.min(box.w / 4, box.h / 2)
+      return {
+        kind: 'polygon',
+        points: [
+          { x: box.x + inset, y: box.y },
+          { x: box.x + box.w - inset, y: box.y },
+          { x: box.x + box.w, y: cy },
+          { x: box.x + box.w - inset, y: box.y + box.h },
+          { x: box.x + inset, y: box.y + box.h },
+          { x: box.x, y: cy },
+        ],
+      }
+    }
+    case 'parallelogram': {
+      // Right-leaning skew, clockwise from the top-left vertex; same
+      // capped proportion as the hexagon inset.
+      const skew = Math.min(box.w / 4, box.h / 2)
+      return {
+        kind: 'polygon',
+        points: [
+          { x: box.x + skew, y: box.y },
+          { x: box.x + box.w, y: box.y },
+          { x: box.x + box.w - skew, y: box.y + box.h },
+          { x: box.x, y: box.y + box.h },
+        ],
+      }
+    }
+    case 'cylinder':
+      return {
+        kind: 'cylinder',
+        x: box.x,
+        y: box.y,
+        w: box.w,
+        h: box.h,
+        ry: Math.min(box.w * 0.1, box.h / 4),
       }
   }
 }
@@ -80,6 +130,19 @@ export function outlineContains(
     }
     case 'polygon':
       return convexPolygonContains(outline.points, point)
+    case 'cylinder': {
+      const { x, y, w, h, ry } = outline
+      if (point.x < x || point.x > x + w) return false
+      if (point.y >= y + ry && point.y <= y + h - ry) return true
+      const rx = w / 2
+      if (rx <= 0 || ry <= 0) return point.y >= y && point.y <= y + h
+      // Above the body: the upper half of the top-cap ellipse; below: the
+      // lower half of the bottom bulge. Same quadratic as the ellipse case.
+      const capCy = point.y < y + ry ? y + ry : y + h - ry
+      const nx = (point.x - (x + rx)) / rx
+      const ny = (point.y - capCy) / ry
+      return nx * nx + ny * ny <= 1
+    }
   }
 }
 

@@ -60,3 +60,72 @@ describe('outlineContains — the hit-test half of the same producer', () => {
     expect(outlineContains('ellipse', box, { x: Number.NaN, y: 0 })).toBe(false)
   })
 })
+
+describe('nodeOutline — hexagon / parallelogram / cylinder', () => {
+  it('hexagon: pointy-left-right six-gon, clockwise from the top-left corner, inset capped', () => {
+    expect(nodeOutline('hexagon', box)).toEqual({
+      kind: 'polygon',
+      points: [
+        { x: 35, y: 20 },
+        { x: 85, y: 20 },
+        { x: 110, y: 50 },
+        { x: 85, y: 80 },
+        { x: 35, y: 80 },
+        { x: 10, y: 50 },
+      ],
+    })
+    // A tall narrow box caps the inset at w/4 so the side points survive.
+    expect(nodeOutline('hexagon', { x: 0, y: 0, w: 40, h: 200 })).toEqual({
+      kind: 'polygon',
+      points: [
+        { x: 10, y: 0 },
+        { x: 30, y: 0 },
+        { x: 40, y: 100 },
+        { x: 30, y: 200 },
+        { x: 10, y: 200 },
+        { x: 0, y: 100 },
+      ],
+    })
+  })
+
+  it('parallelogram: right-leaning skew, clockwise from the top-left vertex', () => {
+    expect(nodeOutline('parallelogram', box)).toEqual({
+      kind: 'polygon',
+      points: [
+        { x: 35, y: 20 },
+        { x: 110, y: 20 },
+        { x: 85, y: 80 },
+        { x: 10, y: 80 },
+      ],
+    })
+  })
+
+  it('cylinder: bbox plus a capped lid radius, never more than a quarter of the height', () => {
+    expect(nodeOutline('cylinder', box)).toEqual({
+      kind: 'cylinder',
+      x: 10,
+      y: 20,
+      w: 100,
+      h: 60,
+      ry: 10,
+    })
+    expect(nodeOutline('cylinder', { x: 0, y: 0, w: 100, h: 24 })).toEqual({
+      kind: 'cylinder',
+      x: 0,
+      y: 0,
+      w: 100,
+      h: 24,
+      ry: 6,
+    })
+  })
+
+  it('containment: hexagon corner outside, cylinder body inside, cap regions honoured', () => {
+    expect(outlineContains('hexagon', box, { x: 12, y: 22 })).toBe(false)
+    expect(outlineContains('hexagon', box, { x: 60, y: 50 })).toBe(true)
+    expect(outlineContains('parallelogram', box, { x: 12, y: 22 })).toBe(false)
+    expect(outlineContains('cylinder', box, { x: 60, y: 50 })).toBe(true)
+    // Above the top cap's crown is outside; the crown's own center is inside.
+    expect(outlineContains('cylinder', box, { x: 12, y: 21 })).toBe(false)
+    expect(outlineContains('cylinder', box, { x: 60, y: 21 })).toBe(true)
+  })
+})

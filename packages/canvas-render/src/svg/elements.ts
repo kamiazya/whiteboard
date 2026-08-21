@@ -82,9 +82,12 @@ export type SvgElements = {
     'marker-end'?: string
     role?: SvgRole
   }
+  // `fill` became optional when outline silhouettes joined the path users
+  // (presence-only paint like rect). EDGES must still declare fill="none"
+  // explicitly — SVG's initial black fill paints a wedge across a bent
+  // path — which their byte-level tests pin now that the type cannot.
   path: PaintAttrs & {
     d: string
-    fill: string
     'marker-start'?: string
     'marker-end'?: string
     role?: SvgRole

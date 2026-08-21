@@ -160,3 +160,19 @@ export function buildRoundedRectScene(): Scene {
   }
   return { nodes: [rect] }
 }
+
+/** All five non-rect silhouettes side by side — the arc-bearing cylinder is
+ * the one a byte golden cannot protect (sweep flags), the rest ride along
+ * so a proportion regression in any outline is equally loud. */
+export function buildNodeOutlinesScene(): Scene {
+  const appearance = { fill: '#e0e7ff', stroke: '#1f2933', strokeWidth: 2 }
+  const shapes = ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const
+  return {
+    nodes: shapes.map((shape, index) => ({
+      kind: 'shape',
+      bbox: { x: index * 140, y: 0, w: 120, h: 80 },
+      shape,
+      appearance,
+    })),
+  }
+}

@@ -253,6 +253,34 @@ function renderShape(node: ShapeSceneNode): SvgChild {
           points: pointsAttr(outline.points),
           ...appearanceAttrs(node.appearance),
         })
+      case 'cylinder': {
+        const { x, y, w, h, ry } = outline
+        const rx = w / 2
+        const top = y + ry
+        const bottom = y + h - ry
+        const arc = (sweep: 0 | 1, toX: number, atY: number) =>
+          `A ${formatCoord(rx)} ${formatCoord(ry)} 0 0 ${sweep} ${formatCoord(toX)} ${formatCoord(atY)}`
+        const silhouette = [
+          `M ${formatCoord(x)} ${formatCoord(top)}`,
+          arc(1, x + w, top),
+          `L ${formatCoord(x + w)} ${formatCoord(bottom)}`,
+          arc(1, x, bottom),
+          'Z',
+        ].join(' ')
+        // The lid is the visible lower half of the top cap — stroke-only
+        // ink INSIDE the silhouette, so bounds/hit keep reading the bbox.
+        const lid = [`M ${formatCoord(x)} ${formatCoord(top)}`, arc(0, x + w, top)].join(' ')
+        const paint = appearanceAttrs(node.appearance)
+        return [
+          el('path', { d: silhouette, ...paint }),
+          el('path', {
+            d: lid,
+            fill: 'none',
+            stroke: paint.stroke,
+            'stroke-width': paint['stroke-width'],
+          }),
+        ]
+      }
     }
   }
   return el('rect', {

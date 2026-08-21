@@ -2,7 +2,9 @@ import { describe, expect, it } from 'vitest'
 import type { Scene } from '../scene-graph.js'
 import { renderSceneToSvg } from './backend.js'
 
-const scene = (shape?: 'ellipse' | 'diamond'): Scene => ({
+const scene = (
+  shape?: 'ellipse' | 'diamond' | 'hexagon' | 'parallelogram' | 'cylinder',
+): Scene => ({
   nodes: [
     {
       kind: 'shape',
@@ -29,6 +31,24 @@ describe('shape outlines in the SVG backend', () => {
   it('diamond renders a <polygon> from the shared decomposition', () => {
     expect(renderSceneToSvg(scene('diamond'))).toBe(
       '<svg xmlns="http://www.w3.org/2000/svg"><polygon points="60,20 110,50 60,80 10,50" fill="#fff" stroke="#333"/></svg>',
+    )
+  })
+
+  it('hexagon and parallelogram render polygons from the shared decomposition', () => {
+    expect(renderSceneToSvg(scene('hexagon'))).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polygon points="35,20 85,20 110,50 85,80 35,80 10,50" fill="#fff" stroke="#333"/></svg>',
+    )
+    expect(renderSceneToSvg(scene('parallelogram'))).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polygon points="35,20 110,20 85,80 10,80" fill="#fff" stroke="#333"/></svg>',
+    )
+  })
+
+  it('cylinder renders a silhouette path plus a stroke-only lid arc', () => {
+    expect(renderSceneToSvg(scene('cylinder'))).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg">' +
+        '<path d="M 10 30 A 50 10 0 0 1 110 30 L 110 70 A 50 10 0 0 1 10 70 Z" fill="#fff" stroke="#333"/>' +
+        '<path d="M 10 30 A 50 10 0 0 0 110 30" fill="none" stroke="#333"/>' +
+        '</svg>',
     )
   })
 
