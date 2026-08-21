@@ -61,7 +61,13 @@ export type SvgElements = {
   }
   // data-wb-key is the keyed renderer's patch handle (svg/keyed.ts) —
   // emitted only in keyed mode, never by the plain document renderer.
-  g: PaintAttrs & { transform?: string; role?: SvgRole; 'data-wb-key'?: string }
+  g: PaintAttrs & {
+    transform?: string
+    'stroke-linecap'?: 'round'
+    'stroke-linejoin'?: 'round'
+    role?: SvgRole
+    'data-wb-key'?: string
+  }
   rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
@@ -96,6 +102,11 @@ export type SvgElements = {
   // keeps passing an explicit fill.
   polygon: PaintAttrs & { points: string; role?: SvgRole }
   ellipse: PaintAttrs & { cx: number; cy: number; rx: number; ry: number; role?: SvgRole }
+  circle: PaintAttrs & { cx: number; cy: number; r: number; role?: SvgRole }
+  symbol: { id: string; viewBox: string }
+  // `href` is a package-composed fragment reference (`#wb-icon-…`), not a
+  // navigation target, so it stays a plain string rather than SafeHref.
+  use: PaintAttrs & { href: string; x: number; y: number; width: number; height: number }
   marker: {
     id: string
     markerWidth: number

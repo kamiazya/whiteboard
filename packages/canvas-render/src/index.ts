@@ -1,10 +1,4 @@
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
-export {
-  type NodeOutline,
-  nodeOutline,
-  outlineContains,
-  outlineEntryPoint,
-} from './layout/node-outline.js'
 export { flattenDrawnEdgePath } from './layout/edge-flatten.js'
 export { edgeLabelAnchor } from './layout/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edge-rounding.js'
@@ -18,6 +12,12 @@ export type {
   RenderedSvgFragment,
 } from './layout/mdast-blocks.js'
 export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX, layoutMdastBlocks } from './layout/mdast-blocks.js'
+export {
+  type NodeOutline,
+  nodeOutline,
+  outlineContains,
+  outlineEntryPoint,
+} from './layout/node-outline.js'
 export { scaleScene } from './layout/scale-scene.js'
 export { createStyleRandom, seedFromId } from './layout/seed.js'
 export type {
@@ -61,13 +61,14 @@ export type {
   EmbedResolvedNode,
   GroupSceneNode,
   HeadingBlockNode,
+  IconSceneNode,
   LinkProvenance,
   ListBlockNode,
   ListItemNode,
+  NodeOutlineKind,
   ParagraphBlockNode,
   RawHtmlNode,
   ResolvedEdgeNode,
-  NodeOutlineKind,
   Scene,
   SceneNode,
   ShapeSceneNode,

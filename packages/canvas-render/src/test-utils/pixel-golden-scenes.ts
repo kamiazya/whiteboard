@@ -176,3 +176,18 @@ export function buildNodeOutlinesScene(): Scene {
     })),
   }
 }
+
+/** The whole vendored lucide subset at badge size — pins that the vendored
+ * geometry actually draws the icons it claims (a bad path lands here as a
+ * visibly wrong glyph, which no byte golden can notice). */
+export function buildIconSetScene(): Scene {
+  const icons = ['database', 'file', 'image', 'link', 'lock', 'star'] as const
+  return {
+    nodes: icons.map((icon, index) => ({
+      kind: 'icon',
+      icon,
+      bbox: { x: index * 40, y: 0, w: 32, h: 32 },
+      appearance: { stroke: '#1f2933' },
+    })),
+  }
+}

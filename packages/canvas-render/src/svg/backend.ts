@@ -16,6 +16,7 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
+import { LUCIDE_ICONS, LUCIDE_VIEWBOX, type LucideIconElement } from '../vendor/lucide/icons.js'
 import { collectDefs } from './defs.js'
 import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'
@@ -465,6 +466,25 @@ function arrowMarkerDef(direction: 'start' | 'end', fill: string): SvgDef {
   }
 }
 
+function renderIconElement(element: LucideIconElement): SvgChild {
+  switch (element.tag) {
+    case 'path':
+      return el('path', { d: element.d })
+    case 'rect':
+      return el('rect', {
+        x: element.x,
+        y: element.y,
+        width: element.width,
+        height: element.height,
+        rx: element.rx,
+      })
+    case 'circle':
+      return el('circle', { cx: element.cx, cy: element.cy, r: element.r })
+    case 'ellipse':
+      return el('ellipse', { cx: element.cx, cy: element.cy, rx: element.rx, ry: element.ry })
+  }
+}
+
 function renderNode(node: SceneNode): SvgChild {
   switch (node.kind) {
     case 'textRun':
@@ -600,6 +620,40 @@ function renderNode(node: SceneNode): SvgChild {
     }
     case 'shape':
       return renderShape(node)
+    case 'icon': {
+      if (!isFiniteBox(node.bbox)) return []
+      const geometry = LUCIDE_ICONS[node.icon]
+      if (geometry === undefined) return []
+      const id = `wb-icon-${idToken(node.icon)}`
+      const def: SvgDef = {
+        id,
+        node: el('symbol', { id, viewBox: LUCIDE_VIEWBOX }, [
+          // Lucide's stroke styling lives ON the definition (fill none,
+          // stroke-width 2, round caps/joins); only the stroke COLOR
+          // inherits from each referencing <use>, so one def serves every
+          // color-assigned node.
+          el(
+            'g',
+            {
+              fill: 'none',
+              'stroke-width': 2,
+              'stroke-linecap': 'round',
+              'stroke-linejoin': 'round',
+            },
+            geometry.map(renderIconElement),
+          ),
+        ]),
+      }
+      const use = el('use', {
+        href: `#${id}`,
+        x: node.bbox.x,
+        y: node.bbox.y,
+        width: node.bbox.w,
+        height: node.bbox.h,
+        stroke: isNonEmptyString(node.appearance?.stroke) ? node.appearance.stroke : undefined,
+      })
+      return withDefs(use, [def])
+    }
     case 'image': {
       // Fixed attribute order (x y width height href preserveAspectRatio)
       // per this package's canonical-serialization rule. Aspect is always
