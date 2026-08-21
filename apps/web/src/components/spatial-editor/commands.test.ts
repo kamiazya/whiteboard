@@ -892,3 +892,64 @@ describe('buildFragmentInsertCommand', () => {
     expect(command.commands.filter((c) => c.kind === 'create-edge')).toHaveLength(0)
   })
 })
+
+describe('set-node-shape', () => {
+  const base: SpatialCanvas = {
+    nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
+    edges: [],
+  }
+  const shapeFacet = (canvas: SpatialCanvas) =>
+    canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']
+
+  it('stores the silhouette as the visual.shape facet on the node', () => {
+    const next = applyCommand(base, { kind: 'set-node-shape', id: 'a', shape: 'hexagon' })
+    expect(shapeFacet(next)).toEqual({ kind: 'hexagon' })
+  })
+
+  it('undefined returns the node to the historic rect (facet removed, no trace)', () => {
+    const shaped = applyCommand(base, { kind: 'set-node-shape', id: 'a', shape: 'cylinder' })
+    const reverted = applyCommand(shaped, { kind: 'set-node-shape', id: 'a', shape: undefined })
+    expect(reverted.nodes[0]).not.toHaveProperty('x-whiteboard')
+  })
+
+  it('keeps an embed extension beside the facet', () => {
+    const withEmbed: SpatialCanvas = {
+      ...base,
+      nodes: [
+        {
+          ...base.nodes[0]!,
+          'x-whiteboard': { kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' },
+        },
+      ],
+    }
+    const next = applyCommand(withEmbed, { kind: 'set-node-shape', id: 'a', shape: 'diamond' })
+    expect(next.nodes[0]?.['x-whiteboard']).toEqual({
+      kind: 'embed',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      facets: { 'visual.shape/v0': { kind: 'diamond' } },
+    })
+    const reverted = applyCommand(next, { kind: 'set-node-shape', id: 'a', shape: undefined })
+    expect(reverted.nodes[0]?.['x-whiteboard']).toEqual({
+      kind: 'embed',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+    })
+  })
+
+  it('keeps facets it does not own', () => {
+    const withOther: SpatialCanvas = {
+      ...base,
+      nodes: [
+        { ...base.nodes[0]!, 'x-whiteboard': { facets: { 'someone.else/v1': { keep: true } } } },
+      ],
+    }
+    const next = applyCommand(withOther, { kind: 'set-node-shape', id: 'a', shape: 'ellipse' })
+    expect(next.nodes[0]?.['x-whiteboard']?.facets).toEqual({
+      'someone.else/v1': { keep: true },
+      'visual.shape/v0': { kind: 'ellipse' },
+    })
+  })
+
+  it('an unknown node id is a no-op', () => {
+    expect(applyCommand(base, { kind: 'set-node-shape', id: 'zz', shape: 'hexagon' })).toEqual(base)
+  })
+})
