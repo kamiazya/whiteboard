@@ -25,6 +25,9 @@ import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
+import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
+import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
+import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
@@ -38,6 +41,7 @@ import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
+import { documentPath } from '../lib/app-routes.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import {
   createDaemonFetch,
@@ -456,6 +460,14 @@ export function DaemonDocumentPage({
   // on upload and rejects anything else.
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
 
+  // The document's own verbs live on the document's ⋯, the same as on the
+  // browser-local page — one object, one action menu (ADR-0006).
+  const { exportError, handleExport } = useSceneExport({
+    onExport: exportScene,
+    filenameBase: sanitizeExportFilenameBase(canvas?.path ?? 'canvas'),
+    log,
+  })
+
   // Creation is immediate — no name is collected up front (ADR-0006 point 3).
   // The path is derived from the loaded documents so it never collides with one
   // already in this workspace; naming happens afterwards in the canvas's top bar.
@@ -652,6 +664,20 @@ export function DaemonDocumentPage({
                     // the disclosure here without a second flag to keep in sync.
                     facets={coreFacets}
                     onFacetsChange={setCoreFacets}
+                    actions={
+                      <>
+                        {exportError && (
+                          <span className="text-destructive truncate text-xs" role="alert">
+                            {exportError}
+                          </span>
+                        )}
+                        <DocumentMenu
+                          documentUrl={`${window.location.origin}${documentPath(canvas.workspaceId, canvas.path)}`}
+                          onExport={(format) => void handleExport(format)}
+                          log={log}
+                        />
+                      </>
+                    }
                   />
                   <ConnectionsChip
                     backlinks={connections === null ? null : connections.backlinks}
@@ -686,7 +712,6 @@ export function DaemonDocumentPage({
               }}
               branchRefreshSignal={branchRefreshSignal}
               onNavigateBack={onNavigateBack}
-              onExport={exportScene}
               // Version thumbnails come from the same PNG export path the
               // user can trigger by hand. Without this the save flow skips
               // the upload entirely and latest-thumbnail stays 204 forever.

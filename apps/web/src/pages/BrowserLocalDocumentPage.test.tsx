@@ -438,19 +438,17 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    // Export is a whole-document operation, so it sits with Duplicate and
-    // Delete in the canvas row's More actions kebab.
+    // One object, one action menu (ADR-0006). Counted BEFORE opening: an open
+    // Radix menu inerts the rest of the page, so its trigger is no longer in
+    // the accessible tree while the menu is up.
+    expect(await screen.findAllByRole('button', { name: 'More actions' })).toHaveLength(1)
+
     await openDocumentOpsMenu()
+    expect(await documentOpsItem(/copy link/i)).toBeTruthy()
     expect(await documentOpsItem(/export as png/i)).toBeTruthy()
     expect(await documentOpsItem(/export as svg/i)).toBeTruthy()
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
-
-    // The top bar's Canvas actions menu keeps rename/copy-URL only on this
-    // page (daemon mode, which has no canvas row, keeps its export there).
-    const topTrigger = await screen.findByLabelText('Document actions')
-    fireEvent.pointerDown(topTrigger, { button: 0, ctrlKey: false })
-    const topMenu = await screen.findByRole('menu')
-    expect(topMenu.textContent).not.toContain('Export')
+    expect(await documentOpsItem(/duplicate/i)).toBeTruthy()
+    expect(await documentOpsItem(/^delete$/i)).toBeTruthy()
   })
 
   it('renders a human-readable save status instead of the raw state enum', async () => {
@@ -615,12 +613,10 @@ describe('BrowserLocalDocumentPage', () => {
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading.textContent).toBe('untitled')
     // WorkspaceTopBar mounts through a lazy chunk; wait for it to resolve.
-    expect(await screen.findByLabelText('Document actions')).toBeTruthy()
-    // Distinct from the canvas row's operations kebab.
-    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'More actions' })).toBeTruthy()
   })
 
-  it("renaming through the top bar's canvas actions updates the heading and flushes a save", async () => {
+  it('renaming through the title field updates the heading and flushes a save', async () => {
     vi.useRealTimers()
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
@@ -635,13 +631,9 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    const canvasActions = await screen.findByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
-    const titleInput = screen.getByRole('textbox', { name: /document title/i })
+    const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
-    fireEvent.keyDown(titleInput, { key: 'Enter' })
+    fireEvent.blur(titleInput)
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
     })
@@ -689,10 +681,8 @@ describe('BrowserLocalDocumentPage', () => {
       )
     })
     const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-    // Accessible names must not collide with the operations kebab or the
-    // top bar's canvas actions control.
-    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
-    expect(screen.getByLabelText('Document actions')).toBeTruthy()
+    // The document's operations menu is the one action control in this row.
+    expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1)
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByText('Other canvas')
   })
@@ -914,7 +904,7 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    await screen.findByLabelText('Document actions')
+    await screen.findByRole('button', { name: 'More actions' })
     // Resolve the initial mount's list refresh (generation 1) with both
     // documents, so the switcher has real options to switch between.
     await act(async () => {
@@ -1015,13 +1005,10 @@ describe('BrowserLocalDocumentPage', () => {
       resolvers[0]!([snap])
     })
 
-    const canvasActions = await screen.findByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    fireEvent.pointerUp(await screen.findByText('Rename'))
-    const titleInput = screen.getByRole('textbox', { name: /document title/i })
+    const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
     const refreshesBeforeRename = resolvers.length
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
-    fireEvent.keyDown(titleInput, { key: 'Enter' })
+    fireEvent.blur(titleInput)
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
     })
@@ -1165,8 +1152,7 @@ describe('BrowserLocalDocumentPage', () => {
           />,
         )
       })
-      expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
-      expect(screen.getByLabelText('Document actions')).toBeTruthy()
+      expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1)
     })
   })
 

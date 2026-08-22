@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import type { ComponentProps } from 'react'
 import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -372,6 +373,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   function renderBarWithDaemonFetch(overrides?: {
     getThumbnailBlob?: () => Promise<Blob | null>
     onNavigateToDocument?: (path: string) => void
+    titleSlot?: ComponentProps<typeof WorkspaceTopBar>['titleSlot']
   }) {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
       if (String(url).includes('/names')) return mkNamesOk()
@@ -388,6 +390,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
           onNavigateBack={() => {}}
           onNavigateToDocument={overrides?.onNavigateToDocument ?? (() => {})}
           getThumbnailBlob={overrides?.getThumbnailBlob}
+          titleSlot={overrides?.titleSlot}
         />
       </DaemonApiContext.Provider>,
       { container: document.body },
@@ -458,16 +461,18 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
-  it('commits a canvas rename through the injected daemon fetch', async () => {
-    const daemonFetch = renderBarWithDaemonFetch()
+  it('commits a rename made through the title slot via the injected daemon fetch', async () => {
+    const daemonFetch = renderBarWithDaemonFetch({
+      titleSlot: (identity) => (
+        <input
+          aria-label="Merged title"
+          value={identity.name}
+          onChange={(e) => identity.onRename?.(e.target.value)}
+        />
+      ),
+    })
 
-    const canvasActions = screen.getByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
-    const input = await screen.findByPlaceholderText('canvas-a')
-    fireEvent.change(input, { target: { value: 'renamed' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
+    fireEvent.change(screen.getByLabelText('Merged title'), { target: { value: 'renamed' } })
 
     await waitFor(() => {
       expect(daemonFetch).toHaveBeenCalledWith(
@@ -508,234 +513,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
       )
     })
     expect(apiFetch).not.toHaveBeenCalled()
-  })
-})
-
-describe('WorkspaceTopBar — export affordance (RED-first)', () => {
-  async function openDocumentActions() {
-    const canvasActions = screen.getByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    await screen.findByText('Rename')
-  }
-
-  it('does not render export menu items when onExport is not provided', async () => {
-    renderBar()
-    await openDocumentActions()
-
-    expect(screen.queryByText('Export as PNG')).toBeNull()
-    expect(screen.queryByText('Export as SVG')).toBeNull()
-  })
-
-  it('invokes onExport with "png" from the Document actions menu and triggers a download', async () => {
-    const blob = new Blob(['fake-png'], { type: 'image/png' })
-    const onExport = vi.fn().mockResolvedValue(blob)
-    const createObjectURL = vi.fn(() => 'blob:mock-url')
-    const revokeObjectURL = vi.fn()
-    vi.stubGlobal('URL', { ...URL, createObjectURL, revokeObjectURL })
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    const pngItem = await screen.findByText('Export as PNG')
-    fireEvent.pointerUp(pngItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
-    await waitFor(() => expect(createObjectURL).toHaveBeenCalledWith(blob))
-    expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url')
-
-    vi.unstubAllGlobals()
-  })
-
-  it('invokes onExport with "svg" from the Document actions menu', async () => {
-    const blob = new Blob(['<svg></svg>'], { type: 'image/svg+xml' })
-    const onExport = vi.fn().mockResolvedValue(blob)
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:mock-url'),
-      revokeObjectURL: vi.fn(),
-    })
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    const svgItem = await screen.findByText('Export as SVG')
-    fireEvent.pointerUp(svgItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('svg'))
-
-    vi.unstubAllGlobals()
-  })
-
-  // The menu must only offer formats `onExport` (SceneExportFormat) can
-  // actually produce — an entry outside that union is an affordance whose
-  // every click fails.
-  it('never renders a JSON/Excalidraw export menu item', async () => {
-    const onExport = vi.fn().mockResolvedValue(new Blob())
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    expect(screen.getByText('Export as PNG')).toBeTruthy()
-    expect(screen.getByText('Export as SVG')).toBeTruthy()
-    expect(screen.queryByText(/json|excalidraw/i)).toBeNull()
-  })
-
-  it('does not throw when onExport resolves null (export unavailable)', async () => {
-    const onExport = vi.fn().mockResolvedValue(null)
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    const pngItem = await screen.findByText('Export as PNG')
-    fireEvent.pointerUp(pngItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
-  })
-
-  it('surfaces a visible error when onExport resolves null (export unavailable)', async () => {
-    const onExport = vi.fn().mockResolvedValue(null)
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    const pngItem = await screen.findByText('Export as PNG')
-    fireEvent.pointerUp(pngItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
-    expect((await screen.findByRole('alert')).textContent).toMatch(/export/i)
-  })
-
-  it('surfaces a visible error when onExport rejects', async () => {
-    const onExport = vi.fn().mockRejectedValue(new Error('boom'))
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    const pngItem = await screen.findByText('Export as PNG')
-    fireEvent.pointerUp(pngItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
-    expect((await screen.findByRole('alert')).textContent).toMatch(/export/i)
-  })
-
-  // RED-first: Firefox (and per the HTML spec generally) does not start a
-  // download from a synthetic .click() on an <a> that was never attached to
-  // the document — the exact "looks like it worked but does nothing" defect
-  // this export affordance exists to avoid. Assert the anchor is actually in
-  // the document at click time, and removed again afterward.
-  it('attaches the download anchor to the document before clicking it, then removes it', async () => {
-    const blob = new Blob(['fake-png'], { type: 'image/png' })
-    const onExport = vi.fn().mockResolvedValue(blob)
-    vi.stubGlobal('URL', {
-      ...URL,
-      createObjectURL: vi.fn(() => 'blob:mock-url'),
-      revokeObjectURL: vi.fn(),
-    })
-
-    let anchorConnectedAtClick: boolean | null = null
-    const realCreateElement = document.createElement.bind(document)
-    const createElementSpy = vi
-      .spyOn(document, 'createElement')
-      .mockImplementation((tagName: string, ...rest) => {
-        const el = realCreateElement(tagName, ...rest)
-        if (tagName === 'a') {
-          const realClick = el.click.bind(el)
-          el.click = () => {
-            anchorConnectedAtClick = el.isConnected
-            realClick()
-          }
-        }
-        return el
-      })
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-        onExport={onExport}
-      />,
-      { container: document.body },
-    )
-
-    await openDocumentActions()
-    const pngItem = await screen.findByText('Export as PNG')
-    fireEvent.pointerUp(pngItem)
-
-    await waitFor(() => expect(onExport).toHaveBeenCalledWith('png'))
-    await waitFor(() => expect(anchorConnectedAtClick).toBe(true))
-
-    createElementSpy.mockRestore()
-    vi.unstubAllGlobals()
   })
 })
 
@@ -878,99 +655,8 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
   })
 })
 
-describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
-  function openDocumentActionsMenu() {
-    const canvasActions = screen.getByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    return screen.findByText('Copy canvas URL')
-  }
-
-  afterEach(() => {
-    // @ts-expect-error -- test-only cleanup of a property defined per-test below
-    delete navigator.clipboard
-  })
-
-  it('shows a "Copied!" confirmation after a successful copy, then reverts', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    })
-
-    try {
-      renderBar()
-      const copyItem = await openDocumentActionsMenu()
-      fireEvent.pointerUp(copyItem)
-
-      await vi.waitFor(() => expect(screen.getByText('Copied!')).toBeTruthy())
-      expect(writeText).toHaveBeenCalledWith(expect.stringContaining('/w/ws_1/document/canvas-a'))
-      // Screen-reader-visible announcement, independent of the visible label.
-      expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
-        'Canvas URL copied to clipboard.',
-      )
-
-      await act(async () => {
-        vi.advanceTimersByTime(2000)
-      })
-      await vi.waitFor(() => expect(screen.queryByText('Copied!')).toBeNull())
-      expect(screen.getByText('Copy canvas URL')).toBeTruthy()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('surfaces a rejected clipboard write as a visible error instead of a false success', async () => {
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    })
-
-    renderBar()
-    const copyItem = await openDocumentActionsMenu()
-    fireEvent.pointerUp(copyItem)
-
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain("Couldn't copy automatically")
-    expect(screen.queryByText('Copied!')).toBeNull()
-    expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
-      "Couldn't copy the canvas URL automatically.",
-    )
-
-    // Fallback: the URL is still available as selectable text.
-    const fallbackInput = screen.getByLabelText('Canvas URL') as HTMLInputElement
-    expect(fallbackInput.value).toContain('/w/ws_1/document/canvas-a')
-    expect(fallbackInput.readOnly).toBe(true)
-  })
-
-  it('does not nest the live-region announcement or the error fallback inside the role="menu" container', async () => {
-    // WAI-ARIA menu pattern: an element with role="menu" may only own
-    // menuitem/menuitemcheckbox/menuitemradio/group descendants. A
-    // role="status"/role="alert" live region nested directly inside it
-    // violates that contract (axe/AccessLint: aria-required-children) even
-    // though the text itself is never focusable or selectable via arrow keys.
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    })
-
-    renderBar()
-    const copyItem = await openDocumentActionsMenu()
-    fireEvent.pointerUp(copyItem)
-
-    const alert = await screen.findByRole('alert')
-    const status = screen.getByRole('status', { name: 'Copy status' })
-    const menu = screen.getByRole('menu')
-
-    expect(menu.contains(alert)).toBe(false)
-    expect(menu.contains(status)).toBe(false)
-  })
-})
-
 describe('WorkspaceTopBar — dataMode="local"', () => {
-  it('never calls the daemon fetch: mount, open the canvas switcher, and open the actions area', async () => {
+  it('never calls the daemon fetch: mount and open the canvas switcher', async () => {
     render(
       <WorkspaceTopBar
         dataMode="local"
@@ -982,7 +668,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         ]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={() => {}}
       />,
       { container: document.body },
@@ -1005,7 +690,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={() => {}}
       />,
       { container: document.body },
@@ -1031,7 +715,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={onCreateDocument}
       />,
       { container: document.body },
@@ -1047,73 +730,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect(apiFetch).not.toHaveBeenCalled()
   })
 
-  it('commits a local-mode rename through onRenameDocument and closes the rename input', async () => {
-    const onRenameDocument = vi.fn().mockResolvedValue(undefined)
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onRenameDocument={onRenameDocument}
-        onCreateDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-
-    const canvasActions = screen.getByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
-    // Query and edit synchronously in the same tick as the pointerUp that
-    // mounts this input (no intervening `await`) — Radix asynchronously
-    // returns focus to the dropdown trigger after the menu closes, which
-    // races with (and can steal) this input's `autoFocus`. Editing before
-    // yielding to that gap keeps the interaction deterministic.
-    const input = screen.getByPlaceholderText('canvas-a')
-    fireEvent.change(input, { target: { value: 'renamed canvas' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
-    await waitFor(() => expect(onRenameDocument).toHaveBeenCalledWith('renamed canvas'))
-    await waitFor(() => expect(screen.queryByPlaceholderText('canvas-a')).toBeNull())
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('surfaces a rejected onRenameDocument as a visible error and keeps the rename input open', async () => {
-    const onRenameDocument = vi.fn().mockRejectedValue(new Error('boom'))
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onRenameDocument={onRenameDocument}
-        onCreateDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-
-    const canvasActions = screen.getByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
-    // See the comment in the success-path test above: edit synchronously,
-    // in the same tick, to avoid Radix's async focus-return-to-trigger
-    // blurring the input first.
-    const input = screen.getByPlaceholderText('canvas-a')
-    fireEvent.change(input, { target: { value: 'renamed canvas' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
-    await waitFor(() => expect(onRenameDocument).toHaveBeenCalledWith('renamed canvas'))
-    expect((await screen.findByRole('alert')).textContent).toContain('Failed to rename canvas.')
-    // The input stays mounted so the user can retry without retyping.
-    expect(screen.queryByPlaceholderText('canvas-a')).not.toBeNull()
-  })
-
   it('surfaces a rejected onCreateDocument as a visible error since local mode has no path dialog', async () => {
     const onCreateDocument = vi.fn().mockRejectedValue(new Error('boom'))
     render(
@@ -1124,7 +740,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={onCreateDocument}
       />,
       { container: document.body },
@@ -1139,44 +754,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('Failed to create canvas.')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('gives the rename input an accessible name and isolates it from document-level shortcut listeners', async () => {
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
-        onCreateDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-
-    const canvasActions = screen.getByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
-
-    const input = screen.getByRole('textbox', { name: 'Document title' })
-
-    const docKeydown = vi.fn()
-    const docKeyup = vi.fn()
-    document.addEventListener('keydown', docKeydown)
-    document.addEventListener('keyup', docKeyup)
-    try {
-      fireEvent.keyDown(input, { key: 'Delete' })
-      fireEvent.keyUp(input, { key: 'Delete' })
-    } finally {
-      document.removeEventListener('keydown', docKeydown)
-      document.removeEventListener('keyup', docKeyup)
-    }
-
-    expect(docKeydown).not.toHaveBeenCalled()
-    expect(docKeyup).not.toHaveBeenCalled()
   })
 
   it('guards against a second in-flight onCreateDocument call when "New canvas…" is invoked twice before the first resolves', async () => {
@@ -1195,7 +772,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={onCreateDocument}
       />,
       { container: document.body },
@@ -1238,7 +814,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={onCreateDocument}
       />,
       { container: document.body },
@@ -1274,7 +849,6 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
         ]}
         onToggleFullscreen={() => {}}
         onNavigateToDocument={() => {}}
-        onRenameDocument={() => {}}
         onCreateDocument={() => {}}
       />,
       { container: document.body },
@@ -1290,48 +864,34 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 })
 
 describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke', () => {
-  it('closes the rename input after a successful daemon rename under StrictMode', async () => {
-    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
-      if (String(url).includes('/names')) return mkNamesOk()
-      if (String(url).includes('/name') && init?.method === 'PUT') {
-        return new Response(JSON.stringify({ workspace: 'My WS', documents: {}, pinned: [] }), {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        })
-      }
-      return new Response('{}', { status: 200 })
-    })
+  // Under StrictMode's dev-only double-invoke (setup -> cleanup -> setup), a
+  // mountedRef that never re-arms on setup stays stuck false, so every
+  // completion path gated on it — here, the create failure message — would
+  // silently never render.
+  it('still surfaces a failed create under StrictMode', async () => {
+    const onCreateDocument = vi.fn().mockRejectedValue(new Error('boom'))
 
     render(
       <StrictMode>
         <WorkspaceTopBar
+          dataMode="local"
           workspaceId="ws_1"
           path="canvas-a"
-          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
           onToggleFullscreen={() => {}}
-          onNavigateBack={() => {}}
           onNavigateToDocument={() => {}}
+          onCreateDocument={onCreateDocument}
         />
       </StrictMode>,
       { container: document.body },
     )
 
-    const actionsButton = screen.getByRole('button', { name: 'Document actions' })
-    fireEvent.pointerDown(actionsButton, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
+    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
+    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-menu-item'))
 
-    const input = await screen.findByLabelText('Document title')
-    fireEvent.change(input, { target: { value: 'Renamed Canvas' } })
-    fireEvent.keyDown(input, { key: 'Enter' })
-
-    // Under React StrictMode's dev-only double-invoke (setup -> cleanup ->
-    // setup), a mountedRef that never re-arms on setup would stay stuck
-    // false, so the rename completion path (gated on mountedRef.current)
-    // would never close the input.
-    await waitFor(() => {
-      expect(screen.queryByLabelText('Document title')).toBeNull()
-    })
+    await waitFor(() => expect(onCreateDocument).toHaveBeenCalled())
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed to create canvas.')
   })
 })
 
@@ -1436,5 +996,50 @@ describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
     )
     const header = screen.getByRole('banner')
     expect(header.contains(screen.getByLabelText('Merged title'))).toBe(true)
+  })
+})
+
+// The pencil's Rename mounted a SECOND live text field into the same flex row
+// as the title slot's own input — one name, two inputs, disagreeing on when a
+// name is committed (keystroke vs. Enter/blur). Naming happens in place on the
+// title (ADR-0006 point 3), so the bar keeps no rename of its own.
+describe('WorkspaceTopBar — one rename surface', () => {
+  it('renders no document-actions pencil beside the switcher', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        path="canvas-a"
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onToggleFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToDocument={() => {}}
+        titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
+      />,
+      { container: document.body },
+    )
+
+    expect(screen.queryByLabelText('Document actions')).toBeNull()
+  })
+
+  it('leaves the title slot as the only editable field in the header', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        path="canvas-a"
+        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
+        onToggleFullscreen={() => {}}
+        onNavigateBack={() => {}}
+        onNavigateToDocument={() => {}}
+        titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
+      />,
+      { container: document.body },
+    )
+
+    const header = screen.getByRole('banner')
+    expect(
+      within(header)
+        .getAllByRole('textbox')
+        .map((field) => field.getAttribute('aria-label')),
+    ).toEqual(['Merged title'])
   })
 })

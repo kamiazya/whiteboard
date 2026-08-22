@@ -436,36 +436,6 @@ describe('WorkspaceTopBar browser mode', () => {
     expect(headerAfter.getBoundingClientRect().height).toBeCloseTo(48, 0)
   })
 
-  it('announces a failed copy without nesting the alert inside the real role="menu" element', async () => {
-    // Real Chromium rendering (not jsdom) of the Radix menu — the layer where
-    // the ARIA tree axe/AccessLint inspects actually exists.
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    })
-
-    renderTopBar()
-
-    await page.getByRole('button', { name: 'Document actions' }).click()
-    await page.getByText('Copy canvas URL').click()
-
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain("Couldn't copy automatically")
-
-    const menu = screen.getByRole('menu')
-    expect(menu.contains(alert)).toBe(false)
-
-    // The announcement is still reachable in the accessibility tree even
-    // though it is no longer a DOM child of the menu.
-    const status = screen.getByRole('status', { name: 'Copy status' })
-    expect(status.textContent).toContain("Couldn't copy the canvas URL automatically.")
-    expect(menu.contains(status)).toBe(false)
-
-    // @ts-expect-error -- test-only cleanup of a property defined above
-    delete navigator.clipboard
-  })
-
   describe('workspace picker (real Radix)', () => {
     function renderWithWorkspaces(onSwitchWorkspace: (workspaceId: string) => void) {
       return renderTopBar({ workspaceId: 'w1', workspaces: ['w1', 'w2'], onSwitchWorkspace })
@@ -526,24 +496,5 @@ describe('WorkspaceTopBar browser mode', () => {
       await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
       expect(onSwitchWorkspace).not.toHaveBeenCalled()
     })
-  })
-
-  it('does not leave sibling top-bar controls aria-hidden after the Canvas actions menu closes', async () => {
-    renderTopBar()
-
-    const backButton = screen.getByRole('button', { name: 'Back to documents' })
-    expect(backButton.getAttribute('aria-hidden')).toBeNull()
-
-    await page.getByRole('button', { name: 'Document actions' }).click()
-    await screen.findByRole('menu')
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-
-    // Radix's DismissableLayer inerts (aria-hides) the rest of the page while
-    // this menu is open; closing it must fully restore every sibling rather
-    // than leaving some of them permanently aria-hidden.
-    expect(backButton.getAttribute('aria-hidden')).toBeNull()
-    const rightActions = screen.getByTestId('topbar-right-actions-exposed')
-    expect(rightActions.getAttribute('aria-hidden')).toBeNull()
   })
 })

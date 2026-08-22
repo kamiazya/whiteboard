@@ -1,26 +1,18 @@
 import { ChevronLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
-import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useDirtyState } from '@/hooks/useDirtyState'
-import type { SceneExportFormat } from '@/hooks/useDocumentSync'
 import { getAppLogger } from '@/lib/app-logger'
-import { documentPath } from '../lib/app-routes.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderSaveDot } from './HeaderSaveDot'
-import { DocumentActionsMenu } from './workspace-top-bar/DocumentActionsMenu'
 import { DocumentDropdown } from './workspace-top-bar/DocumentDropdown'
-import { sanitizeExportFilenameBase } from './workspace-top-bar/export-filename'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
 import type { DocumentInfo } from './workspace-top-bar/types'
-import { useCopyDocumentUrl } from './workspace-top-bar/useCopyDocumentUrl'
 import { useCreateDocument } from './workspace-top-bar/useCreateDocument'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
-import { useDocumentRename } from './workspace-top-bar/useDocumentRename'
 import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
-import { useSceneExport } from './workspace-top-bar/useSceneExport'
 
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
 // default), every capability behaves as if it were `true` — this keeps every
@@ -55,12 +47,10 @@ interface Props {
   onNavigateToDocument: (path: string) => void
   // Defaults to 'daemon' so every existing caller keeps fetching /names and
   // POSTing renames/new-canvas unchanged. 'local' is for hosts with no
-  // daemon data layer (browser-local): the names fetch never fires and
-  // rename/create route through onRenameDocument/onCreateDocument instead.
+  // daemon data layer (browser-local): the names fetch never fires, display
+  // names come from documents[].name, and create routes through
+  // onCreateDocument. Naming is the page's title segment either way.
   dataMode?: 'daemon' | 'local'
-  // Required in local mode; ignored in daemon mode. Awaited internally with
-  // an unmount guard — rejections are not swallowed.
-  onRenameDocument?: (name: string) => void | Promise<void>
   onCreateDocument?: () => void | Promise<void>
   /** Local mode only for now: creates a markdown-kind canvas and opens it. */
   onCreateMarkdownCanvas?: () => void | Promise<void>
@@ -75,14 +65,6 @@ interface Props {
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
   branchRefreshSignal?: number
-  // Renders the scene through the same export utility Excalidraw's own
-  // (harder-to-discover) hamburger-menu export dialog uses. Omitted (the
-  // default) hides the "Export as PNG/SVG/JSON" menu items entirely rather
-  // than wiring a control to a capability the host page hasn't set up —
-  // there is deliberately no PDF option here because no export path (this
-  // app's or Excalidraw's own) produces one.
-  onExport?: (format: SceneExportFormat) => Promise<Blob | null>
-
   // Right-side slot ahead of the secondary actions — the host page's
   // connection-state chip mounts here so the one
   // status affordance lives in the header instead of a banner row.
@@ -108,10 +90,12 @@ interface Props {
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
 // - Only a 48px top bar; Excalidraw keeps the full width
-// - Left: back to workspace, inline workspace rename, and the canvas switcher
-// - Right: version history, fullscreen, and canvas rename actions. Below
-//   400px these secondary actions collapse into a "More actions" kebab so
-//   the header never wraps.
+// - Left: back to workspace, the canvas switcher, and the page's own title
+//   segment. Naming and every per-document verb belong to that segment (the
+//   document is one object, so it gets one action menu — ADR-0006), not to
+//   this bar.
+// - Right: version history and fullscreen. Below 400px these secondary
+//   actions collapse into a "View options" kebab so the header never wraps.
 // - More complex lists appear on demand through buttons and popovers
 
 export default function WorkspaceTopBar({
@@ -124,12 +108,10 @@ export default function WorkspaceTopBar({
   onNavigateBack,
   onNavigateToDocument,
   dataMode = 'daemon',
-  onRenameDocument,
   onCreateDocument,
   onCreateMarkdownCanvas,
   capabilities,
   branchRefreshSignal,
-  onExport,
   statusSlot,
   titleSlot,
   workspaces,
@@ -170,10 +152,8 @@ export default function WorkspaceTopBar({
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
-  // Guards async callbacks (onRenameDocument/onCreateDocument/clipboard writes)
-  // against setState-after-unmount when a canvas switch/delete resolves
-  // mid-flight. Shared by useDocumentRename, useCreateDocument, and
-  // useCopyDocumentUrl below.
+  // Guards useCreateDocument's async callback against setState-after-unmount
+  // when a canvas switch/delete resolves mid-flight.
   const mountedRef = useRef(true)
   useEffect(() => {
     // Re-arm on every setup so React StrictMode's dev-only double-invoke
@@ -186,29 +166,6 @@ export default function WorkspaceTopBar({
   }, [])
 
   const canvasCustomName = effectiveNames.documents[path]
-  // Prefer the custom name when present; otherwise split the path into prefix and leaf.
-  // Muting the prefix helps show that nearby documents belong to the same group.
-  const slashIndex = path.indexOf('/')
-  const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? path.slice(0, slashIndex) : null
-  const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? path.slice(slashIndex + 1) : null
-  const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? path : null)
-
-  const {
-    renamingDocument,
-    draft,
-    setDraft,
-    renameError,
-    startRename,
-    commitDocumentName,
-    cancelRename,
-  } = useDocumentRename({
-    path,
-    isLocalMode,
-    currentName: canvasCustomName,
-    onRenameDocument,
-    renameDocument,
-    mountedRef,
-  })
 
   const { newDocumentError, newDocumentBusy, openNewDocument } = useCreateDocument({
     workspaceId,
@@ -219,24 +176,6 @@ export default function WorkspaceTopBar({
     onNavigateToDocument,
     daemonFetch,
     mountedRef,
-  })
-
-  // Kept outside copyDocumentUrl so the failure-path fallback can render the
-  // same URL as selectable text without recomputing it.
-  const documentUrl = `${window.location.origin}${documentPath(workspaceId, path)}`
-  const { copyStatus, copyDocumentUrl, resetCopyStatus } = useCopyDocumentUrl(
-    documentUrl,
-    log,
-    mountedRef,
-  )
-
-  // A trailing slash-segment (the canvas leaf) makes the safest download
-  // filename; falling back to the raw path covers the ungrouped case.
-  const exportFilenameBase = sanitizeExportFilenameBase(canvasFlat ?? canvasLeaf ?? path)
-  const { exportError, handleExport } = useSceneExport({
-    onExport,
-    filenameBase: exportFilenameBase,
-    log,
   })
 
   return (
@@ -277,45 +216,6 @@ export default function WorkspaceTopBar({
           onSwitchWorkspace={onSwitchWorkspace}
         />
 
-        {/* Canvas-specific actions such as rename and copy URL. */}
-        <DocumentActionsMenu
-          documentUrl={documentUrl}
-          copyStatus={copyStatus}
-          onCopyDocumentUrl={() => void copyDocumentUrl()}
-          onResetCopyStatus={resetCopyStatus}
-          onStartRename={startRename}
-          onExport={onExport ? (format) => void handleExport(format) : undefined}
-        />
-
-        {/* Inline canvas rename input. */}
-        {renamingDocument && (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <Input
-              autoFocus
-              aria-label="Document title"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitDocumentName}
-              // Excalidraw registers document-level keyboard shortcuts (Delete,
-              // Backspace, etc.) that must never fire while the user is typing
-              // a canvas name here.
-              onKeyDown={(e) => {
-                e.stopPropagation()
-                if (e.key === 'Enter') commitDocumentName()
-                else if (e.key === 'Escape') cancelRename()
-              }}
-              onKeyUp={(e) => e.stopPropagation()}
-              placeholder={path}
-              className="h-7 max-w-[220px] text-sm"
-            />
-            {renameError && (
-              <span className="truncate text-xs text-destructive" role="alert">
-                {renameError}
-              </span>
-            )}
-          </div>
-        )}
-
         {/* Both modes: immediate create has no dialog, so its in-flight and
             failure states render here beside the switcher. The status line
             replaces the deleted dialog's disabled "Creating…" button as the
@@ -338,14 +238,6 @@ export default function WorkspaceTopBar({
         {newDocumentError && (
           <span className="truncate text-xs text-destructive" role="alert">
             {newDocumentError}
-          </span>
-        )}
-
-        {/* Export is a plain dropdown action with no dialog of its own, so a
-            failed or unavailable export is surfaced here instead. */}
-        {exportError && (
-          <span className="truncate text-xs text-destructive" role="alert">
-            {exportError}
           </span>
         )}
 

@@ -110,6 +110,13 @@ export function DocumentProperties({
             onTitleChange(event.target.value)
           }}
           readOnly={onTitleChange === undefined}
+          // The editor binds its shortcuts on its own root and guards them
+          // with isTextEntryEvent, so this is belt-and-braces rather than
+          // load-bearing — but a stray Delete reaching a canvas selection from
+          // the title box is the kind of defect nobody reports as a keyboard
+          // bug. Window-capture bindings (Cmd+S) are unaffected by this.
+          onKeyDown={(event) => event.stopPropagation()}
+          onKeyUp={(event) => event.stopPropagation()}
           // Dropping the draft is the whole tidy-up: the box falls back to the
           // canonical name, which is already trimmed.
           onBlur={() => setDraftTitle(null)}
