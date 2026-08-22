@@ -6,9 +6,10 @@ import type { WorkspaceDocumentEntry } from './document-entry.js'
  *
  * The panel used to call the daemon's client functions directly, which made
  * the three-pane browser daemon-only — the single obstacle the
- * one-browser-both-modes ticket names. These five operations are the panel's
+ * one-browser-both-modes ticket names. These operations are the panel's
  * whole data surface, measured from its imports rather than assumed: list,
- * create, rename, and the two content reads its thumbnails and preview need.
+ * create, rename, pin, and the two content reads its thumbnails and preview
+ * need.
  *
  * Duplicate and delete are deliberately NOT here. Both stay with the page
  * (`onDuplicateDocument` / `onRequestDelete`), which owns the confirmation
@@ -30,6 +31,13 @@ export interface WorkspaceFilesSource {
     entry: Pick<WorkspaceDocumentEntry, 'documentId' | 'path'>,
     name: string | undefined,
   ): Promise<void>
+  /**
+   * Pin or unpin a document, which is what decides `pinOrder` on the next
+   * list read. OPTIONAL: pinning is workspace state the daemon keeps, and a
+   * browser-local workspace has nowhere to keep it — the panel omits the
+   * affordance rather than offering one that cannot persist.
+   */
+  setPinned?(entry: Pick<WorkspaceDocumentEntry, 'path'>, pinned: boolean): Promise<void>
   /**
    * The OKF markdown of a markdown document, for row thumbnails and the
    * preview pane. Empty string when the document has no body yet.

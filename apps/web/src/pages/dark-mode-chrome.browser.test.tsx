@@ -100,16 +100,17 @@ describe('dark-mode chrome (root token application)', () => {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        documents={[{ path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
+        titleSlot={() => <span>Login flow</span>}
       />,
     )
 
-    // The subject is COLOUR inheritance, so any chrome text serves. The
-    // switcher names the workspace now, which is the top bar's own label.
-    const label = await findByText('Design review')
+    // The subject is COLOUR inheritance, so any chrome text serves. The bar
+    // itself carries none any more — every control in it is icon-only — so
+    // the page's own title segment stands in, which is what really renders
+    // text in this row.
+    const label = await findByText('Login flow')
     expect(lightness(getComputedStyle(label).color)).toBeGreaterThan(LIGHT)
   })
 })

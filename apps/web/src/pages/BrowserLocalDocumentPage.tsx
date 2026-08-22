@@ -3,10 +3,9 @@ import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
@@ -27,13 +26,8 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu.js'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
+import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
@@ -43,7 +37,11 @@ import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { browserLocalDocumentPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
+import {
+  browserLocalDocumentPath,
+  browserLocalIndexPath,
+  parseBrowserLocalRoute,
+} from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
@@ -54,6 +52,7 @@ import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -64,16 +63,6 @@ import {
   useBrowserLocalDocumentController,
 } from './use-browser-local-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
-
-// React.lazy: DaemonDetectedBanner pulls in daemon-probe.ts + Zod parsing
-// that would otherwise ship in the entry chunk, which is already close to
-// its gzip budget (apps/web/scripts/smoke-bundle-size.mjs). Deferred load
-// keeps first paint unaffected by a feature most sessions never render.
-const DaemonDetectedBanner = lazy(() =>
-  import('../components/migration/DaemonDetectedBanner.js').then((m) => ({
-    default: m.DaemonDetectedBanner,
-  })),
-)
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
@@ -156,9 +145,18 @@ export function BrowserLocalDocumentPage({
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
-  // re-read from localStorage on every render.
+  // Stable across re-renders so the settings payload isn't re-read from
+  // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
+
+  // The connection is app-level, so the App-mounted shell draws it and this
+  // page only reports what it knows: while a browser-local document is open,
+  // the data lives in this browser and nowhere else. Cleared on unmount so an
+  // index page makes no claim of its own.
+  useEffect(() => {
+    setShellConnection({ state: 'local' })
+    return () => setShellConnection(null)
+  }, [])
 
   // duplicateDocument() rejects on failure (see the controller hook) rather
   // than carrying its own error/pending state, so this page owns both: a
@@ -492,8 +490,15 @@ export function BrowserLocalDocumentPage({
 
   const nodeInEditor = useNodeInEditor(canvas, onChange)
 
-  // Export rides the canvas row's operations kebab on this page (the top
-  // bar keeps its export only in daemon mode, which has no canvas row).
+  // The browser-local route, NOT the daemon's `/w/:workspaceId/document/*`
+  // shape the header used to build for every mode — that URL does not route
+  // here at all, so "copy link" handed out an address that landed on the
+  // document list.
+  const documentUrl =
+    documentPath === null
+      ? window.location.href
+      : `${window.location.origin}${browserLocalDocumentPath(documentPath)}`
+
   const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
   const { exportError, handleExport } = useSceneExport({
     onExport: exportScene,
@@ -645,59 +650,37 @@ export function BrowserLocalDocumentPage({
           {exportError}
         </div>
       )}
-      <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={canvasOpsButtonRef}
-                type="button"
-                aria-label="More actions"
-                variant="ghost"
-                size="sm"
-                className="size-7 p-0"
-              >
-                <EllipsisVertical aria-hidden="true" className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More actions</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => void handleExport('png')}>
-            <Download aria-hidden="true" className="size-3.5" />
-            Export as PNG
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void handleExport('svg')}>
-            <Download aria-hidden="true" className="size-3.5" />
-            Export as SVG
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              // Text on the clipboard survives any chat/paste channel intact,
-              // which a binary download cannot — the phone-friendly way to
-              // hand the exact canvas (coordinates included) to a debugger.
-              void navigator.clipboard
-                ?.writeText(serializeSpatial(canvas, 'extended'))
-                .catch(() => {})
-            }}
-          >
-            <Braces aria-hidden="true" className="size-3.5" />
-            Copy as JSON Canvas
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
-            <Copy aria-hidden="true" className="size-3.5" />
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-            onSelect={() => setConfirmDelete(true)}
-          >
-            <Trash2 aria-hidden="true" className="size-3.5" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <DocumentMenu
+        documentUrl={documentUrl}
+        onExport={(format) => void handleExport(format)}
+        triggerRef={canvasOpsButtonRef}
+        log={log}
+      >
+        <DropdownMenuItem
+          onSelect={() => {
+            // Text on the clipboard survives any chat/paste channel intact,
+            // which a binary download cannot — the phone-friendly way to
+            // hand the exact canvas (coordinates included) to a debugger.
+            void navigator.clipboard
+              ?.writeText(serializeSpatial(canvas, 'extended'))
+              .catch(() => {})
+          }}
+        >
+          <Braces aria-hidden="true" className="size-3.5" />
+          Copy as JSON Canvas
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
+          <Copy aria-hidden="true" className="size-3.5" />
+          Duplicate
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+          onSelect={() => setConfirmDelete(true)}
+        >
+          <Trash2 aria-hidden="true" className="size-3.5" />
+          Delete
+        </DropdownMenuItem>
+      </DocumentMenu>
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent
           // The menu item that opened this dialog unmounted with the menu;
@@ -808,41 +791,13 @@ export function BrowserLocalDocumentPage({
               // the daemon's `/names`, so the identity the bar offers is unused
               // here and `documentName`/`onTitleChange` stay the source.
               titleSlot={() => documentTitleSlot}
-              statusSlot={
-                <ConnectionStatus state="local">
-                  <p className="text-muted-foreground">
-                    Connect a local daemon (MCP) to unlock version history, workspaces, variations,
-                    and combining changes
-                  </p>
-                  <Suspense fallback={null}>
-                    <DaemonDetectedBanner
-                      settingsStore={settingsStore}
-                      fetch={window.fetch.bind(window)}
-                    />
-                  </Suspense>
-                </ConnectionStatus>
-              }
               dataMode="local"
               workspaceId="local"
               path={renderState.snapshot.path}
-              documents={switcherOptions.map((c) => ({
-                path: c.path,
-                name: c.name,
-                updatedAt: c.updatedAt,
-              }))}
-              onNavigateToDocument={(path) => {
-                const id = documentIdOfPath(path)
-                if (id !== null) void switchDocument(id)
-              }}
-              onRenameDocument={renameDocument}
-              onCreateDocument={async () => {
-                const created = await createDocument()
-                await switchDocument(created.documentId)
-              }}
-              onCreateMarkdownCanvas={async () => {
-                const created = await createDocument(undefined, 'markdown')
-                await switchDocument(created.documentId)
-              }}
+              // The way out of the editor. This page had none until now —
+              // the app-shell brand mark was the only exit, and it says
+              // nothing about where it goes.
+              onNavigateBack={() => navigate(browserLocalIndexPath())}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {
                 // Entering hides this whole bar; the floating exit control and

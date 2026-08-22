@@ -55,11 +55,6 @@ describe('docs snapshot — canvas browser UI hero', () => {
         testId="canvas-browser-ui-frame"
         width={1280}
         height={760}
-        documents={[
-          { path: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' },
-          { path: 'design/login-flow', updatedAt: '2026-04-30T12:00:00.000Z' },
-          { path: 'sketches/inbox', updatedAt: '2026-04-29T12:00:00.000Z' },
-        ]}
         scene={ARCHITECTURE_SCENE}
       />,
     )

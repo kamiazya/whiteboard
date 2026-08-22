@@ -625,6 +625,52 @@ describe('useBrowserLocalDocumentController', () => {
     expect(result.current.persistence.kind).toBe('saved')
   })
 
+  // Typing commits per keystroke, so "type, change your mind, put the old
+  // name back" is two renames in quick succession with the first one's write
+  // possibly still in flight. Whichever was asked for LAST has to be the one
+  // that survives, in the snapshot the header reads and in the store.
+  it('the later of two overlapping renames wins, in state and in the store', async () => {
+    const store = new LocalStoreDouble()
+    await store.setDefaultDocumentId(C1)
+    await store.save(snap)
+
+    // Hold the first write open so the second rename is issued while it is
+    // still in flight — the ordering this guards only exists then.
+    const realSet = store.index.setDocumentName.bind(store.index)
+    let releaseFirst!: () => void
+    const firstHeld = new Promise<void>((resolve) => {
+      releaseFirst = resolve
+    })
+    let calls = 0
+    store.index.setDocumentName = async (args) => {
+      calls += 1
+      if (calls === 1) await firstHeld
+      return realSet(args)
+    }
+
+    const { result } = renderHook(() =>
+      useBrowserLocalDocumentController(store.index, {
+        loro: store.loro,
+        pointer: store.pointer,
+        clock: store.clock,
+      }),
+    )
+    await act(async () => {})
+
+    await act(async () => {
+      void result.current.renameDocument('Half-typed name')
+      void result.current.renameDocument('Restored name')
+      releaseFirst()
+    })
+
+    expect(result.current.snapshot?.name).toBe('Restored name')
+    const stored = await store.index.resolveDocumentById({
+      workspaceId: LOCAL_WORKSPACE_ID,
+      documentId: C1,
+    })
+    expect(stored?.name).toBe('Restored name')
+  })
+
   // The shape change is only real if the controller MINTS the new fields.
   // Converting the fixtures made 44 tests compile again while asserting
   // nothing about workspace or path — both mutations below stayed green

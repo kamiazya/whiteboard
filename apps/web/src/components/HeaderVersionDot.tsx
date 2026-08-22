@@ -1,16 +1,27 @@
 import type { JSX } from 'react'
+import { StateDot } from '@/components/StateDot'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 
-// Keep save state as subtle as a mail-style unread dot.
-// - dirty=false: show nothing
-// - dirty=true: show only the amber dot; click runs onSave
-// - saving=true: swap to a thin spinner ring
-//
-// The header intentionally has no separate Save button.
-// Cmd+S is the primary action, and the dot doubles as state display plus a small click target.
-
-export interface HeaderSaveDotProps {
+/**
+ * "You have edits no version holds yet" — as subtle as a mail-style unread dot.
+ *
+ * NOT a save indicator, however much it once looked like one. What feeds it is
+ * `useDirtyState`, which counts edits since the last NAMED VERSION; whether
+ * content reached storage is a different question, answered by the save-state
+ * chip in browser-local and by the connection chip on a daemon. Wearing the
+ * same filled amber as the save dot is what made one shape mean two things
+ * depending on which mode you were in, so this one is a RING: a state the
+ * document is not in yet, rather than one it is in.
+ *
+ * - clean: show nothing
+ * - dirty: the ring; clicking it takes a version
+ * - saving: the same ring, turning
+ *
+ * The header intentionally has no separate Save button. Cmd/Ctrl+S is the
+ * primary action and this doubles as state display plus a small click target.
+ */
+export interface HeaderVersionDotProps {
   dirty: boolean
   saving: boolean
   onSave: () => void | Promise<void>
@@ -18,17 +29,17 @@ export interface HeaderSaveDotProps {
   shortcutHint?: string
 }
 
-export function HeaderSaveDot({
+export function HeaderVersionDot({
   dirty,
   saving,
   onSave,
   shortcutHint,
-}: HeaderSaveDotProps): JSX.Element | null {
+}: HeaderVersionDotProps): JSX.Element | null {
   if (!dirty && !saving) {
     // Remove the node entirely while clean. The parent does not reserve fixed width here.
     return null
   }
-  const label = saving ? 'Saving…' : 'Unsaved changes'
+  const label = saving ? 'Saving a version…' : 'No version saved yet'
   const tip = shortcutHint ? `${label} · ${shortcutHint}` : label
   return (
     <Tooltip>
@@ -36,7 +47,7 @@ export function HeaderSaveDot({
         <button
           type="button"
           // Native `disabled` inside a Radix TooltipTrigger swallows the
-          // pointer events the tooltip needs, hiding the "Saving…" status on
+          // pointer events the tooltip needs, hiding the in-flight status on
           // hover — gate the click instead and expose state via aria-disabled.
           onClick={() => {
             if (saving) return
@@ -44,7 +55,7 @@ export function HeaderSaveDot({
           }}
           aria-disabled={saving}
           aria-label={label}
-          data-testid="header-save-dot"
+          data-testid="header-version-dot"
           className={cn(
             'relative inline-flex size-4 shrink-0 items-center justify-center rounded-full',
             // Appears only when there is something to save — a soft
@@ -55,15 +66,7 @@ export function HeaderSaveDot({
             saving ? 'cursor-progress' : 'cursor-pointer',
           )}
         >
-          <span
-            aria-hidden
-            className={cn(
-              'block size-2.5 rounded-full',
-              saving
-                ? 'border-2 border-amber-500 border-t-transparent animate-spin'
-                : 'bg-amber-500',
-            )}
-          />
+          <StateDot tone="attention" shape={saving ? 'spinner' : 'ring'} className="size-2.5" />
         </button>
       </TooltipTrigger>
       <TooltipContent>{tip}</TooltipContent>

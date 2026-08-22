@@ -16,8 +16,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
-import { getShellDaemonAuthError } from '../lib/shell-status-store.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { getShellConnection } from '../lib/shell-status-store.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
@@ -95,22 +94,13 @@ function makeCreateBackend() {
 // Exact match: HeaderBranchChip's "Switch branch (current: <name>)" button
 // also contains the canvas path as a substring, so a loose regex match is
 // ambiguous now that WorkspaceTopBar renders both in the same header.
-// The trigger names the WORKSPACE, not the open canvas — the canvas's own
-// name moved to the canvas row. Callers no longer pass a canvas label.
-async function openDocumentSwitcher() {
-  const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-  fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-  await screen.findByTestId('new-document-menu-item')
-}
-
-async function selectCanvasFromSwitcher(label: string) {
-  const item = (await screen.findByText(label)).closest('[role="menuitem"]') as HTMLElement
-  fireEvent.pointerUp(item)
-}
-
-async function selectWorkspaceFromSwitcher(workspaceId: string) {
-  const item = await screen.findByRole('menuitemradio', { name: workspaceId })
-  fireEvent.pointerUp(item)
+// Switching document from inside the editor is the Connections chip's job:
+// the header's own switcher was retired (finding a document is the document
+// browser's work), and a backlink row opening its source is the remaining
+// document-to-document path a user has without leaving the canvas.
+async function switchDocumentViaConnections(name: string) {
+  fireEvent.click(await screen.findByRole('button', { name: /connections/i }))
+  fireEvent.click(await screen.findByRole('button', { name: new RegExp(name, 'i') }))
 }
 
 // The bar's History button opens the version popover, which now also
@@ -134,7 +124,20 @@ describe('DaemonDocumentPage', () => {
         { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
-    mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [], unlinkedMentions: [] })
+    // One backlink by default so `switchDocumentViaConnections` has a row to
+    // click in any test that needs to change document mid-session.
+    mockGetDocumentBacklinks.mockResolvedValue({
+      backlinks: [
+        {
+          documentId: 'id-second',
+          path: 'second',
+          name: 'Second board',
+          kind: 'spatial',
+          contexts: ['embedded on this canvas'],
+        },
+      ],
+      unlinkedMentions: [],
+    })
   })
 
   afterEach(() => {
@@ -187,12 +190,9 @@ describe('DaemonDocumentPage', () => {
     // Hand (view-only) is the default tool; the host history cluster only
     // docks in Select mode, so tests exercising it switch first.
     fireEvent.click(await screen.findByTestId('select-tool-button'))
-    // The switcher's trigger names the workspace; the canvas entries appear
-    // in its list. What this pins is still the DocumentSummary
-    // {path, updatedAt} -> WorkspaceTopBar DocumentInfo mapping, end to end.
-    expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
-    await openDocumentSwitcher()
-    expect(screen.getByText('second')).toBeTruthy()
+    // The header offers no way to reach another document — that is the
+    // document browser's job, and the back control is how you get there.
+    expect(screen.queryByRole('button', { name: /^Workspace:/i })).toBeNull()
     expect(createdBackends).toHaveLength(1)
     expect(createdBackends[0]?.connectCount).toBe(1)
   })
@@ -273,13 +273,15 @@ describe('DaemonDocumentPage', () => {
     // A single-workspace daemon renders no workspace selector at all —
     // one raw id is not a choice, and every header row costs canvas height.
     expect(screen.queryByLabelText('Workspaces')).toBeNull()
-    await openDocumentSwitcher()
-    expect(screen.queryByText('Workspaces')).toBeNull()
-    expect(screen.queryByRole('menuitemradio')).toBeNull()
   })
 
-  describe('workspace switcher', () => {
-    it('lists workspaces from GET /api/workspaces even though the page supplies an initial workspaceId', async () => {
+  // Switching WORKSPACE from inside an open document is gone with the
+  // header's switcher: a workspace is a place, and moving between places is
+  // the document browser's job. The controller's own switchWorkspace
+  // behaviour (re-fetch, empty target, stale-response race, failure) is
+  // covered where it lives, in use-daemon-document-controller.test.ts.
+  describe('workspace switching left the editor', () => {
+    it('offers no workspace switcher at all while a document is open', async () => {
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
@@ -288,47 +290,33 @@ describe('DaemonDocumentPage', () => {
         render(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
-            workspaceId="w1"
-            path="main"
             createBackend={makeCreateBackend()}
+            onNavigateBack={() => {}}
           />,
           { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      // The header dropdown is the switcher once a canvas is mounted; the
-      // secondary-row <select> only survives the no-canvas state (see the
-      // negative-direction test below).
-      await openDocumentSwitcher()
-      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
-        'w1',
-        'w2',
-      ])
+      expect(screen.queryByLabelText('Workspaces')).toBeNull()
+      expect(screen.queryByRole('button', { name: /^Workspace:/i })).toBeNull()
+      // The way out is the way to another workspace.
+      expect(screen.getByRole('button', { name: 'Back to documents' })).toBeTruthy()
     })
 
-    it('selecting another workspace re-resolves the canvas and re-keys the backend', async () => {
+    it('keeps the row select in the empty state, which is the only place with no canvas to go back from', async () => {
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
-      mockListDocuments.mockImplementation((_fetch, _base, workspaceId) => {
-        if (workspaceId === 'w2') {
-          return Promise.resolve({
-            documents: [
-              { path: 'w2-main', id: 'id-w2-main', updatedAt: '2026-02-01', kind: 'spatial' },
-            ],
-          })
-        }
-        return Promise.resolve({
-          documents: [
-            { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-            { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
-          ],
-        })
-      })
+      mockListDocuments.mockImplementation((_fetch, _base, workspaceId) =>
+        workspaceId === 'w1'
+          ? Promise.resolve({ documents: [] })
+          : Promise.resolve({
+              documents: [
+                { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
+              ],
+            }),
+      )
 
       await act(async () => {
         render(
@@ -339,122 +327,20 @@ describe('DaemonDocumentPage', () => {
           { container: document.body },
         )
       })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-      expect(createdBackends).toHaveLength(1)
-      expect(createdBackends[0]?.workspaceId).toBe('w1')
-
-      await openDocumentSwitcher()
-      await act(async () => {
-        await selectWorkspaceFromSwitcher('w2')
-      })
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
-      })
-      expect(createdBackends).toHaveLength(2)
-      expect(createdBackends[1]?.workspaceId).toBe('w2')
-      expect(createdBackends[0]?.disconnectCount).toBe(1)
-    })
-
-    it('shows the empty-state create form when the switched-to workspace has zero documents', async () => {
-      mockListWorkspaces.mockResolvedValue({
-        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
-      })
-      mockListDocuments.mockImplementation((_fetch, _base, workspaceId) => {
-        if (workspaceId === 'w2') return Promise.resolve({ documents: [] })
-        return Promise.resolve({
-          documents: [
-            { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-            { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
-          ],
-        })
-      })
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      // w1 has documents, so the dropdown (not the row select, which is
-      // absent while a canvas is mounted) is what starts the switch.
-      await openDocumentSwitcher()
-      await act(async () => {
-        await selectWorkspaceFromSwitcher('w2')
-      })
-
       await waitFor(() =>
         expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
       )
-      // w2 has zero documents, so WorkspaceTopBar (and its dropdown) is
-      // unmounted — the row select is the only switcher available here, and
-      // it must still work to get back out of the empty workspace.
-      const workspaceSelect = screen.getByLabelText('Workspaces') as HTMLSelectElement
-      expect(Array.from(workspaceSelect.options).map((o) => o.value)).toEqual(['w1', 'w2'])
+
+      const select = screen.getByLabelText('Workspaces') as HTMLSelectElement
+      expect(Array.from(select.options).map((o) => o.value)).toEqual(['w1', 'w2'])
       await act(async () => {
-        workspaceSelect.value = 'w1'
-        workspaceSelect.dispatchEvent(new Event('change', { bubbles: true }))
+        select.value = 'w2'
+        select.dispatchEvent(new Event('change', { bubbles: true }))
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     })
 
-    it('keeps the editor mounted and shows an inline error when switching workspace fails', async () => {
-      mockListWorkspaces.mockResolvedValue({
-        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
-      })
-      mockListDocuments.mockResolvedValueOnce({
-        documents: [
-          { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-          { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
-        ],
-      })
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-      expect(createdBackends).toHaveLength(1)
-
-      mockListDocuments.mockRejectedValueOnce(new Error('daemon unreachable'))
-
-      await openDocumentSwitcher()
-      await act(async () => {
-        await selectWorkspaceFromSwitcher('w2')
-      })
-
-      await waitFor(() =>
-        expect(screen.getByRole('alert').textContent).toMatch(/daemon unreachable/i),
-      )
-      // A transient switch failure must not tear down the still-valid editor session.
-      expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
-      expect(createdBackends).toHaveLength(1)
-      expect(createdBackends[0]?.disconnectCount).toBe(0)
-    })
-
-    it('shows the static disabled teaser instead of the switcher when capabilities.workspaces is false', async () => {
-      // A daemon with >=2 workspaces still shows no dropdown section or row
-      // select while the capability itself is off — capability gating is a
-      // single rule, not one the new dropdown surface could bypass.
+    it('shows the static disabled teaser when capabilities.workspaces is false', async () => {
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
@@ -464,56 +350,15 @@ describe('DaemonDocumentPage', () => {
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
-            capabilities={{
-              workspaces: false,
-              versions: true,
-              branches: true,
-              merge: true,
-            }}
+            capabilities={{ workspaces: false, versions: true, branches: true, merge: true }}
           />,
           { container: document.body },
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       expect(screen.queryByLabelText('Workspaces')).toBeNull()
-      const teaser = screen.getByText('Workspaces')
-      expect(teaser.getAttribute('aria-disabled')).toBe('true')
-
-      await openDocumentSwitcher()
-      expect(screen.queryByRole('menuitemradio')).toBeNull()
-    })
-
-    it('with a canvas mounted, capabilities.workspaces=true, and >=2 workspaces, the dropdown is the ONLY switcher: the row select is absent while the dropdown shows the Workspaces section', async () => {
-      mockListWorkspaces.mockResolvedValue({
-        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
-      })
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      expect(screen.queryByLabelText('Workspaces')).toBeNull()
-
-      await openDocumentSwitcher()
-      expect(screen.getByText('Workspaces')).toBeTruthy()
-      expect(screen.getAllByRole('menuitemradio').map((item) => item.textContent)).toEqual([
-        'w1',
-        'w2',
-      ])
+      expect(screen.getByText('Workspaces').getAttribute('aria-disabled')).toBe('true')
     })
   })
 
@@ -532,8 +377,7 @@ describe('DaemonDocumentPage', () => {
     const oldBackend = createdBackends[0]!
 
     await act(async () => {
-      await openDocumentSwitcher()
-      await selectCanvasFromSwitcher('second')
+      await switchDocumentViaConnections('Second board')
     })
 
     expect(oldBackend.disconnectCount).toBe(1)
@@ -542,60 +386,10 @@ describe('DaemonDocumentPage', () => {
     expect(createdBackends[1]?.disconnectCount).toBe(0)
   })
 
-  it('records the daemon as dismissed when disconnecting, so discovery stops finding it', async () => {
-    // Forgetting alone is not enough: the default port range is rescanned on
-    // every visit, so a daemon on 3099 would come straight back and the
-    // action would read as a no-op the second time.
-    const onContinueBrowserLocal = vi.fn()
-    // The state a connected browser is actually in: App.tsx stores the daemon
-    // it connected to, and that is what puts the page in daemon mode on the
-    // next load. Without seeding it the assertion below passes vacuously.
-    // Seeded through the store, not by writing JSON: a hand-built payload that
-    // fails the store's own validation is silently replaced by defaults, and
-    // every assertion below then passes without touching the real state.
-    createUserSettingsStore().update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: DAEMON_BASE_URL,
-        knownDaemonBaseUrls: [DAEMON_BASE_URL],
-      },
-    }))
-    await act(async () => {
-      render(
-        <DaemonDocumentPage
-          daemonBaseUrl={DAEMON_BASE_URL}
-          createBackend={makeCreateBackend()}
-          onContinueBrowserLocal={onContinueBrowserLocal}
-        />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-
-    // Precondition, asserted rather than assumed: if the seed did not survive
-    // the store's own validation, everything below would pass vacuously.
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(DAEMON_BASE_URL)
-
-    fireEvent.click(screen.getByTestId('connection-chip'))
-    fireEvent.click(screen.getByTestId('connection-disconnect'))
-
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
-    // Asserted as arrays, not as substrings of the whole store: the daemon's
-    // URL also appears under localDaemonBaseUrl, so a `toContain` on the
-    // serialized storage holds whether or not the dismissal was recorded.
-    const storage = createUserSettingsStore().load().storage
-    expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON_BASE_URL)
-    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(DAEMON_BASE_URL)
-    // App.tsx reads localDaemonBaseUrl to decide a page is daemon-backed, so
-    // leaving it set reconnects on the next load — which makes the popover's
-    // "this browser stops using it" false the moment the user reloads.
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBeUndefined()
-  })
-
-  it('flips the connection chip to "Reconnecting" while the transport is down', async () => {
+  it('reports "reconnecting" to the shell while the transport is down', async () => {
     // A chip that reads Synced while the transport is down tells the user
-    // remote edits are arriving when they are not.
+    // remote edits are arriving when they are not. The App-mounted shell
+    // draws the chip; this page's contract is the state it publishes.
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -603,22 +397,22 @@ describe('DaemonDocumentPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+    expect(getShellConnection()).toEqual({ state: 'synced', daemonBaseUrl: DAEMON_BASE_URL })
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onDisconnected?.()
     })
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/reconnecting/i)
+    expect(getShellConnection()?.state).toBe('reconnecting')
 
     // …and back, so a recovered stream clears it rather than latching.
     await act(async () => {
       backend.handlers?.onConnected()
     })
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+    expect(getShellConnection()?.state).toBe('synced')
   })
 
-  it('flips the connection chip to "Sync off" on WS auth failure (close 1008 -> onAuthError)', async () => {
+  it('reports "sync-off" on WS auth failure (close 1008 -> onAuthError) without replacing the page', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -629,49 +423,20 @@ describe('DaemonDocumentPage', () => {
     // Hand (view-only) is the default tool; the host history cluster only
     // docks in Select mode, so tests exercising it switch first.
     fireEvent.click(await screen.findByTestId('select-tool-button'))
-    // Healthy session: the chip reads Synced.
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+    // Healthy session.
+    expect(getShellConnection()?.state).toBe('synced')
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onAuthError?.()
     })
 
-    // D1: no standing role=alert banner — the chip carries the state and a
-    // polite live region announces it to assistive tech.
+    expect(getShellConnection()?.state).toBe('sync-off')
+    // D1: no standing role=alert banner anywhere on the page — the shell's
+    // chip carries the state and its own live region announces it.
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
-    expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
     // Editor chrome stays mounted — auth error never replaces the page.
     expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
-
-    // The popover is the recovery surface: both ways forward are offered.
-    fireEvent.click(screen.getByTestId('connection-chip'))
-    await waitFor(() => expect(screen.getByRole('button', { name: /re-pair/i })).toBeTruthy())
-    expect(screen.getByText(/edits stay in this browser/i)).toBeTruthy()
-  })
-
-  it('keeps the sr-only live region quiet until authError is true', async () => {
-    await act(async () => {
-      render(
-        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Hand (view-only) is the default tool; the host history cluster only
-    // docks in Select mode, so tests exercising it switch first.
-    fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-    expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
-
-    await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
-    })
-
-    const region = screen.getByLabelText(/live sync off/i)
-    expect(region.getAttribute('role')).toBe('status')
-    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('reports a live auth error to the shell-status store (and clears on unmount)', async () => {
@@ -682,32 +447,22 @@ describe('DaemonDocumentPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(getShellDaemonAuthError()).toBe(false)
+    expect(getShellConnection()?.state).toBe('synced')
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    // The App-mounted shell reads this to light the gear's attention dot.
-    expect(getShellDaemonAuthError()).toBe(true)
+    // The App-mounted shell reads this to draw the chip and to light the
+    // gear's attention dot.
+    expect(getShellConnection()?.state).toBe('sync-off')
 
+    // Cleared on unmount: an index page holds no session, and a latched chip
+    // would keep claiming one.
     cleanup()
-    expect(getShellDaemonAuthError()).toBe(false)
+    expect(getShellConnection()).toBeNull()
   })
 
-  it('renders the "Sync off" indicator even when no canvas is selected', async () => {
-    mockListWorkspaces.mockResolvedValue({
-      workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
-    })
-    mockListDocuments.mockImplementation((_fetch, _base, workspaceId) => {
-      if (workspaceId === 'w2') return Promise.resolve({ documents: [] })
-      return Promise.resolve({
-        documents: [
-          { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-          { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
-        ],
-      })
-    })
-
+  it('clears the reported auth error when switching to a new canvas (new backend identity)', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -722,98 +477,14 @@ describe('DaemonDocumentPage', () => {
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
-
-    // Switch into a workspace with zero documents: the canvas backend tears
-    // down entirely (no WorkspaceTopBar mounts), but there genuinely is no
-    // live sync happening either way, so the indicator must not disappear
-    // just because the canvas-gated UI does. w1 has a mounted canvas, so the
-    // row select is absent here — the dropdown drives the switch.
-    await openDocumentSwitcher()
-    await act(async () => {
-      await selectWorkspaceFromSwitcher('w2')
-    })
-
-    await waitFor(() =>
-      expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
-    )
-    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
-  })
-
-  it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
-    await act(async () => {
-      render(
-        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Hand (view-only) is the default tool; the host history cluster only
-    // docks in Select mode, so tests exercising it switch first.
-    fireEvent.click(await screen.findByTestId('select-tool-button'))
+    expect(getShellConnection()?.state).toBe('sync-off')
 
     await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
-    })
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
-    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
-
-    await act(async () => {
-      await openDocumentSwitcher()
-      await selectCanvasFromSwitcher('second')
+      await switchDocumentViaConnections('Second board')
     })
 
     // The stale sync-off state must not outlive the backend that produced it.
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
-    expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
-  })
-
-  it('offers the browser-local escape inside the chip popover and invokes the callback', async () => {
-    const onContinueBrowserLocal = vi.fn()
-    // The state a connected browser is actually in: App.tsx stores the daemon
-    // it connected to, and that is what puts the page in daemon mode on the
-    // next load. Without seeding it the assertion below passes vacuously.
-    // Seeded through the store, not by writing JSON: a hand-built payload that
-    // fails the store's own validation is silently replaced by defaults, and
-    // every assertion below then passes without touching the real state.
-    createUserSettingsStore().update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: DAEMON_BASE_URL,
-        knownDaemonBaseUrls: [DAEMON_BASE_URL],
-      },
-    }))
-    await act(async () => {
-      render(
-        <DaemonDocumentPage
-          daemonBaseUrl={DAEMON_BASE_URL}
-          createBackend={makeCreateBackend()}
-          onContinueBrowserLocal={onContinueBrowserLocal}
-        />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Hand (view-only) is the default tool; the host history cluster only
-    // docks in Select mode, so tests exercising it switch first.
-    fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-    await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
-    })
-
-    // D1: the escape lives in the chip's popover, not a banner.
-    await act(async () => {
-      screen.getByTestId('connection-chip').click()
-    })
-    const escapeButton = await screen.findByRole('button', {
-      name: /continue in browser-local/i,
-    })
-    await act(async () => {
-      escapeButton.click()
-    })
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+    expect(getShellConnection()?.state).toBe('synced')
   })
 
   it('shows a structural skeleton while workspace/canvas resolution is pending', async () => {
@@ -1040,7 +711,7 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('clears HeaderSaveDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
+    it('clears HeaderVersionDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
@@ -1090,7 +761,7 @@ describe('DaemonDocumentPage', () => {
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       // Dirty the doc via a remote update, exactly like the "drives
-      // HeaderSaveDot dirty/clean" test does, so this test isolates the
+      // HeaderVersionDot dirty/clean" test does, so this test isolates the
       // manual-save clean path from the remote version_created broadcast path.
       const backend = createdBackends[0]!
       const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
@@ -1111,7 +782,7 @@ describe('DaemonDocumentPage', () => {
         backend.handlers?.onRemoteUpdate?.(update)
       })
 
-      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('header-version-dot')).toBeTruthy())
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -1120,7 +791,7 @@ describe('DaemonDocumentPage', () => {
       })
 
       await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
-      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
+      await waitFor(() => expect(screen.queryByTestId('header-version-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })
@@ -2032,7 +1703,7 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
+    it('drives HeaderVersionDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
@@ -2063,7 +1734,7 @@ describe('DaemonDocumentPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      expect(screen.queryByTestId('header-save-dot')).toBeNull()
+      expect(screen.queryByTestId('header-version-dot')).toBeNull()
 
       const backend = createdBackends[0]!
       const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
@@ -2084,7 +1755,7 @@ describe('DaemonDocumentPage', () => {
         backend.handlers?.onRemoteUpdate?.(update)
       })
 
-      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('header-version-dot')).toBeTruthy())
 
       await act(async () => {
         backend.handlers?.onVersionCreated?.({
@@ -2098,7 +1769,7 @@ describe('DaemonDocumentPage', () => {
         })
       })
 
-      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
+      await waitFor(() => expect(screen.queryByTestId('header-version-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })

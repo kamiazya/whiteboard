@@ -5,7 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
-import { resetShellStatusForTests, setShellDaemonAuthError } from './lib/shell-status-store.js'
+import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once its
 // dynamic import resolves — and under a full-suite run that resolution can
 // outlast the 1000ms retry budget of the `findBy*` query waiting on it. The
@@ -30,7 +30,13 @@ import {
 } from './lib/provider.js'
 import { createUserSettingsStore, STORAGE_KEY } from './lib/user-settings-store.js'
 
-afterEach(cleanup)
+afterEach(() => {
+  cleanup()
+  // File-wide: several tests publish a shell connection to drive the chip,
+  // and a leftover sync-off lights the settings nudge for whichever test
+  // runs next.
+  resetShellStatusForTests()
+})
 
 // Records the props BrowserLocalDocumentPage receives so tests can assert
 // capabilities actually flow from App down to the page, not just that the
@@ -597,7 +603,6 @@ describe('App local-daemon provider state', () => {
     expect(receivedDaemonPageProps?.path).toBe('main')
     expect(receivedDaemonPageProps?.capabilities).toEqual(LOCAL_DAEMON_STATE.capabilities)
     expect(receivedDaemonPageProps?.browserLocalStore).toBeDefined()
-    expect(receivedDaemonPageProps?.onContinueBrowserLocal).toBeInstanceOf(Function)
     expect(receivedDaemonPageProps?.onNavigateBack).toBeInstanceOf(Function)
   })
 
@@ -717,10 +722,14 @@ describe('App local-daemon provider state', () => {
       onOpenDocument('w1', 'main')
     })
     await screen.findByTestId('daemon-document-page')
-    const onContinueBrowserLocal = receivedDaemonPageProps?.onContinueBrowserLocal as () => void
+    // The escape is the shell's now: a rejected session publishes sync-off,
+    // and the chip's popover carries the way out. Driving it from here is
+    // what proves App still wires the branch switch behind it.
     act(() => {
-      onContinueBrowserLocal()
+      setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
     })
+    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByRole('button', { name: /continue in browser-local/i }))
     expect(await screen.findByTestId('browser-local-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
     // Capabilities flow to the editor: open a canvas from the escaped list.
@@ -1004,9 +1013,12 @@ describe('App shell (single instance above the routed pages)', () => {
       await waitFor(() => expect(screen.queryByTestId('settings-nudge')).toBeNull())
 
       act(() => {
-        setShellDaemonAuthError(true)
+        setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
       })
       expect(screen.getByTestId('settings-nudge')).toBeTruthy()
+      // The chip is the shell's now, so the state a page reports reaches the
+      // user here rather than inside the page's own top bar.
+      expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
     } finally {
       Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
     }

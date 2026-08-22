@@ -10,12 +10,18 @@ export interface FakeFilesSource extends WorkspaceFilesSource {
   setDocumentName: ReturnType<typeof vi.fn<WorkspaceFilesSource['setDocumentName']>>
   loadMarkdown: ReturnType<typeof vi.fn<WorkspaceFilesSource['loadMarkdown']>>
   loadSpatialSnapshot: ReturnType<typeof vi.fn<WorkspaceFilesSource['loadSpatialSnapshot']>>
+  /** Present only when the test asked for it — see the note in `fakeFilesSource`. */
+  setPinned?: ReturnType<typeof vi.fn<NonNullable<WorkspaceFilesSource['setPinned']>>>
 }
 
 /**
  * A `WorkspaceFilesSource` whose every method is a spy, prefilled with the
  * quietest possible answers. Override per test with plain async functions —
  * they are wrapped in `vi.fn` here so call assertions work either way.
+ *
+ * `setPinned` is the exception: it is optional on the seam, and its ABSENCE
+ * is what hides the pin affordance (browser-local has nowhere to keep a
+ * pin). Defaulting it to a spy would make every test look like a daemon.
  */
 export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): FakeFilesSource {
   return {
@@ -25,5 +31,6 @@ export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): 
     setDocumentName: vi.fn(overrides.setDocumentName ?? (async () => {})),
     loadMarkdown: vi.fn(overrides.loadMarkdown ?? (async () => '')),
     loadSpatialSnapshot: vi.fn(overrides.loadSpatialSnapshot ?? (async () => new Uint8Array())),
+    ...(overrides.setPinned === undefined ? {} : { setPinned: vi.fn(overrides.setPinned) }),
   } as FakeFilesSource
 }
