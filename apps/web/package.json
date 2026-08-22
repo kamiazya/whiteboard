@@ -85,6 +85,6 @@
     "vite-plugin-wasm": "^3",
     "vitest": "catalog:",
     "workbox-window": "7.4.1",
-    "wrangler": "^4.105.0"
+    "wrangler": "^4.123.0"
   }
 }
