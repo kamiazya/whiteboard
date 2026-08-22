@@ -65,12 +65,20 @@ describe('document browser toolbar tooltips (real browser)', () => {
   })
 
   it('keyboard focus reveals the name too', async () => {
+    // Trusted keyboard input, never a programmatic focus(): reaching the
+    // tooltip through :focus-visible is the behavior under test, and the
+    // live app demonstrably does NOT open it for element.focus() — a
+    // programmatic call here would pass on a UA heuristic the product
+    // never relies on.
     renderPanel()
     await vi.waitFor(() => {
       expect(document.querySelector('button[aria-label="New canvas"]')).not.toBeNull()
     })
     const button = document.querySelector('button[aria-label="New canvas"]') as HTMLElement
-    button.focus()
+    for (let hops = 0; hops < 12 && document.activeElement !== button; hops++) {
+      await userEvent.tab()
+    }
+    expect(document.activeElement).toBe(button)
     await vi.waitFor(() => {
       const tips = [...document.querySelectorAll('[data-slot="tooltip-content"], [role="tooltip"]')]
       expect(tips.some((t) => t.textContent?.includes('New canvas'))).toBe(true)
