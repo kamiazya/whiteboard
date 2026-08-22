@@ -1,4 +1,5 @@
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import type { Embedder } from '../search/embedder.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from '../tools/document-io.js'
 import { type ContentFacts, extractContentFacts } from './extract.js'
@@ -24,7 +25,13 @@ const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], tags: undefined }
 export class ContentFactsCache {
   /** workspaceId -> documentId -> stamped facts. Scoped so alternating
    *  requests across workspaces cannot evict each other's entries. */
-  private readonly held = new Map<string, Map<string, { stamp: string; facts: ContentFacts }>>()
+  /** workspaceId -> documentId -> stamped facts, plus its vector once one
+   *  has been asked for. The vector rides the SAME stamp as the facts, so
+   *  an edit invalidates both together and neither can go stale alone. */
+  private readonly held = new Map<
+    string,
+    Map<string, { stamp: string; facts: ContentFacts; vector?: Float32Array }>
+  >()
 
   /**
    * Facts for exactly `entries` of one workspace, loading only documents
@@ -71,6 +78,58 @@ export class ContentFactsCache {
       result.set(entry.documentId, facts)
     }
     return result
+  }
+
+  /**
+   * Vectors for `entries`, embedding only what the stamp says is new or
+   * changed — the same validation the facts use, so an untouched document
+   * is never re-embedded even though embedding is the expensive half.
+   *
+   * The name and path are embedded alongside the body, so a document that
+   * is only a title still gets a vector — otherwise it would sit in the
+   * lexical ranking with no semantic counterpart and be judged by half the
+   * evidence. Only a document with nothing at all is skipped.
+   */
+  async vectorsFor(
+    deps: ServerDeps,
+    workspaceId: string,
+    entries: readonly DocumentEntry[],
+    embedder: Embedder,
+  ): Promise<{ documentId: string; vector: Float32Array }[]> {
+    // Facts first: this fills/validates the per-document stamps, so the
+    // loop below only has to ask which ones still lack a vector.
+    const facts = await this.factsFor(deps, workspaceId, entries)
+    const held = this.held.get(workspaceId)
+    if (held === undefined) return []
+
+    const pending: { documentId: string; text: string }[] = []
+    for (const entry of entries) {
+      const cached = held.get(entry.documentId)
+      if (cached === undefined || cached.vector !== undefined) continue
+      const text = [entry.name ?? '', entry.path, ...(facts.get(entry.documentId)?.texts ?? [])]
+        .join('\n')
+        .trim()
+      if (text === '') continue
+      pending.push({ documentId: entry.documentId, text })
+    }
+    if (pending.length > 0) {
+      const vectors = await embedder.embed(
+        pending.map((entry) => entry.text),
+        'document',
+      )
+      pending.forEach((p, index) => {
+        const cached = held.get(p.documentId)
+        const vector = vectors[index]
+        if (cached !== undefined && vector !== undefined) cached.vector = vector
+      })
+    }
+
+    const out: { documentId: string; vector: Float32Array }[] = []
+    for (const entry of entries) {
+      const vector = held.get(entry.documentId)?.vector
+      if (vector !== undefined) out.push({ documentId: entry.documentId, vector })
+    }
+    return out
   }
 }
 
