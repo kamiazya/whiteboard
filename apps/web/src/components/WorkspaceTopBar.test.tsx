@@ -1432,7 +1432,7 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
     await openSwitcher()
     expect(screen.getByText('Workspaces')).toBeTruthy()
 
-    fireEvent.change(screen.getByPlaceholderText('Switch canvas…'), {
+    fireEvent.change(screen.getByPlaceholderText('Switch document…'), {
       target: { value: 'canvas-a' },
     })
     expect(screen.queryByText('Workspaces')).toBeNull()

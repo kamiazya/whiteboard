@@ -48,9 +48,9 @@ interface DocumentDropdownProps {
   onSwitchWorkspace?: (workspaceId: string) => void
 }
 
-// The canvas switcher dropdown — workspace identity is intentionally hidden
-// in OSS Local; the back-button returns to the flat canvas list and the name
-// shown here is the canvas, not the workspace.
+// The document switcher dropdown — workspace identity is intentionally
+// hidden in OSS Local; the back-button returns to the flat document list and
+// the name shown here is the document, not the workspace.
 export function DocumentDropdown({
   workspaceId,
   path,
@@ -123,10 +123,10 @@ export function DocumentDropdown({
       <DropdownMenuTrigger asChild>
         <button
           type="button"
-          // The WORKSPACE, not the canvas. The canvas's name is row two's
+          // The WORKSPACE, not the document. The document's name is row two's
           // title field; naming it here too meant editing one and watching
           // the other lag, and read as two different things being named.
-          // Picking a canvas from this menu is navigation within the
+          // Picking a document from this menu is navigation within the
           // workspace, which is what the label now says.
           aria-label={`Workspace: ${workspaceLabel}`}
           className="flex min-w-0 items-center gap-1 truncate rounded px-1.5 py-0.5 text-sm hover:bg-accent"
@@ -162,7 +162,7 @@ export function DocumentDropdown({
                   focusFirstItem()
                 }
               }}
-              placeholder="Switch canvas…"
+              placeholder="Switch document…"
               className="h-8 pl-7 text-xs"
               autoFocus
             />
@@ -179,7 +179,7 @@ export function DocumentDropdown({
                 // Radix's RadioItem fires onSelect (hence this) for the
                 // already-checked item too — the no-op guard lives here,
                 // not in Radix, or re-picking the current workspace would
-                // jump the user to that workspace's first canvas for
+                // jump the user to that workspace's first document for
                 // nothing.
                 if (nextWorkspaceId !== workspaceId) onSwitchWorkspace(nextWorkspaceId)
               }}
@@ -196,7 +196,7 @@ export function DocumentDropdown({
           <div className="flex flex-col p-1">
             {filteredCanvases.length === 0 ? (
               <div className="px-2 py-3 text-center text-xs text-muted-foreground">
-                No matching canvas.
+                No matching document.
               </div>
             ) : (
               <>
