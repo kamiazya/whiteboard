@@ -75,6 +75,13 @@ export default defineConfig({
       viewport: { width: 1280, height: 800 },
       provider: playwright({
         launchOptions: resolveBrowserLaunchOptions(process.env),
+        // Animated brand surfaces (the onboarding hero plays the boot-splash
+        // story inside an <img>) would put a different mid-animation frame in
+        // every regeneration. Reduced motion collapses them to their static
+        // landing frame — the same truth reduced-motion users see — and a
+        // page-side style injection cannot reach inside an <img>'s SVG
+        // document, so the context option is the only lever that works.
+        contextOptions: { reducedMotion: 'reduce' },
       }),
       instances: [{ browser: 'chromium' }],
     },

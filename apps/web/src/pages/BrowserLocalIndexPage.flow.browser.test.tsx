@@ -55,7 +55,7 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
     const router = renderApp()
 
     // Fresh store: the list's empty state, not an auto-opened editor.
-    await screen.findByText('No documents yet', undefined, { timeout: 15_000 })
+    await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
 
     // Empty-state create opens a spatial canvas at /local/:id.
     await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
@@ -156,6 +156,6 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
         },
       )
     }
-    await screen.findByText('No documents yet', undefined, { timeout: 15_000 })
+    await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
   })
 })

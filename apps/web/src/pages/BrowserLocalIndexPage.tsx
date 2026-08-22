@@ -182,7 +182,11 @@ export function BrowserLocalIndexPage({
         // The onboarding state renders INSTEAD of the panel: a three-pane
         // browser of nothing teaches less than one sentence and one button,
         // and this button also OPENS what it creates.
-        <EmptyWorkspaceState onCreate={(kind) => void handleCreate(kind)} disabled={creating} />
+        <EmptyWorkspaceState
+          onCreate={(kind) => void handleCreate(kind)}
+          disabled={creating}
+          subtitle="Everything stays in this browser — no account, no upload."
+        />
       ) : snapshots !== null ? (
         <WorkspaceFilesPanel
           source={filesSource}

@@ -14,12 +14,16 @@ pnpm install
 pnpm --filter @kamiazya/whiteboard-web dev   # open http://localhost:5173
 ```
 
-The page lands on your document browser. On a fresh browser it's empty —
-click **Create a canvas** and the new canvas opens ready to draw. Once you
-have documents, the browser shows them as a folder tree with a preview pane:
-click a card to preview it, **Open** to edit it, and use the toolbar to
-search everything, create markdown notes and canvases, or move a document to
-a new path.
+On a fresh browser the page asks what you'll make first — pick **Canvas**
+(notes you place and connect in space) or **Markdown note** (start writing;
+you can put it on a canvas later) and it opens ready to work in.
+
+![Onboarding chooser](../assets/onboarding-chooser.png)
+
+Once you have documents, the page lands on your document browser: a folder
+tree with a preview pane. Click a card to preview it, **Open** to edit it,
+and use the toolbar to search everything, create markdown notes and
+canvases, or move a document to a new path.
 
 ![Browser-local document browser](../assets/browser-local-list.png)
 
