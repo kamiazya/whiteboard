@@ -40,8 +40,14 @@ export const facetListOutputSchema = z
           /**
            * The payload contract as JSON Schema — what makes the answer
            * actionable rather than a list of names to guess against.
+           *
+           * OPTIONAL, because a schema JSON Schema cannot express degrades
+           * to nothing: `JSON.stringify` drops an undefined value's key
+           * entirely, and a non-optional `z.unknown()` rejects the absent
+           * key, so the tool would answer with a payload violating its own
+           * output contract exactly when it degraded.
            */
-          schema: z.unknown(),
+          schema: z.unknown().optional(),
         })
         .strict(),
     ),

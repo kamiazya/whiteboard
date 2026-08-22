@@ -72,6 +72,35 @@ describe('wb_facet_list', () => {
     expect([...targets].sort()).toEqual(['canvas', 'document', 'node'])
   })
 
+  test('a schema JSON Schema cannot express degrades to no schema, and still validates OVER THE WIRE', async () => {
+    // z.toJSONSchema refuses a date (and transforms, maps, custom types), so
+    // a third-party plugin can reach this. The entry must survive — the key
+    // and targets are useful without a schema — and the tool's own output
+    // contract must accept the result AFTER serialization, which is what
+    // the MCP layer actually sends. Asserting on the in-process object alone
+    // passes against a payload the wire would reject.
+    const dated = definePlugin({
+      id: 'legacy',
+      displayName: 'Legacy',
+      facets: [
+        defineFacet({
+          name: 'stamped',
+          version: 'v0',
+          targets: ['document'],
+          schema: z.object({ at: z.date() }),
+        }),
+      ],
+    })
+    const result = await tool(createFacetRegistry([dated])).execute({})
+    const entry = result.facets[0]
+    if (entry === undefined) throw new Error('legacy.stamped/v0 missing from the list')
+    expect(entry.key).toBe('legacy.stamped/v0')
+    expect(entry.targets).toEqual(['document'])
+    expect(entry.schema).toBeUndefined()
+    const overTheWire = JSON.parse(JSON.stringify(result))
+    expect(facetListOutputSchema.safeParse(overTheWire).success).toBe(true)
+  })
+
   test('a registry with no plugins answers an empty list, not an error', async () => {
     const result = await tool(createFacetRegistry([])).execute({})
     expect(result.facets).toEqual([])
