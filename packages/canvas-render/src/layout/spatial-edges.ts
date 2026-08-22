@@ -1721,11 +1721,15 @@ export function routeEdge(
     }
   }
 
-  const derived = deriveDefaultSides(nodes, edge, fromRect, toRect)
   // The anchor pass resolves sides with whole-edge-set crowding knowledge a
   // single call lacks; when it spoke, follow it (authored sides still win).
-  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derived.fromSide
-  const toSide = edge.toSide ?? anchors?.toSide ?? derived.toSide
+  // Deriving is an occlusion scan over every node, and the search calls this
+  // a thousand times per layout with both sides already decided, so it only
+  // runs when a side is actually missing.
+  let derived: SidePair | undefined
+  const derive = () => (derived ??= deriveDefaultSides(nodes, edge, fromRect, toRect))
+  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derive().fromSide
+  const toSide = edge.toSide ?? anchors?.toSide ?? derive().toSide
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
