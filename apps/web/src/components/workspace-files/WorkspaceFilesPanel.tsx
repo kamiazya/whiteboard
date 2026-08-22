@@ -31,6 +31,19 @@ export interface WorkspaceFilesPanelProps {
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
   /**
+   * The folder to open in, and a report of every move away from it.
+   *
+   * Uncontrolled-with-a-default rather than a controlled `folder` prop: the
+   * panel deliberately holds no router (its tests render it bare, and
+   * `app-routes.ts` is framework-agnostic on purpose), so the host reads the
+   * URL and the panel owns the state. Which means a host must WRITE the
+   * address with `replace`, never push — an uncontrolled panel cannot follow
+   * a Back that changes only the query string, and a URL the UI silently
+   * disagrees with is worse than no folder in the URL at all.
+   */
+  initialFolder?: string
+  onFolderChange?: (folder: string) => void
+  /**
    * Copy and ask-to-delete. Both stay with the page: it already owns the
    * duplicate that the grid used and the confirmation dialog that guards a
    * delete, and a second copy of either would be a second set of rules for
@@ -63,6 +76,35 @@ export interface WorkspaceFilesPanelProps {
  */
 export type BrowserColumns = 'one' | 'two'
 
+const COLUMNS_STORAGE_KEY = 'whiteboard.document-browser.columns.v1'
+
+/**
+ * The column count is a per-device PREFERENCE, deliberately not part of the
+ * address: a link someone shares must not impose the sender's layout on
+ * whoever opens it. The open folder is the other side of that line — it is
+ * what you are looking at, so it lives in the URL.
+ *
+ * Every access is guarded because storage does not merely come back empty
+ * when it is unavailable — a private window or blocked site data makes the
+ * accessor itself throw — and because nothing stops the stored value being
+ * anything at all.
+ */
+function readStoredColumns(): BrowserColumns {
+  try {
+    return globalThis.localStorage?.getItem(COLUMNS_STORAGE_KEY) === 'one' ? 'one' : 'two'
+  } catch {
+    return 'two'
+  }
+}
+
+function storeColumns(next: BrowserColumns): void {
+  try {
+    globalThis.localStorage?.setItem(COLUMNS_STORAGE_KEY, next)
+  } catch {
+    // A remembered layout is a courtesy; losing it must never break the view.
+  }
+}
+
 /**
  * The workspace document browser (`/api/v1`), in three panes: the folder
  * sidebar, the contents of the selected folder, and the selected document
@@ -76,6 +118,8 @@ export type BrowserColumns = 'one' | 'two'
 export function WorkspaceFilesPanel({
   source,
   onOpenDocument,
+  initialFolder,
+  onFolderChange,
   onDuplicateDocument,
   onRequestDelete,
   revision,
@@ -86,9 +130,10 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
-  // '' is the workspace root, which is where a freshly loaded tree starts.
-  const [folder, setFolder] = useState('')
-  const [columns, setColumns] = useState<BrowserColumns>('two')
+  // '' is the workspace root, which is where a freshly loaded tree starts —
+  // unless the address named a folder, which is the whole point of naming it.
+  const [folder, setFolder] = useState(initialFolder ?? '')
+  const [columns, setColumns] = useState<BrowserColumns>(readStoredColumns)
   const [createError, setCreateError] = useState<string | null>(null)
   // The `disabled` attribute is the whole double-press mechanism: React
   // flushes this state before a second click can dispatch, while a
@@ -131,12 +176,39 @@ export function WorkspaceFilesPanel({
 
   const readList = useCallback(() => source.listDocuments(), [source])
 
+  // Through a ref so it never joins an effect's dependencies: a host that
+  // passes an inline arrow would otherwise re-run the workspace-load effect
+  // on every render of the page above.
+  const onFolderChangeRef = useRef(onFolderChange)
+  onFolderChangeRef.current = onFolderChange
+  // Same reason as the folder callback: kept out of createHere's dependency
+  // list so an inline arrow from the page above cannot re-create it.
+  const onOpenDocumentRef = useRef(onOpenDocument)
+  onOpenDocumentRef.current = onOpenDocument
+  const lastReadListRef = useRef(readList)
+
+  const chooseColumns = (next: BrowserColumns) => {
+    setColumns(next)
+    storeColumns(next)
+  }
+
   useEffect(() => {
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
     setSelected(null)
-    setFolder('')
+    // Guarded by the source's IDENTITY, not by a first-run flag: an
+    // `initialFolder` is a deliberate address and must survive mounting,
+    // while StrictMode replays this effect with the SAME readList — which a
+    // run-count flag would read as a second workspace and reset (the trap
+    // App.tsx's route sync documents). Only an actual change is a switch.
+    if (lastReadListRef.current !== readList) {
+      lastReadListRef.current = readList
+      setFolder('')
+      // The host's address still names the old workspace's folder; left
+      // unsaid, it would keep pointing at a folder nobody is looking at.
+      onFolderChangeRef.current?.('')
+    }
     readList()
       .then((entries) => {
         if (!cancelled) setDocuments(entries)
@@ -235,6 +307,16 @@ export function WorkspaceFilesPanel({
         const entries = await readList()
         setDocuments(entries)
         setSelected(entries.find((row) => row.path === path) ?? null)
+        // Creating exists to produce content, and an empty document is worth
+        // nothing until it is open — so the create ends where the next thing
+        // happens, as every other creation path in the app already did.
+        //
+        // Only affordable because the open folder is in the address now: the
+        // way back returns to the folder this was made in, rather than to
+        // the workspace root. The selection above still lands, so a host
+        // that offers no way to open leaves someone looking at the new
+        // document rather than at nothing.
+        onOpenDocumentRef.current?.(path)
       } finally {
         setCreating(false)
       }
@@ -318,7 +400,9 @@ export function WorkspaceFilesPanel({
       const entries = await readList()
       setDocuments(entries)
       setSelected(entries.find((row) => row.path === newPath) ?? null)
-      setFolder(newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : '')
+      const landedIn = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : ''
+      setFolder(landedIn)
+      onFolderChangeRef.current?.(landedIn)
     },
     [source, readList],
   )
@@ -340,6 +424,7 @@ export function WorkspaceFilesPanel({
   const selectFolder = (path: string) => {
     setFolder(path)
     setSelected(null)
+    onFolderChangeRef.current?.(path)
   }
 
   if (listStatus === 'error') {
@@ -450,7 +535,7 @@ export function WorkspaceFilesPanel({
                 type="button"
                 aria-label="One column"
                 aria-pressed={columns === 'one'}
-                onClick={() => setColumns('one')}
+                onClick={() => chooseColumns('one')}
                 className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
               >
                 <List className="size-4" />
@@ -464,7 +549,7 @@ export function WorkspaceFilesPanel({
                 type="button"
                 aria-label="Two columns"
                 aria-pressed={columns === 'two'}
-                onClick={() => setColumns('two')}
+                onClick={() => chooseColumns('two')}
                 className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
               >
                 <Columns2 className="size-4" />

@@ -149,3 +149,64 @@ describe('WorkspaceFilesPanel — name and location', () => {
     )
   })
 })
+
+describe('WorkspaceFilesPanel — creating opens what it made', () => {
+  // Creation exists to produce content, and an empty document is worth
+  // nothing until it is open — so the create ends where the next thing
+  // happens. Four of the five creation paths already did this; the browser
+  // was the one that left you looking at a card.
+  //
+  // It only became affordable once the open folder went into the address
+  // (`initialFolder`/`onFolderChange`): before that, coming back landed you
+  // at the workspace root, which costs more than being placed in the
+  // document gains.
+  it('opens the document it just created', async () => {
+    const onOpenDocument = vi.fn()
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+    })
+    render(<WorkspaceFilesPanel source={source} onOpenDocument={onOpenDocument} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('untitled'))
+  })
+
+  // A create that failed has nothing to open, and navigating away would take
+  // the error message with it.
+  it('opens nothing when the create was refused', async () => {
+    const onOpenDocument = vi.fn()
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('refused'))),
+    })
+    render(<WorkspaceFilesPanel source={source} onOpenDocument={onOpenDocument} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    await screen.findByText(/Could not create/)
+    expect(onOpenDocument).not.toHaveBeenCalled()
+  })
+
+  // Looking is still allowed: a host with no way to open a document must not
+  // lose the ability to create one.
+  it('still creates when the host offers no way to open', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    await waitFor(() => expect(source.createDocument).toHaveBeenCalled())
+  })
+})

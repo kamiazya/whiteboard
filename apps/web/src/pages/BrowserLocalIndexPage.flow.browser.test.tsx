@@ -70,25 +70,15 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
     })
     expect(firstCards).toHaveLength(1)
 
-    // The panel creates a markdown note in place; opening it is a second,
-    // explicit step through the preview pane.
+    // The panel's create OPENS what it made, like every other creation path
+    // in the app — an empty document is worth nothing until it is open, and
+    // the folder you were standing in is in the address, so Back returns to
+    // it rather than to the workspace root.
     await userEvent.click(screen.getByRole('button', { name: 'New document' }))
     await userEvent.click(await screen.findByTestId('new-document-markdown'))
-    const noteTitle = await waitFor(
-      () => {
-        const titles = screen.getAllByTestId('card-title')
-        expect(titles).toHaveLength(2)
-        return titles
-      },
-      { timeout: 15_000 },
-    )
-    expect(noteTitle).toHaveLength(2)
-    // Select the markdown row (the one whose subtitle says markdown) and open it.
-    const subtitles = screen.getAllByTestId('card-subtitle')
-    const mdIndex = subtitles.findIndex((el) => el.textContent?.includes('markdown'))
-    expect(mdIndex).toBeGreaterThanOrEqual(0)
-    await userEvent.click(screen.getAllByTestId('card-title')[mdIndex]!)
-    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/local\//), {
+      timeout: 15_000,
+    })
     const editable = await waitFor(
       () => {
         const el = document.querySelector('[contenteditable="true"]')

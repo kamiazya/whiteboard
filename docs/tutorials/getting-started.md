@@ -32,6 +32,14 @@ else is asked for. If you already know what the document is called and where
 it goes, **Name and location…** in that menu takes both up front; leaving its
 form untouched creates exactly what the plain entries would have.
 
+Either way the new document opens straight away, ready to work in. The folder
+you are standing in is part of the address — the URL carries a `?folder=`
+while you are inside one — so coming back lands you where you were, a reload
+keeps your place, and a link you paste to someone opens the folder you meant.
+The column layout is not in the link: that is a per-browser preference, so
+your choice is remembered here without being imposed on whoever you send it
+to.
+
 ![Browser-local document browser](../assets/browser-local-list.png)
 
 A fresh canvas starts empty. Double-click empty canvas space to make a note

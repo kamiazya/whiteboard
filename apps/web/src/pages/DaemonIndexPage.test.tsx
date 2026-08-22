@@ -670,7 +670,7 @@ describe('DaemonIndexPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it("creates a canvas in place from the panel's New canvas button, with no name typed first", async () => {
+  it("creates a canvas from the panel's New menu, opening it with no name typed first", async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -687,9 +687,13 @@ describe('DaemonIndexPage', () => {
     await pickNewDocumentKind('spatial')
 
     await waitFor(() => expect(created).toEqual([['ws-a', 'untitled']]))
-    // The panel's create keeps you in the browser (select-and-rename flow);
-    // only the onboarding empty state's create opens what it makes.
-    expect(onOpenDocument).not.toHaveBeenCalled()
+    // Creating ends where the next thing happens — an empty document is
+    // worth nothing until it is open, and the panel was the last creation
+    // path in the app that left you looking at a card instead. The open
+    // folder is in the address now, so the way back is not a trip to the
+    // workspace root.
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
+    // Still no form in front of it: naming does not gate creation.
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -879,8 +883,10 @@ describe('DaemonIndexPage', () => {
     await pickNewDocumentKind('spatial')
 
     await waitFor(() => expect(created).toEqual(['untitled', 'untitled-2']))
-    // The panel's create stays in the browser; only the onboarding create opens.
-    expect(onOpenDocument).not.toHaveBeenCalled()
+    // The point of this test is the PATH the retry picks, not where the user
+    // ends up — but both creates open what they made now, so the onboarding
+    // one having fired first is why this asserts on the second.
+    await waitFor(() => expect(onOpenDocument).toHaveBeenLastCalledWith('ws-a', 'untitled-2'))
   })
 
   it('the delete dialog names the kind: note for markdown, canvas for spatial', async () => {
