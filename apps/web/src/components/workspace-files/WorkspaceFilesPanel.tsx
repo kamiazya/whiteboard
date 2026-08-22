@@ -270,6 +270,18 @@ export function WorkspaceFilesPanel({
         // The server names the PRODUCED path that collided, which on a
         // subtree move is often not the one typed here.
         setRenameError(err instanceof Error ? err.message : 'Could not rename it.')
+        // A rename applies two writes; the first may have landed before the
+        // second was refused. Re-reading here is what stops the panel from
+        // showing a name the store no longer holds — the refusal is about
+        // the path, and the rest of the screen must still be true.
+        try {
+          const entries = await readList()
+          setDocuments(entries)
+          setSelected(entries.find((row) => row.path === entry.path) ?? null)
+        } catch {
+          // The list read failing on top of a failed rename leaves what is
+          // already on screen; the dialog's own message is the report.
+        }
       } finally {
         setRenameBusy(false)
       }

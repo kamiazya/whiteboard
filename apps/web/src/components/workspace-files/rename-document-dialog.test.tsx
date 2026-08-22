@@ -120,6 +120,39 @@ describe('rename dialog', () => {
     expect(screen.getByRole('dialog')).toBeTruthy()
   })
 
+  // A name that reached the store but not the screen is the worst of both:
+  // the refusal is about the PATH, and the panel behind the dialog must not
+  // keep showing a name the store no longer holds.
+  it('shows the name that landed even when the move that followed was refused', async () => {
+    let storedName: string | undefined = entry.name
+    const source = fakeFilesSource({
+      listDocuments: async () => [
+        // The stored name, absent once cleared — the entry type omits the
+        // key rather than carrying undefined.
+        { ...entry, ...(storedName === undefined ? {} : { name: storedName }) },
+      ],
+      setDocumentName: async (_entry, name) => {
+        storedName = name
+      },
+      renameDocumentPath: async () => {
+        throw new Error('Path "archive/login" already exists')
+      },
+    })
+    render(<WorkspaceFilesPanel source={source} onOpenDocument={() => {}} />)
+
+    const dialog = await openDialog()
+    fireEvent.change(within(dialog).getByLabelText(/^Name/), { target: { value: 'Archived' } })
+    fireEvent.change(within(dialog).getByLabelText(/^Path/), { target: { value: 'archive/login' } })
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
+
+    expect((await within(dialog).findByRole('alert')).textContent).toContain('already exists')
+    await waitFor(() => {
+      expect(
+        screen.queryAllByTestId('card-title').some((el) => el.textContent === 'Archived'),
+      ).toBe(true)
+    })
+  })
+
   it('the card context menu opens the same dialog', async () => {
     renderPanel()
     fireEvent.click((await screen.findAllByRole('button', { name: 'Open folder design' }))[0]!)
