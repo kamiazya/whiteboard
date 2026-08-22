@@ -13,19 +13,12 @@ import {
   listLocalDocuments,
   loadLocalDocument,
 } from '../lib/local-document-summary.js'
-import type { LoroLoadResult } from '../lib/loro-store.js'
-import { LoroStore } from '../lib/loro-store.js'
+import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 
-// Narrow surface used by the controller to seed a new canvas's Loro doc (and,
-// for duplicateDocument, to read one back). Injectable so node/jsdom tests can
-// supply an in-memory fake instead of touching real IndexedDB or the
-// loro-crdt library directly.
-export interface LoroStoreLike {
-  save(documentId: string, snapshot: Uint8Array): Promise<void>
-  createEmptySnapshot(): Uint8Array
-  load(documentId: string): Promise<LoroLoadResult>
-}
+// Re-exported so the many page-side consumers keep their import path; the
+// type itself lives beside the concrete store.
+export type { LoroStoreLike }
 
 export type BrowserLocalPersistenceState =
   | { kind: 'saved'; lastSavedAt: null | string }

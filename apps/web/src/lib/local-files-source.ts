@@ -7,7 +7,6 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from '../components/workspace-files/files-source.js'
-import type { LoroStoreLike } from '../pages/use-browser-local-document-controller.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
   type ContentClock,
@@ -15,7 +14,7 @@ import {
   idbContentClock,
   LOCAL_WORKSPACE_ID,
 } from './local-document-summary.js'
-import { LoroStore } from './loro-store.js'
+import { LoroStore, type LoroStoreLike } from './loro-store.js'
 
 /**
  * `WorkspaceFilesSource` over the browser-local stores — the adapter that
