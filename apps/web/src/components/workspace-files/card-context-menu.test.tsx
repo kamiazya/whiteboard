@@ -185,3 +185,82 @@ describe('document card context menu — pinning', () => {
     )
   })
 })
+
+// A pin is a WRITE to the daemon, and the only one on this menu whose
+// failure had nowhere to go: the entry voided the promise, so a refusal
+// raised an unhandled rejection and the card sat there looking unpinned
+// with nothing said. Same treatment the panel already gives a refused
+// create and a refused move — the source's own words, because only the
+// store knows why it said no.
+describe('document card context menu — a pin that fails says so', () => {
+  it('reports the source’s reason when the pin write is refused', async () => {
+    const setPinned = vi.fn(() => Promise.reject(new Error('workspace is read-only')))
+    renderPanel({ setPinned })
+
+    const menu = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Pin' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('workspace is read-only')
+    expect(alert.textContent).toMatch(/could not pin/i)
+  })
+
+  it('names unpinning when that is what was refused', async () => {
+    const setPinned = vi.fn(() => Promise.reject(new Error('workspace is read-only')))
+    renderPanel({ setPinned, rows: [{ ...entries[0]!, pinOrder: 0 }, entries[1]!] })
+
+    const menu = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Unpin' }))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/could not unpin/i)
+  })
+
+  // Everything after the write is bookkeeping, exactly as it is for a create:
+  // the pin LANDED, so calling it refused invites a second press that would
+  // toggle it back off.
+  it('does not call a completed pin refused when the list refresh fails', async () => {
+    let listed = 0
+    const setPinned = vi.fn(async () => {})
+    const source = fakeFilesSource({
+      listDocuments: () => {
+        listed += 1
+        return listed === 1 ? Promise.resolve(entries) : Promise.reject(new Error('list gone'))
+      },
+      setPinned,
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+
+    const menu = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Pin' }))
+
+    await waitFor(() => expect(setPinned).toHaveBeenCalled())
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toMatch(/pinned/i)
+    expect(alert.textContent).toMatch(/refreshed/i)
+    expect(screen.queryByText(/could not pin/i)).toBeNull()
+  })
+})
+
+// The alert must not outlive the action it describes. Every action on this
+// panel clears all of its transient reports, so a refusal someone has since
+// worked past is never left attached to nothing they can see.
+describe('document card context menu — a refusal does not outlive its action', () => {
+  it('drops the previous refusal when the pin is tried again', async () => {
+    let calls = 0
+    const setPinned = vi.fn(() => {
+      calls += 1
+      return calls === 1 ? Promise.reject(new Error('workspace is read-only')) : Promise.resolve()
+    })
+    renderPanel({ setPinned })
+
+    fireEvent.click(
+      within(await contextMenuOnCard('Meeting notes')).getByRole('menuitem', { name: 'Pin' }),
+    )
+    await screen.findByRole('alert')
+
+    fireEvent.click(
+      within(await contextMenuOnCard('Meeting notes')).getByRole('menuitem', { name: 'Pin' }),
+    )
+    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
+  })
+})

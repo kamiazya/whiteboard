@@ -106,6 +106,17 @@ function storeColumns(next: BrowserColumns): void {
 }
 
 /**
+ * How a write that landed is named once its list refresh failed. The verb is
+ * the message: it says what is now TRUE despite the stale list, which is what
+ * stops the person pressing again.
+ */
+const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = {
+  created: 'Created',
+  pinned: 'Pinned',
+  unpinned: 'Unpinned',
+}
+
+/**
  * The workspace document browser (`/api/v1`), in three panes: the folder
  * sidebar, the contents of the selected folder, and the selected document
  * drawn.
@@ -135,11 +146,29 @@ export function WorkspaceFilesPanel({
   const [folder, setFolder] = useState(initialFolder ?? '')
   const [columns, setColumns] = useState<BrowserColumns>(readStoredColumns)
   /**
-   * A document that WAS created, whose list refresh or open failed after the
-   * fact. Separate from `createError` because the two need opposite things:
-   * a refusal invites another attempt, this one must not.
+   * A write that LANDED, whose list refresh or open failed after the fact.
+   * Separate from the refusal states because the two need opposite things:
+   * a refusal invites another attempt, this one must not — pressing again
+   * would create a second document, or toggle the pin straight back off.
+   *
+   * Carries the action because the verb is the whole message: "Created" and
+   * "Pinned" tell the person a different thing about what is now true.
    */
-  const [refreshError, setRefreshError] = useState<string | null>(null)
+  const [refreshError, setRefreshError] = useState<{
+    action: 'created' | 'pinned' | 'unpinned'
+    path: string
+  } | null>(null)
+  /**
+   * A refused pin, as the direction that was asked for and the source's own
+   * reason. Only the store knows why it said no — that a workspace is
+   * read-only, say — and a pin is the one verb on the card menu with no form
+   * of its own to report into.
+   */
+  const [pinError, setPinError] = useState<{
+    pinning: boolean
+    path: string
+    reason: string
+  } | null>(null)
   /**
    * A refused create, as the kind that was asked for and the reason given.
    *
@@ -320,7 +349,11 @@ export function WorkspaceFilesPanel({
    */
   const createHere = useCallback(
     async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
+      // Every action here clears ALL of the panel's transient reports, not
+      // just its own: an alert that outlives the action it describes is
+      // attached to nothing the person can still see.
       setCreateError(null)
+      setPinError(null)
       setRefreshError(null)
       setCreating(true)
       try {
@@ -365,7 +398,7 @@ export function WorkspaceFilesPanel({
           // Swallowed as a REJECTION, reported as its own message. The
           // document exists; letting this propagate would hold the dialog
           // open on a form whose only offer is to make it again.
-          setRefreshError(path)
+          setRefreshError({ action: 'created', path })
         }
       } finally {
         setCreating(false)
@@ -454,10 +487,34 @@ export function WorkspaceFilesPanel({
   const togglePinned = useCallback(
     async (entry: WorkspaceDocumentEntry) => {
       if (source.setPinned === undefined) return
-      await source.setPinned(entry, entry.pinOrder === undefined)
-      const entries = await readList()
-      setDocuments(entries)
-      setSelected(entries.find((row) => row.path === entry.path) ?? null)
+      const pinning = entry.pinOrder === undefined
+      setPinError(null)
+      setCreateError(null)
+      setRefreshError(null)
+      // ONLY this write decides whether the pin was refused. What follows is
+      // bookkeeping on an order that has already changed, and reporting a
+      // failed refresh as "could not pin" invites a second press that would
+      // undo the pin that landed.
+      try {
+        await source.setPinned(entry, pinning)
+      } catch (err) {
+        setPinError({
+          pinning,
+          path: entry.path,
+          reason: err instanceof Error ? err.message : 'The store gave no reason.',
+        })
+        // Not re-thrown, unlike a refused create: nothing is waiting on this
+        // one. The menu entry that calls it has already closed, and the
+        // report above is the whole outcome.
+        return
+      }
+      try {
+        const entries = await readList()
+        setDocuments(entries)
+        setSelected(entries.find((row) => row.path === entry.path) ?? null)
+      } catch {
+        setRefreshError({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
+      }
     },
     [source, readList],
   )
@@ -642,9 +699,16 @@ export function WorkspaceFilesPanel({
         </p>
       )}
 
+      {pinError !== null && (
+        <p role="alert" className="text-destructive text-sm">
+          Could not {pinError.pinning ? 'pin' : 'unpin'} “{pinError.path}”. {pinError.reason}
+        </p>
+      )}
+
       {refreshError !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Created “{refreshError}”, but this list could not be refreshed. Reload to see it.
+          {REFRESH_FAILURE_VERB[refreshError.action]} “{refreshError.path}”, but this list could not
+          be refreshed. Reload to see it.
         </p>
       )}
 
