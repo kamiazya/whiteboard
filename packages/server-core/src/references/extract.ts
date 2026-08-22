@@ -1,5 +1,6 @@
 import { scanReferences } from '@kamiazya/whiteboard-codec'
 import {
+  readCoreFacets,
   readDocumentKind,
   readMarkdownBody,
   readSpatialCanvas,
@@ -50,23 +51,31 @@ function spatialReferences(canvas: SpatialCanvas): RawReference[] {
 }
 
 /**
- * One document's reference facts, extracted from its persisted state. Pure
- * over (index entry, loaded doc) — the extraction half of the aggregate's
- * extract/resolve split: everything here depends on THIS document alone, so
- * an incremental feed re-runs it only for the document that changed.
+ * The CONTENT half alone — what a stamp-validated cache may keep between
+ * requests. Index-authority meta (path/name/kind) deliberately stays out:
+ * a rename or set-name must be correct with zero invalidation, so it is
+ * read fresh from the listing on every request.
  */
-export function extractReferenceFacts(entry: DocumentEntry, doc: LoroDoc): DocumentReferenceFacts {
+export interface ContentFacts {
+  readonly refs: readonly DocumentReferenceFacts['refs'][number][]
+  readonly texts: readonly string[]
+  /** OKF core-facet tags; undefined for spatial documents (they hold none). */
+  readonly tags: readonly string[] | undefined
+}
+
+export function extractContentFacts(
+  entry: Pick<DocumentEntry, 'kind'>,
+  doc: LoroDoc,
+): ContentFacts {
   const kind = entry.kind ?? readDocumentKind(doc)
   const markdown = kind === 'markdown'
   const canvas = markdown ? undefined : readSpatialCanvas(doc)
   return {
-    path: entry.path,
-    ...(entry.name === undefined ? {} : { name: entry.name }),
-    ...(entry.kind === undefined ? {} : { kind: entry.kind }),
     refs: markdown
       ? textReferences(readMarkdownBody(doc))
       : spatialReferences(canvas as SpatialCanvas),
     // The prose itself, for mention detection against other documents' names.
     texts: markdown ? [readMarkdownBody(doc)] : spatialTexts(canvas as SpatialCanvas),
+    tags: markdown ? readCoreFacets(doc)?.tags : undefined,
   }
 }

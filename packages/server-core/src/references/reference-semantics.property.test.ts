@@ -22,7 +22,10 @@ import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-st
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
+import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
+import { computeDocumentTags } from '../tools/document-tags.js'
+import { ContentFactsCache } from './content-facts-cache.js'
 
 const WS = 'ws-pbt'
 const PATHS = ['alpha', 'beta', 'gamma', 'delta'] as const
@@ -212,6 +215,11 @@ describe('reference semantics under command sequences', () => {
       const setTool = createDocumentSetTool(deps)
       const editTool = createCanvasEditTool(deps)
       const model = new Model()
+      // ONE cache across the whole command sequence — the differential half:
+      // stamp-validated incremental answers must match a fresh full scan
+      // after every command, whatever interleaving of writes produced it.
+      const cache = new ContentFactsCache()
+      const cachedSearch = createDocumentSearchTool(deps, cache)
       // slot -> documentId of the doc created into it (dead ids stay, model ignores)
       const slots: (string | null)[] = [null, null, null]
       let nodeSeq = 0
@@ -349,12 +357,27 @@ describe('reference semantics under command sequences', () => {
           }
         }
 
-        // After EVERY command: the SUT and the model agree for every live doc.
+        // After EVERY command: the CACHED pipeline agrees with the model,
+        // and byte-for-byte with a fresh full scan (backlinks AND mentions).
         for (const doc of model.docs.values()) {
-          const real = await computeBacklinks(deps, { workspaceId: WS, documentId: doc.id })
+          const cached = await computeBacklinks(
+            deps,
+            { workspaceId: WS, documentId: doc.id },
+            cache,
+          )
+          const fresh = await computeBacklinks(deps, { workspaceId: WS, documentId: doc.id })
+          expect(cached, `cache transparency for ${doc.path}`).toEqual(fresh)
           const expected = model.backlinksOf(doc.id)
-          const got = new Map(real.backlinks.map((b) => [b.documentId, b.contexts.length]))
+          const got = new Map(cached.backlinks.map((b) => [b.documentId, b.contexts.length]))
           expect(got, `backlinks of ${doc.path} (${doc.id})`).toEqual(expected)
+        }
+        if (model.docs.size > 0) {
+          expect(await computeDocumentTags(deps, { workspaceId: WS }, cache)).toEqual(
+            await computeDocumentTags(deps, { workspaceId: WS }),
+          )
+          expect(await cachedSearch.execute({ workspaceId: WS, query: 'Plan' })).toEqual(
+            await createDocumentSearchTool(deps).execute({ workspaceId: WS, query: 'Plan' }),
+          )
         }
       }
     },

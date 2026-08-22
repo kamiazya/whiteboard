@@ -66,15 +66,41 @@ Two property suites in `server-core/src/references/` are the enforcement:
   depending on event arrival order, which is why `backlinksOf` sorts by
   the DocumentIndex contract's segment-wise path order.
 
+### 5. The incremental mode landed as a stamp-validated cache (2026-08-22 addendum)
+
+The deferred incremental mode shipped, but not as the event feed sketched
+above. `ContentFactsCache` keeps per-document CONTENT facts (refs, texts,
+tags) keyed by the document's **frontier** — the Loro version vector every
+persisting writer updates because the sync protocol itself runs on it. Per
+request: one listing, one cheap `readFrontier` per document, full
+extraction only where the bytes changed.
+
+Chosen over write-path enumeration because it dissolves this ADR's own
+stated risk instead of managing it: a writer the cache has never heard of
+(a new tool, the WS sync path, an import) still moves the frontier, and
+the stale entry is caught on the next read. Index-authority meta
+(path/name/kind) is never cached — read fresh from the listing, so a
+rename needs no invalidation at all. An event feed, if ever needed,
+becomes an eager invalidation into the same structure.
+
+Backlinks/mentions, tags, and search all read through one cache instance
+per server. Enforcement: the command-sequence property now runs every
+command against a fresh full scan AND one long-lived cache, requiring
+identical responses after each step (disabling the stamp comparison turns
+it red). Measured on 200 documents, interleaved: fresh 41.7ms → cached
+3.7ms median per request.
+
 ## Consequences
 
 - Backlinks are always consistent with reader resolution, including the
   third-document rename case, at the cost of query-time resolution work.
-- The O(N)-scan route is correct by construction (no event plumbing to
-  miss) and carries a `ponytail:` marker naming the upgrade path.
-- Wiring the incremental feed later must hook **every** mutation path
-  (tools, WS sync, imports); the convergence properties give that wiring
-  its safety net in advance.
+- ~~The O(N)-scan route is correct by construction (no event plumbing to
+  miss) and carries a `ponytail:` marker naming the upgrade path.~~
+  Superseded by decision 5: the stamp-validated cache keeps that
+  correctness property while dropping the per-request O(N) loads.
+- ~~Wiring the incremental feed later must hook **every** mutation path
+  (tools, WS sync, imports).~~ Dissolved by decision 5 — no enumeration is
+  required; the frontier is the single change signal.
 
 ## Alternatives considered
 
