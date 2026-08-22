@@ -523,6 +523,50 @@ paths:
       rather than assumed and the answer moved the target: its cost is
       overlap-and-intrusion (10.9% of layout), not border-tracing (3.1%),
       and that term now rejects by axis before measuring.
+      **All four are landed, and re-profiling afterwards moved the target
+      off that list entirely.** On the 345-edge clustered canvas — the size
+      an AI-authored document reaches — `routeEdge` is now 60% of layout,
+      and inside it the fallback chain is nearly all of that: the grid
+      search `routeOnGrid` 27%, `bestCandidate` 8%, the detour `region`
+      union 5%. The elbow shortcut, which the code is written around as the
+      common case, is taken on only 292 of 1215 routings there; the grid
+      search runs on 719 of them. On the 200-edge grid canvas none of this
+      shows (routing is 13%, pair scoring 22%) — so the two bench shapes
+      now disagree about where the time is, and a change judged on one of
+      them has not been judged.
+      One cost off that profile is taken: the routed-path cache is owned by
+      `assignEdgeAnchors` rather than by each `optimizeSideChoices`, which
+      is what lets it span regions and both runs. 1021 of 1900 routings on
+      the clustered canvas repeat a key already seen in the layout; the
+      per-search caches caught 567. Worth 15-17% there, within noise on the
+      grid canvas (which sits at the region gate, so it shares only across
+      one region's two runs, whose aligned anchors mostly key differently).
+      Sound because `nodes`, `style` and an edge's obstacle list are fixed
+      for a whole layout, leaving the anchor pair as the only variable —
+      and `routeCacheKey` covers it field by field, pinned one case per
+      field, because a field the key misses is a wrong path rather than a
+      slow one.
+      **The obstacle preparation was tried and rejected**, the second
+      measurement in this series to refuse a change that argued well.
+      `routeEdge` rebuilds two 286-element arrays per call — the
+      endpoint-containment filter and the margin-inflated copy — 1333 times
+      per clustered layout, and only 421 of those filters drop anything.
+      Memoizing the inflated array and returning the shared one untouched
+      when nothing is dropped measured neutral-to-negative (clustered
+      494/502/491 against 508/470/485ms, rounds disagreeing in sign; grid
+      slightly worse in all three). The 11% the phase profile attributes to
+      those two lines is the SCAN, not the allocation: 1333 calls x 286
+      rects x two `containsPoint` tests is 760k tests, and the prototype
+      keeps every one of them. Nothing here gets cheaper without cutting
+      the obstacle SET down spatially, which changes what is tested rather
+      than how fast it is tested.
+      A note on method, because it cost a wrong conclusion before it was
+      caught: the first interleaved run said the grid canvas regressed 3-4%
+      consistently, in all three rounds. Running the same pairs with the
+      ORDER FLIPPED said neutral. Whichever variant runs first in a round
+      carries that round's warm-up, and three rounds of a fixed order
+      reproduce the artifact rather than test it. Alternate the order, not
+      only the variant.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
