@@ -1,3 +1,4 @@
+import { autocompletion } from '@codemirror/autocomplete'
 import type { Extension } from '@codemirror/state'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
@@ -39,6 +40,7 @@ import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { setHeadingLevel } from './set-heading-level.js'
 import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { wikiLinkCompletionSource } from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
   value: string
@@ -262,6 +264,18 @@ export function MarkdownEditor({
   sourceExtensions,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
+  // [[ completion reads targets through a ref: the source is installed once
+  // at view creation, while the document list keeps refreshing under it.
+  const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
+  linkTargetsRef.current = linkTargets ?? []
+  const completionExtension = useMemo(
+    () => autocompletion({ override: [wikiLinkCompletionSource(() => linkTargetsRef.current)] }),
+    [],
+  )
+  const paneExtensions = useMemo(
+    () => [completionExtension, ...(sourceExtensions ?? [])],
+    [completionExtension, sourceExtensions],
+  )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
   // preview would draw them, and rendering per raw keystroke would race
@@ -677,7 +691,7 @@ export function MarkdownEditor({
             apiRef={sourceApiRef}
             placeholderText="Write in Markdown…"
             className="markdown-editor-source"
-            extensions={sourceExtensions}
+            extensions={paneExtensions}
             // A CRDT binding owns editor<->document sync; the controlled
             // reconcile path would race it (see SourcePane).
             reconcileExternalValue={sourceExtensions === undefined}
