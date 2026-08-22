@@ -40,8 +40,8 @@ export interface CorpusDocument {
  *   scoring, not a missing capability.
  * - `bigram` — Japanese where the wanted term is not space-delimited, so
  *   the answer depends on the CJK bigram scheme specifically.
- * - `paraphrase` — the wanted document says the same thing in other words.
- *   Structurally out of lexical reach.
+ * - `paraphrase` — the wanted document says the same thing in other words,
+ *   sharing NO token with the query. Structurally out of lexical reach.
  * - `cross-lingual` — a Japanese query for an English document (or the
  *   reverse). Structurally out of lexical reach, and the capability the
  *   research measured an embedding model actually delivering.
@@ -139,16 +139,19 @@ export const JUDGED_QUERIES: readonly JudgedQuery[] = [
   { query: 'インフラ構成', category: 'bigram', relevant: ['plans/untitled-3'] },
   { query: '初回ダウンロード', category: 'bigram', relevant: ['notes/untitled-2'] },
 
-  // --- paraphrase: same meaning, different words ---
+  // --- paraphrase: same meaning, NO shared token with the target ---
+  // Zero overlap is the definition here, not a nicety: a query sharing a
+  // token is answerable lexically, so crediting its hit to "paraphrase"
+  // would measure stage 0 against itself. The corpus guard enforces it.
   {
-    query: 'ソケットが落ちたときの復旧手順',
+    query: '通信が不安定な場合の復旧',
     category: 'paraphrase',
-    relevant: ['notes/untitled-1', 'notes/reconnect-runbook'],
+    relevant: ['notes/untitled-1'],
   },
   {
-    query: 'running out of disk space in the browser',
+    query: '回線トラブル時の対処',
     category: 'paraphrase',
-    relevant: ['notes/storage-budget'],
+    relevant: ['notes/untitled-1'],
   },
   {
     query: '新規ユーザーが最初に通る画面',

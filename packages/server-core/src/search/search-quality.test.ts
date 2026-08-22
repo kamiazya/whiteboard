@@ -26,6 +26,7 @@ import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
+import { tokenize } from './full-text.js'
 import { CORPUS_DOCUMENTS, JUDGED_QUERIES, type QueryCategory } from './search-corpus.js'
 
 const WS = 'quality'
@@ -106,25 +107,32 @@ describe('search corpus', () => {
       for (const doc of CORPUS_DOCUMENTS) {
         expect(judged.query, `${judged.query} is a bare title`).not.toBe(doc.name)
       }
-      // The guard the first draft of this corpus needed and lacked: a
-      // paraphrase/cross-lingual query must not be answerable from the
-      // judged document's ADDRESS. Paths and names are indexed text, so a
-      // descriptive English path let an English query "succeed
-      // cross-lingually" at a Japanese document without any cross-lingual
-      // retrieval happening — the instrument flattering itself.
+      // The guard this corpus needed twice. A debt query must not be
+      // answerable LEXICALLY at its judged document — first draft leaked
+      // English through descriptive paths, and review then caught a
+      // Japanese query sharing 手順 plus three bigrams with the body it
+      // was judged against. Both made the instrument flatter the thing it
+      // measures. Checked over SEARCH TOKENS rather
+      // than raw substrings, and over the whole indexed text rather than
+      // the address alone. A debt query sharing even one token with its
+      // judged document is answerable lexically, so crediting its hit to
+      // paraphrase/cross-lingual would measure stage 0 against itself —
+      // review caught exactly that: 「…ときの復旧手順」 shared 手順 and
+      // three more bigrams with the document it was judged against.
       if (judged.category !== 'lexical' && judged.category !== 'bigram') {
-        const terms = judged.query
-          .toLowerCase()
-          .split(/[^\p{L}\p{N}]+/u)
-          .filter((t) => t.length > 2)
+        const queryTokens = new Set(tokenize(judged.query))
         for (const path of judged.relevant) {
           const doc = CORPUS_DOCUMENTS.find((d) => d.path === path)
-          const address = `${doc?.path ?? ''} ${doc?.name ?? ''}`.toLowerCase()
-          for (const term of terms) {
-            expect(address, `"${judged.query}" is answerable from ${path}'s address`).not.toContain(
-              term,
-            )
-          }
+          const indexed = [
+            doc?.path ?? '',
+            doc?.name ?? '',
+            doc?.body ?? '',
+            ...(doc?.nodes ?? []).map((n) => n.text),
+            ...(doc?.groups ?? []).map((g) => g.label),
+            ...(doc?.edges ?? []).map((e) => e.label),
+          ].join(' ')
+          const shared = [...new Set(tokenize(indexed))].filter((t) => queryTokens.has(t))
+          expect(shared, `"${judged.query}" shares tokens with ${path}`).toEqual([])
         }
       }
     }
@@ -162,10 +170,12 @@ describe('stage-0 lexical retrieval quality', () => {
     expect(summary).toEqual({
       lexical: { hitAtK: 3, of: 3, mrr: 1 },
       bigram: { hitAtK: 3, of: 3, mrr: 1 },
-      // The debt. Cross-lingual is a clean ZERO — no lexical scheme can
-      // cross the script boundary, and the one apparent hit an earlier
-      // draft showed was the corpus leaking English through a path.
-      paraphrase: { hitAtK: 2, of: 3, mrr: 0.67 },
+      // The debt, and it is TOTAL: with the corpus honest (no query
+      // sharing a token with its judged document), lexical retrieval
+      // answers none of it. That is the shape to expect — no tokenisation
+      // scheme crosses a synonym or a script boundary — and the earlier
+      // non-zero readings were both the corpus leaking, not capability.
+      paraphrase: { hitAtK: 0, of: 3, mrr: 0 },
       'cross-lingual': { hitAtK: 0, of: 3, mrr: 0 },
     })
     // Named, not just counted: a later reader can see WHICH questions go
@@ -174,7 +184,9 @@ describe('stage-0 lexical retrieval quality', () => {
       'cross-lingual: embedding model download size',
       'cross-lingual: ストレージ容量の見積もり',
       'cross-lingual: 再接続の手順書',
+      'paraphrase: 回線トラブル時の対処',
       'paraphrase: 新規ユーザーが最初に通る画面',
+      'paraphrase: 通信が不安定な場合の復旧',
     ])
   })
 })

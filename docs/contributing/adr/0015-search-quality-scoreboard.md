@@ -51,12 +51,24 @@ The first two are the **contract**; the last two are the **debt**.
 |---|---|---|
 | lexical | 3/3 | 1.00 |
 | bigram | 3/3 | 1.00 |
-| paraphrase | 2/3 | 0.67 |
+| paraphrase | **0/3** | **0.00** |
 | cross-lingual | **0/3** | **0.00** |
 
-Cross-lingual is a clean zero, which is the honest shape: no lexical
-scheme crosses a script boundary. Paraphrase partially works by accident —
-shared technical nouns survive the rewording.
+The debt is total, and getting to that number took two corrections — both
+cases of the instrument flattering the thing it measures:
+
+1. The first draft gave Japanese-titled documents descriptive **English
+   paths**, so an English query "succeeded cross-lingually" by matching
+   the path. Fixed by following ADR-0008 (non-Latin titles collapse to
+   `untitled-N`), which is also what the product really does.
+2. Review then caught a paraphrase query sharing `手順` and three more
+   bigrams with the body it was judged against — a lexical hit credited to
+   paraphrase. Fixed by requiring **zero token overlap** for any
+   paraphrase/cross-lingual query, enforced by a corpus guard.
+
+Both readings had looked like partial capability. Neither was. The honest
+shape is the expected one: no tokenisation scheme crosses a synonym or a
+script boundary.
 
 ### 4. The decision rule
 
