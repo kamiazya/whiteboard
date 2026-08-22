@@ -1,8 +1,9 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
@@ -93,6 +94,16 @@ export function WorkspaceFilesPanel({
   // same-tick case it exists to catch.
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+  // The object-action menu: which document was right-clicked, and where.
+  const [cardMenu, setCardMenu] = useState<{
+    entry: WorkspaceDocumentEntry
+    x: number
+    y: number
+  } | null>(null)
+  // Bumped when the menu's Move… fires, so the preview opens its move form
+  // for the selection the same gesture just made.
+  const [startMoveToken, setStartMoveToken] = useState(0)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   // Every tag in the workspace, each once, in reading order. The strip is
   // derived — deleting the last carrier of a tag removes its chip with it.
   const workspaceTags = useMemo(() => {
@@ -149,6 +160,15 @@ export function WorkspaceFilesPanel({
         setSelected((current) =>
           current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
         )
+        // An open context menu is a captured snapshot; a refresh behind the
+        // panel's back (the whole reason `revision` exists) re-resolves it
+        // the same way, and a menu whose document is GONE closes rather
+        // than offering verbs for a target that no longer exists.
+        setCardMenu((current) => {
+          if (current === null) return null
+          const entry = entries.find((row) => row.path === current.entry.path)
+          return entry === undefined ? null : { ...current, entry }
+        })
       })
       .catch(() => undefined)
     return () => {
@@ -258,8 +278,60 @@ export function WorkspaceFilesPanel({
     return <p className="text-muted-foreground text-sm">Loading files…</p>
   }
 
+  // Plain function, deliberately not a hook: this sits below the early
+  // returns, where a hook would change the count between renders.
+  // ContextMenu's x/y contract is ROOT-local (its absolute box resolves
+  // against the nearest positioned ancestor — the panel root below), so the
+  // viewport coordinates the click carries are converted here instead of
+  // leaning on the app shell never scrolling the window.
+  const openCardMenu = (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => {
+    const rect = rootRef.current?.getBoundingClientRect()
+    setCardMenu({
+      entry,
+      x: clientX - (rect?.left ?? 0),
+      y: clientY - (rect?.top ?? 0),
+    })
+  }
+
+  const cardMenuItems =
+    cardMenu === null
+      ? []
+      : [
+          ...(onOpenDocument === undefined
+            ? []
+            : [{ label: 'Open', onSelect: () => onOpenDocument(cardMenu.entry.path) }]),
+          ...(onDuplicateDocument === undefined
+            ? []
+            : [{ label: 'Duplicate', onSelect: () => onDuplicateDocument(cardMenu.entry.path) }]),
+          {
+            label: 'Move…',
+            onSelect: () => {
+              setSelected(cardMenu.entry)
+              setStartMoveToken((token) => token + 1)
+            },
+          },
+          ...(onRequestDelete === undefined
+            ? []
+            : [
+                {
+                  label: 'Delete',
+                  danger: true,
+                  onSelect: () =>
+                    onRequestDelete(
+                      cardMenu.entry.path,
+                      cardMenu.entry.name ?? cardMenu.entry.path,
+                      cardMenu.entry.kind,
+                    ),
+                },
+              ]),
+        ]
+
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="workspace-files-panel">
+    <div
+      ref={rootRef}
+      className="relative flex min-h-0 flex-1 flex-col gap-2"
+      data-testid="workspace-files-panel"
+    >
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           {/* The trail belongs to whatever narrows the view. In one-column
@@ -385,6 +457,7 @@ export function WorkspaceFilesPanel({
                 query={query}
                 selectedPath={selected?.path}
                 onSelect={setSelected}
+                onDocumentContextMenu={openCardMenu}
                 renderThumbnail={(entry) => (
                   <DocumentThumbnail
                     key={entry.documentId}
@@ -434,6 +507,7 @@ export function WorkspaceFilesPanel({
                       ? selectFolder(target.path)
                       : setSelected(target.document)
                   }
+                  onDocumentContextMenu={openCardMenu}
                   renderThumbnail={(entry) => (
                     <DocumentThumbnail
                       key={entry.documentId}
@@ -451,6 +525,7 @@ export function WorkspaceFilesPanel({
           <DocumentPreview
             document={selected}
             loadRender={loadRender}
+            startMoveToken={startMoveToken}
             {...(onOpenDocument === undefined
               ? {}
               : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
@@ -470,6 +545,15 @@ export function WorkspaceFilesPanel({
           />
         </div>
       </div>
+      {cardMenu !== null && (
+        <ContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          label="Document actions"
+          items={cardMenuItems}
+          onClose={() => setCardMenu(null)}
+        />
+      )}
     </div>
   )
 }

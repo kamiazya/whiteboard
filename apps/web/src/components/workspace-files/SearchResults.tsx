@@ -25,6 +25,8 @@ export interface SearchResultsProps {
   query: string
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
+  /** Right-click on a result row — the object-action menu hook. */
+  onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   renderThumbnail?: (document: WorkspaceDocumentEntry) => ReactNode
   className?: string
 }
@@ -59,6 +61,7 @@ export function SearchResults({
   query,
   selectedPath,
   onSelect,
+  onDocumentContextMenu,
   renderThumbnail,
   className,
 }: SearchResultsProps) {
@@ -128,6 +131,14 @@ export function SearchResults({
                 type="button"
                 aria-current={entry.path === selectedPath ? 'true' : undefined}
                 onClick={() => onSelect(entry)}
+                onContextMenu={
+                  onDocumentContextMenu === undefined
+                    ? undefined
+                    : (event) => {
+                        event.preventDefault()
+                        onDocumentContextMenu(entry, event.clientX, event.clientY)
+                      }
+                }
                 className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 items-center gap-2 rounded-md border p-1.5 text-left aria-[current]:ring-1"
               >
                 {/* 80x44, not smaller: measured on a real document, a faithful
@@ -166,6 +177,14 @@ export function SearchResults({
                 type="button"
                 aria-current={entry.path === selectedPath ? 'true' : undefined}
                 onClick={() => onSelect(entry)}
+                onContextMenu={
+                  onDocumentContextMenu === undefined
+                    ? undefined
+                    : (event) => {
+                        event.preventDefault()
+                        onDocumentContextMenu(entry, event.clientX, event.clientY)
+                      }
+                }
                 className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full min-w-0 flex-col gap-1.5 rounded-md border p-2 text-left aria-[current]:ring-1"
               >
                 {thumbnail(entry, 'aspect-[16/9] w-full')}

@@ -20,6 +20,8 @@ export interface FolderContentsListProps {
   /** The folder being looked inside. `''` is the workspace root. */
   folder: string
   onOpen: (target: FolderContentsOpen) => void
+  /** Right-click on a document card — the object-action menu hook. */
+  onDocumentContextMenu?: (entry: WorkspaceDocumentEntry, x: number, y: number) => void
   /** The document the preview is showing, so the two panes agree. */
   selectedPath?: string
   /**
@@ -41,6 +43,7 @@ export function FolderContentsList({
   documents,
   folder,
   onOpen,
+  onDocumentContextMenu,
   selectedPath,
   renderThumbnail,
   className,
@@ -89,6 +92,14 @@ export function FolderContentsList({
             type="button"
             aria-current={entry.path === selectedPath ? 'true' : undefined}
             onClick={() => onOpen({ kind: 'document', document: entry })}
+            onContextMenu={
+              onDocumentContextMenu === undefined
+                ? undefined
+                : (event) => {
+                    event.preventDefault()
+                    onDocumentContextMenu(entry, event.clientX, event.clientY)
+                  }
+            }
             className="hover:bg-accent/40 aria-[current]:border-primary aria-[current]:ring-primary/40 flex w-full flex-col overflow-hidden rounded-md border text-left aria-[current]:ring-1"
           >
             <span className="bg-muted/40 flex h-16 w-full items-center justify-center overflow-hidden">

@@ -86,6 +86,11 @@ export type ContextMenuItem =
   | ContextMenuHeadingItem
 
 export interface ContextMenuProps {
+  /**
+   * Accessible name of the menu. The default names the spatial surface;
+   * object menus (a document card's) pass their own.
+   */
+  readonly label?: string
   /** Screen position relative to the editor root. */
   readonly x: number
   readonly y: number
@@ -164,7 +169,14 @@ function CustomColorPanel({
   )
 }
 
-export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextMenuProps) {
+export function ContextMenu({
+  x,
+  y,
+  items,
+  onClose,
+  variant = 'list',
+  label = 'Canvas actions',
+}: ContextMenuProps) {
   const menuRef = useRef<HTMLDivElement | null>(null)
   // A menu opened near the editor's right/bottom edge would clip outside it,
   // so the requested position is nudged back inside once the real menu size
@@ -215,7 +227,7 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
       data-testid="context-menu"
       data-variant={variant}
       role="menu"
-      aria-label="Canvas actions"
+      aria-label={label}
       tabIndex={-1}
       className={
         sheet
