@@ -33,6 +33,39 @@ describe('ConnectionsChip', () => {
     expect(panel.textContent).toContain('日程を確定する')
   })
 
+  it('shows unlinked mentions as their own section, and navigates on click', () => {
+    const onOpen = vi.fn()
+    render(
+      <ConnectionsChip
+        backlinks={TWO}
+        mentions={[
+          {
+            documentId: '01CX5ZZKBKACTAV9WEVGEMMVRA',
+            path: 'standup',
+            name: 'Standup memo',
+            kind: 'markdown' as const,
+            contexts: ['…昨日の議論で Release plan の前提が変わった…'],
+          },
+        ]}
+        onOpen={onOpen}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    const panel = screen.getByRole('region', { name: /connections/i })
+    expect(panel.textContent).toContain('Mentioned, not linked')
+    expect(panel.textContent).toContain('Standup memo')
+    fireEvent.click(screen.getByRole('button', { name: /standup memo/i }))
+    expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ path: 'standup' }))
+  })
+
+  it('hides the mentions section when there are none', () => {
+    render(<ConnectionsChip backlinks={TWO} mentions={[]} onOpen={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    expect(screen.getByRole('region', { name: /connections/i }).textContent).not.toContain(
+      'Mentioned, not linked',
+    )
+  })
+
   it('navigates to the source document when its row is clicked', () => {
     const onOpen = vi.fn()
     render(<ConnectionsChip backlinks={TWO} onOpen={onOpen} />)

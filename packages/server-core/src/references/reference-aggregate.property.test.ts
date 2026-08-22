@@ -27,6 +27,7 @@ const factsArb: fc.Arbitrary<DocumentReferenceFacts> = fc.record(
   {
     path: fc.constantFrom<string>(...PATHS),
     name: fc.option(fc.constantFrom('Plan', 'Note'), { nil: undefined }),
+    texts: fc.array(fc.constantFrom('Plan の話', 'plain prose'), { maxLength: 2 }),
     refs: fc.array(
       fc.record({
         target: fc.constantFrom<string>(...IDS, ...PATHS, 'Plan'),

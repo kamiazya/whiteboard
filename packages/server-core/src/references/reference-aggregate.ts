@@ -1,4 +1,4 @@
-import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
+import { createUniqueNameResolver, scanReferences } from '@kamiazya/whiteboard-codec'
 import {
   documentIdSchema,
   documentKindSchema,
@@ -6,6 +6,7 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
+import { snippetAround } from '../search/snippet.js'
 
 /**
  * The reference aggregation layer, designed around the Loro document
@@ -58,6 +59,12 @@ const documentReferenceFactsSchema = z
     name: z.string().min(1).optional(),
     kind: documentKindSchema.optional(),
     refs: z.array(rawReferenceSchema),
+    /**
+     * The document's raw prose — body and canvas text — kept alongside the
+     * extracted refs because MENTION detection is a join against another
+     * document's NAME, which extraction cannot know per-document.
+     */
+    texts: z.array(z.string()),
   })
   .strict()
 export type DocumentReferenceFacts = z.infer<typeof documentReferenceFactsSchema>
@@ -153,6 +160,51 @@ export class ReferenceAggregate {
     )
     return backlinks
   }
+}
+
+/**
+ * Sources whose TEXT names `documentId`'s display name without a resolving
+ * reference — the seeding half of the linking loop: the system finds the
+ * candidate, a human confirms (a link is the author's claim, never a
+ * statistic). Occurrences inside any `[[...]]` span are excluded whole —
+ * target and alias halves alike — so an already-linking document surfaces
+ * only its EXTRA prose mentions.
+ */
+export function mentionsOfIn(
+  target: { readonly documentId: string; readonly name: string },
+  sources: ReadonlyMap<string, DocumentReferenceFacts>,
+): BacklinkEntry[] {
+  const mentions: BacklinkEntry[] = []
+  for (const [sourceId, facts] of sources) {
+    if (sourceId === target.documentId) continue
+    const contexts: string[] = []
+    for (const text of facts.texts) {
+      const spans = scanReferences(text).map(
+        (match) => [match.index, match.index + match.full.length] as const,
+      )
+      let cursor = 0
+      for (;;) {
+        const at = text.indexOf(target.name, cursor)
+        if (at === -1) break
+        cursor = at + target.name.length
+        if (spans.some(([from, to]) => at >= from && at < to)) continue
+        contexts.push(snippetAround(text, at, target.name.length))
+        if (contexts.length >= 3) break
+      }
+      if (contexts.length >= 3) break
+    }
+    if (contexts.length === 0) continue
+    mentions.push({
+      documentId: sourceId,
+      path: facts.path,
+      ...(facts.name === undefined ? {} : { name: facts.name }),
+      ...(facts.kind === undefined ? {} : { kind: facts.kind }),
+      contexts,
+    })
+  }
+  return mentions.sort(
+    (a, b) => compareDocumentPaths(a.path, b.path) || a.documentId.localeCompare(b.documentId),
+  )
 }
 
 function resolvesTo(

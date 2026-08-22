@@ -8,6 +8,11 @@ export type ConnectionsBacklink = DocumentBacklinksResponse['backlinks'][number]
 export interface ConnectionsChipProps {
   /** `null` while the fetch is in flight or unavailable — the chip waits. */
   readonly backlinks: readonly ConnectionsBacklink[] | null
+  /**
+   * Sources naming this document in prose without a link — the panel's
+   * seeding section. Absent hides it (a backend that answers no mentions).
+   */
+  readonly mentions?: readonly ConnectionsBacklink[]
   /** The whole entry: the daemon page navigates by `path`, others may not. */
   readonly onOpen: (backlink: ConnectionsBacklink) => void
 }
@@ -22,7 +27,7 @@ export interface ConnectionsChipProps {
  * links land somewhere, which is the reason to write one; hiding it until
  * content exists would hide the loop exactly where it needs starting.
  */
-export function ConnectionsChip({ backlinks, onOpen }: ConnectionsChipProps) {
+export function ConnectionsChip({ backlinks, mentions, onOpen }: ConnectionsChipProps) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const loaded = backlinks !== null
@@ -60,37 +65,66 @@ export function ConnectionsChip({ backlinks, onOpen }: ConnectionsChipProps) {
               No links yet — a [[link]] written in any document lands here.
             </p>
           ) : (
-            <ul className="flex flex-col">
-              {backlinks.map((entry) => (
-                <li key={entry.documentId}>
-                  <button
-                    type="button"
-                    onClick={() => {
-                      setOpen(false)
-                      onOpen(entry)
-                    }}
-                    className="hover:bg-muted flex w-full flex-col gap-0.5 rounded px-2 py-1.5 text-left"
-                  >
-                    <span className="flex items-center gap-1.5 text-sm font-medium">
-                      {entry.kind === 'spatial' ? (
-                        <LayoutDashboard aria-hidden="true" className="size-3.5 shrink-0" />
-                      ) : (
-                        <FileText aria-hidden="true" className="size-3.5 shrink-0" />
-                      )}
-                      {entry.name ?? entry.path}
-                    </span>
-                    {entry.contexts.slice(0, 2).map((context) => (
-                      <span key={context} className="text-muted-foreground truncate text-xs">
-                        {context}
-                      </span>
-                    ))}
-                  </button>
-                </li>
-              ))}
-            </ul>
+            <SourceList
+              entries={backlinks}
+              onPick={(entry) => {
+                setOpen(false)
+                onOpen(entry)
+              }}
+            />
+          )}
+          {(mentions?.length ?? 0) > 0 && (
+            <>
+              <p className="text-muted-foreground mb-1 mt-3 text-[11px] font-semibold uppercase tracking-wide">
+                Mentioned, not linked {mentions?.length}
+              </p>
+              <SourceList
+                entries={mentions ?? []}
+                onPick={(entry) => {
+                  setOpen(false)
+                  onOpen(entry)
+                }}
+              />
+            </>
           )}
         </section>
       )}
     </>
+  )
+}
+
+function SourceList({
+  entries,
+  onPick,
+}: {
+  readonly entries: readonly ConnectionsBacklink[]
+  readonly onPick: (entry: ConnectionsBacklink) => void
+}) {
+  return (
+    <ul className="flex flex-col">
+      {entries.map((entry) => (
+        <li key={entry.documentId}>
+          <button
+            type="button"
+            onClick={() => onPick(entry)}
+            className="hover:bg-muted flex w-full flex-col gap-0.5 rounded px-2 py-1.5 text-left"
+          >
+            <span className="flex items-center gap-1.5 text-sm font-medium">
+              {entry.kind === 'spatial' ? (
+                <LayoutDashboard aria-hidden="true" className="size-3.5 shrink-0" />
+              ) : (
+                <FileText aria-hidden="true" className="size-3.5 shrink-0" />
+              )}
+              {entry.name ?? entry.path}
+            </span>
+            {entry.contexts.slice(0, 2).map((context) => (
+              <span key={context} className="text-muted-foreground truncate text-xs">
+                {context}
+              </span>
+            ))}
+          </button>
+        </li>
+      ))}
+    </ul>
   )
 }

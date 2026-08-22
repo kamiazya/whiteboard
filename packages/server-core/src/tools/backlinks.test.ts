@@ -134,6 +134,45 @@ describe('GET /backlinks', () => {
     expect((await backlinksOf(deps, other.documentId)).backlinks).toHaveLength(0)
   })
 
+  it('reports unlinked mentions: the name in prose, never inside a reference', async () => {
+    const deps = makeDeps()
+    const { create, writeBody } = await seed(deps)
+    // seed() created the target named 'Release plan' at path 'target'.
+    const [plain, linked, aliasOnly] = [
+      await create('plain-mention', 'markdown', 'Plain'),
+      await create('linked-too', 'markdown', 'Linked'),
+      await create('alias-only', 'markdown', 'Alias'),
+    ]
+    const targetId = (await deps.documentIndex.resolveDocument({ workspaceId: WS, path: 'target' }))
+      ?.documentId
+    if (targetId === undefined) throw new Error('target missing')
+    await writeBody(plain.documentId, '会議で Release plan の前提が変わった。')
+    // A document that LINKS and also mentions in prose sits in both lists.
+    await writeBody(
+      linked.documentId,
+      'see [[Release plan]] — and later, Release plan again in prose.',
+    )
+    // The name only as an alias inside a reference: no mention.
+    await writeBody(aliasOnly.documentId, `see [[${targetId}|Release plan]]`)
+
+    const out = await backlinksOf(deps, targetId)
+    expect(out.backlinks.map((b) => b.path).sort()).toEqual(['alias-only', 'linked-too'])
+    expect(out.unlinkedMentions.map((m) => m.path).sort()).toEqual(['linked-too', 'plain-mention'])
+    expect(out.unlinkedMentions.find((m) => m.path === 'plain-mention')?.contexts[0]).toContain(
+      '前提が変わった',
+    )
+  })
+
+  it('an unnamed document accrues no mentions — a path is an address, not prose', async () => {
+    const deps = makeDeps()
+    const { create, writeBody } = await seed(deps)
+    const unnamed = await create('nameless', 'markdown')
+    const src = await create('src', 'markdown')
+    await writeBody(src.documentId, 'the word nameless appears here in prose')
+    const out = await backlinksOf(deps, unnamed.documentId)
+    expect(out.unlinkedMentions).toEqual([])
+  })
+
   it('excludes self-references and answers 404 for an unknown document', async () => {
     const deps = makeDeps()
     const { target, writeBody } = await seed(deps)
