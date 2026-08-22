@@ -1,6 +1,47 @@
 import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
-import type { EditorView } from '@codemirror/view'
+import { EditorView } from '@codemirror/view'
 import { type LinkTarget, linkMarkupFor, rankLinkTargets } from './link-target.js'
+
+/**
+ * The popup in the app's popover clothes. An EditorView.theme rather than
+ * index.css on purpose: the app stylesheet lives inside CSS @layer blocks,
+ * and CodeMirror injects its own UNLAYERED style element at view creation —
+ * which beats any layered rule regardless of specificity, so an index.css
+ * override silently loses. A theme extension compiles to CodeMirror's own
+ * generated classes and wins by the same mechanism the defaults do. CSS
+ * custom properties resolve at runtime, so the popover tokens (and theme
+ * switches) keep covering this surface.
+ */
+export const wikiLinkCompletionTheme = EditorView.theme({
+  '.cm-tooltip.cm-tooltip-autocomplete': {
+    backgroundColor: 'var(--popover)',
+    color: 'var(--popover-foreground)',
+    border: '1px solid var(--border)',
+    borderRadius: 'var(--radius-md)',
+    boxShadow: '0 4px 6px -1px rgb(0 0 0 / 0.1), 0 2px 4px -2px rgb(0 0 0 / 0.1)',
+    overflow: 'hidden',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul': {
+    fontFamily: 'inherit',
+    fontSize: '0.875rem',
+    maxHeight: '16rem',
+    padding: '0.25rem',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li': {
+    borderRadius: 'var(--radius-sm)',
+    padding: '0.25rem 0.5rem',
+    lineHeight: '1.4',
+  },
+  '.cm-tooltip.cm-tooltip-autocomplete > ul > li[aria-selected]': {
+    backgroundColor: 'var(--accent)',
+    color: 'var(--accent-foreground)',
+  },
+  // The generic "text" kind icon says nothing a document list needs said,
+  // and eats a monospace-width gutter.
+  '.cm-tooltip.cm-tooltip-autocomplete .cm-completionIcon': {
+    display: 'none',
+  },
+})
 
 /**
  * `[[` completion for document references. Accepting a candidate writes the
@@ -34,16 +75,24 @@ export function wikiLinkCompletionSource(getTargets: () => readonly LinkTarget[]
     if (match === null) return null
     const targets = getTargets()
     if (targets.length === 0) return null
-    const bracketsFrom = match.from
     const ranked = rankLinkTargets(targets, match.text.slice(2))
     if (ranked.length === 0) return null
     return {
-      from: bracketsFrom + 2,
+      from: match.from + 2,
       options: ranked.map(
         (target): Completion => ({
           label: target.name,
           type: 'text',
-          apply: (view: EditorView, _completion, _from, to) => {
+          apply: (view: EditorView, _completion, from, to) => {
+            // The brackets sit two characters before the QUERY start — and
+            // it must be the `from` the plugin passes, never a position
+            // captured when the source ran: the document may have changed in
+            // between (mobile autocorrect elsewhere, a CRDT remote echo,
+            // another tab), and the plugin maps from/to through those
+            // changes while a captured offset stays behind and writes the
+            // markup mid-word, corrupting the body.
+            const bracketsFrom = from - 2
+            if (view.state.sliceDoc(bracketsFrom, from) !== '[[') return
             const insert = linkMarkupFor(target, targets)
             view.dispatch({
               changes: { from: bracketsFrom, to, insert },
