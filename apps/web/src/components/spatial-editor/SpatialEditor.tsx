@@ -79,6 +79,7 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import {
   forwardRef,
@@ -118,6 +119,7 @@ import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
+import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
@@ -857,6 +859,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
     const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
     const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
+    const [facetPanelNodeId, setFacetPanelNodeId] = useState<string | null>(null)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
@@ -3269,6 +3272,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setSelectedEdgeId,
               setLinkDialog,
               setDocumentPicker,
+              setFacetPanelNodeId,
             }}
             contextMenu={contextMenu}
             setContextMenu={setContextMenu}
@@ -3316,6 +3320,24 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setDocumentPicker(null)}
           />
         )}
+        {facetPanelNodeId !== null &&
+          (() => {
+            const target = canvas.nodes.find((entry) => entry.id === facetPanelNodeId)
+            if (target === undefined) return null
+            return (
+              <FacetFormPanel
+                node={target}
+                registry={bundledFacetRegistry}
+                onClose={() => setFacetPanelNodeId(null)}
+                onWrite={(key, payload) =>
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [{ kind: 'set-node-facet', id: target.id, key, payload }],
+                  })
+                }
+              />
+            )
+          })()}
         {linkDialog !== null && (
           <LinkUrlDialog
             title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
