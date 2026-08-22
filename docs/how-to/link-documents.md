@@ -5,8 +5,10 @@ side. Works against a daemon-backed workspace.
 
 ## Write a link
 
-In a **markdown document**, use the editor toolbar's Link action (or type
-`[[` brackets yourself). A reference can name its target three ways:
+In a **markdown document**, type `[[` — a completion list of the
+workspace's documents opens as you type, ranked by match; Enter inserts the
+link. The toolbar's Link action offers the same list as a dialog (and also
+handles external URLs). A reference can name its target three ways:
 
 - `[[<document id>]]` — survives renames and moves; what the link picker
   inserts when names are ambiguous.
