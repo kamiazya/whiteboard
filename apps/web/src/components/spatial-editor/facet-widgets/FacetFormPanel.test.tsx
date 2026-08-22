@@ -132,6 +132,45 @@ describe('control kinds the derived form emits', () => {
   })
 })
 
+describe('a draft never outlives what it was seeded from', () => {
+  it('clearing a facet empties the form, so a later Save cannot restore it', () => {
+    const onWrite = vi.fn()
+    const stored = node({ 'planning.due/v0': { date: '2026-08-22' } })
+    const { rerender } = render(
+      <FacetFormPanel node={stored} registry={registry} onWrite={onWrite} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'Clear Planning due' }))
+    // The host applies the clear and re-renders with the facet gone.
+    rerender(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
+    expect((screen.getByLabelText('Planning due date') as HTMLInputElement).value).toBe('')
+    onWrite.mockClear()
+    fireEvent.click(screen.getByRole('button', { name: 'Save Planning due' }))
+    expect(onWrite).not.toHaveBeenCalled()
+  })
+
+  it("switching variants drops the previous arm's field from the payload", () => {
+    const onWrite = vi.fn()
+    render(
+      <FacetFormPanel
+        node={node({ 'visual.symbol/v0': { kind: 'icon', name: 'star' } })}
+        registry={registry}
+        onWrite={onWrite}
+      />,
+    )
+    fireEvent.change(screen.getByLabelText('Visual style symbol kind'), {
+      target: { value: 'emoji' },
+    })
+    fireEvent.change(screen.getByLabelText('Visual style symbol char'), {
+      target: { value: '⭐' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Visual style symbol' }))
+    // `name` belonged to the icon arm and must not ride along: a schema
+    // that passes unknown keys through would otherwise store it.
+    const [, payload] = onWrite.mock.calls[0] as [string, Record<string, unknown>]
+    expect(Object.keys(payload).sort()).toEqual(['char', 'kind'])
+  })
+})
+
 describe('the panel is bound to ONE node', () => {
   it('switching the target node re-seeds the form, never carrying a draft across', () => {
     const onWrite = vi.fn()

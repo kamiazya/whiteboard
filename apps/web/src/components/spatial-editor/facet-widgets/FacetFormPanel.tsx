@@ -20,7 +20,7 @@ import {
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 
 export interface FacetFormPanelProps {
@@ -134,8 +134,18 @@ function FacetEditor({
   readonly registry: FacetRegistry
   readonly onWrite: (key: string, payload: unknown) => void
 }) {
+  // The draft follows the STORED payload: a Clear (or any write from
+  // elsewhere) must empty the form, or the next Save would restore what
+  // the human just removed. `useState`'s initializer runs once, so the
+  // seed is compared against what it was seeded from.
   const [draft, setDraft] = useState<Draft>(() => initialDraft(stored))
+  const [seed, setSeed] = useState(stored)
   const [error, setError] = useState<string | undefined>(undefined)
+  if (seed !== stored) {
+    setSeed(stored)
+    setDraft(initialDraft(stored))
+    setError(undefined)
+  }
   const set = (name: string, value: unknown) => setDraft((prev) => ({ ...prev, [name]: value }))
 
   if (form.kind === 'unsupported') {
@@ -243,6 +253,13 @@ function FacetEditor({
 }
 
 export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPanelProps) {
+  const closeRef = useRef<HTMLButtonElement | null>(null)
+  // Focus on open: a dialog that never takes focus leaves Escape and Tab
+  // acting on the canvas behind it. The close button is the least
+  // surprising landing place — it is also the way out.
+  useEffect(() => {
+    closeRef.current?.focus()
+  }, [])
   const groups = resolveFacetContributions(registry, 'contextMenu.node.properties')
   const stored = storedFacets(node)
   const body = (
@@ -303,6 +320,7 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
       <div className="flex items-center justify-between gap-4 pb-2">
         <span className="text-xs font-medium">Facets</span>
         <button
+          ref={closeRef}
           type="button"
           aria-label="Close facets"
           className="rounded px-2 text-xs text-muted-foreground hover:bg-accent"

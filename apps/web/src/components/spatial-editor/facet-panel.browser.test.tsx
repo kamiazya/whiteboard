@@ -43,6 +43,9 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
 
   const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
   expect(panel).not.toBeNull()
+  // The dialog takes focus, so Escape reaches its handler rather than the
+  // canvas behind it.
+  expect(panel.contains(document.activeElement)).toBe(true)
 
   // visual.shape's derived form: a choice control over the five silhouettes.
   const select = panel.querySelector(
@@ -58,4 +61,7 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
     kind: 'hexagon',
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()
+
+  fireEvent.keyDown(panel, { key: 'Escape' })
+  expect(container.querySelector('[data-testid="facet-form-panel"]')).toBeNull()
 })

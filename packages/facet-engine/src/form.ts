@@ -110,6 +110,9 @@ export function deriveFacetForm(schema: z.ZodTypeAny): FacetForm {
       const [name, label] = found
       if (discriminant !== undefined && discriminant !== name) return UNSUPPORTED
       discriminant = name
+      // Two arms selected by the same literal cannot be told apart by a
+      // picker, and the second would be unreachable.
+      if (variants.some((variant) => variant.label === label)) return UNSUPPORTED
       const fields = fieldsOf(shape, name)
       if (fields === undefined) return UNSUPPORTED
       variants.push({ label, fields })

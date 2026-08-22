@@ -102,6 +102,16 @@ describe('deriveFacetForm', () => {
         ]),
       ).kind,
     ).toBe('unsupported')
+    // Two arms selected by the SAME literal: a variant picker could not
+    // tell them apart, and the second would be unreachable.
+    expect(
+      deriveFacetForm(
+        z.union([
+          z.object({ kind: z.literal('a'), v: z.string() }),
+          z.object({ kind: z.literal('a'), w: z.string() }),
+        ]),
+      ).kind,
+    ).toBe('unsupported')
     // An arm whose non-discriminant member is outside the vocabulary.
     expect(
       deriveFacetForm(
