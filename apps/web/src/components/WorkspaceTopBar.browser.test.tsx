@@ -2,8 +2,7 @@ import type { SaveVersionResponse } from '@kamiazya/whiteboard-mcp/api-contracts
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { page, userEvent } from 'vitest/browser'
-import { waitForMenuClosed } from '../test-utils/menu.js'
+import { page } from 'vitest/browser'
 import '../index.css'
 import WorkspaceTopBar from './WorkspaceTopBar'
 
@@ -89,13 +88,8 @@ function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
       <WorkspaceTopBar
         workspaceId="sess_1"
         path="design/login-flow"
-        documents={[
-          { path: 'design/login-flow', updatedAt: '2026-04-24T11:00:00Z' },
-          { path: 'design/settings-flow', updatedAt: '2026-04-23T11:00:00Z' },
-        ]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
         {...props}
       />
     </div>,
@@ -130,70 +124,6 @@ afterEach(async () => {
 })
 
 describe('WorkspaceTopBar browser mode', () => {
-  it('immediate create: shows Problem Details title on 409, then fallback without leaking internals on 500', async () => {
-    let callCount = 0
-    // Override the beforeEach fetch stub for this test only.
-    const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url.endsWith('/api/workspaces/sess_1/names')) return Promise.resolve(mkNamesResponse())
-      if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
-      if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
-      if (url.includes('/documents') && init?.method === 'POST') {
-        callCount++
-        if (callCount === 1) {
-          // First activation → 409 Problem Details with title.
-          return Promise.resolve(
-            new Response(JSON.stringify({ title: 'Canvas "design/untitled" already exists' }), {
-              status: 409,
-              headers: { 'Content-Type': 'application/json' },
-            }),
-          )
-        }
-        // Second activation → 500 without title → fallback.
-        return Promise.resolve(
-          new Response(JSON.stringify({ error: 'internal' }), {
-            status: 500,
-            headers: { 'Content-Type': 'application/json' },
-          }),
-        )
-      }
-      return Promise.resolve(new Response('{}', { status: 200 }))
-    })
-    vi.stubGlobal('fetch', fetchMock)
-
-    renderTopBar()
-
-    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-
-    // First activation: immediate POST (no dialog ever appears), derived inside the
-    // current group — the 409 title surfaces in the alert line.
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-document-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
-    await waitFor(() => {
-      expect(screen.getByText('Canvas "design/untitled" already exists')).toBeTruthy()
-    })
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(
-      JSON.parse(String(fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')?.[1]?.body)),
-    ).toEqual({
-      path: 'design/untitled',
-    })
-
-    // Second activation: 500 without title → generic fallback, internals never shown.
-    await waitForMenuClosed()
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-document-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
-    await waitFor(() => {
-      expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
-    })
-    // Sensitive server internals must never be exposed.
-    expect(screen.queryByText(/internal/i)).toBeNull()
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
   it('does not dispatch excalidraw:wb_version_saved when POST /versions returns invalid schema', async () => {
     // The default beforeEach mock returns { ok: true } for POST /versions,
     // which does not match saveVersionResponseSchema (missing version.id, branchName, etc.).
@@ -226,7 +156,7 @@ describe('WorkspaceTopBar browser mode', () => {
     window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
-  it('dispatches wb_version_saved on a conforming save, clearing HeaderSaveDot', async () => {
+  it('dispatches wb_version_saved on a conforming save, clearing HeaderVersionDot', async () => {
     // Override the beforeEach stub so POST /versions returns a valid saveVersionResponseSchema body.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
       const url =
@@ -250,7 +180,7 @@ describe('WorkspaceTopBar browser mode', () => {
     renderTopBar()
 
     // Mark the doc dirty first (as useWhiteboardSync would on a real edit) so
-    // HeaderSaveDot's dot is visible before the save clears it.
+    // HeaderVersionDot's dot is visible before the save clears it.
     window.dispatchEvent(
       new CustomEvent('excalidraw:doc_changed', {
         detail: { workspaceId: 'sess_1', path: 'design/login-flow' },
@@ -402,12 +332,9 @@ describe('WorkspaceTopBar browser mode', () => {
     const kebab = screen.getByTestId('topbar-more-actions-trigger')
     expect(isDisplayNone(kebab)).toBe(false)
 
-    // The left-side group (back button + canvas switcher + Pencil kebab +
-    // HeaderBranchChip) still renders without overflow or wrapping.
+    // The left-side group (back button + HeaderBranchChip) still renders
+    // without overflow or wrapping.
     expect(isDisplayNone(screen.getByRole('button', { name: /back to documents/i }))).toBe(false)
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
-    })
 
     // Opening the kebab and selecting Fullscreen calls the same handler as
     // the exposed button would.
@@ -434,116 +361,5 @@ describe('WorkspaceTopBar browser mode', () => {
 
     const headerAfter = screen.getByRole('banner')
     expect(headerAfter.getBoundingClientRect().height).toBeCloseTo(48, 0)
-  })
-
-  it('announces a failed copy without nesting the alert inside the real role="menu" element', async () => {
-    // Real Chromium rendering (not jsdom) of the Radix menu — the layer where
-    // the ARIA tree axe/AccessLint inspects actually exists.
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', {
-      value: { writeText },
-      configurable: true,
-    })
-
-    renderTopBar()
-
-    await page.getByRole('button', { name: 'Document actions' }).click()
-    await page.getByText('Copy canvas URL').click()
-
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain("Couldn't copy automatically")
-
-    const menu = screen.getByRole('menu')
-    expect(menu.contains(alert)).toBe(false)
-
-    // The announcement is still reachable in the accessibility tree even
-    // though it is no longer a DOM child of the menu.
-    const status = screen.getByRole('status', { name: 'Copy status' })
-    expect(status.textContent).toContain("Couldn't copy the canvas URL automatically.")
-    expect(menu.contains(status)).toBe(false)
-
-    // @ts-expect-error -- test-only cleanup of a property defined above
-    delete navigator.clipboard
-  })
-
-  describe('workspace picker (real Radix)', () => {
-    function renderWithWorkspaces(onSwitchWorkspace: (workspaceId: string) => void) {
-      return renderTopBar({ workspaceId: 'w1', workspaces: ['w1', 'w2'], onSwitchWorkspace })
-    }
-
-    it('keyboard: Tab, Enter, ArrowDown traversal (pinned via activeElement), Enter selects and closes', async () => {
-      const onSwitchWorkspace = vi.fn()
-      renderWithWorkspaces(onSwitchWorkspace)
-
-      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-      for (let i = 0; i < 10 && document.activeElement !== switcher; i++) {
-        await userEvent.tab()
-      }
-      expect(switcher).toHaveFocus()
-
-      await userEvent.keyboard('{Enter}')
-      const w1Item = await screen.findByRole('menuitemradio', { name: 'w1' })
-      const w2Item = screen.getByRole('menuitemradio', { name: 'w2' })
-
-      // The search box's autoFocus wins the open-mount focus race against
-      // Radix, so the first ArrowDown is what forwards focus into the
-      // roving-item list at all — pin the transition itself, not only the
-      // eventual selection.
-      await userEvent.keyboard('{ArrowDown}')
-      await expect.poll(() => document.activeElement).toBe(w1Item)
-
-      await userEvent.keyboard('{ArrowDown}')
-      await expect.poll(() => document.activeElement).toBe(w2Item)
-
-      await userEvent.keyboard('{Enter}')
-      await expect.poll(() => onSwitchWorkspace.mock.calls).toEqual([['w2']])
-      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    })
-
-    it('real pointer click on a workspace item fires onSwitchWorkspace and closes the menu', async () => {
-      const onSwitchWorkspace = vi.fn()
-      renderWithWorkspaces(onSwitchWorkspace)
-
-      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-      await userEvent.click(switcher)
-      await screen.findByRole('menuitemradio', { name: 'w1' })
-
-      await page.getByRole('menuitemradio', { name: 'w2' }).click()
-
-      await expect.poll(() => onSwitchWorkspace.mock.calls).toEqual([['w2']])
-      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    })
-
-    it('Escape closes the menu without firing onSwitchWorkspace', async () => {
-      const onSwitchWorkspace = vi.fn()
-      renderWithWorkspaces(onSwitchWorkspace)
-
-      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-      await userEvent.click(switcher)
-      await screen.findByRole('menuitemradio', { name: 'w1' })
-
-      await userEvent.keyboard('{Escape}')
-      await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-      expect(onSwitchWorkspace).not.toHaveBeenCalled()
-    })
-  })
-
-  it('does not leave sibling top-bar controls aria-hidden after the Canvas actions menu closes', async () => {
-    renderTopBar()
-
-    const backButton = screen.getByRole('button', { name: 'Back to documents' })
-    expect(backButton.getAttribute('aria-hidden')).toBeNull()
-
-    await page.getByRole('button', { name: 'Document actions' }).click()
-    await screen.findByRole('menu')
-    await userEvent.keyboard('{Escape}')
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-
-    // Radix's DismissableLayer inerts (aria-hides) the rest of the page while
-    // this menu is open; closing it must fully restore every sibling rather
-    // than leaving some of them permanently aria-hidden.
-    expect(backButton.getAttribute('aria-hidden')).toBeNull()
-    const rightActions = screen.getByTestId('topbar-right-actions-exposed')
-    expect(rightActions.getAttribute('aria-hidden')).toBeNull()
   })
 })

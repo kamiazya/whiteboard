@@ -9,8 +9,8 @@
  * browser's storage actually landed, including the degraded failure state
  * the version dot has no equivalent of.
  */
-import { cn } from '@/lib/utils'
 import type { BrowserLocalPersistenceState } from '../pages/use-browser-local-document-controller.js'
+import { StateDot, type StateDotTone } from './StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js'
 
@@ -24,11 +24,12 @@ const LABEL: Record<Exclude<BrowserLocalPersistenceState['kind'], 'degraded'>, s
   pending: 'Unsaved changes',
 }
 
-const DOT_CLASS: Record<BrowserLocalPersistenceState['kind'], string> = {
-  saved: 'bg-emerald-500',
-  saving: 'bg-amber-500',
-  pending: 'bg-amber-500',
-  degraded: 'bg-amber-500',
+// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
+const DOT_TONE: Record<BrowserLocalPersistenceState['kind'], StateDotTone> = {
+  saved: 'safe',
+  saving: 'attention',
+  pending: 'attention',
+  degraded: 'attention',
 }
 
 const EXPLANATION: Record<BrowserLocalPersistenceState['kind'], string> = {
@@ -51,17 +52,13 @@ export function SaveStatusChip({ state }: SaveStatusChipProps) {
               aria-label={label}
               className="flex shrink-0 items-center justify-center rounded-full p-1.5 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent"
             >
-              <span aria-hidden="true" className="relative inline-flex size-2">
-                {state.kind === 'degraded' && (
-                  // One-shot attention echo, same treatment as the connection
-                  // chip's sync-off: pulses twice on entry, then rests.
-                  <span
-                    data-testid="save-status-chip-pulse"
-                    className="absolute inset-0 rounded-full bg-amber-500 animate-[attention-pulse_900ms_var(--motion-ease-out)_2]"
-                  />
-                )}
-                <span className={cn('absolute inset-0 rounded-full', DOT_CLASS[state.kind])} />
-              </span>
+              <StateDot
+                tone={DOT_TONE[state.kind]}
+                // One-shot attention echo, same treatment as the connection
+                // chip's sync-off: pulses twice on entry, then rests.
+                pulse={state.kind === 'degraded'}
+                pulseTestId="save-status-chip-pulse"
+              />
             </button>
           </PopoverTrigger>
         </TooltipTrigger>

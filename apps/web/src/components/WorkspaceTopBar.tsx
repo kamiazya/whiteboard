@@ -1,26 +1,14 @@
 import { ChevronLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useEffect, useRef, useState } from 'react'
-import { Input } from '@/components/ui/input'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useDirtyState } from '@/hooks/useDirtyState'
-import type { SceneExportFormat } from '@/hooks/useDocumentSync'
 import { getAppLogger } from '@/lib/app-logger'
-import { documentPath } from '../lib/app-routes.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
-import { HeaderSaveDot } from './HeaderSaveDot'
-import { DocumentActionsMenu } from './workspace-top-bar/DocumentActionsMenu'
-import { DocumentDropdown } from './workspace-top-bar/DocumentDropdown'
-import { sanitizeExportFilenameBase } from './workspace-top-bar/export-filename'
+import { HeaderVersionDot } from './HeaderVersionDot'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
-import type { DocumentInfo } from './workspace-top-bar/types'
-import { useCopyDocumentUrl } from './workspace-top-bar/useCopyDocumentUrl'
-import { useCreateDocument } from './workspace-top-bar/useCreateDocument'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
-import { useDocumentRename } from './workspace-top-bar/useDocumentRename'
 import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
-import { useSceneExport } from './workspace-top-bar/useSceneExport'
 
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
 // default), every capability behaves as if it were `true` — this keeps every
@@ -45,29 +33,25 @@ export interface WorkspaceTopBarCapabilities {
 interface Props {
   workspaceId: string
   path: string
-  documents: DocumentInfo[]
   getThumbnailBlob?: () => Promise<Blob | null>
-  // apps/web has no react-router-dom; the page owns navigation and passes it
-  // in as callbacks instead of the original Link/useNavigate. Omitted when
-  // the host page has no "back" destination (e.g. a daemon page with no
-  // canvas-list route) — the button is hidden rather than rendered inert.
+  /**
+   * Leaves the document for the document browser, which is where finding one
+   * happens (user decision 2026-08-22). apps/web has no react-router-dom
+   * here, so the page owns the navigation and passes it in. Omitted only by
+   * hosts with no browser route to return to — the control is hidden rather
+   * than rendered inert.
+   */
   onNavigateBack?: () => void
-  onNavigateToDocument: (path: string) => void
-  // Defaults to 'daemon' so every existing caller keeps fetching /names and
-  // POSTing renames/new-canvas unchanged. 'local' is for hosts with no
-  // daemon data layer (browser-local): the names fetch never fires and
-  // rename/create route through onRenameDocument/onCreateDocument instead.
+  /**
+   * 'local' is for hosts with no daemon data layer (browser-local): the
+   * `/names` fetch never fires and the page's title segment owns naming.
+   * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
+   */
   dataMode?: 'daemon' | 'local'
-  // Required in local mode; ignored in daemon mode. Awaited internally with
-  // an unmount guard — rejections are not swallowed.
-  onRenameDocument?: (name: string) => void | Promise<void>
-  onCreateDocument?: () => void | Promise<void>
-  /** Local mode only for now: creates a markdown-kind canvas and opens it. */
-  onCreateMarkdownCanvas?: () => void | Promise<void>
   // Omitted when the host page has no fullscreen affordance of its own.
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
-  // Gates HeaderSaveDot/Cmd+S/History (versions), HeaderBranchChip (branches),
+  // Gates HeaderVersionDot/Cmd+S/History (versions), HeaderBranchChip (branches),
   // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
   // "all capabilities on", matching every existing caller's behavior.
   capabilities?: WorkspaceTopBarCapabilities
@@ -75,14 +59,6 @@ interface Props {
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
   branchRefreshSignal?: number
-  // Renders the scene through the same export utility Excalidraw's own
-  // (harder-to-discover) hamburger-menu export dialog uses. Omitted (the
-  // default) hides the "Export as PNG/SVG/JSON" menu items entirely rather
-  // than wiring a control to a capability the host page hasn't set up —
-  // there is deliberately no PDF option here because no export path (this
-  // app's or Excalidraw's own) produces one.
-  onExport?: (format: SceneExportFormat) => Promise<Blob | null>
-
   // Right-side slot ahead of the secondary actions — the host page's
   // connection-state chip mounts here so the one
   // status affordance lives in the header instead of a banner row.
@@ -93,47 +69,39 @@ interface Props {
    * canvas identity here instead of stacking a second chrome strip.
    *
    * A FUNCTION rather than a node because the display NAME lives here, not
-   * in the page: this bar already loads `/names` for the canvas dropdown, so
-   * a page that rendered its own identity would either duplicate that fetch
-   * or invent a second source for the same value. Passing the name down is
+   * in the page: this bar already loads `/names`, so a page that rendered its
+   * own identity would either duplicate that fetch or invent a second source
+   * for the same value. Passing the name down is
    * what lets `apps/web`'s two pages agree that a document is named by its
    * workspace (ADR-0009 decision 2) rather than by its content.
    */
   titleSlot?: (identity: DocumentIdentity) => ReactNode
-  // Pass-through to DocumentDropdown's optional Workspaces section — both
-  // omitted (every pre-existing caller) keeps this byte-identical.
-  workspaces?: string[]
-  onSwitchWorkspace?: (workspaceId: string) => void
 }
 
 // Give the canvas visual priority and keep the surrounding chrome lightweight.
 // - Only a 48px top bar; Excalidraw keeps the full width
-// - Left: back to workspace, inline workspace rename, and the canvas switcher
-// - Right: version history, fullscreen, and canvas rename actions. Below
-//   400px these secondary actions collapse into a "More actions" kebab so
-//   the header never wraps.
-// - More complex lists appear on demand through buttons and popovers
+// - Left: back to the document browser, then the page's own title segment.
+//   Naming and every per-document verb belong to that segment (the document
+//   is one object, so it gets one action menu — ADR-0006), not to this bar.
+// - Right: version history and fullscreen. Below 400px these secondary
+//   actions collapse into a "View options" kebab so the header never wraps.
+//
+// This bar answers "which document am I in, and what can I do to it". It
+// deliberately cannot answer "which document do I want" — choosing one is
+// the document browser's job, reached through the back control.
 
 export default function WorkspaceTopBar({
   workspaceId,
   path,
-  documents,
   onToggleFullscreen,
   isFullscreen,
   getThumbnailBlob,
   onNavigateBack,
-  onNavigateToDocument,
   dataMode = 'daemon',
-  onRenameDocument,
-  onCreateDocument,
-  onCreateMarkdownCanvas,
   capabilities,
   branchRefreshSignal,
-  onExport,
   statusSlot,
   titleSlot,
-  workspaces,
-  onSwitchWorkspace,
 }: Props) {
   const isLocalMode = dataMode === 'local'
   const versionsEnabled = capabilities?.versions ?? true
@@ -142,14 +110,11 @@ export default function WorkspaceTopBar({
   const log = getAppLogger('workspace-top-bar')
   const daemonFetch = useDaemonApi()
 
-  const { effectiveNames, renameDocument, togglePin } = useDocumentNames({
+  const { effectiveNames, renameDocument } = useDocumentNames({
     workspaceId,
-    documents,
     isLocalMode,
     daemonFetch,
   })
-
-  const [documentSearch, setDocumentSearch] = useState('')
 
   // Save state: dirty dot + Cmd/Ctrl+S only.
   // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
@@ -170,78 +135,11 @@ export default function WorkspaceTopBar({
   const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
-  // Guards async callbacks (onRenameDocument/onCreateDocument/clipboard writes)
-  // against setState-after-unmount when a canvas switch/delete resolves
-  // mid-flight. Shared by useDocumentRename, useCreateDocument, and
-  // useCopyDocumentUrl below.
-  const mountedRef = useRef(true)
-  useEffect(() => {
-    // Re-arm on every setup so React StrictMode's dev-only double-invoke
-    // (setup -> cleanup -> setup) doesn't leave this permanently false
-    // after the first synthetic unmount/remount.
-    mountedRef.current = true
-    return () => {
-      mountedRef.current = false
-    }
-  }, [])
-
   const canvasCustomName = effectiveNames.documents[path]
-  // Prefer the custom name when present; otherwise split the path into prefix and leaf.
-  // Muting the prefix helps show that nearby documents belong to the same group.
-  const slashIndex = path.indexOf('/')
-  const canvasPrefix = !canvasCustomName && slashIndex !== -1 ? path.slice(0, slashIndex) : null
-  const canvasLeaf = !canvasCustomName && slashIndex !== -1 ? path.slice(slashIndex + 1) : null
-  const canvasFlat = canvasCustomName ?? (canvasPrefix === null ? path : null)
-
-  const {
-    renamingDocument,
-    draft,
-    setDraft,
-    renameError,
-    startRename,
-    commitDocumentName,
-    cancelRename,
-  } = useDocumentRename({
-    path,
-    isLocalMode,
-    currentName: canvasCustomName,
-    onRenameDocument,
-    renameDocument,
-    mountedRef,
-  })
-
-  const { newDocumentError, newDocumentBusy, openNewDocument } = useCreateDocument({
-    workspaceId,
-    documents,
-    path,
-    isLocalMode,
-    onCreateDocument,
-    onNavigateToDocument,
-    daemonFetch,
-    mountedRef,
-  })
-
-  // Kept outside copyDocumentUrl so the failure-path fallback can render the
-  // same URL as selectable text without recomputing it.
-  const documentUrl = `${window.location.origin}${documentPath(workspaceId, path)}`
-  const { copyStatus, copyDocumentUrl, resetCopyStatus } = useCopyDocumentUrl(
-    documentUrl,
-    log,
-    mountedRef,
-  )
-
-  // A trailing slash-segment (the canvas leaf) makes the safest download
-  // filename; falling back to the raw path covers the ungrouped case.
-  const exportFilenameBase = sanitizeExportFilenameBase(canvasFlat ?? canvasLeaf ?? path)
-  const { exportError, handleExport } = useSceneExport({
-    onExport,
-    filenameBase: exportFilenameBase,
-    log,
-  })
 
   return (
     <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">
-      {/* Left side: back button, workspace name, and canvas switcher. */}
+      {/* Left side: the way out, then the page's title segment. */}
       <div className="flex min-w-0 flex-1 items-center gap-2">
         {onNavigateBack && (
           <Tooltip>
@@ -257,96 +155,6 @@ export default function WorkspaceTopBar({
             </TooltipTrigger>
             <TooltipContent>Back to documents</TooltipContent>
           </Tooltip>
-        )}
-
-        <DocumentDropdown
-          workspaceId={workspaceId}
-          path={path}
-          documents={documents}
-          effectiveNames={effectiveNames}
-          isLocalMode={isLocalMode}
-          documentSearch={documentSearch}
-          onCanvasSearchChange={setDocumentSearch}
-          onNavigateToDocument={onNavigateToDocument}
-          onTogglePin={togglePin}
-          onOpenNewCanvas={openNewDocument}
-          onCreateMarkdown={
-            onCreateMarkdownCanvas === undefined ? undefined : () => void onCreateMarkdownCanvas()
-          }
-          workspaces={workspaces}
-          onSwitchWorkspace={onSwitchWorkspace}
-        />
-
-        {/* Canvas-specific actions such as rename and copy URL. */}
-        <DocumentActionsMenu
-          documentUrl={documentUrl}
-          copyStatus={copyStatus}
-          onCopyDocumentUrl={() => void copyDocumentUrl()}
-          onResetCopyStatus={resetCopyStatus}
-          onStartRename={startRename}
-          onExport={onExport ? (format) => void handleExport(format) : undefined}
-        />
-
-        {/* Inline canvas rename input. */}
-        {renamingDocument && (
-          <div className="flex min-w-0 flex-col gap-0.5">
-            <Input
-              autoFocus
-              aria-label="Document title"
-              value={draft}
-              onChange={(e) => setDraft(e.target.value)}
-              onBlur={commitDocumentName}
-              // Excalidraw registers document-level keyboard shortcuts (Delete,
-              // Backspace, etc.) that must never fire while the user is typing
-              // a canvas name here.
-              onKeyDown={(e) => {
-                e.stopPropagation()
-                if (e.key === 'Enter') commitDocumentName()
-                else if (e.key === 'Escape') cancelRename()
-              }}
-              onKeyUp={(e) => e.stopPropagation()}
-              placeholder={path}
-              className="h-7 max-w-[220px] text-sm"
-            />
-            {renameError && (
-              <span className="truncate text-xs text-destructive" role="alert">
-                {renameError}
-              </span>
-            )}
-          </div>
-        )}
-
-        {/* Both modes: immediate create has no dialog, so its in-flight and
-            failure states render here beside the switcher. The status line
-            replaces the deleted dialog's disabled "Creating…" button as the
-            flow's announced busy indication (accessibility criterion 5). */}
-        {/* Mounted even while silent: a polite region that arrives already
-            carrying its message is announced inconsistently, so this one is
-            always here and only its text changes.
-            `sr-only` rather than a `hidden` class while idle — display:none
-            would prune it from the accessibility tree, which is the same bug
-            with a stylesheet instead of a conditional. sr-only is absolutely
-            positioned, so an empty region also adds no gap to this flex row. */}
-        <span
-          aria-live="polite"
-          role="status"
-          aria-label="New canvas status"
-          className={newDocumentBusy ? 'text-xs text-muted-foreground' : 'sr-only'}
-        >
-          {newDocumentBusy ? 'Creating canvas…' : ''}
-        </span>
-        {newDocumentError && (
-          <span className="truncate text-xs text-destructive" role="alert">
-            {newDocumentError}
-          </span>
-        )}
-
-        {/* Export is a plain dropdown action with no dialog of its own, so a
-            failed or unavailable export is surfaced here instead. */}
-        {exportError && (
-          <span className="truncate text-xs text-destructive" role="alert">
-            {exportError}
-          </span>
         )}
 
         {titleSlot?.({
@@ -372,7 +180,7 @@ export default function WorkspaceTopBar({
 
         {/* Save-state dot. */}
         {versionsEnabled && (
-          <HeaderSaveDot
+          <HeaderVersionDot
             dirty={isDirty}
             saving={saving}
             onSave={() => void saveVersion('')}
