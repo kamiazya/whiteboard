@@ -4,11 +4,11 @@ import {
   documentPathSchema,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
+import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
 import type { Embedder } from '../search/embedder.js'
 import { rankByVector } from '../search/embedder.js'
-import { fullTextSearch, type SearchableDocument } from '../search/full-text.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
