@@ -306,6 +306,33 @@ describe('layoutSpatialCanvas', () => {
     }
   })
 
+  it('visual.text overrides the placement a node would otherwise choose, both ways', () => {
+    // A plain RECT asked to centre: the default would top-align it.
+    const centredRect = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      'x-whiteboard': { facets: { 'visual.text/v0': { align: 'center' as const } } },
+    }
+    const rectScene = layoutSpatialCanvas(canvas([centredRect]), baseOptions())
+    const rectBlock = rectScene.nodes.find((n) => n.kind === 'paragraph')
+    const rectCentre = (rectBlock?.bbox.y ?? 0) + (rectBlock?.bbox.h ?? 0) / 2
+    expect(Math.abs(rectCentre - 50)).toBeLessThan(6)
+
+    // A SHAPED node asked to start: the default would centre it.
+    const toppedShape = {
+      ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      'x-whiteboard': {
+        facets: {
+          'visual.shape/v0': { kind: 'ellipse' as const },
+          'visual.text/v0': { align: 'start' as const },
+        },
+      },
+    }
+    const shapeScene = layoutSpatialCanvas(canvas([toppedShape]), baseOptions())
+    const shapeBlock = shapeScene.nodes.find((n) => n.kind === 'paragraph')
+    // The inscribed box's top plus padding — well above the node's middle.
+    expect(shapeBlock?.bbox.y ?? 0).toBeLessThan(40)
+  })
+
   it('an explicit nodeOutlines option overrides the facet for that node', () => {
     const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
     const shaped = {
