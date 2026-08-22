@@ -207,6 +207,25 @@ export function getWorkspaceNames(
   )
 }
 
+export function setDocumentPinned(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  path: string,
+  pinned: boolean,
+): Promise<WorkspaceNames> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'pin')}`,
+    workspaceNamesSchema,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned }),
+    },
+  )
+}
+
 export function setDocumentDisplayName(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,

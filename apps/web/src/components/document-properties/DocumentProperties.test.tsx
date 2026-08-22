@@ -192,6 +192,57 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     expect(current).toBe('Release plan')
   })
 
+  // Escape can arrive in the SAME tick as the keystroke before it — a paste
+  // followed by Escape, or any driver that dispatches both without yielding.
+  // React batches across them, so the draft state the handler would read is
+  // still the previous render's. Reading it there decides "nothing changed"
+  // and leaves the abandoned name standing, which is the failure mode this
+  // pins: no await between the change and the Escape.
+  it('restores the previous name even when Escape lands in the same tick as the edit', () => {
+    let current = 'Release plan'
+    const onTitleChange = vi.fn((next: string) => {
+      current = next
+    })
+    const view = () => (
+      <DocumentProperties
+        {...titleProps({ title: current, onTitleChange })}
+        facets={meta()}
+        onFacetsChange={vi.fn()}
+      />
+    )
+    render(view())
+
+    const box = screen.getByRole('textbox', { name: /title/i })
+    fireEvent.focus(box)
+    // No rerender between the two: the component never sees the draft state
+    // land before the Escape handler runs.
+    fireEvent.change(box, { target: { value: 'Release pl' } })
+    fireEvent.keyDown(box, { key: 'Escape' })
+
+    expect(current).toBe('Release plan')
+  })
+
+  // The spatial editor guards its own bindings with isTextEntryEvent, but a
+  // Delete typed into the title must not reach a canvas selection by any
+  // route — this field is always mounted, right beside the canvas.
+  it('keeps its keystrokes from bubbling out to editor-level listeners', () => {
+    const onAncestorKeyDown = vi.fn()
+    render(
+      // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the page chrome that wraps this row
+      <div onKeyDown={onAncestorKeyDown}>
+        <DocumentProperties
+          {...titleProps({ title: 'Release plan', onTitleChange: vi.fn() })}
+          facets={meta()}
+          onFacetsChange={vi.fn()}
+        />
+      </div>,
+    )
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /title/i }), { key: 'Delete' })
+
+    expect(onAncestorKeyDown).not.toHaveBeenCalled()
+  })
+
   it('drops the draft on blur so the box shows the canonical name', () => {
     const onTitleChange = vi.fn()
     render(

@@ -1,7 +1,7 @@
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
-import { useId, useState } from 'react'
+import { useId, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface DocumentPropertiesProps {
@@ -86,6 +86,11 @@ export function DocumentProperties({
   // it: the next character lands flush against the previous word, and
   // "Release plan" typed one key at a time arrives as "Releaseplan".
   const [draftTitle, setDraftTitle] = useState<string | null>(null)
+  // The name this field held when the current edit began. Every keystroke is
+  // already committed (there is no Save button), so Escape has nothing to
+  // discard — it has to put the previous name BACK. Without it, "type, change
+  // your mind, Escape" silently keeps the half-typed name.
+  const editBaselineRef = useRef(title)
   const suggestionsId = useId()
 
   return (
@@ -110,6 +115,29 @@ export function DocumentProperties({
             onTitleChange(event.target.value)
           }}
           readOnly={onTitleChange === undefined}
+          onFocus={() => {
+            editBaselineRef.current = title
+          }}
+          // stopPropagation is belt-and-braces: the editor binds its shortcuts
+          // on its own root and guards them with isTextEntryEvent, but a stray
+          // Delete reaching a canvas selection from the title box is the kind
+          // of defect nobody reports as a keyboard bug. Window-capture
+          // bindings (Cmd+S) are unaffected by it.
+          onKeyDown={(event) => {
+            event.stopPropagation()
+            if (event.key !== 'Escape' || onTitleChange === undefined) return
+            event.preventDefault()
+            setDraftTitle(null)
+            // Compared against what the BOX holds, never against `title`: the
+            // commit is async, so `title` can still be the old name here and a
+            // comparison to it would decide "nothing changed" while a rename
+            // to the typed value is already in flight.
+            if ((draftTitle ?? title) !== editBaselineRef.current) {
+              onTitleChange(editBaselineRef.current)
+            }
+            event.currentTarget.blur()
+          }}
+          onKeyUp={(event) => event.stopPropagation()}
           // Dropping the draft is the whole tidy-up: the box falls back to the
           // canonical name, which is already trimmed.
           onBlur={() => setDraftTitle(null)}

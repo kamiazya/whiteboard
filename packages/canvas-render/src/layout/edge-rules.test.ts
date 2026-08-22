@@ -315,6 +315,75 @@ describe('overlap-and-intrusion', () => {
     const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
     expect(selfPenalty(path, [rect])).toEqual(zeroPenalty())
   })
+
+  // The four cases below pin the branches the term takes BEFORE it measures
+  // anything: which axis a segment runs along, and whether it runs along one
+  // at all. The scoreboard prices them in aggregate, which says a rewrite
+  // changed nothing overall but not which case a future one breaks.
+  it('self term: a VERTICAL segment through a foreign rect interior is scored like the horizontal one', () => {
+    const path = [
+      { x: 50, y: -10 },
+      { x: 50, y: 110 },
+    ]
+    const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    expect(selfPenalty(path, [rect])).toEqual(costAt('overlap-and-intrusion', 100 * COST_QUANTUM))
+  })
+
+  it('self term: a vertical segment on the rect LEFT border grazes, exactly as a horizontal one does on the top', () => {
+    const path = [
+      { x: 0, y: -10 },
+      { x: 0, y: 110 },
+    ]
+    const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    expect(selfPenalty(path, [rect])).toEqual(zeroPenalty())
+  })
+
+  it('self term: a diagonal segment tunnels through nothing — only an axis-aligned one can', () => {
+    // The start x sits STRICTLY inside the rect on purpose. A diagonal
+    // starting outside it scores zero either way — the vertical branch would
+    // reject it on the same coordinate test — so such a case cannot tell
+    // whether the skip is there at all (mutation-checked: it is not). This
+    // one would be charged 90px of intrusion without it.
+    const path = [
+      { x: 10, y: -10 },
+      { x: 110, y: 90 },
+    ]
+    const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    expect(selfPenalty(path, [rect])).toEqual(zeroPenalty())
+  })
+
+  it('self term: a zero-length segment inside a rect contributes nothing', () => {
+    // Both axes read as equal, so the segment answers to neither branch —
+    // and an intrusion of zero length is what it actually is.
+    const path = [
+      { x: 50, y: 50 },
+      { x: 50, y: 50 },
+    ]
+    const rect: Rect = { x: 0, y: 0, w: 100, h: 100 }
+    expect(selfPenalty(path, [rect])).toEqual(zeroPenalty())
+  })
+
+  it('self term: a vertical retrace is charged its quantized length, mirroring the horizontal case', () => {
+    const path = [
+      { x: 0, y: 0 },
+      { x: 0, y: 20 },
+      { x: 0, y: 5 },
+    ]
+    expect(selfPenalty(path, [])).toEqual([15 * COST_QUANTUM, 0, 0, 0, 0, 1, 1])
+  })
+
+  it('self term: a retrace shorter than one quantum is not ink, though the turn is still a bend', () => {
+    // 0.4 of a quantum out and back: the overlap rounds to nothing, while
+    // realized-bends counts the direction change off the raw geometry. The
+    // two tiers reading the same path at different resolutions is the point
+    // — quantization is the ink terms' own rule, not the path's.
+    const path = [
+      { x: 0, y: 0 },
+      { x: 0.1, y: 0 },
+      { x: 0, y: 0 },
+    ]
+    expect(selfPenalty(path, [])).toEqual(costAt('realized-bends', 1))
+  })
 })
 
 describe('illegibility', () => {

@@ -51,45 +51,6 @@ type Axis = 0 | 1
 const enteredHorizontally = (axis: Axis) => axis === 0
 
 /**
- * True when the open segment `a`-`b` passes through the strict interior of
- * `rect`. Touching a border is allowed: obstacles are already offset outward
- * by the caller's clearance, so a route riding that offset line is at the
- * intended distance, not grazing the node.
- */
-function segmentEntersRect(a: Point, b: Point, rect: Rect): boolean {
-  const right = rect.x + rect.w
-  const bottom = rect.y + rect.h
-  if (a.y === b.y) {
-    if (!(a.y > rect.y && a.y < bottom)) return false
-    return Math.min(a.x, b.x) < right && Math.max(a.x, b.x) > rect.x
-  }
-  if (!(a.x > rect.x && a.x < right)) return false
-  return Math.min(a.y, b.y) < bottom && Math.max(a.y, b.y) > rect.y
-}
-
-/**
- * Length of `a`-`b` lying ON one of `rect`'s borders. Charged rather than
- * forbidden: the anchors themselves sit on a border, so the first and last
- * step of every route trace one by construction and a hard rule would make
- * the target unreachable.
- */
-function borderOverlap(a: Point, b: Point, rect: Rect): number {
-  const right = rect.x + rect.w
-  const bottom = rect.y + rect.h
-  if (a.y === b.y && (a.y === rect.y || a.y === bottom)) {
-    const lo = Math.max(Math.min(a.x, b.x), rect.x)
-    const hi = Math.min(Math.max(a.x, b.x), right)
-    return hi > lo ? hi - lo : 0
-  }
-  if (a.x === b.x && (a.x === rect.x || a.x === right)) {
-    const lo = Math.max(Math.min(a.y, b.y), rect.y)
-    const hi = Math.min(Math.max(a.y, b.y), bottom)
-    return hi > lo ? hi - lo : 0
-  }
-  return 0
-}
-
-/**
  * The cheapest rectilinear path from `start` to `end` whose interior avoids
  * every rect in `obstacles`, or undefined when there is none (or the grid is
  * too large to search). The returned path always begins at `start` and ends
@@ -148,13 +109,30 @@ export function routeOnGrid(
   const ej = ys.indexOf(end.y)
   if (si < 0 || sj < 0 || ei < 0 || ej < 0) return undefined
 
+  // A* rather than Dijkstra: the priority is `g + h` with `h` the Manhattan
+  // distance to the goal. That is ADMISSIBLE (a step's cost is its own
+  // Manhattan length plus a non-negative bend charge, so no remaining route
+  // is ever cheaper than the straight-line remainder) and CONSISTENT (the
+  // same inequality applies edge by edge), which is what makes the first pop
+  // of the goal optimal — the guarantee plain Dijkstra was relying on, kept.
+  // Worth doing because this search is the expensive part of routing and it
+  // was expanding the grid blind: measured 161k pops per layout on a
+  // 345-edge clustered canvas, 331 per call over grids averaging 422 cells.
+  const goalX = xs[ei] as number
+  const goalY = ys[ej] as number
+  const heuristic = (i: number, j: number) =>
+    Math.abs((xs[i] as number) - goalX) + Math.abs((ys[j] as number) - goalY)
+
   const width = xs.length
   // Two states per cell — arrived horizontally or vertically — so a turn can
   // be charged. Collapsing them would make the first arrival win regardless
   // of how many corners it took to get there.
   const stateOf = (i: number, j: number, axis: Axis) => (j * width + i) * 2 + axis
-  const best = new Map<number, number>()
-  const cameFrom = new Map<number, number>()
+  // Dense arrays rather than Maps: the state space is bounded by
+  // MAX_GRID_CELLS and every pop reads and writes both.
+  const stateCount = width * ys.length * 2
+  const best = new Float64Array(stateCount).fill(Number.POSITIVE_INFINITY)
+  const cameFrom = new Int32Array(stateCount).fill(-1)
   // A small binary heap: the grid is bounded but still large enough that a
   // linear scan per pop dominates the search.
   const heap: { cost: number; state: number }[] = []
@@ -201,8 +179,8 @@ export function routeOnGrid(
   }
 
   for (const axis of [0, 1] as const) {
-    best.set(stateOf(si, sj, axis), 0)
-    push(0, stateOf(si, sj, axis))
+    best[stateOf(si, sj, axis)] = 0
+    push(heuristic(si, sj), stateOf(si, sj, axis))
   }
 
   const steps: readonly (readonly [number, number, Axis])[] = [
@@ -212,14 +190,44 @@ export function routeOnGrid(
     [0, -1, 1],
   ]
 
+  // Obstacles bucketed by the grid line a step travels along. Every step is
+  // axis-aligned, so a horizontal one at `ys[j]` can only be BLOCKED by a
+  // rect whose interior strictly spans that y — touching a border is
+  // allowed, since obstacles are already offset outward by the caller's
+  // clearance and a route riding that offset line is at the intended
+  // distance — and can only TRACE the border of one whose top or bottom IS
+  // that y. Bucketing costs lines * obstacles once; scanning every obstacle
+  // per neighbour cost pops * 4 * obstacles, and a search that finds nothing
+  // still expands every reachable cell — which two thirds of them do.
+  const bucket = (
+    values: readonly number[],
+    lo: (r: Rect) => number,
+    size: (r: Rect) => number,
+  ) => ({
+    blockers: values.map((v) => near.filter((r) => v > lo(r) && v < lo(r) + size(r))),
+    borders: values.map((v) => near.filter((r) => v === lo(r) || v === lo(r) + size(r))),
+  })
+  const rows = bucket(
+    ys,
+    (r) => r.y,
+    (r) => r.h,
+  )
+  const cols = bucket(
+    xs,
+    (r) => r.x,
+    (r) => r.w,
+  )
+
   let goal: number | undefined
   while (heap.length > 0) {
     const { cost, state } = pop()
-    if ((best.get(state) ?? Number.POSITIVE_INFINITY) < cost) continue
     const axis = (state % 2) as Axis
     const cell = (state - axis) / 2
     const i = cell % width
     const j = (cell - i) / width
+    // `best` holds g while the heap is ordered by f, so the stale test adds
+    // the same `h` back rather than comparing the two spaces directly.
+    if ((best[state] as number) + heuristic(i, j) < cost) continue
     if (i === ei && j === ej) {
       goal = state
       break
@@ -228,27 +236,51 @@ export function routeOnGrid(
       const ni = i + di
       const nj = j + dj
       if (ni < 0 || nj < 0 || ni >= xs.length || nj >= ys.length) continue
-      const a = { x: xs[i] as number, y: ys[j] as number }
-      const b = { x: xs[ni] as number, y: ys[nj] as number }
-      if (near.some((rect) => segmentEntersRect(a, b, rect))) continue
+      const horizontal = dj === 0
+      const line = horizontal ? rows : cols
+      const index = horizontal ? j : i
+      const from = (horizontal ? xs[i] : ys[j]) as number
+      const to = (horizontal ? xs[ni] : ys[nj]) as number
+      const lo = Math.min(from, to)
+      const hi = Math.max(from, to)
+      const near0 = horizontal ? (r: Rect) => r.x : (r: Rect) => r.y
+      const size0 = horizontal ? (r: Rect) => r.w : (r: Rect) => r.h
+      if (
+        (line.blockers[index] as readonly Rect[]).some(
+          (rect) => lo < near0(rect) + size0(rect) && hi > near0(rect),
+        )
+      ) {
+        continue
+      }
       const turn = enteredHorizontally(axis) === enteredHorizontally(nextAxis) ? 0 : BEND_COST_PX
-      // A traced border costs its own length again: a line hidden on top of
-      // a box's edge is the defect this router would otherwise reintroduce
-      // while avoiding the one it exists to fix. Doubling makes going around
-      // clearly cheaper without making a border-hugging step impossible.
-      const traced = near.reduce((sum, rect) => sum + borderOverlap(a, b, rect), 0)
-      const next = cost + Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + turn + traced
+      // Tracing a border is CHARGED, not forbidden: the anchors themselves
+      // sit on one, so the first and last step of every route traces a
+      // border by construction and a hard rule would make the target
+      // unreachable. The charge is the traced length again — a line hidden
+      // on a box's edge is the defect this router would otherwise
+      // reintroduce while avoiding the one it exists to fix — which makes
+      // going around clearly cheaper without making the step impossible.
+      let traced = 0
+      for (const rect of line.borders[index] as readonly Rect[]) {
+        const overlapLo = Math.max(lo, near0(rect))
+        const overlapHi = Math.min(hi, near0(rect) + size0(rect))
+        if (overlapHi > overlapLo) traced += overlapHi - overlapLo
+      }
+      // `cost` is the popped f, so the successor's g accumulates from
+      // `best[state]` — adding to f instead would charge the heuristic once
+      // per step and stop being a shortest-path search at all.
+      const next = (best[state] as number) + (hi - lo) + turn + traced
       const nextState = stateOf(ni, nj, nextAxis)
-      if (next >= (best.get(nextState) ?? Number.POSITIVE_INFINITY)) continue
-      best.set(nextState, next)
-      cameFrom.set(nextState, state)
-      push(next, nextState)
+      if (next >= (best[nextState] as number)) continue
+      best[nextState] = next
+      cameFrom[nextState] = state
+      push(next + heuristic(ni, nj), nextState)
     }
   }
   if (goal === undefined) return undefined
 
   const reversed: Point[] = []
-  for (let state: number | undefined = goal; state !== undefined; state = cameFrom.get(state)) {
+  for (let state = goal; state >= 0; state = cameFrom[state] as number) {
     const axis = state % 2
     const cell = (state - axis) / 2
     const i = cell % width
