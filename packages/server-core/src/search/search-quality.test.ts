@@ -26,11 +26,23 @@ import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
+import { ndcgAt, recallAt } from './eval.js'
 import { tokenize } from './full-text.js'
 import { CORPUS_DOCUMENTS, JUDGED_QUERIES, type QueryCategory } from './search-corpus.js'
 
 const WS = 'quality'
-const K = 5
+/**
+ * The reporting cutoff, 10 to match what retrieval benchmarks report — BEIR
+ * and the Japanese ones (JMTEB, JQaRA) all publish nDCG@10, so a number
+ * here means what a number there means.
+ *
+ * It is NOT yet meaningful at that standard, and the measurement script
+ * says so out loud: a cut of 10 over a six-document corpus admits the whole
+ * corpus, so recall@10 is free and only the rank-weighting in nDCG
+ * discriminates at all. Fixed at 10 now so that growing the corpus makes
+ * the number comparable rather than requiring the pins to move twice.
+ */
+const K = 10
 
 type Deps = {
   documentStore: ReturnType<typeof createInMemoryDocumentStore>
@@ -100,8 +112,9 @@ describe('search corpus', () => {
   it('is non-degenerate: every judged document exists and no query is answerable by its own title alone', async () => {
     const paths = new Set(CORPUS_DOCUMENTS.map((d) => d.path))
     for (const judged of JUDGED_QUERIES) {
-      expect(judged.relevant.length, judged.query).toBeGreaterThan(0)
-      for (const path of judged.relevant) expect(paths, judged.query).toContain(path)
+      const judgedPaths = Object.keys(judged.relevant)
+      expect(judgedPaths.length, judged.query).toBeGreaterThan(0)
+      for (const path of judgedPaths) expect(paths, judged.query).toContain(path)
       // A query that is literally a document's name would measure nothing —
       // the name is part of the indexed text, so it would always hit.
       for (const doc of CORPUS_DOCUMENTS) {
@@ -121,7 +134,7 @@ describe('search corpus', () => {
       // three more bigrams with the document it was judged against.
       if (judged.category !== 'lexical' && judged.category !== 'bigram') {
         const queryTokens = new Set(tokenize(judged.query))
-        for (const path of judged.relevant) {
+        for (const path of Object.keys(judged.relevant)) {
           const doc = CORPUS_DOCUMENTS.find((d) => d.path === path)
           const indexed = [
             doc?.path ?? '',
@@ -141,42 +154,41 @@ describe('search corpus', () => {
 
 describe('stage-0 lexical retrieval quality', () => {
   it('scores the judged corpus exactly as pinned', async () => {
-    const perCategory = new Map<QueryCategory, { hits: number; total: number; rrSum: number }>()
+    const perCategory = new Map<QueryCategory, { ndcg: number[]; recall: number[] }>()
     const misses: string[] = []
 
     for (const judged of JUDGED_QUERIES) {
       const ranked = await rankedPaths(judged.query)
-      const bucket = perCategory.get(judged.category) ?? { hits: 0, total: 0, rrSum: 0 }
-      bucket.total++
-      const firstHit = ranked.findIndex((path) => judged.relevant.includes(path))
-      if (firstHit === -1) {
+      const bucket = perCategory.get(judged.category) ?? { ndcg: [], recall: [] }
+      bucket.ndcg.push(ndcgAt(ranked, judged.relevant, K))
+      bucket.recall.push(recallAt(ranked, judged.relevant, K))
+      if (recallAt(ranked, judged.relevant, K) === 0) {
         misses.push(`${judged.category}: ${judged.query}`)
-      } else {
-        bucket.hits++
-        bucket.rrSum += 1 / (firstHit + 1)
       }
       perCategory.set(judged.category, bucket)
     }
 
+    const round = (values: number[]) =>
+      Number((values.reduce((a, b) => a + b, 0) / values.length).toFixed(2))
     const summary = Object.fromEntries(
       [...perCategory.entries()].map(([category, b]) => [
         category,
-        { hitAtK: b.hits, of: b.total, mrr: Number((b.rrSum / b.total).toFixed(2)) },
+        { ndcg: round(b.ndcg), recall: round(b.recall), of: b.ndcg.length },
       ]),
     )
 
     // Pinned exactly. `lexical`/`bigram` at full recall is the contract;
     // `paraphrase`/`cross-lingual` is the debt stage 2 would move.
     expect(summary).toEqual({
-      lexical: { hitAtK: 3, of: 3, mrr: 1 },
-      bigram: { hitAtK: 3, of: 3, mrr: 1 },
+      lexical: { ndcg: 1, recall: 1, of: 3 },
+      bigram: { ndcg: 1, recall: 1, of: 3 },
       // The debt, and it is TOTAL: with the corpus honest (no query
       // sharing a token with its judged document), lexical retrieval
       // answers none of it. That is the shape to expect — no tokenisation
       // scheme crosses a synonym or a script boundary — and the earlier
       // non-zero readings were both the corpus leaking, not capability.
-      paraphrase: { hitAtK: 0, of: 3, mrr: 0 },
-      'cross-lingual': { hitAtK: 0, of: 3, mrr: 0 },
+      paraphrase: { ndcg: 0, recall: 0, of: 3 },
+      'cross-lingual': { ndcg: 0, recall: 0, of: 3 },
     })
     // Named, not just counted: a later reader can see WHICH questions go
     // unanswered without re-deriving them.

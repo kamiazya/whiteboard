@@ -110,6 +110,71 @@ model load, ~1.1s for all 12 queries once warm (documents embed once and
 are cached under the same frontier stamp as their content facts, so an
 unchanged document is never re-embedded).
 
+### 3c. What the instrument reports, and why each part is there (2026-08-23)
+
+3b's table was a set of point estimates with no way to tell a real
+improvement from which twelve questions happened to be asked. The metrics
+and statistics now follow standard IR practice rather than being invented
+here, because a scoreboard's whole value is being comparable to something.
+Each choice, with the reason it beat the alternative:
+
+- **nDCG@10 is primary.** BEIR chose it for reasons that apply directly
+  here: precision and recall are rank-unaware, and MRR and MAP cannot
+  express GRADED relevance. The Japanese benchmarks report the same metric
+  (JMTEB, JQaRA at nDCG@10; JaCWIR at MAP@10), so a number produced here
+  means what a number produced there means. Recall@k and MRR are reported
+  BESIDE it, never instead — each is easier to reason about and wrong to
+  optimise alone.
+- **Judgements are graded (1–3), not binary.** Every judgement in today's
+  corpus is a 3, so nDCG currently reduces to a binary measure; the scale
+  exists so the corpus can grow into queries with several partial answers
+  without a second migration, and because a metric that CAN read grades
+  reports a flat corpus honestly where one that cannot hides the flatness.
+- **The difference is tested, not asserted.** A paired sign-flip
+  randomization test over per-query differences, chosen on evidence:
+  comparing significance tests for IR finds randomization, bootstrap and
+  the paired t-test practically indistinguishable, while the Wilcoxon
+  signed-rank and sign tests both detect poorly AND report significance
+  that is not there. Randomization additionally assumes nothing about the
+  distribution of a bounded, skewed, tie-heavy metric like nDCG.
+- **A bootstrap confidence interval accompanies every delta.** Queries are
+  the sample and retrieval is deterministic, so queries are the only thing
+  to resample. The interval answers what a single mean cannot: how much of
+  this number is the system and how much is the question set.
+- **A random floor accompanies every score.** Without it a number is
+  unreadable — and it is what exposed the earlier reading. See below.
+- **The permutation FLOOR is printed next to the p-value.** They are easy
+  to confuse and the confusion always flatters.
+- **Required sample sizes are computed for differences declared in
+  ADVANCE.** Feeding it the difference just observed is post-hoc power,
+  which is not a second opinion on a result — it is a restatement of the
+  p-value, and it always concludes the sample was about big enough.
+
+#### What it says about the stage-2 result
+
+The direction survives: nDCG@10 0.500 → 0.860, delta +0.360, 95% CI
+[+0.141, +0.588]. The debt queries move from not-returned-at-all to rank
+1–2, five of six.
+
+Three things the earlier table could not say, and all three are cautions:
+
+1. **`p = 0.0325` sits on a floor of `0.0313`.** Only six queries differ
+   between the two systems, so `2^(1-6)` is the smallest p the test could
+   produce. This is not a comfortable pass — it is the ONLY pass the sample
+   could produce, and one query changing its mind erases it.
+2. **`recall@10` is meaningless on this corpus.** A cut of 10 over six
+   documents admits everything, so the random floor for recall@10 is
+   exactly 1.000 — the same score stage 2 earns. The script prints a
+   warning whenever k is at least the corpus size.
+3. **Detecting a tuning-sized change would need roughly 130 queries, not
+   12** (nDCG delta of 0.10, α .05, power .80, at the observed per-query
+   spread). So this corpus can detect "unfindable → found" and nothing
+   finer. It cannot referee a fusion-weight change, a different model, or
+   a rescoring tweak, and must not be used to.
+
+That is the instrument working. A scoreboard that cannot state its own
+resolution is one that will eventually be quoted past it.
+
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
