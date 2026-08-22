@@ -1,6 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
-import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
+import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
   addCost,
   bendCount,
@@ -539,18 +539,71 @@ type ConfigCost = readonly number[]
  * the declared tiers.
  */
 function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
+  const qa = quantizedSegments(a)
+  const qb = quantizedSegments(b)
   let overlap = 0
   let illegible = 0
   let crossings = 0
-  for (let ai = 1; ai < a.length; ai++) {
-    for (let bi = 1; bi < b.length; bi++) {
-      const [o, il, c] = scoreSegmentPair(a[ai - 1]!, a[ai]!, b[bi - 1]!, b[bi]!)
+  for (let ai = 0; ai < qa.length; ai += 8) {
+    for (let bi = 0; bi < qb.length; bi += 8) {
+      // Segment-level broad phase, the same inflated-bbox test the sweep
+      // applies (edge-crossing-sweep.ts): a pair whose boxes miss by more
+      // than a quantum cannot overlap, cross, or sit illegibly close.
+      if (
+        qa[ai + 4]! > qb[bi + 6]! ||
+        qb[bi + 4]! > qa[ai + 6]! ||
+        qa[ai + 5]! > qb[bi + 7]! ||
+        qb[bi + 5]! > qa[ai + 7]!
+      ) {
+        continue
+      }
+      const [o, il, c] = scoreQuantizedSegmentPair(
+        qa[ai]!,
+        qa[ai + 1]!,
+        qa[ai + 2]!,
+        qa[ai + 3]!,
+        qb[bi]!,
+        qb[bi + 1]!,
+        qb[bi + 2]!,
+        qb[bi + 3]!,
+      )
       overlap += o
       illegible += il
       crossings += c
     }
   }
   return pairPenalty([overlap, illegible, crossings])
+}
+
+/**
+ * A path's segments in COST_QUANTUM units, eight ints each: x1 y1 x2 y2,
+ * then the bbox (minX minY maxX maxY) inflated by one quantum for the
+ * broad phase. Keyed by path identity: the search routes through a cache,
+ * so the same path object is scored against hundreds of others and paid
+ * for its quantization once.
+ */
+const quantizedCache = new WeakMap<readonly Point[], Int32Array>()
+function quantizedSegments(path: readonly Point[]): Int32Array {
+  const hit = quantizedCache.get(path)
+  if (hit !== undefined) return hit
+  const out = new Int32Array(Math.max(0, path.length - 1) * 8)
+  for (let i = 1; i < path.length; i++) {
+    const x1 = Math.round(path[i - 1]!.x * COST_QUANTUM)
+    const y1 = Math.round(path[i - 1]!.y * COST_QUANTUM)
+    const x2 = Math.round(path[i]!.x * COST_QUANTUM)
+    const y2 = Math.round(path[i]!.y * COST_QUANTUM)
+    const o = (i - 1) * 8
+    out[o] = x1
+    out[o + 1] = y1
+    out[o + 2] = x2
+    out[o + 3] = y2
+    out[o + 4] = Math.min(x1, x2) - 1
+    out[o + 5] = Math.min(y1, y2) - 1
+    out[o + 6] = Math.max(x1, x2) + 1
+    out[o + 7] = Math.max(y1, y2) + 1
+  }
+  quantizedCache.set(path, out)
+  return out
 }
 
 /**
