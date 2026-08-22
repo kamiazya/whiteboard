@@ -838,7 +838,7 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('clears HeaderSaveDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
+    it('clears HeaderVersionDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
@@ -888,7 +888,7 @@ describe('DaemonDocumentPage', () => {
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       // Dirty the doc via a remote update, exactly like the "drives
-      // HeaderSaveDot dirty/clean" test does, so this test isolates the
+      // HeaderVersionDot dirty/clean" test does, so this test isolates the
       // manual-save clean path from the remote version_created broadcast path.
       const backend = createdBackends[0]!
       const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
@@ -909,7 +909,7 @@ describe('DaemonDocumentPage', () => {
         backend.handlers?.onRemoteUpdate?.(update)
       })
 
-      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('header-version-dot')).toBeTruthy())
 
       toggleHistoryPanel()
       const saveButton = await screen.findByRole('button', { name: 'Save version' })
@@ -918,7 +918,7 @@ describe('DaemonDocumentPage', () => {
       })
 
       await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
-      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
+      await waitFor(() => expect(screen.queryByTestId('header-version-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })
@@ -1830,7 +1830,7 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('drives HeaderSaveDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
+    it('drives HeaderVersionDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
           const url = String(input)
@@ -1861,7 +1861,7 @@ describe('DaemonDocumentPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      expect(screen.queryByTestId('header-save-dot')).toBeNull()
+      expect(screen.queryByTestId('header-version-dot')).toBeNull()
 
       const backend = createdBackends[0]!
       const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
@@ -1882,7 +1882,7 @@ describe('DaemonDocumentPage', () => {
         backend.handlers?.onRemoteUpdate?.(update)
       })
 
-      await waitFor(() => expect(screen.getByTestId('header-save-dot')).toBeTruthy())
+      await waitFor(() => expect(screen.getByTestId('header-version-dot')).toBeTruthy())
 
       await act(async () => {
         backend.handlers?.onVersionCreated?.({
@@ -1896,7 +1896,7 @@ describe('DaemonDocumentPage', () => {
         })
       })
 
-      await waitFor(() => expect(screen.queryByTestId('header-save-dot')).toBeNull())
+      await waitFor(() => expect(screen.queryByTestId('header-version-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })

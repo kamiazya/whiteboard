@@ -5,7 +5,7 @@ import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import { getAppLogger } from '@/lib/app-logger'
 import { HeaderBranchChip } from './HeaderBranchChip'
-import { HeaderSaveDot } from './HeaderSaveDot'
+import { HeaderVersionDot } from './HeaderVersionDot'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
 import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
@@ -51,7 +51,7 @@ interface Props {
   // Omitted when the host page has no fullscreen affordance of its own.
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
-  // Gates HeaderSaveDot/Cmd+S/History (versions), HeaderBranchChip (branches),
+  // Gates HeaderVersionDot/Cmd+S/History (versions), HeaderBranchChip (branches),
   // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
   // "all capabilities on", matching every existing caller's behavior.
   capabilities?: WorkspaceTopBarCapabilities
@@ -180,7 +180,7 @@ export default function WorkspaceTopBar({
 
         {/* Save-state dot. */}
         {versionsEnabled && (
-          <HeaderSaveDot
+          <HeaderVersionDot
             dirty={isDirty}
             saving={saving}
             onSave={() => void saveVersion('')}

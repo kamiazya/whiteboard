@@ -156,7 +156,7 @@ describe('WorkspaceTopBar browser mode', () => {
     window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
   })
 
-  it('dispatches wb_version_saved on a conforming save, clearing HeaderSaveDot', async () => {
+  it('dispatches wb_version_saved on a conforming save, clearing HeaderVersionDot', async () => {
     // Override the beforeEach stub so POST /versions returns a valid saveVersionResponseSchema body.
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input, init) => {
       const url =
@@ -180,7 +180,7 @@ describe('WorkspaceTopBar browser mode', () => {
     renderTopBar()
 
     // Mark the doc dirty first (as useWhiteboardSync would on a real edit) so
-    // HeaderSaveDot's dot is visible before the save clears it.
+    // HeaderVersionDot's dot is visible before the save clears it.
     window.dispatchEvent(
       new CustomEvent('excalidraw:doc_changed', {
         detail: { workspaceId: 'sess_1', path: 'design/login-flow' },

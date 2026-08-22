@@ -8,7 +8,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 vi.mock('./HeaderBranchChip', () => ({
   HeaderBranchChip: () => <div data-testid="header-branch-chip" />,
 }))
-vi.mock('./HeaderSaveDot', () => ({ HeaderSaveDot: () => null }))
+vi.mock('./HeaderVersionDot', () => ({ HeaderVersionDot: () => null }))
 vi.mock('./VersionTimeline', () => ({ default: () => null }))
 vi.mock('@/hooks/useDirtyState', () => ({ useDirtyState: () => ({ isDirty: false }) }))
 vi.mock('@kamiazya/whiteboard-mcp/api-client', () => ({ apiFetch: vi.fn() }))
@@ -333,7 +333,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Fullscreen')).toBeNull()
   })
 
-  it('hides HeaderSaveDot when capabilities.versions is false', () => {
+  it('hides HeaderVersionDot when capabilities.versions is false', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
@@ -344,7 +344,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       />,
       { container: document.body },
     )
-    expect(screen.queryByTestId('header-save-dot')).toBeNull()
+    expect(screen.queryByTestId('header-version-dot')).toBeNull()
     // The version-history trigger lives in the canvas HistoryCluster now,
     // never in the top bar.
     expect(screen.queryByRole('button', { name: /history/i })).toBeNull()

@@ -21,6 +21,7 @@
  */
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
+import { StateDot, type StateDotTone } from '../StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
 export type ConnectionState = 'synced' | 'local' | 'reconnecting' | 'sync-off'
@@ -50,11 +51,12 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
   'sync-off': 'Sync off',
 }
 
-const DOT_CLASS: Record<ConnectionState, string> = {
-  synced: 'bg-emerald-500',
-  local: 'bg-muted-foreground/60',
-  reconnecting: 'bg-amber-500',
-  'sync-off': 'bg-amber-500',
+// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
+const DOT_TONE: Record<ConnectionState, StateDotTone> = {
+  synced: 'safe',
+  local: 'neutral',
+  reconnecting: 'attention',
+  'sync-off': 'attention',
 }
 
 export function ConnectionStatus({
@@ -87,18 +89,14 @@ export function ConnectionStatus({
             state === 'sync-off' && 'border-amber-500/40 bg-amber-500/10 text-amber-700',
           )}
         >
-          <span aria-hidden="true" className="relative inline-flex size-2">
-            {state === 'sync-off' && (
-              // One-shot attention echo behind the dot: mounts exactly when
-              // the chip enters sync-off, pulses twice, then rests. Finite
-              // by design — a standing ping would be noise, not guidance.
-              <span
-                data-testid="connection-chip-pulse"
-                className="absolute inset-0 rounded-full bg-amber-500 animate-[attention-pulse_900ms_var(--motion-ease-out)_2]"
-              />
-            )}
-            <span className={cn('absolute inset-0 rounded-full', DOT_CLASS[state])} />
-          </span>
+          <StateDot
+            tone={DOT_TONE[state]}
+            // One-shot attention echo behind the dot: mounts exactly when the
+            // chip enters sync-off, pulses twice, then rests. Finite by
+            // design — a standing ping would be noise, not guidance.
+            pulse={state === 'sync-off'}
+            pulseTestId="connection-chip-pulse"
+          />
           {CHIP_LABEL[state]}
         </button>
       </PopoverTrigger>
