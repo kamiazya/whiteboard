@@ -6,7 +6,10 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
+import type { Embedder } from '../search/embedder.js'
+import { rankByVector } from '../search/embedder.js'
 import { fullTextSearch, type SearchableDocument } from '../search/full-text.js'
+import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
 export const documentSearchInputSchema = z
@@ -33,9 +36,16 @@ export const documentSearchOutputSchema = z
           path: documentPathSchema,
           name: z.string().min(1).optional(),
           kind: documentKindSchema.optional(),
-          /** BM25 over this workspace's corpus — comparable within ONE response only. */
+          /**
+           * BM25 over this workspace's corpus, or the fused rank score when
+           * semantic search is on. Comparable within ONE response only.
+           */
           score: z.number(),
-          /** Excerpts around the first match per matching text source. */
+          /**
+           * Excerpts around the first match per matching text source. A hit
+           * found only by meaning has no keyword to excerpt around, so it
+           * carries the opening of its text instead.
+           */
           contexts: z.array(z.string()),
         })
         .strict(),
@@ -56,6 +66,14 @@ export type DocumentSearchOutput = z.infer<typeof documentSearchOutputSchema>
 export function createDocumentSearchTool(
   deps: ServerDeps,
   cache: ContentFactsCache = new ContentFactsCache(),
+  /**
+   * Optional semantic half. Absent — the default, and what ships today —
+   * this function behaves exactly as it did before embeddings existed.
+   * Supplied, its ranking is FUSED with BM25's by rank rather than mixed
+   * by score, and any failure inside it degrades to lexical-only rather
+   * than failing the search.
+   */
+  embedderFor?: (workspaceId: string) => Embedder | undefined,
 ) {
   return {
     name: 'wb_document_search' as const,
@@ -87,20 +105,91 @@ export function createDocumentSearchTool(
       }
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
-      const results = fullTextSearch(searchable, parsed.query, { limit: parsed.limit }).map(
-        (hit) => {
-          const doc = byId.get(hit.documentId)
-          return {
-            documentId: hit.documentId,
-            path: doc?.path ?? hit.documentId,
-            ...(doc?.name === undefined ? {} : { name: doc.name }),
-            ...(doc?.kind === undefined ? {} : { kind: doc.kind }),
-            score: hit.score,
-            contexts: [...hit.contexts],
-          }
-        },
+      const describe = (documentId: string, score: number, contexts: readonly string[]) => {
+        const doc = byId.get(documentId)
+        return {
+          documentId,
+          path: doc?.path ?? documentId,
+          ...(doc?.name === undefined ? {} : { name: doc.name }),
+          ...(doc?.kind === undefined ? {} : { kind: doc.kind }),
+          score,
+          contexts: [...contexts],
+        }
+      }
+
+      const embedder = embedderFor?.(parsed.workspaceId)
+      if (embedder === undefined) {
+        const hits = fullTextSearch(searchable, parsed.query, { limit: parsed.limit })
+        return { results: hits.map((hit) => describe(hit.documentId, hit.score, hit.contexts)) }
+      }
+
+      // Fusion needs the WHOLE lexical ranking, not the page the caller asked
+      // for: a document the vector half also likes can climb from rank 20.
+      const lexical = fullTextSearch(searchable, parsed.query, { limit: searchable.length })
+      const semantic = await rankSemantically(
+        deps,
+        cache,
+        parsed.workspaceId,
+        entries.filter((entry) => byId.has(entry.documentId)),
+        parsed.query,
+        embedder,
       )
-      return { results }
+      if (semantic === undefined) {
+        return {
+          results: lexical
+            .slice(0, parsed.limit)
+            .map((hit) => describe(hit.documentId, hit.score, hit.contexts)),
+        }
+      }
+
+      const fused = fuseByRank([lexical.map((hit) => hit.documentId), semantic])
+      const ordered = [...fused.entries()]
+        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
+        .map(([documentId]) => documentId)
+      const contexts = new Map(lexical.map((hit) => [hit.documentId, hit.contexts]))
+      return {
+        results: ordered
+          .slice(0, parsed.limit)
+          .map((documentId) =>
+            describe(
+              documentId,
+              fused.get(documentId) ?? 0,
+              contexts.get(documentId) ?? openingOf(byId.get(documentId)),
+            ),
+          ),
+      }
     },
   }
+}
+
+/**
+ * The vector ranking, or `undefined` when the embedder cannot answer.
+ *
+ * Failure here is NOT a search failure: semantic recall is an addition, and
+ * a model that is still loading, out of memory, or simply absent should cost
+ * the user nothing worse than the lexical results they had before.
+ */
+async function rankSemantically(
+  deps: ServerDeps,
+  cache: ContentFactsCache,
+  workspaceId: string,
+  entries: readonly Parameters<ContentFactsCache['factsFor']>[2][number][],
+  query: string,
+  embedder: Embedder,
+): Promise<string[] | undefined> {
+  try {
+    const documents = await cache.vectorsFor(deps, workspaceId, entries, embedder)
+    if (documents.length === 0) return []
+    const [queryVector] = await embedder.embed([query])
+    if (queryVector === undefined) return undefined
+    return rankByVector(queryVector, documents)
+  } catch {
+    return undefined
+  }
+}
+
+/** First line of a document's text, for a hit with no keyword to excerpt. */
+function openingOf(doc: { texts: readonly string[] } | undefined): string[] {
+  const text = doc?.texts.find((candidate) => candidate.trim() !== '')
+  return text === undefined ? [] : [text.slice(0, 120)]
 }
