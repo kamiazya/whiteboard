@@ -12,7 +12,7 @@
  */
 
 import { documentMatchesSearch } from '../workspace-top-bar/document-list.js'
-import type { WorkspaceDocumentEntry } from './document-entry.js'
+import { compareDocumentEntries, type WorkspaceDocumentEntry } from './document-entry.js'
 
 export function searchDocuments<T extends WorkspaceDocumentEntry>(
   documents: readonly T[],
@@ -21,5 +21,5 @@ export function searchDocuments<T extends WorkspaceDocumentEntry>(
   if (query.trim() === '') return []
   return documents
     .filter((entry) => documentMatchesSearch(query, entry))
-    .sort((left, right) => left.path.localeCompare(right.path))
+    .sort(compareDocumentEntries)
 }

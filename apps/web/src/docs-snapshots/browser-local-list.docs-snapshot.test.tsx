@@ -7,8 +7,8 @@ import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { resolveDocAssetPath } from './_helpers.js'
 
-// Generates docs/assets/browser-local-list.png — the browser-local canvas
-// list that '/' lands on, used by the getting-started tutorial.
+// Generates docs/assets/browser-local-list.png — the browser-local document
+// browser that '/' lands on, used by the getting-started tutorial.
 
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
@@ -65,7 +65,7 @@ describe('docs snapshot: browser-local canvas list', () => {
     )
 
     await waitFor(() => {
-      if (document.querySelectorAll('[data-testid="document-list-card"]').length !== 3) {
+      if (document.querySelectorAll('[data-testid="card-title"]').length !== 3) {
         throw new Error('cards not settled')
       }
     })

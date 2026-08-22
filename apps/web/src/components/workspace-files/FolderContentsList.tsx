@@ -1,9 +1,9 @@
 import { ChevronRight, Folder } from 'lucide-react'
 import { type ReactNode, useMemo } from 'react'
 import { cn } from '../../lib/utils.js'
-import { formatRelative } from '../document-list/DocumentListView.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { folderContents } from './folder-contents.js'
+import { formatRelative } from './format-relative.js'
 
 /**
  * What a click in the contents pane means. A folder and a document are

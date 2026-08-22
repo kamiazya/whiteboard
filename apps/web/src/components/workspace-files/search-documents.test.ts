@@ -61,3 +61,20 @@ describe('searchDocuments', () => {
     expect(searchDocuments(docs, '   ')).toEqual([])
   })
 })
+
+describe('searchDocuments pinned order', () => {
+  // Same contract as the folder pane: a pinned document outranks the path
+  // sort, because the user put it there by hand.
+  it('lists pinned matches first, in pinOrder', () => {
+    // The pinned document is the one the path sort would put LAST — a
+    // fixture where it already sorts first would pass without the rule.
+    const pinnable: WorkspaceDocumentEntry[] = [
+      { documentId: 'd1', path: 'archive/old-login' },
+      { documentId: 'd4', path: 'design/login', pinOrder: 0 },
+    ]
+    expect(searchDocuments(pinnable, 'login').map((d) => d.path)).toEqual([
+      'design/login',
+      'archive/old-login',
+    ])
+  })
+})

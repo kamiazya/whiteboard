@@ -1,9 +1,8 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { LayoutGrid, ListTree } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
-import { DocumentListView } from '../components/document-list/DocumentListView.js'
+import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import {
   type ContentClock,
@@ -31,10 +30,11 @@ export interface BrowserLocalIndexPageProps {
   onOpenDocument: (path: string) => void
 }
 
-// The browser-local landing surface: the same shared list the daemon gallery
-// renders, minus its daemon-only capabilities (no thumbnails, no workspace
-// selector). Rows come straight from the store; the editor page owns
-// everything after onOpenDocument fires.
+// The browser-local landing surface: the same three-pane document browser
+// the daemon page renders, minus its daemon-only capabilities (no workspace
+// selector). The page keeps its own snapshot list only to know which of the
+// loading / onboarding / panel states to show; the panel reads the store
+// through its own source.
 // Module-level, NOT default parameters. A default in the parameter list is
 // evaluated on every render, so `idbContentClock()` hands back a new function
 // identity each time; the load effect depends on it, `setSnapshots` stores a
@@ -59,10 +59,12 @@ export function BrowserLocalIndexPage({
   // and a handler-side `if (creating) return` reads a stale closure in
   // exactly the same-tick case it would have to catch.
   const [creating, setCreating] = useState(false)
-  // The same two projections the daemon page offers, so the browser is one
-  // surface across both modes rather than a grid here and a tree there.
-  const [view, setView] = useState<'grid' | 'tree'>('grid')
-  const filesSource = useMemo(() => createLocalFilesSource(), [])
+  // The panel reads through the SAME stores this page was given — never a
+  // second instance that merely happens to open the same database.
+  const filesSource = useMemo(
+    () => createLocalFilesSource({ index, loro, clock }),
+    [index, loro, clock],
+  )
   // Deletions happen in this page's dialog, behind the panel's back — the
   // panel re-reads whenever this identity changes, exactly as on the daemon
   // page.
@@ -86,23 +88,6 @@ export function BrowserLocalIndexPage({
       cancelled = true
     }
   }, [index, clock])
-
-  const rows = useMemo(() => {
-    if (!snapshots) return []
-    const sorted = [...snapshots].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    // A local document has a real path now, so `secondary` shows it on the
-    // same terms the daemon list does: worth a second line only when a
-    // display name covers the first. It is still never DERIVED from the name
-    // — ADR-0008 measured that and every non-Latin name collapsed to
-    // `untitled-N`.
-    return sorted.map((s) => ({
-      path: s.path,
-      displayName: s.name,
-      ...(s.name === s.path ? {} : { secondary: s.path }),
-      updatedAt: s.updatedAt,
-      kind: s.kind,
-    }))
-  }, [snapshots])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
@@ -176,41 +161,12 @@ export function BrowserLocalIndexPage({
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
       <h1 className="sr-only">Canvases</h1>
-      <div className="mb-2 flex items-center">
-        <div className="ml-auto flex items-center gap-0.5 rounded-md border p-0.5">
-          <button
-            type="button"
-            aria-label="Grid view"
-            aria-pressed={view === 'grid'}
-            onClick={() => setView('grid')}
-            className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
-          >
-            <LayoutGrid className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Tree view"
-            aria-pressed={view === 'tree'}
-            onClick={() => setView('tree')}
-            className="rounded p-1.5 text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground"
-          >
-            <ListTree className="size-4" />
-          </button>
-        </div>
-      </div>
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}
         </div>
       )}
-      {view === 'tree' ? (
-        <WorkspaceFilesPanel
-          source={filesSource}
-          onOpenDocument={onOpenDocument}
-          onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
-          revision={filesRevision}
-        />
-      ) : snapshots === null && !error ? (
+      {snapshots === null && !error ? (
         <div
           role="status"
           aria-label="Loading documents"
@@ -222,26 +178,17 @@ export function BrowserLocalIndexPage({
             </div>
           ))}
         </div>
+      ) : snapshots !== null && snapshots.length === 0 ? (
+        // The onboarding state renders INSTEAD of the panel: a three-pane
+        // browser of nothing teaches less than one sentence and one button,
+        // and this button also OPENS what it creates.
+        <EmptyWorkspaceState onCreate={(kind) => void handleCreate(kind)} disabled={creating} />
       ) : snapshots !== null ? (
-        <DocumentListView
-          rows={rows}
-          onOpen={onOpenDocument}
-          onCreate={(kind) => void handleCreate(kind)}
-          createDisabled={creating}
-          renderActions={(row) => (
-            <button
-              type="button"
-              aria-label={`Delete ${row.displayName}`}
-              onClick={(event) => {
-                // Prevents the click from bubbling to the wrapping open-button.
-                event.stopPropagation()
-                setPendingDelete({ path: row.path, displayName: row.displayName })
-              }}
-              className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              Delete
-            </button>
-          )}
+        <WorkspaceFilesPanel
+          source={filesSource}
+          onOpenDocument={onOpenDocument}
+          onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
+          revision={filesRevision}
         />
       ) : (
         // Load failed (error set, snapshots never arrived): creating does

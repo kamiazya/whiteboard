@@ -191,6 +191,18 @@ export function updateDocument(
   )
 }
 
+export function getWorkspaceNames(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<WorkspaceNames> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/names`,
+    workspaceNamesSchema,
+  )
+}
+
 export function setDocumentDisplayName(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,

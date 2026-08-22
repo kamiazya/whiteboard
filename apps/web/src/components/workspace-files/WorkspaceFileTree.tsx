@@ -9,7 +9,7 @@ export interface WorkspaceFileTreeProps {
   /** The document the preview is showing, so the two agree. */
   selectedPath?: string
   /**
-   * A row's icon. Capability slot, like DocumentListView's renderThumb: a
+   * A row's icon. Capability slot: a
    * miniature of the document costs a fetch of its bytes, and this component
    * neither fetches nor renders — so a caller with no daemon to fetch from
    * still gets a working tree, with the kind icon below.
