@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import EmptyMark from '../../brand/empty-mark.svg?react'
+import WelcomeMark from '../../brand/welcome-mark.svg?react'
 
 /**
  * The onboarding chooser both index pages show before a workspace has any
@@ -28,9 +28,11 @@ export function EmptyWorkspaceState({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
-      {/* The signature as a faint watermark: an empty gallery is the
-          blank board, not an error — the mark stays quiet (BRAND.md). */}
-      <EmptyMark className="text-muted-foreground/30" />
+      {/* The brand lockup greets arrivals: the signature draws itself once
+          and the wordmark names the product — this is the one surface where
+          the name is not already in the surrounding chrome (BRAND.md). */}
+      <WelcomeMark className="text-muted-foreground" />
+      <p className="text-lg font-semibold tracking-tight">Whiteboard</p>
       <p className="text-base font-semibold">What will you make first?</p>
       {subtitle !== undefined && (
         <p data-testid="empty-state-subtitle" className="text-muted-foreground -mt-2 text-sm">

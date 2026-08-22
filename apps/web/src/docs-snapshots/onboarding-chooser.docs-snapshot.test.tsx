@@ -35,6 +35,15 @@ describe('docs snapshot: onboarding chooser', () => {
       }
     })
 
+    // The welcome mark draws itself over 1.1s (wb-scribble); a screenshot
+    // mid-stroke is a different image every run. Suppress animation so the
+    // capture lands on the finished stroke — exactly what reduced-motion
+    // users see.
+    const still = document.createElement('style')
+    still.textContent = '* { animation: none !important; transition: none !important; }'
+    document.head.appendChild(still)
+    await new Promise((resolve) => requestAnimationFrame(() => resolve(undefined)))
+
     await page.screenshot({ path: resolveDocAssetPath('onboarding-chooser.png') })
   })
 })

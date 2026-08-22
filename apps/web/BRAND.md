@@ -33,6 +33,7 @@ and each appears only where it earns its keep:
 | PWA launcher icon | no | no | At launcher size, inside a mask, the frame only costs stroke weight and safe-zone space | `public/icon-192.png`, `public/icon-512.png` |
 | README hero | yes | yes | A document context: the image needs containment to read as an object | `docs/assets/readme-mark.svg` (repo root `docs/`) |
 | OG / social card | yes | yes | Same document logic, plus the card must carry the name on foreign surfaces | `public/og-image.png` |
+| Onboarding chooser (empty workspace) | no | yes | The first page arrivals meet; the viewport is the board (no frame), and the name is not in the surrounding chrome, so the lockup introduces the product. The mark performs its one-shot draw (wb-scribble) | `src/brand/welcome-mark.svg` (SVGR) |
 
 The rule in one line: **the squiggle is the signature everywhere; the frame
 appears only where a container earns its keep; the wordmark only where the
@@ -133,7 +134,7 @@ All commands run from `apps/web/`.
 
 | Asset | Source of truth | Regenerate |
 | --- | --- | --- |
-| in-app marks (error / not-found / empty / home) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
+| in-app marks (error / not-found / welcome / home) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
 | ALPHA chip (AppShell) | `src/components/AppShell.tsx` — amber chip + honesty popover; the durable home of "data durability is not guaranteed" | code |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |
