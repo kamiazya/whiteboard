@@ -69,6 +69,21 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
   // degrades into an `as unknown as` cast.
   registerToolWithAnnotations(
     server,
+    tools.facetList.name,
+    {
+      description: tools.facetList.description,
+      inputSchema: tools.facetList.inputSchema.shape,
+      outputSchema: tools.facetList.outputSchema,
+    },
+    async (args) => {
+      // Read-only and document-independent: no write lock, no workspace.
+      const result = await tools.facetList.execute(tools.facetList.inputSchema.parse(args))
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.facetSet.name,
     {
       description: tools.facetSet.description,
