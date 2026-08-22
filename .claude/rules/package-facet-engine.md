@@ -41,6 +41,19 @@ paths:
   writes there go back through `validateFacetWrite`, so a panel can never
   store what `wb_facet_set` would refuse.
 
+- TIER 2, in the same module: an optional `editor` spec on a facet
+  definition, declaring per-field widget/label/quick-band from a CLOSED
+  vocabulary (`text`/`number`/`toggle`/`choice`/`segmented`, glyphs from
+  `FACET_GLYPHS`). `deriveFacetForm(schema, editor)` merges it over the
+  derived form; `assertEditorSpecFits` rejects at definition time a spec
+  naming a field the schema does not declare, or one on a schema with no
+  derivable form. A segmented option's `value: null` means the facet's
+  ABSENCE — some defaults are unrepresentable as a stored value (a rect
+  node stores no shape facet), and a picker with no way to say that
+  cannot express them. The bundled `visual.shape` declares its band this
+  way and ships NO hand-written widget, which is how the mechanism is
+  proved by the plugin that ships with the engine.
+
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's

@@ -132,6 +132,17 @@ describe('control kinds the derived form emits', () => {
   })
 })
 
+describe("the panel honours a facet's declared editor", () => {
+  it("uses the spec's label and its segmented options, not the derived defaults", () => {
+    render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+    // visual.shape declares label 'Shape' and a segmented control; without
+    // the spec the panel would show a select labelled 'kind'.
+    const control = screen.getByLabelText('Visual style shape Shape')
+    expect(control).not.toBeNull()
+    expect(control.getAttribute('role')).toBe('radiogroup')
+  })
+})
+
 describe('a draft never outlives what it was seeded from', () => {
   it('clearing a facet empties the form, so a later Save cannot restore it', () => {
     const onWrite = vi.fn()

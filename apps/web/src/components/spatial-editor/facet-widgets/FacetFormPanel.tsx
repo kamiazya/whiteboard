@@ -74,6 +74,26 @@ function FieldInput({
       />
     )
   }
+  if (field.control.kind === 'segmented') {
+    return (
+      <span id={id} role="radiogroup" aria-label={name} className="flex items-center gap-0.5">
+        {/* Real radios rather than buttons wearing the role: the keyboard
+            behaviour a segmented control needs comes free with the element. */}
+        {field.control.options.map((option) => (
+          <label key={option.label} className={cn(common, 'flex items-center gap-1 px-1.5')}>
+            <input
+              type="radio"
+              name={id}
+              aria-label={option.label}
+              checked={option.value === null ? value === undefined : value === option.value}
+              onChange={() => onChange(option.value ?? undefined)}
+            />
+            {option.label}
+          </label>
+        ))}
+      </span>
+    )
+  }
   if (field.control.kind === 'choice') {
     return (
       <select
@@ -278,7 +298,7 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
               key={`${node.id}:${facet.key}`}
               facetKey={facet.key}
               title={`${group.displayName} ${facet.definition.name}`}
-              form={deriveFacetForm(facet.definition.schema)}
+              form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
               stored={stored[facet.key]}
               registry={registry}
               onWrite={onWrite}

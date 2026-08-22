@@ -94,6 +94,27 @@ export const visualPlugin = definePlugin({
       version: 'v0',
       targets: ['node'],
       schema: visualShapeFacetSchema,
+      // Declared, not hand-written: the bundled plugin goes through the
+      // same tier-2 catalog a third-party plugin would, so the mechanism
+      // is exercised by its first customer. `null` is the Rectangle
+      // segment — rect is the ABSENT facet, not a stored value.
+      editor: {
+        fields: {
+          kind: {
+            widget: 'segmented',
+            label: 'Shape',
+            quick: true,
+            options: [
+              { value: null, label: 'Rectangle', glyph: 'square' },
+              { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
+              { value: 'diamond', label: 'Diamond', glyph: 'diamond' },
+              { value: 'hexagon', label: 'Hexagon', glyph: 'hexagon' },
+              { value: 'parallelogram', label: 'Parallelogram', glyph: 'parallelogram' },
+              { value: 'cylinder', label: 'Cylinder', glyph: 'cylinder' },
+            ],
+          },
+        },
+      },
     }),
     defineFacet({
       name: 'symbol',

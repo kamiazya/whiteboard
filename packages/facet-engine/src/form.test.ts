@@ -5,6 +5,7 @@
 import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { deriveFacetForm } from './form.js'
+import { defineFacet } from './registry.js'
 import { visualShapeFacetSchema, visualSymbolFacetSchema } from './visual.js'
 
 describe('deriveFacetForm', () => {
@@ -19,9 +20,15 @@ describe('deriveFacetForm', () => {
     expect(form).toEqual({
       kind: 'fields',
       fields: [
-        { name: 'title', label: 'title', control: { kind: 'text' }, required: true },
-        { name: 'count', label: 'count', control: { kind: 'number' }, required: true },
-        { name: 'done', label: 'done', control: { kind: 'toggle' }, required: true },
+        { name: 'title', label: 'title', control: { kind: 'text' }, required: true, quick: false },
+        {
+          name: 'count',
+          label: 'count',
+          control: { kind: 'number' },
+          required: true,
+          quick: false,
+        },
+        { name: 'done', label: 'done', control: { kind: 'toggle' }, required: true, quick: false },
       ],
     })
   })
@@ -46,6 +53,7 @@ describe('deriveFacetForm', () => {
       label: 'note',
       control: { kind: 'text' },
       required: false,
+      quick: false,
     })
   })
 
@@ -131,5 +139,89 @@ describe('deriveFacetForm', () => {
     )
     expect(deriveFacetForm(z.string()).kind).toBe('unsupported')
     expect(deriveFacetForm(z.array(z.string())).kind).toBe('unsupported')
+  })
+})
+
+describe('an editor spec refines the derived form', () => {
+  const schema = z.object({
+    kind: z.enum(['ellipse', 'diamond']),
+    label: z.string().optional(),
+  })
+
+  it('a field may declare a richer control from the catalog, with per-option glyphs', () => {
+    const form = deriveFacetForm(schema, {
+      fields: {
+        kind: {
+          widget: 'segmented',
+          label: 'Shape',
+          quick: true,
+          options: [
+            { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
+            { value: 'diamond', label: 'Diamond', glyph: 'diamond' },
+          ],
+        },
+      },
+    })
+    if (form.kind !== 'fields') throw new Error('unreachable')
+    const [first, second] = form.fields
+    expect(first).toEqual({
+      name: 'kind',
+      label: 'Shape',
+      quick: true,
+      control: {
+        kind: 'segmented',
+        options: [
+          { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
+          { value: 'diamond', label: 'Diamond', glyph: 'diamond' },
+        ],
+      },
+      required: true,
+    })
+    // A field the spec says nothing about keeps its derived control.
+    expect(second?.control).toEqual({ kind: 'text' })
+    expect(second?.quick).toBe(false)
+  })
+
+  it('a spec may add an ABSENCE option, since some defaults are unrepresentable', () => {
+    // `visual.shape` has no 'rect' value — rect IS the absent facet — so a
+    // picker needs a way to say "clear this".
+    const form = deriveFacetForm(schema, {
+      fields: {
+        kind: {
+          widget: 'segmented',
+          options: [
+            { value: null, label: 'Rectangle', glyph: 'square' },
+            { value: 'ellipse', label: 'Ellipse', glyph: 'circle' },
+          ],
+        },
+      },
+    })
+    if (form.kind !== 'fields') throw new Error('unreachable')
+    const control = form.fields[0]?.control
+    expect(control?.kind === 'segmented' && control.options[0]?.value).toBeNull()
+  })
+
+  it('a spec naming a field the schema does not have is rejected at definition time', () => {
+    expect(() =>
+      defineFacet({
+        name: 'sample',
+        version: 'v0',
+        targets: ['node'],
+        schema,
+        editor: { fields: { nope: { widget: 'segmented', options: [] } } },
+      }),
+    ).toThrow(/nope/)
+  })
+
+  it('a spec on a schema with no derivable form is rejected too', () => {
+    expect(() =>
+      defineFacet({
+        name: 'sample',
+        version: 'v0',
+        targets: ['node'],
+        schema: z.string(),
+        editor: { fields: { kind: { widget: 'text' } } },
+      }),
+    ).toThrow(/form/)
   })
 })
