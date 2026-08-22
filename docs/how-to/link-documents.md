@@ -31,6 +31,11 @@ reference (or the canvas relationship). Click an entry to jump to it.
 The chip shows `0` on a document nothing links to yet; links written
 anywhere in the workspace land here automatically.
 
+Below the linked-from list, **Mentioned, not linked** surfaces documents
+whose prose contains this document's display name without linking to it —
+candidates for a link the author never wrote. Click one to open it and
+decide; the system never links on its own (a link is the author's claim).
+
 ## Rules worth knowing
 
 - A link that does not resolve for the *reader* (an ambiguous name, an

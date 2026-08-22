@@ -1,7 +1,11 @@
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import { extractReferenceFacts } from '../references/extract.js'
-import { backlinkEntrySchema, ReferenceAggregate } from '../references/reference-aggregate.js'
+import {
+  backlinkEntrySchema,
+  mentionsOfIn,
+  ReferenceAggregate,
+} from '../references/reference-aggregate.js'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { loadDocument } from './document-io.js'
@@ -11,7 +15,13 @@ export const backlinksInputSchema = z
   .strict()
 export type BacklinksInput = z.infer<typeof backlinksInputSchema>
 
-export const backlinksOutputSchema = z.object({ backlinks: z.array(backlinkEntrySchema) }).strict()
+export const backlinksOutputSchema = z
+  .object({
+    backlinks: z.array(backlinkEntrySchema),
+    /** Sources naming this document in prose without a resolving link. */
+    unlinkedMentions: z.array(backlinkEntrySchema),
+  })
+  .strict()
 export type BacklinksOutput = z.infer<typeof backlinksOutputSchema>
 
 /**
@@ -49,10 +59,17 @@ export async function computeBacklinks(
         ...(entry.name === undefined ? {} : { name: entry.name }),
         ...(entry.kind === undefined ? {} : { kind: entry.kind }),
         refs: [],
+        texts: [],
       })
       continue
     }
     aggregate.upsert(entry.documentId, 0, extractReferenceFacts(entry, doc))
   }
-  return { backlinks: aggregate.backlinksOf(input.documentId) }
+  const alive = aggregate.entries()
+  const name = alive.get(input.documentId)?.name
+  return {
+    backlinks: aggregate.backlinksOf(input.documentId),
+    unlinkedMentions:
+      name === undefined ? [] : mentionsOfIn({ documentId: input.documentId, name }, alive),
+  }
 }

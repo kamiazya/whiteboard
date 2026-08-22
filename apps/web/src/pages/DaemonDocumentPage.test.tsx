@@ -134,7 +134,7 @@ describe('DaemonDocumentPage', () => {
         { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
-    mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [] })
+    mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [], unlinkedMentions: [] })
   })
 
   afterEach(() => {
@@ -208,6 +208,7 @@ describe('DaemonDocumentPage', () => {
           contexts: ['embedded on this canvas'],
         },
       ],
+      unlinkedMentions: [],
     })
     await act(async () => {
       render(

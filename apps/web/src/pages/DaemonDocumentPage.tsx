@@ -370,14 +370,17 @@ export function DaemonDocumentPage({
   // an older daemon's id-less listing leaves it undefined and the chip
   // disabled rather than querying with a path the route would reject.
   const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.id
-  const [backlinks, setBacklinks] = useState<readonly ConnectionsBacklink[] | null>(null)
+  const [connections, setConnections] = useState<{
+    readonly backlinks: readonly ConnectionsBacklink[]
+    readonly unlinkedMentions: readonly ConnectionsBacklink[]
+  } | null>(null)
   useEffect(() => {
-    setBacklinks(null)
+    setConnections(null)
     if (currentDocumentId === undefined || controller.workspaceId === null) return
     let cancelled = false
     getDocumentBacklinks(daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId)
       .then((response) => {
-        if (!cancelled) setBacklinks(response.backlinks)
+        if (!cancelled) setConnections(response)
       })
       .catch(() => {
         // The chip simply stays disabled; connections are never worth an
@@ -646,7 +649,8 @@ export function DaemonDocumentPage({
                     onFacetsChange={setCoreFacets}
                   />
                   <ConnectionsChip
-                    backlinks={backlinks}
+                    backlinks={connections === null ? null : connections.backlinks}
+                    mentions={connections?.unlinkedMentions}
                     onOpen={(entry) => controller.switchDocument(entry.path)}
                   />
                 </>

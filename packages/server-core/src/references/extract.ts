@@ -18,6 +18,16 @@ function textReferences(value: string): RawReference[] {
   }))
 }
 
+function spatialTexts(canvas: SpatialCanvas): string[] {
+  const texts: string[] = []
+  for (const node of canvas.nodes) {
+    if (node.type === 'text') texts.push(node.text)
+    if (node.type === 'group' && node.label !== undefined) texts.push(node.label)
+  }
+  for (const edge of canvas.edges) if (edge.label !== undefined) texts.push(edge.label)
+  return texts
+}
+
 function spatialReferences(canvas: SpatialCanvas): RawReference[] {
   const refs: RawReference[] = []
   for (const node of canvas.nodes) {
@@ -47,14 +57,16 @@ function spatialReferences(canvas: SpatialCanvas): RawReference[] {
  */
 export function extractReferenceFacts(entry: DocumentEntry, doc: LoroDoc): DocumentReferenceFacts {
   const kind = entry.kind ?? readDocumentKind(doc)
-  const refs =
-    kind === 'markdown'
-      ? textReferences(readMarkdownBody(doc))
-      : spatialReferences(readSpatialCanvas(doc))
+  const markdown = kind === 'markdown'
+  const canvas = markdown ? undefined : readSpatialCanvas(doc)
   return {
     path: entry.path,
     ...(entry.name === undefined ? {} : { name: entry.name }),
     ...(entry.kind === undefined ? {} : { kind: entry.kind }),
-    refs,
+    refs: markdown
+      ? textReferences(readMarkdownBody(doc))
+      : spatialReferences(canvas as SpatialCanvas),
+    // The prose itself, for mention detection against other documents' names.
+    texts: markdown ? [readMarkdownBody(doc)] : spatialTexts(canvas as SpatialCanvas),
   }
 }
