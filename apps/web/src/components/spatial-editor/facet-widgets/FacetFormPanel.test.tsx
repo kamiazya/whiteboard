@@ -143,6 +143,26 @@ describe("the panel honours a facet's declared editor", () => {
   })
 })
 
+describe('the absence segment clears the facet, like the band does', () => {
+  it('picking the absence option removes the facet instead of failing validation', () => {
+    const onWrite = vi.fn()
+    render(
+      <FacetFormPanel
+        node={node({ 'visual.shape/v0': { kind: 'hexagon' } })}
+        registry={registry}
+        onWrite={onWrite}
+      />,
+    )
+    // `Rectangle` carries value: null — the facet's ABSENCE. Staging it in
+    // the draft and saving would validate `{}` against a schema whose
+    // `kind` is required, so the pick must clear, exactly as the quick
+    // band and the Clear button already do.
+    fireEvent.click(screen.getByLabelText('Rectangle'))
+    expect(onWrite).toHaveBeenCalledWith('visual.shape/v0', undefined)
+    expect(screen.queryByRole('alert')).toBeNull()
+  })
+})
+
 describe('a draft never outlives what it was seeded from', () => {
   it('clearing a facet empties the form, so a later Save cannot restore it', () => {
     const onWrite = vi.fn()

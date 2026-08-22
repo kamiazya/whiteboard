@@ -48,6 +48,7 @@ function FieldInput({
   field,
   value,
   onChange,
+  onClear,
 }: {
   readonly facetKey: string
   /** Facet title, so the accessible name says WHICH facet's field this is. */
@@ -55,6 +56,13 @@ function FieldInput({
   readonly field: FacetFormField
   readonly value: unknown
   readonly onChange: (next: unknown) => void
+  /**
+   * A segmented option carrying `value: null` means the facet should not
+   * exist — a whole-facet statement, not a field value. Staging it in the
+   * draft would submit a payload missing a required field, so it takes the
+   * same immediate path the Clear button beside it already takes.
+   */
+  readonly onClear: () => void
 }) {
   // Scoped by facet: two facets may declare the same field name, and a
   // duplicate id would point every label at the first input. The
@@ -86,7 +94,7 @@ function FieldInput({
               name={id}
               aria-label={option.label}
               checked={option.value === null ? value === undefined : value === option.value}
-              onChange={() => onChange(option.value ?? undefined)}
+              onChange={() => (option.value === null ? onClear() : onChange(option.value))}
             />
             {option.label}
           </label>
@@ -242,6 +250,7 @@ function FacetEditor({
             field={field}
             value={draft[field.name]}
             onChange={(next) => set(field.name, next)}
+            onClear={() => onWrite(facetKey, undefined)}
           />
         </label>
       ))}
