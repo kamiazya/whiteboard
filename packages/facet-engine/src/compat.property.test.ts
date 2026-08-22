@@ -10,6 +10,7 @@ import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
 const registry = createFacetRegistry([
   definePlugin({
     id: 'chain',
+    displayName: 'Chain',
     facets: [
       defineFacet({
         name: 'thing',

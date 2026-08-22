@@ -70,7 +70,20 @@ export interface ContextMenuSeparator {
   readonly kind: 'separator'
 }
 
-export type ContextMenuItem = ContextMenuActionItem | ContextMenuOptionsItem | ContextMenuSeparator
+/**
+ * A namespace-container heading over contributed property bands — shown only
+ * once a second plugin contributes, so a single-namespace menu stays clean.
+ */
+export interface ContextMenuHeadingItem {
+  readonly kind: 'heading'
+  readonly label: string
+}
+
+export type ContextMenuItem =
+  | ContextMenuActionItem
+  | ContextMenuOptionsItem
+  | ContextMenuSeparator
+  | ContextMenuHeadingItem
 
 export interface ContextMenuProps {
   /** Screen position relative to the editor root. */
@@ -280,6 +293,14 @@ export function ContextMenu({ x, y, items, onClose, variant = 'list' }: ContextM
   function renderCatalogItem(item: ContextMenuItem, index: number) {
     return item.kind === 'separator' ? (
       <hr key={`separator-${index}`} className="my-1 border-border" />
+    ) : item.kind === 'heading' ? (
+      <div
+        key={`heading-${item.label}`}
+        role="presentation"
+        className="px-3 pt-1.5 pb-0.5 text-[0.65rem] font-medium tracking-wide text-muted-foreground"
+      >
+        {item.label}
+      </div>
     ) : item.kind === 'options' ? (
       <Fragment key={item.label}>
         <fieldset

@@ -15,18 +15,29 @@ paths:
   read-side compat resolution (`resolveFacetPayload`, decision 7 — stepwise
   chain, drop-not-fail, newer-than-registered preserved).
 - The bundled `visual` plugin and its facet schemas, plus resolvers
-  (`resolveCanvasEdgeStyle`: facet first, legacy `x-whiteboard.edgeRouting`
-  fallback). WIRING STATUS: foundation — canvas-render's layout and the
-  editor still read the legacy key directly; the visual.edges UI rewiring
-  increment adopts this resolver and is what makes the facet user-reachable.
+  (`resolveCanvasEdgeStyle`, `resolveNodeShape`: facet first, legacy
+  fallback where one exists). Both are adopted by canvas-render's layout
+  defaults and the editor — user-reachable, no longer foundation-only.
+- The contribution RESOLUTION layer (`contributions.ts`): the closed
+  `ContributionPoint` set, and `resolveFacetContributions` answering "what
+  facet UI does this point carry" as namespace groups derived mechanically
+  from facet `targets` — ordered by plugin ID (never `displayName`, which
+  may be reworded/localized), headed by `displayName`. Ownership is
+  two-level: the POINT (core surface) owns the point set, the namespace
+  containers, their order and caps; a PLUGIN owns only the inside of its
+  own container. The VESSEL half (actual React rendering, widget lookup by
+  facet key) lives in each surface's composition root — today
+  `apps/web/src/components/spatial-editor/facet-widgets/`, guarded by
+  `facet-wiring-guard.test.ts` so point-owning surfaces never name a
+  domain.
 
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's
   (`extensionFacetsSchema`); this package constructs keys and a test
   cross-checks them against model's grammar.
-- Storage, rendering, transport, UI, contribution-point machinery (later
-  increments), Inversify.
+- Storage, rendering, transport, UI vessels (React widgets — those live in
+  the composition roots), Inversify.
 
 ## Dependency rules
 
@@ -45,6 +56,11 @@ paths:
   add a cross-version converter that skips a step.
 - The bundled plugin is ordinary (no privileged namespace, no special
   ordering); anything that would special-case it belongs nowhere.
+- `displayName` is required and human-facing only — UI containers show it;
+  the id stays machine-only (key grammar, storage, ordering).
+- Adding a `ContributionPoint` is a core increment, like adding a widget
+  kind: a plugin can neither mint a point nor place itself outside its
+  container.
 - Result types are discriminated unions (`resolved`/`dropped`/`preserved`/
   `passthrough`, `ok` true/false) — never sentinel nulls.
 

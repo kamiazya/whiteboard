@@ -197,6 +197,7 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
 describe('registered-facet validation (ADR-0013 decision 6)', () => {
   const documentTicket = definePlugin({
     id: 'ticket',
+    displayName: 'Ticket',
     facets: [
       defineFacet({
         name: 'sample',

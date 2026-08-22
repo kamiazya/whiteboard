@@ -45,6 +45,7 @@ export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
  */
 export const visualPlugin = definePlugin({
   id: 'visual',
+  displayName: 'Visual style',
   facets: [
     defineFacet({
       name: 'edges',

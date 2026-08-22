@@ -39,6 +39,12 @@ export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
 export interface FacetPlugin {
   /** The plugin's id doubles as the facet-key namespace. */
   readonly id: string
+  /**
+   * The plugin's human-facing name — what UI containers (namespace
+   * sections, submenus, tabs) show. The id stays machine-only: key
+   * grammar, storage, and deterministic ordering.
+   */
+  readonly displayName: string
   readonly facets: readonly FacetDefinition[]
 }
 
@@ -68,6 +74,9 @@ export function definePlugin(plugin: FacetPlugin): FacetPlugin {
   if (!SEGMENT_PATTERN.test(plugin.id)) {
     throw new Error(`plugin id "${plugin.id}" must match ${SEGMENT_PATTERN}`)
   }
+  if (plugin.displayName.trim() === '') {
+    throw new Error(`plugin "${plugin.id}" needs a non-blank displayName`)
+  }
   const seen = new Set<string>()
   for (const facet of plugin.facets) {
     if (seen.has(facet.name)) {
@@ -93,6 +102,8 @@ export type FacetResolution =
   | { readonly kind: 'passthrough'; readonly payload: unknown }
 
 export interface FacetRegistry {
+  /** The source plugin list, in registration order (contributions sort by id). */
+  readonly plugins: readonly FacetPlugin[]
   readonly targetsOf: (key: string) => readonly FacetTarget[] | undefined
   readonly validateFacetWrite: (key: string, payload: unknown) => FacetWriteResult
   readonly resolveFacetPayload: (key: string, payload: unknown) => FacetResolution
@@ -124,6 +135,7 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
     `${namespace}.${definition.name}/${definition.version}`
 
   return {
+    plugins,
     targetsOf(key) {
       const parsed = parseKey(key)
       if (parsed === null) return undefined
