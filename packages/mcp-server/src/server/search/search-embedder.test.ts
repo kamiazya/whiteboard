@@ -1,10 +1,11 @@
 import { afterEach, describe, expect, it } from 'vitest'
-import { resolveSearchEmbedder } from './search-embedder.js'
+import { resetSearchEmbedderForTests, resolveSearchEmbedder } from './search-embedder.js'
 
 const FLAG = 'WHITEBOARD_SEMANTIC_SEARCH'
 
 afterEach(() => {
   delete process.env[FLAG]
+  resetSearchEmbedderForTests()
 })
 
 describe('resolveSearchEmbedder', () => {
@@ -23,5 +24,13 @@ describe('resolveSearchEmbedder', () => {
     process.env[FLAG] = '1'
     const embedder = resolveSearchEmbedder()
     expect(embedder?.dimensions).toBe(384)
+  })
+
+  it('answers with ONE embedder across calls, so the model is loaded once', () => {
+    // /mcp is stateless per request: the MCP server, and with it every
+    // ServerDeps, is rebuilt for each call. A per-call embedder would
+    // re-load ~113MB of weights on every single search.
+    process.env[FLAG] = '1'
+    expect(resolveSearchEmbedder()).toBe(resolveSearchEmbedder())
   })
 })

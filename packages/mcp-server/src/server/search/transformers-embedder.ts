@@ -36,6 +36,13 @@ export interface TransformersEmbedderOptions {
    * shares. The caller knows where its data lives; this file does not.
    */
   cacheDir: string
+  /**
+   * Refuse to fetch anything, serving only what `cacheDir` already holds.
+   * The daemon sets this: a ~113MB download has no business on a request
+   * path, and a search that would block on one should return lexical
+   * results instead. The fetch script leaves it off.
+   */
+  offline?: boolean
   /** Hugging Face model id. */
   model?: string
   dtype?: 'fp32' | 'fp16' | 'q8' | 'q4'
@@ -60,6 +67,7 @@ export function createTransformersEmbedder(options: TransformersEmbedderOptions)
   const load = async (): Promise<ExtractorLike> => {
     const { pipeline, env } = await import('@huggingface/transformers')
     env.cacheDir = options.cacheDir
+    if (options.offline === true) env.allowRemoteModels = false
     log.info({ model, dtype: options.dtype ?? DEFAULT_DTYPE }, 'loading embedding model')
     return (await pipeline('feature-extraction', model, {
       dtype: options.dtype ?? DEFAULT_DTYPE,
