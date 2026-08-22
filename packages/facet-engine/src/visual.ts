@@ -75,6 +75,24 @@ export type VisualSymbolFacet = z.infer<typeof visualSymbolFacetSchema>
 export const VISUAL_SYMBOL_KEY = 'visual.symbol/v0'
 
 /**
+ * Where a node's text sits inside the space it has. Separate from
+ * `visual.shape` on purpose: a plain rect may want centred text, and a
+ * shaped node may want its text at the top — tying placement to the
+ * silhouette would make one choice unreachable from the other.
+ *
+ * ABSENT means "however this node would place text anyway" (a shaped node
+ * centres what fits, a rect starts at the top). The facet overrides that
+ * default; it does not restate it, which is why there is no third value.
+ */
+export const visualTextFacetSchema = z.object({
+  align: z.enum(['start', 'center']),
+})
+
+export type VisualTextFacet = z.infer<typeof visualTextFacetSchema>
+
+export const VISUAL_TEXT_KEY = 'visual.text/v0'
+
+/**
  * The bundled plugin. Deliberately ordinary (ADR-0013 decision 3): it goes
  * through the same registry, validation and ordering as any deployment's
  * added plugins, and a deployment may disable it.
@@ -111,6 +129,26 @@ export const visualPlugin = definePlugin({
               { value: 'hexagon', label: 'Hexagon', glyph: 'hexagon' },
               { value: 'parallelogram', label: 'Parallelogram', glyph: 'parallelogram' },
               { value: 'cylinder', label: 'Cylinder', glyph: 'cylinder' },
+            ],
+          },
+        },
+      },
+    }),
+    defineFacet({
+      name: 'text',
+      version: 'v0',
+      targets: ['node'],
+      schema: visualTextFacetSchema,
+      editor: {
+        fields: {
+          align: {
+            widget: 'segmented',
+            label: 'Text',
+            quick: true,
+            options: [
+              { value: null, label: 'Default placement', glyph: 'none' },
+              { value: 'start', label: 'Top' },
+              { value: 'center', label: 'Middle' },
             ],
           },
         },
@@ -194,4 +232,20 @@ export function resolveNodeSymbol(
   const resolution = registry.resolveFacetPayload(VISUAL_SYMBOL_KEY, stored)
   if (resolution.kind !== 'resolved') return undefined
   return visualSymbolFacetSchema.parse(resolution.value)
+}
+
+/**
+ * The one read path for "where does this node's text sit": the
+ * `visual.text/v0` facet when it resolves, else undefined — which every
+ * consumer treats as the placement it would have chosen anyway.
+ */
+export function resolveNodeTextAlign(
+  node: SpatialCanvas['nodes'][number],
+  registry: FacetRegistry = bundledFacetRegistry,
+): VisualTextFacet['align'] | undefined {
+  const stored = node['x-whiteboard']?.facets?.[VISUAL_TEXT_KEY]
+  if (stored === undefined) return undefined
+  const resolution = registry.resolveFacetPayload(VISUAL_TEXT_KEY, stored)
+  if (resolution.kind !== 'resolved') return undefined
+  return visualTextFacetSchema.parse(resolution.value).align
 }

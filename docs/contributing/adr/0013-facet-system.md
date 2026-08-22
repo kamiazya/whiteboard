@@ -209,7 +209,10 @@ grammar). The rest lands in order: the plugin registry, four-layer
 validation, compat chains, the canvas slot and the `visual` edge-style
 migration; then `visual.shape/v0` (first node-target facet, resolving to
 the already-landed silhouettes); then `visual.symbol/v0`; then the editor
-tiers and contribution surfaces.
+tiers and contribution surfaces. `visual.text/v0` (per-node text
+placement) landed after those and is the first facet to reach the editor
+with NO composition-root change at all — its whole UI comes from the
+tier-2 `editor` spec, which is the test of whether the tiers work.
 
 ## Consequences
 
