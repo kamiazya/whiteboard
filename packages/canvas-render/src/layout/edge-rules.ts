@@ -452,6 +452,16 @@ export function fullyContains(outer: Rect, inner: Rect): boolean {
 }
 
 /**
+ * The one COST_QUANTUM rounding every ink term measures in. Sub-quantum
+ * differences are rounding wobble, not geometry: anchors land on fractions
+ * (a slid anchor can sit at 233.333...px), so terms that compare or subtract
+ * coordinates must agree on where the grid is.
+ */
+function quantize(n: number): number {
+  return Math.round(n * COST_QUANTUM)
+}
+
+/**
  * Quantized length of an axis-aligned path's ink lying along `rects`, in the
  * COST_QUANTUM-quantized integer space every ink-length term is measured in
  * (so the term is integral by construction). `qualifies` is the ONE thing
@@ -467,7 +477,7 @@ function inkAlongRects(
   rects: readonly Rect[],
   qualifies: (fixed: number, near: number, far: number) => boolean,
 ): number {
-  const q = (n: number) => Math.round(n * COST_QUANTUM)
+  const q = quantize
   let total = 0
   for (let i = 1; i < path.length; i++) {
     const a = path[i - 1] as Point
@@ -503,40 +513,61 @@ const overlapAndIntrusion: PenaltyRule = {
   tier: 0,
   pairTerm: (triple) => triple[0],
   selfTerm: (path, foreignBodies) => {
-    const q = (n: number) => Math.round(n * COST_QUANTUM)
     let overlap = 0
+    // Quantized once per POINT rather than per comparison: the retrace loop
+    // below is quadratic in the segment count and re-derived the same six
+    // values for every pair. `quantize` is pure, so the sums are unchanged.
+    const qx: number[] = []
+    const qy: number[] = []
+    for (const p of path) {
+      qx.push(quantize(p.x))
+      qy.push(quantize(p.y))
+    }
     for (let i = 1; i < path.length; i++) {
       const a = path[i - 1] as Point
       const b = path[i] as Point
+      // Only an axis-aligned segment can tunnel, and only through a body
+      // whose OTHER axis strictly contains it — the same reject the router
+      // and the grid search already apply. A diagonal or zero-length
+      // segment scores nothing against any body, so it skips the loop
+      // entirely rather than computing four bounds per obstacle to find
+      // that out. Boundary grazing stays excluded: an anchor ON a
+      // neighbour's border or a segment riding the margin band is
+      // bestCandidate's business, not a tunnel.
+      const horizontal = a.y === b.y && a.x !== b.x
+      const vertical = a.x === b.x && a.y !== b.y
+      if (!horizontal && !vertical) continue
       for (const r of foreignBodies) {
-        // Axis-aligned intrusion length, boundary grazing excluded: an
-        // anchor ON a neighbour's border or a segment riding the margin
-        // band is bestCandidate's business, not a tunnel.
-        const minX = Math.max(Math.min(a.x, b.x), r.x)
-        const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
-        const minY = Math.max(Math.min(a.y, b.y), r.y)
-        const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
-        if (maxX <= minX && maxY <= minY) continue
-        if (a.y === b.y && a.y > r.y && a.y < r.y + r.h && maxX > minX) {
-          overlap += q(maxX - minX)
-        } else if (a.x === b.x && a.x > r.x && a.x < r.x + r.w && maxY > minY) {
-          overlap += q(maxY - minY)
+        if (horizontal) {
+          if (a.y <= r.y || a.y >= r.y + r.h) continue
+          const minX = Math.max(Math.min(a.x, b.x), r.x)
+          const maxX = Math.min(Math.max(a.x, b.x), r.x + r.w)
+          if (maxX > minX) overlap += quantize(maxX - minX)
+        } else {
+          if (a.x <= r.x || a.x >= r.x + r.w) continue
+          const minY = Math.max(Math.min(a.y, b.y), r.y)
+          const maxY = Math.min(Math.max(a.y, b.y), r.y + r.h)
+          if (maxY > minY) overlap += quantize(maxY - minY)
         }
       }
     }
     for (let i = 1; i < path.length; i++) {
       for (let j = i + 1; j < path.length; j++) {
-        const a1 = path[i - 1] as Point
-        const a2 = path[i] as Point
-        const b1 = path[j - 1] as Point
-        const b2 = path[j] as Point
-        if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
-          const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
-          const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
+        const ax1 = qx[i - 1] as number
+        const ay1 = qy[i - 1] as number
+        const ax2 = qx[i] as number
+        const ay2 = qy[i] as number
+        const bx1 = qx[j - 1] as number
+        const by1 = qy[j - 1] as number
+        const bx2 = qx[j] as number
+        const by2 = qy[j] as number
+        if (ax1 === ax2 && bx1 === bx2 && ax1 === bx1) {
+          const lo = Math.max(Math.min(ay1, ay2), Math.min(by1, by2))
+          const hi = Math.min(Math.max(ay1, ay2), Math.max(by1, by2))
           if (hi > lo) overlap += hi - lo
-        } else if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
-          const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
-          const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
+        } else if (ay1 === ay2 && by1 === by2 && ay1 === by1) {
+          const lo = Math.max(Math.min(ax1, ax2), Math.min(bx1, bx2))
+          const hi = Math.min(Math.max(ax1, ax2), Math.max(bx1, bx2))
           if (hi > lo) overlap += hi - lo
         }
       }
@@ -678,7 +709,7 @@ export const endpointBodyInk: PenaltyRule = {
  * anchor can land at e.g. 233.333...px), so a raw `Math.sign` would read a
  * sub-quarter-pixel rounding wobble as a reversal. */
 function quantizedSign(a: number, b: number): number {
-  return Math.sign(Math.round(b * COST_QUANTUM) - Math.round(a * COST_QUANTUM))
+  return Math.sign(quantize(b) - quantize(a))
 }
 
 /** Direction reversals per axis along a polyline: a segment whose sign on

@@ -338,10 +338,252 @@ function initialSideChoices(
   return choices
 }
 
-/** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
-function computeAnchorsFor(
+/**
+ * The layout-invariant half of `computeAnchorsFor`'s inputs, built ONCE per
+ * search and reused by every trial: nodes do not move while sides are being
+ * chosen, so their index, rects and centers are identical on every call. The
+ * search runs that function hundreds of times per layout (measured: 252 calls
+ * on the 200-edge bench, 463 on the 345-edge one), and rebuilding these per
+ * call was 15% of layout time.
+ *
+ * Carrying `edges` alongside them is what makes the reuse safe: `ends` is
+ * indexed by edge position, so a context cannot be paired with an edge list
+ * it was not derived from.
+ */
+export interface AnchorContext {
+  readonly edges: readonly CanvasEdge[]
+  /** Per edge index; `undefined` when either endpoint node is missing. */
+  readonly ends: ReadonlyArray<AnchorEnds | undefined>
+}
+
+interface AnchorEnds {
+  readonly fromRect: Rect
+  readonly toRect: Rect
+  readonly fromCenter: Point
+  readonly toCenter: Point
+}
+
+export function anchorContext(
   nodes: readonly SpatialNode[],
   edges: readonly CanvasEdge[],
+): AnchorContext {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const ends = edges.map((edge) => {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) return undefined
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    return { fromRect, toRect, fromCenter: centerOf(fromRect), toCenter: centerOf(toRect) }
+  })
+  return { edges, ends }
+}
+
+/**
+ * One end of one edge, as the fan-out sees it. Ends are partitioned by
+ * `(nodeId, side)`: a group's placement is a function of its own members and
+ * nothing else, which is what lets a trial re-place only the groups it
+ * disturbs (`patchAnchorGroups`).
+ */
+interface AnchorEnd {
+  readonly edgeId: string
+  readonly edgeIndex: number
+  readonly role: 'from' | 'to'
+  readonly rect: Rect
+  readonly side: Side
+  readonly farCenter: Point
+}
+
+/** Pre-alignment anchor entry: what the fan-out writes, before the aligned
+ *  run slides facing pairs and before pins are applied. */
+interface AnchorEntry {
+  from?: Point
+  to?: Point
+  fromLaneDepth?: number
+  toLaneDepth?: number
+  fromSide?: Side
+  toSide?: Side
+}
+
+/**
+ * The partition plus the entries placed from it. Held across a search so a
+ * one-edge trial can rebuild the two groups that edge leaves and the two it
+ * joins, instead of re-deriving all of them: measured on the 200-edge bench,
+ * grouping and placement are 92% of `computeAnchorsFor` (15.4ms + 27.2ms of
+ * 46.4ms) and alignment only 8%, so alignment stays a full pass and only
+ * this half is made incremental.
+ *
+ * This type and the two functions producing it are exported for one reason:
+ * the incremental path is a SECOND producer of a partition the full path
+ * also produces, and this package's one-producer rule admits that only with
+ * a parity test pinning their agreement — see
+ * `anchor-groups.properties.test.ts`.
+ */
+export interface AnchorGroups {
+  readonly groups: Map<string, AnchorEnd[]>
+  readonly entries: Map<string, AnchorEntry>
+}
+
+const groupKeyFor = (edge: CanvasEdge, role: 'from' | 'to', side: Side): string =>
+  `${role === 'from' ? edge.fromNode : edge.toNode} ${side}`
+
+function endsOfEdge(
+  ctx: AnchorContext,
+  edgeIndex: number,
+  sides: ReadonlyMap<string, SidePair>,
+): readonly [AnchorEnd, AnchorEnd] | undefined {
+  const edge = ctx.edges[edgeIndex]
+  const geom = ctx.ends[edgeIndex]
+  if (edge === undefined || geom === undefined) return undefined
+  const chosen = sides.get(edge.id)
+  if (chosen === undefined) return undefined
+  return [
+    {
+      edgeId: edge.id,
+      edgeIndex,
+      role: 'from',
+      rect: geom.fromRect,
+      side: chosen.fromSide,
+      farCenter: geom.toCenter,
+    },
+    {
+      edgeId: edge.id,
+      edgeIndex,
+      role: 'to',
+      rect: geom.toRect,
+      side: chosen.toSide,
+      farCenter: geom.fromCenter,
+    },
+  ]
+}
+
+/**
+ * Fan-out and lane depth for ONE group, written into `entries`. Each end
+ * writes only its own half (`from*` or `to*`), so re-placing a group never
+ * disturbs the other end of an edge that reaches into it.
+ */
+function placeAnchorGroup(group: readonly AnchorEnd[], entries: Map<string, AnchorEntry>): void {
+  const ordered = [...group].sort(
+    (a, b) =>
+      tangentCoordinate(a.side, a.farCenter) - tangentCoordinate(b.side, b.farCenter) ||
+      a.edgeIndex - b.edgeIndex ||
+      (a.role === b.role ? 0 : a.role === 'from' ? -1 : 1),
+  )
+  const placed = ordered.map((end, i) => ({
+    end,
+    point: sidePointAt(end.rect, end.side, (i + 1) / (ordered.length + 1)),
+    t: tangentCoordinate(end.side, sidePointAt(end.rect, end.side, (i + 1) / (ordered.length + 1))),
+  }))
+  for (const member of placed) {
+    // Depth by SWEEP RANK, not list index: a corridor travelling toward
+    // its far endpoint passes every anchor between its own and that
+    // direction, and must run deeper than all of their exit segments —
+    // an index-ordered ladder gives a sweeping corridor a shallow lane
+    // and forces a crossing right at the node that the connections
+    // themselves never required. Ends that sweep past nothing share the
+    // base depth; their corridors occupy disjoint tangent ranges.
+    const dir = Math.sign(tangentCoordinate(member.end.side, member.end.farCenter) - member.t)
+    const rank =
+      dir === 0
+        ? 0
+        : placed.filter((other) => (dir > 0 ? other.t > member.t : other.t < member.t)).length
+    const depth = ORTHOGONAL_STUB_PX + rank * STUB_LANE_STEP_PX
+    const entry = entries.get(member.end.edgeId) ?? {}
+    entries.set(
+      member.end.edgeId,
+      member.end.role === 'from'
+        ? { ...entry, from: member.point, fromLaneDepth: depth, fromSide: member.end.side }
+        : { ...entry, to: member.point, toLaneDepth: depth, toSide: member.end.side },
+    )
+  }
+}
+
+/** The whole partition, placed. */
+export function buildAnchorGroups(
+  ctx: AnchorContext,
+  sides: ReadonlyMap<string, SidePair>,
+): AnchorGroups {
+  const groups = new Map<string, AnchorEnd[]>()
+  ctx.edges.forEach((edge, edgeIndex) => {
+    const ends = endsOfEdge(ctx, edgeIndex, sides)
+    if (ends === undefined) return
+    for (const end of ends) {
+      const key = groupKeyFor(edge, end.role, end.side)
+      const group = groups.get(key)
+      if (group === undefined) groups.set(key, [end])
+      else group.push(end)
+    }
+  })
+  const entries = new Map<string, AnchorEntry>()
+  for (const group of groups.values()) placeAnchorGroup(group, entries)
+  return { groups, entries }
+}
+
+/**
+ * The same partition with ONE edge re-sided. Every trial the side-choice
+ * search evaluates is exactly this shape (`new Map(current)` plus one
+ * `set`), and only the two groups that edge leaves and the two it joins can
+ * differ — every other group keeps the members, and therefore the fan-out,
+ * it already had. `base` is left untouched.
+ */
+export function patchAnchorGroups(
+  ctx: AnchorContext,
+  base: AnchorGroups,
+  sides: ReadonlyMap<string, SidePair>,
+  edgeIndex: number,
+): AnchorGroups {
+  const edge = ctx.edges[edgeIndex]
+  const next = endsOfEdge(ctx, edgeIndex, sides)
+  if (edge === undefined || next === undefined) return base
+  const groups = new Map(base.groups)
+  const touched = new Set<string>()
+  const replace = (key: string, mutate: (members: AnchorEnd[]) => AnchorEnd[]): void => {
+    const members = mutate([...(groups.get(key) ?? [])])
+    // A side an edge has just left may hold nothing now. `buildAnchorGroups`
+    // never creates an empty group, so keeping one here would leave the two
+    // partitions unequal — harmlessly for the alignment pass, which reads a
+    // missing key and an empty one alike, but the parity property compares
+    // the partitions themselves and an emptied key would also accumulate
+    // across a search.
+    if (members.length === 0) groups.delete(key)
+    else groups.set(key, members)
+    touched.add(key)
+  }
+  // Leave the old groups. The edge's previous sides are read off the base
+  // entry rather than a second side map: they are what placed it there.
+  const previous = base.entries.get(edge.id)
+  for (const [role, side] of [
+    ['from', previous?.fromSide],
+    ['to', previous?.toSide],
+  ] as const) {
+    if (side === undefined) continue
+    replace(groupKeyFor(edge, role, side), (members) =>
+      members.filter((m) => !(m.edgeId === edge.id && m.role === role)),
+    )
+  }
+  // Join the new ones.
+  for (const end of next) {
+    replace(groupKeyFor(edge, end.role, end.side), (members) => [...members, end])
+  }
+  // Re-place only what moved. A member of a touched group keeps the half it
+  // owns in another, untouched group, because `placeAnchorGroup` writes one
+  // half per end onto whatever entry is already there.
+  const entries = new Map(base.entries)
+  // The re-sided edge needs no clearing first: both of its new groups are
+  // touched by construction, and each end overwrites its own half of the
+  // entry, so nothing of the old sides survives. (Clearing it anyway was
+  // written here and removed — the parity property showed it changed
+  // nothing.)
+  for (const key of touched) {
+    const group = groups.get(key)
+    if (group !== undefined) placeAnchorGroup(group, entries)
+  }
+  return { groups, entries }
+}
+
+/** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
+function computeAnchorsFor(
+  ctx: AnchorContext,
   sides: ReadonlyMap<string, SidePair>,
   // Alignment never varies WITHIN one optimizer run: sliding anchors
   // mid-optimization changes trial costs, which shifts side-choice
@@ -357,96 +599,13 @@ function computeAnchorsFor(
   // carried newcomer lands on a distinct lane, but their own placed
   // point/depth is the committed one — a stationary edge never moves.
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
+  // A partition already placed for exactly these sides, when the caller has
+  // one (a trial patched from the incumbent). Absent, it is built here.
+  placement?: AnchorGroups,
 ): ReadonlyMap<string, EdgeAnchorPair> {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
-  type End = {
-    readonly edgeId: string
-    readonly edgeIndex: number
-    readonly role: 'from' | 'to'
-    readonly rect: Rect
-    readonly side: Side
-    readonly farCenter: Point
-  }
-  const groups = new Map<string, End[]>()
-  edges.forEach((edge, edgeIndex) => {
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
-    const chosen = sides.get(edge.id)
-    if (fromNode === undefined || toNode === undefined || chosen === undefined) return
-    const fromRect = rectOf(fromNode)
-    const toRect = rectOf(toNode)
-    const ends: End[] = [
-      {
-        edgeId: edge.id,
-        edgeIndex,
-        role: 'from',
-        rect: fromRect,
-        side: chosen.fromSide,
-        farCenter: centerOf(toRect),
-      },
-      {
-        edgeId: edge.id,
-        edgeIndex,
-        role: 'to',
-        rect: toRect,
-        side: chosen.toSide,
-        farCenter: centerOf(fromRect),
-      },
-    ]
-    for (const end of ends) {
-      const key = `${end.role === 'from' ? edge.fromNode : edge.toNode} ${end.side}`
-      const group = groups.get(key)
-      if (group === undefined) groups.set(key, [end])
-      else group.push(end)
-    }
-  })
-
-  const anchors = new Map<
-    string,
-    {
-      from?: Point
-      to?: Point
-      fromLaneDepth?: number
-      toLaneDepth?: number
-      fromSide?: Side
-      toSide?: Side
-    }
-  >()
-  for (const group of groups.values()) {
-    group.sort(
-      (a, b) =>
-        tangentCoordinate(a.side, a.farCenter) - tangentCoordinate(b.side, b.farCenter) ||
-        a.edgeIndex - b.edgeIndex ||
-        (a.role === b.role ? 0 : a.role === 'from' ? -1 : 1),
-    )
-    const placed = group.map((end, i) => ({
-      end,
-      point: sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1)),
-      t: tangentCoordinate(end.side, sidePointAt(end.rect, end.side, (i + 1) / (group.length + 1))),
-    }))
-    for (const member of placed) {
-      // Depth by SWEEP RANK, not list index: a corridor travelling toward
-      // its far endpoint passes every anchor between its own and that
-      // direction, and must run deeper than all of their exit segments —
-      // an index-ordered ladder gives a sweeping corridor a shallow lane
-      // and forces a crossing right at the node that the connections
-      // themselves never required. Ends that sweep past nothing share the
-      // base depth; their corridors occupy disjoint tangent ranges.
-      const dir = Math.sign(tangentCoordinate(member.end.side, member.end.farCenter) - member.t)
-      const rank =
-        dir === 0
-          ? 0
-          : placed.filter((other) => (dir > 0 ? other.t > member.t : other.t < member.t)).length
-      const depth = ORTHOGONAL_STUB_PX + rank * STUB_LANE_STEP_PX
-      const entry = anchors.get(member.end.edgeId) ?? {}
-      anchors.set(
-        member.end.edgeId,
-        member.end.role === 'from'
-          ? { ...entry, from: member.point, fromLaneDepth: depth, fromSide: member.end.side }
-          : { ...entry, to: member.point, toLaneDepth: depth, toSide: member.end.side },
-      )
-    }
-  }
+  const { edges, ends: edgeEnds } = ctx
+  const { groups, entries } = placement ?? buildAnchorGroups(ctx, sides)
+  const anchors = new Map<string, AnchorEntry>(entries)
 
   const applyPins = (): void => {
     if (pins === undefined) return
@@ -474,20 +633,19 @@ function computeAnchorsFor(
   // per-side fraction placement above only delivers when the two side
   // midpoints happen to align. Multi-edge sides keep their fan-out
   // fractions: collapsing two corridors onto one lane is worse than a jog.
-  for (const edge of edges) {
+  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+    const edge = edges[edgeIndex] as CanvasEdge
     // A pinned edge holds its committed anchors; alignment must not move it.
     if (pins?.get(edge.id)?.from !== undefined || pins?.get(edge.id)?.to !== undefined) continue
     const chosen = sides.get(edge.id)
     const entry = anchors.get(edge.id)
     if (chosen === undefined || entry?.from === undefined || entry.to === undefined) continue
     if (chosen.toSide !== oppositeSide(chosen.fromSide)) continue
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
-    if (fromNode === undefined || toNode === undefined) continue
+    const geom = edgeEnds[edgeIndex]
+    if (geom === undefined) continue
     if ((groups.get(`${edge.fromNode} ${chosen.fromSide}`)?.length ?? 0) > 1) continue
     if ((groups.get(`${edge.toNode} ${chosen.toSide}`)?.length ?? 0) > 1) continue
-    const fromRect = rectOf(fromNode)
-    const toRect = rectOf(toNode)
+    const { fromRect, toRect } = geom
     const axis = chosen.fromSide === 'left' || chosen.fromSide === 'right' ? 'h' : 'v'
     // Interpenetrating boxes (authored sides can force them) have no
     // forward-facing lane to slide into.
@@ -735,8 +893,14 @@ function optimizeSideChoices(
     a.y - COST_QUANTUM <= b.y + b.h &&
     b.y - COST_QUANTUM <= a.y + a.h
 
+  const ctx = anchorContext(nodes, edges)
   let current = new Map(initial)
-  let anchors = computeAnchorsFor(nodes, edges, current, align, pins)
+  // The incumbent's partition, carried so a trial can patch it rather than
+  // re-derive it. Replaced only when a trial is adopted, so it always
+  // describes exactly `current`.
+  let placement = buildAnchorGroups(ctx, current)
+  const edgeIndexById = new Map(edges.map((e, i) => [e.id, i]))
+  let anchors = computeAnchorsFor(ctx, current, align, pins, placement)
   let paths: (readonly Point[])[] = edges.map((e, i) => routeCached(e, i, anchors.get(e.id)))
   let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
@@ -787,16 +951,22 @@ function optimizeSideChoices(
 
   const evaluateTrial = (
     trialSides: ReadonlyMap<string, SidePair>,
+    // Which edge `trialSides` re-sided. Every trial here differs from the
+    // incumbent in exactly one edge, which is what makes the partition
+    // patchable instead of rebuilt.
+    reSidedIndex: number,
   ): {
     cost: ConfigCost
     anchors: ReadonlyMap<string, EdgeAnchorPair>
+    placement: AnchorGroups
     paths: (readonly Point[])[]
     bounds: Rect[]
     touched: number[]
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
   } => {
-    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides, align, pins)
+    const trialPlacement = patchAnchorGroups(ctx, placement, trialSides, reSidedIndex)
+    const trialAnchors = computeAnchorsFor(ctx, trialSides, align, pins, trialPlacement)
     const touched: number[] = []
     for (let i = 0; i < edges.length; i++) {
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
@@ -853,6 +1023,7 @@ function optimizeSideChoices(
     return {
       cost,
       anchors: trialAnchors,
+      placement: trialPlacement,
       paths: trialPaths,
       bounds: trialBounds,
       touched,
@@ -941,13 +1112,14 @@ function optimizeSideChoices(
         if (candidate.fromSide === chosen.fromSide && candidate.toSide === chosen.toSide) continue
         const trial = new Map(current)
         trial.set(edge.id, candidate)
-        const evaluated = evaluateTrial(trial)
+        const evaluated = evaluateTrial(trial, edgeIndexById.get(edge.id) ?? -1)
         // incumbent-wins-ties: adopt only on a strict decrease (edge-rules.ts),
         // so a tie never triggers churn and the lexicographic loop cannot oscillate.
         if (shouldAdoptCandidate(evaluated.cost, currentCost, lessCost)) {
           current = trial
           currentCost = evaluated.cost
           anchors = evaluated.anchors
+          placement = evaluated.placement
           paths = evaluated.paths
           bounds = evaluated.bounds
           for (const [key, score] of evaluated.updates) matrix.set(key, score)
@@ -992,7 +1164,8 @@ function anchorsWithoutCoincidentEnds(
     const a = anchors.get(id)
     return a?.from !== undefined && a.to !== undefined && a.from.x === a.to.x && a.from.y === a.to.y
   }
-  const anchors = computeAnchorsFor(nodes, edges, sides, align, pins)
+  const ctx = anchorContext(nodes, edges)
+  const anchors = computeAnchorsFor(ctx, sides, align, pins)
   const collided = edges.filter(
     (edge) =>
       edge.fromNode !== edge.toNode &&
@@ -1037,7 +1210,7 @@ function anchorsWithoutCoincidentEnds(
       }
       const trial = new Map(repaired)
       trial.set(edge.id, sided)
-      const trialAnchors = computeAnchorsFor(nodes, edges, trial, align, pins)
+      const trialAnchors = computeAnchorsFor(ctx, trial, align, pins)
       if (coincides(trialAnchors, edge.id)) continue
       const { path } = routeEdge(nodes, edge, style, trialAnchors.get(edge.id))
       // The arrowhead is drawn ON the final segment; a shorter one paints an
@@ -1071,7 +1244,7 @@ function anchorsWithoutCoincidentEnds(
     // draws the shared point rather than a spike, so the worst case is an
     // invisible edge, never a wrong one.
   }
-  return computeAnchorsFor(nodes, edges, repaired, align, pins)
+  return computeAnchorsFor(ctx, repaired, align, pins)
 }
 
 /**

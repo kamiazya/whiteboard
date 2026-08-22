@@ -492,14 +492,37 @@ paths:
       sequential search does in 0.6s. No production router found (libavoid,
       ELK, yFiles, Excalidraw) parallelises this step; the comparable one
       (Excalidraw's elbow arrows) shrank the routing search space instead.
-      The experiments are preserved unmerged on branches
-      `batch-side-choice` and `webgpu-pair-scorer`. Do not re-propose GPU
-      or batch search for SPEED; what batch still offers is QUALITY on large
-      canvases (345-edge clustered: violations 183 -> 138, interior ink
-      -22%) at 4x the time, which is a separate trade. The speed work goes
-      into the CPU-side costs the profile named: unmeasured `selfPenalty`,
-      per-trial full `computeAnchorsFor`, allocation in `addCost`/`lessCost`,
-      and `routeEdge` rebuilding obstacle lists it was already given.
+      Both experiments were left on local branches (`batch-side-choice`,
+      `webgpu-pair-scorer`) that were never pushed and are not reachable
+      from this repository — so the paragraph above, not a branch, is what
+      has to carry the conclusion. Enough to rebuild either: the batch form
+      is the one described under the 2026-08-14 measurement (best candidate
+      per edge scored against ONE base configuration, adopted where old and
+      new bounding boxes are both disjoint, merged configuration
+      re-evaluated), and the kernel is one WGSL compute shader over
+      `scoreQuantizedSegmentPair`'s integer narrow phase — which is exactly
+      why that function was made integer-only and is documented as
+      reproducible by a second implementation.
+      Do not re-propose GPU or batch search for SPEED; what batch still
+      offers is QUALITY on large canvases (345-edge clustered: violations
+      183 -> 138, interior ink -22%) at 4x the time, which is a separate
+      trade. The speed work goes
+      into the CPU-side costs the profile named. Two of the four are done:
+      `addCost`/`lessCost` allocation (the trial sums into one scratch
+      array) and `routeEdge`'s repeated `deriveDefaultSides` scan.
+      `computeAnchorsFor` is done: it gave up its layout-invariant half
+      (node index, rects, centers, hoisted into an `AnchorContext` built
+      once per search), and its partition is now patched per trial rather
+      than rebuilt (`patchAnchorGroups`). Timing its three phases is what
+      made the second half tractable — grouping 15.4ms, placement 27.2ms,
+      alignment 3.8ms of 46.4ms on the 200-edge bench — because it showed
+      alignment could stay a FULL pass. That is the part worth remembering:
+      the hard question was which edges' alignment a re-side can flip
+      (the aligned run's slide reads group SIZES), and at 8% of the
+      function it never had to be answered. `selfPenalty` was measured
+      rather than assumed and the answer moved the target: its cost is
+      overlap-and-intrusion (10.9% of layout), not border-tracing (3.1%),
+      and that term now rejects by axis before measuring.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
