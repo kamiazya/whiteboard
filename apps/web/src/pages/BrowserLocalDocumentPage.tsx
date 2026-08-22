@@ -38,7 +38,11 @@ import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { browserLocalDocumentPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
+import {
+  browserLocalDocumentPath,
+  browserLocalIndexPath,
+  parseBrowserLocalRoute,
+} from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
@@ -805,23 +809,10 @@ export function BrowserLocalDocumentPage({
               dataMode="local"
               workspaceId="local"
               path={renderState.snapshot.path}
-              documents={switcherOptions.map((c) => ({
-                path: c.path,
-                name: c.name,
-                updatedAt: c.updatedAt,
-              }))}
-              onNavigateToDocument={(path) => {
-                const id = documentIdOfPath(path)
-                if (id !== null) void switchDocument(id)
-              }}
-              onCreateDocument={async () => {
-                const created = await createDocument()
-                await switchDocument(created.documentId)
-              }}
-              onCreateMarkdownCanvas={async () => {
-                const created = await createDocument(undefined, 'markdown')
-                await switchDocument(created.documentId)
-              }}
+              // The way out of the editor. This page had none until now —
+              // the app-shell brand mark was the only exit, and it says
+              // nothing about where it goes.
+              onNavigateBack={() => navigate(browserLocalIndexPath())}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {
                 // Entering hides this whole bar; the floating exit control and

@@ -2,7 +2,6 @@
 
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
-import { StrictMode } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 // Stub heavy/irrelevant dependencies so the component mounts without network or browser-only requirements.
@@ -16,7 +15,7 @@ vi.mock('@kamiazya/whiteboard-mcp/api-client', () => ({ apiFetch: vi.fn() }))
 
 import { apiFetch } from '@kamiazya/whiteboard-mcp/api-client'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
-import WorkspaceTopBar from './WorkspaceTopBar'
+import WorkspaceTopBar, { type DocumentIdentity } from './WorkspaceTopBar'
 
 function mkNamesOk() {
   return new Response(JSON.stringify({ workspace: 'My WS', documents: {}, pinned: [] }), {
@@ -25,12 +24,7 @@ function mkNamesOk() {
   })
 }
 
-function renderBar(overrides?: {
-  onNavigateBack?: () => void
-  onNavigateToDocument?: (path: string) => void
-  workspaces?: string[]
-  onSwitchWorkspace?: (workspaceId: string) => void
-}) {
+function renderBar(overrides?: { onNavigateBack?: () => void }) {
   // React 18 delegates events to the root container. Radix portals render into document.body,
   // which is a DOM sibling of the default test container. Using document.body as the React root
   // ensures portal events bubble to React's listener.
@@ -38,19 +32,12 @@ function renderBar(overrides?: {
     <WorkspaceTopBar
       workspaceId="ws_1"
       path="canvas-a"
-      documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
       onToggleFullscreen={() => {}}
       onNavigateBack={overrides?.onNavigateBack ?? (() => {})}
-      onNavigateToDocument={overrides?.onNavigateToDocument ?? (() => {})}
-      workspaces={overrides?.workspaces}
-      onSwitchWorkspace={overrides?.onSwitchWorkspace}
     />,
     { container: document.body },
   )
 }
-
-// Open the new canvas dialog through the canvas switcher dropdown.
-// Radix DropdownMenuTrigger opens on pointerDown (not click); DropdownMenuItem selects on pointerUp.
 
 beforeEach(() => {
   vi.mocked(apiFetch).mockImplementation(async (url) => {
@@ -62,106 +49,6 @@ beforeEach(() => {
 afterEach(() => {
   cleanup()
   vi.clearAllMocks()
-})
-
-// ADR-0006 point 3: creation is not gated on a name. Selecting "New canvas…" derives a path from
-// the loaded list (preserving the current group prefix) and POSTs immediately — no dialog.
-// These are the red tests for that convergence; the dialog-era suites below are updated with it.
-async function selectNewCanvasItem(switcherName: RegExp = /^Workspace:/i) {
-  const switcher = screen.getByRole('button', { name: switcherName })
-  fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-  const item = await screen.findByTestId('new-document-menu-item')
-  fireEvent.pointerUp(item)
-}
-
-function capturePosts() {
-  const posts: Array<{ url: string; body: unknown }> = []
-  vi.mocked(apiFetch).mockImplementation(async (url, init) => {
-    if (String(url).includes('/names')) return mkNamesOk()
-    if (init?.method === 'POST') {
-      posts.push({ url: String(url), body: JSON.parse(String(init.body)) })
-      return new Response(
-        JSON.stringify({ path: (JSON.parse(String(init.body)) as { path: string }).path }),
-        {
-          status: 200,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      )
-    }
-    return new Response('{}', { status: 200 })
-  })
-  return posts
-}
-
-describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
-  it('POSTs a derived path on select and navigates — no dialog', async () => {
-    const posts = capturePosts()
-    const onNavigateToDocument = vi.fn()
-    renderBar({ onNavigateToDocument })
-    await selectNewCanvasItem()
-    await waitFor(() => expect(onNavigateToDocument).toHaveBeenCalledWith('untitled'))
-    expect(posts).toEqual([expect.objectContaining({ body: { path: 'untitled' } })])
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
-
-  it('derives inside the current group: design/foo -> design/untitled', async () => {
-    const posts = capturePosts()
-    const onNavigateToDocument = vi.fn()
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="design/foo"
-        documents={[{ path: 'design/foo', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={onNavigateToDocument}
-      />,
-      { container: document.body },
-    )
-    await selectNewCanvasItem()
-    await waitFor(() => expect(onNavigateToDocument).toHaveBeenCalledWith('design/untitled'))
-    expect(posts[0]?.body).toEqual({ path: 'design/untitled' })
-  })
-
-  it('skips paths already in the list: untitled taken -> untitled-2', async () => {
-    const posts = capturePosts()
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[
-          { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' },
-          { path: 'untitled', updatedAt: '2026-04-23T00:00:00Z' },
-        ]}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-    await selectNewCanvasItem()
-    await waitFor(() => expect(posts.length).toBe(1))
-    expect(posts[0]?.body).toEqual({ path: 'untitled-2' })
-  })
-
-  it('a failed create surfaces the Problem Details title in an alert — still no dialog', async () => {
-    vi.mocked(apiFetch).mockImplementation(async (url) => {
-      if (String(url).includes('/names')) return mkNamesOk()
-      return new Response(
-        JSON.stringify({ title: 'Canvas "untitled" already exists', status: 409 }),
-        {
-          status: 409,
-          headers: { 'Content-Type': 'application/json' },
-        },
-      )
-    })
-    const onNavigateToDocument = vi.fn()
-    renderBar({ onNavigateToDocument })
-    await selectNewCanvasItem()
-    expect((await screen.findByRole('alert')).textContent).toContain('already exists')
-    expect(onNavigateToDocument).not.toHaveBeenCalled()
-    expect(screen.queryByRole('dialog')).toBeNull()
-  })
 })
 
 describe('WorkspaceTopBar — router-free navigation callbacks', () => {
@@ -195,10 +82,11 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
 
     const baseProps = {
       path: 'shared-path',
-      documents: [{ path: 'shared-path', updatedAt: '2026-04-23T00:00:00Z' }],
       onToggleFullscreen: () => {},
       onNavigateBack: () => {},
-      onNavigateToDocument: () => {},
+      // The resolved display name is what this race decides, and the title
+      // segment is where it surfaces now that the switcher's list is gone.
+      titleSlot: (identity: DocumentIdentity) => <span>{identity.name}</span>,
     }
 
     const { rerender } = render(<WorkspaceTopBar workspaceId="ws_a" {...baseProps} />)
@@ -212,12 +100,6 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
         { status: 200, headers: { 'Content-Type': 'application/json' } },
       ),
     )
-    // Observed in the switcher's list: the trigger names the workspace now,
-    // but WHICH canvas name wins is exactly what this race guards.
-    fireEvent.pointerDown(screen.getByRole('button', { name: /^Workspace:/i }), {
-      button: 0,
-      ctrlKey: false,
-    })
     await waitFor(() => {
       expect(screen.getByText('Fresh B')).toBeTruthy()
     })
@@ -233,33 +115,6 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
       expect(screen.queryByText('Stale A')).toBeNull()
       expect(screen.getByText('Fresh B')).toBeTruthy()
     })
-  })
-})
-
-describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
-  it('wraps the canvas list section in a scrollable max-height container so many documents remain reachable', async () => {
-    const many = Array.from({ length: 50 }, (_, i) => ({
-      path: `canvas-${i}`,
-      updatedAt: '2026-04-23T00:00:00Z',
-    }))
-    renderBar()
-    cleanup()
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-0"
-        documents={many}
-        onToggleFullscreen={() => {}}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-      />,
-    )
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
-
-    expect(document.querySelector('.max-h-\\[300px\\].overflow-y-auto')).toBeTruthy()
   })
 })
 
@@ -296,35 +151,6 @@ describe('WorkspaceTopBar — saveVersion double-invoke race (RED-first)', () =>
   })
 })
 
-describe('WorkspaceTopBar — new-canvas double activation', () => {
-  it('issues exactly one POST /documents when New canvas… is activated twice before the first resolves', async () => {
-    let resolvePost!: (r: Response) => void
-    const deferred = new Promise<Response>((resolve) => {
-      resolvePost = resolve
-    })
-    let postCount = 0
-    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
-      const u = String(url)
-      if (u.includes('/names')) return mkNamesOk()
-      if (u.includes('/documents') && (init as RequestInit | undefined)?.method === 'POST') {
-        postCount++
-        return deferred
-      }
-      return new Response('{}', { status: 200 })
-    })
-
-    renderBar()
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
-    fireEvent.pointerUp(item)
-    fireEvent.pointerUp(item)
-    await waitFor(() => expect(postCount).toBe(1))
-    resolvePost(new Response(JSON.stringify({ path: 'untitled' }), { status: 200 }))
-    await waitFor(() => expect(postCount).toBe(1))
-  })
-})
-
 describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
   it('with no DaemonApiContext provider mounted, loads names through the default apiFetch (fallback stays byte-identical)', async () => {
     renderBar()
@@ -347,10 +173,8 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
-          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
-          onNavigateToDocument={() => {}}
         />
       </DaemonApiContext.Provider>,
       { container: document.body },
@@ -372,7 +196,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
 describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (RED-first)', () => {
   function renderBarWithDaemonFetch(overrides?: {
     getThumbnailBlob?: () => Promise<Blob | null>
-    onNavigateToDocument?: (path: string) => void
     titleSlot?: ComponentProps<typeof WorkspaceTopBar>['titleSlot']
   }) {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
@@ -385,10 +208,8 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
         <WorkspaceTopBar
           workspaceId="ws_1"
           path="canvas-a"
-          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
-          onNavigateToDocument={overrides?.onNavigateToDocument ?? (() => {})}
           getThumbnailBlob={overrides?.getThumbnailBlob}
           titleSlot={overrides?.titleSlot}
         />
@@ -482,38 +303,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
     })
     expect(apiFetch).not.toHaveBeenCalled()
   })
-
-  it('toggles pin through the injected daemon fetch', async () => {
-    const daemonFetch = renderBarWithDaemonFetch()
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const pinButton = await screen.findByRole('button', { name: 'Pin canvas' })
-    fireEvent.click(pinButton)
-
-    await waitFor(() => {
-      expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/documents/canvas-a/pin'),
-        expect.objectContaining({ method: 'PUT' }),
-      )
-    })
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('creates a canvas through the injected daemon fetch', async () => {
-    const onNavigateToDocument = vi.fn()
-    const daemonFetch = renderBarWithDaemonFetch({ onNavigateToDocument })
-
-    await selectNewCanvasItem()
-
-    await waitFor(() => {
-      expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/api/workspaces/ws_1/documents'),
-        expect.objectContaining({ method: 'POST' }),
-      )
-    })
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
 })
 
 describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
@@ -533,29 +322,14 @@ describe('WorkspaceTopBar — ~400px collapse (RED-first)', () => {
 
 describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => {
   it('hides the back button when onNavigateBack is omitted', () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onNavigateToDocument={() => {}}
-      />,
-      { container: document.body },
-    )
+    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" />, { container: document.body })
     expect(screen.queryByLabelText('Back to documents')).toBeNull()
   })
 
   it('hides the fullscreen button when onToggleFullscreen is omitted', () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
-        onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
-      />,
-      { container: document.body },
-    )
+    render(<WorkspaceTopBar workspaceId="ws_1" path="canvas-a" onNavigateBack={() => {}} />, {
+      container: document.body,
+    })
     expect(screen.queryByLabelText('Fullscreen')).toBeNull()
   })
 
@@ -564,10 +338,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
         capabilities={{ versions: false, branches: true, merge: true }}
       />,
       { container: document.body },
@@ -593,10 +365,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
         capabilities={{ versions: false, branches: true, merge: true }}
       />,
       { container: document.body },
@@ -614,10 +384,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
         capabilities={{ versions: true, branches: false, merge: true }}
       />,
       { container: document.body },
@@ -636,10 +404,8 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
       <WorkspaceTopBar
         workspaceId="ws 1#x"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
       />,
       { container: document.body },
     )
@@ -655,341 +421,14 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
   })
 })
 
-describe('WorkspaceTopBar — dataMode="local"', () => {
-  it('never calls the daemon fetch: mount and open the canvas switcher', async () => {
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[
-          { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
-          { path: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
-        ]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-
-    // Open the canvas switcher dropdown.
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
-
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('uses documents[].name for display instead of fetching /names', async () => {
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Custom title' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-
-    // The trigger names the WORKSPACE now, so the resolved canvas name is
-    // observed where it is still shown: the switcher's own list.
-    fireEvent.pointerDown(screen.getByRole('button', { name: /^Workspace:/i }), {
-      button: 0,
-      ctrlKey: false,
-    })
-    expect(await screen.findByText('Custom title')).not.toBeNull()
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('routes "New canvas…" to onCreateDocument instead of opening the path dialog / POSTing', async () => {
-    const onCreateDocument = vi.fn().mockResolvedValue(undefined)
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={onCreateDocument}
-      />,
-      { container: document.body },
-    )
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
-    fireEvent.pointerUp(item)
-
-    await waitFor(() => expect(onCreateDocument).toHaveBeenCalledTimes(1))
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('surfaces a rejected onCreateDocument as a visible error since local mode has no path dialog', async () => {
-    const onCreateDocument = vi.fn().mockRejectedValue(new Error('boom'))
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={onCreateDocument}
-      />,
-      { container: document.body },
-    )
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
-    fireEvent.pointerUp(item)
-
-    await waitFor(() => expect(onCreateDocument).toHaveBeenCalledTimes(1))
-    expect((await screen.findByRole('alert')).textContent).toContain('Failed to create canvas.')
-    expect(screen.queryByRole('dialog')).toBeNull()
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('guards against a second in-flight onCreateDocument call when "New canvas…" is invoked twice before the first resolves', async () => {
-    let resolveCreate: () => void = () => {}
-    const onCreateDocument = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveCreate = resolve
-        }),
-    )
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={onCreateDocument}
-      />,
-      { container: document.body },
-    )
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
-    fireEvent.pointerUp(item)
-
-    expect(onCreateDocument).toHaveBeenCalledTimes(1)
-
-    // Reopen the switcher and fire "New canvas…" again before the first
-    // onCreateDocument call resolves — the newDocumentBusy guard must skip this
-    // second invocation instead of minting a duplicate canvas.
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item2 = await screen.findByTestId('new-document-menu-item')
-    fireEvent.pointerUp(item2)
-
-    expect(onCreateDocument).toHaveBeenCalledTimes(1)
-
-    resolveCreate()
-    await waitFor(() => expect(screen.queryByRole('alert')).toBeNull())
-    expect(onCreateDocument).toHaveBeenCalledTimes(1)
-  })
-
-  it('announces the in-flight create through a region that was already there', async () => {
-    let resolveCreate: () => void = () => {}
-    const onCreateDocument = vi.fn(
-      () =>
-        new Promise<void>((resolve) => {
-          resolveCreate = resolve
-        }),
-    )
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={onCreateDocument}
-      />,
-      { container: document.body },
-    )
-
-    // Present and silent BEFORE anything happens: a polite region that
-    // arrives carrying its first message is announced unreliably.
-    const region = screen.getByRole('status', { name: 'New canvas status' })
-    expect(region.textContent).toBe('')
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    fireEvent.pointerUp(await screen.findByTestId('new-document-menu-item'))
-
-    await waitFor(() => expect(region.textContent).toBe('Creating canvas…'))
-    // The SAME element, not a replacement — this is what makes the update an
-    // announcement rather than an insertion.
-    expect(screen.getByRole('status', { name: 'New canvas status' })).toBe(region)
-
-    resolveCreate()
-    await waitFor(() => expect(region.textContent).toBe(''))
-  })
-
-  it('never renders the daemon-only thumbnail <img> or the pin affordance in the canvas switcher', async () => {
-    render(
-      <WorkspaceTopBar
-        dataMode="local"
-        workspaceId="ws_1"
-        path="canvas-a"
-        documents={[
-          { path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' },
-          { path: 'canvas-b', updatedAt: '2026-04-22T00:00:00Z', name: 'Canvas B' },
-        ]}
-        onToggleFullscreen={() => {}}
-        onNavigateToDocument={() => {}}
-        onCreateDocument={() => {}}
-      />,
-      { container: document.body },
-    )
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
-
-    expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
-    expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
-  })
-})
-
-describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke', () => {
-  // Under StrictMode's dev-only double-invoke (setup -> cleanup -> setup), a
-  // mountedRef that never re-arms on setup stays stuck false, so every
-  // completion path gated on it — here, the create failure message — would
-  // silently never render.
-  it('still surfaces a failed create under StrictMode', async () => {
-    const onCreateDocument = vi.fn().mockRejectedValue(new Error('boom'))
-
-    render(
-      <StrictMode>
-        <WorkspaceTopBar
-          dataMode="local"
-          workspaceId="ws_1"
-          path="canvas-a"
-          documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z', name: 'Canvas A' }]}
-          onToggleFullscreen={() => {}}
-          onNavigateToDocument={() => {}}
-          onCreateDocument={onCreateDocument}
-        />
-      </StrictMode>,
-      { container: document.body },
-    )
-
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    fireEvent.pointerUp(await screen.findByTestId('new-document-menu-item'))
-
-    await waitFor(() => expect(onCreateDocument).toHaveBeenCalled())
-    expect((await screen.findByRole('alert')).textContent).toContain('Failed to create canvas.')
-  })
-})
-
-describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
-  async function openSwitcher() {
-    const switcher = screen.getByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
-  }
-
-  it('renders a Workspaces section above the documents section, one menuitemradio per workspace, current checked', async () => {
-    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace: () => {} })
-    await openSwitcher()
-
-    const label = screen.getByText('Workspaces')
-    const items = screen.getAllByRole('menuitemradio')
-    expect(items.map((item) => item.textContent)).toEqual(['ws_1', 'w2'])
-    expect(items[0]?.getAttribute('aria-checked')).toBe('true')
-    expect(items[1]?.getAttribute('aria-checked')).toBe('false')
-
-    // "Above the documents section": the label precedes the canvas entry in document order.
-    const canvasEntry = screen.getByText('canvas-a')
-    expect(
-      label.compareDocumentPosition(canvasEntry) & Node.DOCUMENT_POSITION_FOLLOWING,
-    ).toBeTruthy()
-  })
-
-  it('marks the current workspace with a visible non-color indicator (ItemIndicator check icon), and no indicator on the others', async () => {
-    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace: () => {} })
-    await openSwitcher()
-
-    const items = screen.getAllByRole('menuitemradio')
-    expect(items[0]?.querySelector('svg')).not.toBeNull()
-    expect(items[1]?.querySelector('svg')).toBeNull()
-  })
-
-  it('clicking another workspace calls onSwitchWorkspace exactly once with its id and closes the menu', async () => {
-    const onSwitchWorkspace = vi.fn()
-    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace })
-    await openSwitcher()
-
-    const w2Item = screen.getByRole('menuitemradio', { name: 'w2' })
-    fireEvent.pointerUp(w2Item)
-
-    await waitFor(() => expect(onSwitchWorkspace).toHaveBeenCalledTimes(1))
-    expect(onSwitchWorkspace).toHaveBeenCalledWith('w2')
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-  })
-
-  it('clicking the current workspace never calls onSwitchWorkspace', async () => {
-    const onSwitchWorkspace = vi.fn()
-    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace })
-    await openSwitcher()
-
-    const currentItem = screen.getByRole('menuitemradio', { name: 'ws_1' })
-    fireEvent.pointerUp(currentItem)
-
-    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())
-    expect(onSwitchWorkspace).not.toHaveBeenCalled()
-  })
-
-  it('renders no Workspaces section when workspaces/onSwitchWorkspace are absent — every pre-existing caller stays byte-identical', async () => {
-    renderBar()
-    await openSwitcher()
-
-    expect(screen.queryByText('Workspaces')).toBeNull()
-    expect(screen.queryByRole('menuitemradio')).toBeNull()
-  })
-
-  it('renders no Workspaces section with a single workspace, and hides it while a canvas search is active', async () => {
-    const onSwitchWorkspace = vi.fn()
-    renderBar({ workspaces: ['ws_1'], onSwitchWorkspace })
-    await openSwitcher()
-    expect(screen.queryByText('Workspaces')).toBeNull()
-
-    cleanup()
-
-    renderBar({ workspaces: ['ws_1', 'w2'], onSwitchWorkspace })
-    await openSwitcher()
-    expect(screen.getByText('Workspaces')).toBeTruthy()
-
-    fireEvent.change(screen.getByPlaceholderText('Switch canvas…'), {
-      target: { value: 'canvas-a' },
-    })
-    expect(screen.queryByText('Workspaces')).toBeNull()
-  })
-})
-
 describe('WorkspaceTopBar — titleSlot (merged canvas row)', () => {
   it('renders the page-provided title segment inside the header', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
         titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
       { container: document.body },
@@ -1009,10 +448,8 @@ describe('WorkspaceTopBar — one rename surface', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
         titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
       { container: document.body },
@@ -1026,10 +463,8 @@ describe('WorkspaceTopBar — one rename surface', () => {
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
-        documents={[{ path: 'canvas-a', updatedAt: '2026-04-23T00:00:00Z' }]}
         onToggleFullscreen={() => {}}
         onNavigateBack={() => {}}
-        onNavigateToDocument={() => {}}
         titleSlot={() => <input aria-label="Merged title" readOnly value="t" />}
       />,
       { container: document.body },
@@ -1041,5 +476,42 @@ describe('WorkspaceTopBar — one rename surface', () => {
         .getAllByRole('textbox')
         .map((field) => field.getAttribute('aria-label')),
     ).toEqual(['Merged title'])
+  })
+})
+
+// In-editor document switching is retired (user decision 2026-08-22): finding
+// a document is the document browser's job, reached from the back control.
+// The workspace-named menu that used to navigate, create and switch workspace
+// from inside the editor is gone, and a launcher will be designed on its own
+// rather than kept alive as that menu's side effect.
+describe('WorkspaceTopBar — navigation left the document row', () => {
+  it('renders no workspace-named switcher menu', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        path="canvas-a"
+        onToggleFullscreen={() => {}}
+        onNavigateBack={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    expect(screen.queryByRole('button', { name: /^Workspace:/i })).toBeNull()
+  })
+
+  // Navigation controls carry no visible text (user decision 2026-08-22);
+  // their name lives in aria-label and the tooltip.
+  it('names the back control without giving it visible text', () => {
+    render(
+      <WorkspaceTopBar
+        workspaceId="ws_1"
+        path="canvas-a"
+        onToggleFullscreen={() => {}}
+        onNavigateBack={() => {}}
+      />,
+      { container: document.body },
+    )
+
+    expect(screen.getByRole('button', { name: 'Back to documents' }).textContent).toBe('')
   })
 })

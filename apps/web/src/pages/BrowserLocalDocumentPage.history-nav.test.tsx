@@ -20,7 +20,6 @@ import {
   act,
   cleanup,
   configure,
-  fireEvent,
   render as rtlRender,
   screen,
   waitFor,
@@ -29,7 +28,12 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
+import {
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  listLocalDocuments,
+} from '../lib/local-document-summary.js'
+import { LoroStore } from '../lib/loro-store.js'
 import {
   clearWhiteboardDb,
   persistedNodeIds,
@@ -99,6 +103,15 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
 
   it('Back returns to the first canvas and Forward returns to the second', async () => {
     const store = new IdbDocumentIndex()
+    // Seeded before mount, the way the document browser creates them: the
+    // editor creates nothing itself any more, and an in-place switch resolves
+    // the URL against the documents the controller has already listed.
+    const { createSeededDocument } = await import('./use-browser-local-document-controller.js')
+    const loro = new LoroStore()
+    const clock = idbContentClock()
+    const seededA = await createSeededDocument(store, loro, clock)
+    const seededB = await createSeededDocument(store, loro, clock)
+    await new IdbDefaultDocumentPointer().set(seededA.documentId)
     const router = createMemoryRouter(
       [
         {
@@ -135,12 +148,11 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       { interval: 600 },
     )
 
-    // Create canvas B via the switcher's New-canvas control.
-    const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
+    // Open B by navigating — the document browser's only effect on this page.
+    const pathB = seededB.path
+    expect(pathB).not.toBe(pathA)
     await act(async () => {
-      fireEvent.pointerUp(newItem)
+      await router.navigate(`/local/${pathB}`)
     })
 
     const idB = await waitFor(async () => {
@@ -148,9 +160,6 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
       expect(id).not.toBe(idA)
       return id as string
     })
-    const pathB = await pathOf(store, idB)
-    expect(pathB).not.toBe(pathA)
-
     await waitFor(() => expect(router.state.location.pathname).toBe(`/local/${pathB}`))
 
     const nodeB = textNodeCanvas('history-nav-node-b', 20, 20)

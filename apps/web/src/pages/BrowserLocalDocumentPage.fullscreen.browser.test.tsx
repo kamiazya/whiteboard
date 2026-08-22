@@ -51,7 +51,7 @@ async function renderLoaded() {
       <BrowserLocalDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />,
     )
   })
-  await screen.findByRole('button', { name: /^Workspace:/i }, { timeout: 10_000 })
+  await screen.findByRole('button', { name: 'Back to documents' }, { timeout: 10_000 })
 }
 
 it('really enters fullscreen on click, focuses the exit control, and restores focus on exit', async () => {
@@ -62,7 +62,9 @@ it('really enters fullscreen on click, focuses the exit control, and restores fo
   await waitFor(() => expect(document.fullscreenElement).not.toBeNull(), { timeout: 10_000 })
 
   // The chrome steps aside; the one way back out holds focus.
-  await waitFor(() => expect(screen.queryByRole('button', { name: /^Workspace:/i })).toBeNull())
+  await waitFor(() =>
+    expect(screen.queryByRole('button', { name: 'Back to documents' })).toBeNull(),
+  )
   const exit = await screen.findByRole('button', { name: 'Exit fullscreen' })
   await waitFor(() => expect(document.activeElement).toBe(exit))
 
@@ -70,7 +72,7 @@ it('really enters fullscreen on click, focuses the exit control, and restores fo
   await waitFor(() => expect(document.fullscreenElement).toBeNull(), { timeout: 10_000 })
 
   // The chrome returns, and focus lands back on the toggle that started it.
-  await screen.findByRole('button', { name: /^Workspace:/i })
+  await screen.findByRole('button', { name: 'Back to documents' })
   await waitFor(() =>
     expect(document.activeElement).toBe(screen.getByRole('button', { name: 'Fullscreen' })),
   )

@@ -1,6 +1,5 @@
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { describe, expect, it, vi } from 'vitest'
-import type { DocumentInfo } from './types'
 import { useDocumentNames } from './useDocumentNames'
 
 function jsonResponse(body: unknown, ok = true): Response {
@@ -18,7 +17,6 @@ describe('useDocumentNames', () => {
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
-        documents: [],
         isLocalMode: false,
         daemonFetch,
       }),
@@ -34,7 +32,6 @@ describe('useDocumentNames', () => {
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
-        documents: [],
         isLocalMode: false,
         daemonFetch,
       }),
@@ -47,19 +44,13 @@ describe('useDocumentNames', () => {
     expect(result.current.effectiveNames).toEqual({ documents: {}, pinned: [] })
   })
 
-  it('derives local-mode names from the documents array instead of fetching', () => {
+  it('answers empty names in local mode without ever fetching', () => {
     const daemonFetch = vi.fn()
-    const documents: DocumentInfo[] = [{ path: 'foo', updatedAt: '2026-01-01', name: 'Foo Local' }]
     const { result } = renderHook(() =>
-      useDocumentNames({
-        workspaceId: 'ws1',
-        documents,
-        isLocalMode: true,
-        daemonFetch,
-      }),
+      useDocumentNames({ workspaceId: 'ws', isLocalMode: true, daemonFetch }),
     )
+    expect(result.current.effectiveNames).toEqual({ documents: {}, pinned: [] })
     expect(daemonFetch).not.toHaveBeenCalled()
-    expect(result.current.effectiveNames).toEqual({ documents: { foo: 'Foo Local' }, pinned: [] })
   })
 
   it('renameDocument PUTs /name and replaces names from the parsed response', async () => {
@@ -70,7 +61,6 @@ describe('useDocumentNames', () => {
     const { result } = renderHook(() =>
       useDocumentNames({
         workspaceId: 'ws1',
-        documents: [],
         isLocalMode: false,
         daemonFetch,
       }),
@@ -80,25 +70,5 @@ describe('useDocumentNames', () => {
       await result.current.renameDocument('foo', 'Renamed')
     })
     expect(result.current.effectiveNames.documents.foo).toBe('Renamed')
-  })
-
-  it('togglePin PUTs /pin and replaces names from the parsed response', async () => {
-    const daemonFetch = vi
-      .fn()
-      .mockResolvedValueOnce(jsonResponse({ documents: {}, pinned: [] }))
-      .mockResolvedValueOnce(jsonResponse({ documents: {}, pinned: ['foo'] }))
-    const { result } = renderHook(() =>
-      useDocumentNames({
-        workspaceId: 'ws1',
-        documents: [],
-        isLocalMode: false,
-        daemonFetch,
-      }),
-    )
-    await waitFor(() => expect(daemonFetch).toHaveBeenCalledTimes(1))
-    await act(async () => {
-      await result.current.togglePin('foo', true)
-    })
-    expect(result.current.effectiveNames.pinned).toEqual(['foo'])
   })
 })

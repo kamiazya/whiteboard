@@ -703,8 +703,6 @@ export function DaemonDocumentPage({
               )}
               workspaceId={canvas.workspaceId}
               path={canvas.path}
-              documents={controller.documents}
-              onNavigateToDocument={controller.switchDocument}
               capabilities={{
                 versions: capabilities.versions,
                 branches: capabilities.branches,
@@ -716,12 +714,6 @@ export function DaemonDocumentPage({
               // user can trigger by hand. Without this the save flow skips
               // the upload entirely and latest-thumbnail stays 204 forever.
               getThumbnailBlob={getThumbnailBlob}
-              workspaces={
-                capabilities.workspaces
-                  ? controller.workspaces.map((w) => w.workspaceId)
-                  : undefined
-              }
-              onSwitchWorkspace={(id) => void controller.switchWorkspace(id)}
             />
           )}
           {capabilities.branches && canvas && (
