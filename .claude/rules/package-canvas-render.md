@@ -578,6 +578,48 @@ paths:
       carries that round's warm-up, and three rounds of a fixed order
       reproduce the artifact rather than test it. Alternate the order, not
       only the variant.
+      **`routeOnGrid` searches with A*, and finding that out took refuting the
+      obvious answer first.** The profile pointed at it (27% of layout on the
+      clustered canvas), and the plan was to cut the obstacle SET down
+      spatially, as the rejected prototype's post-mortem above suggested.
+      Measured inside the function, that was already done: its window filter
+      keeps 31 of 287 rects, and costs 0.3% of layout to do it. The time was
+      the search itself — 161k heap pops per layout, 331 per call over grids
+      averaging 422 cells — expanding the grid blind because the priority was
+      `g` alone. A Manhattan heuristic makes it A*: admissible (a step costs
+      its own Manhattan length plus a non-negative bend charge) and consistent
+      (the same inequality edge by edge), so the first pop of the goal stays
+      optimal. Worth 8-11% on the clustered canvas, five of five interleaved
+      comparisons in both orders; neutral on the grid canvas.
+      It is NOT free, and the price is a kind worth recognising. A* is fast
+      precisely because it does not expand the states a blind search does, so
+      among EQUAL-cost shortest paths it settles on a different member. Over
+      7419 generated cases the two never disagreed about what an optimal route
+      costs — never worse, never better — and disagreed about which one to
+      draw in 10-30% of them. On the 345-edge canvas exactly 2 of 345 edges
+      then settled on different sides, which is what moved that scoreboard's
+      violations 99 -> 100 and interior ink by 1.1%; the corpus-wide debt
+      metrics did not move at all.
+      That cost cannot be bought back inside the router, and the reason is
+      structural rather than a tuning failure: `routeOnGrid` is handed every
+      obstacle including the edge's own endpoints and avoids all their
+      interiors, so its path can never BE a violation — the difference arrives
+      through the side-choice search, which a per-edge routing cost cannot see.
+      Two attempts confirmed it: a lower-g heap tie-break (paths differing 394
+      -> 408, i.e. worse) and a canonical predecessor on equal-cost relaxations
+      (394 -> 363, i.e. barely moved). The second failure is the instructive
+      one — canonicalising among the alternatives requires having LOOKED at
+      them, which is the exact work A* skips.
+      The guard for all of this is `grid-route.optimality.properties.test.ts`,
+      an independent-oracle property: a plain Dijkstra written in the test from
+      the definition, asserting equal COST (never equal path — equal-cost
+      routes are the norm on a lattice). It exists because an inadmissible
+      heuristic fails silently: it returns a merely-good path, and every debt
+      metric the scoreboard pins stays put because a slightly-long detour still
+      avoids every body. Mutation-checked twice, and the second mutation is not
+      hypothetical — accumulating the successor's `g` from the popped `f` was
+      written during this change and caught by reading the push site, not by a
+      test. The property catches it now.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,

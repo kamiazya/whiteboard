@@ -179,9 +179,9 @@ describe('routing quality across the synthetic corpus', () => {
       violations: { 'own-endpoint': 12, foreign: 15, degenerate: 0 },
       interiorInk: 2083,
       borderInk: 824,
-      bends: 8149,
-      crossings: 493,
-      length: 1340729,
+      bends: 8152,
+      crossings: 494,
+      length: 1341164,
       shortArrowRunway: 136,
     })
   })
@@ -197,6 +197,20 @@ describe('routing quality across the synthetic corpus', () => {
 // Pinned exactly, like the aggregate above, and for the same reason: this
 // is a debt figure whose target is lower, and an improvement has to be as
 // loud as a regression.
+//
+// One movement in these numbers is NOT a routing change and is worth knowing
+// before chasing it: `routeOnGrid` searches with A*, which expands fewer
+// states than the Dijkstra it replaced and therefore settles on a different
+// member of the set of EQUAL-cost shortest paths. Measured over 7419
+// generated cases the two never disagreed about what an optimal route costs
+// and disagreed about which one to draw in 10-30% of them, and on this canvas
+// exactly 2 of 345 edges then settled on different sides. That is what moved
+// violations 99 -> 100 and interior ink 11451 -> 11578 here. The grid search
+// avoids every obstacle interior including the edge's own endpoints, so its
+// path cannot itself be a violation — the difference arrives through the
+// side-choice search, which no per-edge routing cost can see or target. Two
+// attempts to recover it (a lower-g heap tie-break, then a canonical
+// predecessor) were measured and neither moved it.
 describe('routing quality past the side-choice optimizer gate', () => {
   it('reports the drawing cost of a large clustered canvas', () => {
     const layout = clusteredLayout({ clusters: 24, nodesPerCluster: 12, edgesPerCluster: 16 })
@@ -223,12 +237,12 @@ describe('routing quality past the side-choice optimizer gate', () => {
       length: Math.round(length),
     }).toEqual({
       edges: 345,
-      violations: 99,
-      interiorInk: 11451,
+      violations: 100,
+      interiorInk: 11578,
       borderInk: 266,
-      bends: 756,
-      crossings: 848,
-      length: 275548,
+      bends: 760,
+      crossings: 855,
+      length: 275766,
     })
   }, 120_000)
 })
