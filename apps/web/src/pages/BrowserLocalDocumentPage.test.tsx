@@ -21,6 +21,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // unused by name on purpose — being in the module graph is the fix.
 import '../components/WorkspaceTopBar.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
+import { getShellConnection, resetShellStatusForTests } from '../lib/shell-status-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { assertNoSetStateInRenderWarning } from '../test-utils/no-setstate-in-render.js'
@@ -109,10 +110,14 @@ async function openDeleteConfirm() {
 }
 
 describe('BrowserLocalDocumentPage', () => {
-  beforeEach(() => vi.useFakeTimers())
+  beforeEach(() => {
+    vi.useFakeTimers()
+    resetShellStatusForTests()
+  })
   afterEach(() => {
     cleanup()
     vi.useRealTimers()
+    resetShellStatusForTests()
   })
 
   it('renders loading state before canvas is loaded', () => {
@@ -815,7 +820,7 @@ describe('BrowserLocalDocumentPage', () => {
     const CTA_TEXT =
       'Connect a local daemon (MCP) to unlock version history, workspaces, variations, and combining changes'
 
-    it('moves the capability CTA into the Local connection chip popover (D1: no standing copy)', async () => {
+    it('keeps the capability CTA out of page chrome and reports "local" to the shell', async () => {
       const store = new LocalStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
       await store.save(snap)
@@ -829,19 +834,19 @@ describe('BrowserLocalDocumentPage', () => {
           />,
         )
       })
-      // No sentence-length CTA sits in the page chrome anymore...
+      // No sentence-length CTA sits in the page chrome...
       expect(screen.queryByText(CTA_TEXT)).toBeNull()
       for (const label of ['Version history', 'Workspaces', 'Branches', 'Merge']) {
         expect(screen.queryByRole('button', { name: label })).toBeNull()
       }
-      // ...it lives in the Local chip's popover, next to the storage note.
-      // (Synchronous assertions: this file runs under fake timers, so
-      // findBy*'s real-timer polling would hang.)
-      await act(async () => {
-        fireEvent.click(screen.getByTestId('connection-chip'))
-      })
-      expect(screen.getByText(/only in this browser/i)).toBeTruthy()
-      expect(screen.getByText(CTA_TEXT)).toBeTruthy()
+      // ...nor does the chip itself: the connection is app-level, so the
+      // App-mounted shell draws it (and hosts the CTA in its popover) from
+      // the state this page publishes.
+      expect(screen.queryByTestId('connection-chip')).toBeNull()
+      expect(getShellConnection()).toEqual({ state: 'local' })
+
+      cleanup()
+      expect(getShellConnection()).toBeNull()
     })
 
     it('does not render any mode-switch control — mode stays a read-only status', async () => {

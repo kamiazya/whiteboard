@@ -59,10 +59,6 @@ interface Props {
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
   branchRefreshSignal?: number
-  // Right-side slot ahead of the secondary actions — the host page's
-  // connection-state chip mounts here so the one
-  // status affordance lives in the header instead of a banner row.
-  statusSlot?: ReactNode
   /**
    * The merged canvas row's flexible middle (title + properties triggers),
    * provided by the page — the header is one row, so pages inject their
@@ -100,7 +96,6 @@ export default function WorkspaceTopBar({
   dataMode = 'daemon',
   capabilities,
   branchRefreshSignal,
-  statusSlot,
   titleSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
@@ -189,7 +184,6 @@ export default function WorkspaceTopBar({
         )}
       </div>
 
-      {statusSlot}
       <TopBarSecondaryActions onToggleFullscreen={onToggleFullscreen} isFullscreen={isFullscreen} />
     </header>
   )

@@ -16,8 +16,7 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
 import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
-import { getShellDaemonAuthError } from '../lib/shell-status-store.js'
-import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { getShellConnection } from '../lib/shell-status-store.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
@@ -387,60 +386,10 @@ describe('DaemonDocumentPage', () => {
     expect(createdBackends[1]?.disconnectCount).toBe(0)
   })
 
-  it('records the daemon as dismissed when disconnecting, so discovery stops finding it', async () => {
-    // Forgetting alone is not enough: the default port range is rescanned on
-    // every visit, so a daemon on 3099 would come straight back and the
-    // action would read as a no-op the second time.
-    const onContinueBrowserLocal = vi.fn()
-    // The state a connected browser is actually in: App.tsx stores the daemon
-    // it connected to, and that is what puts the page in daemon mode on the
-    // next load. Without seeding it the assertion below passes vacuously.
-    // Seeded through the store, not by writing JSON: a hand-built payload that
-    // fails the store's own validation is silently replaced by defaults, and
-    // every assertion below then passes without touching the real state.
-    createUserSettingsStore().update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: DAEMON_BASE_URL,
-        knownDaemonBaseUrls: [DAEMON_BASE_URL],
-      },
-    }))
-    await act(async () => {
-      render(
-        <DaemonDocumentPage
-          daemonBaseUrl={DAEMON_BASE_URL}
-          createBackend={makeCreateBackend()}
-          onContinueBrowserLocal={onContinueBrowserLocal}
-        />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-
-    // Precondition, asserted rather than assumed: if the seed did not survive
-    // the store's own validation, everything below would pass vacuously.
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(DAEMON_BASE_URL)
-
-    fireEvent.click(screen.getByTestId('connection-chip'))
-    fireEvent.click(screen.getByTestId('connection-disconnect'))
-
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
-    // Asserted as arrays, not as substrings of the whole store: the daemon's
-    // URL also appears under localDaemonBaseUrl, so a `toContain` on the
-    // serialized storage holds whether or not the dismissal was recorded.
-    const storage = createUserSettingsStore().load().storage
-    expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON_BASE_URL)
-    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(DAEMON_BASE_URL)
-    // App.tsx reads localDaemonBaseUrl to decide a page is daemon-backed, so
-    // leaving it set reconnects on the next load — which makes the popover's
-    // "this browser stops using it" false the moment the user reloads.
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBeUndefined()
-  })
-
-  it('flips the connection chip to "Reconnecting" while the transport is down', async () => {
+  it('reports "reconnecting" to the shell while the transport is down', async () => {
     // A chip that reads Synced while the transport is down tells the user
-    // remote edits are arriving when they are not.
+    // remote edits are arriving when they are not. The App-mounted shell
+    // draws the chip; this page's contract is the state it publishes.
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -448,22 +397,22 @@ describe('DaemonDocumentPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+    expect(getShellConnection()).toEqual({ state: 'synced', daemonBaseUrl: DAEMON_BASE_URL })
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onDisconnected?.()
     })
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/reconnecting/i)
+    expect(getShellConnection()?.state).toBe('reconnecting')
 
     // …and back, so a recovered stream clears it rather than latching.
     await act(async () => {
       backend.handlers?.onConnected()
     })
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+    expect(getShellConnection()?.state).toBe('synced')
   })
 
-  it('flips the connection chip to "Sync off" on WS auth failure (close 1008 -> onAuthError)', async () => {
+  it('reports "sync-off" on WS auth failure (close 1008 -> onAuthError) without replacing the page', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -474,49 +423,20 @@ describe('DaemonDocumentPage', () => {
     // Hand (view-only) is the default tool; the host history cluster only
     // docks in Select mode, so tests exercising it switch first.
     fireEvent.click(await screen.findByTestId('select-tool-button'))
-    // Healthy session: the chip reads Synced.
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
+    // Healthy session.
+    expect(getShellConnection()?.state).toBe('synced')
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onAuthError?.()
     })
 
-    // D1: no standing role=alert banner — the chip carries the state and a
-    // polite live region announces it to assistive tech.
+    expect(getShellConnection()?.state).toBe('sync-off')
+    // D1: no standing role=alert banner anywhere on the page — the shell's
+    // chip carries the state and its own live region announces it.
     expect(screen.queryByRole('alert')).toBeNull()
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
-    expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
     // Editor chrome stays mounted — auth error never replaces the page.
     expect(screen.getByTestId('spatial-editor-container')).toBeTruthy()
-
-    // The popover is the recovery surface: both ways forward are offered.
-    fireEvent.click(screen.getByTestId('connection-chip'))
-    await waitFor(() => expect(screen.getByRole('button', { name: /re-pair/i })).toBeTruthy())
-    expect(screen.getByText(/edits stay in this browser/i)).toBeTruthy()
-  })
-
-  it('keeps the sr-only live region quiet until authError is true', async () => {
-    await act(async () => {
-      render(
-        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Hand (view-only) is the default tool; the host history cluster only
-    // docks in Select mode, so tests exercising it switch first.
-    fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-    expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
-
-    await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
-    })
-
-    const region = screen.getByLabelText(/live sync off/i)
-    expect(region.getAttribute('role')).toBe('status')
-    expect(screen.queryByRole('alert')).toBeNull()
   })
 
   it('reports a live auth error to the shell-status store (and clears on unmount)', async () => {
@@ -527,19 +447,22 @@ describe('DaemonDocumentPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(getShellDaemonAuthError()).toBe(false)
+    expect(getShellConnection()?.state).toBe('synced')
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    // The App-mounted shell reads this to light the gear's attention dot.
-    expect(getShellDaemonAuthError()).toBe(true)
+    // The App-mounted shell reads this to draw the chip and to light the
+    // gear's attention dot.
+    expect(getShellConnection()?.state).toBe('sync-off')
 
+    // Cleared on unmount: an index page holds no session, and a latched chip
+    // would keep claiming one.
     cleanup()
-    expect(getShellDaemonAuthError()).toBe(false)
+    expect(getShellConnection()).toBeNull()
   })
 
-  it('clears the auth-error banner when switching to a new canvas (new backend identity)', async () => {
+  it('clears the reported auth error when switching to a new canvas (new backend identity)', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
@@ -554,64 +477,14 @@ describe('DaemonDocumentPage', () => {
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
-    expect(screen.getByLabelText(/live sync off/i)).toBeTruthy()
+    expect(getShellConnection()?.state).toBe('sync-off')
 
     await act(async () => {
       await switchDocumentViaConnections('Second board')
     })
 
     // The stale sync-off state must not outlive the backend that produced it.
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/synced/i)
-    expect(screen.queryByLabelText(/live sync off/i)).toBeNull()
-  })
-
-  it('offers the browser-local escape inside the chip popover and invokes the callback', async () => {
-    const onContinueBrowserLocal = vi.fn()
-    // The state a connected browser is actually in: App.tsx stores the daemon
-    // it connected to, and that is what puts the page in daemon mode on the
-    // next load. Without seeding it the assertion below passes vacuously.
-    // Seeded through the store, not by writing JSON: a hand-built payload that
-    // fails the store's own validation is silently replaced by defaults, and
-    // every assertion below then passes without touching the real state.
-    createUserSettingsStore().update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: DAEMON_BASE_URL,
-        knownDaemonBaseUrls: [DAEMON_BASE_URL],
-      },
-    }))
-    await act(async () => {
-      render(
-        <DaemonDocumentPage
-          daemonBaseUrl={DAEMON_BASE_URL}
-          createBackend={makeCreateBackend()}
-          onContinueBrowserLocal={onContinueBrowserLocal}
-        />,
-        { container: document.body },
-      )
-    })
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    // Hand (view-only) is the default tool; the host history cluster only
-    // docks in Select mode, so tests exercising it switch first.
-    fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-    await act(async () => {
-      createdBackends[0]?.handlers?.onAuthError?.()
-    })
-
-    // D1: the escape lives in the chip's popover, not a banner.
-    await act(async () => {
-      screen.getByTestId('connection-chip').click()
-    })
-    const escapeButton = await screen.findByRole('button', {
-      name: /continue in browser-local/i,
-    })
-    await act(async () => {
-      escapeButton.click()
-    })
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+    expect(getShellConnection()?.state).toBe('synced')
   })
 
   it('shows a structural skeleton while workspace/canvas resolution is pending', async () => {

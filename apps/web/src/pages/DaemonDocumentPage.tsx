@@ -9,7 +9,6 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
-import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
@@ -55,9 +54,8 @@ import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import type { ContentClock } from '../lib/local-document-summary.js'
-import { beginPairingGrant } from '../lib/pairing-grant.js'
 import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
-import { setShellDaemonAuthError } from '../lib/shell-status-store.js'
+import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
@@ -86,10 +84,6 @@ export interface DaemonDocumentPageProps {
   // window.__WHITEBOARD_DAEMON_TOKEN__, that global wins for the WS.
   token?: string
   capabilities?: WhiteboardCapabilities
-  // Rendered as a "Continue in browser-local" escape next to the auth-error
-  // banner — without it a rejected session leaves the user stuck on a dead
-  // daemon page with no way back into the app.
-  onContinueBrowserLocal?: () => void
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
@@ -111,7 +105,6 @@ export function DaemonDocumentPage({
   path,
   token,
   capabilities = LOCAL_DAEMON_CAPABILITIES,
-  onContinueBrowserLocal,
   createBackend,
   browserLocalStore,
   browserLocalClock,
@@ -188,14 +181,6 @@ export function DaemonDocumentPage({
       : null
 
   const [authError, setAuthError] = useState(false)
-  // Report the live auth error to the App-mounted shell: it means the daemon
-  // needs the user's action (re-pair lives under Settings -> Connections),
-  // so it counts as disconnected for the attention dot; transient reconnects
-  // don't.
-  useEffect(() => {
-    setShellDaemonAuthError(authError)
-    return () => setShellDaemonAuthError(false)
-  }, [authError])
   // Disables the empty-state "Create a canvas" control while a create is in
   // flight. `disabled` is the whole mechanism: an in-handler
   // `if (creating) return` reads the render closure, so it is stale in exactly
@@ -456,6 +441,21 @@ export function DaemonDocumentPage({
     rects: documentOutline,
   })
 
+  // The connection is app-level, so the App-mounted shell draws it and this
+  // page only reports what it knows. Synced is claimed only while the session
+  // is actually connected: an auth rejection outranks everything else because
+  // re-pairing is the only way out of it, and `idle` (not started yet) and
+  // `error` fold in with `reconnecting`, whose copy makes no claim about
+  // recovery timing. Cleared on unmount — an index page has no live session,
+  // and a latched chip would keep claiming one.
+  useEffect(() => {
+    setShellConnection({
+      state: authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting',
+      daemonBaseUrl,
+    })
+    return () => setShellConnection(null)
+  }, [authError, syncStatus, daemonBaseUrl])
+
   // PNG, because the daemon's thumbnail endpoint validates a PNG signature
   // on upload and rejects anything else.
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
@@ -559,63 +559,6 @@ export function DaemonDocumentPage({
       </div>
     ) : null
 
-  // The ONE connection affordance: a header chip whose popover carries
-  // the explanation and the available recovery paths — re-pairing always,
-  // plus continue-in-browser-local when the host page provides that
-  // escape. Re-pairing navigates top-level to the daemon's own /pair
-  // consent page, the same trust anchor first-time pairing uses.
-  const connectionStatus = (
-    <ConnectionStatus
-      // Synced is claimed only while the session is actually connected. An
-      // auth rejection outranks everything else because re-pairing is the only
-      // way out of it; `idle` (not started yet) and `error` are folded in with
-      // `reconnecting`, whose copy makes no claim about recovery timing —
-      // reporting them as Synced is what this whole change exists to stop.
-      state={authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting'}
-      daemonBaseUrl={daemonBaseUrl}
-      onRepair={() => {
-        void beginPairingGrant({
-          daemonBaseUrl,
-          hostedOrigin: window.location.origin,
-          sessionStorage: window.sessionStorage,
-          navigate: (url) => window.location.assign(url),
-        })
-      }}
-      onContinueBrowserLocal={onContinueBrowserLocal}
-      onDisconnect={
-        onContinueBrowserLocal &&
-        (() => {
-          // Recorded so discovery skips it next time: the default port range
-          // is rescanned on every visit, so forgetting alone would bring this
-          // daemon straight back and make the action look like a no-op.
-          settingsStore.update((current) => {
-            const known = (current.storage.knownDaemonBaseUrls ?? []).filter(
-              (entry) => entry !== daemonBaseUrl,
-            )
-            const dismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(
-              (entry) => entry !== daemonBaseUrl,
-            )
-            // Clearing the stored target is what makes this outlive the page:
-            // App.tsx reads localDaemonBaseUrl to decide a load is
-            // daemon-backed, so leaving it set reconnects on the next visit
-            // and the popover's "this browser stops using it" becomes false.
-            const { localDaemonBaseUrl, ...storage } = current.storage
-            return {
-              ...current,
-              storage: {
-                ...storage,
-                ...(localDaemonBaseUrl === daemonBaseUrl ? {} : { localDaemonBaseUrl }),
-                knownDaemonBaseUrls: known,
-                dismissedDaemonBaseUrls: [daemonBaseUrl, ...dismissed].slice(0, 5),
-              },
-            }
-          })
-          onContinueBrowserLocal()
-        })
-      }
-    />
-  )
-
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       {/* Two-row grid shell: everything header-shaped stacks inside the
@@ -634,17 +577,8 @@ export function DaemonDocumentPage({
               <span className="text-xs text-destructive">{controller.switchError}</span>
             </div>
           )}
-          {/* Rendered at the page level when WorkspaceTopBar has nowhere to
-            mount (no-canvas/empty-workspace view) so the degraded state
-            never disappears with the canvas-gated chrome. */}
-          {authError && !canvas && (
-            <div className="flex items-center border-b bg-background px-4 py-1.5">
-              {connectionStatus}
-            </div>
-          )}
           {canvas && (
             <WorkspaceTopBar
-              statusSlot={connectionStatus}
               // Document identity in the merged header row, mirroring the
               // browser-local page. The NAME is the workspace's — the top bar
               // hands it down from `/names`, the same surface the canvas
