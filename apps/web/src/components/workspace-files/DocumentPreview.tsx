@@ -12,7 +12,7 @@
  * keep throwing you into an editor.
  */
 
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { fitSvgToBox } from './fit-svg.js'
@@ -38,6 +38,12 @@ export interface DocumentPreviewProps {
    */
   readonly onDelete?: (document: WorkspaceDocumentEntry) => void
   readonly className?: string
+  /**
+   * Bumped by the panel when a context menu's Move… targets the (already
+   * selected) document: the move form opens without a second click on the
+   * preview's own Move… link. Absent or unchanged means untouched.
+   */
+  readonly startMoveToken?: number
 }
 
 type State =
@@ -54,6 +60,7 @@ export function DocumentPreview({
   onDuplicate,
   onDelete,
   className,
+  startMoveToken,
 }: DocumentPreviewProps) {
   const [state, setState] = useState<State>({ kind: 'idle' })
   const [editing, setEditing] = useState<string | null>(null)
@@ -86,6 +93,20 @@ export function DocumentPreview({
       live = false
     }
   }, [document, loadRender])
+
+  // Context-menu Move…: each bump opens the form for whatever document the
+  // panel has just selected. Defined AFTER the selection-change effect above,
+  // whose editing reset would otherwise run second and undo this in the very
+  // commit where selection and token change together. Skipped on mount so
+  // plain selection never starts an edit.
+  const lastMoveToken = useRef(startMoveToken)
+  useEffect(() => {
+    if (startMoveToken === undefined || startMoveToken === lastMoveToken.current) return
+    lastMoveToken.current = startMoveToken
+    if (document === null || onMove === undefined) return
+    setMoveError(null)
+    setEditing(document.path)
+  }, [startMoveToken, document, onMove])
 
   if (document === null) {
     return (

@@ -3,6 +3,7 @@ import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
 import { DocumentThumbnail } from './DocumentThumbnail.js'
@@ -93,6 +94,15 @@ export function WorkspaceFilesPanel({
   // same-tick case it exists to catch.
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+  // The object-action menu: which document was right-clicked, and where.
+  const [cardMenu, setCardMenu] = useState<{
+    entry: WorkspaceDocumentEntry
+    x: number
+    y: number
+  } | null>(null)
+  // Bumped when the menu's Move… fires, so the preview opens its move form
+  // for the selection the same gesture just made.
+  const [startMoveToken, setStartMoveToken] = useState(0)
   // Every tag in the workspace, each once, in reading order. The strip is
   // derived — deleting the last carrier of a tag removes its chip with it.
   const workspaceTags = useMemo(() => {
@@ -258,6 +268,45 @@ export function WorkspaceFilesPanel({
     return <p className="text-muted-foreground text-sm">Loading files…</p>
   }
 
+  // Plain function, deliberately not a hook: this sits below the early
+  // returns, where a hook would change the count between renders.
+  const openCardMenu = (entry: WorkspaceDocumentEntry, x: number, y: number) => {
+    setCardMenu({ entry, x, y })
+  }
+
+  const cardMenuItems =
+    cardMenu === null
+      ? []
+      : [
+          ...(onOpenDocument === undefined
+            ? []
+            : [{ label: 'Open', onSelect: () => onOpenDocument(cardMenu.entry.path) }]),
+          ...(onDuplicateDocument === undefined
+            ? []
+            : [{ label: 'Duplicate', onSelect: () => onDuplicateDocument(cardMenu.entry.path) }]),
+          {
+            label: 'Move…',
+            onSelect: () => {
+              setSelected(cardMenu.entry)
+              setStartMoveToken((token) => token + 1)
+            },
+          },
+          ...(onRequestDelete === undefined
+            ? []
+            : [
+                {
+                  label: 'Delete',
+                  danger: true,
+                  onSelect: () =>
+                    onRequestDelete(
+                      cardMenu.entry.path,
+                      cardMenu.entry.name ?? cardMenu.entry.path,
+                      cardMenu.entry.kind,
+                    ),
+                },
+              ]),
+        ]
+
   return (
     <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="workspace-files-panel">
       <div className="flex items-center gap-2">
@@ -385,6 +434,7 @@ export function WorkspaceFilesPanel({
                 query={query}
                 selectedPath={selected?.path}
                 onSelect={setSelected}
+                onDocumentContextMenu={openCardMenu}
                 renderThumbnail={(entry) => (
                   <DocumentThumbnail
                     key={entry.documentId}
@@ -434,6 +484,7 @@ export function WorkspaceFilesPanel({
                       ? selectFolder(target.path)
                       : setSelected(target.document)
                   }
+                  onDocumentContextMenu={openCardMenu}
                   renderThumbnail={(entry) => (
                     <DocumentThumbnail
                       key={entry.documentId}
@@ -451,6 +502,7 @@ export function WorkspaceFilesPanel({
           <DocumentPreview
             document={selected}
             loadRender={loadRender}
+            startMoveToken={startMoveToken}
             {...(onOpenDocument === undefined
               ? {}
               : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
@@ -470,6 +522,15 @@ export function WorkspaceFilesPanel({
           />
         </div>
       </div>
+      {cardMenu !== null && (
+        <ContextMenu
+          x={cardMenu.x}
+          y={cardMenu.y}
+          label="Document actions"
+          items={cardMenuItems}
+          onClose={() => setCardMenu(null)}
+        />
+      )}
     </div>
   )
 }
