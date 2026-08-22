@@ -114,8 +114,11 @@ export function routeOnGrid(
   // be charged. Collapsing them would make the first arrival win regardless
   // of how many corners it took to get there.
   const stateOf = (i: number, j: number, axis: Axis) => (j * width + i) * 2 + axis
-  const best = new Map<number, number>()
-  const cameFrom = new Map<number, number>()
+  // Dense arrays rather than Maps: the state space is bounded by
+  // MAX_GRID_CELLS and every pop reads and writes both.
+  const stateCount = width * ys.length * 2
+  const best = new Float64Array(stateCount).fill(Number.POSITIVE_INFINITY)
+  const cameFrom = new Int32Array(stateCount).fill(-1)
   // A small binary heap: the grid is bounded but still large enough that a
   // linear scan per pop dominates the search.
   const heap: { cost: number; state: number }[] = []
@@ -162,7 +165,7 @@ export function routeOnGrid(
   }
 
   for (const axis of [0, 1] as const) {
-    best.set(stateOf(si, sj, axis), 0)
+    best[stateOf(si, sj, axis)] = 0
     push(0, stateOf(si, sj, axis))
   }
 
@@ -204,7 +207,7 @@ export function routeOnGrid(
   let goal: number | undefined
   while (heap.length > 0) {
     const { cost, state } = pop()
-    if ((best.get(state) ?? Number.POSITIVE_INFINITY) < cost) continue
+    if ((best[state] as number) < cost) continue
     const axis = (state % 2) as Axis
     const cell = (state - axis) / 2
     const i = cell % width
@@ -249,16 +252,16 @@ export function routeOnGrid(
       }
       const next = cost + (hi - lo) + turn + traced
       const nextState = stateOf(ni, nj, nextAxis)
-      if (next >= (best.get(nextState) ?? Number.POSITIVE_INFINITY)) continue
-      best.set(nextState, next)
-      cameFrom.set(nextState, state)
+      if (next >= (best[nextState] as number)) continue
+      best[nextState] = next
+      cameFrom[nextState] = state
       push(next, nextState)
     }
   }
   if (goal === undefined) return undefined
 
   const reversed: Point[] = []
-  for (let state: number | undefined = goal; state !== undefined; state = cameFrom.get(state)) {
+  for (let state = goal; state >= 0; state = cameFrom[state] as number) {
     const axis = state % 2
     const cell = (state - axis) / 2
     const i = cell % width
