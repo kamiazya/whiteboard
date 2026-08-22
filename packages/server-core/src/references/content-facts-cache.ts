@@ -22,20 +22,28 @@ const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], tags: undefined }
  * read fresh from the listing per request — a rename needs no invalidation.
  */
 export class ContentFactsCache {
-  private readonly held = new Map<string, { stamp: string; facts: ContentFacts }>()
+  /** workspaceId -> documentId -> stamped facts. Scoped so alternating
+   *  requests across workspaces cannot evict each other's entries. */
+  private readonly held = new Map<string, Map<string, { stamp: string; facts: ContentFacts }>>()
 
   /**
-   * Facts for exactly `entries`, loading only documents whose frontier
-   * moved (or were never seen) and evicting ids the listing no longer
-   * contains. A document with no snapshot yet (frontier null) is empty
-   * facts without a load.
+   * Facts for exactly `entries` of one workspace, loading only documents
+   * whose stamp moved (or were never seen) and evicting ids that
+   * workspace's listing no longer contains. A document with no snapshot
+   * yet (frontier null) is empty facts without a load.
    */
   async factsFor(
     deps: ServerDeps,
+    workspaceId: string,
     entries: readonly DocumentEntry[],
   ): Promise<ReadonlyMap<string, ContentFacts>> {
+    let held = this.held.get(workspaceId)
+    if (held === undefined) {
+      held = new Map()
+      this.held.set(workspaceId, held)
+    }
     const wanted = new Set(entries.map((entry) => entry.documentId))
-    for (const id of this.held.keys()) if (!wanted.has(id)) this.held.delete(id)
+    for (const id of held.keys()) if (!wanted.has(id)) held.delete(id)
 
     const result = new Map<string, ContentFacts>()
     for (const entry of entries) {
@@ -43,19 +51,23 @@ export class ContentFactsCache {
         docRef: { kind: 'document', documentId: entry.documentId },
       })
       if (frontier === null) {
-        this.held.delete(entry.documentId)
+        held.delete(entry.documentId)
         result.set(entry.documentId, EMPTY_FACTS)
         continue
       }
-      const stamp = stampOf(frontier.frontier)
-      const cached = this.held.get(entry.documentId)
+      // The kind is part of the stamp: extraction branches on it, so facts
+      // are only valid FOR the kind they were extracted under. No
+      // listing-only kind mutation exists today — this closes the latent
+      // trap rather than a reachable bug.
+      const stamp = `${entry.kind ?? '?'}:${stampOf(frontier.frontier)}`
+      const cached = held.get(entry.documentId)
       if (cached !== undefined && cached.stamp === stamp) {
         result.set(entry.documentId, cached.facts)
         continue
       }
       const { doc } = await loadDocument(deps, entry.documentId)
       const facts = extractContentFacts(entry, doc)
-      this.held.set(entry.documentId, { stamp, facts })
+      held.set(entry.documentId, { stamp, facts })
       result.set(entry.documentId, facts)
     }
     return result

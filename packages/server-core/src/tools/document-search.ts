@@ -66,7 +66,7 @@ export function createDocumentSearchTool(
     async execute(input: DocumentSearchInput): Promise<DocumentSearchOutput> {
       const parsed = documentSearchInputSchema.parse(input)
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
-      const content = await cache.factsFor(deps, entries)
+      const content = await cache.factsFor(deps, parsed.workspaceId, entries)
 
       const searchable: (SearchableDocument & { kind?: 'markdown' | 'spatial' })[] = []
       for (const entry of entries) {

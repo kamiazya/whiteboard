@@ -44,7 +44,7 @@ export async function computeBacklinks(
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.documentId)
   }
 
-  const content = await cache.factsFor(deps, entries)
+  const content = await cache.factsFor(deps, input.workspaceId, entries)
   const aggregate = new ReferenceAggregate()
   for (const entry of entries) {
     const facts = content.get(entry.documentId)
