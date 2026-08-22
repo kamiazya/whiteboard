@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto'
 import { readdirSync, readFileSync } from 'node:fs'
 import { join, relative, resolve } from 'node:path'
 import type { Judgments, QueryCategory } from '@kamiazya/whiteboard-server-core'
@@ -58,6 +59,25 @@ function firstHeading(markdown: string): string | undefined {
     if (line.startsWith('# ')) return line.slice(2).trim()
   }
   return undefined
+}
+
+/**
+ * A short fingerprint of exactly what was measured.
+ *
+ * This corpus is READ FROM THE LIVE TREE, so two runs a month apart are two
+ * different experiments and nothing in the output would say so. A number
+ * quoted from a run nobody can identify is not a measurement, it is an
+ * anecdote — and the whole point of the scoreboard is that a claim about
+ * ranking has to name the evidence behind it.
+ *
+ * Kept separate from `queryDigest` on purpose: when a reported figure
+ * moves, the first question is whether the documents changed or the
+ * judgements did, and one combined hash cannot answer it.
+ */
+export function corpusDigest(documents: readonly DocsCorpusDocument[]): string {
+  const hash = createHash('sha256')
+  for (const doc of documents) hash.update(`${doc.path}\u0000${doc.name}\u0000${doc.body}\u0000`)
+  return hash.digest('hex').slice(0, 12)
 }
 
 export interface DocsJudgedQuery {
@@ -309,3 +329,20 @@ export const DOCS_JUDGED_QUERIES: readonly DocsJudgedQuery[] = [
     relevant: { 'contributing/development': 3 },
   },
 ]
+
+/**
+ * Fingerprint of the query set INCLUDING its judgements, so re-grading a
+ * single document is as visible as adding a query. A judgement change with
+ * an unchanged digest would be the worst kind of silent drift: the same
+ * corpus, the same questions, and a different answer key.
+ */
+export function queryDigest(queries: readonly DocsJudgedQuery[]): string {
+  const hash = createHash('sha256')
+  for (const judged of queries) {
+    hash.update(`${judged.query}\u0000${judged.category}\u0000`)
+    for (const path of Object.keys(judged.relevant).sort()) {
+      hash.update(`${path}=${judged.relevant[path]}\u0000`)
+    }
+  }
+  return hash.digest('hex').slice(0, 12)
+}

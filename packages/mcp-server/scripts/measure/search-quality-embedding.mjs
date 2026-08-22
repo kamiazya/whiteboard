@@ -33,7 +33,12 @@ import {
   wbDocumentCreate,
 } from '@kamiazya/whiteboard-server-core'
 import { createInMemoryDocumentStore } from '../../../server-core/src/test-utils/in-memory-document-store.ts'
-import { DOCS_JUDGED_QUERIES, loadDocsCorpus } from '../../src/server/search/docs-corpus.ts'
+import {
+  corpusDigest,
+  DOCS_JUDGED_QUERIES,
+  loadDocsCorpus,
+  queryDigest,
+} from '../../src/server/search/docs-corpus.ts'
 import { searchModelCacheDir } from '../../src/server/search/search-embedder.ts'
 import {
   createTransformersEmbedder,
@@ -142,6 +147,12 @@ out('')
 out(
   `corpus: ${CORPUS.length} documents from docs/, ` +
     `${DOCS_JUDGED_QUERIES.length} judged queries, cut at ${K}`,
+)
+// Which experiment this was. The corpus is read from the live tree, so two
+// runs a month apart are two different experiments and nothing else in this
+// output would say so.
+out(
+  `  corpus ${corpusDigest(CORPUS)} / queries ${queryDigest(DOCS_JUDGED_QUERIES)} / model ${EMBEDDING_MODEL}`,
 )
 if (K >= CORPUS.length) {
   out('')

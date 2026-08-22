@@ -231,6 +231,23 @@ ever have surfaced it. Chunking is now the obvious next increment, and
 unlike before there is an instrument that can price it. The script reports
 the truncated fraction on every run so it cannot quietly return.
 
+#### Every figure above names the experiment that produced it
+
+The corpus is read from the LIVE `docs/` tree, so two runs a month apart
+are two different experiments and nothing in a bare table would say so. The
+script prints a corpus digest and a query digest on every run — separate,
+because when a figure moves the first question is whether the documents
+changed or the answer key did, and one combined hash cannot answer it.
+
+The figures here were measured at corpus `026ba02fea41`, queries
+`03069009f9ea`, model `Xenova/multilingual-e5-small`.
+
+Note the loop this creates: **this ADR is itself a document in the corpus.**
+Writing the paragraph above changed the corpus and moved the truncation
+figure from 21% to 20%. That is not a bug to fix — it is why the digest
+exists, and why a later reader finding a small discrepancy should check the
+digest before assuming someone mis-transcribed a number.
+
 #### What the corpus still cannot do
 
 Detecting a 0.10 nDCG difference needs about 109 queries at the observed
