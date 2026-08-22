@@ -13,6 +13,7 @@ import {
   getWorkspaceNames,
   listDocuments,
   renameDocumentPath,
+  setDocumentDisplayName,
 } from './daemon-api-client.js'
 
 /**
@@ -73,6 +74,11 @@ export function createDaemonFilesSource(
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {
       await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, newPath)
+    },
+
+    async setDocumentName(entry, name): Promise<void> {
+      // The API spells "clear" as an empty string (PUT name deletes on '').
+      await setDocumentDisplayName(daemonFetch, daemonBaseUrl, workspaceId, entry.path, name ?? '')
     },
 
     async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<string> {

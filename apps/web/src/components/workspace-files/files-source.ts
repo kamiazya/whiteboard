@@ -21,6 +21,16 @@ export interface WorkspaceFilesSource {
   /** Move a document — and everything under it — to a new path. */
   renameDocumentPath(path: string, newPath: string): Promise<void>
   /**
+   * Set what the document is called, or clear it (undefined) so readers
+   * fall back to the path's last segment. The name lives in the WORKSPACE
+   * (vocabulary.md), which is why this sits on the source and not on the
+   * document's content.
+   */
+  setDocumentName(
+    entry: Pick<WorkspaceDocumentEntry, 'documentId' | 'path'>,
+    name: string | undefined,
+  ): Promise<void>
+  /**
    * The OKF markdown of a markdown document, for row thumbnails and the
    * preview pane. Empty string when the document has no body yet.
    */

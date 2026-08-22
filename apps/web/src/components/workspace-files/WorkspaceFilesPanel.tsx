@@ -14,6 +14,7 @@ import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { newDocumentPathIn } from './new-document-path.js'
+import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments } from './search-documents.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
@@ -100,9 +101,11 @@ export function WorkspaceFilesPanel({
     x: number
     y: number
   } | null>(null)
-  // Bumped when the menu's Move… fires, so the preview opens its move form
-  // for the selection the same gesture just made.
-  const [startMoveToken, setStartMoveToken] = useState(0)
+  // The rename dialog's target, plus the in-flight/refusal state its form
+  // shows. Null means closed.
+  const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
+  const [renameBusy, setRenameBusy] = useState(false)
+  const [renameError, setRenameError] = useState<string | null>(null)
   const rootRef = useRef<HTMLDivElement | null>(null)
   // Every tag in the workspace, each once, in reading order. The strip is
   // derived — deleting the last carrier of a tag removes its chip with it.
@@ -240,6 +243,40 @@ export function WorkspaceFilesPanel({
     [query, folder],
   )
 
+  /**
+   * Apply whatever the rename dialog changed: the name through the source's
+   * workspace-side setter, the path through the same move the panel already
+   * performs. Both, in that order, when both changed — a failed move then
+   * leaves the new name applied, which is honest: the dialog stays open on
+   * the server's refusal and the field still shows what was typed.
+   */
+  const submitRename = useCallback(
+    async (entry: WorkspaceDocumentEntry, name: string | undefined, newPath: string) => {
+      setRenameBusy(true)
+      setRenameError(null)
+      try {
+        if ((entry.name ?? undefined) !== name) {
+          await source.setDocumentName(entry, name)
+        }
+        if (newPath !== entry.path) {
+          await moveDocumentRef.current(entry, newPath)
+        } else {
+          const entries = await readList()
+          setDocuments(entries)
+          setSelected(entries.find((row) => row.path === entry.path) ?? null)
+        }
+        setRenaming(null)
+      } catch (err) {
+        // The server names the PRODUCED path that collided, which on a
+        // subtree move is often not the one typed here.
+        setRenameError(err instanceof Error ? err.message : 'Could not rename it.')
+      } finally {
+        setRenameBusy(false)
+      }
+    },
+    [source, readList],
+  )
+
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await source.renameDocumentPath(entry.path, newPath)
@@ -250,6 +287,12 @@ export function WorkspaceFilesPanel({
     },
     [source, readList],
   )
+  // submitRename is declared above moveDocument (it reads better beside the
+  // dialog state) and calls it through a ref rather than being reordered:
+  // both are hooks, so their ORDER is load-bearing and a reader should not
+  // have to verify it twice.
+  const moveDocumentRef = useRef(moveDocument)
+  moveDocumentRef.current = moveDocument
 
   /**
    * Moving the contents pane always empties the preview.
@@ -304,10 +347,11 @@ export function WorkspaceFilesPanel({
             ? []
             : [{ label: 'Duplicate', onSelect: () => onDuplicateDocument(cardMenu.entry.path) }]),
           {
-            label: 'Move…',
+            label: 'Rename…',
             onSelect: () => {
               setSelected(cardMenu.entry)
-              setStartMoveToken((token) => token + 1)
+              setRenameError(null)
+              setRenaming(cardMenu.entry)
             },
           },
           ...(onRequestDelete === undefined
@@ -525,11 +569,13 @@ export function WorkspaceFilesPanel({
           <DocumentPreview
             document={selected}
             loadRender={loadRender}
-            startMoveToken={startMoveToken}
             {...(onOpenDocument === undefined
               ? {}
               : { onOpen: (entry: WorkspaceDocumentEntry) => onOpenDocument(entry.path) })}
-            onMove={moveDocument}
+            onRename={(entry: WorkspaceDocumentEntry) => {
+              setRenameError(null)
+              setRenaming(entry)
+            }}
             {...(onDuplicateDocument === undefined
               ? {}
               : {
@@ -545,6 +591,19 @@ export function WorkspaceFilesPanel({
           />
         </div>
       </div>
+      <RenameDocumentDialog
+        document={renaming}
+        busy={renameBusy}
+        error={renameError}
+        onCancel={() => {
+          setRenaming(null)
+          setRenameError(null)
+        }}
+        onSubmit={(name, newPath) => {
+          if (renaming === null) return
+          void submitRename(renaming, name, newPath)
+        }}
+      />
       {cardMenu !== null && (
         <ContextMenu
           x={cardMenu.x}

@@ -221,7 +221,7 @@ describe('DaemonIndexPage tree view', () => {
   })
 
   // The move route has existed since #888 with no caller at all. This is it.
-  it('moves a document, and the panes follow it', async () => {
+  it('renames a document to a new path, and the panes follow it', async () => {
     // The daemon's own semantics, in miniature: a move takes the subtree.
     let docs = [
       { id: 'a', path: 'notes', updatedAt: '2026-05-01T12:00:00.000Z', kind: 'markdown' },
@@ -262,11 +262,12 @@ describe('DaemonIndexPage tree view', () => {
     )
     await screen.findByTestId('okf-preview')
 
-    fireEvent.click(screen.getByRole('button', { name: /Move/ }))
-    fireEvent.change(screen.getByRole('textbox', { name: /path/i }), {
+    fireEvent.click(screen.getByRole('button', { name: /Rename/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText(/^Path/), {
       target: { value: 'archive/design' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     // The selection follows the document, and the panes move with it —
     // otherwise the preview goes blank exactly when someone wants to see
@@ -278,7 +279,7 @@ describe('DaemonIndexPage tree view', () => {
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
-  it('shows the server’s refusal when a move collides', async () => {
+  it('shows the server’s refusal when the new path collides', async () => {
     const base = installFetchMock()
     vi.stubGlobal(
       'fetch',
@@ -303,15 +304,16 @@ describe('DaemonIndexPage tree view', () => {
     )
     await screen.findByTestId('okf-preview')
 
-    fireEvent.click(screen.getByRole('button', { name: /Move/ }))
-    fireEvent.change(screen.getByRole('textbox', { name: /path/i }), {
+    fireEvent.click(screen.getByRole('button', { name: /Rename/ }))
+    const dialog = await screen.findByRole('dialog')
+    fireEvent.change(within(dialog).getByLabelText(/^Path/), {
       target: { value: 'archive/design' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save' }))
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Save' }))
 
     // The server named a path the caller never typed — that is the point of
     // forwarding its words instead of building a sentence around the input.
-    const alert = await screen.findByRole('alert')
+    const alert = await within(screen.getByRole('dialog')).findByRole('alert')
     expect(alert.textContent).toContain('archive/design/x')
   })
 
