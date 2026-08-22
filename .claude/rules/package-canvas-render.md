@@ -510,14 +510,16 @@ paths:
       into the CPU-side costs the profile named. Two of the four are done:
       `addCost`/`lessCost` allocation (the trial sums into one scratch
       array) and `routeEdge`'s repeated `deriveDefaultSides` scan.
-      `computeAnchorsFor` gave up its layout-invariant half (node index,
-      rects, centers, hoisted into an `AnchorContext` built once per
-      search); what remains of it is the grouping and fan-out, which a
-      trial genuinely changes, and recovering that needs a per-group
-      incremental recompute — only the (nodeId, side) groups an edge leaves
-      and joins can differ, at most four per re-sided edge, though the
-      aligned run's slide reads group SIZES and so has to be re-checked for
-      every edge touching a resized group. `selfPenalty` was measured
+      `computeAnchorsFor` is done: it gave up its layout-invariant half
+      (node index, rects, centers, hoisted into an `AnchorContext` built
+      once per search), and its partition is now patched per trial rather
+      than rebuilt (`patchAnchorGroups`). Timing its three phases is what
+      made the second half tractable — grouping 15.4ms, placement 27.2ms,
+      alignment 3.8ms of 46.4ms on the 200-edge bench — because it showed
+      alignment could stay a FULL pass. That is the part worth remembering:
+      the hard question was which edges' alignment a re-side can flip
+      (the aligned run's slide reads group SIZES), and at 8% of the
+      function it never had to be answered. `selfPenalty` was measured
       rather than assumed and the answer moved the target: its cost is
       overlap-and-intrusion (10.9% of layout), not border-tracing (3.1%),
       and that term now rejects by axis before measuring.
