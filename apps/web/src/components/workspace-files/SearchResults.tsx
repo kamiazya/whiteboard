@@ -15,6 +15,7 @@
 
 import { LayoutGrid, List } from 'lucide-react'
 import { type ReactNode, useState } from 'react'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
@@ -89,24 +90,34 @@ export function SearchResults({
     <div className={className}>
       <div className="mb-1 flex justify-end">
         <div className="flex items-center gap-0.5 rounded-md border p-0.5">
-          <button
-            type="button"
-            aria-label="List results"
-            aria-pressed={layout === 'list'}
-            onClick={() => setLayout('list')}
-            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
-          >
-            <List className="size-4" />
-          </button>
-          <button
-            type="button"
-            aria-label="Grid results"
-            aria-pressed={layout === 'grid'}
-            onClick={() => setLayout('grid')}
-            className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
-          >
-            <LayoutGrid className="size-4" />
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="List results"
+                aria-pressed={layout === 'list'}
+                onClick={() => setLayout('list')}
+                className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
+              >
+                <List className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>List results</TooltipContent>
+          </Tooltip>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="Grid results"
+                aria-pressed={layout === 'grid'}
+                onClick={() => setLayout('grid')}
+                className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
+              >
+                <LayoutGrid className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Grid results</TooltipContent>
+          </Tooltip>
         </div>
       </div>
       {layout === 'list' ? (
