@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Hosted browser app for whiteboard \u2014 Cloudflare Pages deploy target",
+  "description": "Hosted browser app for whiteboard — Cloudflare Pages deploy target",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -21,6 +21,7 @@
     "smoke:pwa-precache": "node scripts/check-pwa-precache.mjs"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.1",
     "@codemirror/language": "^6.11.4",
