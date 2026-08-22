@@ -338,10 +338,47 @@ function initialSideChoices(
   return choices
 }
 
+/**
+ * The layout-invariant half of `computeAnchorsFor`'s inputs, built ONCE per
+ * search and reused by every trial: nodes do not move while sides are being
+ * chosen, so their index, rects and centers are identical on every call. The
+ * search runs that function hundreds of times per layout (measured: 252 calls
+ * on the 200-edge bench, 463 on the 345-edge one), and rebuilding these per
+ * call was 15% of layout time.
+ *
+ * Carrying `edges` alongside them is what makes the reuse safe: `ends` is
+ * indexed by edge position, so a context cannot be paired with an edge list
+ * it was not derived from.
+ */
+interface AnchorContext {
+  readonly edges: readonly CanvasEdge[]
+  /** Per edge index; `undefined` when either endpoint node is missing. */
+  readonly ends: ReadonlyArray<AnchorEnds | undefined>
+}
+
+interface AnchorEnds {
+  readonly fromRect: Rect
+  readonly toRect: Rect
+  readonly fromCenter: Point
+  readonly toCenter: Point
+}
+
+function anchorContext(nodes: readonly SpatialNode[], edges: readonly CanvasEdge[]): AnchorContext {
+  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const ends = edges.map((edge) => {
+    const fromNode = byId.get(edge.fromNode)
+    const toNode = byId.get(edge.toNode)
+    if (fromNode === undefined || toNode === undefined) return undefined
+    const fromRect = rectOf(fromNode)
+    const toRect = rectOf(toNode)
+    return { fromRect, toRect, fromCenter: centerOf(fromRect), toCenter: centerOf(toRect) }
+  })
+  return { edges, ends }
+}
+
 /** Grouping, anchor fan-out and lane depths for a FIXED side configuration. */
 function computeAnchorsFor(
-  nodes: readonly SpatialNode[],
-  edges: readonly CanvasEdge[],
+  ctx: AnchorContext,
   sides: ReadonlyMap<string, SidePair>,
   // Alignment never varies WITHIN one optimizer run: sliding anchors
   // mid-optimization changes trial costs, which shifts side-choice
@@ -358,7 +395,7 @@ function computeAnchorsFor(
   // point/depth is the committed one — a stationary edge never moves.
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, EdgeAnchorPair> {
-  const byId = new Map(nodes.map((n) => [n.id, n]))
+  const { edges, ends: edgeEnds } = ctx
   type End = {
     readonly edgeId: string
     readonly edgeIndex: number
@@ -369,12 +406,10 @@ function computeAnchorsFor(
   }
   const groups = new Map<string, End[]>()
   edges.forEach((edge, edgeIndex) => {
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
+    const geom = edgeEnds[edgeIndex]
     const chosen = sides.get(edge.id)
-    if (fromNode === undefined || toNode === undefined || chosen === undefined) return
-    const fromRect = rectOf(fromNode)
-    const toRect = rectOf(toNode)
+    if (geom === undefined || chosen === undefined) return
+    const { fromRect, toRect } = geom
     const ends: End[] = [
       {
         edgeId: edge.id,
@@ -382,7 +417,7 @@ function computeAnchorsFor(
         role: 'from',
         rect: fromRect,
         side: chosen.fromSide,
-        farCenter: centerOf(toRect),
+        farCenter: geom.toCenter,
       },
       {
         edgeId: edge.id,
@@ -390,7 +425,7 @@ function computeAnchorsFor(
         role: 'to',
         rect: toRect,
         side: chosen.toSide,
-        farCenter: centerOf(fromRect),
+        farCenter: geom.fromCenter,
       },
     ]
     for (const end of ends) {
@@ -474,20 +509,19 @@ function computeAnchorsFor(
   // per-side fraction placement above only delivers when the two side
   // midpoints happen to align. Multi-edge sides keep their fan-out
   // fractions: collapsing two corridors onto one lane is worse than a jog.
-  for (const edge of edges) {
+  for (let edgeIndex = 0; edgeIndex < edges.length; edgeIndex++) {
+    const edge = edges[edgeIndex] as CanvasEdge
     // A pinned edge holds its committed anchors; alignment must not move it.
     if (pins?.get(edge.id)?.from !== undefined || pins?.get(edge.id)?.to !== undefined) continue
     const chosen = sides.get(edge.id)
     const entry = anchors.get(edge.id)
     if (chosen === undefined || entry?.from === undefined || entry.to === undefined) continue
     if (chosen.toSide !== oppositeSide(chosen.fromSide)) continue
-    const fromNode = byId.get(edge.fromNode)
-    const toNode = byId.get(edge.toNode)
-    if (fromNode === undefined || toNode === undefined) continue
+    const geom = edgeEnds[edgeIndex]
+    if (geom === undefined) continue
     if ((groups.get(`${edge.fromNode} ${chosen.fromSide}`)?.length ?? 0) > 1) continue
     if ((groups.get(`${edge.toNode} ${chosen.toSide}`)?.length ?? 0) > 1) continue
-    const fromRect = rectOf(fromNode)
-    const toRect = rectOf(toNode)
+    const { fromRect, toRect } = geom
     const axis = chosen.fromSide === 'left' || chosen.fromSide === 'right' ? 'h' : 'v'
     // Interpenetrating boxes (authored sides can force them) have no
     // forward-facing lane to slide into.
@@ -735,8 +769,9 @@ function optimizeSideChoices(
     a.y - COST_QUANTUM <= b.y + b.h &&
     b.y - COST_QUANTUM <= a.y + a.h
 
+  const ctx = anchorContext(nodes, edges)
   let current = new Map(initial)
-  let anchors = computeAnchorsFor(nodes, edges, current, align, pins)
+  let anchors = computeAnchorsFor(ctx, current, align, pins)
   let paths: (readonly Point[])[] = edges.map((e, i) => routeCached(e, i, anchors.get(e.id)))
   let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
@@ -796,7 +831,7 @@ function optimizeSideChoices(
     updates: Map<number, ConfigCost>
     selfUpdates: Map<number, ConfigCost>
   } => {
-    const trialAnchors = computeAnchorsFor(nodes, edges, trialSides, align, pins)
+    const trialAnchors = computeAnchorsFor(ctx, trialSides, align, pins)
     const touched: number[] = []
     for (let i = 0; i < edges.length; i++) {
       if (!sameAnchor(anchors.get(edges[i]!.id), trialAnchors.get(edges[i]!.id))) touched.push(i)
@@ -992,7 +1027,8 @@ function anchorsWithoutCoincidentEnds(
     const a = anchors.get(id)
     return a?.from !== undefined && a.to !== undefined && a.from.x === a.to.x && a.from.y === a.to.y
   }
-  const anchors = computeAnchorsFor(nodes, edges, sides, align, pins)
+  const ctx = anchorContext(nodes, edges)
+  const anchors = computeAnchorsFor(ctx, sides, align, pins)
   const collided = edges.filter(
     (edge) =>
       edge.fromNode !== edge.toNode &&
@@ -1037,7 +1073,7 @@ function anchorsWithoutCoincidentEnds(
       }
       const trial = new Map(repaired)
       trial.set(edge.id, sided)
-      const trialAnchors = computeAnchorsFor(nodes, edges, trial, align, pins)
+      const trialAnchors = computeAnchorsFor(ctx, trial, align, pins)
       if (coincides(trialAnchors, edge.id)) continue
       const { path } = routeEdge(nodes, edge, style, trialAnchors.get(edge.id))
       // The arrowhead is drawn ON the final segment; a shorter one paints an
@@ -1071,7 +1107,7 @@ function anchorsWithoutCoincidentEnds(
     // draws the shared point rather than a spike, so the worst case is an
     // invisible edge, never a wrong one.
   }
-  return computeAnchorsFor(nodes, edges, repaired, align, pins)
+  return computeAnchorsFor(ctx, repaired, align, pins)
 }
 
 /**
