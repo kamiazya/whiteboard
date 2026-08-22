@@ -1,3 +1,4 @@
+import { createUniqueNameResolver } from '@kamiazya/whiteboard-codec'
 import { documentsApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
 import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
@@ -9,6 +10,8 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
+import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
+import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
@@ -18,7 +21,6 @@ import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
-import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
@@ -37,7 +39,7 @@ import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
-import { createDaemonFetch } from '../lib/daemon-api-client.js'
+import { createDaemonFetch, getDocumentBacklinks } from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
@@ -351,12 +353,34 @@ export function DaemonDocumentPage({
   // display name AND by path, since only the path is addressable and only
   // the name is the user's own word for the document.
   const resolveAlias = useMemo(
-    () => createSnapshotAliasResolver(daemonLinkEntries(controller.documents)),
+    () => createUniqueNameResolver(daemonLinkEntries(controller.documents)),
     [controller.documents],
   )
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.
   const linkTargets = useMemo(() => daemonLinkTargets(controller.documents), [controller.documents])
+
+  // Backlinks for the Connections chip. Keyed on the CURRENT document's id —
+  // an older daemon's id-less listing leaves it undefined and the chip
+  // disabled rather than querying with a path the route would reject.
+  const currentDocumentId = controller.documents.find((d) => d.path === controller.path)?.id
+  const [backlinks, setBacklinks] = useState<readonly ConnectionsBacklink[] | null>(null)
+  useEffect(() => {
+    setBacklinks(null)
+    if (currentDocumentId === undefined || controller.workspaceId === null) return
+    let cancelled = false
+    getDocumentBacklinks(daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId)
+      .then((response) => {
+        if (!cancelled) setBacklinks(response.backlinks)
+      })
+      .catch(() => {
+        // The chip simply stays disabled; connections are never worth an
+        // error surface of their own on a page that otherwise works.
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId])
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
@@ -602,18 +626,24 @@ export function DaemonDocumentPage({
               // content, which ADR-0009 decision 2 forbids and
               // `storedCoreFacetsSchema` has no room for.
               titleSlot={(identity) => (
-                <DocumentProperties
-                  inline
-                  key={`${canvas.workspaceId}/${canvas.path}`}
-                  title={identity.name}
-                  onTitleChange={identity.onRename}
-                  // Facets are OKF frontmatter, so only a markdown document
-                  // has any — `readCoreFacets` answers `undefined` for a
-                  // spatial one (ADR-0009 decision 3), which is what decides
-                  // the disclosure here without a second flag to keep in sync.
-                  facets={coreFacets}
-                  onFacetsChange={setCoreFacets}
-                />
+                <>
+                  <DocumentProperties
+                    inline
+                    key={`${canvas.workspaceId}/${canvas.path}`}
+                    title={identity.name}
+                    onTitleChange={identity.onRename}
+                    // Facets are OKF frontmatter, so only a markdown document
+                    // has any — `readCoreFacets` answers `undefined` for a
+                    // spatial one (ADR-0009 decision 3), which is what decides
+                    // the disclosure here without a second flag to keep in sync.
+                    facets={coreFacets}
+                    onFacetsChange={setCoreFacets}
+                  />
+                  <ConnectionsChip
+                    backlinks={backlinks}
+                    onOpen={(entry) => controller.switchDocument(entry.path)}
+                  />
+                </>
               )}
               workspaceId={canvas.workspaceId}
               path={canvas.path}

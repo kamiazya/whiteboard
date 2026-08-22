@@ -34,13 +34,10 @@ export function filterDocumentsBySearch(
   namesByPath: Readonly<Record<string, string>>,
 ): DocumentInfo[] {
   if (query.trim() === '') return [...documents]
-  // Either source, though today neither caller can tell them apart:
-  // DocumentListView builds its table from `r.displayName` on the line above
-  // the rows themselves, and useDocumentNames builds local-mode's from
-  // `c.name`. So this `??` is the function's contract matching its own
-  // signature — it takes rows that carry a name AND a table of names — and
-  // not a live defect. A caller that populated only one would otherwise
-  // search by path alone with nothing to say so.
+  // Either source: the function takes rows that carry a name AND a table of
+  // names, and the `??` is its contract matching that signature — a caller
+  // that populated only one would otherwise search by path alone with
+  // nothing to say so.
   return documents.filter((c) =>
     documentMatchesSearch(query, { path: c.path, name: namesByPath[c.path] ?? c.name }),
   )

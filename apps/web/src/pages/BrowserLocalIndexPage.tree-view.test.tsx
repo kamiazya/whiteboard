@@ -1,9 +1,8 @@
 /**
- * The three-pane document browser, in LOCAL mode.
- *
- * One browser for both modes: the daemon page has had the tree view since
- * #902; this pins that the local page offers the same one, backed by the
- * local source, with the same grid/tree toggle.
+ * The three-pane document browser, in LOCAL mode, over the REAL IndexedDB
+ * stores (fake-indexeddb): the injected-double page tests cannot see a
+ * wiring split between the page's stores and the panel's source, and this
+ * file exists for exactly that seam.
  */
 import 'fake-indexeddb/auto'
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
@@ -29,24 +28,20 @@ function renderPage() {
   return onOpenDocument
 }
 
-describe('browser-local tree view', () => {
+describe('browser-local document browser (real stores)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
   })
   afterEach(cleanup)
 
-  it('offers the grid/tree toggle and shows the three-pane browser', async () => {
+  it('lands on the three-pane browser, no toggle in between', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     await seedIdbDocument(index, { path: 'roadmap', name: 'Roadmap', kind: 'markdown' })
 
     renderPage()
 
-    // The same toggle the daemon page carries — one browser, both modes.
-    const treeButton = await screen.findByRole('button', { name: 'Tree view' })
-    fireEvent.click(treeButton)
-
-    // The panel's search box is the tree view's distinctive chrome.
+    // The panel's search box is the browser's distinctive chrome.
     await screen.findByLabelText('Search documents')
     // And the seeded document is reachable in it.
     await waitFor(() => {
@@ -54,13 +49,12 @@ describe('browser-local tree view', () => {
     })
   })
 
-  it('opens a document from the tree view through the same navigation', async () => {
+  it('opens a document from the browser through the same navigation', async () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     await seedIdbDocument(index, { path: 'roadmap', name: 'Roadmap', kind: 'markdown' })
 
     const onOpenDocument = renderPage()
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     fireEvent.click((await screen.findAllByText('Roadmap'))[0] as HTMLElement)
 
     // Selecting shows the preview; its open affordance drives navigation.

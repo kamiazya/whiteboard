@@ -87,8 +87,6 @@ describe('DaemonIndexPage tree view', () => {
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
-
     await waitFor(() => {
       expect(screen.getByTestId('workspace-files-panel')).not.toBeNull()
     })
@@ -106,7 +104,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
 
     // At the root the middle pane shows the top level only — `notes` is
     // there as a folder, its child is one level down and is not.
@@ -160,7 +157,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
 
     fireEvent.click(screen.getByRole('button', { name: 'One column' }))
@@ -185,7 +181,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
     fireEvent.click(screen.getByRole('button', { name: 'One column' }))
 
@@ -205,7 +200,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
 
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
@@ -258,7 +252,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -300,7 +293,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -364,7 +356,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
 
     // At the root it lands at the root.
@@ -412,7 +403,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -457,7 +447,13 @@ describe('DaemonIndexPage tree view', () => {
           return Promise.resolve(jsonResponse({ path: 'untitled' }))
         }
         if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
-          return Promise.resolve(jsonResponse({ documents: [] }))
+          // One seeded row: an empty workspace shows the onboarding state
+          // instead of the panel, and this test needs the panel's buttons.
+          return Promise.resolve(
+            jsonResponse({
+              documents: [{ path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' }],
+            }),
+          )
         }
         return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
       }),
@@ -466,7 +462,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
 
     fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
@@ -496,7 +491,11 @@ describe('DaemonIndexPage tree view', () => {
           return Promise.resolve(jsonResponse({ path: body.path }))
         }
         if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
-          return Promise.resolve(jsonResponse({ documents: [] }))
+          return Promise.resolve(
+            jsonResponse({
+              documents: [{ path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' }],
+            }),
+          )
         }
         return Promise.resolve(jsonResponse({ message: 'not found' }, 404))
       }),
@@ -505,7 +504,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
 
     fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
@@ -578,7 +576,6 @@ describe('DaemonIndexPage tree view', () => {
         onOpenDocument={(workspaceId, path) => opened.push([workspaceId, path])}
       />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -612,7 +609,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
     // Standing at the root, where `notes/design` is NOT listed.
     expect(contents.textContent).not.toContain('design')
@@ -634,7 +630,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
 
     const box = screen.getByRole('searchbox', { name: 'Search documents' })
@@ -659,7 +654,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
 
     const box = screen.getByRole('searchbox', { name: 'Search documents' })
@@ -683,7 +677,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     const contents = await screen.findByTestId('folder-contents')
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
     await waitFor(() => {
@@ -708,7 +701,6 @@ describe('DaemonIndexPage tree view', () => {
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
     await screen.findByTestId('folder-contents')
 
     fireEvent.change(screen.getByRole('searchbox', { name: 'Search documents' }), {
@@ -717,15 +709,15 @@ describe('DaemonIndexPage tree view', () => {
     expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')
   })
 
-  it('shows a calm no-tree message (not an alert) when the list 404s', async () => {
+  it('treats a 404 list as an empty workspace (onboarding, no alert)', async () => {
+    // A workspace with no document tree yet is a calm empty workspace the
+    // onboarding state can create into — not a broken page.
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
-
-    await screen.findByText('This workspace has no document tree yet.')
+    await screen.findByText('No documents yet')
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
@@ -735,9 +727,7 @@ describe('DaemonIndexPage tree view', () => {
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: 'Tree view' }))
-
     const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain('Failed to load the workspace file tree.')
+    expect(alert.textContent).toContain('Failed to load documents for this workspace.')
   })
 })

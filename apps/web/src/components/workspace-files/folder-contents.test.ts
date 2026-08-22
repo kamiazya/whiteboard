@@ -76,3 +76,24 @@ describe('folderContents', () => {
     expect(documents.map((d) => d.path)).toEqual(['readme'])
   })
 })
+
+describe('folderContents pinned order', () => {
+  // The grid this pane replaced put pinned documents first (in the order the
+  // user pinned them), and retiring it must not silently lose that. Unpinned
+  // documents keep the path order; pinned ones step in front of it.
+  it('lists pinned documents first, in pinOrder, ahead of the path sort', () => {
+    const pinnable = [
+      { documentId: 'a', path: 'design/alpha' },
+      { documentId: 'z', path: 'design/zeta', pinOrder: 0 },
+      { documentId: 'm', path: 'design/mid', pinOrder: 1 },
+      { documentId: 'b', path: 'design/beta' },
+    ]
+    const { documents } = folderContents(pinnable, 'design')
+    expect(documents.map((d) => d.path)).toEqual([
+      'design/zeta',
+      'design/mid',
+      'design/alpha',
+      'design/beta',
+    ])
+  })
+})

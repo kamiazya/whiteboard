@@ -40,12 +40,14 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
     listWorkspaces: vi.fn(),
     listDocuments: vi.fn(),
     createDocument: vi.fn(),
+    getDocumentBacklinks: vi.fn(),
   }
 })
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
 const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
+const mockGetDocumentBacklinks = vi.mocked(daemonApiClient.getDocumentBacklinks)
 
 // Records every fake backend instance created, in order, so tests can assert
 // exactly-once disconnect and ordering (old disconnects before new connects).
@@ -132,6 +134,7 @@ describe('DaemonDocumentPage', () => {
         { path: 'second', id: 'id-second', updatedAt: '2026-01-02', kind: 'spatial' },
       ],
     })
+    mockGetDocumentBacklinks.mockResolvedValue({ backlinks: [] })
   })
 
   afterEach(() => {
@@ -192,6 +195,39 @@ describe('DaemonDocumentPage', () => {
     expect(screen.getByText('second')).toBeTruthy()
     expect(createdBackends).toHaveLength(1)
     expect(createdBackends[0]?.connectCount).toBe(1)
+  })
+
+  it('shows the Connections chip with the backlink count and switches to a source on click', async () => {
+    mockGetDocumentBacklinks.mockResolvedValue({
+      backlinks: [
+        {
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          path: 'second',
+          name: 'Second board',
+          kind: 'spatial',
+          contexts: ['embedded on this canvas'],
+        },
+      ],
+    })
+    await act(async () => {
+      render(
+        <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,
+        { container: document.body },
+      )
+    })
+    const chip = await screen.findByRole('button', { name: /connections \(1\)/i })
+    expect(mockGetDocumentBacklinks).toHaveBeenCalledWith(
+      expect.anything(),
+      DAEMON_BASE_URL,
+      'w1',
+      'id-main',
+    )
+
+    fireEvent.click(chip)
+    fireEvent.click(await screen.findByRole('button', { name: /second board/i }))
+    // Row click navigates by path: the page switches documents, which mounts
+    // a second backend for 'second'.
+    await waitFor(() => expect(createdBackends).toHaveLength(2))
   })
 
   it('keeps one live connection when the parent re-renders with a fresh createBackend', async () => {

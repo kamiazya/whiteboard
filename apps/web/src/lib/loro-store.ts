@@ -28,6 +28,19 @@ import { IdbDocumentStore } from './idb-document-store.js'
 import { inTransaction, request } from './idb-tx.js'
 import { shouldCompact } from './loro-compaction.js'
 
+/**
+ * Narrow surface consumers need to seed, read back, and persist a document's
+ * Loro bytes. Injectable so node/jsdom tests can supply an in-memory fake
+ * instead of touching real IndexedDB or the loro-crdt library directly. It
+ * lives beside the concrete `LoroStore` so lower-level `lib/` modules never
+ * have to reach up into `pages/` for the type.
+ */
+export interface LoroStoreLike {
+  save(documentId: string, snapshot: Uint8Array): Promise<void>
+  createEmptySnapshot(): Uint8Array
+  load(documentId: string): Promise<LoroLoadResult>
+}
+
 export type LoroLoadResult =
   | { kind: 'ok'; snapshot: Uint8Array; deltas?: Uint8Array[] }
   | { kind: 'not-found' }

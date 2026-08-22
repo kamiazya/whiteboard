@@ -21,8 +21,11 @@ export interface FolderChild {
   readonly count: number
 }
 
+import { compareDocumentEntries } from './document-entry.js'
+
 interface PathBearing {
   readonly path: string
+  readonly pinOrder?: number
 }
 
 export function folderContents<T extends PathBearing>(
@@ -55,6 +58,6 @@ export function folderContents<T extends PathBearing>(
 
   return {
     folders,
-    documents: here.sort((left, right) => left.path.localeCompare(right.path)),
+    documents: here.sort(compareDocumentEntries),
   }
 }

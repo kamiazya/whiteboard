@@ -17,4 +17,33 @@ export interface WorkspaceDocumentEntry {
   readonly kind?: 'spatial' | 'markdown'
   /** Absent for a daemon that does not record it; the card then carries no age. */
   readonly updatedAt?: string
+  /**
+   * Present iff the user pinned this document; the value is its position
+   * among the pinned. Pinned documents outrank the path sort everywhere the
+   * panel orders a flat run of documents — the grid this panel replaced put
+   * them first, and retiring it must not silently lose that.
+   */
+  readonly pinOrder?: number
+}
+
+/**
+ * The one document ordering: pinned first (in pin order), then by path.
+ * Folder pane and search results both use it, so the two can never rank the
+ * same pair differently.
+ */
+export function compareDocumentEntries(
+  left: { readonly path: string; readonly pinOrder?: number },
+  right: { readonly path: string; readonly pinOrder?: number },
+): number {
+  if ((left.pinOrder === undefined) !== (right.pinOrder === undefined)) {
+    return left.pinOrder === undefined ? 1 : -1
+  }
+  if (
+    left.pinOrder !== undefined &&
+    right.pinOrder !== undefined &&
+    left.pinOrder !== right.pinOrder
+  ) {
+    return left.pinOrder - right.pinOrder
+  }
+  return left.path.localeCompare(right.path)
 }

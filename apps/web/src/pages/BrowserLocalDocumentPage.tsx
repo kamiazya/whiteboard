@@ -1,4 +1,4 @@
-import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
@@ -13,7 +13,6 @@ import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEdi
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
-import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
@@ -275,11 +274,11 @@ export function BrowserLocalDocumentPage({
   // [[Name]] resolution for the markdown preview: display names from the
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
-  // `createSnapshotAliasResolver` takes {id, name}; a stored row now says
+  // `createUniqueNameResolver` takes {id, name}; a stored row now says
   // `documentId`, so the projection is explicit rather than structural.
   const resolveAlias = useMemo(
     () =>
-      createSnapshotAliasResolver(
+      createUniqueNameResolver(
         documents.map((entry) => ({ id: entry.documentId, name: entry.name })),
       ),
     [documents],

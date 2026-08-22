@@ -86,6 +86,11 @@ export function WorkspaceFilesPanel({
   const [folder, setFolder] = useState('')
   const [columns, setColumns] = useState<BrowserColumns>('two')
   const [createError, setCreateError] = useState<string | null>(null)
+  // The `disabled` attribute is the whole double-press mechanism: React
+  // flushes this state before a second click can dispatch, while a
+  // handler-side early return would read a stale closure in exactly the
+  // same-tick case it exists to catch.
+  const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
 
   // One loader for the whole panel, so a re-render does not hand every card
@@ -165,14 +170,19 @@ export function WorkspaceFilesPanel({
   const createHere = useCallback(
     async (kind: DocumentKind) => {
       setCreateError(null)
-      const path = newDocumentPathIn(
-        folder,
-        (documents ?? []).map((row) => row.path),
-      )
-      await source.createDocument(path, kind)
-      const entries = await readList()
-      setDocuments(entries)
-      setSelected(entries.find((row) => row.path === path) ?? null)
+      setCreating(true)
+      try {
+        const path = newDocumentPathIn(
+          folder,
+          (documents ?? []).map((row) => row.path),
+        )
+        await source.createDocument(path, kind)
+        const entries = await readList()
+        setDocuments(entries)
+        setSelected(entries.find((row) => row.path === path) ?? null)
+      } finally {
+        setCreating(false)
+      }
     },
     [source, readList, folder, documents],
   )
@@ -269,6 +279,7 @@ export function WorkspaceFilesPanel({
           <button
             type="button"
             aria-label="New markdown document"
+            disabled={creating}
             onClick={() => void createHere('markdown').catch(() => setCreateError('markdown'))}
             className="text-muted-foreground hover:text-foreground rounded border p-1.5"
           >
@@ -277,6 +288,7 @@ export function WorkspaceFilesPanel({
           <button
             type="button"
             aria-label="New canvas"
+            disabled={creating}
             onClick={() => void createHere('spatial').catch(() => setCreateError('spatial'))}
             className="text-muted-foreground hover:text-foreground rounded border p-1.5"
           >

@@ -15,6 +15,7 @@
 // barrel instead of importing a shared-layer package it is not allowed to
 // depend on directly (see .claude/rules/architecture-map.md).
 export {
+  backlinksOutputSchema as documentBacklinksResponseSchema,
   exportOkfOutputSchema as documentOkfV1ResponseSchema,
   wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
@@ -37,8 +38,10 @@ export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime
 
 import type {
   exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
+  backlinksOutputSchema as _documentBacklinksResponseSchema,
   wbDocumentListOutputSchema as _listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { z as _z } from 'zod'
+export type DocumentBacklinksResponse = _z.infer<typeof _documentBacklinksResponseSchema>
 export type DocumentOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
 export type ListDocumentsV1Response = _z.infer<typeof _listDocumentsV1ResponseSchema>

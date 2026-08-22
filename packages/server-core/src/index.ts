@@ -7,6 +7,8 @@ export type {
   ServerDeps,
   ViewportRequest,
 } from './server-deps.js'
+export type { BacklinksInput, BacklinksOutput } from './tools/backlinks.js'
+export { backlinksInputSchema, backlinksOutputSchema, computeBacklinks } from './tools/backlinks.js'
 export type { BodyPatchInput, BodyPatchOutput, BodyPatchRange } from './tools/body-patch.js'
 export {
   bodyPatchInputSchema,

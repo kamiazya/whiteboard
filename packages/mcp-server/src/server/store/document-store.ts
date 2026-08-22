@@ -44,7 +44,7 @@ import {
   isCorruptStoredDataError,
   isMissingFileError,
 } from './corrupt-stored-data.js'
-import { getDb, registerDbDisposeHook } from './db/index.js'
+import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
