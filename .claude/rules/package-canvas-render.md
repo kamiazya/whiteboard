@@ -523,6 +523,61 @@ paths:
       rather than assumed and the answer moved the target: its cost is
       overlap-and-intrusion (10.9% of layout), not border-tracing (3.1%),
       and that term now rejects by axis before measuring.
+      **All four are landed, and re-profiling afterwards moved the target
+      off that list entirely.** On the 345-edge clustered canvas — the size
+      an AI-authored document reaches — `routeEdge` is now 60% of layout,
+      and inside it the fallback chain is nearly all of that: the grid
+      search `routeOnGrid` 27%, `bestCandidate` 8%, the detour `region`
+      union 5%. The elbow shortcut, which the code is written around as the
+      common case, is taken on only 292 of 1215 routings there; the grid
+      search runs on 719 of them. On the 200-edge grid canvas none of this
+      shows (routing is 13%, pair scoring 22%) — so the two bench shapes
+      now disagree about where the time is, and a change judged on one of
+      them has not been judged.
+      One cost off that profile is taken: the routed-path cache is owned by
+      the REGION rather than by each `optimizeSideChoices`, so it spans a
+      region's unaligned and aligned runs. That pairing is where the repeats
+      are — 1021 of 1900 routings on the clustered canvas repeat a key the
+      other run of their own region already saw, against 567 caught by the
+      per-search caches. Worth 15-19% there in six of six interleaved
+      comparisons, within noise on the grid canvas. Sound because `nodes`,
+      `style` and an edge's obstacle list are fixed across those two runs,
+      leaving the anchor pair as the only variable — and `routeCacheKey`
+      covers it field by field, pinned one case per field, because a field
+      the key misses is a wrong path rather than a slow one.
+      **It was first written one scope too wide, and the reason is worth
+      keeping.** A cache owned by `assignEdgeAnchors` measured exactly the
+      same, so nothing flagged it: regions PARTITION the edge list, an edge
+      is routed in only the region that holds it, and `routeCacheKey` starts
+      with `edge.id` — so a later region can never hit an earlier one's
+      entry. Measured 0 cross-region hits on canvases of one, two and four
+      regions. The wider scope bought nothing and held every completed
+      region's paths until the layout finished. The gap in the reasoning was
+      specific: soundness was checked (may these searches share?) and
+      usefulness was not (do they ever have anything to share?). A sharing
+      change needs both, and the cheap way to get the second is to attribute
+      the hits, not to count them.
+      **The obstacle preparation was tried and rejected**, the second
+      measurement in this series to refuse a change that argued well.
+      `routeEdge` rebuilds two 286-element arrays per call — the
+      endpoint-containment filter and the margin-inflated copy — 1333 times
+      per clustered layout, and only 421 of those filters drop anything.
+      Memoizing the inflated array and returning the shared one untouched
+      when nothing is dropped measured neutral-to-negative (clustered
+      494/502/491 against 508/470/485ms, rounds disagreeing in sign; grid
+      slightly worse in all three). The 11% the phase profile attributes to
+      those two lines is the SCAN, not the allocation: 1333 calls x 286
+      rects x two `containsPoint` tests is 760k tests, and the prototype
+      keeps every one of them. Nothing here gets cheaper without cutting
+      the obstacle SET down spatially, which changes what is tested rather
+      than how fast it is tested.
+      A note on method, because it cost a wrong conclusion before it was
+      caught: the first interleaved run said the grid canvas regressed 3-4%
+      consistently, in all three rounds. Running the same pairs with the
+      ORDER FLIPPED said neutral. Whichever variant runs first in a round
+      carries that round's warm-up, and three rounds of a fixed order
+      reproduce the artifact rather than test it. Alternate the order, not
+      only the variant.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
