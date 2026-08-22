@@ -358,7 +358,13 @@ export function DaemonDocumentPage({
   )
   // The same list, one row per document, carried with ids so the picker can
   // fall back to one when a name is ambiguous.
-  const linkTargets = useMemo(() => daemonLinkTargets(controller.documents), [controller.documents])
+  const linkTargets = useMemo(
+    () =>
+      daemonLinkTargets(controller.documents, {
+        excludeDocumentId: controller.documents.find((d) => d.path === controller.path)?.id,
+      }),
+    [controller.documents, controller.path],
+  )
 
   // Backlinks for the Connections chip. Keyed on the CURRENT document's id —
   // an older daemon's id-less listing leaves it undefined and the chip
