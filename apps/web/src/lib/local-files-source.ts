@@ -1,4 +1,4 @@
-import { readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import { readCoreFacets, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
@@ -69,11 +69,32 @@ export function createLocalFilesSource(
       }
       if (entries.length === 0) return []
       const stamps = await clock(entries.map((entry) => entry.documentId))
+      // Tags for search and the filter chips. Loading every markdown doc at
+      // list time is the local spelling of the daemon's tag projection —
+      // IndexedDB reads, so cheap at this scale; an unreadable document
+      // simply lists tagless rather than failing the list.
+      // ponytail: O(N) doc loads per listing; cache per-document when a
+      // measured workspace makes the panel open slowly.
+      const tagsById = new Map<string, readonly string[]>()
+      for (const entry of entries) {
+        if (entry.kind !== 'markdown') continue
+        try {
+          const tags = readCoreFacets(
+            await loadCurrentDoc({ documentId: entry.documentId, path: entry.path }),
+          )?.tags
+          if (tags !== undefined && tags.length > 0) tagsById.set(entry.documentId, tags)
+        } catch {
+          // unreadable or never written: no tags to show
+        }
+      }
       return entries.map((entry) => ({
         documentId: entry.documentId,
         path: entry.path,
         ...(entry.name === undefined ? {} : { name: entry.name }),
         ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+        ...(tagsById.has(entry.documentId)
+          ? { tags: tagsById.get(entry.documentId) as readonly string[] }
+          : {}),
         ...(stamps.has(entry.documentId)
           ? { updatedAt: stamps.get(entry.documentId) as string }
           : {}),

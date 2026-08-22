@@ -24,7 +24,9 @@ import {
   renameDocumentPathResponseSchema,
   type UpdateDocumentResponse,
   updateDocumentResponseSchema,
+  type WorkspaceDocumentTagsResponse,
   type WorkspaceNames,
+  workspaceDocumentTagsResponseSchema,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -235,6 +237,19 @@ export function getDocumentBacklinks(
     fetchImpl,
     `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/backlinks`,
     documentBacklinksResponseSchema,
+  )
+}
+
+/** The workspace's tag projection (documentId -> tags), for the document browser. */
+export function getWorkspaceDocumentTags(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<WorkspaceDocumentTagsResponse> {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/document-tags`,
+    workspaceDocumentTagsResponseSchema,
   )
 }
 

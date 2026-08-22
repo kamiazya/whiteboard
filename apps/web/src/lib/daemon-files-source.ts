@@ -9,6 +9,7 @@ import {
   DaemonApiError,
   getDocumentOkfV1,
   getDocumentSnapshot,
+  getWorkspaceDocumentTags,
   getWorkspaceNames,
   listDocuments,
   renameDocumentPath,
@@ -35,11 +36,16 @@ export function createDaemonFilesSource(
         // workspace state the /documents response does not carry. A failed
         // names fetch degrades to "nothing pinned", never to a failed list,
         // matching what the grid page did.
-        const [res, names] = await Promise.all([
+        // Tags ride alongside for the same reason as names: search and the
+        // filter chips need them, and a failed tag fetch degrades to a
+        // tagless list, never to a failed list.
+        const [res, names, tagRes] = await Promise.all([
           listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
           getWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
+          getWorkspaceDocumentTags(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
         ])
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
+        const tagsById = new Map((tagRes?.documents ?? []).map((doc) => [doc.documentId, doc.tags]))
         return res.documents.map((entry) => ({
           // An older daemon omits the id; the path stands in, as it does
           // everywhere else that reads this list.
@@ -48,6 +54,9 @@ export function createDaemonFilesSource(
           ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
           ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+          ...(tagsById.has(entry.id ?? entry.path)
+            ? { tags: tagsById.get(entry.id ?? entry.path) as readonly string[] }
+            : {}),
           ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),
         }))
       } catch (err) {

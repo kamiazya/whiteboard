@@ -1,4 +1,7 @@
-import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
+import {
+  DocumentPathTakenError,
+  WorkspaceNotFoundError as PortWorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
 import type { ServerDeps } from './server-deps.js'
@@ -27,6 +30,7 @@ import {
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
 import { createDocumentSetTool } from './tools/document-set.js'
+import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import { createVersionListTool } from './tools/version-list.js'
@@ -103,6 +107,18 @@ export function createServer(deps: ServerDeps) {
   // (workspace file tree) can open one without an MCP client. Deliberately
   // still OKF-specific: this is a different surface from the MCP tools, and
   // the tree wants markdown regardless of what wb_document_get would choose.
+  app.get('/api/v1/workspaces/:workspaceId/document-tags', async (c) => {
+    const parsed = documentTagsInputSchema.safeParse({ workspaceId: c.req.param('workspaceId') })
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    try {
+      return c.json(await computeDocumentTags(deps, parsed.data))
+    } catch (err) {
+      return mapDocumentError(c, err)
+    }
+  })
+
   app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks', async (c) => {
     const parsed = backlinksInputSchema.safeParse({
       workspaceId: c.req.param('workspaceId'),
@@ -163,6 +179,12 @@ function mapDocumentError(c: Context, err: unknown) {
     return c.json({ error: err.message }, 404)
   }
   if (err instanceof WorkspaceNotFoundError) {
+    return c.json({ error: err.message }, 404)
+  }
+  // The index's own spelling of the same condition: tools that call
+  // `documentIndex.listDocuments` directly (backlinks, document-tags) let it
+  // escape untranslated, and a typo'd workspaceId must read as 404, not 500.
+  if (err instanceof PortWorkspaceNotFoundError) {
     return c.json({ error: err.message }, 404)
   }
   if (err instanceof DocumentPathTakenError) {

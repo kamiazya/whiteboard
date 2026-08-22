@@ -78,3 +78,27 @@ describe('searchDocuments pinned order', () => {
     ])
   })
 })
+
+describe('tag matching', () => {
+  const docs = [
+    { documentId: 'A', path: 'plans/release', name: 'Release plan', tags: ['release', 'q3'] },
+    { documentId: 'B', path: 'notes/retro', name: 'Retro', tags: ['q3'] },
+    { documentId: 'C', path: 'notes/misc', name: 'Misc' },
+  ]
+
+  it('a plain query substring-matches tags alongside path and name', () => {
+    expect(searchDocuments(docs, 'relea').map((d) => d.documentId)).toEqual(['A'])
+    // 'q3' appears only as a tag; both carriers match, the tagless one does not.
+    expect(searchDocuments(docs, 'q3').map((d) => d.documentId)).toEqual(['B', 'A'])
+  })
+
+  it('a #query matches ONLY the exact tag, never path or name', () => {
+    // 'release' is also a path segment of A — but #q3 must not read paths.
+    expect(searchDocuments(docs, '#q3').map((d) => d.documentId)).toEqual(['B', 'A'])
+    expect(searchDocuments(docs, '#Release').map((d) => d.documentId)).toEqual(['A'])
+    // Substring of a tag is not the tag.
+    expect(searchDocuments(docs, '#q').map((d) => d.documentId)).toEqual([])
+    // Matches the name/path of C? '#misc' names no tag, so nothing.
+    expect(searchDocuments(docs, '#misc').map((d) => d.documentId)).toEqual([])
+  })
+})

@@ -3,6 +3,7 @@
  * three-pane browser serve local mode, which is the whole point of the seam.
  */
 import 'fake-indexeddb/auto'
+import { writeCoreFacets } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
@@ -100,5 +101,28 @@ describe('createLocalFilesSource', () => {
     // Both elements: a thumbnail of the last snapshot alone would show a
     // document the user is not looking at.
     expect(fresh.getList('elements').toJSON()).toHaveLength(2)
+  })
+})
+
+describe('createLocalFilesSource tags', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('surfaces core-facet tags on markdown entries and omits them elsewhere', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const tagged = await index.createDocument({
+      workspaceId: 'local',
+      path: 'tagged',
+      kind: 'markdown',
+    })
+    await index.createDocument({ workspaceId: 'local', path: 'plain', kind: 'markdown' })
+
+    const doc = new Loro()
+    writeCoreFacets(doc, { type: 'note', tags: ['release', 'q3'] })
+    await new LoroStore().save(tagged.documentId, doc.export({ mode: 'snapshot' }))
+
+    const entries = await createLocalFilesSource().listDocuments()
+    expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
+    expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
   })
 })
