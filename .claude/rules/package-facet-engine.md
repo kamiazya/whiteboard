@@ -31,6 +31,16 @@ paths:
   `facet-wiring-guard.test.ts` so point-owning surfaces never name a
   domain.
 
+- The editor-ladder TIER 1 derivation (`form.ts`): `deriveFacetForm` turns
+  a facet's own schema into a form spec in a CLOSED control vocabulary
+  (`text`/`number`/`toggle`/`choice`, plus a discriminated-union variants
+  form). A schema outside that vocabulary answers `unsupported` — the
+  honest signal that the facet wants a hand-written widget (tier 2), never
+  a half-rendered payload. Rendering is the vessel's job, exactly as with
+  contributions: `apps/web`'s `FacetFormPanel` is today's vessel, and
+  writes there go back through `validateFacetWrite`, so a panel can never
+  store what `wb_facet_set` would refuse.
+
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's
