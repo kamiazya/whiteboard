@@ -859,18 +859,19 @@ function optimizeSideChoices(
   // measured at 60 nodes / 200 edges, 296 of 854 routings were repeats of an
   // identical call, one combination recurring nine times.
   //
-  // The caller supplies the cache, so it spans every region and BOTH runs of
-  // one `assignEdgeAnchors` rather than one search: measured on a 288-node /
-  // 345-edge clustered canvas, 1021 of 1900 routings repeated a key already
-  // seen in that layout while a per-search cache caught only 567 of them.
-  // Sound because everything the key omits is fixed for the whole layout —
+  // The caller supplies the cache, so it spans BOTH runs of a region rather
+  // than one search. That pairing is where the repeats are: measured on a
+  // 288-node / 345-edge clustered canvas, 1021 of 1900 routings repeated a
+  // key already seen by the other run of their own region, while a
+  // per-search cache caught only 567 of them.
+  // Sound because everything the key omits is fixed across those two runs —
   // `nodes` and `style` are passed down unchanged, an edge is the SAME
-  // object in every region, and its obstacle list is derived from those
-  // two. What is left is the anchor pair, and `routeCacheKey` covers it
-  // field by field (`route-cache-key.test.ts` pins that, one case per
-  // field, because a field the key misses is a wrong path rather than a
-  // slow one). A cache never outlives its `assignEdgeAnchors` call, so a
-  // later layout of a moved canvas cannot see a stale path.
+  // object in both, and its obstacle list is derived from those two. What
+  // is left is the anchor pair, and `routeCacheKey` covers it field by
+  // field (`route-cache-key.test.ts` pins that, one case per field, because
+  // a field the key misses is a wrong path rather than a slow one). A cache
+  // never outlives its region, so a later layout of a moved canvas cannot
+  // see a stale path.
   const cache = routeCache ?? new Map<string, readonly Point[]>()
   const routeCached = (
     edge: CanvasEdge,
@@ -1302,14 +1303,19 @@ function optimizeAcrossRegions(
   locked?: ReadonlySet<string>,
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, SidePair> {
-  // One cache for the whole layout: regions partition the same edge list and
-  // every run is handed the same `nodes` and `style`, so a path routed for
-  // one region's search is the path any other would compute.
-  const routeCache = new Map<string, readonly Point[]>()
   const bothRuns = (
     regionEdges: readonly CanvasEdge[],
     seed: ReadonlyMap<string, SidePair>,
   ): ReadonlyMap<string, SidePair> => {
+    // One cache per region, shared by its unaligned and aligned runs — the
+    // pairing the per-search cache could not see. NOT one cache for the whole
+    // layout: regions partition the edge list, so an edge is routed in
+    // exactly one of them, and `routeCacheKey` starts with `edge.id` — a
+    // later region cannot hit an earlier region's entry. Measured 0
+    // cross-region hits on canvases of one, two and four regions. A
+    // layout-wide map would therefore buy nothing and hold every completed
+    // region's paths until the layout finished.
+    const routeCache = new Map<string, readonly Point[]>()
     const unaligned = optimizeSideChoices(
       nodes,
       regionEdges,

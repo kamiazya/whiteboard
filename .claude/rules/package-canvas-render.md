@@ -535,17 +535,28 @@ paths:
       now disagree about where the time is, and a change judged on one of
       them has not been judged.
       One cost off that profile is taken: the routed-path cache is owned by
-      `assignEdgeAnchors` rather than by each `optimizeSideChoices`, which
-      is what lets it span regions and both runs. 1021 of 1900 routings on
-      the clustered canvas repeat a key already seen in the layout; the
-      per-search caches caught 567. Worth 15-17% there, within noise on the
-      grid canvas (which sits at the region gate, so it shares only across
-      one region's two runs, whose aligned anchors mostly key differently).
-      Sound because `nodes`, `style` and an edge's obstacle list are fixed
-      for a whole layout, leaving the anchor pair as the only variable —
-      and `routeCacheKey` covers it field by field, pinned one case per
-      field, because a field the key misses is a wrong path rather than a
-      slow one.
+      the REGION rather than by each `optimizeSideChoices`, so it spans a
+      region's unaligned and aligned runs. That pairing is where the repeats
+      are — 1021 of 1900 routings on the clustered canvas repeat a key the
+      other run of their own region already saw, against 567 caught by the
+      per-search caches. Worth 15-19% there in six of six interleaved
+      comparisons, within noise on the grid canvas. Sound because `nodes`,
+      `style` and an edge's obstacle list are fixed across those two runs,
+      leaving the anchor pair as the only variable — and `routeCacheKey`
+      covers it field by field, pinned one case per field, because a field
+      the key misses is a wrong path rather than a slow one.
+      **It was first written one scope too wide, and the reason is worth
+      keeping.** A cache owned by `assignEdgeAnchors` measured exactly the
+      same, so nothing flagged it: regions PARTITION the edge list, an edge
+      is routed in only the region that holds it, and `routeCacheKey` starts
+      with `edge.id` — so a later region can never hit an earlier one's
+      entry. Measured 0 cross-region hits on canvases of one, two and four
+      regions. The wider scope bought nothing and held every completed
+      region's paths until the layout finished. The gap in the reasoning was
+      specific: soundness was checked (may these searches share?) and
+      usefulness was not (do they ever have anything to share?). A sharing
+      change needs both, and the cheap way to get the second is to attribute
+      the hits, not to count them.
       **The obstacle preparation was tried and rejected**, the second
       measurement in this series to refuse a change that argued well.
       `routeEdge` rebuilds two 286-element arrays per call — the
