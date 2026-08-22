@@ -26,6 +26,35 @@ function fetchStub(handlers: {
   }) as unknown as typeof globalThis.fetch
 }
 
+describe('createDaemonFilesSource setDocumentName', () => {
+  function nameFetchStub(calls: Array<{ url: string; body: unknown }>): typeof globalThis.fetch {
+    return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/name') && init?.method === 'PUT') {
+        calls.push({ url, body: JSON.parse(String(init.body)) })
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      }
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+  }
+
+  it('PUTs the new display name for the entry path', async () => {
+    const calls: Array<{ url: string; body: unknown }> = []
+    const source = createDaemonFilesSource(nameFetchStub(calls), BASE, 'ws')
+    await source.setDocumentName({ documentId: 'id1', path: 'plans/roadmap' }, 'Roadmap')
+    expect(calls).toHaveLength(1)
+    expect(calls[0]?.url).toContain('roadmap')
+    expect(calls[0]?.body).toEqual({ name: 'Roadmap' })
+  })
+
+  it("clears with the API's delete spelling: an empty string", async () => {
+    const calls: Array<{ url: string; body: unknown }> = []
+    const source = createDaemonFilesSource(nameFetchStub(calls), BASE, 'ws')
+    await source.setDocumentName({ documentId: 'id1', path: 'plans/roadmap' }, undefined)
+    expect(calls[0]?.body).toEqual({ name: '' })
+  })
+})
+
 describe('createDaemonFilesSource pinned mapping', () => {
   it('marks entries pinned from the names response, in pin order', async () => {
     const source = createDaemonFilesSource(

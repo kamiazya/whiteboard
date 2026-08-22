@@ -7,6 +7,7 @@ export interface FakeFilesSource extends WorkspaceFilesSource {
   listDocuments: ReturnType<typeof vi.fn<() => Promise<readonly WorkspaceDocumentEntry[]>>>
   createDocument: ReturnType<typeof vi.fn<WorkspaceFilesSource['createDocument']>>
   renameDocumentPath: ReturnType<typeof vi.fn<WorkspaceFilesSource['renameDocumentPath']>>
+  setDocumentName: ReturnType<typeof vi.fn<WorkspaceFilesSource['setDocumentName']>>
   loadMarkdown: ReturnType<typeof vi.fn<WorkspaceFilesSource['loadMarkdown']>>
   loadSpatialSnapshot: ReturnType<typeof vi.fn<WorkspaceFilesSource['loadSpatialSnapshot']>>
 }
@@ -21,6 +22,7 @@ export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): 
     listDocuments: vi.fn(overrides.listDocuments ?? (async () => [])),
     createDocument: vi.fn(overrides.createDocument ?? (async () => {})),
     renameDocumentPath: vi.fn(overrides.renameDocumentPath ?? (async () => {})),
+    setDocumentName: vi.fn(overrides.setDocumentName ?? (async () => {})),
     loadMarkdown: vi.fn(overrides.loadMarkdown ?? (async () => '')),
     loadSpatialSnapshot: vi.fn(overrides.loadSpatialSnapshot ?? (async () => new Uint8Array())),
   } as FakeFilesSource

@@ -43,7 +43,7 @@ describe('document card context menu', () => {
     renderPanel({ onOpenDocument, onDuplicateDocument, onRequestDelete: () => {} })
 
     const menu = await contextMenuOnCard('Meeting notes')
-    for (const label of ['Open', 'Duplicate', 'Move…', 'Delete']) {
+    for (const label of ['Open', 'Duplicate', 'Rename…', 'Delete']) {
       expect(within(menu).getByRole('menuitem', { name: label })).toBeTruthy()
     }
     fireEvent.click(within(menu).getByRole('menuitem', { name: 'Open' }))
@@ -76,9 +76,8 @@ describe('document card context menu', () => {
     expect(within(menu).getByRole('menuitem', { name: 'Open' })).toBeTruthy()
   })
 
-  it('plain selection never opens the move form', async () => {
-    // The startMoveToken guard: only a Move… bump starts an edit —
-    // clicking a card to select it must not.
+  it('plain selection never opens the rename dialog', async () => {
+    // Selecting shows the document; only Rename… asks to change it.
     renderPanel({ onOpenDocument: () => {} })
     await waitFor(() => {
       expect(
@@ -88,16 +87,16 @@ describe('document card context menu', () => {
     const el = screen.getAllByTestId('card-title').find((n) => n.textContent === 'Meeting notes')
     fireEvent.click(el?.closest('button') as HTMLElement)
     await screen.findByTestId('okf-preview')
-    expect(screen.queryByLabelText('Path')).toBeNull()
+    expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('Move… selects the document and opens the move form', async () => {
+  it('Rename… opens the dialog for exactly this document', async () => {
     renderPanel({ onOpenDocument: () => {} })
     const menu = await contextMenuOnCard('Meeting notes')
-    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Move…' }))
-    // The preview's path form appears for exactly this document, ready to edit.
-    const input = await screen.findByLabelText('Path')
-    expect((input as HTMLInputElement).value).toBe('meeting-notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Rename…' }))
+    const dialog = await screen.findByRole('dialog')
+    expect((within(dialog).getByLabelText(/^Path/) as HTMLInputElement).value).toBe('meeting-notes')
+    expect((within(dialog).getByLabelText(/^Name/) as HTMLInputElement).value).toBe('Meeting notes')
   })
 
   it('a search result row opens the same menu, and Escape closes it', async () => {

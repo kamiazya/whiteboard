@@ -67,6 +67,29 @@ describe('createLocalFilesSource', () => {
     expect(paths).toEqual(['roadmap', 'roadmap/sub'])
   })
 
+  it('names a document by its ID, and clears the name by absence', async () => {
+    // The daemon sibling keys the same call on PATH; both are plain strings,
+    // so a swap typechecks and silently renames nothing. The fixture makes
+    // the two addresses differ (a nested path never equals an id) so only
+    // the id can produce this result.
+    const source = createLocalFilesSource()
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const created = await index.createDocument({
+      workspaceId: 'local',
+      path: 'plans/roadmap',
+      kind: 'markdown',
+    })
+
+    await source.setDocumentName({ documentId: created.documentId, path: created.path }, 'Roadmap')
+    expect((await source.listDocuments())[0]?.name).toBe('Roadmap')
+
+    // Clearing is ABSENCE for the port (the daemon spells it as an empty
+    // string) — a reader then falls back to the path's last segment.
+    await source.setDocumentName({ documentId: created.documentId, path: created.path }, undefined)
+    expect((await source.listDocuments())[0]?.name).toBeUndefined()
+  })
+
   it('reads a markdown document body back', async () => {
     const source = createLocalFilesSource()
     const index = new IdbDocumentIndex()

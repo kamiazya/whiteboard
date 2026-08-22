@@ -125,6 +125,15 @@ export function createLocalFilesSource(
       await index.moveDocument({ workspaceId: LOCAL_WORKSPACE_ID, from: path, to: newPath })
     },
 
+    async setDocumentName(entry, name): Promise<void> {
+      await index.setDocumentName({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        documentId: entry.documentId,
+        // The port spells "clear" as absence, not empty string.
+        ...(name === undefined ? {} : { name }),
+      })
+    },
+
     async loadMarkdown(entry: WorkspaceDocumentEntry): Promise<string> {
       // The BODY, not an OKF serialization: the reads behind this method feed
       // the thumbnail and preview renderers, which draw markdown — a
