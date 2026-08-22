@@ -312,6 +312,33 @@ async function main() {
     throw new Error(`null tombstone did not delete: ${JSON.stringify(nodeFacetCleared)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → null tombstone deletes the facet')
+  // Two node facets coexist on one node: the write merges rather than
+  // replacing the bucket, which is what a second plugin's facet depends on.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+  })
+  const bothFacets = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.symbol/v0': { kind: 'icon', name: 'star' } },
+  })
+  if (
+    bothFacets.facets?.['visual.symbol/v0']?.name !== 'star' ||
+    bothFacets.facets?.['visual.shape/v0']?.kind !== 'ellipse'
+  ) {
+    throw new Error(`node facets did not merge: ${JSON.stringify(bothFacets)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → visual.symbol merges beside visual.shape')
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': null, 'visual.symbol/v0': null },
+  })
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(

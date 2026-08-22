@@ -18,12 +18,7 @@
  * `toNode` referenced the removed node, so no command sequence can ever
  * produce a canvas with a dangling edge endpoint.
  */
-import {
-  resolveCanvasEdgeStyle,
-  VISUAL_EDGES_KEY,
-  VISUAL_SHAPE_KEY,
-  type VisualShapeFacet,
-} from '@kamiazya/whiteboard-facet-engine'
+import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasColor,
   CanvasEdge,
@@ -92,10 +87,17 @@ export type EditorLeafCommand =
       readonly color: CanvasColor | undefined
     }
   | {
-      readonly kind: 'set-node-shape'
+      /**
+       * Writes one facet on one node. Deliberately facet-GENERIC: the key
+       * comes from the caller (a facet widget, the extension side of the
+       * contribution seam), so this module never names a domain.
+       */
+      readonly kind: 'set-node-facet'
       readonly id: string
-      // undefined returns the node to the historic rect (facet removed).
-      readonly shape: VisualShapeFacet['kind'] | undefined
+      readonly key: string
+      // undefined removes the facet — for a facet whose absence IS a value
+      // (visual.shape's rect), that is how the default is restored.
+      readonly payload: unknown
     }
   | {
       // Edits the canvas ENVELOPE rather than its contents, so it names no
@@ -379,10 +381,11 @@ function setLineJumps(canvas: SpatialCanvas, lineJumps: LineJumps): SpatialCanva
  * and an empty extension disappears — while an embed extension and facets
  * this command does not own survive untouched.
  */
-function setNodeShape(
+function setNodeFacet(
   canvas: SpatialCanvas,
   id: string,
-  shape: VisualShapeFacet['kind'] | undefined,
+  key: string,
+  payload: unknown,
 ): SpatialCanvas {
   if (!canvas.nodes.some((node) => node.id === id)) return canvas
   return {
@@ -390,9 +393,8 @@ function setNodeShape(
     nodes: canvas.nodes.map((node) => {
       if (node.id !== id) return node
       const { facets, ...extensionRest } = node['x-whiteboard'] ?? {}
-      const { [VISUAL_SHAPE_KEY]: _previous, ...otherFacets } = facets ?? {}
-      const nextFacets =
-        shape === undefined ? otherFacets : { ...otherFacets, [VISUAL_SHAPE_KEY]: { kind: shape } }
+      const { [key]: _previous, ...otherFacets } = facets ?? {}
+      const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
       const nextExtension = {
         ...extensionRest,
         ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
@@ -565,8 +567,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeSide(canvas, command.id, command.endpoint, command.side)
     case 'set-node-color':
       return setNodeColor(canvas, command.id, command.color)
-    case 'set-node-shape':
-      return setNodeShape(canvas, command.id, command.shape)
+    case 'set-node-facet':
+      return setNodeFacet(canvas, command.id, command.key, command.payload)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
     case 'set-line-jumps':

@@ -9,15 +9,24 @@
  * later editor-spec tier derives a default form instead of failing here.
  */
 import {
+  BUILT_IN_ICON_NAMES,
+  LUCIDE_ICONS,
+  LUCIDE_VIEWBOX,
+} from '@kamiazya/whiteboard-canvas-render'
+import {
   type FacetRegistry,
   resolveCanvasEdgeStyle,
   resolveFacetContributions,
   resolveNodeShape,
+  resolveNodeSymbol,
+  VISUAL_SHAPE_KEY,
+  VISUAL_SYMBOL_KEY,
   type VisualShapeFacet,
+  type VisualSymbolFacet,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { Circle, Cylinder, Diamond, Hexagon, Square } from 'lucide-react'
-import type { ReactNode } from 'react'
+import { Ban, Circle, Cylinder, Diamond, Hexagon, Square } from 'lucide-react'
+import { createElement, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import type { EditorCommand } from '../commands.js'
@@ -46,7 +55,14 @@ export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
 const visualShapeBand: NodePropertiesWidget = ({ node, applyToSelection }) => {
   const currentShape = resolveNodeShape(node)
   const applyShape = (shape: VisualShapeFacet['kind'] | undefined) => {
-    applyToSelection((ids) => ids.map((id) => ({ kind: 'set-node-shape' as const, id, shape })))
+    applyToSelection((ids) =>
+      ids.map((id) => ({
+        kind: 'set-node-facet' as const,
+        id,
+        key: VISUAL_SHAPE_KEY,
+        payload: shape === undefined ? undefined : { kind: shape },
+      })),
+    )
   }
   const shapeOption = (shape: VisualShapeFacet['kind'], ariaLabel: string, icon: ReactNode) => ({
     label: shape,
@@ -92,6 +108,78 @@ const visualShapeBand: NodePropertiesWidget = ({ node, applyToSelection }) => {
       ],
     },
   ]
+}
+
+// --- visual.symbol/v0 ------------------------------------------------------
+
+/**
+ * The badge picker. Icons come from the RENDERER's vendored set, so the row
+ * can never offer a name the canvas would silently drop; the emoji arm
+ * carries a small starter set — a free-entry field is the editor-spec tier's
+ * job, not a quick band's.
+ */
+const EMOJI_CHOICES = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
+
+const visualSymbolBand: NodePropertiesWidget = ({ node, applyToSelection }) => {
+  const current = resolveNodeSymbol(node)
+  const applySymbol = (payload: VisualSymbolFacet | undefined) => {
+    applyToSelection((ids) =>
+      ids.map((id) => ({ kind: 'set-node-facet' as const, id, key: VISUAL_SYMBOL_KEY, payload })),
+    )
+  }
+  return [
+    {
+      kind: 'options' as const,
+      label: 'Symbol',
+      options: [
+        {
+          label: 'none',
+          ariaLabel: 'No symbol',
+          icon: <Ban />,
+          selected: current === undefined,
+          onSelect: () => applySymbol(undefined),
+        },
+        ...BUILT_IN_ICON_NAMES.map((name) => ({
+          label: name,
+          ariaLabel: `Icon ${name}`,
+          icon: <BuiltInIcon name={name} />,
+          selected: current?.kind === 'icon' && current.name === name,
+          onSelect: () => applySymbol({ kind: 'icon', name }),
+        })),
+        ...EMOJI_CHOICES.map((char) => ({
+          label: char,
+          ariaLabel: `Emoji ${char}`,
+          selected: current?.kind === 'emoji' && current.char === char,
+          onSelect: () => applySymbol({ kind: 'emoji', char }),
+        })),
+      ],
+    },
+  ]
+}
+
+/**
+ * Draws a vendored icon by name, from the SAME geometry the canvas renders,
+ * so the picker cannot drift from the badge it produces.
+ */
+function BuiltInIcon({ name }: { readonly name: string }) {
+  return (
+    <svg
+      viewBox={LUCIDE_VIEWBOX}
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      aria-hidden="true"
+    >
+      {(LUCIDE_ICONS[name] ?? []).map((element, index) => {
+        const { tag, ...attrs } = element
+        // The vendored geometry is a fixed, never-reordered list, so the
+        // index is a stable identity here.
+        return createElement(tag, { ...attrs, key: `${tag}-${index}` })
+      })}
+    </svg>
+  )
 }
 
 // --- visual.edges/v0 -------------------------------------------------------
@@ -193,6 +281,7 @@ export function nodePropertyItems(
 
 export const NODE_PROPERTIES_WIDGETS: Readonly<Record<string, NodePropertiesWidget>> = {
   'visual.shape/v0': visualShapeBand,
+  'visual.symbol/v0': visualSymbolBand,
 }
 
 export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidget>> = {

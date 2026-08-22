@@ -893,7 +893,7 @@ describe('buildFragmentInsertCommand', () => {
   })
 })
 
-describe('set-node-shape', () => {
+describe('set-node-facet', () => {
   const base: SpatialCanvas = {
     nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hi' }],
     edges: [],
@@ -902,13 +902,28 @@ describe('set-node-shape', () => {
     canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']
 
   it('stores the silhouette as the visual.shape facet on the node', () => {
-    const next = applyCommand(base, { kind: 'set-node-shape', id: 'a', shape: 'hexagon' })
+    const next = applyCommand(base, {
+      kind: 'set-node-facet',
+      id: 'a',
+      key: 'visual.shape/v0',
+      payload: { kind: 'hexagon' },
+    })
     expect(shapeFacet(next)).toEqual({ kind: 'hexagon' })
   })
 
   it('undefined returns the node to the historic rect (facet removed, no trace)', () => {
-    const shaped = applyCommand(base, { kind: 'set-node-shape', id: 'a', shape: 'cylinder' })
-    const reverted = applyCommand(shaped, { kind: 'set-node-shape', id: 'a', shape: undefined })
+    const shaped = applyCommand(base, {
+      kind: 'set-node-facet',
+      id: 'a',
+      key: 'visual.shape/v0',
+      payload: { kind: 'cylinder' },
+    })
+    const reverted = applyCommand(shaped, {
+      kind: 'set-node-facet',
+      id: 'a',
+      key: 'visual.shape/v0',
+      payload: undefined,
+    })
     expect(reverted.nodes[0]).not.toHaveProperty('x-whiteboard')
   })
 
@@ -922,13 +937,23 @@ describe('set-node-shape', () => {
         },
       ],
     }
-    const next = applyCommand(withEmbed, { kind: 'set-node-shape', id: 'a', shape: 'diamond' })
+    const next = applyCommand(withEmbed, {
+      kind: 'set-node-facet',
+      id: 'a',
+      key: 'visual.shape/v0',
+      payload: { kind: 'diamond' },
+    })
     expect(next.nodes[0]?.['x-whiteboard']).toEqual({
       kind: 'embed',
       documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
       facets: { 'visual.shape/v0': { kind: 'diamond' } },
     })
-    const reverted = applyCommand(next, { kind: 'set-node-shape', id: 'a', shape: undefined })
+    const reverted = applyCommand(next, {
+      kind: 'set-node-facet',
+      id: 'a',
+      key: 'visual.shape/v0',
+      payload: undefined,
+    })
     expect(reverted.nodes[0]?.['x-whiteboard']).toEqual({
       kind: 'embed',
       documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
@@ -942,7 +967,12 @@ describe('set-node-shape', () => {
         { ...base.nodes[0]!, 'x-whiteboard': { facets: { 'someone.else/v1': { keep: true } } } },
       ],
     }
-    const next = applyCommand(withOther, { kind: 'set-node-shape', id: 'a', shape: 'ellipse' })
+    const next = applyCommand(withOther, {
+      kind: 'set-node-facet',
+      id: 'a',
+      key: 'visual.shape/v0',
+      payload: { kind: 'ellipse' },
+    })
     expect(next.nodes[0]?.['x-whiteboard']?.facets).toEqual({
       'someone.else/v1': { keep: true },
       'visual.shape/v0': { kind: 'ellipse' },
@@ -950,6 +980,13 @@ describe('set-node-shape', () => {
   })
 
   it('an unknown node id is a no-op', () => {
-    expect(applyCommand(base, { kind: 'set-node-shape', id: 'zz', shape: 'hexagon' })).toEqual(base)
+    expect(
+      applyCommand(base, {
+        kind: 'set-node-facet',
+        id: 'zz',
+        key: 'visual.shape/v0',
+        payload: { kind: 'hexagon' },
+      }),
+    ).toEqual(base)
   })
 })
