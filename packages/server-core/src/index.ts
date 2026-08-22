@@ -55,6 +55,12 @@ export {
   wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
 export { SnapshotNotFoundError } from './tools/document-io.js'
+export type { DocumentSearchInput, DocumentSearchOutput } from './tools/document-search.js'
+export {
+  createDocumentSearchTool,
+  documentSearchInputSchema,
+  documentSearchOutputSchema,
+} from './tools/document-search.js'
 export type { DocumentSetInput, DocumentSetOutput } from './tools/document-set.js'
 export {
   createDocumentSetTool,

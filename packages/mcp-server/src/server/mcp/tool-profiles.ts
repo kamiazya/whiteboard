@@ -43,6 +43,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
   wb_document_set: { profile: MUTATING, title: 'Replace a document from OKF Markdown' },
   wb_document_get: { profile: READ_ONLY, title: 'Read a document in its own format' },
+  wb_document_search: { profile: READ_ONLY, title: 'Find documents by content' },
   wb_document_create: { profile: MUTATING, title: 'Create a document' },
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
   wb_document_resolve: { profile: READ_ONLY, title: 'Resolve a document id to its placement' },

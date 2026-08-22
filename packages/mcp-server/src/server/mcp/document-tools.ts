@@ -121,6 +121,21 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
+    tools.documentSearch.name,
+    {
+      description: tools.documentSearch.description,
+      inputSchema: tools.documentSearch.inputSchema.shape,
+      outputSchema: tools.documentSearch.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.documentSearch.inputSchema.parse(args)
+      const result = await tools.documentSearch.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.documentGet.name,
     {
       description: tools.documentGet.description,

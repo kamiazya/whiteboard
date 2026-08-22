@@ -7,16 +7,8 @@ import {
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
+import { snippetAround } from '../search/snippet.js'
 import type { DocumentReferenceFacts, RawReference } from './reference-aggregate.js'
-
-const CONTEXT_RADIUS = 60
-
-function snippetAround(value: string, index: number, length: number): string {
-  const start = Math.max(0, index - CONTEXT_RADIUS)
-  const end = Math.min(value.length, index + length + CONTEXT_RADIUS)
-  const text = value.slice(start, end).replace(/\s+/g, ' ').trim()
-  return `${start > 0 ? '…' : ''}${text}${end < value.length ? '…' : ''}`
-}
 
 function textReferences(value: string): RawReference[] {
   return scanReferences(value).map((match) => ({
