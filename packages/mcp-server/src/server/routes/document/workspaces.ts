@@ -23,6 +23,7 @@ import {
   saveDocument,
   workspaceExists,
 } from '../../store/document-store.js'
+import { setDocumentDisplayName } from '../../store/names-store.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -123,6 +124,23 @@ export function createWorkspacesRouter() {
       // a snapshot export) doesn't need the row to know what it's looking at.
       writeDocumentKind(doc, parsed.data.kind)
       await saveDocument(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
+      // What a blank name means is `setDocumentDisplayName`'s rule, not a
+      // second copy of it here: it trims and stores null. Either way a name
+      // is never why the document fails to exist — the one field a person
+      // can correct afterwards must not gate creation.
+      const { name } = parsed.data
+      if (name !== undefined) {
+        // Best-effort, deliberately. The document is already saved, so a
+        // failure here cannot be reported as a failed create — a client that
+        // read 500 would retry and make a SECOND document. An unnamed
+        // document is recoverable by rename; a duplicated one is not.
+        await setDocumentDisplayName(workspaceId, path, name).catch((err: unknown) => {
+          getLogger('document').warning(
+            { err: err as Error, workspaceId, path },
+            'document created but its name could not be stored',
+          )
+        })
+      }
       const response: CreateDocumentResponse = { path }
       return c.json(response)
     } catch (err) {

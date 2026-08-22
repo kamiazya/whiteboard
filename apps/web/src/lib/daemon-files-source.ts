@@ -69,8 +69,8 @@ export function createDaemonFilesSource(
       }
     },
 
-    async createDocument(path: string, kind: DocumentKind): Promise<void> {
-      await createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind)
+    async createDocument(path: string, kind: DocumentKind, name?: string): Promise<void> {
+      await createDocument(daemonFetch, daemonBaseUrl, workspaceId, path, kind, name)
     },
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {

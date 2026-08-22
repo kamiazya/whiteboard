@@ -39,9 +39,9 @@ describe('document browser toolbar tooltips (real browser)', () => {
   it('every icon-only control reveals its name on hover', async () => {
     renderPanel()
     await vi.waitFor(() => {
-      expect(document.querySelector('button[aria-label="New canvas"]')).not.toBeNull()
+      expect(document.querySelector('button[aria-label="New document"]')).not.toBeNull()
     })
-    for (const label of ['New markdown document', 'New canvas', 'One column', 'Two columns']) {
+    for (const label of ['New document', 'One column', 'Two columns']) {
       await expectTooltip(label)
     }
   })
@@ -72,16 +72,16 @@ describe('document browser toolbar tooltips (real browser)', () => {
     // never relies on.
     renderPanel()
     await vi.waitFor(() => {
-      expect(document.querySelector('button[aria-label="New canvas"]')).not.toBeNull()
+      expect(document.querySelector('button[aria-label="New document"]')).not.toBeNull()
     })
-    const button = document.querySelector('button[aria-label="New canvas"]') as HTMLElement
+    const button = document.querySelector('button[aria-label="New document"]') as HTMLElement
     for (let hops = 0; hops < 12 && document.activeElement !== button; hops++) {
       await userEvent.tab()
     }
     expect(document.activeElement).toBe(button)
     await vi.waitFor(() => {
       const tips = [...document.querySelectorAll('[data-slot="tooltip-content"], [role="tooltip"]')]
-      expect(tips.some((t) => t.textContent?.includes('New canvas'))).toBe(true)
+      expect(tips.some((t) => t.textContent?.includes('New document'))).toBe(true)
     })
   })
 })
