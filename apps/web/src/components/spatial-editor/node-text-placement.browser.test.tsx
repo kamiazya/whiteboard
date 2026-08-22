@@ -33,8 +33,9 @@ it('the Text row stores the facet and moves the drawn text', () => {
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   const textY = () =>
     Number(
-      (container.querySelector('[data-testid="spatial-editor"] svg text') as SVGTextElement | null)
-        ?.getAttribute('y') ?? '0',
+      (
+        container.querySelector('[data-testid="spatial-editor"] svg text') as SVGTextElement | null
+      )?.getAttribute('y') ?? '0',
     )
   const before = textY()
 

@@ -477,7 +477,8 @@ function placeInNode(
   // ask to centre, a shaped node to start at the top. Absent, the default
   // above is what happens — which is why the facet has no third value.
   const align = resolveNodeTextAlign(node)
-  const centres = align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
+  const centres =
+    align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
   let dy = 0
   if (options.fitToBox && centres) {
     const innerH = bounds.h - 2 * padding

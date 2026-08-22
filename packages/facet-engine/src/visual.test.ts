@@ -247,13 +247,19 @@ describe('visual.text/v0', () => {
       ),
     ).toBe('center')
     expect(
-      resolveNodeTextAlign(nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'start' } } }), registry),
+      resolveNodeTextAlign(
+        nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'start' } } }),
+        registry,
+      ),
     ).toBe('start')
     // Absent means "however this node would place text anyway" — the facet
     // OVERRIDES a default, it does not restate one.
     expect(resolveNodeTextAlign(nodeWith(undefined), registry)).toBeUndefined()
     expect(
-      resolveNodeTextAlign(nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'middle' } } }), registry),
+      resolveNodeTextAlign(
+        nodeWith({ facets: { [VISUAL_TEXT_KEY]: { align: 'middle' } } }),
+        registry,
+      ),
     ).toBeUndefined()
   })
 })
