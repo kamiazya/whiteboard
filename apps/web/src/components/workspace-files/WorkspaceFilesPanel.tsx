@@ -1,6 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
@@ -103,6 +103,7 @@ export function WorkspaceFilesPanel({
   // Bumped when the menu's Move… fires, so the preview opens its move form
   // for the selection the same gesture just made.
   const [startMoveToken, setStartMoveToken] = useState(0)
+  const rootRef = useRef<HTMLDivElement | null>(null)
   // Every tag in the workspace, each once, in reading order. The strip is
   // derived — deleting the last carrier of a tag removes its chip with it.
   const workspaceTags = useMemo(() => {
@@ -159,6 +160,15 @@ export function WorkspaceFilesPanel({
         setSelected((current) =>
           current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
         )
+        // An open context menu is a captured snapshot; a refresh behind the
+        // panel's back (the whole reason `revision` exists) re-resolves it
+        // the same way, and a menu whose document is GONE closes rather
+        // than offering verbs for a target that no longer exists.
+        setCardMenu((current) => {
+          if (current === null) return null
+          const entry = entries.find((row) => row.path === current.entry.path)
+          return entry === undefined ? null : { ...current, entry }
+        })
       })
       .catch(() => undefined)
     return () => {
@@ -270,8 +280,17 @@ export function WorkspaceFilesPanel({
 
   // Plain function, deliberately not a hook: this sits below the early
   // returns, where a hook would change the count between renders.
-  const openCardMenu = (entry: WorkspaceDocumentEntry, x: number, y: number) => {
-    setCardMenu({ entry, x, y })
+  // ContextMenu's x/y contract is ROOT-local (its absolute box resolves
+  // against the nearest positioned ancestor — the panel root below), so the
+  // viewport coordinates the click carries are converted here instead of
+  // leaning on the app shell never scrolling the window.
+  const openCardMenu = (entry: WorkspaceDocumentEntry, clientX: number, clientY: number) => {
+    const rect = rootRef.current?.getBoundingClientRect()
+    setCardMenu({
+      entry,
+      x: clientX - (rect?.left ?? 0),
+      y: clientY - (rect?.top ?? 0),
+    })
   }
 
   const cardMenuItems =
@@ -308,7 +327,11 @@ export function WorkspaceFilesPanel({
         ]
 
   return (
-    <div className="flex min-h-0 flex-1 flex-col gap-2" data-testid="workspace-files-panel">
+    <div
+      ref={rootRef}
+      className="relative flex min-h-0 flex-1 flex-col gap-2"
+      data-testid="workspace-files-panel"
+    >
       <div className="flex items-center gap-2">
         <div className="min-w-0 flex-1">
           {/* The trail belongs to whatever narrows the view. In one-column

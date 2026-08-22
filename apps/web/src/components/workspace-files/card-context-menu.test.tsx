@@ -59,10 +59,36 @@ describe('document card context menu', () => {
     expect(onRequestDelete).toHaveBeenCalledWith('meeting-notes', 'Meeting notes', 'markdown')
   })
 
-  it('omits Duplicate when the page does not provide it', async () => {
+  it('omits every verb whose handler the page does not provide', async () => {
+    // Only Delete is wired here: Open, Duplicate must both be absent —
+    // making any spread unconditional goes red.
     renderPanel({ onRequestDelete: () => {} })
     const menu = await contextMenuOnCard('Meeting notes')
     expect(within(menu).queryByRole('menuitem', { name: 'Duplicate' })).toBeNull()
+    expect(within(menu).queryByRole('menuitem', { name: 'Open' })).toBeNull()
+    expect(within(menu).getByRole('menuitem', { name: 'Delete' })).toBeTruthy()
+  })
+
+  it('omits Delete when only opening is wired', async () => {
+    renderPanel({ onOpenDocument: () => {} })
+    const menu = await contextMenuOnCard('Meeting notes')
+    expect(within(menu).queryByRole('menuitem', { name: 'Delete' })).toBeNull()
+    expect(within(menu).getByRole('menuitem', { name: 'Open' })).toBeTruthy()
+  })
+
+  it('plain selection never opens the move form', async () => {
+    // The startMoveToken guard: only a Move… bump starts an edit —
+    // clicking a card to select it must not.
+    renderPanel({ onOpenDocument: () => {} })
+    await waitFor(() => {
+      expect(
+        screen.getAllByTestId('card-title').some((el) => el.textContent === 'Meeting notes'),
+      ).toBe(true)
+    })
+    const el = screen.getAllByTestId('card-title').find((n) => n.textContent === 'Meeting notes')
+    fireEvent.click(el?.closest('button') as HTMLElement)
+    await screen.findByTestId('okf-preview')
+    expect(screen.queryByLabelText('Path')).toBeNull()
   })
 
   it('Move… selects the document and opens the move form', async () => {
@@ -83,6 +109,17 @@ describe('document card context menu', () => {
     const menu = await screen.findByRole('menu', { name: 'Document actions' })
     fireEvent.keyDown(menu, { key: 'Escape' })
     await waitFor(() => expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull())
+  })
+
+  it('the grid layout of search results carries the menu too', async () => {
+    renderPanel({ onOpenDocument: () => {} })
+    await waitFor(() => expect(screen.getAllByTestId('card-title').length).toBeGreaterThan(0))
+    fireEvent.change(screen.getByLabelText('Search documents'), { target: { value: 'road' } })
+    await screen.findByTestId('search-results-list')
+    fireEvent.click(screen.getByRole('button', { name: 'Grid results' }))
+    const row = await screen.findByTestId('result-title')
+    fireEvent.contextMenu(row.closest('button') as HTMLElement, { clientX: 30, clientY: 30 })
+    expect(await screen.findByRole('menu', { name: 'Document actions' })).toBeTruthy()
   })
 
   it('a folder card opens no menu', async () => {
