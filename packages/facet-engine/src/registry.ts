@@ -109,6 +109,29 @@ export interface FacetRegistry {
   readonly resolveFacetPayload: (key: string, payload: unknown) => FacetResolution
 }
 
+/**
+ * A rejection an author can act on, rather than a dump of zod's internal
+ * issue tree. A union schema's raw `error.message` is nested JSON several
+ * levels deep — the valid values ARE in there, buried; this flattens every
+ * issue (including a union's per-arm ones) to `field: what was expected`,
+ * deduped, on one line.
+ */
+function summarizeIssues(error: z.ZodError): string {
+  const seen = new Set<string>()
+  const collect = (issues: readonly z.core.$ZodIssue[]): void => {
+    for (const issue of issues) {
+      if (issue.code === 'invalid_union') {
+        for (const arm of issue.errors) collect(arm)
+        continue
+      }
+      const path = issue.path.length === 0 ? 'payload' : issue.path.join('.')
+      seen.add(`${path}: ${issue.message}`)
+    }
+  }
+  collect(error.issues)
+  return [...seen].join('; ')
+}
+
 const versionNumber = (tag: string): number => Number(tag.slice(1))
 
 function parseKey(key: string): { namespace: string; name: string; version: string } | null {
@@ -158,7 +181,10 @@ export function createFacetRegistry(plugins: readonly FacetPlugin[]): FacetRegis
       }
       const result = definition.schema.safeParse(payload)
       if (!result.success) {
-        return { ok: false, message: `payload for "${key}" is invalid: ${result.error.message}` }
+        return {
+          ok: false,
+          message: `payload for "${key}" is invalid: ${summarizeIssues(result.error)}`,
+        }
       }
       return { ok: true, value: result.data }
     },
