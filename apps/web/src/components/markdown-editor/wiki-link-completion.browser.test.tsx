@@ -1,4 +1,5 @@
 import { cleanup, render } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { MarkdownEditor } from './MarkdownEditor.js'
@@ -57,6 +58,76 @@ describe('wiki link completion (real browser)', () => {
     })
     // Accepting closed the popup rather than leaving it over the text.
     expect(document.querySelector('.cm-tooltip-autocomplete')).toBeNull()
+  })
+
+  it('tapping an option accepts it — the touch path, not only Enter', async () => {
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
+    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
+    ;(editable as HTMLElement).focus()
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(editable)
+    })
+    await userEvent.keyboard('see [[[[Ret')
+    const option = await vi.waitFor(() => {
+      const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
+        li.textContent?.includes('Retro notes'),
+      )
+      expect(el).toBeDefined()
+      return el as HTMLElement
+    })
+    await userEvent.click(option)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[Retro notes]]')
+    })
+  })
+
+  it('the preview catches up with an accepted completion once the debounce settles', async () => {
+    // The dogfood report: on a phone, accepting a completion left the
+    // preview disagreeing with the source. The controlled round-trip is
+    // value -> onChange -> value -> debounced preview; this pins that an
+    // accept (a programmatic dispatch, not typing) travels the whole way.
+    function Harness() {
+      const [value, setValue] = useState('')
+      return (
+        <MarkdownEditor
+          initialViewMode="split"
+          previewDebounceMs={30}
+          value={value}
+          onChange={setValue}
+          linkTargets={TARGETS}
+        />
+      )
+    }
+    const { getByTestId } = render(<Harness />)
+    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
+    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
+    ;(editable as HTMLElement).focus()
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(editable)
+    })
+    await userEvent.keyboard('see [[[[Re')
+    await vi.waitFor(() => {
+      expect(
+        document.querySelector('.cm-tooltip-autocomplete li[aria-selected="true"]'),
+      ).toBeTruthy()
+    })
+    await new Promise((resolve) => setTimeout(resolve, 120))
+    await userEvent.keyboard('{Enter}')
+    await vi.waitFor(() => {
+      const preview = getByTestId('markdown-preview-pane')
+      expect(preview.textContent).toContain('Release plan')
+    })
   })
 
   it('plain prose never opens the popup', async () => {
