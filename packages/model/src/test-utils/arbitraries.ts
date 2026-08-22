@@ -56,6 +56,12 @@ const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
  */
 function stripProtoKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripProtoKeys)
+  // Negative zero is legal JS but not a JSON-text value: JSON.stringify(-0)
+  // emits "0" and JSON.parse never yields -0, so a facet value holding one
+  // cannot round-trip through ANY JSON-text codec. Normalize at generation
+  // — the same call as the __proto__ strip below (narrow the generator,
+  // never teach a parser to reproduce the unreachable value).
+  if (typeof value === 'number') return Object.is(value, -0) ? 0 : value
   if (value === null || typeof value !== 'object') return value
   const out: Record<string, unknown> = {}
   for (const [key, child] of Object.entries(value)) {
