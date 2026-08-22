@@ -62,18 +62,13 @@ export type DocumentSearchOutput = z.infer<typeof documentSearchOutputSchema>
  * Corpus served from the stamp-validated ContentFactsCache shared with
  * backlinks/mentions and tags — only documents whose frontier moved are
  * reloaded (ADR-0014's incremental mode, cache form).
+ *
+ * With `deps.embedder` supplied it also searches by MEANING, fusing the two
+ * rankings; without one it is lexical search and nothing else.
  */
 export function createDocumentSearchTool(
   deps: ServerDeps,
   cache: ContentFactsCache = new ContentFactsCache(),
-  /**
-   * Optional semantic half. Absent — the default, and what ships today —
-   * this function behaves exactly as it did before embeddings existed.
-   * Supplied, its ranking is FUSED with BM25's by rank rather than mixed
-   * by score, and any failure inside it degrades to lexical-only rather
-   * than failing the search.
-   */
-  embedderFor?: (workspaceId: string) => Embedder | undefined,
 ) {
   return {
     name: 'wb_document_search' as const,
@@ -117,7 +112,11 @@ export function createDocumentSearchTool(
         }
       }
 
-      const embedder = embedderFor?.(parsed.workspaceId)
+      // The optional semantic half. Absent, this returns exactly what it
+      // returned before embeddings existed; supplied, its ranking is FUSED
+      // with BM25's by rank rather than mixed by score, and any failure
+      // inside it degrades to lexical-only rather than failing the search.
+      const { embedder } = deps
       if (embedder === undefined) {
         const hits = fullTextSearch(searchable, parsed.query, { limit: parsed.limit })
         return { results: hits.map((hit) => describe(hit.documentId, hit.score, hit.contexts)) }

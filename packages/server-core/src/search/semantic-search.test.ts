@@ -98,7 +98,7 @@ describe('semantic fusion', () => {
     const deps = makeDeps()
     const { reconnect } = await seed(deps)
     const embedder = fakeEmbedder()
-    const tool = createDocumentSearchTool(deps, undefined, () => embedder)
+    const tool = createDocumentSearchTool({ ...deps, embedder })
     const out = await tool.execute({ workspaceId: WS, query: '復旧' })
     expect(out.results.map((r) => r.documentId)).toContain(reconnect)
   })
@@ -111,7 +111,7 @@ describe('semantic fusion', () => {
       query: 'quota',
     })
     expect(lexicalOnly.results.map((r) => r.documentId)).toEqual([storage])
-    const fused = await createDocumentSearchTool(deps, undefined, () => fakeEmbedder()).execute({
+    const fused = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
       workspaceId: WS,
       query: 'quota',
     })
@@ -130,7 +130,7 @@ describe('semantic fusion', () => {
       kind: 'markdown',
       name: 'onboarding',
     })
-    const out = await createDocumentSearchTool(deps, undefined, () => fakeEmbedder()).execute({
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
       workspaceId: WS,
       query: '初回',
     })
@@ -144,7 +144,7 @@ describe('semantic fusion', () => {
       dimensions: 3,
       embed: () => Promise.reject(new Error('model unavailable')),
     }
-    const out = await createDocumentSearchTool(deps, undefined, () => broken).execute({
+    const out = await createDocumentSearchTool({ ...deps, embedder: broken }).execute({
       workspaceId: WS,
       query: 'quota',
     })
@@ -155,7 +155,7 @@ describe('semantic fusion', () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)
     const embedder = fakeEmbedder()
-    const tool = createDocumentSearchTool(deps, undefined, () => embedder)
+    const tool = createDocumentSearchTool({ ...deps, embedder })
     await tool.execute({ workspaceId: WS, query: 'quota' })
     const afterFirst = embedder.calls
     expect(afterFirst).toBeGreaterThanOrEqual(2)
