@@ -461,7 +461,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   it('commits a canvas rename through the injected daemon fetch', async () => {
     const daemonFetch = renderBarWithDaemonFetch()
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
@@ -513,7 +513,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
 describe('WorkspaceTopBar — export affordance (RED-first)', () => {
   async function openDocumentActions() {
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     await screen.findByText('Rename canvas')
   }
@@ -526,7 +526,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     expect(screen.queryByText('Export as SVG')).toBeNull()
   })
 
-  it('invokes onExport with "png" from the Canvas actions menu and triggers a download', async () => {
+  it('invokes onExport with "png" from the Document actions menu and triggers a download', async () => {
     const blob = new Blob(['fake-png'], { type: 'image/png' })
     const onExport = vi.fn().mockResolvedValue(blob)
     const createObjectURL = vi.fn(() => 'blob:mock-url')
@@ -557,7 +557,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('invokes onExport with "svg" from the Canvas actions menu', async () => {
+  it('invokes onExport with "svg" from the Document actions menu', async () => {
     const blob = new Blob(['<svg></svg>'], { type: 'image/svg+xml' })
     const onExport = vi.fn().mockResolvedValue(blob)
     vi.stubGlobal('URL', {
@@ -880,7 +880,7 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
 
 describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
   function openDocumentActionsMenu() {
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     return screen.findByText('Copy canvas URL')
   }
@@ -1063,7 +1063,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
@@ -1097,7 +1097,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
@@ -1156,7 +1156,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
@@ -1316,7 +1316,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
       { container: document.body },
     )
 
-    const actionsButton = screen.getByRole('button', { name: 'Canvas actions' })
+    const actionsButton = screen.getByRole('button', { name: 'Document actions' })
     fireEvent.pointerDown(actionsButton, { button: 0, ctrlKey: false })
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)

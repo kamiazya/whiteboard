@@ -50,7 +50,7 @@ export function DocumentActionsMenu({
           <button
             type="button"
             className="shrink-0 rounded p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
-            aria-label="Canvas actions"
+            aria-label="Document actions"
           >
             <Pencil className="size-3.5" />
           </button>

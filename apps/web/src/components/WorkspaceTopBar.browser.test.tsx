@@ -447,7 +447,7 @@ describe('WorkspaceTopBar browser mode', () => {
 
     renderTopBar()
 
-    await page.getByRole('button', { name: 'Canvas actions' }).click()
+    await page.getByRole('button', { name: 'Document actions' }).click()
     await page.getByText('Copy canvas URL').click()
 
     const alert = await screen.findByRole('alert')
@@ -534,7 +534,7 @@ describe('WorkspaceTopBar browser mode', () => {
     const backButton = screen.getByRole('button', { name: 'Back to documents' })
     expect(backButton.getAttribute('aria-hidden')).toBeNull()
 
-    await page.getByRole('button', { name: 'Canvas actions' }).click()
+    await page.getByRole('button', { name: 'Document actions' }).click()
     await screen.findByRole('menu')
     await userEvent.keyboard('{Escape}')
     await waitFor(() => expect(screen.queryByRole('menu')).toBeNull())

@@ -44,7 +44,7 @@ async function waitForTitle(expected: string): Promise<void> {
   )
 }
 
-// The rename input lives behind WorkspaceTopBar's "Canvas actions" menu
+// The rename input lives behind WorkspaceTopBar's "Document actions" menu
 // rather than being always-mounted, so each edit starts by opening it.
 //
 // In real-browser mode, the first time this specific trigger is opened in a
@@ -60,7 +60,7 @@ async function openRenameInput(): Promise<HTMLElement> {
       cleanup()
       await renderLoaded()
     }
-    const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Canvas actions'), {
+    const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Document actions'), {
       timeout: 5000,
     })
     const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
