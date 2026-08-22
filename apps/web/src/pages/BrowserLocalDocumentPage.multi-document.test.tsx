@@ -41,6 +41,10 @@ import {
 import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+// The lazy WorkspaceTopBar chunk, transformed in the collection phase so a
+// findBy* on its controls never pays the load (integrator-flow.md's
+// lazy()-vs-findBy* family; see BrowserLocalDocumentPage.test.tsx).
+import '../components/WorkspaceTopBar.js'
 
 claimIsolatedWhiteboardDb('browserlocaldocumentpage-multi-document')
 
