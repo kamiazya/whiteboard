@@ -36,12 +36,21 @@ describe('wiki link completion (real browser)', () => {
     // user-event treats [[ as an escaped literal [ — four brackets type two.
     await userEvent.keyboard('see [[[[Re')
     // The completion tooltip lists both matches, best first.
+    // Selection, not mere presence: the tooltip keeps rendering through a
+    // re-query, but only an ACTIVE result marks an option selected — and
+    // only then does Enter accept instead of inserting a newline. This is
+    // what the user sees before pressing Enter, so it is what the test
+    // waits for.
     await vi.waitFor(() => {
-      const options = document.querySelectorAll('.cm-tooltip-autocomplete li')
-      expect(options.length).toBeGreaterThanOrEqual(1)
-      expect(options[0]?.textContent).toContain('Release plan')
+      const selected = document.querySelector('.cm-tooltip-autocomplete li[aria-selected="true"]')
+      expect(selected?.textContent).toContain('Release plan')
     })
 
+    // acceptCompletion deliberately ignores an Enter within interactionDelay
+    // (75ms) of the result opening — an accident guard a human never races.
+    // The wait keeps this test on the human side of that guard; under load
+    // it only grows, so the guard can never re-flake this.
+    await new Promise((resolve) => setTimeout(resolve, 120))
     await userEvent.keyboard('{Enter}')
     await vi.waitFor(() => {
       expect(value).toBe('see [[Release plan]]')
