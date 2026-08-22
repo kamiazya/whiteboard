@@ -168,7 +168,7 @@ describe('WorkspaceTopBar — router-free navigation callbacks', () => {
     const onNavigateBack = vi.fn()
     renderBar({ onNavigateBack })
 
-    fireEvent.click(screen.getByRole('button', { name: /back to canvas list/i }))
+    fireEvent.click(screen.getByRole('button', { name: /back to documents/i }))
 
     expect(onNavigateBack).toHaveBeenCalledTimes(1)
   })
@@ -461,9 +461,9 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
   it('commits a canvas rename through the injected daemon fetch', async () => {
     const daemonFetch = renderBarWithDaemonFetch()
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
     const input = await screen.findByPlaceholderText('canvas-a')
     fireEvent.change(input, { target: { value: 'renamed' } })
@@ -513,9 +513,9 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
 describe('WorkspaceTopBar — export affordance (RED-first)', () => {
   async function openDocumentActions() {
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    await screen.findByText('Rename canvas')
+    await screen.findByText('Rename')
   }
 
   it('does not render export menu items when onExport is not provided', async () => {
@@ -526,7 +526,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     expect(screen.queryByText('Export as SVG')).toBeNull()
   })
 
-  it('invokes onExport with "png" from the Canvas actions menu and triggers a download', async () => {
+  it('invokes onExport with "png" from the Document actions menu and triggers a download', async () => {
     const blob = new Blob(['fake-png'], { type: 'image/png' })
     const onExport = vi.fn().mockResolvedValue(blob)
     const createObjectURL = vi.fn(() => 'blob:mock-url')
@@ -557,7 +557,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
     vi.unstubAllGlobals()
   })
 
-  it('invokes onExport with "svg" from the Canvas actions menu', async () => {
+  it('invokes onExport with "svg" from the Document actions menu', async () => {
     const blob = new Blob(['<svg></svg>'], { type: 'image/svg+xml' })
     const onExport = vi.fn().mockResolvedValue(blob)
     vi.stubGlobal('URL', {
@@ -765,7 +765,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       />,
       { container: document.body },
     )
-    expect(screen.queryByLabelText('Back to canvas list')).toBeNull()
+    expect(screen.queryByLabelText('Back to documents')).toBeNull()
   })
 
   it('hides the fullscreen button when onToggleFullscreen is omitted', () => {
@@ -880,7 +880,7 @@ describe('WorkspaceTopBar — workspaceId URL encoding', () => {
 
 describe('WorkspaceTopBar — copy canvas URL feedback (RED-first)', () => {
   function openDocumentActionsMenu() {
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     return screen.findByText('Copy canvas URL')
   }
@@ -1063,9 +1063,9 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
     // Query and edit synchronously in the same tick as the pointerUp that
     // mounts this input (no intervening `await`) — Radix asynchronously
@@ -1097,9 +1097,9 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
     // See the comment in the success-path test above: edit synchronously,
     // in the same tick, to avoid Radix's async focus-return-to-trigger
@@ -1156,12 +1156,12 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
       { container: document.body },
     )
 
-    const canvasActions = screen.getByLabelText('Canvas actions')
+    const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
 
-    const input = screen.getByRole('textbox', { name: 'Canvas title' })
+    const input = screen.getByRole('textbox', { name: 'Document title' })
 
     const docKeydown = vi.fn()
     const docKeyup = vi.fn()
@@ -1316,12 +1316,12 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
       { container: document.body },
     )
 
-    const actionsButton = screen.getByRole('button', { name: 'Canvas actions' })
+    const actionsButton = screen.getByRole('button', { name: 'Document actions' })
     fireEvent.pointerDown(actionsButton, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
 
-    const input = await screen.findByLabelText('Canvas title')
+    const input = await screen.findByLabelText('Document title')
     fireEvent.change(input, { target: { value: 'Renamed Canvas' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -1330,7 +1330,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
     // false, so the rename completion path (gated on mountedRef.current)
     // would never close the input.
     await waitFor(() => {
-      expect(screen.queryByLabelText('Canvas title')).toBeNull()
+      expect(screen.queryByLabelText('Document title')).toBeNull()
     })
   })
 })

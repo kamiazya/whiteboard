@@ -50,6 +50,7 @@ import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -174,7 +175,9 @@ export function BrowserLocalDocumentPage({
     try {
       await duplicateDocument()
     } catch (err) {
-      setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
+      setDuplicateError(
+        err instanceof Error ? err.message : `Failed to duplicate ${kindNoun(documentKind)}.`,
+      )
     } finally {
       setIsDuplicating(false)
     }
@@ -701,10 +704,10 @@ export function BrowserLocalDocumentPage({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this canvas?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the canvas and its drawing data from this browser. This
-              action cannot be undone.
+              This permanently removes the {kindNoun(documentKind)} and its content from this
+              browser. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

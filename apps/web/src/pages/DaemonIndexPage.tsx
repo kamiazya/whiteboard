@@ -20,6 +20,7 @@ import { createDaemonFilesSource } from '../lib/daemon-files-source.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
@@ -208,7 +209,7 @@ export function DaemonIndexPage({
       } catch (err) {
         // daemon-api-client errors are already sanitized (Problem Details
         // title or a generic status message) — safe to surface directly.
-        setCreateError(err instanceof Error ? err.message : 'Failed to create canvas.')
+        setCreateError(err instanceof Error ? err.message : `Failed to create ${kindNoun(kind)}.`)
         // The path is derived from `rows`, so a failure caused by a name this list has not seen
         // (another tab, a lost race) would otherwise re-derive the SAME path on every retry and
         // collide forever. Re-read the list so the next derive skips what is actually taken.
@@ -264,7 +265,7 @@ export function DaemonIndexPage({
         await loadWorkspace(workspaceAtStart, isStale)
       } catch (err) {
         if (selectedWorkspaceRef.current !== workspaceAtStart) return
-        setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
+        setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate document.')
       } finally {
         setDuplicatingPath((current) => (current === sourcePath ? null : current))
       }
@@ -275,6 +276,7 @@ export function DaemonIndexPage({
   const [pendingDelete, setPendingDelete] = useState<{
     path: string
     displayName: string
+    kind?: DocumentKind
   } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -304,7 +306,7 @@ export function DaemonIndexPage({
     } catch (err) {
       // daemon-api-client errors are already sanitized (problem-details
       // title or a generic status message) — safe to surface directly.
-      setDeleteError(err instanceof Error ? err.message : 'Failed to delete canvas.')
+      setDeleteError(err instanceof Error ? err.message : 'Failed to delete document.')
     } finally {
       setDeleting(false)
     }
@@ -313,7 +315,7 @@ export function DaemonIndexPage({
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <div className="flex h-full flex-col overflow-y-auto p-4">
-        <h1 className="sr-only">Canvases</h1>
+        <h1 className="sr-only">Documents</h1>
         <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
           {workspaces.length > 1 && (
             <select
@@ -393,7 +395,9 @@ export function DaemonIndexPage({
               source={filesSource}
               onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
               onDuplicateDocument={(path) => void handleDuplicate(path)}
-              onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
+              onRequestDelete={(path, displayName, kind) =>
+                setPendingDelete({ path, displayName, kind })
+              }
               // A new array on every successful read, which is exactly the
               // signal the panel needs: the page reloads this list after a
               // duplicate and after a delete, both of which it performs on
@@ -408,7 +412,7 @@ export function DaemonIndexPage({
           pending={pendingDelete}
           busy={deleting}
           error={deleteError}
-          description="This permanently removes the canvas, including its versions and branches. There is no undo."
+          description={`This permanently removes the ${kindNoun(pendingDelete?.kind)}, including its versions and branches. There is no undo.`}
           onCancel={closeDeleteDialog}
           onConfirm={() => void handleConfirmDelete()}
         />

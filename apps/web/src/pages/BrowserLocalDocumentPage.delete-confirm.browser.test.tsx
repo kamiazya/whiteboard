@@ -15,6 +15,7 @@ import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
 const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-delete-confirm')
 
@@ -67,6 +68,24 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
 
   afterEach(() => {
     cleanup()
+  })
+
+  it('a markdown note names itself in the dialog: note, not canvas', async () => {
+    // The kind-aware copy's whole point on this page — the markdown branch
+    // must not inherit the spatial wording.
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, {
+      path: 'meeting-notes',
+      name: 'Meeting notes',
+      kind: 'markdown',
+      makeDefault: true,
+    })
+    render(<BrowserLocalDocumentPage store={store} />)
+    await screen.findByRole('button', { name: 'More actions' }, { timeout: 5000 })
+
+    const dialog = await openDeleteDialog()
+    expect(dialog).toHaveAccessibleName('Delete this note?')
+    expect(dialog).toHaveAccessibleDescription(/permanently removes the note/i)
   })
 
   it('opening the delete dialog does not delete the canvas yet', async () => {
@@ -156,7 +175,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     // Put the header persistence state into "pending" by renaming, then
     // immediately open+confirm the delete dialog before the debounce fires.
     //
-    // In real-browser mode, opening WorkspaceTopBar's "Canvas actions" menu
+    // In real-browser mode, opening WorkspaceTopBar's "Document actions" menu
     // for the first time after several prior AlertDialogs have opened and
     // closed in this file occasionally does not register on the first
     // pointerdown — a Radix dismissable-layer/testing-tooling quirk (never
@@ -172,13 +191,13 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
       // cleanup+remount; querying "all" and taking the most-recently-mounted
       // match sidesteps a transient multiple-elements error instead of
       // failing the whole retry loop on it.
-      const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Canvas actions'), {
+      const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Document actions'), {
         timeout: 5000,
       })
       const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
       fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
       try {
-        const allRenameItems = await waitFor(() => screen.getAllByText('Rename canvas'), {
+        const allRenameItems = await waitFor(() => screen.getAllByText('Rename'), {
           timeout: 1500,
         })
         renameItem = allRenameItems[allRenameItems.length - 1]!
@@ -186,11 +205,11 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
         // retry with a fresh remount
       }
     }
-    if (!renameItem) throw new Error('Canvas actions dropdown never opened after retries')
+    if (!renameItem) throw new Error('Document actions dropdown never opened after retries')
     fireEvent.pointerUp(renameItem)
     const titleInput = await screen.findByRole(
       'textbox',
-      { name: /canvas title/i },
+      { name: /document title/i },
       { timeout: 3000 },
     )
     titleInput.focus()

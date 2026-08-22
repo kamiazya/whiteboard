@@ -447,7 +447,7 @@ describe('BrowserLocalDocumentPage', () => {
 
     // The top bar's Canvas actions menu keeps rename/copy-URL only on this
     // page (daemon mode, which has no canvas row, keeps its export there).
-    const topTrigger = await screen.findByLabelText('Canvas actions')
+    const topTrigger = await screen.findByLabelText('Document actions')
     fireEvent.pointerDown(topTrigger, { button: 0, ctrlKey: false })
     const topMenu = await screen.findByRole('menu')
     expect(topMenu.textContent).not.toContain('Export')
@@ -615,7 +615,7 @@ describe('BrowserLocalDocumentPage', () => {
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading.textContent).toBe('untitled')
     // WorkspaceTopBar mounts through a lazy chunk; wait for it to resolve.
-    expect(await screen.findByLabelText('Canvas actions')).toBeTruthy()
+    expect(await screen.findByLabelText('Document actions')).toBeTruthy()
     // Distinct from the canvas row's operations kebab.
     expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
   })
@@ -635,11 +635,11 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    const canvasActions = await screen.findByLabelText('Canvas actions')
+    const canvasActions = await screen.findByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
-    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    const titleInput = screen.getByRole('textbox', { name: /document title/i })
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
     await waitFor(() => {
@@ -692,7 +692,7 @@ describe('BrowserLocalDocumentPage', () => {
     // Accessible names must not collide with the operations kebab or the
     // top bar's canvas actions control.
     expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
-    expect(screen.getByLabelText('Canvas actions')).toBeTruthy()
+    expect(screen.getByLabelText('Document actions')).toBeTruthy()
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     await screen.findByText('Other canvas')
   })
@@ -914,7 +914,7 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    await screen.findByLabelText('Canvas actions')
+    await screen.findByLabelText('Document actions')
     // Resolve the initial mount's list refresh (generation 1) with both
     // documents, so the switcher has real options to switch between.
     await act(async () => {
@@ -1015,10 +1015,10 @@ describe('BrowserLocalDocumentPage', () => {
       resolvers[0]!([snap])
     })
 
-    const canvasActions = await screen.findByLabelText('Canvas actions')
+    const canvasActions = await screen.findByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    fireEvent.pointerUp(await screen.findByText('Rename canvas'))
-    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    fireEvent.pointerUp(await screen.findByText('Rename'))
+    const titleInput = screen.getByRole('textbox', { name: /document title/i })
     const refreshesBeforeRename = resolvers.length
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
@@ -1166,7 +1166,7 @@ describe('BrowserLocalDocumentPage', () => {
         )
       })
       expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
-      expect(screen.getByLabelText('Canvas actions')).toBeTruthy()
+      expect(screen.getByLabelText('Document actions')).toBeTruthy()
     })
   })
 

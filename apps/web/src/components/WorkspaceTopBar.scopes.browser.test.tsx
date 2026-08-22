@@ -58,7 +58,7 @@ describe('top bar scopes', () => {
     // canvas-name resolution lifted out of this component, which the
     // identity-model work owns. Rename is the part that duplicated row two.
     expect(screen.queryByRole('menuitem', { name: /rename/i })).toBeNull()
-    expect(screen.queryByLabelText('Canvas title')).toBeNull()
+    expect(screen.queryByLabelText('Document title')).toBeNull()
   })
 
   it('toggles fullscreen rather than only entering it', async () => {

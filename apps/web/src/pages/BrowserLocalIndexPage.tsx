@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
@@ -94,6 +95,7 @@ export function BrowserLocalIndexPage({
   const [pendingDelete, setPendingDelete] = useState<{
     path: string
     displayName: string
+    kind?: DocumentKind
   } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -124,7 +126,7 @@ export function BrowserLocalIndexPage({
       setFilesRevision((revision) => revision + 1)
       setPendingDelete(null)
     } catch {
-      setDeleteError('Failed to delete the canvas from this browser.')
+      setDeleteError('Failed to delete the document from this browser.')
     } finally {
       setDeleting(false)
     }
@@ -150,7 +152,7 @@ export function BrowserLocalIndexPage({
         await pointer.set(created.documentId)
         onOpenDocument(created.path)
       } catch {
-        setError('Failed to create a canvas in this browser.')
+        setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
       } finally {
         setCreating(false)
       }
@@ -160,7 +162,7 @@ export function BrowserLocalIndexPage({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
-      <h1 className="sr-only">Canvases</h1>
+      <h1 className="sr-only">Documents</h1>
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}
@@ -191,7 +193,9 @@ export function BrowserLocalIndexPage({
         <WorkspaceFilesPanel
           source={filesSource}
           onOpenDocument={onOpenDocument}
-          onRequestDelete={(path, displayName) => setPendingDelete({ path, displayName })}
+          onRequestDelete={(path, displayName, kind) =>
+            setPendingDelete({ path, displayName, kind })
+          }
           revision={filesRevision}
         />
       ) : (
@@ -212,7 +216,7 @@ export function BrowserLocalIndexPage({
         pending={pendingDelete}
         busy={deleting}
         error={deleteError}
-        description="This permanently removes the canvas from this browser. There is no undo."
+        description={`This permanently removes the ${kindNoun(pendingDelete?.kind)} from this browser. There is no undo.`}
         onCancel={() => {
           setPendingDelete(null)
           setDeleteError(null)
