@@ -39,10 +39,25 @@ export function daemonLinkEntries(
  * known by. Unlike the resolver above this is a list a human reads, so a
  * document appearing twice would be noise rather than tolerance.
  */
-export function daemonLinkTargets(documents: readonly DocumentSummary[]): readonly LinkTarget[] {
-  return documents.map((entry) => ({
-    id: documentId(entry),
-    name: entry.displayName ?? entry.path,
-    ...(entry.kind ? { kind: entry.kind } : {}),
-  }))
+/**
+ * `excludeDocumentId` is the OPEN document: a link's whole job is to reach
+ * some other document, and offering the one being edited invites the
+ * self-reference the Connections surface would then have to explain away
+ * (backlinks already skip self, so a self-link is invisible everywhere).
+ */
+export function daemonLinkTargets(
+  documents: readonly DocumentSummary[],
+  { excludeDocumentId }: { excludeDocumentId?: string } = {},
+): readonly LinkTarget[] {
+  return documents.flatMap((entry) => {
+    const id = documentId(entry)
+    if (id === excludeDocumentId) return []
+    return [
+      {
+        id,
+        name: entry.displayName ?? entry.path,
+        ...(entry.kind ? { kind: entry.kind } : {}),
+      },
+    ]
+  })
 }
