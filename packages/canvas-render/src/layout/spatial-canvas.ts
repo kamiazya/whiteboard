@@ -1178,13 +1178,17 @@ function composeNodeBadge(node: SpatialNode, options: ResolvedLayoutOptions): re
   if (symbol === undefined) return []
   const bounds = nodeContentBounds(node, options)
   const size = SYMBOL_BADGE_SIZE_PX
+  const margin = SYMBOL_BADGE_MARGIN_PX
+  // The badge plus its margin must FIT: pricing the glyph alone let an
+  // 18px-wide node place a 16px badge at x = -2, painting it outside the
+  // node the badge is supposed to mark.
+  if (bounds.w < size + margin || bounds.h < size + margin) return []
   const bbox = {
-    x: bounds.x + bounds.w - SYMBOL_BADGE_MARGIN_PX - size,
-    y: bounds.y + SYMBOL_BADGE_MARGIN_PX,
+    x: bounds.x + bounds.w - margin - size,
+    y: bounds.y + margin,
     w: size,
     h: size,
   }
-  if (bbox.w > bounds.w || bbox.h > bounds.h) return []
   if (symbol.kind === 'emoji') return [{ kind: 'glyph', bbox, glyph: symbol.char }]
   const label = options.appearance.resolveLabel()
   return [

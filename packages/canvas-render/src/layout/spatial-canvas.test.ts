@@ -286,6 +286,26 @@ describe('layoutSpatialCanvas', () => {
     }
   })
 
+  it('a node too narrow for a badge draws none, and never paints one outside itself', () => {
+    // The badge is a fixed 16px inset by a 4px margin, so a node has to be
+    // wider than 16 to hold one — the guard has to price the MARGIN too, or
+    // an 18px node gets a badge starting at x = -2.
+    for (const width of [8, 18, 20]) {
+      const node = {
+        ...textNode({ id: 'a', x: 0, y: 0, width, height: width, text: '' }),
+        'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
+      }
+      const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
+      const badge = scene.nodes.find((n) => n.kind === 'icon')
+      if (badge === undefined) continue
+      if (badge.kind !== 'icon') throw new Error('unreachable')
+      expect(badge.bbox.x, `width ${width}`).toBeGreaterThanOrEqual(0)
+      expect(badge.bbox.x + badge.bbox.w, `width ${width}`).toBeLessThanOrEqual(width)
+      expect(badge.bbox.y, `width ${width}`).toBeGreaterThanOrEqual(0)
+      expect(badge.bbox.y + badge.bbox.h, `width ${width}`).toBeLessThanOrEqual(width)
+    }
+  })
+
   it('an explicit nodeOutlines option overrides the facet for that node', () => {
     const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
     const shaped = {
