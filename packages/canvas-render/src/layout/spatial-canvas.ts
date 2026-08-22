@@ -26,7 +26,11 @@
 // the same SVG twice regardless.
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import { resolveCanvasEdgeStyle, resolveNodeShape } from '@kamiazya/whiteboard-facet-engine'
+import {
+  resolveCanvasEdgeStyle,
+  resolveNodeShape,
+  resolveNodeSymbol,
+} from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
   EdgeRoutingStyle,
@@ -1157,11 +1161,50 @@ function layoutSpatialCanvasInternalScene(
   return layoutSpatialCanvasInternal(canvas, resolved).scene
 }
 
+/** Badge geometry: a small corner mark, not content — fixed, not themed. */
+const SYMBOL_BADGE_SIZE_PX = 16
+const SYMBOL_BADGE_MARGIN_PX = 4
+
+/**
+ * The node's `visual.symbol/v0` badge: an icon (stroke assigned from the
+ * label appearance — layout assigns, never invents) or an emoji glyph, at
+ * the top-right of the node's content bounds so a shaped node keeps its
+ * badge inside the silhouette. Emitted AFTER the node's own content, so it
+ * draws on top. An icon name the renderer's vendored set does not carry
+ * degrades to nothing at draw time (the backend's own rule).
+ */
+function composeNodeBadge(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  const symbol = resolveNodeSymbol(node)
+  if (symbol === undefined) return []
+  const bounds = nodeContentBounds(node, options)
+  const size = SYMBOL_BADGE_SIZE_PX
+  const bbox = {
+    x: bounds.x + bounds.w - SYMBOL_BADGE_MARGIN_PX - size,
+    y: bounds.y + SYMBOL_BADGE_MARGIN_PX,
+    w: size,
+    h: size,
+  }
+  if (bbox.w > bounds.w || bbox.h > bounds.h) return []
+  if (symbol.kind === 'emoji') return [{ kind: 'glyph', bbox, glyph: symbol.char }]
+  const label = options.appearance.resolveLabel()
+  return [
+    {
+      kind: 'icon',
+      bbox,
+      icon: symbol.name,
+      ...(label.fill === undefined ? {} : { appearance: { stroke: label.fill } }),
+    },
+  ]
+}
+
 function layoutSpatialCanvasInternal(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
+  const nodeContent = canvas.nodes.flatMap((node) => [
+    ...composeNode(node, resolved),
+    ...composeNodeBadge(node, resolved),
+  ])
   const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
   return { scene: { nodes: [...nodeContent, ...content] }, anchors }
 }
