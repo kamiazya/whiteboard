@@ -48,8 +48,10 @@ moves semantic results silently.
 
 The ORDER matters as much as the content, because the embedding input is
 truncated: measured on 45 real documents, 37 exceeded the model's 512-token
-limit and the embedder read about 21% of the body (mean 2288 tokens, longest
-7800). Reordering the strings changes which part survives the cut.
+limit and the embedder read about 21% of the embedding input — the whole
+`passage: {name}\n{path}\n{body}` string, not the body alone (mean 2288
+tokens, longest 7800). Reordering the strings changes which part survives
+the cut.
 
 The search-quality scoreboard (ADR-0015) prints the truncation rate on every
 run, so the effect is measurable rather than a matter of argument — take the
