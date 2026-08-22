@@ -2,6 +2,7 @@ import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteb
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
+  accumulateCost,
   addCost,
   bendCount,
   COST_QUANTUM,
@@ -807,7 +808,8 @@ function optimizeSideChoices(
       trialBounds[i] = boundsOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
-    let cost = currentCost
+    // Summed in place into a scratch copy: every term below is added exactly once.
+    const cost = currentCost.slice()
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
@@ -817,8 +819,8 @@ function optimizeSideChoices(
         nodeBorders,
         endpointRectsFor[i],
       )
-      cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
-      cost = addCost(cost, next, 1)
+      accumulateCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
+      accumulateCost(cost, next, 1)
       selfUpdates.set(i, next)
     }
     for (const i of touched) {
@@ -837,14 +839,14 @@ function optimizeSideChoices(
           // tuples to arrive at the same answer.
           const prior = matrix.get(key)
           if (prior !== undefined) {
-            cost = addCost(cost, prior, -1)
+            accumulateCost(cost, prior, -1)
             updates.set(key, zeroPenalty())
           }
           continue
         }
         const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
-        cost = addCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
-        cost = addCost(cost, next, 1)
+        accumulateCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
+        accumulateCost(cost, next, 1)
         updates.set(key, next)
       }
     }
@@ -1249,24 +1251,41 @@ const OBSTACLE_CLEARANCE_PX = 16
  * comparison rather than a special branch.
  */
 function segmentCrossesRect(a: Point, b: Point, rect: Rect): boolean {
+  const right = rect.x + rect.w
+  const bottom = rect.y + rect.h
+  // Bounding-box reject first: this is the innermost test of candidate
+  // routing, called once per segment per obstacle, and almost every pair
+  // is nowhere near each other.
+  if (
+    Math.max(a.x, b.x) < rect.x ||
+    Math.min(a.x, b.x) > right ||
+    Math.max(a.y, b.y) < rect.y ||
+    Math.min(a.y, b.y) > bottom
+  ) {
+    return false
+  }
   const dx = b.x - a.x
   const dy = b.y - a.y
   let enter = 0
   let exit = 1
-  const slabs: readonly [number, number, number][] = [
-    [dx, rect.x - a.x, rect.x + rect.w - a.x],
-    [dy, rect.y - a.y, rect.y + rect.h - a.y],
-  ]
-  for (const [delta, near, far] of slabs) {
-    if (delta === 0) {
-      // Parallel to this axis: no crossing unless it already lies within.
-      if (near > 0 || far < 0) return false
-      continue
-    }
-    const t0 = Math.min(near / delta, far / delta)
-    const t1 = Math.max(near / delta, far / delta)
-    enter = Math.max(enter, t0)
-    exit = Math.min(exit, t1)
+  // Slab method, one axis at a time, no per-call allocation.
+  if (dx === 0) {
+    // Parallel to this axis: no crossing unless it already lies within.
+    if (rect.x - a.x > 0 || right - a.x < 0) return false
+  } else {
+    const t0 = (rect.x - a.x) / dx
+    const t1 = (right - a.x) / dx
+    enter = Math.max(enter, Math.min(t0, t1))
+    exit = Math.min(exit, Math.max(t0, t1))
+    if (enter >= exit) return false
+  }
+  if (dy === 0) {
+    if (rect.y - a.y > 0 || bottom - a.y < 0) return false
+  } else {
+    const t0 = (rect.y - a.y) / dy
+    const t1 = (bottom - a.y) / dy
+    enter = Math.max(enter, Math.min(t0, t1))
+    exit = Math.min(exit, Math.max(t0, t1))
     if (enter >= exit) return false
   }
   return exit > enter

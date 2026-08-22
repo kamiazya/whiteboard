@@ -831,6 +831,22 @@ export function addCost(
 }
 
 /**
+ * `addCost` into an existing array. For the one caller that sums hundreds
+ * of pair terms into a single trial total (`evaluateTrial`, spatial-edges.ts):
+ * a fresh seven-slot array per term was the bulk of a trial's bookkeeping.
+ * `target` is the caller's own scratch copy, never a cost it shares.
+ */
+export function accumulateCost(
+  target: number[],
+  b: readonly number[],
+  sign: 1 | -1,
+  rules: readonly PenaltyRule[] = PENALTY_RULES,
+): void {
+  for (const rule of rules)
+    target[rule.tier] = (target[rule.tier] ?? 0) + sign * (b[rule.tier] ?? 0)
+}
+
+/**
  * Lexicographic integer compare over the declared tiers, in TIER order
  * (sorted by `rule.tier`, so a caller passing an accidentally-reordered
  * `rules` array still compares correctly — only the canonical
