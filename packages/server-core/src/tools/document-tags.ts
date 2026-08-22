@@ -34,7 +34,7 @@ export async function computeDocumentTags(
   cache: ContentFactsCache = new ContentFactsCache(),
 ): Promise<DocumentTagsOutput> {
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
-  const content = await cache.factsFor(deps, entries)
+  const content = await cache.factsFor(deps, input.workspaceId, entries)
   const documents: DocumentTagsOutput['documents'] = []
   for (const entry of entries) {
     const tags = content.get(entry.documentId)?.tags
