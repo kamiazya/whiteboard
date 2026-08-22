@@ -22,7 +22,6 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { LoroStore } from '../lib/loro-store.js'
 import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
-import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 import { focusEditable } from '../test-utils/focus-editable.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
@@ -109,24 +108,15 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     cleanup()
   })
 
-  it('New markdown note… opens the markdown editor; the typed body survives a remount', async () => {
+  // Documents are created in the document browser and opened by navigating
+  // here, so these suites seed the document rather than driving a create
+  // control this page no longer has.
+  it('a markdown document opens the markdown editor; the typed body survives a remount', async () => {
     const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
     const first = render(<BrowserLocalDocumentPage store={store} />)
 
-    // Fresh DB boots into a spatial canvas.
-    await screen.findByTestId('mock-spatial-editor')
-
-    // Open the switcher dropdown and create a markdown note.
-    const switcher = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    await userEvent.click(switcher)
-    const newMarkdown = await screen.findByTestId('new-markdown-menu-item')
-    await userEvent.click(newMarkdown)
-
-    // The markdown editor (real CodeMirror) replaces the spatial editor.
+    // The markdown editor (real CodeMirror) is what mounts for this kind.
     const editable = await waitFor(() => {
       const el = document.querySelector('[contenteditable="true"]')
       expect(el).not.toBeNull()
@@ -178,22 +168,19 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
   })
 
   it('a markdown canvas has no display-settings gear — edge routing is spatial-only', async () => {
-    const store = new IdbDocumentIndex()
-    render(<BrowserLocalDocumentPage store={store} />)
+    const spatialStore = new IdbDocumentIndex()
+    const spatial = render(<BrowserLocalDocumentPage store={spatialStore} />)
 
-    // Fresh DB boots into a spatial canvas: the gear is offered there.
+    // A spatial canvas is where the gear is offered.
     await screen.findByTestId('mock-spatial-editor')
     await waitFor(() => {
       expect(document.querySelector('[data-testid="canvas-settings-button"]')).not.toBeNull()
     })
+    spatial.unmount()
 
-    const switcher = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+    render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
@@ -204,18 +191,10 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     expect(document.querySelector('[data-testid="save-status-chip"]')).toBeTruthy()
   })
 
-  it('the title survives a remount and renames the canvas in the switcher', async () => {
+  it("the title survives a remount and is the document's one name", async () => {
     const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
     const first = render(<BrowserLocalDocumentPage store={store} />)
-
-    await screen.findByTestId('mock-spatial-editor')
-    const switcher = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
     const title = await findMarkdownTitleInput()
     // The markdown arm of the merged row: the title lives INSIDE the
@@ -228,14 +207,12 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     await userEvent.fill(title, 'リリース計画')
     await expectTitleValue('リリース計画')
 
-    // The title IS the canvas name — one value in the snapshot row, observed
-    // in the switcher's LIST since its trigger names the workspace rather
-    // than the canvas.
-    await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
-    // Scoped to the menu item: the title INPUT holds the same string, so a
-    // bare text query matches both and cannot tell them apart.
-    await screen.findByRole('menuitem', { name: /リリース計画/ }, { timeout: 10_000 })
-    await userEvent.keyboard('{Escape}')
+    // The title IS the document's name — one value in the snapshot row,
+    // observed in the page's own heading landmark rather than in the title
+    // input that is being typed into.
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('リリース計画'),
+    )
 
     await waitForSaved()
     first.unmount()
@@ -250,8 +227,6 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     // content: the document a rename touches holds no `title` facet at all
     // (ADR-0009 decision 2). Without this the test passes on a document that
     // stores the name twice, which is the state it exists to rule out.
-    // By kind, not by index: the workspace still holds the initial spatial
-    // canvas this flow started from.
     const entry = (await listLocalDocuments(store)).find((row) => row.kind === 'markdown')
     expect(entry?.name).toBe('リリース計画')
     const loaded = await new LoroStore().load(entry?.documentId ?? '')
@@ -266,16 +241,8 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
 
   it('keeps the body when core facets are written, and vice versa', async () => {
     const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
     const first = render(<BrowserLocalDocumentPage store={store} />)
-
-    await screen.findByTestId('mock-spatial-editor')
-    const switcher = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
@@ -322,16 +289,8 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
 
   it('flushes a title edit that is still debounced when the page goes away', async () => {
     const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
     const first = render(<BrowserLocalDocumentPage store={store} />)
-
-    await screen.findByTestId('mock-spatial-editor')
-    const switcher = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
 
     const title = await findMarkdownTitleInput()
     await userEvent.click(title)
@@ -389,9 +348,9 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
     await userEvent.click(title)
     await userEvent.clear(title)
     await userEvent.keyboard('Architecture map')
-    await userEvent.click(await screen.findByRole('button', { name: /^Workspace:/i }))
-    await screen.findByRole('menuitem', { name: /Architecture map/ }, { timeout: 10_000 })
-    await userEvent.keyboard('{Escape}')
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Architecture map'),
+    )
 
     await waitForSaved()
     first.unmount()
@@ -416,33 +375,18 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       kind: 'spatial',
       makeDefault: true,
     })
-    render(<BrowserLocalDocumentPage store={store} />)
-    await screen.findByTestId('mock-spatial-editor')
-
-    const switcher = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await seedIdbDocument(store, { path: 'a-note', kind: 'markdown', makeDefault: true })
+    const note = render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
+    note.unmount()
 
-    // Switch back to the original spatial canvas via the switcher list.
+    // Opening the spatial document again — the way arriving from the document
+    // browser does — must still mount the spatial editor, not carry the
+    // markdown one over.
     const before = spatialMounts
-    const switcher2 = await screen.findByRole(
-      'button',
-      { name: /^Workspace:/i },
-      { timeout: 10_000 },
-    )
-    // Removing this wait no longer fails the file in isolation — the race it
-    // guards only opens up once the whole browser project is in flight. Keep
-    // it: an isolated green says nothing about the run that actually flakes.
-    await waitForMenuClosed()
-    await userEvent.click(switcher2)
-    await userEvent.click(await screen.findByText('Diagram A', undefined, { timeout: 10_000 }))
+    render(<BrowserLocalDocumentPage store={store} initialPath="diagram-a-2" />)
 
     await waitFor(() => {
       expect(screen.getByTestId('mock-spatial-editor')).toBeInTheDocument()

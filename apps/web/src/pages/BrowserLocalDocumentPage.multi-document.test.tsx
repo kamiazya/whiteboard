@@ -1,9 +1,14 @@
 /**
- * S-C2 multi-canvas UI (real IndexedDB): edit canvas A, create+switch to a
- * fresh empty canvas B via the page's New-canvas control, switch back to A via
- * the switcher, and confirm A's node is restored. Proves the switcher/New
- * UI drives the S-C1 store+controller API end to end, including the
- * useDocumentSync reconnect-on-backend-identity-change path.
+ * S-C2 multi-canvas UI (real IndexedDB): edit canvas A, switch to a fresh
+ * empty canvas B, switch back to A, and confirm A's node is restored. Proves
+ * the store+controller API is driven end to end by a document CHANGE,
+ * including the useDocumentSync reconnect-on-backend-identity-change path.
+ *
+ * The editor creates and switches nothing itself any more — both are the
+ * document browser's job, and the browser drives the editor by navigating to
+ * `/local/:path`. So B is created the way that page creates it
+ * (`createSeededDocument`) and the switch is a route change, which is the
+ * real mechanism rather than a stand-in for one.
  *
  * SpatialEditor is mocked (see BrowserLocalDocumentPage.reload-elements.browser.test.tsx's
  * doc comment for why) so edits are driven deterministically via onChange —
@@ -20,17 +25,23 @@ import {
   act,
   cleanup,
   configure,
-  fireEvent,
   render as rtlRender,
   screen,
   waitFor,
 } from '@testing-library/react'
 import type { ReactElement } from 'react'
-import { MemoryRouter } from 'react-router-dom'
+import { useEffect } from 'react'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
+import { browserLocalDocumentPath } from '../lib/app-routes.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer, listLocalDocuments } from '../lib/local-document-summary.js'
+import {
+  IdbDefaultDocumentPointer,
+  idbContentClock,
+  listLocalDocuments,
+} from '../lib/local-document-summary.js'
+import { LoroStore } from '../lib/loro-store.js'
 import {
   clearWhiteboardDb,
   loroDocumentsKeys,
@@ -38,7 +49,6 @@ import {
   setTextCommand,
   textNodeCanvas,
 } from '../test-utils/browser-local-document.js'
-import { waitForMenuClosed } from '../test-utils/menu.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 // The lazy WorkspaceTopBar chunk, transformed in the collection phase so a
@@ -50,14 +60,58 @@ claimIsolatedWhiteboardDb('browserlocaldocumentpage-multi-document')
 
 // The page reads/writes the canvas id through the router, so it needs a router
 // in scope exactly as it has one in main.tsx.
+// Stands in for the document browser: the only thing it does to this page is
+// change the URL, which is exactly what picking a document there does.
+let navigateTo: ((to: string) => void) | null = null
+function NavigationProbe() {
+  const navigate = useNavigate()
+  useEffect(() => {
+    navigateTo = navigate
+    return () => {
+      navigateTo = null
+    }
+  }, [navigate])
+  return null
+}
+
 function render(ui: ReactElement) {
   return rtlRender(
     // Pages fill their allotted height (h-full) — the app shell owns the
     // viewport in production, so tests supply the equivalent sized parent.
     <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>
+      <MemoryRouter initialEntries={['/']}>
+        <NavigationProbe />
+        {ui}
+      </MemoryRouter>
     </div>,
   )
+}
+
+/**
+ * Seeds the two documents this suite switches between, exactly as the
+ * document browser's New does, and points the default at the first — so the
+ * page opens A and already knows B is there.
+ *
+ * Seeded BEFORE the page mounts on purpose: an in-place switch resolves the
+ * URL's path against the documents the controller has listed, which is also
+ * the only way it happens in the product (browser Back/Forward, or following
+ * a [[reference]]). A document created behind the controller's back is not
+ * in that list and the navigation would be a no-op.
+ */
+async function seedTwoDocuments(store: IdbDocumentIndex): Promise<[string, string]> {
+  const { createSeededDocument } = await import('./use-browser-local-document-controller.js')
+  const loro = new LoroStore()
+  const clock = idbContentClock()
+  const a = await createSeededDocument(store, loro, clock)
+  const b = await createSeededDocument(store, loro, clock)
+  await new IdbDefaultDocumentPointer().set(a.documentId)
+  return [a.path, b.path]
+}
+
+async function openDocument(path: string): Promise<void> {
+  await act(async () => {
+    navigateTo?.(browserLocalDocumentPath(path))
+  })
 }
 
 type OnChange = (next: SpatialCanvas, command: EditorCommand) => void
@@ -108,8 +162,9 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
     cleanup()
   })
 
-  it('edits A, New switches to empty B, switching back to A restores the edited node', async () => {
+  it('edits A, switching to empty B and back to A restores the edited node', async () => {
     const store = new IdbDocumentIndex()
+    const [pathA, pathB] = await seedTwoDocuments(store)
     render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
@@ -138,13 +193,9 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       { interval: 600 },
     )
 
-    // Create canvas B and switch to it, via WorkspaceTopBar's switcher dropdown.
-    const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
-    await act(async () => {
-      fireEvent.pointerUp(newItem)
-    })
+    // Open B by navigating, which is all the document browser does to this
+    // page.
+    await openDocument(pathB)
 
     const idB = await waitFor(async () => {
       const id = await new IdbDefaultDocumentPointer().get()
@@ -160,30 +211,15 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
     // No stray placeholder row from the backend re-key.
     expect(await loroDocumentsKeys()).not.toContain('__placeholder__')
 
-    // The switcher's menu is still dismissing from the "New canvas" click above.
-    await waitForMenuClosed()
-
-    // Switch back to A via the switcher control. Both A and B default to the
-    // "untitled" display NAME, so the only thing that separates them in the
-    // menu is their path — which is also what the switcher navigates by.
-    const pathA = await pathOf(store, idA)
-    const pathB = await pathOf(store, idB)
-    expect(pathA).not.toBe(pathB)
-    const switcherB = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcherB, { button: 0, ctrlKey: false })
-    const items = await screen.findAllByRole('menuitem')
-    const itemA = items.find(
-      (item) => item.textContent?.includes(pathA) && !item.textContent.includes(pathB),
-    ) as HTMLElement
-    expect(itemA).toBeDefined()
+    // Switch back to A. Both A and B default to the "untitled" display NAME,
+    // so their paths are what separate them — which is what the URL carries.
+    expect(await pathOf(store, idA)).toBe(pathA)
     // `latestMountedCanvases` accumulates every mount, including the one from
     // when A was originally open. Only mounts recorded from here on can show
     // that switching BACK re-hydrated A — searching the whole history would
     // pass even if the switch mounted nothing at all.
     const mountsBeforeSwitchBack = latestMountedCanvases.length
-    await act(async () => {
-      fireEvent.pointerUp(itemA)
-    })
+    await openDocument(pathA)
 
     await waitFor(() => {
       const restoredIds = latestMountedCanvases
@@ -197,6 +233,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
 
   it('persists an edit made inside the 300ms debounce before switching canvas', async () => {
     const store = new IdbDocumentIndex()
+    const [, pathB] = await seedTwoDocuments(store)
     render(<BrowserLocalDocumentPage store={store} />)
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
     await waitFor(() => expect(latestOnChange).not.toBeNull())
@@ -250,12 +287,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
       latestOnChange!(lateEdit, setTextCommand('multi-canvas-late-edit-a'))
     })
 
-    const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
-    await act(async () => {
-      fireEvent.pointerUp(newItem)
-    })
+    await openDocument(pathB)
 
     const idB = await waitFor(async () => {
       const id = await new IdbDefaultDocumentPointer().get()
