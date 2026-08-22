@@ -463,7 +463,7 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
     const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
     const input = await screen.findByPlaceholderText('canvas-a')
     fireEvent.change(input, { target: { value: 'renamed' } })
@@ -515,7 +515,7 @@ describe('WorkspaceTopBar — export affordance (RED-first)', () => {
   async function openDocumentActions() {
     const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    await screen.findByText('Rename canvas')
+    await screen.findByText('Rename')
   }
 
   it('does not render export menu items when onExport is not provided', async () => {
@@ -1065,7 +1065,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
     // Query and edit synchronously in the same tick as the pointerUp that
     // mounts this input (no intervening `await`) — Radix asynchronously
@@ -1099,7 +1099,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
     // See the comment in the success-path test above: edit synchronously,
     // in the same tick, to avoid Radix's async focus-return-to-trigger
@@ -1158,7 +1158,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const canvasActions = screen.getByLabelText('Document actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
 
     const input = screen.getByRole('textbox', { name: 'Document title' })
@@ -1318,7 +1318,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
 
     const actionsButton = screen.getByRole('button', { name: 'Document actions' })
     fireEvent.pointerDown(actionsButton, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename canvas')
+    const renameItem = await screen.findByText('Rename')
     fireEvent.pointerUp(renameItem)
 
     const input = await screen.findByLabelText('Document title')

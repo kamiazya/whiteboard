@@ -882,6 +882,45 @@ describe('DaemonIndexPage', () => {
     expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
+  it('the delete dialog names the kind: note for markdown, canvas for spatial', async () => {
+    // Hardcoding "canvas" back into this page's dialog must go red here —
+    // the local page has the same pin, and the daemon page is not exempt.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        'ws-a': [
+          {
+            path: 'meeting-notes',
+            displayName: 'Meeting notes',
+            updatedAt: '2026-08-01T00:00:00Z',
+            kind: 'markdown',
+          },
+          {
+            path: 'trip-plan',
+            displayName: 'Trip plan',
+            updatedAt: '2026-08-02T00:00:00Z',
+            kind: 'spatial',
+          },
+        ],
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
+      container: document.body,
+    })
+
+    await selectCard('Meeting notes')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    let dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/removes the note, including its versions/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+
+    await selectCard('Trip plan')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/removes the canvas, including its versions/)).toBeTruthy()
+  })
+
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
     const deleted: string[] = []
     installFetchMock({

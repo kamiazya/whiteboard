@@ -58,7 +58,7 @@ export function DocumentActionsMenu({
         <DropdownMenuContent align="start">
           <DropdownMenuItem onSelect={onStartRename} className="gap-2">
             <Pencil className="size-3.5" />
-            Rename canvas
+            Rename
           </DropdownMenuItem>
           <DropdownMenuItem
             onSelect={(e) => {

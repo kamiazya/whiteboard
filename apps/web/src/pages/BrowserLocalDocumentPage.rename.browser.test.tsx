@@ -66,7 +66,7 @@ async function openRenameInput(): Promise<HTMLElement> {
     const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     try {
-      const allRenameItems = await waitFor(() => screen.getAllByText('Rename canvas'), {
+      const allRenameItems = await waitFor(() => screen.getAllByText('Rename'), {
         timeout: 1500,
       })
       renameItem = allRenameItems[allRenameItems.length - 1]!

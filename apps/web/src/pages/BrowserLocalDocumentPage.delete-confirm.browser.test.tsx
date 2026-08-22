@@ -15,6 +15,7 @@ import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // Real app styles so a11y/focus assertions run against the shipped geometry.
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
 
 const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-delete-confirm')
 
@@ -67,6 +68,24 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
 
   afterEach(() => {
     cleanup()
+  })
+
+  it('a markdown note names itself in the dialog: note, not canvas', async () => {
+    // The kind-aware copy's whole point on this page — the markdown branch
+    // must not inherit the spatial wording.
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, {
+      path: 'meeting-notes',
+      name: 'Meeting notes',
+      kind: 'markdown',
+      makeDefault: true,
+    })
+    render(<BrowserLocalDocumentPage store={store} />)
+    await screen.findByRole('button', { name: 'More actions' }, { timeout: 5000 })
+
+    const dialog = await openDeleteDialog()
+    expect(dialog).toHaveAccessibleName('Delete this note?')
+    expect(dialog).toHaveAccessibleDescription(/permanently removes the note/i)
   })
 
   it('opening the delete dialog does not delete the canvas yet', async () => {
@@ -178,7 +197,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
       const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
       fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
       try {
-        const allRenameItems = await waitFor(() => screen.getAllByText('Rename canvas'), {
+        const allRenameItems = await waitFor(() => screen.getAllByText('Rename'), {
           timeout: 1500,
         })
         renameItem = allRenameItems[allRenameItems.length - 1]!
