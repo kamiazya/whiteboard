@@ -18,12 +18,28 @@ export function sortDocumentsByRecency(documents: readonly DocumentInfo[]): Docu
  */
 export function documentMatchesSearch(
   query: string,
-  document: { readonly path: string; readonly name?: string | undefined },
+  document: {
+    readonly path: string
+    readonly name?: string | undefined
+    readonly tags?: readonly string[] | undefined
+  },
 ): boolean {
   const q = query.trim().toLowerCase()
   if (q === '') return true
+  // `#tag` is a FILTER, not a search: it matches only documents carrying
+  // exactly that tag, never a path or name that happens to contain the
+  // word — clicking a tag chip must select the tag's carriers and nothing
+  // else. Exact rather than substring for the same reason: `#q` naming no
+  // tag selects nothing, instead of quietly widening to every q-ish tag.
+  if (q.startsWith('#')) {
+    const wanted = q.slice(1)
+    if (wanted === '') return true
+    return document.tags?.some((tag) => tag.toLowerCase() === wanted) ?? false
+  }
   return (
-    document.path.toLowerCase().includes(q) || (document.name?.toLowerCase().includes(q) ?? false)
+    document.path.toLowerCase().includes(q) ||
+    (document.name?.toLowerCase().includes(q) ?? false) ||
+    (document.tags?.some((tag) => tag.toLowerCase().includes(q)) ?? false)
   )
 }
 

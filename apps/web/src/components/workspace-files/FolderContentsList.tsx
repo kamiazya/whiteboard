@@ -111,6 +111,11 @@ export function FolderContentsList({
               <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
                 {cardSubtitle(entry)}
               </span>
+              {(entry.tags?.length ?? 0) > 0 && (
+                <span className="text-muted-foreground truncate text-[11px]">
+                  {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+                </span>
+              )}
             </span>
           </button>
         </li>

@@ -132,6 +132,13 @@ export function SearchResults({
                   <span className="text-muted-foreground truncate font-mono text-xs">
                     <Highlighted text={entry.path} query={query} />
                   </span>
+                  {(entry.tags?.length ?? 0) > 0 && (
+                    /* A #tag query matches nothing visible in title or path,
+                       so the row must show the tag that put it here. */
+                    <span className="text-muted-foreground truncate text-[11px]">
+                      {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+                    </span>
+                  )}
                 </span>
               </button>
             </li>
@@ -160,6 +167,13 @@ export function SearchResults({
                   <span className="text-muted-foreground truncate font-mono text-xs">
                     <Highlighted text={entry.path} query={query} />
                   </span>
+                  {(entry.tags?.length ?? 0) > 0 && (
+                    /* A #tag query matches nothing visible in title or path,
+                       so the row must show the tag that put it here. */
+                    <span className="text-muted-foreground truncate text-[11px]">
+                      {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+                    </span>
+                  )}
                 </span>
               </button>
             </li>

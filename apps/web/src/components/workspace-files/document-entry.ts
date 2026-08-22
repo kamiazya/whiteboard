@@ -18,6 +18,13 @@ export interface WorkspaceDocumentEntry {
   /** Absent for a daemon that does not record it; the card then carries no age. */
   readonly updatedAt?: string
   /**
+   * OKF core-facet tags, for search and filter chips. Absent when the
+   * document carries none (spatial documents always: core facets are a
+   * markdown concern) — absence and emptiness render identically, so only
+   * one of them travels.
+   */
+  readonly tags?: readonly string[]
+  /**
    * Present iff the user pinned this document; the value is its position
    * among the pinned. Pinned documents outrank the path sort everywhere the
    * panel orders a flat run of documents — the grid this panel replaced put

@@ -67,3 +67,58 @@ describe('createDaemonFilesSource pinned mapping', () => {
     expect(entries[0]?.pinOrder).toBeUndefined()
   })
 })
+
+describe('createDaemonFilesSource tags', () => {
+  it('merges the tag projection into entries and degrades to tagless on failure', async () => {
+    const withTags = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/names'))
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      if (url.endsWith('/document-tags'))
+        return Promise.resolve(
+          jsonResponse({
+            documents: [{ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', tags: ['release', 'q3'] }],
+          }),
+        )
+      if (url.endsWith('/documents'))
+        return Promise.resolve(
+          jsonResponse({
+            documents: [
+              {
+                path: 'tagged',
+                id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+                updatedAt: '2026-08-01T00:00:00Z',
+              },
+              {
+                path: 'plain',
+                id: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+                updatedAt: '2026-08-01T00:00:00Z',
+              },
+            ],
+          }),
+        )
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+
+    const source = createDaemonFilesSource(withTags, BASE, 'ws')
+    const entries = await source.listDocuments()
+    expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
+    expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
+
+    // A failed tag fetch never fails the LIST — the browser still opens.
+    const tagsDown = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/names'))
+        return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
+      if (url.endsWith('/document-tags')) return Promise.resolve(jsonResponse({ error: 'x' }, 500))
+      if (url.endsWith('/documents'))
+        return Promise.resolve(
+          jsonResponse({ documents: [{ path: 'tagged', updatedAt: '2026-08-01T00:00:00Z' }] }),
+        )
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const degraded = await createDaemonFilesSource(tagsDown, BASE, 'ws').listDocuments()
+    expect(degraded).toHaveLength(1)
+    expect(degraded[0]?.tags).toBeUndefined()
+  })
+})

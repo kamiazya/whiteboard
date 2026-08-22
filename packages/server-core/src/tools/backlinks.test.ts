@@ -144,5 +144,12 @@ describe('GET /backlinks', () => {
       `/api/v1/workspaces/${WS}/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/backlinks`,
     )
     expect(res.status).toBe(404)
+
+    // An unknown WORKSPACE is the same answer — the index's own error must
+    // translate to 404 rather than escaping as a 500.
+    const noWs = await createServer(deps).app.request(
+      '/api/v1/workspaces/nope/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV/backlinks',
+    )
+    expect(noWs.status).toBe(404)
   })
 })

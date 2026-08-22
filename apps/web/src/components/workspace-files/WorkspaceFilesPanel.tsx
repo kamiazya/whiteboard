@@ -92,6 +92,14 @@ export function WorkspaceFilesPanel({
   // same-tick case it exists to catch.
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+  // Every tag in the workspace, each once, in reading order. The strip is
+  // derived — deleting the last carrier of a tag removes its chip with it.
+  const workspaceTags = useMemo(() => {
+    const seen = new Set<string>()
+    for (const entry of documents ?? []) for (const tag of entry.tags ?? []) seen.add(tag)
+    return [...seen].sort((a, b) => a.localeCompare(b))
+  }, [documents])
+  const activeTag = query.trim().startsWith('#') ? query.trim().slice(1) : null
 
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
@@ -324,6 +332,25 @@ export function WorkspaceFilesPanel({
         </p>
       )}
 
+      {workspaceTags.length > 0 && (
+        /* The one place tag chips are BUTTONS: rows are buttons already,
+           and a button inside a button is neither valid nor reachable by
+           keyboard. The strip filters via the search box (#tag), so the
+           filter stays visible, editable state rather than a hidden mode. */
+        <fieldset aria-label="Filter by tag" className="flex flex-wrap gap-1 border-0 px-2 pb-1">
+          {workspaceTags.map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              aria-pressed={activeTag === tag}
+              onClick={() => changeQuery(activeTag === tag ? '' : `#${tag}`)}
+              className="text-muted-foreground hover:text-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded-full border px-2 py-0.5 text-[11px]"
+            >
+              #{tag}
+            </button>
+          ))}
+        </fieldset>
+      )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
         {query.trim() !== '' ? (
           // Results come from everywhere, so neither the folder tree nor the

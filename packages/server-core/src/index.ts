@@ -62,6 +62,12 @@ export {
   documentSetOutputSchema,
   OkfParseError,
 } from './tools/document-set.js'
+export type { DocumentTagsInput, DocumentTagsOutput } from './tools/document-tags.js'
+export {
+  computeDocumentTags,
+  documentTagsInputSchema,
+  documentTagsOutputSchema,
+} from './tools/document-tags.js'
 export {
   NodeNotFoundError,
   NotATextNodeError,
