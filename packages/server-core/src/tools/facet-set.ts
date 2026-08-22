@@ -112,8 +112,8 @@ export function createFacetSetTool(deps: ServerDeps) {
           )
         }
         const canvas = readSpatialCanvas(doc)
-        const node = canvas?.nodes.find((candidate) => candidate.id === nodeId)
-        if (canvas === undefined || node === undefined) {
+        const node = canvas.nodes.find((candidate) => candidate.id === nodeId)
+        if (node === undefined) {
           throw new NodeNotFoundError(input.documentId, nodeId)
         }
         const merged: ExtensionFacets = { ...node['x-whiteboard']?.facets, ...sets }
