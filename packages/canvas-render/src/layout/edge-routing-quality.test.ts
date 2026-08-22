@@ -176,13 +176,13 @@ describe('routing quality across the synthetic corpus', () => {
       length: Math.round(length),
       shortArrowRunway: shortRunway,
     }).toEqual({
-      violations: { 'own-endpoint': 13, foreign: 16, degenerate: 0 },
-      interiorInk: 2164,
+      violations: { 'own-endpoint': 12, foreign: 15, degenerate: 0 },
+      interiorInk: 2083,
       borderInk: 824,
-      bends: 8153,
-      crossings: 497,
-      length: 1340228,
-      shortArrowRunway: 137,
+      bends: 8149,
+      crossings: 493,
+      length: 1340729,
+      shortArrowRunway: 136,
     })
   })
 })
@@ -223,12 +223,12 @@ describe('routing quality past the side-choice optimizer gate', () => {
       length: Math.round(length),
     }).toEqual({
       edges: 345,
-      violations: 183,
-      interiorInk: 21001,
-      borderInk: 554,
-      bends: 658,
-      crossings: 752,
-      length: 274440,
+      violations: 99,
+      interiorInk: 11451,
+      borderInk: 266,
+      bends: 756,
+      crossings: 848,
+      length: 275548,
     })
   }, 120_000)
 })

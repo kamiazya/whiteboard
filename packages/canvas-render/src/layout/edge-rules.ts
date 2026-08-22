@@ -841,8 +841,7 @@ export function lessCost(
   b: readonly number[],
   rules: readonly PenaltyRule[] = PENALTY_RULES,
 ): boolean {
-  const ordered = [...rules].sort((x, y) => x.tier - y.tier)
-  for (const rule of ordered) {
+  for (const rule of tierOrdered(rules)) {
     const av = a[rule.tier] ?? 0
     const bv = b[rule.tier] ?? 0
     if (av !== bv) return av < bv
@@ -862,6 +861,20 @@ export function hasRepairableProblem(
   cost: readonly number[],
   rules: readonly PenaltyRule[] = PENALTY_RULES,
 ): boolean {
-  const lastTier = Math.max(...rules.map((r) => r.tier))
+  const ordered = tierOrdered(rules)
+  const lastTier = ordered[ordered.length - 1]?.tier ?? 0
   return rules.some((r) => r.tier < lastTier && (cost[r.tier] ?? 0) !== 0)
+}
+
+/** `rules` sorted by tier, computed once per rule list: the search compares
+ * costs hundreds of thousands of times per layout and re-sorting the same
+ * seven-entry list on every compare was a measurable share of it. */
+const tierOrderCache = new WeakMap<readonly PenaltyRule[], readonly PenaltyRule[]>()
+function tierOrdered(rules: readonly PenaltyRule[]): readonly PenaltyRule[] {
+  let ordered = tierOrderCache.get(rules)
+  if (ordered === undefined) {
+    ordered = [...rules].sort((x, y) => x.tier - y.tier)
+    tierOrderCache.set(rules, ordered)
+  }
+  return ordered
 }
