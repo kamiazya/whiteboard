@@ -21,6 +21,13 @@ export type SearchableContent =
  * It takes content already READ rather than a document, so this package
  * needs neither the CRDT nor the bridge — every caller is somewhere that
  * holds the body or the canvas anyway.
+ *
+ * What it returns is ALSO the embedding input on the semantic path
+ * (`ContentFactsCache.vectorsFor` embeds name + path + these texts), and
+ * that input is truncated at the model's token limit — so their ORDER
+ * decides which part of a long document a vector sees at all. Changing
+ * this function with only lexical search in mind moves semantic results
+ * too; the quality scoreboard prints the truncation rate, so measure.
  */
 export function searchableTexts(content: SearchableContent): string[] {
   if (content.kind === 'markdown') return [content.body]

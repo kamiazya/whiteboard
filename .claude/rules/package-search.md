@@ -38,6 +38,23 @@ cannot. `server-core` cannot be that home: it carries hono and the whole
 `/api/v1` surface, and the browser has no business importing a package
 whose ROLE is the server.
 
+## `searchableTexts` decides two things, not one
+
+Since stage 2 landed (#1012), `ContentFactsCache.vectorsFor` embeds
+`name + path + facts.texts` — and `facts.texts` is what this function
+returns. So changing it changes **what gets vectorised**, not only what
+BM25 tokenises, and a change made with only the lexical side in mind
+moves semantic results silently.
+
+The ORDER matters as much as the content, because the embedding input is
+truncated: measured on 45 real documents, 37 exceeded the model's 512-token
+limit and the embedder read about 21% of the body (mean 2288 tokens, longest
+7800). Reordering the strings changes which part survives the cut.
+
+The search-quality scoreboard (ADR-0015) prints the truncation rate on every
+run, so the effect is measurable rather than a matter of argument — take the
+measurement before and after any change to this function.
+
 ## Conventions
 
 - `fullTextSearch` scores are comparable **within one response only** —
