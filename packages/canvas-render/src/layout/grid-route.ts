@@ -35,6 +35,17 @@ const BEND_COST_PX = 80
  * neighbourhood is already past what the enumerated candidates fail on. */
 const MAX_GRID_CELLS = 4096
 
+/**
+ * How far past the endpoints' bounding box the search may wander, in px.
+ * Swept against the routing scoreboard: 80 loses routes the corpus needs
+ * (violations 29 -> 37), 320 matches an unbounded grid on the corpus while
+ * costing 25% more time on a large canvas, and 160 beats both — fewer
+ * violations and less interior ink than the unbounded grid on the corpus,
+ * because a detour that has to wander that far tends to create the defects
+ * it was avoiding.
+ */
+const GRID_WINDOW_PX = 160
+
 type Axis = 0 | 1
 
 const enteredHorizontally = (axis: Axis) => axis === 0
@@ -90,17 +101,42 @@ export function routeOnGrid(
   obstacles: readonly Rect[],
   clearance: number,
 ): Point[] | undefined {
+  // The search is confined to a window around the two endpoints: only
+  // obstacles that reach into it are considered, and only their grid
+  // coordinates inside it. Every obstacle a path inside the window could
+  // touch is therefore in the list, so the result is exact for that window;
+  // a route that would have to leave it is simply not found, and the caller
+  // keeps its enumerated candidate — the same answer a whole-canvas grid
+  // gave past the cell cap, which on a canvas of a few hundred nodes was
+  // every call. The window is what lets a large canvas reach this search
+  // at all.
+  const minX = Math.min(start.x, end.x) - GRID_WINDOW_PX
+  const maxX = Math.max(start.x, end.x) + GRID_WINDOW_PX
+  const minY = Math.min(start.y, end.y) - GRID_WINDOW_PX
+  const maxY = Math.max(start.y, end.y) + GRID_WINDOW_PX
+  const near = obstacles.filter(
+    (r) =>
+      r.x - clearance <= maxX &&
+      r.x + r.w + clearance >= minX &&
+      r.y - clearance <= maxY &&
+      r.y + r.h + clearance >= minY,
+  )
   // Distinct coordinates first, sorting only once the grid is known to fit:
   // on a canvas past the cap every call used to build and sort both axes
-  // just to abandon them (measured: every one of 705 calls on a 345-edge
-  // canvas, a quarter of its routing time).
+  // just to abandon them.
   const xSet = new Set<number>([start.x, end.x])
   const ySet = new Set<number>([start.y, end.y])
-  for (const r of obstacles) {
-    xSet.add(r.x - clearance)
-    xSet.add(r.x + r.w + clearance)
-    ySet.add(r.y - clearance)
-    ySet.add(r.y + r.h + clearance)
+  const addX = (x: number) => {
+    if (x >= minX && x <= maxX) xSet.add(x)
+  }
+  const addY = (y: number) => {
+    if (y >= minY && y <= maxY) ySet.add(y)
+  }
+  for (const r of near) {
+    addX(r.x - clearance)
+    addX(r.x + r.w + clearance)
+    addY(r.y - clearance)
+    addY(r.y + r.h + clearance)
   }
   if (xSet.size * ySet.size > MAX_GRID_CELLS) return undefined
   const xs = [...xSet].sort((a, b) => a - b)
@@ -194,13 +230,13 @@ export function routeOnGrid(
       if (ni < 0 || nj < 0 || ni >= xs.length || nj >= ys.length) continue
       const a = { x: xs[i] as number, y: ys[j] as number }
       const b = { x: xs[ni] as number, y: ys[nj] as number }
-      if (obstacles.some((rect) => segmentEntersRect(a, b, rect))) continue
+      if (near.some((rect) => segmentEntersRect(a, b, rect))) continue
       const turn = enteredHorizontally(axis) === enteredHorizontally(nextAxis) ? 0 : BEND_COST_PX
       // A traced border costs its own length again: a line hidden on top of
       // a box's edge is the defect this router would otherwise reintroduce
       // while avoiding the one it exists to fix. Doubling makes going around
       // clearly cheaper without making a border-hugging step impossible.
-      const traced = obstacles.reduce((sum, rect) => sum + borderOverlap(a, b, rect), 0)
+      const traced = near.reduce((sum, rect) => sum + borderOverlap(a, b, rect), 0)
       const next = cost + Math.abs(b.x - a.x) + Math.abs(b.y - a.y) + turn + traced
       const nextState = stateOf(ni, nj, nextAxis)
       if (next >= (best.get(nextState) ?? Number.POSITIVE_INFINITY)) continue
