@@ -193,23 +193,45 @@ export function WorkspaceFilesPanel({
    * this is the only place that knows it was the server's words.
    */
   /**
+   * The address a create with no opinion lands at: inside the folder the
+   * browser is standing in, numbered past whatever is already there.
+   *
+   * Derived once and shared, because the menu's dialog has to PRE-FILL with
+   * the very path its plain entries would have used — submitting that form
+   * untouched must produce what not opening it would have. Two separate
+   * derivations would drift the moment one of them was given a different
+   * list.
+   */
+  const derivedNewPath = useMemo(
+    () =>
+      newDocumentPathIn(
+        folder,
+        (documents ?? []).map((row) => row.path),
+      ),
+    [folder, documents],
+  )
+
+  /**
    * Create a document in the folder the browser is standing in.
    *
    * Until now the only way to put a document anywhere but the workspace root
    * was MCP or raw HTTP, which left the browser showing a hierarchy it had
-   * no way to add to. No name is collected: naming follows creation
-   * (ADR-0006), and a path is never derived from a name (ADR-0008).
+   * no way to add to. Naming still follows creation (ADR-0006) — the menu's
+   * two kind entries collect nothing — and the dialog behind its third entry
+   * is an opt-in for someone who already knows, never a gate. A path is
+   * still never derived from a name (ADR-0008); the dialog takes both, and
+   * neither field feeds the other.
    */
   const createHere = useCallback(
-    async (kind: DocumentKind) => {
+    async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
       setCreateError(null)
       setCreating(true)
       try {
-        const path = newDocumentPathIn(
-          folder,
-          (documents ?? []).map((row) => row.path),
-        )
-        await source.createDocument(path, kind)
+        // No options means nobody expressed an opinion, so the address is
+        // derived exactly as it always was. The dialog is the only caller
+        // that supplies one.
+        const path = options?.path ?? derivedNewPath
+        await source.createDocument(path, kind, options?.name)
         const entries = await readList()
         setDocuments(entries)
         setSelected(entries.find((row) => row.path === path) ?? null)
@@ -217,7 +239,7 @@ export function WorkspaceFilesPanel({
         setCreating(false)
       }
     },
-    [source, readList, folder, documents],
+    [source, readList, derivedNewPath],
   )
 
   /**
@@ -415,7 +437,10 @@ export function WorkspaceFilesPanel({
         </div>
         <NewDocumentMenu
           disabled={creating}
-          onCreate={(kind) => void createHere(kind).catch(() => setCreateError(kind))}
+          defaultPath={derivedNewPath}
+          onCreate={(kind, options) =>
+            void createHere(kind, options).catch(() => setCreateError(kind))
+          }
         />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>

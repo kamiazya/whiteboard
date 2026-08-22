@@ -105,6 +105,7 @@ export function createDocument(
   workspaceId: string,
   path: string,
   kind?: DocumentKind,
+  name?: string,
 ): Promise<CreateDocumentResponse> {
   return fetchAndParse(
     fetchFn,
@@ -113,9 +114,13 @@ export function createDocument(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Omitted kind stays omitted (not null) so an older daemon that
+      // Omitted fields stay omitted (not null) so an older daemon that
       // rejects unknown fields never sees one it can't parse.
-      body: JSON.stringify(kind === undefined ? { path } : { path, kind }),
+      body: JSON.stringify({
+        path,
+        ...(kind === undefined ? {} : { kind }),
+        ...(name === undefined ? {} : { name }),
+      }),
     },
   )
 }

@@ -96,6 +96,56 @@ describe('WorkspaceFilesPanel create guard', () => {
     fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
     fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
 
-    await waitFor(() => expect(source.createDocument).toHaveBeenCalledWith('untitled', 'spatial'))
+    await waitFor(() =>
+      expect(source.createDocument).toHaveBeenCalledWith('untitled', 'spatial', undefined),
+    )
+  })
+})
+
+describe('WorkspaceFilesPanel — name and location', () => {
+  // The panel is what turns the dialog's answers into a create, so the seam
+  // worth pinning is the source call: a name typed into the form has to
+  // arrive in the SAME call that makes the document, not a follow-up.
+  it('creates at the typed path with the typed name, in one call', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+
+    fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: 'Weekly notes' } })
+    fireEvent.change(screen.getByLabelText(/^Path/), { target: { value: 'notes/weekly' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(source.createDocument).toHaveBeenCalledWith('notes/weekly', 'spatial', 'Weekly notes'),
+    )
+  })
+
+  // Opening the form and submitting it untouched must be indistinguishable
+  // from never opening it — otherwise the dialog is a second create flow
+  // rather than the same one with the address shown.
+  it('lands where the plain entry would have when the form is not edited', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([
+          { documentId: 'd1', path: 'untitled', kind: 'spatial' as const },
+          { documentId: 'd2', path: 'untitled-2', kind: 'spatial' as const },
+        ]),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
+
+    await waitFor(() =>
+      expect(source.createDocument).toHaveBeenCalledWith('untitled-3', 'spatial', undefined),
+    )
   })
 })

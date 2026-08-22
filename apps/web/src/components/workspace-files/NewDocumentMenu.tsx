@@ -1,13 +1,16 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { FilePlus2 } from 'lucide-react'
+import { FilePlus2, SlidersHorizontal } from 'lucide-react'
+import { useState } from 'react'
 import {
   DropdownMenu,
   DropdownMenuContent,
   DropdownMenuItem,
+  DropdownMenuSeparator,
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
+import { NewDocumentDialog } from './NewDocumentDialog.js'
 
 /**
  * The one door to creating a document, wherever creation is offered.
@@ -31,8 +34,16 @@ import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 export function NewDocumentMenu({
   onCreate,
   disabled,
+  defaultPath,
+  createError,
 }: {
-  onCreate: (kind: DocumentKind) => void
+  /**
+   * `options` arrives only from the dialog. A plain menu entry sends none,
+   * and the host derives the address exactly as it always has — so the two
+   * routes to a document differ in what the person said, not in what the
+   * host does with their silence.
+   */
+  onCreate: (kind: DocumentKind, options?: { path: string; name: string | undefined }) => void
   /**
    * A create is in flight. Disables the ITEMS rather than the trigger:
    * with a menu in the way the second press lands on an item, and a menu
@@ -40,7 +51,16 @@ export function NewDocumentMenu({
    * than a dead button does.
    */
   disabled?: boolean
+  /**
+   * Where a create with no opinion would put the document. Its absence is
+   * what hides the dialog entry: with nothing to pre-fill `Path` with, the
+   * form could only open on a guess.
+   */
+  defaultPath?: string
+  /** Shown inside the dialog, which stays open on a refusal. */
+  createError?: string | null
 }) {
+  const [dialogOpen, setDialogOpen] = useState(false)
   return (
     <DropdownMenu>
       <Tooltip>
@@ -80,7 +100,36 @@ export function NewDocumentMenu({
             {label}
           </DropdownMenuItem>
         ))}
+        {defaultPath !== undefined && (
+          <>
+            <DropdownMenuSeparator />
+            {/* The ellipsis belongs HERE and only here: this is the one entry
+                that opens something rather than acting. */}
+            <DropdownMenuItem
+              data-testid="new-document-specify"
+              disabled={disabled}
+              onSelect={() => setDialogOpen(true)}
+              className="gap-2"
+            >
+              <SlidersHorizontal aria-hidden="true" className="size-4" />
+              Name and location…
+            </DropdownMenuItem>
+          </>
+        )}
       </DropdownMenuContent>
+      {defaultPath !== undefined && (
+        <NewDocumentDialog
+          open={dialogOpen}
+          defaultPath={defaultPath}
+          busy={disabled}
+          error={createError}
+          onCancel={() => setDialogOpen(false)}
+          onSubmit={(kind, options) => {
+            setDialogOpen(false)
+            onCreate(kind, options)
+          }}
+        />
+      )}
     </DropdownMenu>
   )
 }

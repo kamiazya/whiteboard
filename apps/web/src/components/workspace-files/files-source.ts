@@ -17,7 +17,13 @@ import type { WorkspaceDocumentEntry } from './document-entry.js'
  */
 export interface WorkspaceFilesSource {
   listDocuments(): Promise<readonly WorkspaceDocumentEntry[]>
-  createDocument(path: string, kind: DocumentKind): Promise<void>
+  /**
+   * `name` is what a human reads, applied by the SAME call that creates the
+   * document. Split into a create then a set-name, the second half can fail
+   * alone and leave a document the user named sitting in the list as
+   * untitled-N, with nothing on screen saying which half went wrong.
+   */
+  createDocument(path: string, kind: DocumentKind, name?: string): Promise<void>
   /** Move a document — and everything under it — to a new path. */
   renameDocumentPath(path: string, newPath: string): Promise<void>
   /**

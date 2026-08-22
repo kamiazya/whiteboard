@@ -22,8 +22,15 @@ you can put it on a canvas later) and it opens ready to work in.
 
 Once you have documents, the page lands on your document browser: a folder
 tree with a preview pane. Click a card to preview it, **Open** to edit it,
-and use the toolbar to search everything, create markdown notes and
-canvases, or move a document to a new path.
+and use the toolbar to search everything or move a document to a new path.
+
+**New** in that toolbar opens the same two choices — **Canvas** or **Markdown
+note** — and creates one in whichever folder you are standing in. A kind
+cannot be changed later, which is why you pick it by name rather than by
+icon; everything else about a document is editable afterwards, so nothing
+else is asked for. If you already know what the document is called and where
+it goes, **Name and location…** in that menu takes both up front; leaving its
+form untouched creates exactly what the plain entries would have.
 
 ![Browser-local document browser](../assets/browser-local-list.png)
 
