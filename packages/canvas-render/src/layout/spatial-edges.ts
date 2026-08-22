@@ -1,6 +1,6 @@
 import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedEdgeNode } from '../scene-graph.js'
-import { buildPairwiseScores, scoreSegmentPair } from './edge-crossing-sweep.js'
+import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
   addCost,
   bendCount,
@@ -539,18 +539,71 @@ type ConfigCost = readonly number[]
  * the declared tiers.
  */
 function pairScore(a: readonly Point[], b: readonly Point[]): ConfigCost {
+  const qa = quantizedSegments(a)
+  const qb = quantizedSegments(b)
   let overlap = 0
   let illegible = 0
   let crossings = 0
-  for (let ai = 1; ai < a.length; ai++) {
-    for (let bi = 1; bi < b.length; bi++) {
-      const [o, il, c] = scoreSegmentPair(a[ai - 1]!, a[ai]!, b[bi - 1]!, b[bi]!)
+  for (let ai = 0; ai < qa.length; ai += 8) {
+    for (let bi = 0; bi < qb.length; bi += 8) {
+      // Segment-level broad phase, the same inflated-bbox test the sweep
+      // applies (edge-crossing-sweep.ts): a pair whose boxes miss by more
+      // than a quantum cannot overlap, cross, or sit illegibly close.
+      if (
+        qa[ai + 4]! > qb[bi + 6]! ||
+        qb[bi + 4]! > qa[ai + 6]! ||
+        qa[ai + 5]! > qb[bi + 7]! ||
+        qb[bi + 5]! > qa[ai + 7]!
+      ) {
+        continue
+      }
+      const [o, il, c] = scoreQuantizedSegmentPair(
+        qa[ai]!,
+        qa[ai + 1]!,
+        qa[ai + 2]!,
+        qa[ai + 3]!,
+        qb[bi]!,
+        qb[bi + 1]!,
+        qb[bi + 2]!,
+        qb[bi + 3]!,
+      )
       overlap += o
       illegible += il
       crossings += c
     }
   }
   return pairPenalty([overlap, illegible, crossings])
+}
+
+/**
+ * A path's segments in COST_QUANTUM units, eight ints each: x1 y1 x2 y2,
+ * then the bbox (minX minY maxX maxY) inflated by one quantum for the
+ * broad phase. Keyed by path identity: the search routes through a cache,
+ * so the same path object is scored against hundreds of others and paid
+ * for its quantization once.
+ */
+const quantizedCache = new WeakMap<readonly Point[], Int32Array>()
+function quantizedSegments(path: readonly Point[]): Int32Array {
+  const hit = quantizedCache.get(path)
+  if (hit !== undefined) return hit
+  const out = new Int32Array(Math.max(0, path.length - 1) * 8)
+  for (let i = 1; i < path.length; i++) {
+    const x1 = Math.round(path[i - 1]!.x * COST_QUANTUM)
+    const y1 = Math.round(path[i - 1]!.y * COST_QUANTUM)
+    const x2 = Math.round(path[i]!.x * COST_QUANTUM)
+    const y2 = Math.round(path[i]!.y * COST_QUANTUM)
+    const o = (i - 1) * 8
+    out[o] = x1
+    out[o + 1] = y1
+    out[o + 2] = x2
+    out[o + 3] = y2
+    out[o + 4] = Math.min(x1, x2) - 1
+    out[o + 5] = Math.min(y1, y2) - 1
+    out[o + 6] = Math.max(x1, x2) + 1
+    out[o + 7] = Math.max(y1, y2) + 1
+  }
+  quantizedCache.set(path, out)
+  return out
 }
 
 /**
@@ -609,6 +662,9 @@ function optimizeSideChoices(
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
+  const othersFor = edges.map((e) =>
+    nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
+  )
   const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
     a?.from?.x === b?.from?.x &&
     a?.from?.y === b?.from?.y &&
@@ -636,11 +692,15 @@ function optimizeSideChoices(
   const routeCache = new Map<string, readonly Point[]>()
   const anchorKey = (edge: CanvasEdge, a: EdgeAnchorPair | undefined) =>
     `${edge.id}|${a?.fromSide}|${a?.toSide}|${a?.from?.x},${a?.from?.y}|${a?.to?.x},${a?.to?.y}|${a?.fromLaneDepth}|${a?.toLaneDepth}`
-  const routeCached = (edge: CanvasEdge, a: EdgeAnchorPair | undefined): readonly Point[] => {
+  const routeCached = (
+    edge: CanvasEdge,
+    i: number,
+    a: EdgeAnchorPair | undefined,
+  ): readonly Point[] => {
     const key = anchorKey(edge, a)
     const hit = routeCache.get(key)
     if (hit !== undefined) return hit
-    const path = routeEdge(nodes, edge, style, a).path
+    const path = routeEdge(nodes, edge, style, a, othersFor[i]).path
     routeCache.set(key, path)
     return path
   }
@@ -676,7 +736,7 @@ function optimizeSideChoices(
 
   let current = new Map(initial)
   let anchors = computeAnchorsFor(nodes, edges, current, align, pins)
-  let paths: (readonly Point[])[] = edges.map((e) => routeCached(e, anchors.get(e.id)))
+  let paths: (readonly Point[])[] = edges.map((e, i) => routeCached(e, i, anchors.get(e.id)))
   let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
@@ -686,14 +746,11 @@ function optimizeSideChoices(
   // always excluded them; the SEARCH did not, so it priced ink the router
   // could not avoid and could be talked into a detour to "save" it — the
   // same predicate `deriveDefaultSides`'s occlusion filter already uses.
-  const foreignBodiesFor = edges.map((e) => {
+  const foreignBodiesFor = edges.map((e, i) => {
     const endpoints = [byId.get(e.fromNode), byId.get(e.toNode)]
       .filter((n): n is SpatialNode => n !== undefined)
       .map(rectOf)
-    return nodes
-      .filter((n) => n.id !== e.fromNode && n.id !== e.toNode)
-      .map(rectOf)
-      .filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
+    return othersFor[i]!.filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
   })
   // Every node's border, INCLUDING an edge's own endpoints — border-tracing
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
@@ -746,7 +803,7 @@ function optimizeSideChoices(
     const trialPaths = paths.slice()
     const trialBounds = bounds.slice()
     for (const i of touched) {
-      trialPaths[i] = routeCached(edges[i]!, trialAnchors.get(edges[i]!.id))
+      trialPaths[i] = routeCached(edges[i]!, i, trialAnchors.get(edges[i]!.id))
       trialBounds[i] = boundsOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
@@ -1677,6 +1734,10 @@ export function routeEdge(
   // Endpoint override from `assignEdgeAnchors`'s fan-out pass; an absent
   // field keeps the side midpoint, so single callers stay unchanged.
   anchors?: EdgeAnchorPair,
+  // Every node's rect except the two endpoints', when the caller already
+  // has them: the side-choice search routes each edge many times per
+  // layout and this is the one O(nodes) list it can hand over intact.
+  others?: readonly Rect[],
 ): ResolvedEdgeNode {
   const fromNode = nodes.find((n) => n.id === edge.fromNode)
   const toNode = nodes.find((n) => n.id === edge.toNode)
@@ -1721,11 +1782,15 @@ export function routeEdge(
     }
   }
 
-  const derived = deriveDefaultSides(nodes, edge, fromRect, toRect)
   // The anchor pass resolves sides with whole-edge-set crowding knowledge a
   // single call lacks; when it spoke, follow it (authored sides still win).
-  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derived.fromSide
-  const toSide = edge.toSide ?? anchors?.toSide ?? derived.toSide
+  // Deriving is an occlusion scan over every node, and the search calls this
+  // a thousand times per layout with both sides already decided, so it only
+  // runs when a side is actually missing.
+  let derived: SidePair | undefined
+  const derive = () => (derived ??= deriveDefaultSides(nodes, edge, fromRect, toRect))
+  const fromSide = edge.fromSide ?? anchors?.fromSide ?? derive().fromSide
+  const toSide = edge.toSide ?? anchors?.toSide ?? derive().toSide
 
   const start = anchors?.from ?? sidePoint(fromRect, fromSide)
   const end = anchors?.to ?? sidePoint(toRect, toSide)
@@ -1740,10 +1805,9 @@ export function routeEdge(
   // anchor is boxed inside a neighbour's margin band, `bestCandidate`'s
   // second tier accepts a band crossing to escape rather than tunnelling
   // through the node itself.
-  const rawObstacles = nodes
-    .filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode)
-    .map(rectOf)
-    .filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  const rawObstacles = (
+    others ?? nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+  ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
   const obstacles = rawObstacles.map((rect) => ({
     x: rect.x - ROUTE_MARGIN_PX,
     y: rect.y - ROUTE_MARGIN_PX,
