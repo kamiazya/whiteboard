@@ -18,7 +18,11 @@ describe('x-whiteboard JSON Schema artifact', () => {
     const defs = schema.$defs as Record<string, Record<string, unknown>>
     expect(Object.keys(defs).sort()).toEqual(['canvasExtension', 'nodeExtension'])
     expect(defs.canvasExtension.type).toBe('object')
-    expect(defs.nodeExtension.type).toBe('object')
+    // The node site is a UNION since ADR-0013: an embed variant and a
+    // facets-only variant, each an object.
+    const nodeVariants = defs.nodeExtension.anyOf as { type?: string }[]
+    expect(nodeVariants).toHaveLength(2)
+    for (const variant of nodeVariants) expect(variant.type).toBe('object')
     // Neither def re-declares a root `$schema` of its own.
     expect('$schema' in defs.canvasExtension).toBe(false)
     expect('$schema' in defs.nodeExtension).toBe(false)

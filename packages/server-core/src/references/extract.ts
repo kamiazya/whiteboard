@@ -29,7 +29,11 @@ function textReferences(value: string): RawReference[] {
 function spatialReferences(canvas: SpatialCanvas): RawReference[] {
   const refs: RawReference[] = []
   for (const node of canvas.nodes) {
-    const embedId = node['x-whiteboard']?.documentId
+    // The extension is a union (embed | facets-only); only the embed
+    // variant references another document.
+    const extension = node['x-whiteboard']
+    const embedId =
+      extension !== undefined && 'kind' in extension ? extension.documentId : undefined
     if (embedId !== undefined) {
       refs.push({ target: embedId, via: 'embed-node', context: 'embedded on this canvas' })
       continue

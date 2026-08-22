@@ -2,7 +2,14 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { extensionFacetsSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { createFacetRegistry } from './registry.js'
-import { bundledPlugins, resolveCanvasEdgeStyle, VISUAL_EDGES_KEY, visualPlugin } from './visual.js'
+import {
+  bundledPlugins,
+  resolveCanvasEdgeStyle,
+  resolveNodeShape,
+  VISUAL_EDGES_KEY,
+  VISUAL_SHAPE_KEY,
+  visualPlugin,
+} from './visual.js'
 
 const registry = createFacetRegistry(bundledPlugins)
 
@@ -77,5 +84,61 @@ describe('resolveCanvasEdgeStyle', () => {
 describe('bundledPlugins', () => {
   it('contains exactly the visual plugin (no privileged extras)', () => {
     expect(bundledPlugins).toEqual([visualPlugin])
+  })
+})
+
+describe('visual.shape/v0', () => {
+  it('registers as a node-target facet with the silhouette vocabulary', () => {
+    expect(VISUAL_SHAPE_KEY).toBe('visual.shape/v0')
+    expect(registry.targetsOf(VISUAL_SHAPE_KEY)).toEqual(['node'])
+    expect(registry.validateFacetWrite(VISUAL_SHAPE_KEY, { kind: 'hexagon' }).ok).toBe(true)
+    expect(registry.validateFacetWrite(VISUAL_SHAPE_KEY, { kind: 'star' }).ok).toBe(false)
+  })
+})
+
+describe('resolveNodeShape', () => {
+  const nodeWith = (extension: SpatialCanvas['nodes'][number]['x-whiteboard']) =>
+    ({
+      id: 'n1',
+      type: 'text',
+      text: '',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      'x-whiteboard': extension,
+    }) as SpatialCanvas['nodes'][number]
+
+  it('answers the facet silhouette kind', () => {
+    expect(
+      resolveNodeShape(
+        nodeWith({ facets: { [VISUAL_SHAPE_KEY]: { kind: 'cylinder' } } }),
+        registry,
+      ),
+    ).toBe('cylinder')
+  })
+
+  it('answers undefined without the facet (absent = the historic rect)', () => {
+    expect(resolveNodeShape(nodeWith(undefined), registry)).toBeUndefined()
+    expect(resolveNodeShape(nodeWith({ facets: {} }), registry)).toBeUndefined()
+  })
+
+  it('answers undefined for an unresolvable payload (drop-not-fail)', () => {
+    expect(
+      resolveNodeShape(nodeWith({ facets: { [VISUAL_SHAPE_KEY]: { kind: 'star' } } }), registry),
+    ).toBeUndefined()
+  })
+
+  it('reads the facet beside an embed', () => {
+    expect(
+      resolveNodeShape(
+        nodeWith({
+          kind: 'embed',
+          documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+          facets: { [VISUAL_SHAPE_KEY]: { kind: 'diamond' } },
+        }),
+        registry,
+      ),
+    ).toBe('diamond')
   })
 })

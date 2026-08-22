@@ -288,6 +288,29 @@ async function main() {
   if (seedBatch.applied !== 3 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
+
+  // Node-target facets (ADR-0013): set a silhouette on one node of the
+  // spatial document, then delete it with the null tombstone.
+  const nodeFacet = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+  })
+  if (nodeFacet.facets?.['visual.shape/v0']?.kind !== 'hexagon') {
+    throw new Error(`wb_facet_set(nodeId) returned unexpected shape: ${JSON.stringify(nodeFacet)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → visual.shape set on a node')
+  const nodeFacetCleared = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': null },
+  })
+  if (Object.keys(nodeFacetCleared.facets ?? { leftover: true }).length !== 0) {
+    throw new Error(`null tombstone did not delete: ${JSON.stringify(nodeFacetCleared)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → null tombstone deletes the facet')
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(

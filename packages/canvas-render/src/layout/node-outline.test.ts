@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { nodeOutline, outlineContains, outlineEntryPoint } from './node-outline.js'
+import {
+  nodeOutline,
+  outlineContains,
+  outlineContentBox,
+  outlineEntryPoint,
+} from './node-outline.js'
 
 const box = { x: 10, y: 20, w: 100, h: 60 }
 
@@ -216,5 +221,44 @@ describe('review regressions (CodeRabbit #953)', () => {
     const pulled = outlineEntryPoint('cylinder', box, { x: -40, y: 0 }, { x: 14, y: 22 })
     expect(outlineContains('cylinder', box, pulled)).toBe(true)
     expect(outlineContains('cylinder', box, { x: pulled.x - 1, y: pulled.y - 0.5 })).toBe(false)
+  })
+})
+
+describe('outlineContentBox — the inscribed box content must stay inside', () => {
+  const kinds = ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const
+
+  it('every corner of the content box lies inside the outline, for every kind', () => {
+    for (const kind of kinds) {
+      const content = outlineContentBox(kind, box)
+      const corners = [
+        { x: content.x, y: content.y },
+        { x: content.x + content.w, y: content.y },
+        { x: content.x + content.w, y: content.y + content.h },
+        { x: content.x, y: content.y + content.h },
+      ]
+      for (const corner of corners) {
+        expect(outlineContains(kind, box, corner), `${kind} corner ${JSON.stringify(corner)}`).toBe(
+          true,
+        )
+      }
+    }
+  })
+
+  it('strictly narrows the box for every kind — a shaped node never keeps the full rect', () => {
+    for (const kind of kinds) {
+      const content = outlineContentBox(kind, box)
+      expect(content.w * content.h, kind).toBeLessThan(box.w * box.h)
+      expect(content.w, kind).toBeGreaterThan(0)
+      expect(content.h, kind).toBeGreaterThan(0)
+    }
+  })
+
+  it('no outline (a plain rect) answers the box unchanged', () => {
+    expect(outlineContentBox(undefined, box)).toEqual(box)
+  })
+
+  it('is total: an unsupported runtime value degrades to the box, never a throw', () => {
+    const bogus = 'blob' as unknown as Parameters<typeof nodeOutline>[0]
+    expect(outlineContentBox(bogus, box)).toEqual(box)
   })
 })

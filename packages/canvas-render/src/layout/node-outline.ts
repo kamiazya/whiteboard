@@ -113,6 +113,48 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
 }
 
 /**
+ * The axis-aligned box inscribed in the outline — where a node's CONTENT can
+ * lay out without crossing the silhouette. A rect (no outline) is its own
+ * content box, and an unsupported runtime value degrades the same way, per
+ * `nodeOutline`'s null contract.
+ *
+ * Ellipse and diamond take the maximal inscribed rect of the box's own
+ * aspect; hexagon and parallelogram give up only their slanted horizontal
+ * margins; the cylinder gives up the lid (its drawn front rim dips to 2·ry)
+ * and the bottom bulge. Every corner returned here satisfies
+ * `outlineContains` — the geometry test pins that per kind.
+ */
+export function outlineContentBox(
+  kind: NodeOutlineKind | undefined,
+  box: BoundingBox,
+): BoundingBox {
+  if (kind === undefined || !isFiniteBox(box)) return box
+  switch (kind) {
+    case 'ellipse': {
+      // 0.15 rather than the exact (1 - 1/√2)/2 ≈ 0.1464: the exact value
+      // puts corners ON the rim, where float error flips containment, and
+      // content should not kiss the stroke anyway.
+      const dx = box.w * 0.15
+      const dy = box.h * 0.15
+      return { x: box.x + dx, y: box.y + dy, w: box.w - 2 * dx, h: box.h - 2 * dy }
+    }
+    case 'diamond':
+      return { x: box.x + box.w / 4, y: box.y + box.h / 4, w: box.w / 2, h: box.h / 2 }
+    case 'hexagon':
+    case 'parallelogram': {
+      const inset = Math.min(box.w / 4, box.h / 2)
+      return { x: box.x + inset, y: box.y, w: box.w - 2 * inset, h: box.h }
+    }
+    case 'cylinder': {
+      const ry = Math.min(box.w * 0.1, box.h / 4)
+      return { x: box.x, y: box.y + 2 * ry, w: box.w, h: box.h - 3 * ry }
+    }
+    default:
+      return box
+  }
+}
+
+/**
  * Point containment against the outline (boundary counts as inside) — the
  * hit-test half of the producer. Total: any non-finite input answers false.
  */

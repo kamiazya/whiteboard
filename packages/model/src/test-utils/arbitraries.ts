@@ -130,23 +130,42 @@ const spatialGroupNodeArbitrary = fc.record({
   type: fc.constant('group' as const),
 })
 
-export const spatialNodeArbitrary = fc.oneof(
+// Both variants of the node-extension union: embed (facets optional) and
+// facets-only. Declared before the node arbitraries that attach it.
+export const xWhiteboardArbitrary = fc.oneof(
+  fc.record(
+    {
+      kind: fc.constant('embed' as const),
+      documentId: canonicalUlidArbitrary,
+      facets: extensionFacetsArbitrary,
+    },
+    { requiredKeys: ['kind', 'documentId'] },
+  ),
+  fc.record({ facets: extensionFacetsArbitrary }, { requiredKeys: [] }),
+)
+
+// Every node kind may carry the x-whiteboard extension (embed | facets-only
+// union), so the property suites that consume `spatialCanvasArbitrary`
+// (model's schema property, codec's round-trip and extension-contract
+// properties) exercise node facets rather than being blind to the union.
+const bareSpatialNodeArbitrary = fc.oneof(
   spatialTextNodeArbitrary,
   spatialFileNodeArbitrary,
   spatialLinkNodeArbitrary,
   spatialGroupNodeArbitrary,
 )
 
+export const spatialNodeArbitrary = fc
+  .tuple(bareSpatialNodeArbitrary, fc.option(xWhiteboardArbitrary, { nil: undefined }))
+  .map(([node, extension]) =>
+    extension === undefined ? node : { ...node, 'x-whiteboard': extension },
+  )
+
 export const canvasEdgeArbitrary = fc.record({
   id: nodeIdArbitrary,
   fromNode: nodeIdArbitrary,
   toNode: nodeIdArbitrary,
   color: fc.option(canvasColorArbitrary, { nil: undefined }),
-})
-
-export const xWhiteboardArbitrary = fc.record({
-  kind: fc.constant('embed' as const),
-  documentId: canonicalUlidArbitrary,
 })
 
 export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 200 }) })
