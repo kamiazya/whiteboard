@@ -18,6 +18,7 @@ export {
   backlinksOutputSchema as documentBacklinksResponseSchema,
   documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
   exportOkfOutputSchema as documentOkfV1ResponseSchema,
+  linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as listDocumentsV1ResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 export * from './branches.js'
@@ -40,11 +41,13 @@ export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime
 import type {
   exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
   backlinksOutputSchema as _documentBacklinksResponseSchema,
+  linkifyMentionsOutputSchema as _linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as _listDocumentsV1ResponseSchema,
   documentTagsOutputSchema as _workspaceDocumentTagsResponseSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { z as _z } from 'zod'
 export type DocumentBacklinksResponse = _z.infer<typeof _documentBacklinksResponseSchema>
 export type WorkspaceDocumentTagsResponse = _z.infer<typeof _workspaceDocumentTagsResponseSchema>
+export type LinkifyMentionsResponse = _z.infer<typeof _linkifyMentionsResponseSchema>
 export type DocumentOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
 export type ListDocumentsV1Response = _z.infer<typeof _listDocumentsV1ResponseSchema>

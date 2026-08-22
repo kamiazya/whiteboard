@@ -163,6 +163,29 @@ export class ReferenceAggregate {
 }
 
 /**
+ * Where `name` occurs in `text` OUTSIDE any `[[...]]` span — the ONE rule
+ * both mention detection and linkify apply, so what the panel lists is
+ * exactly what the linkify operation will rewrite.
+ */
+export function unlinkedNameSpans(
+  text: string,
+  name: string,
+): readonly { index: number; length: number }[] {
+  const refs = scanReferences(text).map(
+    (match) => [match.index, match.index + match.full.length] as const,
+  )
+  const spans: { index: number; length: number }[] = []
+  let cursor = 0
+  for (;;) {
+    const at = text.indexOf(name, cursor)
+    if (at === -1) return spans
+    cursor = at + name.length
+    if (refs.some(([from, to]) => at >= from && at < to)) continue
+    spans.push({ index: at, length: name.length })
+  }
+}
+
+/**
  * Sources whose TEXT names `documentId`'s display name without a resolving
  * reference — the seeding half of the linking loop: the system finds the
  * candidate, a human confirms (a link is the author's claim, never a
@@ -179,16 +202,8 @@ export function mentionsOfIn(
     if (sourceId === target.documentId) continue
     const contexts: string[] = []
     for (const text of facts.texts) {
-      const spans = scanReferences(text).map(
-        (match) => [match.index, match.index + match.full.length] as const,
-      )
-      let cursor = 0
-      for (;;) {
-        const at = text.indexOf(target.name, cursor)
-        if (at === -1) break
-        cursor = at + target.name.length
-        if (spans.some(([from, to]) => at >= from && at < to)) continue
-        contexts.push(snippetAround(text, at, target.name.length))
+      for (const span of unlinkedNameSpans(text, target.name)) {
+        contexts.push(snippetAround(text, span.index, span.length))
         if (contexts.length >= 3) break
       }
       if (contexts.length >= 3) break
