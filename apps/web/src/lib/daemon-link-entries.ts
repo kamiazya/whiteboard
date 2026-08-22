@@ -1,5 +1,5 @@
+import type { UniqueNameEntry } from '@kamiazya/whiteboard-codec'
 import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
-import type { AliasResolverEntry } from '../components/markdown-editor/alias-resolver.js'
 import type { LinkTarget } from '../components/markdown-editor/link-target.js'
 
 /**
@@ -24,7 +24,7 @@ function documentId(entry: DocumentSummary): string {
  */
 export function daemonLinkEntries(
   documents: readonly DocumentSummary[],
-): readonly AliasResolverEntry[] {
+): readonly UniqueNameEntry[] {
   return documents.flatMap((entry) => {
     const id = documentId(entry)
     const byPath = { id, name: entry.path }

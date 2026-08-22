@@ -4,9 +4,11 @@ import {
   createDocumentResponseSchema,
   createGrantResponseSchema,
   type DeleteDocumentResponse,
+  type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
   deleteDocumentResponseSchema,
   documentApiUrl,
+  documentBacklinksResponseSchema,
   documentOkfV1ResponseSchema,
   documentsApiUrl,
   type InstallFontResponse,
@@ -209,6 +211,20 @@ export function setDocumentDisplayName(
 }
 
 // ---- /api/v1 document surface (documentId + derived alias world) ----
+
+/** Documents in this workspace that reference `documentId` (the Connections panel). */
+export function getDocumentBacklinks(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  documentId: string,
+): Promise<DocumentBacklinksResponse> {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/backlinks`,
+    documentBacklinksResponseSchema,
+  )
+}
 
 export function getDocumentOkfV1(
   fetchFn: typeof globalThis.fetch,
