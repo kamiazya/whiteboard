@@ -326,12 +326,16 @@ export function BrowserLocalDocumentPage({
 
   const linkTargets = useMemo(
     () =>
-      switcherOptions.map((entry) => ({
-        id: entry.documentId,
-        name: entry.name,
-        kind: entry.kind,
-      })),
-    [switcherOptions],
+      switcherOptions
+        // Never the open document itself: a link's whole job is to reach
+        // some OTHER document, and backlinks skip self-references anyway.
+        .filter((entry) => entry.documentId !== documentId)
+        .map((entry) => ({
+          id: entry.documentId,
+          name: entry.name,
+          kind: entry.kind,
+        })),
+    [switcherOptions, documentId],
   )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
