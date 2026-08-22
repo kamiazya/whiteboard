@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import {
   Dialog,
   DialogContent,
@@ -54,10 +54,20 @@ export function NewDocumentDialog({
   // server message cannot outlive the field that has since been corrected.
   const [pathIssue, setPathIssue] = useState<string | null>(null)
 
-  // Re-prime on each opening: a cancelled edit must not leak into the next
-  // one, and `defaultPath` moves as documents are created around it.
+  // Re-primed on the closed-to-OPEN transition only, never on a later
+  // `defaultPath` change: that value is re-derived on every document-list
+  // refresh, so depending on it would wipe the name and path someone is
+  // halfway through typing — and would undo the point of keeping this form
+  // open after a refusal, since the correction being made would go with it.
+  //
+  // A ref rather than a run-count flag, for the reason App.tsx's route sync
+  // documents: StrictMode replays an effect with the same props, and a flag
+  // reads that replay as a second opening.
+  const wasOpenRef = useRef(false)
   useEffect(() => {
-    if (!open) return
+    const justOpened = open && !wasOpenRef.current
+    wasOpenRef.current = open
+    if (!justOpened) return
     setKind('spatial')
     setName('')
     setPath(defaultPath)

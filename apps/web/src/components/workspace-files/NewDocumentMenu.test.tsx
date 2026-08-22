@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { NewDocumentDialog } from './NewDocumentDialog.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 
 // Radix DropdownMenuTrigger opens on pointerDown (not click); DropdownMenuItem
@@ -163,5 +164,50 @@ describe('NewDocumentMenu — the dialog survives a refusal', () => {
 
     expect(onCreate).not.toHaveBeenCalled()
     expect((await screen.findByRole('alert')).textContent).toMatch(/path/i)
+  })
+})
+
+describe('NewDocumentDialog — an open form is not reset underneath the user', () => {
+  // `defaultPath` moves whenever the document list changes, and the panel
+  // re-derives it on every refresh. Re-priming on that would wipe the name
+  // and path someone is halfway through typing — and would undo the whole
+  // point of keeping the form open after a refusal, since the correction
+  // they were making would vanish with it.
+  it('keeps what was typed when the derived path moves', async () => {
+    const { rerender } = render(
+      <NewDocumentDialog open defaultPath="untitled" onCancel={vi.fn()} onSubmit={vi.fn()} />,
+    )
+    fireEvent.change(await screen.findByLabelText(/^Name/), { target: { value: 'Weekly' } })
+    fireEvent.change(screen.getByLabelText(/^Path/), { target: { value: 'notes/weekly' } })
+
+    rerender(
+      <NewDocumentDialog open defaultPath="untitled-2" onCancel={vi.fn()} onSubmit={vi.fn()} />,
+    )
+
+    expect((screen.getByLabelText(/^Name/) as HTMLInputElement).value).toBe('Weekly')
+    expect((screen.getByLabelText(/^Path/) as HTMLInputElement).value).toBe('notes/weekly')
+  })
+
+  // Re-opening is a fresh form, and it starts at whatever address a plain
+  // create would use NOW — not the one that was derived when it last closed.
+  it('re-primes from the current derived path on each opening', async () => {
+    const { rerender } = render(
+      <NewDocumentDialog open defaultPath="untitled" onCancel={vi.fn()} onSubmit={vi.fn()} />,
+    )
+    fireEvent.change(await screen.findByLabelText(/^Path/), { target: { value: 'scratch' } })
+
+    rerender(
+      <NewDocumentDialog
+        open={false}
+        defaultPath="untitled"
+        onCancel={vi.fn()}
+        onSubmit={vi.fn()}
+      />,
+    )
+    rerender(
+      <NewDocumentDialog open defaultPath="untitled-3" onCancel={vi.fn()} onSubmit={vi.fn()} />,
+    )
+
+    expect(((await screen.findByLabelText(/^Path/)) as HTMLInputElement).value).toBe('untitled-3')
   })
 })

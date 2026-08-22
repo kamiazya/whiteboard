@@ -135,12 +135,26 @@ export function WorkspaceFilesPanel({
   const [folder, setFolder] = useState(initialFolder ?? '')
   const [columns, setColumns] = useState<BrowserColumns>(readStoredColumns)
   /**
+   * A document that WAS created, whose list refresh or open failed after the
+   * fact. Separate from `createError` because the two need opposite things:
+   * a refusal invites another attempt, this one must not.
+   */
+  const [refreshError, setRefreshError] = useState<string | null>(null)
+  /**
    * A refused create, as the kind that was asked for and the reason given.
    *
    * The reason is the source's own words — the same treatment a refused MOVE
-   * already gets, and for the same purpose: only the server knows which path
-   * actually collided, and a person cannot correct an address the message
-   * will not name.
+   * already gets, and for the same purpose: only the store knows which path
+   * actually collided, and an address the message will not name cannot be
+   * corrected.
+   *
+   * The dialog renders `reason` too, so both are in the DOM while it is
+   * open. Only one is ANNOUNCED — Radix marks the page behind a modal
+   * `aria-hidden` (measured: DOM 2, accessible 1) — and dismissing the form
+   * clears this, so the panel's generic line never outlives the submission
+   * it describes. That is why there is no "which surface asked" flag here:
+   * it would be a second rule for an outcome the clearing already produces,
+   * and no test could tell the two apart.
    */
   const [createError, setCreateError] = useState<{ kind: DocumentKind; reason: string } | null>(
     null,
@@ -307,35 +321,52 @@ export function WorkspaceFilesPanel({
   const createHere = useCallback(
     async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
       setCreateError(null)
+      setRefreshError(null)
       setCreating(true)
       try {
         // No options means nobody expressed an opinion, so the address is
         // derived exactly as it always was. The dialog is the only caller
         // that supplies one.
         const path = options?.path ?? derivedNewPath
-        await source.createDocument(path, kind, options?.name)
-        const entries = await readList()
-        setDocuments(entries)
-        setSelected(entries.find((row) => row.path === path) ?? null)
-        // Creating exists to produce content, and an empty document is worth
-        // nothing until it is open — so the create ends where the next thing
-        // happens, as every other creation path in the app already did.
-        //
-        // Only affordable because the open folder is in the address now: the
-        // way back returns to the folder this was made in, rather than to
-        // the workspace root. The selection above still lands, so a host
-        // that offers no way to open leaves someone looking at the new
-        // document rather than at nothing.
-        onOpenDocumentRef.current?.(path)
-      } catch (err) {
-        setCreateError({
-          kind,
-          reason: err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
-        })
-        // Re-thrown so the caller can tell a refusal from a success — the
-        // dialog stays open on one and closes on the other, and swallowing it
-        // here would close it either way.
-        throw err
+        // ONLY this write decides whether the create was refused. Everything
+        // below is bookkeeping on a document that already exists, and
+        // reporting a failed refresh as "could not create" invites a retry
+        // that collides with what was just made — from the dialog, while the
+        // form is still open holding the path that now exists.
+        try {
+          await source.createDocument(path, kind, options?.name)
+        } catch (err) {
+          setCreateError({
+            kind,
+            reason:
+              err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
+          })
+          // Re-thrown so the caller can tell a refusal from a success — the
+          // dialog stays open on one and closes on the other, and swallowing
+          // it here would close it either way.
+          throw err
+        }
+        try {
+          const entries = await readList()
+          setDocuments(entries)
+          setSelected(entries.find((row) => row.path === path) ?? null)
+          // Creating exists to produce content, and an empty document is
+          // worth nothing until it is open — so the create ends where the
+          // next thing happens, as every other creation path in the app
+          // already did.
+          //
+          // Only affordable because the open folder is in the address now:
+          // the way back returns to the folder this was made in, rather than
+          // to the workspace root. The selection above still lands, so a
+          // host that offers no way to open leaves someone looking at the
+          // new document rather than at nothing.
+          onOpenDocumentRef.current?.(path)
+        } catch {
+          // Swallowed as a REJECTION, reported as its own message. The
+          // document exists; letting this propagate would hold the dialog
+          // open on a form whose only offer is to make it again.
+          setRefreshError(path)
+        }
       } finally {
         setCreating(false)
       }
@@ -570,6 +601,7 @@ export function WorkspaceFilesPanel({
           defaultPath={derivedNewPath}
           createError={createError?.reason ?? null}
           onCreate={createHere}
+          onDismiss={() => setCreateError(null)}
         />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
@@ -607,6 +639,12 @@ export function WorkspaceFilesPanel({
       {createError !== null && (
         <p role="alert" className="text-destructive text-sm">
           Could not create a {createError.kind} document here.
+        </p>
+      )}
+
+      {refreshError !== null && (
+        <p role="alert" className="text-destructive text-sm">
+          Created “{refreshError}”, but this list could not be refreshed. Reload to see it.
         </p>
       )}
 

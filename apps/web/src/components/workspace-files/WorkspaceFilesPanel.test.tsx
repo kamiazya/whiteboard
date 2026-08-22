@@ -237,3 +237,99 @@ describe('WorkspaceFilesPanel — a refused create is correctable', () => {
     expect((screen.getByLabelText(/^Path/) as HTMLInputElement).value).toBe('notes/weekly')
   })
 })
+
+describe('WorkspaceFilesPanel — a create that succeeded is not a refusal', () => {
+  // Everything after the write is bookkeeping. Reporting a failed refresh or
+  // a failed navigation as "could not create" invites a retry that collides
+  // with the document that WAS created — and, from the dialog, does it while
+  // the form is still open holding the path that now exists.
+  it('does not call a completed create refused when the list refresh fails', async () => {
+    let listed = 0
+    const source = fakeFilesSource({
+      listDocuments: () => {
+        listed += 1
+        return listed === 1
+          ? Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }])
+          : Promise.reject(new Error('list unavailable'))
+      },
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(source.createDocument).toHaveBeenCalled())
+    // The document exists, so the form that would re-create it must be gone.
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByText(/Could not create/)).toBeNull()
+  })
+
+  // Two alerts are in the DOM while the dialog is open, but only ONE is in
+  // the accessibility tree: Radix marks the page behind a modal
+  // `aria-hidden`, so nothing announces the panel's generic line twice.
+  // Measured — DOM 2, `getAllByRole('alert')` 1 — because the raw-DOM count
+  // reads as a duplicate-announcement bug and is not one. Pinned so a later
+  // non-modal dialog cannot turn it into one silently.
+  it('announces a refused dialog create exactly once', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('"seed" already exists'))),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
+
+    // Settle on the dialog's own line FIRST, then count. Counting inside the
+    // wait passes on the poll that lands between the two renders — which is
+    // exactly how the earlier version of this test went green against two
+    // alerts.
+    await screen.findByText(/already exists/)
+    expect(screen.getAllByRole('alert')).toHaveLength(1)
+  })
+
+  // The real residue of the two alerts: dismissing the form leaves the
+  // panel's generic line behind, describing a submission the person just
+  // abandoned. Nothing on screen then connects it to anything.
+  it('drops the failure when the form it belonged to is dismissed', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('"seed" already exists'))),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create' }))
+    await screen.findByText(/already exists/)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+    expect(screen.queryByText(/Could not create/)).toBeNull()
+  })
+
+  // The plain entries have no dialog to carry the reason, so the panel's own
+  // line is the only place it can appear.
+  it('still announces a refused plain-entry create in the panel', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('refused'))),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    expect((await screen.findByRole('alert')).textContent).toMatch(/Could not create/)
+  })
+})

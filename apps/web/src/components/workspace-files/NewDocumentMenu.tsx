@@ -37,6 +37,7 @@ export function NewDocumentMenu({
   disabled,
   defaultPath,
   createError,
+  onDismiss,
 }: {
   /**
    * `options` arrives only from the dialog. A plain menu entry sends none,
@@ -63,6 +64,12 @@ export function NewDocumentMenu({
   defaultPath?: string
   /** Shown inside the dialog, which stays open on a refusal. */
   createError?: string | null
+  /**
+   * The dialog was closed without creating anything. The host clears the
+   * failure it was showing — a submission that was abandoned has no business
+   * still being reported once the form carrying it is gone.
+   */
+  onDismiss?: () => void
 }) {
   const [dialogOpen, setDialogOpen] = useState(false)
   return (
@@ -131,7 +138,10 @@ export function NewDocumentMenu({
           defaultPath={defaultPath}
           busy={disabled}
           error={createError}
-          onCancel={() => setDialogOpen(false)}
+          onCancel={() => {
+            setDialogOpen(false)
+            onDismiss?.()
+          }}
           // Closed only once the create SUCCEEDS. A refusal — a path
           // collision, most often — is the one a person can fix, and closing
           // on submit threw away the name and path they had typed and left
