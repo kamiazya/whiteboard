@@ -70,6 +70,46 @@ Both readings had looked like partial capability. Neither was. The honest
 shape is the expected one: no tokenisation scheme crosses a synonym or a
 script boundary.
 
+### 3b. The measured stage-2 column (2026-08-23)
+
+The number the whole instrument existed to produce. Same corpus, same
+queries, same scoring; the only difference is an embedder supplied to
+`wb_document_search`, whose ranking is fused with BM25's by rank.
+
+Model: `Xenova/multilingual-e5-small` through transformers.js, q8 weights,
+384 dimensions, 113MB downloaded once and then offline.
+
+| category | stage 0 hit@1 | stage 0 hit@5 | stage 0 MRR | stage 2 hit@1 | stage 2 hit@5 | stage 2 MRR |
+|---|---|---|---|---|---|---|
+| lexical | 3/3 | 3/3 | 1.00 | 3/3 | 3/3 | 1.00 |
+| bigram | 3/3 | 3/3 | 1.00 | 3/3 | 3/3 | 1.00 |
+| paraphrase | 0/3 | 0/3 | 0.00 | **1/3** | **3/3** | **0.67** |
+| cross-lingual | 0/3 | 0/3 | 0.00 | **1/3** | **3/3** | **0.58** |
+
+Two readings, and the second is the honest one:
+
+- **The debt is retired.** Every paraphrase and cross-lingual query that
+  stage 0 could not answer at all is now answered within the top 5, and
+  nothing that already worked moved. Fusing by rank rather than by score
+  is what bought that: the lexical rows are identical, not merely close.
+- **hit@5 is the weaker column and should not be read as the headline.**
+  With six documents a random ranking scores hit@5 at 5/6. The columns
+  that discriminate are hit@1 and MRR, and there the debt rows land at
+  1/3 and ~0.6 — a real capability, not a solved problem. Growing the
+  corpus is the obvious next improvement to the instrument, and it should
+  happen before anyone tunes fusion against these numbers.
+
+Reproduce with `node --import tsx/esm
+scripts/measure/search-quality-embedding.mjs` from `packages/mcp-server`.
+It is a script rather than a test because it downloads 113MB and `pnpm
+test` stays hermetic. The pinned scoreboard test remains the guard; this
+is the instrument that decides whether there is anything to guard.
+
+Cost, measured rather than estimated: 113MB of weights, ~14s of first-run
+model load, ~1.1s for all 12 queries once warm (documents embed once and
+are cached under the same frontier stamp as their content facts, so an
+unchanged document is never re-embedded).
+
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
@@ -129,7 +169,14 @@ first, hence the low bar above.
 ## Consequences
 
 - Search changes now answer to a scoreboard, so a "better ranking" claim
-  has to show which cell moved.
+  has to show which cell moved. Stage 2 was the first claim put to it, and
+  the table above is the answer: the debt rows moved, the working rows did
+  not.
+- The instrument earned its keep in an unplanned way as well. The
+  measurement's first run named a model id that turned out to be gated,
+  and the stage-2 column came back byte-identical to stage 0 — which is
+  exactly what the degradation path is supposed to do, verified end to end
+  without anyone writing a test for it.
 - What the scoreboard is FOR is narrower than it first looked. It measures
   capability, and capability alone: it can say stage 0 answers none of the
   debt, and it cannot say whether anyone needs that answered. Reading a
@@ -143,7 +190,10 @@ first, hence the low bar above.
   having formed habits around a lexical index's limits.
 - The corpus is small (6 documents, 12 queries) — enough to separate the
   four capabilities, not enough for a ranking-quality claim. Growing it is
-  cheap and should happen when a real query disappoints someone.
+  cheap and should happen when a real query disappoints someone. Stage 2's
+  column sharpens this: at six documents hit@5 is nearly free, so the
+  corpus must grow BEFORE anyone tunes fusion, or the tuning optimises a
+  metric that a coin flip already passes.
 - The pinned numbers will need updating whenever the corpus grows; that is
   the intended cost of an exact pin.
 
