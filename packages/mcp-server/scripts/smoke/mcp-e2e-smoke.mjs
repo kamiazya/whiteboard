@@ -143,6 +143,7 @@ const EXPECTED_TOOLS = [
   'wb_scene_render',
   'canvas_view',
   'wb_facet_set',
+  'wb_facet_list',
   'wb_version_list',
   'wb_version_restore',
   'wb_version_save',
@@ -289,6 +290,26 @@ async function main() {
   if (seedBatch.applied !== 3 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
+
+  // Facet discovery: an agent learns the exact keys and payload contracts
+  // rather than guessing them, which is what the writes below rely on.
+  const registered = await callTool('wb_facet_list', {})
+  const registeredKeys = (registered.facets ?? []).map((facet) => facet.key)
+  for (const expected of ['visual.edges/v0', 'visual.shape/v0', 'visual.symbol/v0']) {
+    if (!registeredKeys.includes(expected)) {
+      throw new Error(`wb_facet_list omitted ${expected}: ${JSON.stringify(registeredKeys)}`)
+    }
+  }
+  const shapeEntry = (registered.facets ?? []).find((facet) => facet.key === 'visual.shape/v0')
+  if (!shapeEntry?.targets?.includes('node') || shapeEntry?.schema?.type !== 'object') {
+    throw new Error(`wb_facet_list entry is not actionable: ${JSON.stringify(shapeEntry)}`)
+  }
+  console.log(`[e2e] wb_facet_list → ${registeredKeys.length} registered facets, with schemas`)
+  const nodeOnly = await callTool('wb_facet_list', { target: 'node' })
+  if ((nodeOnly.facets ?? []).some((facet) => !facet.targets.includes('node'))) {
+    throw new Error(`wb_facet_list(target) leaked a non-node facet: ${JSON.stringify(nodeOnly)}`)
+  }
+  console.log('[e2e] wb_facet_list(target: node) → filtered to node-target facets')
 
   // Node-target facets (ADR-0013): set a silhouette on one node of the
   // spatial document, then delete it with the null tombstone.

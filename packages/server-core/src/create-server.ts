@@ -34,6 +34,7 @@ import { createDocumentSearchTool, documentSearchInputSchema } from './tools/doc
 import { createDocumentSetTool } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
+import { createFacetListTool } from './tools/facet-list.js'
 import { createFacetSetTool } from './tools/facet-set.js'
 import {
   linkifyMentions,
@@ -209,6 +210,7 @@ export function createServer(deps: ServerDeps) {
   })
 
   const tools = {
+    facetList: createFacetListTool(deps),
     facetSet: createFacetSetTool(deps),
     bodyPatch: createBodyPatchTool(deps),
     canvasRenderSvg: createCanvasRenderSvgTool(deps),

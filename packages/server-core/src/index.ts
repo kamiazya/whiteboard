@@ -94,6 +94,11 @@ export {
   exportOkfInputSchema,
   exportOkfOutputSchema,
 } from './tools/export-okf.js'
+export {
+  createFacetListTool,
+  facetListInputSchema,
+  facetListOutputSchema,
+} from './tools/facet-list.js'
 export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'
 export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
 export type { LinkifyMentionsInput, LinkifyMentionsOutput } from './tools/linkify-mentions.js'
