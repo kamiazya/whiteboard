@@ -74,18 +74,73 @@ script boundary.
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
   tokenisation or scoring; never reach for a model to paper over it.
-- Stage 2 is justified when the `paraphrase`/`cross-lingual` debt is both
-  large in this table *and* confirmed to matter in real use. The second
-  half is not optional: the Connections work already showed a feature that
-  looked obviously valuable on paper (a link graph) sitting unused because
-  nothing rewarded it, and only measuring the real workspace revealed it.
-- If the debt turns out not to matter in practice, **stage 0 is the whole
-  feature** and the 120MB is never paid.
+- The debt columns say what stage 0 **cannot** do. They do not say how
+  often anyone needs it, and no amount of watching current usage will:
+  see the correction below.
+- Stage 2 is judged on **the user value it delivers against the cost of
+  delivering it** — argued forward from what the capability is worth to a
+  reader (human or agent), not inferred backward from behaviour under a
+  product that lacks it.
+- Those are two separable decisions, and conflating them is what the first
+  draft of this rule got wrong:
+  - **Building it behind a flag** costs developer time and one local model
+    download. The bar is low, because the strongest evidence available —
+    running both retrievals over the same real queries and comparing — can
+    only be produced by building it.
+  - **Shipping it on by default** makes every user pay ~120MB, again per
+    origin. The bar is high, and the research already named the resolution:
+    stage 2 ships **opt-in**, so the cost lands only on whoever wants the
+    capability. Opt-in dissolves most of what a demand gate was protecting.
+
+#### The correction this rule needed
+
+The first draft required the debt to be *"confirmed to matter in real
+use"*, and cited the Connections work — a link graph the dev workspace had
+almost no data for (24 documents, 1 cross-document reference) — as proof
+that a feature can look valuable on paper and sit unused.
+
+That citation was wrong twice over, and the second error is the one that
+matters here.
+
+**It stated a cause the observation could not establish.** Four
+explanations produce the same empty graph: nothing rewarded links; the
+authoring affordance was weak (`[[` completion did not exist yet); the
+data was a development environment; and the content was mostly
+agent-generated tickets, which have no reason to cross-reference. The
+research report said as much in its own limits note — *"n=24, mostly
+agent-generated tickets; not evidence about human behaviour"* — and the
+caveat was lost when the finding became a precedent here. A weak
+observation got promoted to a strong prior by being quoted.
+
+**And the rule it justified was circular.** Absence of a capability
+suppresses the behaviour that would demonstrate demand for it. Someone who
+learns that rephrasing a query never finds anything stops rephrasing
+queries; "nobody searches that way" is then guaranteed, whatever they
+would have wanted. Requiring behavioural proof before building is a
+standard that no genuinely new capability can ever meet — and refusing to
+build on that basis is not caution, it is a loss taken silently.
+
+Evidence that is NOT suppressed by the feature's absence, and is therefore
+worth gathering: queries that returned nothing useful (a failed attempt
+leaves a trace even when the habit later dies), and side-by-side results
+for the same query with and without the model — which requires building it
+first, hence the low bar above.
 
 ## Consequences
 
 - Search changes now answer to a scoreboard, so a "better ranking" claim
   has to show which cell moved.
+- What the scoreboard is FOR is narrower than it first looked. It measures
+  capability, and capability alone: it can say stage 0 answers none of the
+  debt, and it cannot say whether anyone needs that answered. Reading a
+  capability table as a demand signal is the mistake decision 4 corrects.
+- The forward case for stage 2 in THIS product is worth stating, since it
+  is what a value judgement weighs rather than something usage data could
+  supply: the documentation is written in English by project policy while
+  its author works in Japanese, so a cross-lingual query is a structural
+  fact of the content, not a hypothetical; and the MCP tools make an agent
+  a first-class reader, which reaches for semantic recall without ever
+  having formed habits around a lexical index's limits.
 - The corpus is small (6 documents, 12 queries) — enough to separate the
   four capabilities, not enough for a ranking-quality claim. Growing it is
   cheap and should happen when a real query disappoints someone.
@@ -94,9 +149,14 @@ script boundary.
 
 ## Alternatives considered
 
-- **Ship stage 2 and compare informally.** Rejected: this is the
-  argument-instead-of-numbers path, and it also spends the 120MB before
-  learning whether it buys anything.
+- **Ship stage 2 and compare informally.** Rejected as a way to decide the
+  DEFAULT — that is the argument-instead-of-numbers path. Not rejected as a
+  way to decide at all: building it behind a flag and comparing real
+  queries side by side is the strongest evidence available, and costs one
+  local download rather than every user's.
+- **Require behavioural proof of demand before building.** Rejected —
+  see decision 4's correction. The absence of the capability suppresses the
+  behaviour, so the standard is unmeetable by construction.
 - **Measure with an off-the-shelf IR benchmark.** Rejected: none of them
   contain canvases with labelled edges, or the JA/EN mix this product's
   own documents have. The corpus has to look like the content.
