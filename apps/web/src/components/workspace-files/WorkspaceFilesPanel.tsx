@@ -134,7 +134,17 @@ export function WorkspaceFilesPanel({
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
   const [columns, setColumns] = useState<BrowserColumns>(readStoredColumns)
-  const [createError, setCreateError] = useState<string | null>(null)
+  /**
+   * A refused create, as the kind that was asked for and the reason given.
+   *
+   * The reason is the source's own words — the same treatment a refused MOVE
+   * already gets, and for the same purpose: only the server knows which path
+   * actually collided, and a person cannot correct an address the message
+   * will not name.
+   */
+  const [createError, setCreateError] = useState<{ kind: DocumentKind; reason: string } | null>(
+    null,
+  )
   // The `disabled` attribute is the whole double-press mechanism: React
   // flushes this state before a second click can dispatch, while a
   // handler-side early return would read a stale closure in exactly the
@@ -317,6 +327,15 @@ export function WorkspaceFilesPanel({
         // that offers no way to open leaves someone looking at the new
         // document rather than at nothing.
         onOpenDocumentRef.current?.(path)
+      } catch (err) {
+        setCreateError({
+          kind,
+          reason: err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
+        })
+        // Re-thrown so the caller can tell a refusal from a success — the
+        // dialog stays open on one and closes on the other, and swallowing it
+        // here would close it either way.
+        throw err
       } finally {
         setCreating(false)
       }
@@ -523,9 +542,8 @@ export function WorkspaceFilesPanel({
         <NewDocumentMenu
           disabled={creating}
           defaultPath={derivedNewPath}
-          onCreate={(kind, options) =>
-            void createHere(kind, options).catch(() => setCreateError(kind))
-          }
+          createError={createError?.reason ?? null}
+          onCreate={createHere}
         />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
@@ -562,7 +580,7 @@ export function WorkspaceFilesPanel({
 
       {createError !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {createError} document here.
+          Could not create a {createError.kind} document here.
         </p>
       )}
 

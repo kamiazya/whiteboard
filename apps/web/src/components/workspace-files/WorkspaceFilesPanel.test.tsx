@@ -210,3 +210,30 @@ describe('WorkspaceFilesPanel — creating opens what it made', () => {
     await waitFor(() => expect(source.createDocument).toHaveBeenCalled())
   })
 })
+
+describe('WorkspaceFilesPanel — a refused create is correctable', () => {
+  // The panel already surfaces the server's own words for a failed MOVE, and
+  // a create fails for the same reason a move does — the path is taken. The
+  // dialog stays open holding what was typed, so the address can be fixed
+  // where it was entered rather than re-typed from scratch.
+  it('reports the source’s reason inside the dialog and leaves it open', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => Promise.reject(new Error('"notes/weekly" already exists'))),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    fireEvent.change(await screen.findByLabelText(/^Path/), { target: { value: 'notes/weekly' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('already exists')
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+    // What was typed survives, which is the whole point of staying open.
+    expect((screen.getByLabelText(/^Path/) as HTMLInputElement).value).toBe('notes/weekly')
+  })
+})

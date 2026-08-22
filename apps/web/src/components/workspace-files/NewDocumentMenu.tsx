@@ -43,7 +43,10 @@ export function NewDocumentMenu({
    * routes to a document differ in what the person said, not in what the
    * host does with their silence.
    */
-  onCreate: (kind: DocumentKind, options?: { path: string; name: string | undefined }) => void
+  onCreate: (
+    kind: DocumentKind,
+    options?: { path: string; name: string | undefined },
+  ) => void | Promise<void>
   /**
    * A create is in flight. Disables the ITEMS rather than the trigger:
    * with a menu in the way the second press lands on an item, and a menu
@@ -93,7 +96,11 @@ export function NewDocumentMenu({
             key={kind}
             data-testid={`new-document-${kind}`}
             disabled={disabled}
-            onSelect={() => onCreate(kind)}
+            // Voided through a catch, not bare: the host now REJECTS on a
+            // refusal so the dialog can stay open, and these entries share
+            // that host. An unhandled rejection fails a whole test file, and
+            // the host is already reporting the failure its own way.
+            onSelect={() => void Promise.resolve(onCreate(kind)).catch(() => {})}
             className="gap-2"
           >
             <Icon aria-hidden="true" className="size-4" />
@@ -124,9 +131,19 @@ export function NewDocumentMenu({
           busy={disabled}
           error={createError}
           onCancel={() => setDialogOpen(false)}
+          // Closed only once the create SUCCEEDS. A refusal — a path
+          // collision, most often — is the one a person can fix, and closing
+          // on submit threw away the name and path they had typed and left
+          // the reason behind a dialog that no longer existed. A host that
+          // answers synchronously still closes immediately.
           onSubmit={(kind, options) => {
-            setDialogOpen(false)
-            onCreate(kind, options)
+            void Promise.resolve(onCreate(kind, options)).then(
+              () => setDialogOpen(false),
+              () => {
+                // Left open on purpose; the host reports why through
+                // `createError`.
+              },
+            )
           }}
         />
       )}

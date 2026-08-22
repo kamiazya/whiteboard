@@ -1265,17 +1265,17 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     // Present and silent BEFORE anything happens: a polite region that
     // arrives carrying its first message is announced unreliably.
-    const region = screen.getByRole('status', { name: 'New canvas status' })
+    const region = screen.getByRole('status', { name: 'New document status' })
     expect(region.textContent).toBe('')
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
     fireEvent.pointerUp(await screen.findByTestId('new-document-spatial-menu-item'))
 
-    await waitFor(() => expect(region.textContent).toBe('Creating canvas…'))
+    await waitFor(() => expect(region.textContent).toBe('Creating document…'))
     // The SAME element, not a replacement — this is what makes the update an
     // announcement rather than an insertion.
-    expect(screen.getByRole('status', { name: 'New canvas status' })).toBe(region)
+    expect(screen.getByRole('status', { name: 'New document status' })).toBe(region)
 
     resolveCreate()
     await waitFor(() => expect(region.textContent).toBe(''))

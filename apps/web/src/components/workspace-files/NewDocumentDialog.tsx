@@ -50,6 +50,9 @@ export function NewDocumentDialog({
   const [kind, setKind] = useState<DocumentKind>('spatial')
   const [name, setName] = useState('')
   const [path, setPath] = useState(defaultPath)
+  // The form's own refusal, kept apart from the host's `error` so a stale
+  // server message cannot outlive the field that has since been corrected.
+  const [pathIssue, setPathIssue] = useState<string | null>(null)
 
   // Re-prime on each opening: a cancelled edit must not leak into the next
   // one, and `defaultPath` moves as documents are created around it.
@@ -58,7 +61,11 @@ export function NewDocumentDialog({
     setKind('spatial')
     setName('')
     setPath(defaultPath)
+    setPathIssue(null)
   }, [open, defaultPath])
+
+  const shownError =
+    pathIssue ?? (error !== null && error !== undefined && error !== '' ? error : null)
 
   return (
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
@@ -67,7 +74,14 @@ export function NewDocumentDialog({
           onSubmit={(event) => {
             event.preventDefault()
             const trimmedPath = path.trim()
-            if (trimmedPath === '') return
+            if (trimmedPath === '') {
+              // Returning in silence made Create look like a dead button: the
+              // one field with no default a person could fall back on is the
+              // one that has to say why it was refused.
+              setPathIssue('A path is required — it is where the document lives.')
+              return
+            }
+            setPathIssue(null)
             const trimmedName = name.trim()
             onSubmit(kind, {
               path: trimmedPath,
@@ -126,7 +140,10 @@ export function NewDocumentDialog({
               <input
                 type="text"
                 value={path}
-                onChange={(event) => setPath(event.target.value)}
+                onChange={(event) => {
+                  setPath(event.target.value)
+                  setPathIssue(null)
+                }}
                 className="rounded-md border bg-background px-2 py-1.5 font-mono text-sm"
               />
               <span className="text-muted-foreground text-xs">
@@ -134,9 +151,12 @@ export function NewDocumentDialog({
                 design.
               </span>
             </label>
-            {error != null && error !== '' && (
+            {/* The form's own refusal wins: it names the field the person is
+                looking at, while `error` describes a submission that has
+                already been superseded by whatever they typed next. */}
+            {shownError !== null && (
               <p role="alert" className="text-destructive text-sm">
-                {error}
+                {shownError}
               </p>
             )}
           </div>

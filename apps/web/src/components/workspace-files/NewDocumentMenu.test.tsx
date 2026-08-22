@@ -1,4 +1,4 @@
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 
@@ -112,5 +112,56 @@ describe('NewDocumentMenu — name and location', () => {
     open()
     await screen.findByTestId('new-document-spatial')
     expect(screen.queryByTestId('new-document-specify')).toBeNull()
+  })
+})
+
+describe('NewDocumentMenu — the dialog survives a refusal', () => {
+  async function openDialogWith(onCreate: (...args: never[]) => unknown, error?: string) {
+    render(
+      <NewDocumentMenu
+        onCreate={onCreate as never}
+        defaultPath="untitled"
+        createError={error ?? null}
+      />,
+    )
+    fireEvent.pointerDown(screen.getByRole('button', { name: /new document/i }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-specify'))
+    return screen.findByRole('dialog')
+  }
+
+  // A path collision is the likeliest refusal, and it is exactly the one the
+  // person can fix — but only if the form they typed into is still there.
+  // Closing on submit threw the typed name and path away and left the reason
+  // behind a dialog that no longer existed.
+  it('stays open when the create is refused, with the reason in it', async () => {
+    const onCreate = vi.fn(() => Promise.reject(new Error('already exists')))
+    await openDialogWith(onCreate)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(onCreate).toHaveBeenCalled())
+    expect(screen.queryByRole('dialog')).not.toBeNull()
+  })
+
+  it('closes once the create succeeds', async () => {
+    const onCreate = vi.fn(() => Promise.resolve())
+    await openDialogWith(onCreate)
+
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull())
+  })
+
+  // Submitting an empty Path returned with no output at all: Create looked
+  // like a dead button. A field the form refuses has to say so.
+  it('says why an empty path is refused instead of doing nothing', async () => {
+    const onCreate = vi.fn()
+    await openDialogWith(onCreate)
+
+    fireEvent.change(screen.getByLabelText(/^Path/), { target: { value: '   ' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Create' }))
+
+    expect(onCreate).not.toHaveBeenCalled()
+    expect((await screen.findByRole('alert')).textContent).toMatch(/path/i)
   })
 })

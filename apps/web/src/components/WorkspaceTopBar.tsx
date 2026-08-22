@@ -325,10 +325,10 @@ export default function WorkspaceTopBar({
         <span
           aria-live="polite"
           role="status"
-          aria-label="New canvas status"
+          aria-label="New document status"
           className={newDocumentBusy ? 'text-xs text-muted-foreground' : 'sr-only'}
         >
-          {newDocumentBusy ? 'Creating canvas…' : ''}
+          {newDocumentBusy ? 'Creating document…' : ''}
         </span>
         {newDocumentError && (
           <span className="truncate text-xs text-destructive" role="alert">
