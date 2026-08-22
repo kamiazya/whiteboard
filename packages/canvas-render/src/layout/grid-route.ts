@@ -78,8 +78,6 @@ function borderOverlap(a: Point, b: Point, rect: Rect): number {
   return 0
 }
 
-const uniqueSorted = (values: readonly number[]) => [...new Set(values)].sort((a, b) => a - b)
-
 /**
  * The cheapest rectilinear path from `start` to `end` whose interior avoids
  * every rect in `obstacles`, or undefined when there is none (or the grid is
@@ -92,17 +90,21 @@ export function routeOnGrid(
   obstacles: readonly Rect[],
   clearance: number,
 ): Point[] | undefined {
-  const xs = uniqueSorted([
-    start.x,
-    end.x,
-    ...obstacles.flatMap((r) => [r.x - clearance, r.x + r.w + clearance]),
-  ])
-  const ys = uniqueSorted([
-    start.y,
-    end.y,
-    ...obstacles.flatMap((r) => [r.y - clearance, r.y + r.h + clearance]),
-  ])
-  if (xs.length * ys.length > MAX_GRID_CELLS) return undefined
+  // Distinct coordinates first, sorting only once the grid is known to fit:
+  // on a canvas past the cap every call used to build and sort both axes
+  // just to abandon them (measured: every one of 705 calls on a 345-edge
+  // canvas, a quarter of its routing time).
+  const xSet = new Set<number>([start.x, end.x])
+  const ySet = new Set<number>([start.y, end.y])
+  for (const r of obstacles) {
+    xSet.add(r.x - clearance)
+    xSet.add(r.x + r.w + clearance)
+    ySet.add(r.y - clearance)
+    ySet.add(r.y + r.h + clearance)
+  }
+  if (xSet.size * ySet.size > MAX_GRID_CELLS) return undefined
+  const xs = [...xSet].sort((a, b) => a - b)
+  const ys = [...ySet].sort((a, b) => a - b)
 
   const si = xs.indexOf(start.x)
   const sj = ys.indexOf(start.y)

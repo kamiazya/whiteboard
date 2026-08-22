@@ -662,6 +662,9 @@ function optimizeSideChoices(
   pins?: ReadonlyMap<string, EdgeAnchorOverride>,
 ): ReadonlyMap<string, SidePair> {
   const byId = new Map(nodes.map((n) => [n.id, n]))
+  const othersFor = edges.map((e) =>
+    nodes.filter((n) => n.id !== e.fromNode && n.id !== e.toNode).map(rectOf),
+  )
   const sameAnchor = (a: EdgeAnchorPair | undefined, b: EdgeAnchorPair | undefined): boolean =>
     a?.from?.x === b?.from?.x &&
     a?.from?.y === b?.from?.y &&
@@ -689,11 +692,15 @@ function optimizeSideChoices(
   const routeCache = new Map<string, readonly Point[]>()
   const anchorKey = (edge: CanvasEdge, a: EdgeAnchorPair | undefined) =>
     `${edge.id}|${a?.fromSide}|${a?.toSide}|${a?.from?.x},${a?.from?.y}|${a?.to?.x},${a?.to?.y}|${a?.fromLaneDepth}|${a?.toLaneDepth}`
-  const routeCached = (edge: CanvasEdge, a: EdgeAnchorPair | undefined): readonly Point[] => {
+  const routeCached = (
+    edge: CanvasEdge,
+    i: number,
+    a: EdgeAnchorPair | undefined,
+  ): readonly Point[] => {
     const key = anchorKey(edge, a)
     const hit = routeCache.get(key)
     if (hit !== undefined) return hit
-    const path = routeEdge(nodes, edge, style, a).path
+    const path = routeEdge(nodes, edge, style, a, othersFor[i]).path
     routeCache.set(key, path)
     return path
   }
@@ -729,7 +736,7 @@ function optimizeSideChoices(
 
   let current = new Map(initial)
   let anchors = computeAnchorsFor(nodes, edges, current, align, pins)
-  let paths: (readonly Point[])[] = edges.map((e) => routeCached(e, anchors.get(e.id)))
+  let paths: (readonly Point[])[] = edges.map((e, i) => routeCached(e, i, anchors.get(e.id)))
   let bounds: Rect[] = paths.map(boundsOf)
   const pairKey = (i: number, j: number) => i * edges.length + j
   const matrix = new Map<number, ConfigCost>()
@@ -739,14 +746,11 @@ function optimizeSideChoices(
   // always excluded them; the SEARCH did not, so it priced ink the router
   // could not avoid and could be talked into a detour to "save" it — the
   // same predicate `deriveDefaultSides`'s occlusion filter already uses.
-  const foreignBodiesFor = edges.map((e) => {
+  const foreignBodiesFor = edges.map((e, i) => {
     const endpoints = [byId.get(e.fromNode), byId.get(e.toNode)]
       .filter((n): n is SpatialNode => n !== undefined)
       .map(rectOf)
-    return nodes
-      .filter((n) => n.id !== e.fromNode && n.id !== e.toNode)
-      .map(rectOf)
-      .filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
+    return othersFor[i]!.filter((r) => !endpoints.some((endpoint) => fullyContains(r, endpoint)))
   })
   // Every node's border, INCLUDING an edge's own endpoints — border-tracing
   // prices ink on a node's own outline, unlike foreignBodiesFor's tunnel
@@ -799,7 +803,7 @@ function optimizeSideChoices(
     const trialPaths = paths.slice()
     const trialBounds = bounds.slice()
     for (const i of touched) {
-      trialPaths[i] = routeCached(edges[i]!, trialAnchors.get(edges[i]!.id))
+      trialPaths[i] = routeCached(edges[i]!, i, trialAnchors.get(edges[i]!.id))
       trialBounds[i] = boundsOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
@@ -1730,6 +1734,10 @@ export function routeEdge(
   // Endpoint override from `assignEdgeAnchors`'s fan-out pass; an absent
   // field keeps the side midpoint, so single callers stay unchanged.
   anchors?: EdgeAnchorPair,
+  // Every node's rect except the two endpoints', when the caller already
+  // has them: the side-choice search routes each edge many times per
+  // layout and this is the one O(nodes) list it can hand over intact.
+  others?: readonly Rect[],
 ): ResolvedEdgeNode {
   const fromNode = nodes.find((n) => n.id === edge.fromNode)
   const toNode = nodes.find((n) => n.id === edge.toNode)
@@ -1797,10 +1805,9 @@ export function routeEdge(
   // anchor is boxed inside a neighbour's margin band, `bestCandidate`'s
   // second tier accepts a band crossing to escape rather than tunnelling
   // through the node itself.
-  const rawObstacles = nodes
-    .filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode)
-    .map(rectOf)
-    .filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
+  const rawObstacles = (
+    others ?? nodes.filter((n) => n.id !== edge.fromNode && n.id !== edge.toNode).map(rectOf)
+  ).filter((rect) => !containsPoint(rect, start) && !containsPoint(rect, end))
   const obstacles = rawObstacles.map((rect) => ({
     x: rect.x - ROUTE_MARGIN_PX,
     y: rect.y - ROUTE_MARGIN_PX,
