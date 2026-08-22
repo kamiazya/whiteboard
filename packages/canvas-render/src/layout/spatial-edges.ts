@@ -2,6 +2,7 @@ import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteb
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
+  accumulateCost,
   addCost,
   bendCount,
   COST_QUANTUM,
@@ -807,7 +808,8 @@ function optimizeSideChoices(
       trialBounds[i] = boundsOf(trialPaths[i]!)
     }
     const touchedSet = new Set(touched)
-    let cost = currentCost
+    // Summed in place into a scratch copy: every term below is added exactly once.
+    const cost = currentCost.slice()
     const updates = new Map<number, ConfigCost>()
     const selfUpdates = new Map<number, ConfigCost>()
     for (const i of touched) {
@@ -817,8 +819,8 @@ function optimizeSideChoices(
         nodeBorders,
         endpointRectsFor[i],
       )
-      cost = addCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
-      cost = addCost(cost, next, 1)
+      accumulateCost(cost, selfCosts[i] ?? zeroPenalty(), -1)
+      accumulateCost(cost, next, 1)
       selfUpdates.set(i, next)
     }
     for (const i of touched) {
@@ -837,14 +839,14 @@ function optimizeSideChoices(
           // tuples to arrive at the same answer.
           const prior = matrix.get(key)
           if (prior !== undefined) {
-            cost = addCost(cost, prior, -1)
+            accumulateCost(cost, prior, -1)
             updates.set(key, zeroPenalty())
           }
           continue
         }
         const next = pairScore(trialPaths[lo]!, trialPaths[hi]!)
-        cost = addCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
-        cost = addCost(cost, next, 1)
+        accumulateCost(cost, matrix.get(key) ?? zeroPenalty(), -1)
+        accumulateCost(cost, next, 1)
         updates.set(key, next)
       }
     }
