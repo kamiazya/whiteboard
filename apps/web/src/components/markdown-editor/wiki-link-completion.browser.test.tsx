@@ -130,6 +130,87 @@ describe('wiki link completion (real browser)', () => {
     })
   })
 
+  it('a real touch tap on an option commits it — no synthesized mouse events required', async () => {
+    // The phone report: an option looks selected but nothing commits.
+    // Upstream accepts on the synthesized mousedown and closes on the
+    // contenteditable blur + 10ms — an ordering a touch can lose, and one a
+    // synthetic TouchEvent (which synthesizes no mouse events at all)
+    // reproduces deterministically.
+    let value = ''
+    const { getByTestId } = render(
+      <MarkdownEditor
+        initialViewMode="write"
+        value=""
+        onChange={(next) => {
+          value = next
+        }}
+        linkTargets={TARGETS}
+      />,
+    )
+    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
+    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
+    ;(editable as HTMLElement).focus()
+    await vi.waitFor(() => {
+      expect(document.activeElement).toBe(editable)
+    })
+    await userEvent.keyboard('see [[[[Ret')
+    const option = await vi.waitFor(() => {
+      const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
+        li.textContent?.includes('Retro notes'),
+      )
+      expect(el).toBeDefined()
+      return el as HTMLElement
+    })
+    const rect = option.getBoundingClientRect()
+    const touch = (type: string, y: number) =>
+      option.dispatchEvent(
+        new TouchEvent(type, {
+          bubbles: true,
+          cancelable: true,
+          changedTouches: [
+            new Touch({ identifier: 1, target: option, clientX: rect.x + 4, clientY: y }),
+          ],
+        }),
+      )
+    touch('touchstart', rect.y + 4)
+    touch('touchend', rect.y + 4)
+    await vi.waitFor(() => {
+      expect(value).toBe('see [[Retro notes]]')
+    })
+
+    // And a scroll gesture over the list must NOT commit: same events, but
+    // the finger travelled.
+    await userEvent.keyboard(' and [[[[Rel')
+    const second = await vi.waitFor(() => {
+      const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
+        li.textContent?.includes('Release plan'),
+      )
+      expect(el).toBeDefined()
+      return el as HTMLElement
+    })
+    const r2 = second.getBoundingClientRect()
+    second.dispatchEvent(
+      new TouchEvent('touchstart', {
+        bubbles: true,
+        cancelable: true,
+        changedTouches: [
+          new Touch({ identifier: 2, target: second, clientX: r2.x + 4, clientY: r2.y + 4 }),
+        ],
+      }),
+    )
+    second.dispatchEvent(
+      new TouchEvent('touchend', {
+        bubbles: true,
+        cancelable: true,
+        changedTouches: [
+          new Touch({ identifier: 2, target: second, clientX: r2.x + 4, clientY: r2.y + 60 }),
+        ],
+      }),
+    )
+    await new Promise((resolve) => setTimeout(resolve, 200))
+    expect(value).toBe('see [[Retro notes]] and [[Rel')
+  })
+
   it('plain prose never opens the popup', async () => {
     const { getByTestId } = render(
       <MarkdownEditor initialViewMode="write" value="" onChange={() => {}} linkTargets={TARGETS} />,
