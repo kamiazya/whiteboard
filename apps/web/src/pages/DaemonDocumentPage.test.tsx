@@ -100,7 +100,7 @@ function makeCreateBackend() {
 async function openDocumentSwitcher() {
   const switcher = screen.getByRole('button', { name: /^Workspace:/i })
   fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-  await screen.findByTestId('new-document-menu-item')
+  await screen.findByTestId('new-document-spatial-menu-item')
 }
 
 async function selectCanvasFromSwitcher(label: string) {

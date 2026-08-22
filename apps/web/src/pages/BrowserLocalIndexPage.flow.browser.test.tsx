@@ -72,7 +72,8 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
 
     // The panel creates a markdown note in place; opening it is a second,
     // explicit step through the preview pane.
-    await userEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await userEvent.click(screen.getByRole('button', { name: 'New document' }))
+    await userEvent.click(await screen.findByTestId('new-document-markdown'))
     const noteTitle = await waitFor(
       () => {
         const titles = screen.getAllByTestId('card-title')

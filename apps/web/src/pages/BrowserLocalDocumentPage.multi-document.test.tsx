@@ -141,7 +141,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
     // Create canvas B and switch to it, via WorkspaceTopBar's switcher dropdown.
     const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
+    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
     await act(async () => {
       fireEvent.pointerUp(newItem)
     })
@@ -252,7 +252,7 @@ describe('BrowserLocalDocumentPage multi-canvas UI (real IndexedDB)', () => {
 
     const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
+    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
     await act(async () => {
       fireEvent.pointerUp(newItem)
     })

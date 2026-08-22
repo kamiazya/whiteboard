@@ -1,4 +1,5 @@
 import { apiErrorReason } from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { MutableRefObject } from 'react'
 import { useRef, useState } from 'react'
 import { deriveNewDocumentPath } from '../../lib/derive-new-document-path.js'
@@ -9,7 +10,7 @@ interface UseCreateDocumentOptions {
   path: string
   documents: DocumentInfo[]
   isLocalMode: boolean
-  onCreateDocument: (() => void | Promise<void>) | undefined
+  onCreateDocument: ((kind: DocumentKind) => void | Promise<void>) | undefined
   onNavigateToDocument: (path: string) => void
   daemonFetch: typeof globalThis.fetch
   // Shared with rename/copy — a single mountedRef guards every async write in
@@ -18,8 +19,10 @@ interface UseCreateDocumentOptions {
   mountedRef: MutableRefObject<boolean>
 }
 
-// New canvas flow, both modes: create IMMEDIATELY, name afterwards (ADR-0006
+// New document flow, both modes: create IMMEDIATELY, name afterwards (ADR-0006
 // point 3 — a name field before the object exists is the shape this replaced).
+// The KIND is the exception, and travels with the request: nothing writes it a
+// second time, so it cannot be corrected after the fact the way a name can.
 // Local mode hands off to onCreateDocument; daemon mode derives a path from the
 // loaded list — inside the current group, so creating from "design/foo" yields
 // "design/untitled", preserving the grouping the old dialog seeded — and POSTs
@@ -46,7 +49,7 @@ export function useCreateDocument({
   const busyRef = useRef(false)
   const [newDocumentBusy, setNewCanvasBusy] = useState(false)
 
-  const openNewDocument = () => {
+  const openNewDocument = (kind: DocumentKind) => {
     if (busyRef.current) return
     busyRef.current = true
     setNewCanvasBusy(true)
@@ -54,7 +57,7 @@ export function useCreateDocument({
     void (async () => {
       try {
         if (isLocalMode) {
-          await onCreateDocument?.()
+          await onCreateDocument?.(kind)
           return
         }
         const ix = path.indexOf('/')
@@ -68,7 +71,7 @@ export function useCreateDocument({
           {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ path: target }),
+            body: JSON.stringify({ path: target, kind }),
           },
         )
         if (res.ok) {
@@ -80,9 +83,9 @@ export function useCreateDocument({
         // else. Never expose bare body.message or Error.message — those can
         // contain server-side paths or credentials (P-HTTP-005).
         const reason = apiErrorReason(await res.json().catch(() => ({})))
-        if (mountedRef.current) setNewCanvasError(reason ?? 'Failed to create canvas.')
+        if (mountedRef.current) setNewCanvasError(reason ?? 'Failed to create document.')
       } catch {
-        if (mountedRef.current) setNewCanvasError('Failed to create canvas.')
+        if (mountedRef.current) setNewCanvasError('Failed to create document.')
       } finally {
         busyRef.current = false
         if (mountedRef.current) setNewCanvasBusy(false)

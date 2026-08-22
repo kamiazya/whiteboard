@@ -138,7 +138,7 @@ describe('BrowserLocalDocumentPage browser Back/Forward (browser — real Indexe
     // Create canvas B via the switcher's New-canvas control.
     const switcherA = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcherA, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
+    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
     await act(async () => {
       fireEvent.pointerUp(newItem)
     })

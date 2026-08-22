@@ -32,7 +32,11 @@ describe('WorkspaceFilesPanel list states', () => {
 })
 
 describe('WorkspaceFilesPanel create guard', () => {
-  it('two same-tick presses of a create button send one create', async () => {
+  // What stops the second press is the menu closing on select, NOT the
+  // items' `disabled` — verified by removing that prop and watching this
+  // stay green. It is pinned anyway because one gesture producing one
+  // document is the contract; which layer delivers it may change.
+  it('two same-tick selects of one kind send one create', async () => {
     let resolveCreate: (() => void) | undefined
     const source = fakeFilesSource({
       listDocuments: () =>
@@ -47,12 +51,51 @@ describe('WorkspaceFilesPanel create guard', () => {
     render(<WorkspaceFilesPanel source={source} />)
     await screen.findAllByTestId('card-title')
 
-    const button = screen.getByRole('button', { name: 'New markdown document' })
-    fireEvent.click(button)
-    fireEvent.click(button)
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    const item = await screen.findByTestId('new-document-markdown')
+    fireEvent.pointerUp(item)
+    fireEvent.pointerUp(item)
 
     expect(source.createDocument).toHaveBeenCalledTimes(1)
     resolveCreate?.()
-    await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
+    await waitFor(() => expect(source.createDocument).toHaveBeenCalledTimes(1))
+  })
+
+  // The in-flight guard's real job: a create is resolving and the user
+  // reopens the menu. `disabled` is what greys the kinds out there.
+  it('offers no kind while a create is in flight', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+      createDocument: vi.fn(() => new Promise<void>(() => {})),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    const trigger = screen.getByRole('button', { name: 'New document' })
+    fireEvent.pointerDown(trigger, { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-markdown'))
+
+    fireEvent.pointerDown(trigger, { button: 0 })
+    await waitFor(() =>
+      expect(
+        screen.getByTestId('new-document-spatial').getAttribute('data-disabled'),
+      ).not.toBeNull(),
+    )
+  })
+
+  // The choice that fixes an unchangeable `kind` reaches the source intact.
+  it('creates the kind the menu named', async () => {
+    const source = fakeFilesSource({
+      listDocuments: () =>
+        Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+    await screen.findAllByTestId('card-title')
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: 'New document' }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial'))
+
+    await waitFor(() => expect(source.createDocument).toHaveBeenCalledWith('untitled', 'spatial'))
   })
 })

@@ -169,8 +169,8 @@ describe('WorkspaceTopBar browser mode', () => {
     // First activation: immediate POST (no dialog ever appears), derived inside the
     // current group — the 409 title surfaces in the alert line.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-document-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
+    await waitFor(() => screen.getByTestId('new-document-spatial-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-document-spatial-menu-item'))
     await waitFor(() => {
       expect(screen.getByText('Canvas "design/untitled" already exists')).toBeTruthy()
     })
@@ -179,15 +179,16 @@ describe('WorkspaceTopBar browser mode', () => {
       JSON.parse(String(fetchMock.mock.calls.find(([, i]) => i?.method === 'POST')?.[1]?.body)),
     ).toEqual({
       path: 'design/untitled',
+      kind: 'spatial',
     })
 
     // Second activation: 500 without title → generic fallback, internals never shown.
     await waitForMenuClosed()
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await waitFor(() => screen.getByTestId('new-document-menu-item'))
-    fireEvent.pointerUp(screen.getByTestId('new-document-menu-item'))
+    await waitFor(() => screen.getByTestId('new-document-spatial-menu-item'))
+    fireEvent.pointerUp(screen.getByTestId('new-document-spatial-menu-item'))
     await waitFor(() => {
-      expect(screen.getByText('Failed to create canvas.')).toBeTruthy()
+      expect(screen.getByText('Failed to create document.')).toBeTruthy()
     })
     // Sensitive server internals must never be exposed.
     expect(screen.queryByText(/internal/i)).toBeNull()

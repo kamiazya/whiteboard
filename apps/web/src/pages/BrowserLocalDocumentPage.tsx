@@ -835,12 +835,8 @@ export function BrowserLocalDocumentPage({
                 if (id !== null) void switchDocument(id)
               }}
               onRenameDocument={renameDocument}
-              onCreateDocument={async () => {
-                const created = await createDocument()
-                await switchDocument(created.documentId)
-              }}
-              onCreateMarkdownCanvas={async () => {
-                const created = await createDocument(undefined, 'markdown')
+              onCreateDocument={async (kind) => {
+                const created = await createDocument(undefined, kind)
                 await switchDocument(created.documentId)
               }}
               isFullscreen={isFullscreen}

@@ -69,7 +69,7 @@ afterEach(() => {
 async function selectNewCanvasItem(switcherName: RegExp = /^Workspace:/i) {
   const switcher = screen.getByRole('button', { name: switcherName })
   fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-  const item = await screen.findByTestId('new-document-menu-item')
+  const item = await screen.findByTestId('new-document-spatial-menu-item')
   fireEvent.pointerUp(item)
 }
 
@@ -93,13 +93,32 @@ function capturePosts() {
 }
 
 describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
+  // Daemon mode could only ever make a canvas from here: markdown was an
+  // optional callback the browser-local page alone passed, so on a daemon
+  // workspace the switcher quietly implied a canvas was the only kind a
+  // document could be. Getting to markdown meant leaving the editor for the
+  // index.
+  it('offers markdown in daemon mode and POSTs the kind that was picked', async () => {
+    const posts = capturePosts()
+    const onNavigateToDocument = vi.fn()
+    renderBar({ onNavigateToDocument })
+
+    fireEvent.pointerDown(screen.getByRole('button', { name: /^Workspace:/i }), { button: 0 })
+    fireEvent.pointerUp(await screen.findByTestId('new-document-markdown-menu-item'))
+
+    await waitFor(() => expect(onNavigateToDocument).toHaveBeenCalledWith('untitled'))
+    expect(posts[0]?.body).toEqual({ path: 'untitled', kind: 'markdown' })
+  })
+
   it('POSTs a derived path on select and navigates — no dialog', async () => {
     const posts = capturePosts()
     const onNavigateToDocument = vi.fn()
     renderBar({ onNavigateToDocument })
     await selectNewCanvasItem()
     await waitFor(() => expect(onNavigateToDocument).toHaveBeenCalledWith('untitled'))
-    expect(posts).toEqual([expect.objectContaining({ body: { path: 'untitled' } })])
+    expect(posts).toEqual([
+      expect.objectContaining({ body: { path: 'untitled', kind: 'spatial' } }),
+    ])
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
@@ -119,7 +138,7 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
     )
     await selectNewCanvasItem()
     await waitFor(() => expect(onNavigateToDocument).toHaveBeenCalledWith('design/untitled'))
-    expect(posts[0]?.body).toEqual({ path: 'design/untitled' })
+    expect(posts[0]?.body).toEqual({ path: 'design/untitled', kind: 'spatial' })
   })
 
   it('skips paths already in the list: untitled taken -> untitled-2', async () => {
@@ -140,7 +159,7 @@ describe('WorkspaceTopBar — immediate create (ADR-0006)', () => {
     )
     await selectNewCanvasItem()
     await waitFor(() => expect(posts.length).toBe(1))
-    expect(posts[0]?.body).toEqual({ path: 'untitled-2' })
+    expect(posts[0]?.body).toEqual({ path: 'untitled-2', kind: 'spatial' })
   })
 
   it('a failed create surfaces the Problem Details title in an alert — still no dialog', async () => {
@@ -256,7 +275,7 @@ describe('WorkspaceTopBar — canvas switcher overflow (RED-first)', () => {
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
+    await screen.findByTestId('new-document-spatial-menu-item')
 
     expect(document.querySelector('.max-h-\\[300px\\].overflow-y-auto')).toBeTruthy()
   })
@@ -315,7 +334,7 @@ describe('WorkspaceTopBar — new-canvas double activation', () => {
     renderBar()
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
+    const item = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(item)
     fireEvent.pointerUp(item)
     await waitFor(() => expect(postCount).toBe(1))
@@ -991,7 +1010,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     // Open the canvas switcher dropdown.
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
+    await screen.findByTestId('new-document-spatial-menu-item')
 
     expect(apiFetch).not.toHaveBeenCalled()
   })
@@ -1039,7 +1058,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
+    const item = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(item)
 
     await waitFor(() => expect(onCreateDocument).toHaveBeenCalledTimes(1))
@@ -1132,11 +1151,11 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
+    const item = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(item)
 
     await waitFor(() => expect(onCreateDocument).toHaveBeenCalledTimes(1))
-    expect((await screen.findByRole('alert')).textContent).toContain('Failed to create canvas.')
+    expect((await screen.findByRole('alert')).textContent).toContain('Failed to create document.')
     expect(screen.queryByRole('dialog')).toBeNull()
     expect(apiFetch).not.toHaveBeenCalled()
   })
@@ -1203,7 +1222,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item = await screen.findByTestId('new-document-menu-item')
+    const item = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(item)
 
     expect(onCreateDocument).toHaveBeenCalledTimes(1)
@@ -1212,7 +1231,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     // onCreateDocument call resolves — the newDocumentBusy guard must skip this
     // second invocation instead of minting a duplicate canvas.
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const item2 = await screen.findByTestId('new-document-menu-item')
+    const item2 = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(item2)
 
     expect(onCreateDocument).toHaveBeenCalledTimes(1)
@@ -1251,7 +1270,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    fireEvent.pointerUp(await screen.findByTestId('new-document-menu-item'))
+    fireEvent.pointerUp(await screen.findByTestId('new-document-spatial-menu-item'))
 
     await waitFor(() => expect(region.textContent).toBe('Creating canvas…'))
     // The SAME element, not a replacement — this is what makes the update an
@@ -1282,7 +1301,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
 
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
+    await screen.findByTestId('new-document-spatial-menu-item')
 
     expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
     expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
@@ -1339,7 +1358,7 @@ describe('WorkspaceTopBar — workspace picker (RED-first)', () => {
   async function openSwitcher() {
     const switcher = screen.getByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByTestId('new-document-menu-item')
+    await screen.findByTestId('new-document-spatial-menu-item')
   }
 
   it('renders a Workspaces section above the documents section, one menuitemradio per workspace, current checked', async () => {

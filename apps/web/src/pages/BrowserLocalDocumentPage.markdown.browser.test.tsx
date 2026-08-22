@@ -123,7 +123,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.click(switcher)
-    const newMarkdown = await screen.findByTestId('new-markdown-menu-item')
+    const newMarkdown = await screen.findByTestId('new-document-markdown-menu-item')
     await userEvent.click(newMarkdown)
 
     // The markdown editor (real CodeMirror) replaces the spatial editor.
@@ -193,7 +193,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await userEvent.click(await screen.findByTestId('new-document-markdown-menu-item'))
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })
@@ -215,7 +215,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await userEvent.click(await screen.findByTestId('new-document-markdown-menu-item'))
 
     const title = await findMarkdownTitleInput()
     // The markdown arm of the merged row: the title lives INSIDE the
@@ -275,7 +275,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await userEvent.click(await screen.findByTestId('new-document-markdown-menu-item'))
 
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
@@ -331,7 +331,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await userEvent.click(await screen.findByTestId('new-document-markdown-menu-item'))
 
     const title = await findMarkdownTitleInput()
     await userEvent.click(title)
@@ -425,7 +425,7 @@ describe('BrowserLocalDocumentPage markdown 導線 (real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.click(switcher)
-    await userEvent.click(await screen.findByTestId('new-markdown-menu-item'))
+    await userEvent.click(await screen.findByTestId('new-document-markdown-menu-item'))
     await waitFor(() => {
       expect(document.querySelector('[contenteditable="true"]')).not.toBeNull()
     })

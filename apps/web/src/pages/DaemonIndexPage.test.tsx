@@ -10,6 +10,7 @@ import {
 import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
 // The page now reads useNavigate (Settings navigation), so every render
@@ -683,7 +684,7 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await pickNewDocumentKind('spatial')
 
     await waitFor(() => expect(created).toEqual([['ws-a', 'untitled']]))
     // The panel's create keeps you in the browser (select-and-rename flow);
@@ -706,7 +707,7 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
 
     await waitFor(() => expect(created).toEqual([['ws-a', 'untitled', 'markdown']]))
   })
@@ -725,7 +726,7 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('untitled')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await pickNewDocumentKind('spatial')
 
     await waitFor(() => expect(created).toEqual([['ws-a', 'untitled-2']]))
   })
@@ -875,7 +876,7 @@ describe('DaemonIndexPage', () => {
     // canvas — the page leaves the onboarding state and mounts the panel,
     // whose own create button must not repeat the losing path.
     await screen.findByText('untitled')
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await pickNewDocumentKind('spatial')
 
     await waitFor(() => expect(created).toEqual(['untitled', 'untitled-2']))
     // The panel's create stays in the browser; only the onboarding create opens.
@@ -1108,7 +1109,7 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('combobox', { name: 'Workspace' })).toBeNull()
   })
 
-  it('exposes the New canvas control as an icon-only button whose glyph is aria-hidden', async () => {
+  it('names the create control in text and hides its glyph from the accessible name', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
@@ -1117,9 +1118,12 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
-    const button = screen.getByRole('button', { name: 'New canvas' })
-    expect(button.getAttribute('aria-label')).toBe('New canvas')
-    // The only visible content is the aria-hidden glyph — no leaked text name.
+    const button = screen.getByRole('button', { name: 'New document' })
+    expect(button.getAttribute('aria-label')).toBe('New document')
+    // WCAG 2.5.3: the visible label is a substring of the accessible name,
+    // so "click New" reaches this control by voice. The glyph stays out of
+    // the name entirely.
+    expect(button.textContent).toContain('New')
     const svg = button.querySelector('svg')
     expect(svg?.getAttribute('aria-hidden')).toBe('true')
   })

@@ -1,3 +1,4 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { ChevronLeft } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useEffect, useRef, useState } from 'react'
@@ -61,9 +62,7 @@ interface Props {
   // Required in local mode; ignored in daemon mode. Awaited internally with
   // an unmount guard — rejections are not swallowed.
   onRenameDocument?: (name: string) => void | Promise<void>
-  onCreateDocument?: () => void | Promise<void>
-  /** Local mode only for now: creates a markdown-kind canvas and opens it. */
-  onCreateMarkdownCanvas?: () => void | Promise<void>
+  onCreateDocument?: (kind: DocumentKind) => void | Promise<void>
   // Omitted when the host page has no fullscreen affordance of its own.
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
@@ -126,7 +125,6 @@ export default function WorkspaceTopBar({
   dataMode = 'daemon',
   onRenameDocument,
   onCreateDocument,
-  onCreateMarkdownCanvas,
   capabilities,
   branchRefreshSignal,
   onExport,
@@ -269,10 +267,7 @@ export default function WorkspaceTopBar({
           onCanvasSearchChange={setDocumentSearch}
           onNavigateToDocument={onNavigateToDocument}
           onTogglePin={togglePin}
-          onOpenNewCanvas={openNewDocument}
-          onCreateMarkdown={
-            onCreateMarkdownCanvas === undefined ? undefined : () => void onCreateMarkdownCanvas()
-          }
+          onCreateDocument={openNewDocument}
           workspaces={workspaces}
           onSwitchWorkspace={onSwitchWorkspace}
         />

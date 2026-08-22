@@ -1,5 +1,6 @@
 import type { WorkspaceNames } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { ChevronDown, FilePlus2, Pin, Search } from 'lucide-react'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { ChevronDown, Pin, Search } from 'lucide-react'
 import { useMemo, useRef } from 'react'
 import {
   DropdownMenu,
@@ -11,6 +12,7 @@ import {
   DropdownMenuTrigger,
 } from '@/components/ui/dropdown-menu'
 import { Input } from '@/components/ui/input'
+import { DOCUMENT_KIND_CHOICES } from '../workspace-files/document-kind-choice.js'
 import { DocumentItem } from './DocumentItem'
 import {
   derivePinnedCanvases,
@@ -30,8 +32,15 @@ interface DocumentDropdownProps {
   onCanvasSearchChange: (value: string) => void
   onNavigateToDocument: (path: string) => void
   onTogglePin: (path: string, nextPinned: boolean) => void
-  onOpenNewCanvas: () => void /** Renders a second creation entry for markdown-kind documents (local mode). */
-  onCreateMarkdown?: () => void
+  /**
+   * Creates a document of the chosen kind and opens it.
+   *
+   * One callback for every kind, not one per kind: the previous shape made
+   * markdown an optional extra that only the browser-local page passed, so
+   * the daemon switcher silently offered canvas as if it were the only
+   * thing a workspace could hold.
+   */
+  onCreateDocument: (kind: DocumentKind) => void
   // Both present (and >1 entry) render a "Workspaces" section above the
   // documents section. Either omitted keeps every existing caller
   // (BrowserLocalDocumentPage, docs snapshots) byte-identical.
@@ -52,8 +61,7 @@ export function DocumentDropdown({
   onCanvasSearchChange,
   onNavigateToDocument,
   onTogglePin,
-  onOpenNewCanvas,
-  onCreateMarkdown,
+  onCreateDocument,
   workspaces,
   onSwitchWorkspace,
 }: DocumentDropdownProps) {
@@ -249,24 +257,24 @@ export function DocumentDropdown({
           </div>
         </div>
         <div className="sticky bottom-0 z-10 border-t bg-popover">
-          <DropdownMenuItem
-            data-testid="new-document-menu-item"
-            onSelect={onOpenNewCanvas}
-            className="gap-2 rounded-none font-medium"
-          >
-            <FilePlus2 className="size-3.5" />
-            New canvas…
-          </DropdownMenuItem>
-          {onCreateMarkdown !== undefined && (
+          <DropdownMenuLabel className="text-muted-foreground text-xs font-normal">
+            New
+          </DropdownMenuLabel>
+          {/* No ellipsis on either: creation is immediate (ADR-0006 point 3),
+              and "New canvas…" promised a dialog that has never existed.
+              Same table as the document browser's own menu, so a kind is
+              named and drawn one way across the app. */}
+          {DOCUMENT_KIND_CHOICES.map(({ kind, label, Icon }) => (
             <DropdownMenuItem
-              data-testid="new-markdown-menu-item"
-              onSelect={onCreateMarkdown}
+              key={kind}
+              data-testid={`new-document-${kind}-menu-item`}
+              onSelect={() => onCreateDocument(kind)}
               className="gap-2 rounded-none font-medium"
             >
-              <FilePlus2 className="size-3.5" />
-              New markdown note…
+              <Icon className="size-3.5" />
+              {label}
             </DropdownMenuItem>
-          )}
+          ))}
         </div>
       </DropdownMenuContent>
     </DropdownMenu>

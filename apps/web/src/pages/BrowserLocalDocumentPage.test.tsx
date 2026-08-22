@@ -834,7 +834,7 @@ describe('BrowserLocalDocumentPage', () => {
 
     const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
+    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(newItem)
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
@@ -873,12 +873,12 @@ describe('BrowserLocalDocumentPage', () => {
     failNextSave = true
     const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
     fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-menu-item')
+    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
     fireEvent.pointerUp(newItem)
     // The rejection from createDocument() must be caught and surfaced by
     // WorkspaceTopBar's own local-mode error channel, not left as an
     // unhandled promise rejection with the UI silently doing nothing.
-    expect((await screen.findByRole('alert')).textContent).toBe('Failed to create canvas.')
+    expect((await screen.findByRole('alert')).textContent).toBe('Failed to create document.')
     // The current canvas is untouched — no switch happened.
     expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
     expect(await base.getDefaultDocumentId()).toBe('069CFJNRVY147ADGKPSWZ258BE')
@@ -1083,7 +1083,7 @@ describe('BrowserLocalDocumentPage', () => {
       // Create-canvas flow drives another switch + re-render.
       const switcher2 = await screen.findByRole('button', { name: /^Workspace:/i })
       fireEvent.pointerDown(switcher2, { button: 0, ctrlKey: false })
-      const newItem = await screen.findByTestId('new-document-menu-item')
+      const newItem = await screen.findByTestId('new-document-spatial-menu-item')
       fireEvent.pointerUp(newItem)
       await waitFor(() => {
         // 'untitled-2': the seeded canvas already holds the path 'untitled',

@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
+import { Columns2, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
@@ -13,6 +13,7 @@ import { FolderContentsList } from './FolderContentsList.js'
 import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
+import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
@@ -412,36 +413,10 @@ export function WorkspaceFilesPanel({
             className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
           />
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="New markdown document"
-                disabled={creating}
-                onClick={() => void createHere('markdown').catch(() => setCreateError('markdown'))}
-                className="text-muted-foreground hover:text-foreground rounded border p-1.5"
-              >
-                <FilePlus2 className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>New markdown document</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="New canvas"
-                disabled={creating}
-                onClick={() => void createHere('spatial').catch(() => setCreateError('spatial'))}
-                className="text-muted-foreground hover:text-foreground rounded border p-1.5"
-              >
-                <LayoutGrid className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>New canvas</TooltipContent>
-          </Tooltip>
-        </div>
+        <NewDocumentMenu
+          disabled={creating}
+          onCreate={(kind) => void createHere(kind).catch(() => setCreateError(kind))}
+        />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
           <Tooltip>

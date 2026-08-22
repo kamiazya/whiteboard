@@ -33,7 +33,7 @@ describe('useCreateDocument — immediate create', () => {
         options({ daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
       ),
     )
-    act(() => result.current.openNewDocument())
+    act(() => result.current.openNewDocument('spatial'))
     expect(result.current.newDocumentBusy).toBe(true)
     await act(async () =>
       resolveFetch?.(new Response(JSON.stringify({ path: 'untitled' }), { status: 200 })),
@@ -57,7 +57,7 @@ describe('useCreateDocument — immediate create', () => {
         options({ mountedRef, daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
       ),
     )
-    act(() => result.current.openNewDocument())
+    act(() => result.current.openNewDocument('spatial'))
     mountedRef.current = false
     await act(async () => rejectFetch?.(new Error('boom')))
     expect(result.current.newDocumentError).toBeNull()
@@ -69,7 +69,7 @@ describe('useCreateDocument — immediate create', () => {
     const { result } = renderHook(() =>
       useCreateDocument(options({ isLocalMode: true, onCreateDocument, daemonFetch })),
     )
-    await act(async () => result.current.openNewDocument())
+    await act(async () => result.current.openNewDocument('spatial'))
     expect(onCreateDocument).toHaveBeenCalledTimes(1)
     expect(daemonFetch).not.toHaveBeenCalled()
   })
@@ -94,10 +94,14 @@ describe('useCreateDocument — immediate create', () => {
         }),
       ),
     )
-    await act(async () => result.current.openNewDocument())
+    await act(async () => result.current.openNewDocument('spatial'))
     // design/untitled is taken INSIDE the group; the bare untitled outside it must not collide.
+    // `kind` travels explicitly rather than leaning on the route's 'spatial'
+    // default: the user picked it by name, and a default that silently agrees
+    // is indistinguishable from one that silently disagrees.
     expect(JSON.parse(String(daemonFetch.mock.calls[0]?.[1]?.body))).toEqual({
       path: 'design/untitled-2',
+      kind: 'spatial',
     })
     expect(onNavigateToDocument).toHaveBeenCalledWith('design/untitled-2')
   })
@@ -118,8 +122,8 @@ describe('useCreateDocument — immediate create', () => {
       ),
     )
     act(() => {
-      result.current.openNewDocument()
-      result.current.openNewDocument()
+      result.current.openNewDocument('spatial')
+      result.current.openNewDocument('spatial')
     })
     expect(daemonFetch).toHaveBeenCalledTimes(1)
     await act(async () =>
@@ -140,7 +144,7 @@ describe('useCreateDocument — immediate create', () => {
         options({ daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
       ),
     )
-    await act(async () => result.current.openNewDocument())
+    await act(async () => result.current.openNewDocument('spatial'))
     expect(result.current.newDocumentError).toBe('Canvas already exists')
   })
 
@@ -154,8 +158,8 @@ describe('useCreateDocument — immediate create', () => {
         options({ daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
       ),
     )
-    await act(async () => result.current.openNewDocument())
-    expect(result.current.newDocumentError).toBe('Failed to create canvas.')
+    await act(async () => result.current.openNewDocument('spatial'))
+    expect(result.current.newDocumentError).toBe('Failed to create document.')
   })
 
   it('never exposes Error.message when fetch throws (P-HTTP-005)', async () => {
@@ -167,8 +171,8 @@ describe('useCreateDocument — immediate create', () => {
         options({ daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
       ),
     )
-    await act(async () => result.current.openNewDocument())
-    expect(result.current.newDocumentError).toBe('Failed to create canvas.')
+    await act(async () => result.current.openNewDocument('spatial'))
+    expect(result.current.newDocumentError).toBe('Failed to create document.')
   })
 
   it('falls back when the Problem Details title is a non-string (Zod parse guard)', async () => {
@@ -180,7 +184,7 @@ describe('useCreateDocument — immediate create', () => {
         options({ daemonFetch: daemonFetch as unknown as typeof globalThis.fetch }),
       ),
     )
-    await act(async () => result.current.openNewDocument())
-    expect(result.current.newDocumentError).toBe('Failed to create canvas.')
+    await act(async () => result.current.openNewDocument('spatial'))
+    expect(result.current.newDocumentError).toBe('Failed to create document.')
   })
 })

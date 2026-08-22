@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
 
 afterEach(cleanup)
@@ -111,7 +112,7 @@ describe('BrowserLocalIndexPage', () => {
     // The panel's create is in-place: the document appears in the pane and
     // the user stays in the browser. Auto-open (and the default-pointer
     // repoint that rides with it) lives only on the onboarding path now.
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
 
     await waitFor(async () => {
       const all = await store.listDocuments()
