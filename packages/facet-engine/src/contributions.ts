@@ -14,17 +14,16 @@ import type { FacetDefinition, FacetRegistry } from './registry.js'
 /**
  * The closed set of places facet UI can appear. Adding a point is a core
  * increment, exactly like adding a widget kind — a plugin can neither mint
- * a point nor place itself outside its container.
+ * a point nor place itself outside its container. A point exists only once
+ * its vessel does: `documentProperties` (the DocumentProperties disclosure)
+ * joins together with the surface that consumes it, in the facet editor
+ * increment.
  */
-export type ContributionPoint =
-  | 'contextMenu.node.properties'
-  | 'canvasSettings'
-  | 'documentProperties'
+export type ContributionPoint = 'contextMenu.node.properties' | 'canvasSettings'
 
 const POINT_TARGET = {
   'contextMenu.node.properties': 'node',
   canvasSettings: 'canvas',
-  documentProperties: 'document',
 } as const
 
 export interface FacetContribution {

@@ -41,10 +41,6 @@ describe('resolveFacetContributions', () => {
     const canvas = resolveFacetContributions(registry, 'canvasSettings')
     expect(canvas.map((g) => g.namespace)).toEqual(['visual'])
     expect(canvas[0]?.facets.map((f) => f.key)).toEqual(['visual.edges/v0'])
-
-    const document = resolveFacetContributions(registry, 'documentProperties')
-    expect(document.map((g) => g.namespace)).toEqual(['planning'])
-    expect(document[0]?.facets.map((f) => f.key)).toEqual(['planning.due/v0'])
   })
 
   it('a plugin contributing nothing to a point produces no empty group', () => {
