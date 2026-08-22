@@ -12,11 +12,13 @@ describe('EmptyWorkspaceState chooser', () => {
     const onCreate = vi.fn()
     render(<EmptyWorkspaceState onCreate={onCreate} subtitle="stays here" />)
 
-    // The brand lockup from the README greets arrivals here: the signature
-    // draws itself once (wb-scribble one-shot, never a loop) and the
-    // wordmark names the product — this is the one surface where the name
-    // is not already in the surrounding chrome.
-    expect(document.querySelector('[data-mark="welcome"] .wb-scribble')).toBeTruthy()
+    // The brand STORY greets arrivals here: the boot splash's self-contained
+    // SVG (draw -> sketch -> the spark tidies -> the signature returns and
+    // breathes) plays in an <img>, and the wordmark names the product —
+    // this is the one surface where the name is not already in the
+    // surrounding chrome.
+    const hero = document.querySelector('img[data-mark="welcome"]')
+    expect(hero?.getAttribute('src')).toBe('/boot-splash.svg')
     expect(screen.getByText('Whiteboard')).toBeTruthy()
     expect(screen.getByText('What will you make first?')).toBeTruthy()
     expect(screen.getByText('stays here')).toBeTruthy()
@@ -37,6 +39,24 @@ describe('EmptyWorkspaceState chooser', () => {
     expect(
       screen.getByRole('button', { name: 'Create a markdown note' }).hasAttribute('disabled'),
     ).toBe(true)
+  })
+
+  it('collapses to the static drawn logo under reduced motion', () => {
+    const original = window.matchMedia
+    window.matchMedia = ((query: string) =>
+      ({
+        matches: query.includes('prefers-reduced-motion'),
+        media: query,
+        addEventListener: () => {},
+        removeEventListener: () => {},
+      }) as unknown as MediaQueryList) as typeof window.matchMedia
+    try {
+      render(<EmptyWorkspaceState onCreate={() => {}} />)
+      expect(document.querySelector('img[data-mark="welcome"]')).toBeNull()
+      expect(document.querySelector('[data-mark="welcome-static"]')).toBeTruthy()
+    } finally {
+      window.matchMedia = original
+    }
   })
 
   it('omits the subtitle line when none is given', () => {

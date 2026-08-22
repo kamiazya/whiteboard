@@ -12,6 +12,15 @@ import WelcomeMark from '../../brand/welcome-mark.svg?react'
  * document). This is the one moment a user cannot reach the panel's own
  * create buttons, so both kinds must be reachable here.
  */
+// Read once per render: the preference changing mid-visit is rare enough
+// that live subscription would be machinery without a user.
+function prefersReducedMotion(): boolean {
+  return (
+    typeof window.matchMedia === 'function' &&
+    window.matchMedia('(prefers-reduced-motion: reduce)').matches
+  )
+}
+
 export function EmptyWorkspaceState({
   onCreate,
   disabled,
@@ -28,10 +37,30 @@ export function EmptyWorkspaceState({
 }) {
   return (
     <div className="flex flex-col items-center gap-3 py-16 text-center">
-      {/* The brand lockup greets arrivals: the signature draws itself once
-          and the wordmark names the product — this is the one surface where
-          the name is not already in the surrounding chrome (BRAND.md). */}
-      <WelcomeMark className="text-muted-foreground" />
+      {/* The brand STORY greets arrivals: the boot splash's self-contained
+          SVG plays its whole arc here — the signature draws itself, a cursor
+          sketches nodes and edges, the spark (the AI's hand) tidies them,
+          and the signature returns to breathe. An <img> so the asset stays
+          the single source of that story; its internal reduced-motion rule
+          collapses it to the static drawn logo. The wordmark names the
+          product — the one surface where the name is not already in the
+          surrounding chrome (BRAND.md). */}
+      {prefersReducedMotion() ? (
+        // BRAND.md: reduced motion collapses every brand animation to the
+        // static drawn logo. Decided HERE, not only inside the SVG — the
+        // image's own @media fallback still stands, but an <img> document
+        // does not see emulated media, and skipping the story entirely is
+        // the calmer answer anyway.
+        <WelcomeMark className="text-muted-foreground" />
+      ) : (
+        <img
+          data-mark="welcome"
+          src="/boot-splash.svg"
+          alt=""
+          aria-hidden="true"
+          className="h-auto w-60"
+        />
+      )}
       <p className="text-lg font-semibold tracking-tight">Whiteboard</p>
       <p className="text-base font-semibold">What will you make first?</p>
       {subtitle !== undefined && (
@@ -39,17 +68,20 @@ export function EmptyWorkspaceState({
           {subtitle}
         </p>
       )}
-      <div className="mt-2 flex flex-wrap items-stretch justify-center gap-4">
+      {/* One row at every width: a fixed card width wrapped to a COLUMN on
+          phones, and seeing both objects in one glance is the chooser's
+          whole point. The grid splits whatever width the page gives. */}
+      <div className="mt-2 grid w-full max-w-lg grid-cols-2 gap-3 px-4 sm:gap-4">
         <button
           type="button"
           aria-label="Create a canvas"
           disabled={disabled}
           onClick={() => onCreate('spatial')}
-          className="hover:border-primary w-56 rounded-lg border text-left transition-colors disabled:opacity-50"
+          className="hover:border-primary w-full rounded-lg border text-left transition-colors disabled:opacity-50"
         >
           <span
             aria-hidden="true"
-            className="bg-muted/40 block h-24 w-full overflow-hidden rounded-t-lg"
+            className="bg-muted/40 block aspect-[224/96] w-full overflow-hidden rounded-t-lg"
           >
             {/* Two notes and the connection between them — the canvas in
                 one picture. */}
@@ -97,11 +129,11 @@ export function EmptyWorkspaceState({
           aria-label="Create a markdown note"
           disabled={disabled}
           onClick={() => onCreate('markdown')}
-          className="hover:border-primary w-56 rounded-lg border text-left transition-colors disabled:opacity-50"
+          className="hover:border-primary w-full rounded-lg border text-left transition-colors disabled:opacity-50"
         >
           <span
             aria-hidden="true"
-            className="bg-muted/40 block h-24 w-full overflow-hidden rounded-t-lg"
+            className="bg-muted/40 block aspect-[224/96] w-full overflow-hidden rounded-t-lg"
           >
             {/* Lines of prose — the note in one picture. */}
             <svg aria-hidden="true" viewBox="0 0 224 96" className="size-full">

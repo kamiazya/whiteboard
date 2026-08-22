@@ -239,10 +239,10 @@
   }
 
   /*
-   * One-shot draw for brand marks that perform their stroke on mount
-   * (error-mark's scribbled knot, welcome-mark's greeting signature).
-   * Base state is the finished stroke so the reduced-motion one-shot
-   * lands on it, not on a blank.
+   * Error-state mark (src/brand/error-mark.svg via SVGR): the signature
+   * draws itself into a scribbled knot once on mount — the whiteboard
+   * gesture for "that's wrong". Base state is the finished scribble so
+   * the reduced-motion one-shot lands on it, not on a blank.
    */
   @keyframes wb-scribble {
     from {

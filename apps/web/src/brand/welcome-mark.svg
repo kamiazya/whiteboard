@@ -1,10 +1,10 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="132" height="84" viewBox="0 0 88 56" fill="none" data-mark="welcome" aria-hidden="true">
+<svg xmlns="http://www.w3.org/2000/svg" width="132" height="84" viewBox="0 0 88 56" fill="none" data-mark="welcome-static" aria-hidden="true">
   <!--
-    Onboarding hero (BRAND.md): the signature at greeting size, drawing
-    itself once on mount (wb-scribble one-shot) - the first page is where
-    the brand introduces itself, so the mark performs its stroke instead of
-    sitting as a watermark. No frame: the viewport is the board.
-    currentColor follows the theme.
+    Onboarding hero, reduced-motion variant (BRAND.md): the story collapses
+    to its landing frame - the drawn signature, no animation. The animated
+    story itself is public/boot-splash.svg, played via <img>; this inline
+    static mark is what the chooser renders when the user prefers reduced
+    motion. currentColor follows the theme.
   -->
-  <path class="wb-scribble" d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
+  <path d="M20 44 C 27 22, 37 22, 44 33 S 58 50, 68 25" stroke="currentColor" stroke-width="6" stroke-linecap="round"/>
 </svg>
