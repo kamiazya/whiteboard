@@ -34,6 +34,11 @@ import { createDocumentSetTool } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
 import { createFacetSetTool } from './tools/facet-set.js'
+import {
+  linkifyMentions,
+  linkifyMentionsInputSchema,
+  NamelessLinkifyTargetError,
+} from './tools/linkify-mentions.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
@@ -136,6 +141,26 @@ export function createServer(deps: ServerDeps) {
     try {
       return c.json(await computeDocumentTags(deps, parsed.data))
     } catch (err) {
+      return mapDocumentError(c, err)
+    }
+  })
+
+  app.post('/api/v1/workspaces/:workspaceId/documents/:documentId/linkify-mentions', async (c) => {
+    const body = await c.req.json().catch(() => ({}))
+    const parsed = linkifyMentionsInputSchema.safeParse({
+      workspaceId: c.req.param('workspaceId'),
+      documentId: c.req.param('documentId'),
+      ...body,
+    })
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    try {
+      return c.json(await linkifyMentions(deps, parsed.data))
+    } catch (err) {
+      if (err instanceof NamelessLinkifyTargetError) {
+        return c.json({ error: err.message }, 400)
+      }
       return mapDocumentError(c, err)
     }
   })

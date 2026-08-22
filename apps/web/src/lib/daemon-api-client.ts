@@ -13,9 +13,11 @@ import {
   documentsApiUrl,
   type InstallFontResponse,
   installFontResponseSchema,
+  type LinkifyMentionsResponse,
   type ListDocumentsResponse,
   type ListFontsResponse,
   type ListWorkspacesResponse,
+  linkifyMentionsResponseSchema,
   listDocumentsResponseSchema,
   listFontsResponseSchema,
   listWorkspacesResponseSchema,
@@ -250,6 +252,26 @@ export function getWorkspaceDocumentTags(
     fetchImpl,
     `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/document-tags`,
     workspaceDocumentTagsResponseSchema,
+  )
+}
+
+/** Convert a source document's unlinked mentions of the target into [[...]] links. */
+export function linkifyDocumentMentions(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  sourceDocumentId: string,
+  targetDocumentId: string,
+): Promise<LinkifyMentionsResponse> {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(sourceDocumentId)}/linkify-mentions`,
+    linkifyMentionsResponseSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetDocumentId }),
+    },
   )
 }
 

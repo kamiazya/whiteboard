@@ -39,7 +39,11 @@ import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
-import { createDaemonFetch, getDocumentBacklinks } from '../lib/daemon-api-client.js'
+import {
+  createDaemonFetch,
+  getDocumentBacklinks,
+  linkifyDocumentMentions,
+} from '../lib/daemon-api-client.js'
 import { createDaemonFileAdapter } from '../lib/daemon-file-adapter.js'
 import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
@@ -374,6 +378,7 @@ export function DaemonDocumentPage({
     readonly backlinks: readonly ConnectionsBacklink[]
     readonly unlinkedMentions: readonly ConnectionsBacklink[]
   } | null>(null)
+  const [connectionsRefresh, setConnectionsRefresh] = useState(0)
   useEffect(() => {
     setConnections(null)
     if (currentDocumentId === undefined || controller.workspaceId === null) return
@@ -389,7 +394,7 @@ export function DaemonDocumentPage({
     return () => {
       cancelled = true
     }
-  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId])
+  }, [daemonFetch, daemonBaseUrl, controller.workspaceId, currentDocumentId, connectionsRefresh])
   const loadEmbedSource = useCallback<MarkdownEmbedLoader>(
     async (documentId) => {
       const target = await fileAdapter.loadDocument(documentId)
@@ -652,6 +657,21 @@ export function DaemonDocumentPage({
                     backlinks={connections === null ? null : connections.backlinks}
                     mentions={connections?.unlinkedMentions}
                     onOpen={(entry) => controller.switchDocument(entry.path)}
+                    onLinkify={(mention) => {
+                      if (controller.workspaceId === null || currentDocumentId === undefined) return
+                      void linkifyDocumentMentions(
+                        daemonFetch,
+                        daemonBaseUrl,
+                        controller.workspaceId,
+                        mention.documentId,
+                        currentDocumentId,
+                      )
+                        .then(() => setConnectionsRefresh((n) => n + 1))
+                        .catch(() => {
+                          // The panel simply keeps showing the mention; the
+                          // next open retries.
+                        })
+                    }}
                   />
                 </>
               )}

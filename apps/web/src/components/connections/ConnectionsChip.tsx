@@ -15,6 +15,12 @@ export interface ConnectionsChipProps {
   readonly mentions?: readonly ConnectionsBacklink[]
   /** The whole entry: the daemon page navigates by `path`, others may not. */
   readonly onOpen: (backlink: ConnectionsBacklink) => void
+  /**
+   * Converts a mention row's occurrences into real links (the server-side
+   * linkify operation). Absent hides the button — a backend without the
+   * route offers navigation only.
+   */
+  readonly onLinkify?: (mention: ConnectionsBacklink) => void
 }
 
 /**
@@ -27,7 +33,7 @@ export interface ConnectionsChipProps {
  * links land somewhere, which is the reason to write one; hiding it until
  * content exists would hide the loop exactly where it needs starting.
  */
-export function ConnectionsChip({ backlinks, mentions, onOpen }: ConnectionsChipProps) {
+export function ConnectionsChip({ backlinks, mentions, onOpen, onLinkify }: ConnectionsChipProps) {
   const [open, setOpen] = useState(false)
   const panelId = useId()
   const loaded = backlinks !== null
@@ -84,6 +90,11 @@ export function ConnectionsChip({ backlinks, mentions, onOpen }: ConnectionsChip
                   setOpen(false)
                   onOpen(entry)
                 }}
+                action={
+                  onLinkify === undefined
+                    ? undefined
+                    : { label: 'Link it', onPick: (entry) => onLinkify(entry) }
+                }
               />
             </>
           )}
@@ -96,18 +107,20 @@ export function ConnectionsChip({ backlinks, mentions, onOpen }: ConnectionsChip
 function SourceList({
   entries,
   onPick,
+  action,
 }: {
   readonly entries: readonly ConnectionsBacklink[]
   readonly onPick: (entry: ConnectionsBacklink) => void
+  readonly action?: { label: string; onPick: (entry: ConnectionsBacklink) => void }
 }) {
   return (
     <ul className="flex flex-col">
       {entries.map((entry) => (
-        <li key={entry.documentId}>
+        <li key={entry.documentId} className="flex items-start gap-1">
           <button
             type="button"
             onClick={() => onPick(entry)}
-            className="hover:bg-muted flex w-full flex-col gap-0.5 rounded px-2 py-1.5 text-left"
+            className="hover:bg-muted flex min-w-0 flex-1 flex-col gap-0.5 rounded px-2 py-1.5 text-left"
           >
             <span className="flex items-center gap-1.5 text-sm font-medium">
               {entry.kind === 'spatial' ? (
@@ -123,6 +136,15 @@ function SourceList({
               </span>
             ))}
           </button>
+          {action !== undefined && (
+            <button
+              type="button"
+              onClick={() => action.onPick(entry)}
+              className="text-primary hover:bg-accent mt-1.5 shrink-0 rounded border px-2 py-0.5 text-xs font-medium"
+            >
+              {action.label}
+            </button>
+          )}
         </li>
       ))}
     </ul>

@@ -58,6 +58,33 @@ describe('ConnectionsChip', () => {
     expect(onOpen).toHaveBeenCalledWith(expect.objectContaining({ path: 'standup' }))
   })
 
+  it('mention rows offer Link it when a handler is given, and only then', () => {
+    const onLinkify = vi.fn()
+    const mention = {
+      documentId: '01CX5ZZKBKACTAV9WEVGEMMVRA',
+      path: 'standup',
+      name: 'Standup memo',
+      kind: 'markdown' as const,
+      contexts: ['…Release plan の前提が…'],
+    }
+    const { unmount } = render(
+      <ConnectionsChip
+        backlinks={TWO}
+        mentions={[mention]}
+        onOpen={() => {}}
+        onLinkify={onLinkify}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    fireEvent.click(screen.getByRole('button', { name: /link it/i }))
+    expect(onLinkify).toHaveBeenCalledWith(expect.objectContaining({ path: 'standup' }))
+    unmount()
+
+    render(<ConnectionsChip backlinks={TWO} mentions={[mention]} onOpen={() => {}} />)
+    fireEvent.click(screen.getByRole('button', { name: /connections/i }))
+    expect(screen.queryByRole('button', { name: /link it/i })).toBeNull()
+  })
+
   it('hides the mentions section when there are none', () => {
     render(<ConnectionsChip backlinks={TWO} mentions={[]} onOpen={() => {}} />)
     fireEvent.click(screen.getByRole('button', { name: /connections/i }))

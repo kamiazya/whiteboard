@@ -96,6 +96,13 @@ export {
 } from './tools/export-okf.js'
 export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'
 export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
+export type { LinkifyMentionsInput, LinkifyMentionsOutput } from './tools/linkify-mentions.js'
+export {
+  linkifyMentions,
+  linkifyMentionsInputSchema,
+  linkifyMentionsOutputSchema,
+  NamelessLinkifyTargetError,
+} from './tools/linkify-mentions.js'
 export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
 export {
   createVersionListTool,

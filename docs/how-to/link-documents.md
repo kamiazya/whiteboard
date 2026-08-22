@@ -33,8 +33,13 @@ anywhere in the workspace land here automatically.
 
 Below the linked-from list, **Mentioned, not linked** surfaces documents
 whose prose contains this document's display name without linking to it —
-candidates for a link the author never wrote. Click one to open it and
-decide; the system never links on its own (a link is the author's claim).
+candidates for a link the author never wrote. Click a row to open it and
+decide, or **Link it** to convert that document's mentions into real
+`[[...]]` links in one server-side operation — the readable `[[Name]]`
+when the name is unique, `[[<id>|Name]]` otherwise. Mentions inside canvas
+labels are listed but never rewritten (a link in a label would render as
+literal brackets). The system still never links without a click — a link
+is the author's claim.
 
 ## Rules worth knowing
 
