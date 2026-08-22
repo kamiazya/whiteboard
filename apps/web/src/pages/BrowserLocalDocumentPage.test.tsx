@@ -640,6 +640,45 @@ describe('BrowserLocalDocumentPage', () => {
     expect((await store.load('069CFJNRVY147ADGKPSWZ258BE'))?.name).toBe('Renamed canvas')
   })
 
+  // The field commits per keystroke, so Escape cannot discard a draft — it has
+  // to put the previous name BACK. Two renames land in quick succession, and
+  // the one asked for LAST must be the one that survives: settling on the old
+  // name and then being overwritten by the half-typed one is the failure this
+  // pins, and it is invisible to an assertion that stops at the first match.
+  it('Escape restores the previous name, and the abandoned one does not land afterwards', async () => {
+    vi.useRealTimers()
+    const store = new LocalStoreDouble()
+    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
+    await store.save(snap)
+    await act(async () => {
+      render(
+        <BrowserLocalDocumentPage
+          loro={store.loro}
+          store={store.index}
+          pointer={store.pointer}
+          clock={store.clock}
+        />,
+      )
+    })
+    const heading = () => screen.getByRole('heading', { level: 1 }).textContent
+
+    const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
+    fireEvent.focus(titleInput)
+    fireEvent.change(titleInput, { target: { value: 'Half typed' } })
+    await waitFor(() => expect(heading()).toBe('Half typed'))
+
+    fireEvent.keyDown(titleInput, { key: 'Escape' })
+    await waitFor(() => expect(heading()).toBe('untitled'))
+
+    // Settle everything still in flight before believing it: the defect is a
+    // LATER write winning, which a first-match assertion sails straight past.
+    await act(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 50))
+    })
+    expect(heading()).toBe('untitled')
+    expect((await store.load('069CFJNRVY147ADGKPSWZ258BE'))?.name).toBe('untitled')
+  })
+
   it('does not render an "Add rectangle" button — scene writes flow through SpatialEditor gestures', async () => {
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')

@@ -116,6 +116,27 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
     }
   })
 
+  // The field commits per keystroke, so Escape puts the previous name back
+  // rather than discarding a draft. Real IndexedDB and real timing here: the
+  // failure this pins is the ABANDONED name landing after the restore, which
+  // an assertion that stops at the first match sails straight past.
+  it('Escape restores the previous name and the abandoned one never lands', async () => {
+    await renderLoaded()
+    const titleInput = await titleField()
+    titleInput.focus()
+    fireEvent.change(titleInput, { target: { value: 'Should not persist' } })
+    fireEvent.keyDown(titleInput, { key: 'Escape' })
+    await waitForTitle('untitled')
+
+    // Settle everything still in flight before believing the restore held.
+    await new Promise((resolve) => setTimeout(resolve, 400))
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
+
+    cleanup()
+    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
+    await waitForTitle('untitled')
+  })
+
   it("whitespace-only commit persists 'untitled' and restores it on remount", async () => {
     await renderLoaded()
     // Commit a real name first so the remount assertion below can distinguish
