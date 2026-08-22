@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react'
+import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
@@ -9,11 +9,11 @@ import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 // with it — this pins their return on the panel. Real browser because
 // jsdom cannot be trusted to portal-render Radix tooltip content.
 
-afterEach(() => {
-  // Radix leaves no timers behind, but the portal root may linger between
-  // tests; a fresh body keeps the queries honest.
-  document.body.innerHTML = ''
-})
+// testing-library's cleanup, never a bare innerHTML wipe: React must
+// unmount its own roots, or its later teardown removeChild()s nodes that
+// are no longer in the document and the file fails with unhandled
+// NotFoundErrors (measured on CI).
+afterEach(cleanup)
 
 function renderPanel() {
   const source = fakeFilesSource({
