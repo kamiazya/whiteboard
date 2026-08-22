@@ -175,6 +175,21 @@ describe('visual.symbol/v0', () => {
     })
     expect(visualSymbolFacetSchema.safeParse({ kind: 'icon', name: '' }).success).toBe(false)
     expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '' }).success).toBe(false)
+    // A badge is ONE glyph. Multi-codepoint clusters (variation selectors,
+    // ZWJ families, flags) are one grapheme and stay valid; two symbols are
+    // not a badge and would overflow the fixed box.
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '⚠️' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '👨‍👩‍👧‍👦' }).success).toBe(
+      true,
+    )
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '🇯🇵' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '✅🔥' }).success).toBe(false)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: 'ab' }).success).toBe(false)
+    // NOT emoji-only: the scene node this feeds documents a CJK character
+    // or a dingbat as intended badge content, so the facet may not be
+    // narrower than the substrate it draws through.
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '重' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '✽' }).success).toBe(true)
     expect(visualSymbolFacetSchema.safeParse({ kind: 'image', href: 'x' }).success).toBe(false)
   })
 

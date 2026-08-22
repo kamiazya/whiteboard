@@ -47,9 +47,27 @@ export const VISUAL_SHAPE_KEY = 'visual.shape/v0'
  * set is canvas-render's, and this package cannot depend on it — a name the
  * renderer does not carry degrades to no badge at draw time.
  */
+const graphemes = new Intl.Segmenter(undefined, { granularity: 'grapheme' })
+
+/**
+ * ONE grapheme cluster — what "a badge" means. A cluster may be many code
+ * points (a variation selector, a ZWJ family, a flag pair), which is why
+ * this counts graphemes rather than length. Deliberately NOT emoji-only:
+ * the scene node this draws through names a CJK character or a dingbat as
+ * intended badge content, and a facet must not be narrower than the
+ * substrate that renders it.
+ */
+const isSingleGrapheme = (value: string): boolean => [...graphemes.segment(value)].length === 1
+
 export const visualSymbolFacetSchema = z.union([
   z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
-  z.object({ kind: z.literal('emoji'), char: z.string().min(1) }),
+  z.object({
+    kind: z.literal('emoji'),
+    char: z
+      .string()
+      .min(1)
+      .refine(isSingleGrapheme, 'must be a single character or emoji, not a string'),
+  }),
 ])
 
 export type VisualSymbolFacet = z.infer<typeof visualSymbolFacetSchema>

@@ -333,12 +333,16 @@ async function main() {
     throw new Error(`node facets did not merge: ${JSON.stringify(bothFacets)}`)
   }
   console.log('[e2e] wb_facet_set(nodeId) → visual.symbol merges beside visual.shape')
-  await callTool('wb_facet_set', {
+  const bothCleared = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
     documentId,
     nodeId: 'target',
     facets: { 'visual.shape/v0': null, 'visual.symbol/v0': null },
   })
+  if (Object.keys(bothCleared.facets ?? { leftover: true }).length !== 0) {
+    throw new Error(`combined null tombstones did not delete: ${JSON.stringify(bothCleared)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → one call deletes both node facets')
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(

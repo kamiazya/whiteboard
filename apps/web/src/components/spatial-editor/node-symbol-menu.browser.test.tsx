@@ -62,11 +62,19 @@ it('an emoji pick draws a glyph, and No symbol removes the facet', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
+  const glyphText = () =>
+    [...container.querySelectorAll('[data-testid="spatial-editor"] svg text')]
+      .map((t) => t.textContent)
+      .filter((value) => value === '⭐')
+
   const menu = openNodeMenu(container)
   fireEvent.click(menu.querySelector('[aria-label="Emoji ⭐"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '⭐' })
+  // The badge is DRAWN, not merely stored.
+  expect(glyphText()).toHaveLength(1)
 
   fireEvent.click(menu.querySelector('[aria-label="No symbol"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toBeUndefined()
   expect(latest.canvas.nodes[0]).not.toHaveProperty('x-whiteboard')
+  expect(glyphText()).toHaveLength(0)
 })
