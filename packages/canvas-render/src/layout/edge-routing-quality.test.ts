@@ -176,12 +176,12 @@ describe('routing quality across the synthetic corpus', () => {
       length: Math.round(length),
       shortArrowRunway: shortRunway,
     }).toEqual({
-      violations: { 'own-endpoint': 14, foreign: 16, degenerate: 0 },
-      interiorInk: 2203,
+      violations: { 'own-endpoint': 13, foreign: 16, degenerate: 0 },
+      interiorInk: 2164,
       borderInk: 824,
-      bends: 8150,
-      crossings: 498,
-      length: 1340155,
+      bends: 8153,
+      crossings: 497,
+      length: 1340228,
       shortArrowRunway: 137,
     })
   })

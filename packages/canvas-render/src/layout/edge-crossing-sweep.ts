@@ -46,38 +46,89 @@ export function scoreSegmentPair(
   b2: Point,
 ): readonly [number, number, number] {
   const q = (n: number) => Math.round(n * COST_QUANTUM)
-  const clearance = EDGE_JUMP_RADIUS_PX + 1
+  return scoreQuantizedSegmentPair(
+    q(a1.x),
+    q(a1.y),
+    q(a2.x),
+    q(a2.y),
+    q(b1.x),
+    q(b1.y),
+    q(b2.x),
+    q(b2.y),
+  )
+}
+
+/** `EDGE_JUMP_RADIUS_PX + 1`, in COST_QUANTUM units. */
+const CLEARANCE_Q = (EDGE_JUMP_RADIUS_PX + 1) * COST_QUANTUM
+
+/**
+ * The narrow phase on ALREADY-QUANTIZED integer coordinates — pure integer
+ * arithmetic from here on, so a second implementation of it (a WGSL
+ * kernel, a worker) can be held to bit-identical output. Quantizing first,
+ * rather than only for the collinear branch, is what makes that true: the
+ * crossing test used to run on raw floats, and two endpoints a
+ * sub-quantum apart could count as a crossing here while scoring equal
+ * everywhere else. `t`/`u` stay exact because every comparison is done on
+ * the cross-multiplied integers, never on the quotient.
+ */
+export function scoreQuantizedSegmentPair(
+  ax1: number,
+  ay1: number,
+  ax2: number,
+  ay2: number,
+  bx1: number,
+  by1: number,
+  bx2: number,
+  by2: number,
+): readonly [number, number, number] {
   // Collinear axis-aligned overlap.
-  if (q(a1.y) === q(a2.y) && q(b1.y) === q(b2.y) && q(a1.y) === q(b1.y)) {
-    const lo = Math.max(q(Math.min(a1.x, a2.x)), q(Math.min(b1.x, b2.x)))
-    const hi = Math.min(q(Math.max(a1.x, a2.x)), q(Math.max(b1.x, b2.x)))
+  if (ay1 === ay2 && by1 === by2 && ay1 === by1) {
+    const lo = Math.max(Math.min(ax1, ax2), Math.min(bx1, bx2))
+    const hi = Math.min(Math.max(ax1, ax2), Math.max(bx1, bx2))
     return [hi > lo ? hi - lo : 0, 0, 0]
   }
-  if (q(a1.x) === q(a2.x) && q(b1.x) === q(b2.x) && q(a1.x) === q(b1.x)) {
-    const lo = Math.max(q(Math.min(a1.y, a2.y)), q(Math.min(b1.y, b2.y)))
-    const hi = Math.min(q(Math.max(a1.y, a2.y)), q(Math.max(b1.y, b2.y)))
+  if (ax1 === ax2 && bx1 === bx2 && ax1 === bx1) {
+    const lo = Math.max(Math.min(ay1, ay2), Math.min(by1, by2))
+    const hi = Math.min(Math.max(ay1, ay2), Math.max(by1, by2))
     return [hi > lo ? hi - lo : 0, 0, 0]
   }
-  // Proper transversal crossing.
-  const dax = a2.x - a1.x
-  const day = a2.y - a1.y
-  const dbx = b2.x - b1.x
-  const dby = b2.y - b1.y
-  const denom = dax * dby - day * dbx
+  // Proper transversal crossing: t = tn/denom, u = un/denom, both strictly
+  // inside (0, 1). Signs are normalized so the open-interval test is a
+  // plain integer comparison.
+  const dax = ax2 - ax1
+  const day = ay2 - ay1
+  const dbx = bx2 - bx1
+  const dby = by2 - by1
+  let denom = dax * dby - day * dbx
   if (denom === 0) return [0, 0, 0]
-  const t = ((b1.x - a1.x) * dby - (b1.y - a1.y) * dbx) / denom
-  const u = ((b1.x - a1.x) * day - (b1.y - a1.y) * dax) / denom
-  if (t <= 0 || t >= 1 || u <= 0 || u >= 1) return [0, 0, 0]
-  const lenA = Math.hypot(dax, day)
-  const lenB = Math.hypot(dbx, dby)
+  let tn = (bx1 - ax1) * dby - (by1 - ay1) * dbx
+  let un = (bx1 - ax1) * day - (by1 - ay1) * dax
+  if (denom < 0) {
+    denom = -denom
+    tn = -tn
+    un = -un
+  }
+  if (tn <= 0 || tn >= denom || un <= 0 || un >= denom) return [0, 0, 0]
+  // Distance from each segment end to the crossing, compared against the
+  // clearance without dividing: t * |A| < c  <=>  tn * |A| < c * denom.
+  // |A| is exact for an axis-aligned segment; a diagonal one rounds its
+  // hypot, which is the one remaining float in this function.
+  const lenA = axisLength(dax, day)
+  const lenB = axisLength(dbx, dby)
   const illegible =
-    t * lenA < clearance ||
-    (1 - t) * lenA < clearance ||
-    u * lenB < clearance ||
-    (1 - u) * lenB < clearance
+    tn * lenA < CLEARANCE_Q * denom ||
+    (denom - tn) * lenA < CLEARANCE_Q * denom ||
+    un * lenB < CLEARANCE_Q * denom ||
+    (denom - un) * lenB < CLEARANCE_Q * denom
       ? 1
       : 0
   return [0, illegible, 1]
+}
+
+function axisLength(dx: number, dy: number): number {
+  if (dx === 0) return Math.abs(dy)
+  if (dy === 0) return Math.abs(dx)
+  return Math.round(Math.hypot(dx, dy))
 }
 
 interface SweepSegment {
