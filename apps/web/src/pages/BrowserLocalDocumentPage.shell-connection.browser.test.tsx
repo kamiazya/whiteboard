@@ -1,0 +1,97 @@
+import { cleanup, fireEvent, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import { MemoryRouter } from 'react-router-dom'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { AppShell } from '../components/AppShell.js'
+import { IdbDocumentIndex } from '../lib/idb-document-index.js'
+import { resetShellStatusForTests } from '../lib/shell-status-store.js'
+import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
+// Real app styles so the chip is laid out the way it ships.
+import '../index.css'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+
+const ISOLATED_DB = claimIsolatedWhiteboardDb('browserlocaldocumentpage-shell-connection')
+
+async function clearDb(): Promise<void> {
+  return new Promise((resolve) => {
+    const req = indexedDB.deleteDatabase(ISOLATED_DB)
+    req.onsuccess = () => resolve()
+    req.onerror = () => resolve()
+  })
+}
+
+// The composition main.tsx ships: the shell above the routed page, both in one
+// router. Neither half proves this on its own — the page publishes a state it
+// does not draw, and the shell draws a state it does not know.
+function renderApp() {
+  return rtlRender(
+    <div style={{ height: '100vh' }}>
+      <MemoryRouter initialEntries={['/local/c1']}>
+        <div className="flex h-dvh flex-col">
+          <AppShell daemon={false} />
+          <div className="min-h-0 flex-1">
+            <BrowserLocalDocumentPage store={new IdbDocumentIndex()} />
+          </div>
+        </div>
+      </MemoryRouter>
+    </div>,
+  )
+}
+
+describe('shell connection chip over a real browser-local document', () => {
+  beforeEach(async () => {
+    resetShellStatusForTests()
+    await clearDb()
+  })
+
+  afterEach(() => {
+    cleanup()
+    resetShellStatusForTests()
+  })
+
+  it('the open document lights the shell chip, whose popover carries the daemon CTA', async () => {
+    renderApp()
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
+
+    const chip = await waitFor(() => screen.getByTestId('connection-chip'), { timeout: 5000 })
+    expect(chip.textContent).toMatch(/local/i)
+    // The chip sits in the shell's own row, not inside the document's top bar
+    // — that separation is the whole point of the move, and a DOM assertion is
+    // the only thing that can tell the two rows apart.
+    expect(chip.closest('header')?.querySelector('[data-testid="shell-settings"]')).toBeTruthy()
+
+    // Sentence-length copy stays out of chrome: it appears only once opened.
+    expect(screen.queryByText(/only in this browser/i)).toBeNull()
+    fireEvent.click(chip)
+    expect(await screen.findByText(/only in this browser/i)).toBeInTheDocument()
+    expect(await screen.findByText(/unlock version history/i)).toBeInTheDocument()
+  })
+
+  it('leaving the document takes the claim with it', async () => {
+    renderApp()
+    await waitFor(
+      () => expect(screen.getByTestId('spatial-editor-container')).toBeInTheDocument(),
+      {
+        timeout: 5000,
+      },
+    )
+    await waitFor(() => expect(screen.getByTestId('connection-chip')).toBeInTheDocument(), {
+      timeout: 5000,
+    })
+
+    // The shell outlives the page in production, so the page unmounting is
+    // exactly what must clear the chip — a latched one would keep telling an
+    // index page it is holding a session.
+    cleanup()
+    rtlRender(
+      <MemoryRouter initialEntries={['/']}>
+        <AppShell daemon={false} />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByTestId('connection-chip')).toBeNull()
+  })
+})
