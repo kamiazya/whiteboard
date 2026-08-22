@@ -24,6 +24,7 @@ import { CORPUS_DOCUMENTS, JUDGED_QUERIES } from '../../../server-core/src/searc
 // in-memory store are test fixtures, and widening server-core's published
 // surface for one local script would be the wrong trade.
 import { createInMemoryDocumentStore } from '../../../server-core/src/test-utils/in-memory-document-store.ts'
+import { searchModelCacheDir } from '../../src/server/search/search-embedder.ts'
 import { createTransformersEmbedder } from '../../src/server/search/transformers-embedder.ts'
 
 const WS = 'quality'
@@ -103,11 +104,26 @@ const deps = await seed()
 
 const lexical = await score(createDocumentSearchTool(deps))
 
-const embedder = createTransformersEmbedder({
-  cacheDir: new URL('../../tmp/models/', import.meta.url).pathname,
-})
+const embedder = createTransformersEmbedder({ cacheDir: searchModelCacheDir() })
+
+// Preflight, and it is not ceremony. A model that is missing, gated, or
+// broken makes `embed` return nothing and the search tool fall back to
+// lexical results — silently and by design, because a user's search must
+// not fail over it. In a MEASUREMENT that same fallback prints a stage-2
+// column identical to stage 0 and calls it a result. It happened on the
+// first run of this script, against a gated model id.
+const [probe] = await embedder.embed(['preflight'], 'document')
+if (probe === undefined || probe.length !== embedder.dimensions) {
+  process.stderr.write(
+    'the embedding model did not load — refusing to print a stage-2 column ' +
+      'that would just be stage 0 under another heading.\n' +
+      'run: pnpm --filter @kamiazya/whiteboard-mcp search:fetch-model\n',
+  )
+  process.exit(1)
+}
+
 const startedAt = process.hrtime.bigint()
-const fused = await score(createDocumentSearchTool(deps, undefined, () => embedder))
+const fused = await score(createDocumentSearchTool({ ...deps, embedder }))
 const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
 
 const CATEGORIES = ['lexical', 'bigram', 'paraphrase', 'cross-lingual']

@@ -30,9 +30,11 @@ same thing in different words, or in a different language — ask for
 hidden, because the two share no text.
 
 Turning on semantic search adds that. A local embedding model runs beside
-the daemon and its ranking is fused with the word-based one, so everything
-that already matched still matches; meaning-based results are added rather
-than substituted.
+the daemon, and the two rankings are FUSED: a document both halves like
+rises above one that only one half likes. Word matching is not replaced,
+but it is no longer the only voice — on a large workspace a weak keyword
+match can be ranked below a strong match by meaning, and fall off the end
+of the results you asked for.
 
 It is off by default because the model is a ~113MB download. Two deliberate
 steps turn it on:
