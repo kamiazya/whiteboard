@@ -610,6 +610,56 @@ paths:
       (394 -> 363, i.e. barely moved). The second failure is the instructive
       one — canonicalising among the alternatives requires having LOOKED at
       them, which is the exact work A* skips.
+      **The per-trial pair loop was measured next, and REJECTED after three
+      variants.** After A* the two bench canvases stop agreeing about what is
+      expensive, which is itself the finding: on the 345-edge clustered canvas
+      `routeEdge` is 47% and the trial's pair loop 11.5%, while on the
+      200-edge grid canvas routing is 10.5% and the pair loop is **55%** — of
+      which only 22.5% is `pairScore` itself, leaving ~32% in the loop's own
+      bookkeeping. That loop walks every edge per touched edge (309k
+      iterations per layout on the grid canvas) computing a key, three map
+      probes and a bounds test just to reject.
+      Replacing the walk with an x-sorted index over path bounds, plus a
+      `neighbours` adjacency so pairs that scored non-zero BEFORE can still be
+      subtracted, is the obvious fix and does not pay. Interleaved in both
+      orders: a Set-per-touched-edge version was 8% WORSE on the grid canvas;
+      hoisting an accidental O(E) scan out of the query made it 10% worse;
+      an allocation-free version (stamp array plus scratch list) settled at 6%
+      worse on the grid canvas and 4% better on the clustered one.
+      **What DID pay was pruning the obstacle set per routing call.** The same
+      re-profile that named the pair loop also split `routeEdge`: on the
+      clustered canvas `routeOnGrid` is 16.3% after A*, `bestCandidate` 7.2%,
+      the endpoint-containment filter 7.1% and the detour `region` union 4.6%.
+      Only `routeOnGrid` prunes; the others each walk all 286 rects, and
+      `routeOrthogonal` walks that set six to fifteen times per call — two
+      elbow clearance tests, `crossedBy`, and `bestCandidate` up to three
+      times, each testing its ranked candidates. One extra pass to build a
+      small set buys ten cheap ones. Measured 10-13% on the clustered canvas,
+      five of five in both orders; within noise on the grid canvas, where 58
+      obstacles leave nothing to prune.
+      The bound is where the care is, and the first version got it wrong.
+      Elbows live inside `bbox(start, exit, entry, end)`, which is exact for
+      the clearance tests and for `crossedBy` — that only ever tests elbow
+      segments. But a DETOUR waypoint is placed `OBSTACLE_CLEARANCE_PX`
+      OUTSIDE the region, so a box stopping at the region dropped obstacles a
+      detour still ran into. The routing scoreboard caught it, as moved pins
+      rather than as a crash — which is a long way from naming the cause. So
+      the bound is pinned rather than remembered: `DETOUR_REACH_PX` is
+      exported beside `detourCandidates` and
+      `detour-reach.properties.test.ts` asserts every waypoint stays inside
+      it, mutation-checked by zeroing the constant (the bug as shipped) and by
+      moving a waypoint one pixel further out. A prune whose bound is too
+      small does not throw; it quietly reroutes.
+      The reason is in the fixture's own documentation: the stride canvas is
+      the worst case for spatial pruning, where **55% of edge pairs survive a
+      bounding-box test**. The index therefore returns nearly everything, so
+      the binary search, the walk and the stamp writes are all paid on top of
+      visiting the same edges — and a flat `for (let j = 0; j < E; j++)` with
+      an inline bounds test is simply cheaper per element than an indexed walk
+      with an indirect read. Gating the index on a density estimate would buy
+      the clustered 4%, and would also be a threshold tuned against two
+      synthetic canvases, which is how one of them becomes the convention by
+      accident. Not worth 4%.
       The guard for all of this is `grid-route.optimality.properties.test.ts`,
       an independent-oracle property: a plain Dijkstra written in the test from
       the definition, asserting equal COST (never equal path — equal-cost

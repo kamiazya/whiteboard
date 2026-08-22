@@ -1593,7 +1593,16 @@ function bestCandidate(
 }
 
 /** Ways past a blocking region: over it, under it, left of it, right of it. */
-function detourCandidates(start: Point, end: Point, region: Rect): Point[][] {
+/**
+ * How far past the region a detour waypoint is placed. `routeOrthogonal`
+ * prunes its obstacle set to the box a candidate path can reach, and that
+ * box has to include this margin — a prune that stopped at the region
+ * dropped obstacles a detour still ran into. Exported so the bound is pinned
+ * by a test rather than by two call sites agreeing from memory.
+ */
+export const DETOUR_REACH_PX = OBSTACLE_CLEARANCE_PX
+
+export function detourCandidates(start: Point, end: Point, region: Rect): Point[][] {
   const above = region.y - OBSTACLE_CLEARANCE_PX
   const below = region.y + region.h + OBSTACLE_CLEARANCE_PX
   const leftOf = region.x - OBSTACLE_CLEARANCE_PX
@@ -1897,6 +1906,43 @@ function routeOrthogonal(
 
   const endpointRects = [fromRect, toRect]
   const elbows = [between([{ x: entry.x, y: exit.y }]), between([{ x: exit.x, y: entry.y }])]
+
+  // Everything below tests candidate paths against the obstacle set, six to
+  // fifteen times per call: two elbow clearance tests, the `crossedBy` filter,
+  // and `bestCandidate` up to three times, each walking its ranked candidates.
+  // On a clustered canvas that set is every node but two -- 286 rects, nearly
+  // all of them nowhere near this edge. `routeOnGrid` already prunes to a
+  // window; nothing else did.
+  //
+  // Sound because every path this function can produce lives inside the box
+  // below: the elbows are built from {start, exit, entry, end}, and a detour
+  // is built from `detourCandidates(exit, entry, region)` where `region` is a
+  // union of obstacles the elbows CROSS -- so it cannot reach an obstacle the
+  // elbow box does not already touch.
+  const boxOf = (points: readonly Point[]): Rect => {
+    let minX = Number.POSITIVE_INFINITY
+    let minY = Number.POSITIVE_INFINITY
+    let maxX = Number.NEGATIVE_INFINITY
+    let maxY = Number.NEGATIVE_INFINITY
+    for (const p of points) {
+      if (p.x < minX) minX = p.x
+      if (p.x > maxX) maxX = p.x
+      if (p.y < minY) minY = p.y
+      if (p.y > maxY) maxY = p.y
+    }
+    return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
+  }
+  const touches = (r: Rect, box: Rect) =>
+    r.x <= box.x + box.w && r.x + r.w >= box.x && r.y <= box.y + box.h && r.y + r.h >= box.y
+  const elbowBox = boxOf(elbows.flat())
+  // Stage one: what the elbows themselves can reach. Correct for the
+  // clearance tests and for `crossedBy`, which only ever tests elbow segments.
+  const nearIndices: number[] = []
+  for (let i = 0; i < inflated.length; i++) {
+    if (touches(inflated[i] as Rect, elbowBox)) nearIndices.push(i)
+  }
+  const nearInflated = nearIndices.map((i) => inflated[i] as Rect)
+  const nearRaw = nearIndices.map((i) => raw[i] as Rect)
   // An elbow is good enough to stop here only if it is clear of the FOREIGN
   // obstacles AND puts no ink inside its own endpoints. Testing foreign
   // clearance alone returned an elbow that tunnelled straight through the
@@ -1904,10 +1950,10 @@ function routeOrthogonal(
   // not obstacles, so nothing reported the route as blocked.
   if (
     elbows.some(
-      (path) => pathIsClear(path, inflated) && interiorInkThrough(path, endpointRects) === 0,
+      (path) => pathIsClear(path, nearInflated) && interiorInkThrough(path, endpointRects) === 0,
     )
   ) {
-    return bestCandidate(elbows, inflated, raw, endpointRects)
+    return bestCandidate(elbows, nearInflated, nearRaw, endpointRects)
   }
 
   // Detours are needed when the paths this style actually travels are
@@ -1924,7 +1970,7 @@ function routeOrthogonal(
       path.some((point, i) => i > 0 && segmentCrossesRect(path[i - 1] as Point, point, rect)),
     )
   const region = unionRect([
-    ...inflated.filter(crossedBy),
+    ...nearInflated.filter(crossedBy),
     ...endpointRects.filter((rect) => elbows.some((path) => interiorInkThrough(path, [rect]) > 0)),
   ])
   const candidates =
@@ -1934,8 +1980,30 @@ function routeOrthogonal(
           ...elbows,
           ...detourCandidates(exit, entry, region).map((path) => between(path.slice(1, -1))),
         ]
-  const enumerated = bestCandidate(candidates, inflated, raw, endpointRects)
-  if (interiorInkThrough(enumerated, endpointRects) === 0 && pathIsClear(enumerated, raw)) {
+  // Stage two: a detour reaches into `region`, so the working box grows to
+  // cover it and the set is taken again from the full list.
+  // Inflated by the detour clearance, because `detourCandidates` places its
+  // waypoints OBSTACLE_CLEARANCE_PX OUTSIDE the region's edges — a box that
+  // stops at the region drops obstacles a detour can still run into. The
+  // routing scoreboard caught exactly that as changed routes.
+  const detourReach = region === undefined ? undefined : (unionRect([elbowBox, region]) as Rect)
+  const workBox =
+    detourReach === undefined
+      ? elbowBox
+      : {
+          x: detourReach.x - DETOUR_REACH_PX,
+          y: detourReach.y - DETOUR_REACH_PX,
+          w: detourReach.w + 2 * DETOUR_REACH_PX,
+          h: detourReach.h + 2 * DETOUR_REACH_PX,
+        }
+  const workIndices: number[] = []
+  for (let i = 0; i < inflated.length; i++) {
+    if (touches(inflated[i] as Rect, workBox)) workIndices.push(i)
+  }
+  const workInflated = workIndices.map((i) => inflated[i] as Rect)
+  const workRaw = workIndices.map((i) => raw[i] as Rect)
+  const enumerated = bestCandidate(candidates, workInflated, workRaw, endpointRects)
+  if (interiorInkThrough(enumerated, endpointRects) === 0 && pathIsClear(enumerated, workRaw)) {
     return enumerated
   }
   // Nothing enumerated works, so pay for a real search. It runs between the
@@ -1945,7 +2013,12 @@ function routeOrthogonal(
   const searched = routeOnGrid(exit, entry, [...raw, ...endpointRects], OBSTACLE_CLEARANCE_PX)
   return searched === undefined
     ? enumerated
-    : bestCandidate([enumerated, between(searched.slice(1, -1))], inflated, raw, endpointRects)
+    : bestCandidate(
+        [enumerated, between(searched.slice(1, -1))],
+        workInflated,
+        workRaw,
+        endpointRects,
+      )
 }
 
 /**
