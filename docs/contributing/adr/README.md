@@ -47,3 +47,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0012](0012-user-installed-fonts.md) | A user installs a font by naming it, and the daemon keeps it | Accepted — not yet implemented; extends ADR-0011 |
 | [ADR-0013](0013-facet-system.md) | The facet system — plugins, versioned facet keys, and the meaning/display split | Accepted — key grammar landed; supersedes ADR-0009 decision 3 |
 | [ADR-0014](0014-reference-index.md) | Cross-document references are a derived projection with an event-fed aggregate | Accepted |
+| [ADR-0015](0015-search-quality-scoreboard.md) | A judged corpus decides whether search needs embeddings | Accepted |
