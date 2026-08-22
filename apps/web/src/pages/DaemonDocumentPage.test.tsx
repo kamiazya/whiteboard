@@ -1902,7 +1902,7 @@ describe('DaemonDocumentPage', () => {
   })
 
   describe('WorkspaceTopBar chrome adoption', () => {
-    it('does not render a "Back to canvas list" button (onNavigateBack omitted)', async () => {
+    it('does not render a "Back to documents" button (onNavigateBack omitted)', async () => {
       await act(async () => {
         render(
           <DaemonDocumentPage
@@ -1917,10 +1917,10 @@ describe('DaemonDocumentPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      expect(screen.queryByRole('button', { name: 'Back to canvas list' })).toBeNull()
+      expect(screen.queryByRole('button', { name: 'Back to documents' })).toBeNull()
     })
 
-    it('renders "Back to canvas list" and invokes onNavigateBack when provided', async () => {
+    it('renders "Back to documents" and invokes onNavigateBack when provided', async () => {
       const onNavigateBack = vi.fn()
       await act(async () => {
         render(
@@ -1937,12 +1937,12 @@ describe('DaemonDocumentPage', () => {
       // docks in Select mode, so tests exercising it switch first.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const button = screen.getByRole('button', { name: 'Back to canvas list' })
+      const button = screen.getByRole('button', { name: 'Back to documents' })
       fireEvent.click(button)
       expect(onNavigateBack).toHaveBeenCalledTimes(1)
     })
 
-    it('renders "Back to canvas list" in the zero-documents branch, where WorkspaceTopBar does not mount', async () => {
+    it('renders "Back to documents" in the zero-documents branch, where WorkspaceTopBar does not mount', async () => {
       mockListDocuments.mockResolvedValue({ documents: [] })
       const onNavigateBack = vi.fn()
 
@@ -1961,7 +1961,7 @@ describe('DaemonDocumentPage', () => {
         expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
       )
 
-      const button = screen.getByRole('button', { name: 'Back to canvas list' })
+      const button = screen.getByRole('button', { name: 'Back to documents' })
       fireEvent.click(button)
       expect(onNavigateBack).toHaveBeenCalledTimes(1)
     })

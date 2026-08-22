@@ -33,7 +33,7 @@ export interface WorkspaceFilesPanelProps {
    * the same destructive act.
    */
   onDuplicateDocument?: (path: string) => void
-  onRequestDelete?: (path: string, displayName: string) => void
+  onRequestDelete?: (path: string, displayName: string, kind?: DocumentKind) => void
   /**
    * Any value that changes when the workspace's documents may have changed
    * behind this panel's back.
@@ -443,7 +443,7 @@ export function WorkspaceFilesPanel({
               ? {}
               : {
                   onDelete: (entry: WorkspaceDocumentEntry) =>
-                    onRequestDelete(entry.path, entry.name ?? entry.path),
+                    onRequestDelete(entry.path, entry.name ?? entry.path, entry.kind),
                 })}
             className="h-full"
           />

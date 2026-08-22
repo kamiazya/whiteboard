@@ -190,7 +190,7 @@ describe('BrowserLocalDocumentPage delete confirmation (browser — real Indexed
     fireEvent.pointerUp(renameItem)
     const titleInput = await screen.findByRole(
       'textbox',
-      { name: /canvas title/i },
+      { name: /document title/i },
       { timeout: 3000 },
     )
     titleInput.focus()

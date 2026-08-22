@@ -77,7 +77,7 @@ async function openRenameInput(): Promise<HTMLElement> {
   if (!renameItem) throw new Error('Canvas actions dropdown never opened after retries')
   fireEvent.pointerUp(renameItem)
   const allTitleInputs = await waitFor(
-    () => screen.getAllByRole('textbox', { name: /canvas title/i }),
+    () => screen.getAllByRole('textbox', { name: /document title/i }),
     { timeout: 3000 },
   )
   return allTitleInputs[allTitleInputs.length - 1]!

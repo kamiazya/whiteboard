@@ -249,13 +249,13 @@ export default function WorkspaceTopBar({
               <button
                 type="button"
                 onClick={onNavigateBack}
-                aria-label="Back to canvas list"
+                aria-label="Back to documents"
                 className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
               >
                 <ChevronLeft className="size-4" />
               </button>
             </TooltipTrigger>
-            <TooltipContent>Back to canvas list</TooltipContent>
+            <TooltipContent>Back to documents</TooltipContent>
           </Tooltip>
         )}
 
@@ -292,7 +292,7 @@ export default function WorkspaceTopBar({
           <div className="flex min-w-0 flex-col gap-0.5">
             <Input
               autoFocus
-              aria-label="Canvas title"
+              aria-label="Document title"
               value={draft}
               onChange={(e) => setDraft(e.target.value)}
               onBlur={commitDocumentName}

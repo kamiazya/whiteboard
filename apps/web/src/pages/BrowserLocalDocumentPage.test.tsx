@@ -630,7 +630,7 @@ describe('BrowserLocalDocumentPage', () => {
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
-    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    const titleInput = screen.getByRole('textbox', { name: /document title/i })
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })
     await waitFor(() => {
@@ -1009,7 +1009,7 @@ describe('BrowserLocalDocumentPage', () => {
     const canvasActions = await screen.findByLabelText('Canvas actions')
     fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
     fireEvent.pointerUp(await screen.findByText('Rename canvas'))
-    const titleInput = screen.getByRole('textbox', { name: /canvas title/i })
+    const titleInput = screen.getByRole('textbox', { name: /document title/i })
     const refreshesBeforeRename = resolvers.length
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
     fireEvent.keyDown(titleInput, { key: 'Enter' })

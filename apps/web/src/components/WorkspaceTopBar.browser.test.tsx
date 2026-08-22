@@ -404,7 +404,7 @@ describe('WorkspaceTopBar browser mode', () => {
 
     // The left-side group (back button + canvas switcher + Pencil kebab +
     // HeaderBranchChip) still renders without overflow or wrapping.
-    expect(isDisplayNone(screen.getByRole('button', { name: /back to canvas list/i }))).toBe(false)
+    expect(isDisplayNone(screen.getByRole('button', { name: /back to documents/i }))).toBe(false)
     await waitFor(() => {
       expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
     })
@@ -531,7 +531,7 @@ describe('WorkspaceTopBar browser mode', () => {
   it('does not leave sibling top-bar controls aria-hidden after the Canvas actions menu closes', async () => {
     renderTopBar()
 
-    const backButton = screen.getByRole('button', { name: 'Back to canvas list' })
+    const backButton = screen.getByRole('button', { name: 'Back to documents' })
     expect(backButton.getAttribute('aria-hidden')).toBeNull()
 
     await page.getByRole('button', { name: 'Canvas actions' }).click()

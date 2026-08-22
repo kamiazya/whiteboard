@@ -199,6 +199,42 @@ describe('BrowserLocalIndexPage', () => {
     await waitFor(() => expect(button.hasAttribute('disabled')).toBe(false))
   })
 
+  it('the delete dialog names the kind: note for markdown, canvas for spatial', async () => {
+    // The dialog copy names the OBJECT being destroyed. Calling a markdown
+    // note "the canvas" is the retired container sense of the word.
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'meeting-notes',
+        name: 'Meeting notes',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'markdown',
+      },
+      {
+        documentId: '0KPSWZ258BEHMQTX0369CFJNRV',
+        workspaceId: 'local',
+        path: 'trip-plan',
+        name: 'Trip plan',
+        updatedAt: '2026-08-02T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    renderPage(store)
+
+    await selectCard('Meeting notes')
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    let dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/removes the note from this browser/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+
+    await selectCard('Trip plan')
+    fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
+    dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/removes the canvas from this browser/)).toBeTruthy()
+  })
+
   it('Delete opens a dialog naming the canvas; Cancel removes nothing', async () => {
     const store = await seededStore([
       {
@@ -295,7 +331,7 @@ describe('BrowserLocalIndexPage', () => {
 
     // Fixed copy — never the raw error text — and the dialog stays open.
     expect(
-      await within(dialog).findByText('Failed to delete the canvas from this browser.'),
+      await within(dialog).findByText('Failed to delete the document from this browser.'),
     ).toBeTruthy()
     expect(within(dialog).queryByText(/quota exceeded/)).toBeNull()
 

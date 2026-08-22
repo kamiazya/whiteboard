@@ -168,7 +168,7 @@ describe('WorkspaceTopBar — router-free navigation callbacks', () => {
     const onNavigateBack = vi.fn()
     renderBar({ onNavigateBack })
 
-    fireEvent.click(screen.getByRole('button', { name: /back to canvas list/i }))
+    fireEvent.click(screen.getByRole('button', { name: /back to documents/i }))
 
     expect(onNavigateBack).toHaveBeenCalledTimes(1)
   })
@@ -765,7 +765,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
       />,
       { container: document.body },
     )
-    expect(screen.queryByLabelText('Back to canvas list')).toBeNull()
+    expect(screen.queryByLabelText('Back to documents')).toBeNull()
   })
 
   it('hides the fullscreen button when onToggleFullscreen is omitted', () => {
@@ -1161,7 +1161,7 @@ describe('WorkspaceTopBar — dataMode="local"', () => {
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
 
-    const input = screen.getByRole('textbox', { name: 'Canvas title' })
+    const input = screen.getByRole('textbox', { name: 'Document title' })
 
     const docKeydown = vi.fn()
     const docKeyup = vi.fn()
@@ -1321,7 +1321,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
     const renameItem = await screen.findByText('Rename canvas')
     fireEvent.pointerUp(renameItem)
 
-    const input = await screen.findByLabelText('Canvas title')
+    const input = await screen.findByLabelText('Document title')
     fireEvent.change(input, { target: { value: 'Renamed Canvas' } })
     fireEvent.keyDown(input, { key: 'Enter' })
 
@@ -1330,7 +1330,7 @@ describe('WorkspaceTopBar — mountedRef survives StrictMode dev double-invoke',
     // false, so the rename completion path (gated on mountedRef.current)
     // would never close the input.
     await waitFor(() => {
-      expect(screen.queryByLabelText('Canvas title')).toBeNull()
+      expect(screen.queryByLabelText('Document title')).toBeNull()
     })
   })
 })

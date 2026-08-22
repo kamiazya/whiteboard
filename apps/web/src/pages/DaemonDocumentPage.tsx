@@ -91,7 +91,7 @@ export interface DaemonDocumentPageProps {
   // daemon workspace. Absent in tests/embedders that don't need the flow.
   browserLocalStore?: DocumentIndex
   browserLocalClock?: ContentClock
-  // Wired to WorkspaceTopBar's own "Back to canvas list" button. Absent
+  // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
   onNavigateBack?: () => void
@@ -768,7 +768,7 @@ export function DaemonDocumentPage({
                 onClick={onNavigateBack}
                 className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
               >
-                <span aria-hidden="true">← </span>Back to canvas list
+                <span aria-hidden="true">← </span>Back to documents
               </button>
             )}
             <p className="text-sm text-muted-foreground">This workspace has no documents yet.</p>
