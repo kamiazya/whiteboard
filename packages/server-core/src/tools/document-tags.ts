@@ -37,7 +37,7 @@ export async function computeDocumentTags(
   const entries = await deps.documentIndex.listDocuments({ workspaceId: input.workspaceId })
   const documents: DocumentTagsOutput['documents'] = []
   for (const entry of entries) {
-    let doc
+    let doc: Awaited<ReturnType<typeof loadDocument>>['doc']
     try {
       doc = (await loadDocument(deps, entry.documentId)).doc
     } catch {

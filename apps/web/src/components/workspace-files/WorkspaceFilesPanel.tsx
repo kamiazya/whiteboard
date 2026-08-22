@@ -337,7 +337,7 @@ export function WorkspaceFilesPanel({
            and a button inside a button is neither valid nor reachable by
            keyboard. The strip filters via the search box (#tag), so the
            filter stays visible, editable state rather than a hidden mode. */
-        <div role="group" aria-label="Filter by tag" className="flex flex-wrap gap-1 px-2 pb-1">
+        <fieldset aria-label="Filter by tag" className="flex flex-wrap gap-1 border-0 px-2 pb-1">
           {workspaceTags.map((tag) => (
             <button
               key={tag}
@@ -349,7 +349,7 @@ export function WorkspaceFilesPanel({
               #{tag}
             </button>
           ))}
-        </div>
+        </fieldset>
       )}
       <div className="flex min-h-0 flex-1 flex-col gap-4 md:flex-row">
         {query.trim() !== '' ? (
