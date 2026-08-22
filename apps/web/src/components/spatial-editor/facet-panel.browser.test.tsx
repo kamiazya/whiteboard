@@ -45,7 +45,9 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   expect(panel).not.toBeNull()
 
   // visual.shape's derived form: a choice control over the five silhouettes.
-  const select = panel.querySelector('select[aria-label="kind"]') as HTMLSelectElement
+  const select = panel.querySelector(
+    'select[aria-label="Visual style shape kind"]',
+  ) as HTMLSelectElement
   fireEvent.change(select, { target: { value: 'hexagon' } })
   const save = [...panel.querySelectorAll('button')].find((b) =>
     b.textContent?.startsWith('Save Visual style shape'),

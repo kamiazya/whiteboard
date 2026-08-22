@@ -60,6 +60,59 @@ describe('deriveFacetForm', () => {
     expect(form.discriminant).toBe('kind')
   })
 
+  it('distinguishes optional from default, and a chain of both', () => {
+    // `required` drives only emphasis today, but the three wrapper
+    // combinations answer differently and nothing else pins which is which.
+    const form = deriveFacetForm(
+      z.object({
+        plain: z.string(),
+        opt: z.string().optional(),
+        def: z.string().default('x'),
+        both: z.string().default('x').optional(),
+      }),
+    )
+    if (form.kind !== 'fields') throw new Error('unreachable')
+    expect(form.fields.map((f) => [f.name, f.required])).toEqual([
+      ['plain', true],
+      ['opt', false],
+      ['def', true],
+      ['both', false],
+    ])
+  })
+
+  it('rejects a union it cannot present as variants, each way separately', () => {
+    // A non-object arm — the OTHER arm is a well-formed discriminated
+    // object, so the rejection can only come from the bad arm itself.
+    expect(
+      deriveFacetForm(z.union([z.object({ kind: z.literal('a'), v: z.string() }), z.string()]))
+        .kind,
+    ).toBe('unsupported')
+    // An arm with no string literal to select it by.
+    expect(
+      deriveFacetForm(
+        z.union([z.object({ kind: z.literal('a'), v: z.string() }), z.object({ v: z.string() })]),
+      ).kind,
+    ).toBe('unsupported')
+    // Arms discriminated on DIFFERENT field names — each is fine alone.
+    expect(
+      deriveFacetForm(
+        z.union([
+          z.object({ kind: z.literal('a'), v: z.string() }),
+          z.object({ type: z.literal('b'), v: z.string() }),
+        ]),
+      ).kind,
+    ).toBe('unsupported')
+    // An arm whose non-discriminant member is outside the vocabulary.
+    expect(
+      deriveFacetForm(
+        z.union([
+          z.object({ kind: z.literal('a'), v: z.string() }),
+          z.object({ kind: z.literal('b'), v: z.array(z.string()) }),
+        ]),
+      ).kind,
+    ).toBe('unsupported')
+  })
+
   it('answers unsupported for a schema outside the closed vocabulary', () => {
     // A nested object is not a tier-1 form: the fallback is honest about
     // needing a real widget rather than rendering half the payload.

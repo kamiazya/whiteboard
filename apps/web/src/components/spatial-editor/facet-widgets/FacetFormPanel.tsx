@@ -44,24 +44,30 @@ function initialDraft(stored: unknown): Draft {
 
 function FieldInput({
   facetKey,
+  title,
   field,
   value,
   onChange,
 }: {
   readonly facetKey: string
+  /** Facet title, so the accessible name says WHICH facet's field this is. */
+  readonly title: string
   readonly field: FacetFormField
   readonly value: unknown
   readonly onChange: (next: unknown) => void
 }) {
   // Scoped by facet: two facets may declare the same field name, and a
-  // duplicate id would point every label at the first input.
+  // duplicate id would point every label at the first input. The
+  // accessible NAME is qualified for the same reason — a dialog with two
+  // controls both called "kind" tells a screen-reader user nothing.
   const id = `facet-field-${facetKey}-${field.name}`
+  const name = `${title} ${field.label}`
   const common = 'rounded border border-border bg-background px-2 py-1 text-xs'
   if (field.control.kind === 'toggle') {
     return (
       <input
         id={id}
-        aria-label={field.label}
+        aria-label={name}
         type="checkbox"
         checked={value === true}
         onChange={(event) => onChange(event.target.checked)}
@@ -72,7 +78,7 @@ function FieldInput({
     return (
       <select
         id={id}
-        aria-label={field.label}
+        aria-label={name}
         className={common}
         value={typeof value === 'string' ? value : ''}
         onChange={(event) => onChange(event.target.value)}
@@ -89,7 +95,7 @@ function FieldInput({
   return (
     <input
       id={id}
-      aria-label={field.label}
+      aria-label={name}
       type={field.control.kind === 'number' ? 'number' : 'text'}
       className={common}
       value={value === undefined || value === null ? '' : String(value)}
@@ -178,7 +184,7 @@ function FacetEditor({
           <span className="text-muted-foreground">{form.discriminant}</span>
           <select
             id={`facet-variant-${facetKey}`}
-            aria-label={form.discriminant}
+            aria-label={`${title} ${form.discriminant}`}
             className="rounded border border-border bg-background px-2 py-1 text-xs"
             value={activeVariant?.label ?? ''}
             onChange={(event) => set(form.discriminant, event.target.value)}
@@ -202,6 +208,7 @@ function FacetEditor({
           </span>
           <FieldInput
             facetKey={facetKey}
+            title={title}
             field={field}
             value={draft[field.name]}
             onChange={(next) => set(field.name, next)}
@@ -247,7 +254,11 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
           </span>
           {group.facets.map((facet) => (
             <FacetEditor
-              key={facet.key}
+              // Keyed by NODE too: a draft belongs to the node it was typed
+              // against. Retargeting the panel without this reuses the
+              // instance, so an abandoned edit on one node would be shown —
+              // and saved — as another node's value.
+              key={`${node.id}:${facet.key}`}
               facetKey={facet.key}
               title={`${group.displayName} ${facet.definition.name}`}
               form={deriveFacetForm(facet.definition.schema)}
