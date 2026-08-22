@@ -1,19 +1,13 @@
 import {
-  readCoreFacets,
-  readDocumentKind,
-  readMarkdownBody,
-} from '@kamiazya/whiteboard-loro-adapter'
-import {
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
-  type SpatialCanvas,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
+import { ContentFactsCache } from '../references/content-facts-cache.js'
 import { fullTextSearch, type SearchableDocument } from '../search/full-text.js'
 import type { ServerDeps } from '../server-deps.js'
-import { loadDocument } from './document-io.js'
 
 export const documentSearchInputSchema = z
   .object({
@@ -50,26 +44,19 @@ export const documentSearchOutputSchema = z
   .strict()
 export type DocumentSearchOutput = z.infer<typeof documentSearchOutputSchema>
 
-function canvasTexts(canvas: SpatialCanvas): string[] {
-  const texts: string[] = []
-  for (const node of canvas.nodes) {
-    if (node.type === 'text') texts.push(node.text)
-    if (node.type === 'group' && node.label !== undefined) texts.push(node.label)
-  }
-  for (const edge of canvas.edges) if (edge.label !== undefined) texts.push(edge.label)
-  return texts
-}
-
 /**
  * Lexical search across a workspace: markdown bodies, canvas text (nodes,
  * group labels, edge labels — a canvas means through its RELATIONS, so edge
  * labels are content, not decoration), names and paths.
  *
- * ponytail: O(N) document loads per query, the same ceiling as
- * computeBacklinks/computeDocumentTags — one event-fed facts projection
- * replaces all three when a measured workspace demands it (ADR-0014).
+ * Corpus served from the stamp-validated ContentFactsCache shared with
+ * backlinks/mentions and tags — only documents whose frontier moved are
+ * reloaded (ADR-0014's incremental mode, cache form).
  */
-export function createDocumentSearchTool(deps: ServerDeps) {
+export function createDocumentSearchTool(
+  deps: ServerDeps,
+  cache: ContentFactsCache = new ContentFactsCache(),
+) {
   return {
     name: 'wb_document_search' as const,
     description:
@@ -79,27 +66,23 @@ export function createDocumentSearchTool(deps: ServerDeps) {
     async execute(input: DocumentSearchInput): Promise<DocumentSearchOutput> {
       const parsed = documentSearchInputSchema.parse(input)
       const entries = await deps.documentIndex.listDocuments({ workspaceId: parsed.workspaceId })
+      const content = await cache.factsFor(deps, entries)
 
       const searchable: (SearchableDocument & { kind?: 'markdown' | 'spatial' })[] = []
       for (const entry of entries) {
-        let loaded: Awaited<ReturnType<typeof loadDocument>>
-        try {
-          loaded = await loadDocument(deps, entry.documentId)
-        } catch {
-          continue // no snapshot yet: nothing to match
-        }
-        const kind = entry.kind ?? readDocumentKind(loaded.doc)
-        if (parsed.kind !== undefined && kind !== parsed.kind) continue
+        const facts = content.get(entry.documentId)
+        if (facts === undefined) continue
+        if (parsed.kind !== undefined && entry.kind !== parsed.kind) continue
         if (parsed.tags !== undefined) {
-          const tags = readCoreFacets(loaded.doc)?.tags ?? []
+          const tags = facts.tags ?? []
           if (!parsed.tags.every((tag) => tags.includes(tag))) continue
         }
         searchable.push({
           documentId: entry.documentId,
           path: entry.path,
           ...(entry.name === undefined ? {} : { name: entry.name }),
-          ...(kind === undefined ? {} : { kind }),
-          texts: kind === 'markdown' ? [readMarkdownBody(loaded.doc)] : canvasTexts(loaded.canvas),
+          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          texts: [...facts.texts],
         })
       }
 

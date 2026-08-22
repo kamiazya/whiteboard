@@ -4,6 +4,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import { ContentFactsCache } from './references/content-facts-cache.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
 import { createBodyPatchTool } from './tools/body-patch.js'
@@ -46,6 +47,10 @@ import { createViewportSetTool } from './tools/viewport-set.js'
 
 export function createServer(deps: ServerDeps) {
   const app = new Hono()
+  // One stamp-validated content-facts cache per server: backlinks/mentions,
+  // tags, and search all read through it, so a request after a quiet period
+  // reloads only what changed — regardless of which write path changed it.
+  const factsCache = new ContentFactsCache()
 
   app.post('/api/v1/workspaces/:workspaceId/documents', async (c) => {
     const body = await c.req.json().catch(() => ({}))
@@ -139,7 +144,7 @@ export function createServer(deps: ServerDeps) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
     try {
-      return c.json(await computeDocumentTags(deps, parsed.data))
+      return c.json(await computeDocumentTags(deps, parsed.data, factsCache))
     } catch (err) {
       return mapDocumentError(c, err)
     }
@@ -174,7 +179,7 @@ export function createServer(deps: ServerDeps) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
     try {
-      return c.json(await computeBacklinks(deps, parsed.data))
+      return c.json(await computeBacklinks(deps, parsed.data, factsCache))
     } catch (err) {
       return mapDocumentError(c, err)
     }
@@ -212,7 +217,7 @@ export function createServer(deps: ServerDeps) {
     canvasEdit: createCanvasEditTool(deps),
     viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
-    documentSearch: createDocumentSearchTool(deps),
+    documentSearch: createDocumentSearchTool(deps, factsCache),
     documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),
