@@ -124,7 +124,14 @@ describe('BrowserLocalIndexPage', () => {
     const store = new LocalStoreDouble()
     const { onOpenDocument } = renderPage(store)
 
-    fireEvent.click(await screen.findByRole('button', { name: /create a canvas/i }))
+    // The privacy promise is only TRUE in local mode — a swap with the
+    // daemon page's line would ship a lie, so the exact string is pinned
+    // per page.
+    expect((await screen.findByTestId('empty-state-subtitle')).textContent).toBe(
+      'Everything stays in this browser — no account, no upload.',
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: /create a canvas/i }))
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     const newPath = onOpenDocument.mock.calls[0]![0] as string

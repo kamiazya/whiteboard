@@ -1133,6 +1133,11 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
 
     expect(await screen.findByText('What will you make first?')).toBeTruthy()
+    // Mode-honest copy: the daemon page must NOT show local mode's
+    // "stays in this browser" promise — documents live in the daemon here.
+    expect(screen.getByTestId('empty-state-subtitle').textContent).toBe(
+      'Documents live in this workspace, kept by your local daemon.',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
 
     // The action creates immediately — no naming step gates it — and opens
