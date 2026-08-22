@@ -6,9 +6,12 @@ import {
   bundledPlugins,
   resolveCanvasEdgeStyle,
   resolveNodeShape,
+  resolveNodeSymbol,
   VISUAL_EDGES_KEY,
   VISUAL_SHAPE_KEY,
+  VISUAL_SYMBOL_KEY,
   visualPlugin,
+  visualSymbolFacetSchema,
 } from './visual.js'
 
 const registry = createFacetRegistry(bundledPlugins)
@@ -140,5 +143,72 @@ describe('resolveNodeShape', () => {
         registry,
       ),
     ).toBe('diamond')
+  })
+})
+
+describe('visual.symbol/v0', () => {
+  const nodeWith = (extension: SpatialCanvas['nodes'][number]['x-whiteboard']) =>
+    ({
+      id: 'n1',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 10,
+      height: 10,
+      text: '',
+      ...(extension === undefined ? {} : { 'x-whiteboard': extension }),
+    }) as SpatialCanvas['nodes'][number]
+
+  it('registers with the visual plugin, node-targeted, under the fixed key', () => {
+    expect(VISUAL_SYMBOL_KEY).toBe('visual.symbol/v0')
+    expect(registry.targetsOf(VISUAL_SYMBOL_KEY)).toEqual(['node'])
+  })
+
+  it('the payload is a union: an icon by name or an emoji by character', () => {
+    expect(visualSymbolFacetSchema.parse({ kind: 'icon', name: 'star' })).toEqual({
+      kind: 'icon',
+      name: 'star',
+    })
+    expect(visualSymbolFacetSchema.parse({ kind: 'emoji', char: '✅' })).toEqual({
+      kind: 'emoji',
+      char: '✅',
+    })
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'icon', name: '' }).success).toBe(false)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '' }).success).toBe(false)
+    // A badge is ONE glyph. Multi-codepoint clusters (variation selectors,
+    // ZWJ families, flags) are one grapheme and stay valid; two symbols are
+    // not a badge and would overflow the fixed box.
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '⚠️' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '👨‍👩‍👧‍👦' }).success).toBe(
+      true,
+    )
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '🇯🇵' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '✅🔥' }).success).toBe(false)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: 'ab' }).success).toBe(false)
+    // NOT emoji-only: the scene node this feeds documents a CJK character
+    // or a dingbat as intended badge content, so the facet may not be
+    // narrower than the substrate it draws through.
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '重' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'emoji', char: '✽' }).success).toBe(true)
+    expect(visualSymbolFacetSchema.safeParse({ kind: 'image', href: 'x' }).success).toBe(false)
+  })
+
+  it('resolveNodeSymbol answers the stored symbol, undefined when absent or unresolvable', () => {
+    expect(
+      resolveNodeSymbol(
+        nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'icon', name: 'star' } } }),
+        registry,
+      ),
+    ).toEqual({ kind: 'icon', name: 'star' })
+    expect(
+      resolveNodeSymbol(
+        nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { kind: 'emoji', char: '⚠️' } } }),
+        registry,
+      ),
+    ).toEqual({ kind: 'emoji', char: '⚠️' })
+    expect(resolveNodeSymbol(nodeWith(undefined), registry)).toBeUndefined()
+    expect(
+      resolveNodeSymbol(nodeWith({ facets: { [VISUAL_SYMBOL_KEY]: { bogus: true } } }), registry),
+    ).toBeUndefined()
   })
 })

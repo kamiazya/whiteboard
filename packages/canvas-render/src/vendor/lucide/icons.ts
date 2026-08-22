@@ -60,3 +60,10 @@ export const LUCIDE_ICONS: Readonly<Record<string, ReadonlyArray<LucideIconEleme
     },
   ],
 }
+
+/**
+ * The vendored set's names, sorted — the published answer to "which icons
+ * can this renderer draw". A picker offers exactly these, so an editor
+ * never lists a name the backend would silently drop.
+ */
+export const BUILT_IN_ICON_NAMES: readonly string[] = Object.keys(LUCIDE_ICONS).sort()

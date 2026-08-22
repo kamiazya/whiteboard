@@ -236,6 +236,76 @@ describe('layoutSpatialCanvas', () => {
     expect(plainBlock?.bbox.y).toBe(NODE_PADDING_PX)
   })
 
+  it('a visual.symbol facet draws a badge: an icon by name, an emoji as a glyph', () => {
+    const iconNode = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'a' }),
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
+    }
+    const scene = layoutSpatialCanvas(canvas([iconNode]), baseOptions())
+    const badge = scene.nodes.find((n) => n.kind === 'icon')
+    expect(badge).toBeDefined()
+    if (badge?.kind !== 'icon') throw new Error('unreachable')
+    expect(badge.icon).toBe('star')
+    // Top-right of the content area, inside the node box, on top of content
+    // (emitted after it).
+    expect(badge.bbox.x + badge.bbox.w).toBeLessThanOrEqual(200)
+    expect(badge.bbox.y).toBeGreaterThanOrEqual(0)
+    expect(badge.appearance?.stroke).toBe('#303030')
+
+    const emojiNode = {
+      ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'b' }),
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji' as const, char: '✅' } } },
+    }
+    const emojiScene = layoutSpatialCanvas(canvas([emojiNode]), baseOptions())
+    const glyph = emojiScene.nodes.find((n) => n.kind === 'glyph')
+    expect(glyph?.kind === 'glyph' && glyph.glyph).toBe('✅')
+  })
+
+  it('a badge on a SHAPED node sits inside the silhouette', () => {
+    const shaped = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: '' }),
+      'x-whiteboard': {
+        facets: {
+          'visual.shape/v0': { kind: 'ellipse' as const },
+          'visual.symbol/v0': { kind: 'icon' as const, name: 'star' },
+        },
+      },
+    }
+    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+    const badge = scene.nodes.find((n) => n.kind === 'icon')
+    expect(badge).toBeDefined()
+    if (badge?.kind !== 'icon') throw new Error('unreachable')
+    const corners = [
+      { x: badge.bbox.x, y: badge.bbox.y },
+      { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y },
+      { x: badge.bbox.x, y: badge.bbox.y + badge.bbox.h },
+      { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y + badge.bbox.h },
+    ]
+    for (const corner of corners) {
+      expect(outlineContains('ellipse', { x: 0, y: 0, w: 200, h: 100 }, corner)).toBe(true)
+    }
+  })
+
+  it('a node too narrow for a badge draws none, and never paints one outside itself', () => {
+    // The badge is a fixed 16px inset by a 4px margin, so a node has to be
+    // wider than 16 to hold one — the guard has to price the MARGIN too, or
+    // an 18px node gets a badge starting at x = -2.
+    for (const width of [8, 18, 20]) {
+      const node = {
+        ...textNode({ id: 'a', x: 0, y: 0, width, height: width, text: '' }),
+        'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
+      }
+      const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
+      const badge = scene.nodes.find((n) => n.kind === 'icon')
+      if (badge === undefined) continue
+      if (badge.kind !== 'icon') throw new Error('unreachable')
+      expect(badge.bbox.x, `width ${width}`).toBeGreaterThanOrEqual(0)
+      expect(badge.bbox.x + badge.bbox.w, `width ${width}`).toBeLessThanOrEqual(width)
+      expect(badge.bbox.y, `width ${width}`).toBeGreaterThanOrEqual(0)
+      expect(badge.bbox.y + badge.bbox.h, `width ${width}`).toBeLessThanOrEqual(width)
+    }
+  })
+
   it('an explicit nodeOutlines option overrides the facet for that node', () => {
     const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
     const shaped = {

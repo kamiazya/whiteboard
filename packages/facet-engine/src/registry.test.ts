@@ -203,3 +203,44 @@ describe('malformed keys — every registry method has an explicit branch', () =
     expect(registry.resolveFacetPayload(key, {})).toEqual({ kind: 'dropped' })
   })
 })
+
+describe('write rejection messages are for a reader, not a dump', () => {
+  const union = definePlugin({
+    id: 'shapes',
+    displayName: 'Shapes',
+    facets: [
+      defineFacet({
+        name: 'badge',
+        version: 'v0',
+        targets: ['node'],
+        schema: z.union([
+          z.object({ kind: z.literal('icon'), name: z.string().min(1) }),
+          z.object({ kind: z.literal('emoji'), char: z.string().min(1) }),
+        ]),
+      }),
+    ],
+  })
+  const registry = createFacetRegistry([union])
+
+  it('names each offending field and what it expected, on one line per issue', () => {
+    const result = registry.validateFacetWrite('shapes.badge/v0', { kind: 'image', href: 'x' })
+    expect(result.ok).toBe(false)
+    const message = result.ok ? '' : result.message
+    // No raw ZodError JSON: no bracket-dump, no internal issue codes.
+    expect(message).not.toContain('"code"')
+    expect(message).not.toContain('invalid_union')
+    expect(message.split('\n')).toHaveLength(1)
+    // The reader learns which field and which values are acceptable.
+    expect(message).toContain('kind')
+    expect(message).toContain('icon')
+    expect(message).toContain('emoji')
+  })
+
+  it('a single-issue rejection stays short too', () => {
+    const result = registry.validateFacetWrite('shapes.badge/v0', { kind: 'icon', name: '' })
+    expect(result.ok).toBe(false)
+    const message = result.ok ? '' : result.message
+    expect(message).not.toContain('"code"')
+    expect(message).toContain('name')
+  })
+})
