@@ -139,7 +139,7 @@ describe('BrowserLocalIndexPage', () => {
     const store = new LocalStoreDouble()
     const { onOpenDocument } = renderPage(store)
 
-    fireEvent.click(await screen.findByRole('button', { name: 'New markdown note' }))
+    fireEvent.click(await screen.findByRole('button', { name: 'Create a markdown note' }))
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     const newPath = onOpenDocument.mock.calls[0]![0] as string
@@ -262,7 +262,7 @@ describe('BrowserLocalIndexPage', () => {
 
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(await store.listDocuments()).toHaveLength(0)
-    expect(await screen.findByText('No documents yet')).toBeTruthy()
+    expect(await screen.findByText('What will you make first?')).toBeTruthy()
     // The delete flow must never open the canvas.
     expect(onOpenDocument).not.toHaveBeenCalled()
   })

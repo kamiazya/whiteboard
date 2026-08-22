@@ -380,7 +380,11 @@ export function DaemonIndexPage({
           // browser of nothing teaches less than one sentence and one
           // button, and this button also OPENS what it creates (ADR-0006 —
           // naming happens in the opened document's own top bar).
-          <EmptyWorkspaceState onCreate={(kind) => void handleCreate(kind)} disabled={creating} />
+          <EmptyWorkspaceState
+            onCreate={(kind) => void handleCreate(kind)}
+            disabled={creating}
+            subtitle="Documents live in this workspace, kept by your local daemon."
+          />
         ) : selectedWorkspace && filesSource ? (
           // Mounts when the skeleton unmounts: the fade carries the
           // skeleton-to-content handoff instead of an instant swap.

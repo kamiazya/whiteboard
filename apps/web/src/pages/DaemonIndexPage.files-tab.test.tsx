@@ -717,7 +717,7 @@ describe('DaemonIndexPage tree view', () => {
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
-    await screen.findByText('No documents yet')
+    await screen.findByText('What will you make first?')
     expect(screen.queryByRole('alert')).toBeNull()
   })
 
