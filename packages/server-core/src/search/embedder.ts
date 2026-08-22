@@ -15,14 +15,20 @@ export interface Embedder {
    * IS the cosine similarity. Normalising here rather than at every call
    * site keeps the comparison one multiply — and makes "which similarity"
    * a property of the port instead of a convention each caller re-derives.
+   *
+   * `role` is required rather than optional because retrieval models are
+   * commonly ASYMMETRIC: e5 was trained with a literal `query:` / `passage:`
+   * prefix and loses accuracy without it. A default would be a default that
+   * is wrong half the time, and silently — the results still look plausible.
+   * A symmetric model simply ignores the argument.
    */
-  embed(texts: readonly string[]): Promise<readonly Float32Array[]>
+  embed(texts: readonly string[], role: 'query' | 'document'): Promise<readonly Float32Array[]>
   /** Vector width, for a cheap shape check before scoring. */
   readonly dimensions: number
 }
 
 /** Cosine similarity of two L2-normalised vectors. */
-export function cosine(a: Float32Array, b: Float32Array): number {
+function cosine(a: Float32Array, b: Float32Array): number {
   if (a.length !== b.length) return 0
   let sum = 0
   for (let i = 0; i < a.length; i++) sum += (a[i] as number) * (b[i] as number)

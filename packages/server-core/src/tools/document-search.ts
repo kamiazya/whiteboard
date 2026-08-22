@@ -180,7 +180,7 @@ async function rankSemantically(
   try {
     const documents = await cache.vectorsFor(deps, workspaceId, entries, embedder)
     if (documents.length === 0) return []
-    const [queryVector] = await embedder.embed([query])
+    const [queryVector] = await embedder.embed([query], 'query')
     if (queryVector === undefined) return undefined
     return rankByVector(queryVector, documents)
   } catch {

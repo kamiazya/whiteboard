@@ -1,6 +1,7 @@
 export { createServer } from './create-server.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
+export type { Embedder } from './search/embedder.js'
 export type {
   AgentActivity,
   CanvasClientNotifier,

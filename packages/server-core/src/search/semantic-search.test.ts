@@ -48,7 +48,7 @@ function fakeEmbedder(): Embedder & { calls: number } {
   const impl = {
     dimensions: 3,
     calls: 0,
-    async embed(texts: readonly string[]) {
+    async embed(texts: readonly string[], _role: 'query' | 'document') {
       impl.calls += texts.length
       return texts.map(fakeVector)
     },

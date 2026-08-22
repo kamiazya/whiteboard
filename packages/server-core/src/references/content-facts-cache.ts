@@ -1,7 +1,7 @@
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import type { Embedder } from '../search/embedder.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from '../tools/document-io.js'
-import type { Embedder } from '../search/embedder.js'
 import { type ContentFacts, extractContentFacts } from './extract.js'
 
 const EMPTY_FACTS: ContentFacts = { refs: [], texts: [], tags: undefined }
@@ -113,7 +113,10 @@ export class ContentFactsCache {
       pending.push({ documentId: entry.documentId, text })
     }
     if (pending.length > 0) {
-      const vectors = await embedder.embed(pending.map((p) => p.text))
+      const vectors = await embedder.embed(
+        pending.map((entry) => entry.text),
+        'document',
+      )
       pending.forEach((p, index) => {
         const cached = held.get(p.documentId)
         const vector = vectors[index]
