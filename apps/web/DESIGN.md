@@ -25,10 +25,14 @@ value.
 | `--border`, `--input`, `--ring` | hairlines, input outlines, focus rings |
 | `--radius` (sm/md/lg/xl derived) | one radius scale — never ad-hoc radii |
 
-State colors outside the shadcn set (used by `ConnectionStatus`):
-`emerald-500` = live/synced, `amber-500` = needs attention,
+State colors outside the shadcn set live in ONE component,
+`components/StateDot.tsx`, which every chrome state carrier draws from:
+`emerald-500` = safe (saved, synced), `amber-500` = needs attention,
 `muted-foreground` = neutral/local. These are the ONLY approved uses of raw
-Tailwind palette colors in chrome.
+Tailwind palette colors in chrome, and a carrier picks a MEANING (`tone`)
+rather than a color. It also picks a SHAPE, which is what separates two
+carriers that share a tone: `filled` is a state the document is IN, `ring`
+one it is not in yet, `spinner` that same ring while the doing is in flight.
 
 ## Rules
 
@@ -39,9 +43,24 @@ Tailwind palette colors in chrome.
   carries state.
 - **One accent per view** (baseline-ui): destructive red on at most the one
   destructive control. Stateful color in a header is limited to a closed,
-  named set: the connection chip, the save-state dot (amber grammar), and
-  the AppShell gear's attention dot (brand blue, actionable-todo only).
-  Anything else stateful in chrome needs this list amended first.
+  named set, and each member says what QUESTION it answers — two carriers
+  that look alike but answer differently is the defect this naming exists to
+  prevent:
+  - **connection chip** (`ConnectionStatus`) — is this document reaching its
+    backend? Filled dot.
+  - **save-state chip** (`SaveStatusChip`) — did the last write to this
+    browser's storage land? Filled dot. Browser-local only; on a daemon the
+    connection chip is what answers "is my work safe", and a second dot
+    saying so would be the same fact twice.
+  - **version dot** (`HeaderVersionDot`) — are there edits no named version
+    holds yet? RING, not filled, precisely because it shares the amber tone
+    with the save-state chip while asking something else. It carried the
+    filled amber and the name "save dot" until 2026-08-22, which made one
+    shape mean two things depending on the mode.
+  - **AppShell gear's attention dot** — brand blue, actionable-todo only.
+
+  Anything else stateful in chrome needs this list amended first, and takes
+  its paint from `StateDot` rather than a fresh literal.
 - **The AppShell owns brand and settings.** Every page mounts `AppShell`
   (brand mark = home, the ALPHA honesty chip, the settings gear + attention
   dot) and never renders its own brand or settings chrome. Context and

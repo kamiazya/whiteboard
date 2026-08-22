@@ -64,13 +64,7 @@ describe('docs snapshot — user added review notes', () => {
     await ensureViewerFontLoaded()
 
     const { container } = render(
-      <TopBarFrame
-        testId="canvas-user-annotated-frame"
-        width={1100}
-        height={640}
-        documents={[{ path: 'design/architecture', updatedAt: '2026-05-01T12:00:00.000Z' }]}
-        scene={scene}
-      />,
+      <TopBarFrame testId="canvas-user-annotated-frame" width={1100} height={640} scene={scene} />,
     )
 
     await waitForSnapshotContent(container, {

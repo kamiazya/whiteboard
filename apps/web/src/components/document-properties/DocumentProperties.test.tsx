@@ -192,6 +192,27 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     expect(current).toBe('Release plan')
   })
 
+  // The spatial editor guards its own bindings with isTextEntryEvent, but a
+  // Delete typed into the title must not reach a canvas selection by any
+  // route — this field is always mounted, right beside the canvas.
+  it('keeps its keystrokes from bubbling out to editor-level listeners', () => {
+    const onAncestorKeyDown = vi.fn()
+    render(
+      // biome-ignore lint/a11y/noStaticElementInteractions: stands in for the page chrome that wraps this row
+      <div onKeyDown={onAncestorKeyDown}>
+        <DocumentProperties
+          {...titleProps({ title: 'Release plan', onTitleChange: vi.fn() })}
+          facets={meta()}
+          onFacetsChange={vi.fn()}
+        />
+      </div>,
+    )
+
+    fireEvent.keyDown(screen.getByRole('textbox', { name: /title/i }), { key: 'Delete' })
+
+    expect(onAncestorKeyDown).not.toHaveBeenCalled()
+  })
+
   it('drops the draft on blur so the box shows the canonical name', () => {
     const onTitleChange = vi.fn()
     render(

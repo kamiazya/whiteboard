@@ -9,7 +9,7 @@ import {
 } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import type { ReactElement } from 'react'
-import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 // Statically imported so the chunk's transform-and-load happens in the
 // collection phase, not inside a findBy* retry budget: the page renders
@@ -438,19 +438,17 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    // Export is a whole-document operation, so it sits with Duplicate and
-    // Delete in the canvas row's More actions kebab.
+    // One object, one action menu (ADR-0006). Counted BEFORE opening: an open
+    // Radix menu inerts the rest of the page, so its trigger is no longer in
+    // the accessible tree while the menu is up.
+    expect(await screen.findAllByRole('button', { name: 'More actions' })).toHaveLength(1)
+
     await openDocumentOpsMenu()
+    expect(await documentOpsItem(/copy link/i)).toBeTruthy()
     expect(await documentOpsItem(/export as png/i)).toBeTruthy()
     expect(await documentOpsItem(/export as svg/i)).toBeTruthy()
-    fireEvent.keyDown(screen.getByRole('menu'), { key: 'Escape' })
-
-    // The top bar's Canvas actions menu keeps rename/copy-URL only on this
-    // page (daemon mode, which has no canvas row, keeps its export there).
-    const topTrigger = await screen.findByLabelText('Document actions')
-    fireEvent.pointerDown(topTrigger, { button: 0, ctrlKey: false })
-    const topMenu = await screen.findByRole('menu')
-    expect(topMenu.textContent).not.toContain('Export')
+    expect(await documentOpsItem(/duplicate/i)).toBeTruthy()
+    expect(await documentOpsItem(/^delete$/i)).toBeTruthy()
   })
 
   it('renders a human-readable save status instead of the raw state enum', async () => {
@@ -496,11 +494,11 @@ describe('BrowserLocalDocumentPage', () => {
     // the right edge — not in a second header strip of its own.
     const title = screen.getByRole('textbox', { name: /title/i })
     // The merged row IS the workspace header: identity, state and operations
-    // all live in the one <header> next to the workspace switcher — there is
-    // no second chrome strip.
+    // all live in the one <header> next to the way out — there is no second
+    // chrome strip.
     const row = title.closest('header') as HTMLElement
     expect(row).toBeTruthy()
-    expect(row.contains(screen.getByRole('button', { name: /^Workspace:/i }))).toBe(true)
+    expect(row.contains(screen.getByRole('button', { name: 'Back to documents' }))).toBe(true)
     const chip = screen.getByTestId('save-status-chip')
     expect(row.contains(chip)).toBe(true)
     expect(chip.compareDocumentPosition(title) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy()
@@ -615,12 +613,10 @@ describe('BrowserLocalDocumentPage', () => {
     const heading = screen.getByRole('heading', { level: 1 })
     expect(heading.textContent).toBe('untitled')
     // WorkspaceTopBar mounts through a lazy chunk; wait for it to resolve.
-    expect(await screen.findByLabelText('Document actions')).toBeTruthy()
-    // Distinct from the canvas row's operations kebab.
-    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
+    expect(await screen.findByRole('button', { name: 'More actions' })).toBeTruthy()
   })
 
-  it("renaming through the top bar's canvas actions updates the heading and flushes a save", async () => {
+  it('renaming through the title field updates the heading and flushes a save', async () => {
     vi.useRealTimers()
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
@@ -635,13 +631,9 @@ describe('BrowserLocalDocumentPage', () => {
         />,
       )
     })
-    const canvasActions = await screen.findByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    const renameItem = await screen.findByText('Rename')
-    fireEvent.pointerUp(renameItem)
-    const titleInput = screen.getByRole('textbox', { name: /document title/i })
+    const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
-    fireEvent.keyDown(titleInput, { key: 'Enter' })
+    fireEvent.blur(titleInput)
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
     })
@@ -663,71 +655,6 @@ describe('BrowserLocalDocumentPage', () => {
       )
     })
     expect(screen.queryByRole('button', { name: /add rectangle/i })).toBeNull()
-  })
-
-  it('lists all documents in the switcher dropdown', async () => {
-    vi.useRealTimers()
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
-    await store.save({
-      documentId: '0DGKPSWZ258BEHMQTX0369CFJN',
-      workspaceId: 'local',
-      path: 'other-canvas',
-      name: 'Other canvas',
-      updatedAt: '2026-05-25T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
-    await act(async () => {
-      render(
-        <BrowserLocalDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
-      )
-    })
-    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-    // Accessible names must not collide with the operations kebab or the
-    // top bar's canvas actions control.
-    expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
-    expect(screen.getByLabelText('Document actions')).toBeTruthy()
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    await screen.findByText('Other canvas')
-  })
-
-  it('switching the switcher selection calls switchDocument exactly once', async () => {
-    vi.useRealTimers()
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
-    await store.save({
-      documentId: '0DGKPSWZ258BEHMQTX0369CFJN',
-      workspaceId: 'local',
-      path: 'other-canvas-2',
-      name: 'Other canvas',
-      updatedAt: '2026-05-25T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
-    await act(async () => {
-      render(
-        <BrowserLocalDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
-      )
-    })
-    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const otherItem = await screen.findByText('Other canvas')
-    fireEvent.pointerUp(otherItem)
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other canvas')
-    })
-    expect(await store.getDefaultDocumentId()).toBe('0DGKPSWZ258BEHMQTX0369CFJN')
   })
 
   it('honors an explicit initialPath prop over the store default canvas', async () => {
@@ -765,231 +692,7 @@ describe('BrowserLocalDocumentPage', () => {
     expect(heading.textContent).toBe('Other canvas')
   })
 
-  it('updates the URL to the switched-to document PATH, not its id', async () => {
-    vi.useRealTimers()
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await store.save(snap)
-    await store.save({
-      documentId: '0DGKPSWZ258BEHMQTX0369CFJN',
-      workspaceId: 'local',
-      path: 'archive/other-canvas',
-      name: 'Other canvas',
-      updatedAt: '2026-05-25T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
-    const router = createMemoryRouter(
-      [
-        {
-          path: '*',
-          element: (
-            <BrowserLocalDocumentPage
-              store={store.index}
-              pointer={store.pointer}
-              clock={store.clock}
-              loro={new FakeLoroStore()}
-            />
-          ),
-        },
-      ],
-      { initialEntries: ['/'] },
-    )
-    await act(async () => {
-      rtlRender(<RouterProvider router={router} />)
-    })
-    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const otherItem = await screen.findByText('Other canvas')
-    fireEvent.pointerUp(otherItem)
-    await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/local/archive/other-canvas')
-    })
-  })
-
-  it('creating a canvas through the top bar switches to a fresh untitled canvas', async () => {
-    vi.useRealTimers()
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    // A distinctly-named current canvas so the switch to the new 'untitled' one
-    // is observable in the heading, not just an inert re-render.
-    await store.save({
-      documentId: '069CFJNRVY147ADGKPSWZ258BE',
-      workspaceId: 'local',
-      path: 'diagram-a',
-      name: 'Diagram A',
-      updatedAt: '2026-05-24T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
-    await act(async () => {
-      render(
-        <BrowserLocalDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
-      )
-    })
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Diagram A')
-
-    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
-    fireEvent.pointerUp(newItem)
-    await waitFor(() => {
-      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
-    })
-    const newId = await store.getDefaultDocumentId()
-    expect(newId).not.toBe('069CFJNRVY147ADGKPSWZ258BE')
-    const list = await store.listDocuments()
-    expect(list.map((c) => c.documentId)).toEqual(
-      expect.arrayContaining(['069CFJNRVY147ADGKPSWZ258BE', newId]),
-    )
-  })
-
-  it('surfaces an error and stays on the current canvas when creating a new canvas fails', async () => {
-    vi.useRealTimers()
-    const base = new LocalStoreDouble()
-    await base.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    await base.save(snap)
-    // Fail the metadata save that createDocument performs first, so createDocument()
-    // rejects before ever calling switchDocument.
-    let failNextSave = false
-    const create = base.index.createDocument.bind(base.index)
-    base.index.createDocument = async (input) => {
-      if (failNextSave) throw new Error('idb write failed')
-      return create(input)
-    }
-    await act(async () => {
-      render(
-        <BrowserLocalDocumentPage
-          store={base.index}
-          pointer={base.pointer}
-          clock={base.clock}
-          loro={new FakeLoroStore()}
-        />,
-      )
-    })
-    failNextSave = true
-    const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-    const newItem = await screen.findByTestId('new-document-spatial-menu-item')
-    fireEvent.pointerUp(newItem)
-    // The rejection from createDocument() must be caught and surfaced by
-    // WorkspaceTopBar's own local-mode error channel, not left as an
-    // unhandled promise rejection with the UI silently doing nothing.
-    expect((await screen.findByRole('alert')).textContent).toBe('Failed to create document.')
-    // The current canvas is untouched — no switch happened.
-    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled')
-    expect(await base.getDefaultDocumentId()).toBe('069CFJNRVY147ADGKPSWZ258BE')
-  })
-
-  it('drops a stale listDocuments resolution that would otherwise clobber a newer refresh from a fast switch', async () => {
-    const store = new LocalStoreDouble()
-    await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
-    vi.useRealTimers()
-    await store.save(snap)
-    await store.save({
-      documentId: '0DGKPSWZ258BEHMQTX0369CFJN',
-      workspaceId: 'local',
-      path: 'other-canvas-5',
-      name: 'Other canvas',
-      updatedAt: '2026-05-25T00:00:00.000Z',
-      kind: 'spatial' as const,
-    })
-
-    // Held open at the PORT, one rung below where the old double held it: the
-    // listing the page renders is `listLocalDocuments`, and the read it waits
-    // on is the index's.
-    const resolvers: Array<(list: DocumentEntry[]) => void> = []
-    store.index.listDocuments = () => new Promise((resolve) => resolvers.push(resolve))
-
-    await act(async () => {
-      render(
-        <BrowserLocalDocumentPage
-          store={store.index}
-          pointer={store.pointer}
-          clock={store.clock}
-          loro={new FakeLoroStore()}
-        />,
-      )
-    })
-    await screen.findByLabelText('Document actions')
-    // Resolve the initial mount's list refresh (generation 1) with both
-    // documents, so the switcher has real options to switch between.
-    await act(async () => {
-      resolvers[0]!([
-        snap,
-        {
-          documentId: '0DGKPSWZ258BEHMQTX0369CFJN',
-          workspaceId: 'local',
-          path: 'other-canvas-6',
-          name: 'Other canvas',
-          updatedAt: '2026-05-25T00:00:00.000Z',
-          kind: 'spatial' as const,
-        },
-      ])
-    })
-
-    // Fast switch: c1 -> c2 -> c1. Each switch bumps the list-refresh
-    // generation but its listDocuments() call is left pending (deferred),
-    // so two stale refreshes (generation 2 for c2, generation 3 for c1) end
-    // up in flight at once.
-    const switchTo = async (name: string) => {
-      const switcherButton = screen.getByRole('button', { name: /^Workspace:/i })
-      fireEvent.pointerDown(switcherButton, { button: 0, ctrlKey: false })
-      const item = await screen.findByText(name)
-      fireEvent.pointerUp(item)
-      await waitFor(() => {
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe(name)
-      })
-    }
-    await switchTo('Other canvas')
-    await switchTo('untitled')
-    expect(resolvers.length).toBe(3)
-
-    // Resolve generation 3 (fresh, matches the final c1 state) BEFORE
-    // generation 2 (stale, superseded) — the out-of-order case the
-    // generation guard exists to handle.
-    // The fresh marker rides a row OTHER than the open canvas: the open
-    // canvas's own label comes from the loaded snapshot, not from the list.
-    const freshList: DocumentSnapshot[] = [
-      snap,
-      {
-        documentId: '0MQTX0369CFJNRVY147ADGKPSW',
-        workspaceId: 'local',
-        path: 'other-canvas-fresh',
-        name: 'Other canvas (fresh)',
-        updatedAt: '2026-05-26T00:00:00.000Z',
-        kind: 'spatial' as const,
-      },
-    ]
-    const staleList: DocumentSnapshot[] = [
-      {
-        documentId: '0DGKPSWZ258BEHMQTX0369CFJN',
-        workspaceId: 'local',
-        path: 'other-canvas-stale',
-        name: 'Other canvas (stale)',
-        updatedAt: '2026-05-25T00:00:00.000Z',
-        kind: 'spatial' as const,
-      },
-    ]
-    await act(async () => {
-      resolvers[2]!(freshList)
-    })
-    await act(async () => {
-      resolvers[1]!(staleList)
-    })
-
-    // The stale (generation 2) resolution must not clobber the fresh one:
-    // opening the switcher again must show only the fresh name.
-    const switcherButton = await screen.findByRole('button', { name: /^Workspace:/i })
-    fireEvent.pointerDown(switcherButton, { button: 0, ctrlKey: false })
-    await screen.findByText('Other canvas (fresh)')
-    expect(screen.queryByText('Other canvas (stale)')).toBeNull()
-  })
-
-  it('shows the renamed canvas in the switcher even when the list read wins the race against the save', async () => {
+  it('shows the renamed document even when the list read wins the race against the save', async () => {
     vi.useRealTimers()
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
@@ -1015,13 +718,10 @@ describe('BrowserLocalDocumentPage', () => {
       resolvers[0]!([snap])
     })
 
-    const canvasActions = await screen.findByLabelText('Document actions')
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    fireEvent.pointerUp(await screen.findByText('Rename'))
-    const titleInput = screen.getByRole('textbox', { name: /document title/i })
+    const titleInput = await screen.findByRole('textbox', { name: /^title$/i })
     const refreshesBeforeRename = resolvers.length
     fireEvent.change(titleInput, { target: { value: 'Renamed canvas' } })
-    fireEvent.keyDown(titleInput, { key: 'Enter' })
+    fireEvent.blur(titleInput)
     await waitFor(() => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
     })
@@ -1033,17 +733,15 @@ describe('BrowserLocalDocumentPage', () => {
 
     // It resolves with the PRE-rename row: the store read raced the
     // still-in-flight save and lost. Nothing schedules another refresh
-    // afterwards, so a list-only switcher label would stay stale forever —
-    // the current canvas's row must come from the loaded snapshot.
+    // afterwards, so a list-derived label would stay stale forever — the
+    // open document's name must come from the loaded snapshot.
     await act(async () => {
       resolvers[resolvers.length - 1]!([snap])
     })
-    expect(screen.getByRole('button', { name: /^Workspace:/i })).toBeTruthy()
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Renamed canvas')
   })
 
-  it('never triggers a React setState-in-render warning across mount, canvas switch, and create-canvas', async () => {
-    // Ported to the WorkspaceTopBar chrome: switching and creating now go
-    // through the bar's switcher dropdown instead of the old combobox/button.
+  it('never triggers a React setState-in-render warning on mount', async () => {
     vi.useRealTimers()
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {})
     try {
@@ -1067,29 +765,6 @@ describe('BrowserLocalDocumentPage', () => {
             loro={new FakeLoroStore()}
           />,
         )
-      })
-      assertNoSetStateInRenderWarning(errorSpy)
-
-      // Canvas switch re-renders the title with new key/props.
-      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-      fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-      const otherItem = await screen.findByText('Other canvas')
-      fireEvent.pointerUp(otherItem)
-      await waitFor(() => {
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Other canvas')
-      })
-      assertNoSetStateInRenderWarning(errorSpy)
-
-      // Create-canvas flow drives another switch + re-render.
-      const switcher2 = await screen.findByRole('button', { name: /^Workspace:/i })
-      fireEvent.pointerDown(switcher2, { button: 0, ctrlKey: false })
-      const newItem = await screen.findByTestId('new-document-spatial-menu-item')
-      fireEvent.pointerUp(newItem)
-      await waitFor(() => {
-        // 'untitled-2': the seeded canvas already holds the path 'untitled',
-        // an unnamed document reads as its path, and the index refuses to
-        // hand the same path out twice.
-        expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('untitled-2')
       })
       assertNoSetStateInRenderWarning(errorSpy)
     } finally {
@@ -1165,13 +840,12 @@ describe('BrowserLocalDocumentPage', () => {
           />,
         )
       })
-      expect(screen.getByRole('button', { name: 'More actions' })).toBeTruthy()
-      expect(screen.getByLabelText('Document actions')).toBeTruthy()
+      expect(screen.getAllByRole('button', { name: 'More actions' })).toHaveLength(1)
     })
   })
 
   describe('local mode issues no daemon network requests', () => {
-    it('mounting and opening the canvas switcher renders no daemon thumbnail <img>', async () => {
+    it('mounting renders no daemon thumbnail <img> and no pin affordance', async () => {
       vi.useRealTimers()
       const store = new LocalStoreDouble()
       await store.setDefaultDocumentId('069CFJNRVY147ADGKPSWZ258BE')
@@ -1194,9 +868,7 @@ describe('BrowserLocalDocumentPage', () => {
           />,
         )
       })
-      const switcher = await screen.findByRole('button', { name: /^Workspace:/i })
-      fireEvent.pointerDown(switcher, { button: 0, ctrlKey: false })
-      await screen.findByText('Other canvas')
+      await screen.findByRole('button', { name: 'More actions' })
       expect(document.querySelectorAll('img[src*="/api/"]').length).toBe(0)
       expect(screen.queryByRole('button', { name: /pin canvas/i })).toBeNull()
     })

@@ -44,43 +44,15 @@ async function waitForTitle(expected: string): Promise<void> {
   )
 }
 
-// The rename input lives behind WorkspaceTopBar's "Document actions" menu
-// rather than being always-mounted, so each edit starts by opening it.
-//
-// In real-browser mode, the first time this specific trigger is opened in a
-// given test file it occasionally does not register on the first
-// pointerdown, and a stale tree can transiently coexist with a freshly
-// remounted one across a retry (never reproduces in jsdom). Retry with a
-// full remount, and query "all" + take the most recent match, rather than
-// let that tooling artifact fail a real behavioral assertion.
-async function openRenameInput(): Promise<HTMLElement> {
-  let renameItem: HTMLElement | undefined
-  for (let attempt = 0; attempt < 8 && !renameItem; attempt++) {
-    if (attempt > 0) {
-      cleanup()
-      await renderLoaded()
-    }
-    const allCanvasActions = await waitFor(() => screen.getAllByLabelText('Document actions'), {
-      timeout: 5000,
-    })
-    const canvasActions = allCanvasActions[allCanvasActions.length - 1]!
-    fireEvent.pointerDown(canvasActions, { button: 0, ctrlKey: false })
-    try {
-      const allRenameItems = await waitFor(() => screen.getAllByText('Rename'), {
-        timeout: 1500,
-      })
-      renameItem = allRenameItems[allRenameItems.length - 1]!
-    } catch {
-      // retry with a fresh remount
-    }
-  }
-  if (!renameItem) throw new Error('Canvas actions dropdown never opened after retries')
-  fireEvent.pointerUp(renameItem)
-  const allTitleInputs = await waitFor(
-    () => screen.getAllByRole('textbox', { name: /document title/i }),
-    { timeout: 3000 },
-  )
-  return allTitleInputs[allTitleInputs.length - 1]!
+// The title is the document's ONE rename surface and is always mounted, so
+// there is no menu to open first. ("all" + most recent guards only against a
+// stale tree transiently coexisting with a freshly remounted one, which the
+// remount-based tests below can produce.)
+async function titleField(): Promise<HTMLElement> {
+  const all = await waitFor(() => screen.getAllByRole('textbox', { name: /^title$/i }), {
+    timeout: 5000,
+  })
+  return all[all.length - 1]!
 }
 
 describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
@@ -94,7 +66,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
 
   it('reload: edited title survives an unmount + fresh-store remount', async () => {
     await renderLoaded()
-    const titleInput = await openRenameInput()
+    const titleInput = await titleField()
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Reloaded title' } })
     titleInput.blur()
@@ -110,7 +82,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
 
   it('layout: spatial editor container still fills the viewport after editing the title', async () => {
     await renderLoaded()
-    const titleInput = await openRenameInput()
+    const titleInput = await titleField()
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Layout check' } })
     titleInput.blur()
@@ -125,10 +97,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
     const documentKeyDown = vi.fn()
     document.addEventListener('keydown', documentKeyDown)
     try {
-      // Enter and Escape both close the rename affordance in WorkspaceTopBar,
-      // so exercise Backspace/Delete on one open input, then Enter and Escape
-      // each on their own freshly-opened input.
-      const titleInput = await openRenameInput()
+      const titleInput = await titleField()
       titleInput.focus()
       fireEvent.change(titleInput, { target: { value: 'Typing in title' } })
       for (const key of ['Backspace', 'Delete']) {
@@ -136,7 +105,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
       }
       fireEvent.keyDown(titleInput, { key: 'Escape' })
 
-      const titleInput2 = await openRenameInput()
+      const titleInput2 = await titleField()
       fireEvent.keyDown(titleInput2, { key: 'Enter' })
 
       expect(documentKeyDown).not.toHaveBeenCalled()
@@ -147,25 +116,12 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
     }
   })
 
-  it('Escape during edit reverts without persisting to IndexedDB', async () => {
-    await renderLoaded()
-    const titleInput = await openRenameInput()
-    titleInput.focus()
-    fireEvent.change(titleInput, { target: { value: 'Should not persist' } })
-    fireEvent.keyDown(titleInput, { key: 'Escape' })
-    await waitForTitle('untitled')
-
-    cleanup()
-    render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitForTitle('untitled')
-  })
-
   it("whitespace-only commit persists 'untitled' and restores it on remount", async () => {
     await renderLoaded()
     // Commit a real name first so the remount assertion below can distinguish
     // "restored the whitespace-commit's normalized value" from "never persisted
     // anything, so it's just showing the initial default".
-    const titleInput = await openRenameInput()
+    const titleInput = await titleField()
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Named canvas' } })
     titleInput.blur()
@@ -174,7 +130,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
       timeout: 5000,
     })
 
-    const titleInput2 = await openRenameInput()
+    const titleInput2 = await titleField()
     titleInput2.focus()
     fireEvent.change(titleInput2, { target: { value: '   ' } })
     titleInput2.blur()
@@ -202,7 +158,7 @@ describe('BrowserLocalDocumentPage rename (real IndexedDB)', () => {
       return original(...args)
     })
     await renderLoaded()
-    const titleInput = await openRenameInput()
+    const titleInput = await titleField()
     titleInput.focus()
     fireEvent.change(titleInput, { target: { value: 'Network check' } })
     titleInput.blur()

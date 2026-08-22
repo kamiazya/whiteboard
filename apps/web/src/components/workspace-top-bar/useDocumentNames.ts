@@ -3,28 +3,27 @@ import {
   type WorkspaceNames,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { useCallback, useEffect, useMemo, useState } from 'react'
-import type { DocumentInfo } from './types'
+import { useCallback, useEffect, useState } from 'react'
 
 const EMPTY_NAMES: WorkspaceNames = { documents: {}, pinned: [] }
 
 interface UseDocumentNamesOptions {
   workspaceId: string
-  documents: DocumentInfo[]
-  // Local mode has no daemon to ask for /names — display names come from
-  // documents[].name instead, and rename/pin never PUT to the daemon.
+  /**
+   * Local mode has no daemon to ask for `/names`, and nothing else to ask
+   * either: the browser-local page names its document through its own store
+   * and hands the header the result, so this hook simply stays empty there.
+   */
   isLocalMode: boolean
   daemonFetch: typeof globalThis.fetch
 }
 
-// Single owner of the workspaceNamesSchema-derived names state. Every other
-// module (DocumentDropdown, DocumentItem, the rename input) receives
-// `effectiveNames` and the two writer callbacks below rather than a setter —
-// keeping the schema-parse boundary in one place is what stops a future
-// caller from writing an un-validated shape into this state.
+// Single owner of the workspaceNamesSchema-derived names state. Callers get
+// `effectiveNames` and the writer below rather than a setter — keeping the
+// schema-parse boundary in one place is what stops a future caller from
+// writing an un-validated shape into this state.
 export function useDocumentNames({
   workspaceId,
-  documents,
   isLocalMode,
   daemonFetch,
 }: UseDocumentNamesOptions) {
@@ -52,22 +51,10 @@ export function useDocumentNames({
     // token change) must refetch to avoid serving stale names.
   }, [workspaceId, daemonFetch, isLocalMode])
 
-  // Local-mode display names come straight from the caller-provided
-  // documents array rather than the daemon's /names response.
-  const localNames = useMemo<WorkspaceNames>(() => {
-    if (!isLocalMode) return EMPTY_NAMES
-    const byId: Record<string, string> = {}
-    for (const c of documents) {
-      if (c.name) byId[c.path] = c.name
-    }
-    return { documents: byId, pinned: [] }
-  }, [isLocalMode, documents])
-
-  const effectiveNames = isLocalMode ? localNames : names
+  const effectiveNames = isLocalMode ? EMPTY_NAMES : names
 
   // Daemon-mode rename commit. Returns whether the PUT succeeded so the
-  // caller can decide how to react (the local-mode rename path is entirely
-  // separate — it calls the host page's onRenameDocument instead).
+  // caller can decide how to react; local mode never reaches it.
   const renameDocument = useCallback(
     async (targetPath: string, name: string): Promise<boolean> => {
       try {
@@ -88,23 +75,5 @@ export function useDocumentNames({
     [workspaceId, daemonFetch],
   )
 
-  // Toggle pin state and replace local state with the server response.
-  // This intentionally avoids optimistic UI because rollback is not worth the added complexity.
-  const togglePin = useCallback(
-    async (targetPath: string, pinned: boolean) => {
-      try {
-        const res = await daemonFetch(documentsApiUrl(workspaceId, targetPath, 'pin'), {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ pinned }),
-        })
-        if (res.ok) setNames(workspaceNamesSchema.parse(await res.json()))
-      } catch {
-        /* Pin failures stay silent; the UX does not need explicit retry handling here. */
-      }
-    },
-    [workspaceId, daemonFetch],
-  )
-
-  return { effectiveNames, renameDocument, togglePin }
+  return { effectiveNames, renameDocument }
 }

@@ -413,6 +413,24 @@ export function WorkspaceFilesPanel({
     [source, readList],
   )
 
+  /**
+   * Pinning used to be settable only from the editor header's document
+   * switcher. That switcher is gone, and the ordering it fed
+   * (`compareDocumentEntries`) is still here — so the affordance moves onto
+   * the object it acts on rather than being lost with the menu it happened
+   * to live in.
+   */
+  const togglePinned = useCallback(
+    async (entry: WorkspaceDocumentEntry) => {
+      if (source.setPinned === undefined) return
+      await source.setPinned(entry, entry.pinOrder === undefined)
+      const entries = await readList()
+      setDocuments(entries)
+      setSelected(entries.find((row) => row.path === entry.path) ?? null)
+    },
+    [source, readList],
+  )
+
   const moveDocument = useCallback(
     async (entry: WorkspaceDocumentEntry, newPath: string) => {
       await source.renameDocumentPath(entry.path, newPath)
@@ -485,6 +503,14 @@ export function WorkspaceFilesPanel({
           ...(onDuplicateDocument === undefined
             ? []
             : [{ label: 'Duplicate', onSelect: () => onDuplicateDocument(cardMenu.entry.path) }]),
+          ...(source.setPinned === undefined
+            ? []
+            : [
+                {
+                  label: cardMenu.entry.pinOrder === undefined ? 'Pin' : 'Unpin',
+                  onSelect: () => void togglePinned(cardMenu.entry),
+                },
+              ]),
           {
             label: 'Rename…',
             onSelect: () => {

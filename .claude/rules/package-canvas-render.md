@@ -492,14 +492,134 @@ paths:
       sequential search does in 0.6s. No production router found (libavoid,
       ELK, yFiles, Excalidraw) parallelises this step; the comparable one
       (Excalidraw's elbow arrows) shrank the routing search space instead.
-      The experiments are preserved unmerged on branches
-      `batch-side-choice` and `webgpu-pair-scorer`. Do not re-propose GPU
-      or batch search for SPEED; what batch still offers is QUALITY on large
-      canvases (345-edge clustered: violations 183 -> 138, interior ink
-      -22%) at 4x the time, which is a separate trade. The speed work goes
-      into the CPU-side costs the profile named: unmeasured `selfPenalty`,
-      per-trial full `computeAnchorsFor`, allocation in `addCost`/`lessCost`,
-      and `routeEdge` rebuilding obstacle lists it was already given.
+      Both experiments were left on local branches (`batch-side-choice`,
+      `webgpu-pair-scorer`) that were never pushed and are not reachable
+      from this repository — so the paragraph above, not a branch, is what
+      has to carry the conclusion. Enough to rebuild either: the batch form
+      is the one described under the 2026-08-14 measurement (best candidate
+      per edge scored against ONE base configuration, adopted where old and
+      new bounding boxes are both disjoint, merged configuration
+      re-evaluated), and the kernel is one WGSL compute shader over
+      `scoreQuantizedSegmentPair`'s integer narrow phase — which is exactly
+      why that function was made integer-only and is documented as
+      reproducible by a second implementation.
+      Do not re-propose GPU or batch search for SPEED; what batch still
+      offers is QUALITY on large canvases (345-edge clustered: violations
+      183 -> 138, interior ink -22%) at 4x the time, which is a separate
+      trade. The speed work goes
+      into the CPU-side costs the profile named. Two of the four are done:
+      `addCost`/`lessCost` allocation (the trial sums into one scratch
+      array) and `routeEdge`'s repeated `deriveDefaultSides` scan.
+      `computeAnchorsFor` is done: it gave up its layout-invariant half
+      (node index, rects, centers, hoisted into an `AnchorContext` built
+      once per search), and its partition is now patched per trial rather
+      than rebuilt (`patchAnchorGroups`). Timing its three phases is what
+      made the second half tractable — grouping 15.4ms, placement 27.2ms,
+      alignment 3.8ms of 46.4ms on the 200-edge bench — because it showed
+      alignment could stay a FULL pass. That is the part worth remembering:
+      the hard question was which edges' alignment a re-side can flip
+      (the aligned run's slide reads group SIZES), and at 8% of the
+      function it never had to be answered. `selfPenalty` was measured
+      rather than assumed and the answer moved the target: its cost is
+      overlap-and-intrusion (10.9% of layout), not border-tracing (3.1%),
+      and that term now rejects by axis before measuring.
+      **All four are landed, and re-profiling afterwards moved the target
+      off that list entirely.** On the 345-edge clustered canvas — the size
+      an AI-authored document reaches — `routeEdge` is now 60% of layout,
+      and inside it the fallback chain is nearly all of that: the grid
+      search `routeOnGrid` 27%, `bestCandidate` 8%, the detour `region`
+      union 5%. The elbow shortcut, which the code is written around as the
+      common case, is taken on only 292 of 1215 routings there; the grid
+      search runs on 719 of them. On the 200-edge grid canvas none of this
+      shows (routing is 13%, pair scoring 22%) — so the two bench shapes
+      now disagree about where the time is, and a change judged on one of
+      them has not been judged.
+      One cost off that profile is taken: the routed-path cache is owned by
+      the REGION rather than by each `optimizeSideChoices`, so it spans a
+      region's unaligned and aligned runs. That pairing is where the repeats
+      are — 1021 of 1900 routings on the clustered canvas repeat a key the
+      other run of their own region already saw, against 567 caught by the
+      per-search caches. Worth 15-19% there in six of six interleaved
+      comparisons, within noise on the grid canvas. Sound because `nodes`,
+      `style` and an edge's obstacle list are fixed across those two runs,
+      leaving the anchor pair as the only variable — and `routeCacheKey`
+      covers it field by field, pinned one case per field, because a field
+      the key misses is a wrong path rather than a slow one.
+      **It was first written one scope too wide, and the reason is worth
+      keeping.** A cache owned by `assignEdgeAnchors` measured exactly the
+      same, so nothing flagged it: regions PARTITION the edge list, an edge
+      is routed in only the region that holds it, and `routeCacheKey` starts
+      with `edge.id` — so a later region can never hit an earlier one's
+      entry. Measured 0 cross-region hits on canvases of one, two and four
+      regions. The wider scope bought nothing and held every completed
+      region's paths until the layout finished. The gap in the reasoning was
+      specific: soundness was checked (may these searches share?) and
+      usefulness was not (do they ever have anything to share?). A sharing
+      change needs both, and the cheap way to get the second is to attribute
+      the hits, not to count them.
+      **The obstacle preparation was tried and rejected**, the second
+      measurement in this series to refuse a change that argued well.
+      `routeEdge` rebuilds two 286-element arrays per call — the
+      endpoint-containment filter and the margin-inflated copy — 1333 times
+      per clustered layout, and only 421 of those filters drop anything.
+      Memoizing the inflated array and returning the shared one untouched
+      when nothing is dropped measured neutral-to-negative (clustered
+      494/502/491 against 508/470/485ms, rounds disagreeing in sign; grid
+      slightly worse in all three). The 11% the phase profile attributes to
+      those two lines is the SCAN, not the allocation: 1333 calls x 286
+      rects x two `containsPoint` tests is 760k tests, and the prototype
+      keeps every one of them. Nothing here gets cheaper without cutting
+      the obstacle SET down spatially, which changes what is tested rather
+      than how fast it is tested.
+      A note on method, because it cost a wrong conclusion before it was
+      caught: the first interleaved run said the grid canvas regressed 3-4%
+      consistently, in all three rounds. Running the same pairs with the
+      ORDER FLIPPED said neutral. Whichever variant runs first in a round
+      carries that round's warm-up, and three rounds of a fixed order
+      reproduce the artifact rather than test it. Alternate the order, not
+      only the variant.
+      **`routeOnGrid` searches with A*, and finding that out took refuting the
+      obvious answer first.** The profile pointed at it (27% of layout on the
+      clustered canvas), and the plan was to cut the obstacle SET down
+      spatially, as the rejected prototype's post-mortem above suggested.
+      Measured inside the function, that was already done: its window filter
+      keeps 31 of 287 rects, and costs 0.3% of layout to do it. The time was
+      the search itself — 161k heap pops per layout, 331 per call over grids
+      averaging 422 cells — expanding the grid blind because the priority was
+      `g` alone. A Manhattan heuristic makes it A*: admissible (a step costs
+      its own Manhattan length plus a non-negative bend charge) and consistent
+      (the same inequality edge by edge), so the first pop of the goal stays
+      optimal. Worth 8-11% on the clustered canvas, five of five interleaved
+      comparisons in both orders; neutral on the grid canvas.
+      It is NOT free, and the price is a kind worth recognising. A* is fast
+      precisely because it does not expand the states a blind search does, so
+      among EQUAL-cost shortest paths it settles on a different member. Over
+      7419 generated cases the two never disagreed about what an optimal route
+      costs — never worse, never better — and disagreed about which one to
+      draw in 10-30% of them. On the 345-edge canvas exactly 2 of 345 edges
+      then settled on different sides, which is what moved that scoreboard's
+      violations 99 -> 100 and interior ink by 1.1%; the corpus-wide debt
+      metrics did not move at all.
+      That cost cannot be bought back inside the router, and the reason is
+      structural rather than a tuning failure: `routeOnGrid` is handed every
+      obstacle including the edge's own endpoints and avoids all their
+      interiors, so its path can never BE a violation — the difference arrives
+      through the side-choice search, which a per-edge routing cost cannot see.
+      Two attempts confirmed it: a lower-g heap tie-break (paths differing 394
+      -> 408, i.e. worse) and a canonical predecessor on equal-cost relaxations
+      (394 -> 363, i.e. barely moved). The second failure is the instructive
+      one — canonicalising among the alternatives requires having LOOKED at
+      them, which is the exact work A* skips.
+      The guard for all of this is `grid-route.optimality.properties.test.ts`,
+      an independent-oracle property: a plain Dijkstra written in the test from
+      the definition, asserting equal COST (never equal path — equal-cost
+      routes are the norm on a lattice). It exists because an inadmissible
+      heuristic fails silently: it returns a merely-good path, and every debt
+      metric the scoreboard pins stays put because a slightly-long detour still
+      avoids every body. Mutation-checked twice, and the second mutation is not
+      hypothetical — accumulating the successor's `g` from the popped `f` was
+      written during this change and caught by reading the push site, not by a
+      test. The property catches it now.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,

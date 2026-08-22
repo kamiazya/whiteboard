@@ -29,7 +29,8 @@ import { NewDocumentDialog } from './NewDocumentDialog.js'
  * legible enough at 16px to carry a meaning on its own.
  *
  * The kinds themselves come from `DOCUMENT_KIND_CHOICES`, shared with the
- * switcher's own creation entries so the two cannot drift apart again.
+ * dialog behind this menu's last entry so the two cannot name or draw the
+ * same kind differently.
  */
 export function NewDocumentMenu({
   onCreate,
