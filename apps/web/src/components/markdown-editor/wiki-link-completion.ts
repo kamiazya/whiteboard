@@ -1,5 +1,11 @@
-import type { Completion, CompletionContext, CompletionResult } from '@codemirror/autocomplete'
-import { EditorView } from '@codemirror/view'
+import {
+  acceptCompletion,
+  type Completion,
+  type CompletionContext,
+  type CompletionResult,
+  setSelectedCompletion,
+} from '@codemirror/autocomplete'
+import { EditorView, ViewPlugin } from '@codemirror/view'
 import { type LinkTarget, linkMarkupFor, rankLinkTargets } from './link-target.js'
 
 /**
@@ -12,6 +18,50 @@ import { type LinkTarget, linkMarkupFor, rankLinkTargets } from './link-target.j
  * custom properties resolve at runtime, so the popover tokens (and theme
  * switches) keep covering this surface.
  */
+/**
+ * Deterministic tap-commit for the completion popup. Upstream accepts on
+ * the SYNTHESIZED mousedown and separately closes the popup when the
+ * contenteditable blurs (with a 10ms grace) — on touch devices the tap
+ * that should accept is also the tap that blurs the editor, and whether
+ * the synthesized mousedown beats the blur is a per-platform ordering the
+ * user experienced losing: the option highlights, nothing commits.
+ * touchend precedes both, so accepting there removes the race; a moved
+ * finger (a scroll over the option list) stays a scroll.
+ */
+const TAP_SLOP_PX = 12
+
+export const wikiLinkTouchAccept = ViewPlugin.define((view) => {
+  let startY: number | null = null
+  const optionAt = (target: EventTarget | null): HTMLElement | null => {
+    const li = target instanceof Element ? target.closest('.cm-tooltip-autocomplete li') : null
+    return li instanceof HTMLElement && view.dom.contains(li) ? li : null
+  }
+  const onTouchStart = (event: TouchEvent) => {
+    startY = optionAt(event.target) === null ? null : (event.changedTouches[0]?.clientY ?? null)
+  }
+  const onTouchEnd = (event: TouchEvent) => {
+    const li = optionAt(event.target)
+    const endY = event.changedTouches[0]?.clientY
+    if (li === null || startY === null || endY === undefined) return
+    if (Math.abs(endY - startY) > TAP_SLOP_PX) return
+    const match = /-(\d+)$/.exec(li.id)
+    if (match === null) return
+    // No synthesized mouse events after this tap: upstream must not accept
+    // a second time, and the blur that would close the popup never fires.
+    event.preventDefault()
+    view.dispatch({ effects: setSelectedCompletion(Number(match[1])) })
+    acceptCompletion(view)
+  }
+  view.dom.addEventListener('touchstart', onTouchStart, { passive: true })
+  view.dom.addEventListener('touchend', onTouchEnd, { passive: false })
+  return {
+    destroy() {
+      view.dom.removeEventListener('touchstart', onTouchStart)
+      view.dom.removeEventListener('touchend', onTouchEnd)
+    },
+  }
+})
+
 export const wikiLinkCompletionTheme = EditorView.theme({
   '.cm-tooltip.cm-tooltip-autocomplete': {
     backgroundColor: 'var(--popover)',

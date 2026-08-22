@@ -42,7 +42,11 @@ import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { setHeadingLevel } from './set-heading-level.js'
 import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { useDebouncedValue } from './use-debounced-value.js'
-import { wikiLinkCompletionSource, wikiLinkCompletionTheme } from './wiki-link-completion.js'
+import {
+  wikiLinkCompletionSource,
+  wikiLinkCompletionTheme,
+  wikiLinkTouchAccept,
+} from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
   value: string
@@ -299,6 +303,7 @@ export function MarkdownEditor({
         ]),
       ),
       wikiLinkCompletionTheme,
+      wikiLinkTouchAccept,
     ],
     [],
   )
