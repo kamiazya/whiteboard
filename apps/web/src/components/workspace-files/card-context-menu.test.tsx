@@ -2,6 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
+import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 // OOUI: the object's actions are reachable FROM the object. Right-click a
@@ -20,10 +21,16 @@ function renderPanel(
     onOpenDocument?: (path: string) => void
     onDuplicateDocument?: (path: string) => void
     onRequestDelete?: (path: string, displayName: string, kind?: 'spatial' | 'markdown') => void
+    setPinned?: (entry: { readonly path: string }, pinned: boolean) => Promise<void>
+    rows?: readonly WorkspaceDocumentEntry[]
   } = {},
 ) {
-  const source = fakeFilesSource({ listDocuments: () => Promise.resolve(entries) })
-  render(<WorkspaceFilesPanel source={source} {...overrides} />)
+  const { setPinned, rows, ...panelProps } = overrides
+  const source = fakeFilesSource({
+    listDocuments: () => Promise.resolve(rows ?? entries),
+    ...(setPinned === undefined ? {} : { setPinned }),
+  })
+  render(<WorkspaceFilesPanel source={source} {...panelProps} />)
   return source
 }
 
@@ -131,5 +138,50 @@ describe('document card context menu', () => {
       clientY: 30,
     })
     expect(screen.queryByRole('menu', { name: 'Document actions' })).toBeNull()
+  })
+})
+
+// Pinning was settable only from the editor header's document switcher until
+// that switcher was retired. The ordering it feeds (compareDocumentEntries)
+// outlived it, so the verb had to land on the object rather than vanish.
+describe('document card context menu — pinning', () => {
+  it('omits Pin when the backend cannot keep one', async () => {
+    renderPanel({ onOpenDocument: () => {} })
+
+    const menu = await contextMenuOnCard('Meeting notes')
+    expect(within(menu).queryByRole('menuitem', { name: /^(pin|unpin)$/i })).toBeNull()
+  })
+
+  it('pins an unpinned document through the seam', async () => {
+    const setPinned = vi.fn(async () => {})
+    renderPanel({ setPinned })
+
+    const menu = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Pin' }))
+
+    await waitFor(() =>
+      expect(setPinned).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'meeting-notes' }),
+        true,
+      ),
+    )
+  })
+
+  it('offers Unpin for a document that is already pinned', async () => {
+    const setPinned = vi.fn(async () => {})
+    renderPanel({
+      setPinned,
+      rows: [{ ...entries[0]!, pinOrder: 0 }, entries[1]!],
+    })
+
+    const menu = await contextMenuOnCard('Meeting notes')
+    fireEvent.click(within(menu).getByRole('menuitem', { name: 'Unpin' }))
+
+    await waitFor(() =>
+      expect(setPinned).toHaveBeenCalledWith(
+        expect.objectContaining({ path: 'meeting-notes' }),
+        false,
+      ),
+    )
   })
 })
