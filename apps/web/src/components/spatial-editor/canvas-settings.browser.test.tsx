@@ -2,12 +2,20 @@
 // pick applies the canvas-wide command immediately and keeps it open for
 // the next tweak, consecutive picks chain under a deferred parent, and
 // dismissal returns focus to the gear.
-import type { VisualEdgesFacet } from '@kamiazya/whiteboard-facet-engine'
+import {
+  bundledPlugins,
+  createFacetRegistry,
+  defineFacet,
+  definePlugin,
+  type VisualEdgesFacet,
+} from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
+import { z } from 'zod'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
+import { CANVAS_SETTINGS_WIDGETS } from './facet-widgets/index.js'
 
 const edgesFacetOf = (canvas: SpatialCanvas) =>
   canvas['x-whiteboard']?.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
@@ -115,4 +123,48 @@ it('Escape closes and hands focus back to the gear', async () => {
   // Radix hands focus back to the trigger, so a keyboard user keeps their
   // place instead of falling to <body>.
   await vi.waitFor(() => expect(document.activeElement).toBe(trigger))
+})
+
+it('a second contributing namespace introduces displayName tabs; one namespace stays bare', async () => {
+  const planning = definePlugin({
+    id: 'planning',
+    displayName: 'Planning',
+    facets: [
+      defineFacet({ name: 'board', version: 'v0', targets: ['canvas'], schema: z.object({}) }),
+    ],
+  })
+  const registry = createFacetRegistry([...bundledPlugins, planning])
+  function Host() {
+    const [canvas, setCanvas] = useState(initial)
+    return (
+      <CanvasDisplaySettings
+        canvas={canvas}
+        onChange={(next) => setCanvas(next)}
+        facetRegistry={registry}
+        widgets={{
+          ...CANVAS_SETTINGS_WIDGETS,
+          'planning.board/v0': () => <div>Board options</div>,
+        }}
+      />
+    )
+  }
+  const { container } = render(<Host />)
+  fireEvent.click(gear(container))
+  await vi.waitFor(() => expect(menu()).toBeTruthy())
+
+  const tabs = [...(menu()?.querySelectorAll('[role="tab"]') ?? [])]
+  expect(tabs.map((t) => t.textContent)).toEqual(['Planning', 'Visual style'])
+  // First namespace by id is active: planning's panel shows, visual's not.
+  expect(menu()?.textContent).toContain('Board options')
+  expect(menu()?.textContent).not.toContain('Edge routing')
+  fireEvent.click(tabs[1] as HTMLElement)
+  await vi.waitFor(() => expect(menu()?.textContent).toContain('Edge routing'))
+
+  cleanup()
+  // The bundled registry alone (one namespace) shows no tablist.
+  const { Host: BareHost } = makeHost()
+  const { container: bare } = render(<BareHost />)
+  fireEvent.click(gear(bare))
+  await vi.waitFor(() => expect(menu()).toBeTruthy())
+  expect(menu()?.querySelector('[role="tab"]')).toBeNull()
 })

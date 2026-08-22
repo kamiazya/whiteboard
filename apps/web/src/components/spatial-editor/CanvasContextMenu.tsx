@@ -6,7 +6,7 @@ import {
   SPATIAL_LIGHT_PALETTE,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
-import { resolveNodeShape, type VisualShapeFacet } from '@kamiazya/whiteboard-facet-engine'
+import { bundledFacetRegistry, type FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasColor,
   ClipboardFragment,
@@ -25,16 +25,12 @@ import {
   BringToFront,
   ChevronDown,
   ChevronUp,
-  Circle,
   ClipboardPaste,
   Copy as CopyIcon,
   CopyPlus,
-  Cylinder,
-  Diamond,
   ExternalLink,
   FileBox,
   Frame,
-  Hexagon,
   Image as ImageIcon,
   ImageOff,
   Link,
@@ -48,13 +44,12 @@ import {
   Scissors,
   SendToBack,
   Sparkles,
-  Square,
   SquareDashed,
   StickyNote,
   Tag,
   Trash2,
 } from 'lucide-react'
-import type { MutableRefObject, ReactNode } from 'react'
+import type { MutableRefObject } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { hasClipboardFragment } from '../../lib/clipboard-store.js'
 import type { BoxMove } from './align.js'
@@ -63,6 +58,7 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import type { FileRefOption } from './DocumentPickerDialog.js'
+import { nodePropertyItems } from './facet-widgets/index.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { Point } from './viewport.js'
 
@@ -144,6 +140,8 @@ export interface CanvasContextMenuProps {
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
   readonly isImageFileRef?: (file: string) => boolean
+  /** Contribution source; a test seam — production uses the bundled registry. */
+  readonly facetRegistry?: FacetRegistry
   readonly missingFileRef?: (file: string) => boolean
 }
 
@@ -165,6 +163,7 @@ export function CanvasContextMenu({
   selectedId,
   isImageFileRef,
   missingFileRef,
+  facetRegistry = bundledFacetRegistry,
 }: CanvasContextMenuProps) {
   const {
     applyResult,
@@ -641,64 +640,20 @@ export function CanvasContextMenu({
             })
           }),
         )
-        // The silhouette row: writes the visual.shape/v0 facet through the
-        // same selection semantics as Color (a multi-selection reshapes
-        // every member). `rect` is the historic default and deliberately
-        // unrepresentable as a value — choosing it removes the facet.
+        // Facet quick bands ride the contribution seam: this surface asks the
+        // registry what the point carries and looks widgets up by key — it
+        // never names a plugin or facet itself (facet-wiring-guard.test.ts
+        // keeps it that way). Bands apply to the whole selection, the same
+        // semantics as Color.
         {
-          const currentShape = resolveNodeShape(node)
-          const applyShape = (shape: VisualShapeFacet['kind'] | undefined) => {
+          const applyToSelection = (
+            commandsFor: (targetIds: readonly string[]) => readonly EditorCommand[],
+          ) => {
             const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
             const nodeTargets = members.has(node.id) ? [...members] : [node.id]
-            applyResult({
-              state: { kind: 'idle' },
-              commands: nodeTargets.map((id) => ({ kind: 'set-node-shape' as const, id, shape })),
-            })
+            applyResult({ state: { kind: 'idle' }, commands: [...commandsFor(nodeTargets)] })
           }
-          const shapeOption = (
-            shape: VisualShapeFacet['kind'],
-            ariaLabel: string,
-            icon: ReactNode,
-          ) => ({
-            label: shape,
-            ariaLabel,
-            icon,
-            selected: currentShape === shape,
-            onSelect: () => applyShape(shape),
-          })
-          properties.push({
-            kind: 'options' as const,
-            label: 'Shape',
-            options: [
-              {
-                label: 'rect',
-                ariaLabel: 'Rectangle',
-                icon: <Square />,
-                selected: currentShape === undefined,
-                onSelect: () => applyShape(undefined),
-              },
-              shapeOption('ellipse', 'Ellipse', <Circle />),
-              shapeOption('diamond', 'Diamond', <Diamond />),
-              shapeOption('hexagon', 'Hexagon', <Hexagon />),
-              shapeOption(
-                'parallelogram',
-                'Parallelogram',
-                // No lucide glyph for a parallelogram; drawn in the same
-                // 24-grid stroke style so the row reads as one set.
-                <svg
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="2"
-                  strokeLinejoin="round"
-                  aria-hidden="true"
-                >
-                  <path d="M7 5h14l-4 14H3Z" />
-                </svg>,
-              ),
-              shapeOption('cylinder', 'Cylinder', <Cylinder />),
-            ],
-          })
+          properties.push(...nodePropertyItems(facetRegistry, { node, applyToSelection }))
         }
         // Z-order as one-tap options — the touch path to the [ / ]
         // keyboard shortcuts (see shortcuts.ts). Not a picker: no
