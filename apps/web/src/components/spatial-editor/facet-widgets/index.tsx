@@ -14,14 +14,14 @@ import {
   LUCIDE_VIEWBOX,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
+  deriveFacetForm,
+  type FacetDefinition,
+  type FacetGlyph,
   type FacetRegistry,
   resolveCanvasEdgeStyle,
   resolveFacetContributions,
-  resolveNodeShape,
   resolveNodeSymbol,
-  VISUAL_SHAPE_KEY,
   VISUAL_SYMBOL_KEY,
-  type VisualShapeFacet,
   type VisualSymbolFacet,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
@@ -52,62 +52,42 @@ export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
 
 // --- visual.shape/v0 -------------------------------------------------------
 
-const visualShapeBand: NodePropertiesWidget = ({ node, applyToSelection }) => {
-  const currentShape = resolveNodeShape(node)
-  const applyShape = (shape: VisualShapeFacet['kind'] | undefined) => {
-    applyToSelection((ids) =>
-      ids.map((id) => ({
-        kind: 'set-node-facet' as const,
-        id,
-        key: VISUAL_SHAPE_KEY,
-        payload: shape === undefined ? undefined : { kind: shape },
-      })),
-    )
+/**
+ * The core's glyph vocabulary rendered: a spec NAMES a glyph, this maps the
+ * name to a drawing. Keeping the map here (not in the engine) is the same
+ * split as everywhere else — the engine owns what may be said, the vessel
+ * owns how it looks.
+ */
+function FacetGlyphIcon({ glyph }: { readonly glyph?: FacetGlyph }) {
+  switch (glyph) {
+    case 'square':
+      return <Square />
+    case 'circle':
+      return <Circle />
+    case 'diamond':
+      return <Diamond />
+    case 'hexagon':
+      return <Hexagon />
+    case 'parallelogram':
+      // No lucide glyph for a parallelogram; drawn in the same 24-grid
+      // stroke style so a row of these reads as one set.
+      return (
+        <svg
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          strokeLinejoin="round"
+          aria-hidden="true"
+        >
+          <path d="M7 5h14l-4 14H3Z" />
+        </svg>
+      )
+    case 'cylinder':
+      return <Cylinder />
+    default:
+      return undefined
   }
-  const shapeOption = (shape: VisualShapeFacet['kind'], ariaLabel: string, icon: ReactNode) => ({
-    label: shape,
-    ariaLabel,
-    icon,
-    selected: currentShape === shape,
-    onSelect: () => applyShape(shape),
-  })
-  return [
-    {
-      kind: 'options' as const,
-      label: 'Shape',
-      options: [
-        // `rect` is the historic default and deliberately unrepresentable
-        // as a value — choosing it removes the facet.
-        {
-          label: 'rect',
-          ariaLabel: 'Rectangle',
-          icon: <Square />,
-          selected: currentShape === undefined,
-          onSelect: () => applyShape(undefined),
-        },
-        shapeOption('ellipse', 'Ellipse', <Circle />),
-        shapeOption('diamond', 'Diamond', <Diamond />),
-        shapeOption('hexagon', 'Hexagon', <Hexagon />),
-        shapeOption(
-          'parallelogram',
-          'Parallelogram',
-          // No lucide glyph for a parallelogram; drawn in the same 24-grid
-          // stroke style so the row reads as one set.
-          <svg
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke="currentColor"
-            strokeWidth="2"
-            strokeLinejoin="round"
-            aria-hidden="true"
-          >
-            <path d="M7 5h14l-4 14H3Z" />
-          </svg>,
-        ),
-        shapeOption('cylinder', 'Cylinder', <Cylinder />),
-      ],
-    },
-  ]
 }
 
 // --- visual.symbol/v0 ------------------------------------------------------
@@ -259,6 +239,51 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
  * SECOND namespace contributes (one namespace stays unlabeled). Group order
  * is namespace-id lexicographic — display wording never moves it.
  */
+/**
+ * Tier 2: a facet that DECLARES its editor gets its quick band rendered
+ * from the declaration — no per-facet React. The glyph vocabulary is the
+ * core's (a plugin names one, it cannot ship one), which is what keeps a
+ * declared editor a declaration rather than third-party UI code.
+ */
+function declaredBands(
+  facetKey: string,
+  definition: FacetDefinition,
+  ctx: NodePropertiesContext,
+): readonly ContextMenuItem[] {
+  if (definition.editor === undefined) return []
+  const form = deriveFacetForm(definition.schema, definition.editor)
+  if (form.kind !== 'fields') return []
+  const stored = ctx.node['x-whiteboard']?.facets?.[facetKey] as Record<string, unknown> | undefined
+  return form.fields.flatMap((field) => {
+    if (!field.quick || field.control.kind !== 'segmented') return []
+    const current = stored?.[field.name]
+    return [
+      {
+        kind: 'options' as const,
+        label: field.label,
+        options: field.control.options.map((option) => ({
+          label: option.value ?? 'none',
+          ariaLabel: option.label,
+          icon: <FacetGlyphIcon glyph={option.glyph} />,
+          // A null option means the facet's ABSENCE, which is why the
+          // comparison is against undefined rather than the value.
+          selected: option.value === null ? stored === undefined : current === option.value,
+          onSelect: () => {
+            ctx.applyToSelection((ids) =>
+              ids.map((id) => ({
+                kind: 'set-node-facet' as const,
+                id,
+                key: facetKey,
+                payload: option.value === null ? undefined : { [field.name]: option.value },
+              })),
+            )
+          },
+        })),
+      },
+    ]
+  })
+}
+
 export function nodePropertyItems(
   registry: FacetRegistry,
   ctx: NodePropertiesContext,
@@ -267,7 +292,12 @@ export function nodePropertyItems(
   const contributed = resolveFacetContributions(registry, 'contextMenu.node.properties')
     .map((group) => ({
       group,
-      bands: group.facets.flatMap((facet) => widgets[facet.key]?.(ctx) ?? []),
+      // A hand-written widget still wins where one is registered (tier 2
+      // is a ladder, not a replacement): a picker the catalog cannot yet
+      // express keeps its code.
+      bands: group.facets.flatMap(
+        (facet) => widgets[facet.key]?.(ctx) ?? declaredBands(facet.key, facet.definition, ctx),
+      ),
     }))
     .filter((entry) => entry.bands.length > 0)
   return contributed.flatMap(({ group, bands }) =>
@@ -280,7 +310,9 @@ export function nodePropertyItems(
 // --- registrations ---------------------------------------------------------
 
 export const NODE_PROPERTIES_WIDGETS: Readonly<Record<string, NodePropertiesWidget>> = {
-  'visual.shape/v0': visualShapeBand,
+  // visual.shape is NOT here: it declares its band (see visual.ts's editor
+  // spec) and is rendered from that declaration — the acceptance test for
+  // tier 2 being usable by the plugin that ships with the engine.
   'visual.symbol/v0': visualSymbolBand,
 }
 

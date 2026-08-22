@@ -48,6 +48,7 @@ function FieldInput({
   field,
   value,
   onChange,
+  onClear,
 }: {
   readonly facetKey: string
   /** Facet title, so the accessible name says WHICH facet's field this is. */
@@ -55,6 +56,13 @@ function FieldInput({
   readonly field: FacetFormField
   readonly value: unknown
   readonly onChange: (next: unknown) => void
+  /**
+   * A segmented option carrying `value: null` means the facet should not
+   * exist — a whole-facet statement, not a field value. Staging it in the
+   * draft would submit a payload missing a required field, so it takes the
+   * same immediate path the Clear button beside it already takes.
+   */
+  readonly onClear: () => void
 }) {
   // Scoped by facet: two facets may declare the same field name, and a
   // duplicate id would point every label at the first input. The
@@ -72,6 +80,26 @@ function FieldInput({
         checked={value === true}
         onChange={(event) => onChange(event.target.checked)}
       />
+    )
+  }
+  if (field.control.kind === 'segmented') {
+    return (
+      <span id={id} role="radiogroup" aria-label={name} className="flex items-center gap-0.5">
+        {/* Real radios rather than buttons wearing the role: the keyboard
+            behaviour a segmented control needs comes free with the element. */}
+        {field.control.options.map((option) => (
+          <label key={option.label} className={cn(common, 'flex items-center gap-1 px-1.5')}>
+            <input
+              type="radio"
+              name={id}
+              aria-label={option.label}
+              checked={option.value === null ? value === undefined : value === option.value}
+              onChange={() => (option.value === null ? onClear() : onChange(option.value))}
+            />
+            {option.label}
+          </label>
+        ))}
+      </span>
     )
   }
   if (field.control.kind === 'choice') {
@@ -222,6 +250,7 @@ function FacetEditor({
             field={field}
             value={draft[field.name]}
             onChange={(next) => set(field.name, next)}
+            onClear={() => onWrite(facetKey, undefined)}
           />
         </label>
       ))}
@@ -278,7 +307,7 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
               key={`${node.id}:${facet.key}`}
               facetKey={facet.key}
               title={`${group.displayName} ${facet.definition.name}`}
-              form={deriveFacetForm(facet.definition.schema)}
+              form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
               stored={stored[facet.key]}
               registry={registry}
               onWrite={onWrite}
