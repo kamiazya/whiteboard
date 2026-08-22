@@ -306,8 +306,15 @@ async function main() {
   }
   console.log(`[e2e] wb_facet_list → ${registeredKeys.length} registered facets, with schemas`)
   const nodeOnly = await callTool('wb_facet_list', { target: 'node' })
+  const nodeKeys = (nodeOnly.facets ?? []).map((facet) => facet.key)
+  // Both directions: nothing foreign leaked in, and the filter did not
+  // simply answer with nothing — an empty list would satisfy the first
+  // check alone.
   if ((nodeOnly.facets ?? []).some((facet) => !facet.targets.includes('node'))) {
     throw new Error(`wb_facet_list(target) leaked a non-node facet: ${JSON.stringify(nodeOnly)}`)
+  }
+  if (!nodeKeys.includes('visual.shape/v0') || nodeKeys.includes('visual.edges/v0')) {
+    throw new Error(`wb_facet_list(target: node) filtered wrongly: ${JSON.stringify(nodeKeys)}`)
   }
   console.log('[e2e] wb_facet_list(target: node) → filtered to node-target facets')
 

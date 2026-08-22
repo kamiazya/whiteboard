@@ -63,6 +63,12 @@ export function createFacetListTool(deps: ServerDeps) {
     inputSchema: facetListInputSchema,
     outputSchema: facetListOutputSchema,
     execute: async (input: FacetListInput): Promise<FacetListOutput> => {
+      // Parsed HERE, not only at the MCP boundary: that boundary registers
+      // `inputSchema.shape`, so the SDK rebuilds a non-strict validator and
+      // a typo'd key would be stripped rather than refused — answering an
+      // unfiltered list that looks like a result. A direct server-core
+      // caller has no boundary at all.
+      const parsed = facetListInputSchema.parse(input)
       const registry = deps.facetRegistry ?? bundledFacetRegistry
       const facets = registry.plugins
         .flatMap((plugin) =>
@@ -80,7 +86,7 @@ export function createFacetListTool(deps: ServerDeps) {
             schema: describeSchema(definition.schema),
           })),
         )
-        .filter((facet) => input.target === undefined || facet.targets.includes(input.target))
+        .filter((facet) => parsed.target === undefined || facet.targets.includes(parsed.target))
         // Sorted by key so two calls agree and a diff of the output is
         // stable; registration order is an implementation detail.
         .sort((a, b) => (a.key < b.key ? -1 : 1))

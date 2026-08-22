@@ -101,6 +101,15 @@ describe('wb_facet_list', () => {
     expect(facetListOutputSchema.safeParse(overTheWire).success).toBe(true)
   })
 
+  test('refuses an invalid target or an unknown key, rather than answering something', async () => {
+    // The MCP boundary rebuilds a non-strict validator from `.shape`, so a
+    // direct server-core caller is the only one this schema's own strictness
+    // protects — and an unfiltered or empty answer to a typo'd key is worse
+    // than a refusal, because it looks like a result.
+    await expect(tool().execute({ target: 'workspace' } as never)).rejects.toThrow()
+    await expect(tool().execute({ taget: 'node' } as never)).rejects.toThrow()
+  })
+
   test('a registry with no plugins answers an empty list, not an error', async () => {
     const result = await tool(createFacetRegistry([])).execute({})
     expect(result.facets).toEqual([])
