@@ -175,6 +175,77 @@ Three things the earlier table could not say, and all three are cautions:
 That is the instrument working. A scoreboard that cannot state its own
 resolution is one that will eventually be quoted past it.
 
+### 3d. Two corpora, and what the real one said (2026-08-23)
+
+The six-document corpus could not referee anything: its own instrument
+reported that detecting a tuning-sized change would need roughly 130
+queries. Rather than grow a synthetic corpus, measurement moved to this
+project's own `docs/` tree — 45 real documents, 50 judged queries.
+
+**The two corpora now have different jobs, and neither can do the other's.**
+
+| | `search-corpus.ts` (6 synthetic) | `docs-corpus.ts` (45 real) |
+|---|---|---|
+| runs in | `pnpm test`, pinned exactly | a script, on demand |
+| job | fail when tokenisation or scoring changes | say whether one ranking beats another |
+| needs | hermetic, frozen, tiny | realistic, large enough for k=10 |
+| categories | all four, including `bigram` | no `bigram` — the docs are English |
+
+Real documents buy the half of the bias problem that can be bought: nobody
+wrote them to make a retriever look good. The queries are still authored by
+someone who knows the corpus, which is ordinary for a test collection but
+is the part to stay sceptical about.
+
+#### Four things the synthetic corpus could not show
+
+1. **It was flattering stage 0.** Lexical nDCG@10 is 0.783 on real
+   documents, not the 1.000 the synthetic corpus reported. Six short
+   documents written around their queries make keyword search look
+   perfect.
+2. **The paraphrase gain is much smaller than claimed.** 0.222 → 0.343,
+   where the synthetic corpus showed 0.000 → 0.754. Real English
+   paraphrases share vocabulary with real documents, so stage 0 partly
+   works and the model adds proportionally less.
+3. **Cross-lingual is where the value actually is**, and now on 22 queries
+   rather than 3: 0.045 → 0.603 nDCG@10, MRR 0.045 → 0.545.
+4. **Fusion costs something, which was previously invisible.** `pairing
+   code` fell from rank 1 to 2; `who can read my drawings and what stops
+   them` fell from rank 9 out of the top 10 entirely. A semantic
+   neighbour outranking a keyword match is the mechanism working as
+   designed, and it is not free.
+
+Overall nDCG@10 0.324 → 0.631, delta +0.307, 95% CI [+0.207, +0.411],
+p = 0.0001 against a floor of 2.3e-10 — this time the p-value has room
+below it, which the six-document result never did.
+
+#### The finding that changes what to build next
+
+**37 of the 45 documents exceed the model's 512-token input limit.** Mean
+length is 2288 tokens, longest 7800; the embedder therefore reads about
+22% of the corpus text and silently ignores the rest. Every number above
+is achieved WITHOUT three quarters of the documents.
+
+That is not a defect in the measurement, it is the measurement doing its
+job — the synthetic corpus had short documents, so nothing there could
+ever have surfaced it. Chunking is now the obvious next increment, and
+unlike before there is an instrument that can price it. The script reports
+the truncated fraction on every run so it cannot quietly return.
+
+#### What the corpus still cannot do
+
+Detecting a 0.10 nDCG difference needs about 109 queries at the observed
+per-query spread; there are 50. So the collection can referee "unfindable
+→ found" and large structural changes, and cannot yet referee a fusion
+weight, a model swap, or a rescoring tweak.
+
+Judgements are also incomplete: 139 documents appear in some system's top
+three without a judgement, and an unjudged document counts as irrelevant,
+which penalises a system for returning something genuinely useful. The
+script prints that pool precisely so the next round of judgements has
+somewhere to start — pooling from the systems under test is how test
+collections are normally grown, with the known caveat that a future third
+system did not contribute to the pool and is disadvantaged by it.
+
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
