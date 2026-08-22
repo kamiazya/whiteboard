@@ -4,6 +4,7 @@ import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
 
 const samplePlugin = definePlugin({
   id: 'example',
+  displayName: 'Example',
   facets: [
     defineFacet({
       name: 'sample',
@@ -39,7 +40,7 @@ describe('defineFacet / definePlugin', () => {
   })
 
   it('rejects an invalid plugin id segment', () => {
-    expect(() => definePlugin({ id: 'Not OK', facets: [] })).toThrow(/id/)
+    expect(() => definePlugin({ id: 'Not OK', displayName: 'Not OK', facets: [] })).toThrow(/id/)
   })
 
   it('rejects two facets with the same name inside one plugin', () => {
@@ -49,7 +50,9 @@ describe('defineFacet / definePlugin', () => {
       targets: ['document'],
       schema: z.object({}),
     })
-    expect(() => definePlugin({ id: 'example', facets: [twice, twice] })).toThrow(/duplicate/)
+    expect(() =>
+      definePlugin({ id: 'example', displayName: 'Example', facets: [twice, twice] }),
+    ).toThrow(/duplicate/)
   })
 })
 
@@ -99,6 +102,7 @@ describe('resolveFacetPayload', () => {
   // A three-version facet: v0 {a:number} -> v1 {b:string} -> v2 {c:string}.
   const chained = definePlugin({
     id: 'chain',
+    displayName: 'Chain',
     facets: [
       defineFacet({
         name: 'thing',
@@ -148,6 +152,7 @@ describe('resolveFacetPayload', () => {
     const gapped = createFacetRegistry([
       definePlugin({
         id: 'gap',
+        displayName: 'Gap',
         facets: [
           defineFacet({
             name: 'thing',
