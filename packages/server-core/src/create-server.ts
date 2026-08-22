@@ -29,6 +29,7 @@ import {
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
+import { createDocumentSearchTool, documentSearchInputSchema } from './tools/document-search.js'
 import { createDocumentSetTool } from './tools/document-set.js'
 import { computeDocumentTags, documentTagsInputSchema } from './tools/document-tags.js'
 import { exportOkf, exportOkfInputSchema } from './tools/export-okf.js'
@@ -107,6 +108,26 @@ export function createServer(deps: ServerDeps) {
   // (workspace file tree) can open one without an MCP client. Deliberately
   // still OKF-specific: this is a different surface from the MCP tools, and
   // the tree wants markdown regardless of what wb_document_get would choose.
+  app.get('/api/v1/workspaces/:workspaceId/search', async (c) => {
+    const parsed = documentSearchInputSchema.safeParse({
+      workspaceId: c.req.param('workspaceId'),
+      query: c.req.query('q'),
+      ...(c.req.query('kind') === undefined ? {} : { kind: c.req.query('kind') }),
+      ...(c.req.queries('tag') === undefined || c.req.queries('tag')?.length === 0
+        ? {}
+        : { tags: c.req.queries('tag') }),
+      ...(c.req.query('limit') === undefined ? {} : { limit: Number(c.req.query('limit')) }),
+    })
+    if (!parsed.success) {
+      return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
+    }
+    try {
+      return c.json(await tools.documentSearch.execute(parsed.data))
+    } catch (err) {
+      return mapDocumentError(c, err)
+    }
+  })
+
   app.get('/api/v1/workspaces/:workspaceId/document-tags', async (c) => {
     const parsed = documentTagsInputSchema.safeParse({ workspaceId: c.req.param('workspaceId') })
     if (!parsed.success) {
@@ -166,6 +187,7 @@ export function createServer(deps: ServerDeps) {
     canvasEdit: createCanvasEditTool(deps),
     viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
+    documentSearch: createDocumentSearchTool(deps),
     documentSet: createDocumentSetTool(deps),
     versionSave: createVersionSaveTool(deps),
     versionList: createVersionListTool(deps),

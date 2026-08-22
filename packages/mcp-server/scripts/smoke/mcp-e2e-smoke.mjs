@@ -138,6 +138,7 @@ const EXPECTED_TOOLS = [
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_document_get',
+  'wb_document_search',
   'wb_document_set',
   'wb_scene_render',
   'canvas_view',
@@ -737,6 +738,21 @@ async function main() {
     throw new Error(`wb_document_set returned unexpected shape: ${JSON.stringify(imported)}`)
   }
   console.log('[e2e] wb_document_set → imported')
+
+  // wb_document_search over the body just imported — the runtime guard for
+  // this tool's structuredContent-vs-outputSchema drift, plus tag filtering.
+  const searched = await callTool('wb_document_search', {
+    workspaceId: WORKSPACE_ID,
+    query: 'Imported body',
+    tags: ['smoke'],
+  })
+  if (!searched.results.some((r) => r.documentId === mdCanvasId)) {
+    throw new Error(`wb_document_search missed the imported document: ${JSON.stringify(searched)}`)
+  }
+  if (!(searched.results[0].contexts[0] ?? '').includes('Imported body')) {
+    throw new Error(`wb_document_search snippet mismatch: ${JSON.stringify(searched.results[0])}`)
+  }
+  console.log('[e2e] wb_document_search → found the imported body with a snippet')
 
   const exported = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,

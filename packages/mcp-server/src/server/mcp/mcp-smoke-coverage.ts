@@ -47,6 +47,7 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_version_save',
   'wb_document_create',
   'wb_document_get',
+  'wb_document_search',
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',
@@ -56,6 +57,7 @@ export const ALL_REGISTERED_TOOLS = [
 export const COVERED_TOOLS = [
   'wb_viewport_set',
   'wb_document_set',
+  'wb_document_search',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_facet_set',
