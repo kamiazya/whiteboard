@@ -473,9 +473,33 @@ paths:
       Deferred rather than shipped because `canvas-render` is a shared-layer
       package with no worker, no SIMD path, and no `navigator.gpu` (a DOM
       global this layer forbids) — so today it would buy a 36% regression for
-      a few percent of crossings. Revisit when a composition root can supply a
-      parallel executor through a seam, which is a larger design than the
-      search itself.
+      a few percent of crossings.
+      **Re-measured 2026-08-22 on the then-current search, and the case for
+      a parallel executor did not survive.** Batch re-implemented (best
+      candidate per edge against one base, disjoint old+new bounding boxes,
+      merged configuration re-evaluated) needs ~24 rounds to match the
+      sequential search on avoidable ink, not 6, and at that point costs
+      4x (345 edges) to 10x (200 edges) the sequential time in interleaved
+      `pnpm bench` — not +36%. Profiled, pair scoring — the only part a GPU
+      can take, because trial shapes are generated on the CPU — is 46% of
+      the 200-edge batch time and under 10% everywhere else; anchors,
+      routing and trial bookkeeping are the rest. A WGSL pair-scoring kernel
+      was built anyway and held bit-identical to the CPU narrow phase
+      (`scoreQuantizedSegmentPair`): 8-10x faster than the CPU at 100k+
+      pairs on a real GPU, equal to it on SwiftShader, with a ~2.7ms floor
+      per dispatch against rounds of 27-79k pairs. Amdahl's law then puts the
+      best achievable batch+GPU layout at ~2.4s for the 200-edge case the
+      sequential search does in 0.6s. No production router found (libavoid,
+      ELK, yFiles, Excalidraw) parallelises this step; the comparable one
+      (Excalidraw's elbow arrows) shrank the routing search space instead.
+      The experiments are preserved unmerged on branches
+      `batch-side-choice` and `webgpu-pair-scorer`. Do not re-propose GPU
+      or batch search for SPEED; what batch still offers is QUALITY on large
+      canvases (345-edge clustered: violations 183 -> 138, interior ink
+      -22%) at 4x the time, which is a separate trade. The speed work goes
+      into the CPU-side costs the profile named: unmeasured `selfPenalty`,
+      per-trial full `computeAnchorsFor`, allocation in `addCost`/`lessCost`,
+      and `routeEdge` rebuilding obstacle lists it was already given.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
