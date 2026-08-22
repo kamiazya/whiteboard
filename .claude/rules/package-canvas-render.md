@@ -626,6 +626,30 @@ paths:
       hoisting an accidental O(E) scan out of the query made it 10% worse;
       an allocation-free version (stamp array plus scratch list) settled at 6%
       worse on the grid canvas and 4% better on the clustered one.
+      **What DID pay was pruning the obstacle set per routing call.** The same
+      re-profile that named the pair loop also split `routeEdge`: on the
+      clustered canvas `routeOnGrid` is 16.3% after A*, `bestCandidate` 7.2%,
+      the endpoint-containment filter 7.1% and the detour `region` union 4.6%.
+      Only `routeOnGrid` prunes; the others each walk all 286 rects, and
+      `routeOrthogonal` walks that set six to fifteen times per call — two
+      elbow clearance tests, `crossedBy`, and `bestCandidate` up to three
+      times, each testing its ranked candidates. One extra pass to build a
+      small set buys ten cheap ones. Measured 10-13% on the clustered canvas,
+      five of five in both orders; within noise on the grid canvas, where 58
+      obstacles leave nothing to prune.
+      The bound is where the care is, and the first version got it wrong.
+      Elbows live inside `bbox(start, exit, entry, end)`, which is exact for
+      the clearance tests and for `crossedBy` — that only ever tests elbow
+      segments. But a DETOUR waypoint is placed `OBSTACLE_CLEARANCE_PX`
+      OUTSIDE the region, so a box stopping at the region dropped obstacles a
+      detour still ran into. The routing scoreboard caught it, as moved pins
+      rather than as a crash — which is a long way from naming the cause. So
+      the bound is pinned rather than remembered: `DETOUR_REACH_PX` is
+      exported beside `detourCandidates` and
+      `detour-reach.properties.test.ts` asserts every waypoint stays inside
+      it, mutation-checked by zeroing the constant (the bug as shipped) and by
+      moving a waypoint one pixel further out. A prune whose bound is too
+      small does not throw; it quietly reroutes.
       The reason is in the fixture's own documentation: the stride canvas is
       the worst case for spatial pruning, where **55% of edge pairs survive a
       bounding-box test**. The index therefore returns nearly everything, so
