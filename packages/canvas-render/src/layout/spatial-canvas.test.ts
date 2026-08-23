@@ -4,8 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import { outlineContains } from './node-outline.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
+import { outlineContains } from './nodes/node-outline.js'
+import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
 import {
   layoutSpatialCanvas,

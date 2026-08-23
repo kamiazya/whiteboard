@@ -7,10 +7,39 @@ paths:
 
 ## What belongs here
 
+`layout/` is split by the two JSON Canvas element kinds it serves, because
+the code that serves them shares nothing:
+
+- `layout/edges/` — the orthogonal edge router (side choice, cost model,
+  Hanan-grid A*, crossings, jumps, rounding). Pure geometry over boxes; it
+  has no idea what is drawn inside one.
+- `layout/nodes/` — how a node's box is drawn and filled: outline shape,
+  appearance resolution, the markdown body typesetter, truncation.
+- `layout/` itself — `spatial-canvas.ts`, the composer that draws on both,
+  plus the kind-agnostic scene transforms it uses.
+
+The split was made because the two clusters were measured to have ZERO
+production imports between each other while sitting in one flat directory,
+so the directory gave a reader no signal which of two unrelated engines a
+file belonged to. `layout/layer-boundary.test.ts` is what keeps that true:
+the clusters may not import each other, and may not reach up to the
+composer. Tests are exempt — an edge-router test that builds its fixture by
+composing a whole scene is doing setup, not depending on the composer.
+
+That the clusters are disjoint is also the reason a facet-style plugin
+seam is NOT what this directory needs. Extension already arrives through
+`facet-engine`: `spatial-canvas.ts` resolves shape, edge style, symbol and
+text alignment from registered facets, so a new rendering behaviour is a
+plugin declaration plus a small composer change (`visual.text/v0` cost ten
+lines here). The scene-node union stays closed on purpose — every consumer
+is in this repo, and an open union would buy dispatch flexibility nobody
+has asked for at the cost of the exhaustiveness checking the SVG backend
+relies on.
+
 - Plain-TS scene graph types (`scene-graph.ts`): resolved bounding boxes,
   shape kind, text runs, list/heading/table structure, the SVG-fragment
   (math/diagram) seam node, resolved edges.
-- `layout/edge-geometry.ts`: the geometry VOCABULARY the edge layer is
+- `layout/edges/edge-geometry.ts`: the geometry VOCABULARY the edge layer is
   written in — rectangles, points, sides, polylines — with no opinion about
   routing or side choice. It exists because that vocabulary had no home:
   `spatial-edges.ts` held the side-choice search, the router and these
@@ -25,9 +54,9 @@ paths:
   eight entry points rather than the one `routeEdge` a reading suggests,
   so it is a three-module decomposition with no measurable payoff, on the
   file most likely to change next.
-- Pure layout functions: spatial-canvas edge routing (`layout/spatial-edges.ts`),
+- Pure layout functions: spatial-canvas edge routing (`layout/edges/spatial-edges.ts`),
   embed recursion over a resolved doc bundle (`layout/embed-recursion.ts`),
-  and mdast block layout (`layout/mdast-blocks.ts`) — the single mdast ->
+  and mdast block layout (`layout/nodes/mdast-blocks.ts`) — the single mdast ->
   scene-graph render path shared by preview / spatial text node / export.
 - `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
   `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
@@ -237,7 +266,7 @@ paths:
    codec, so `parseBody: (text: string) => MdastRoot` is supplied by
    the caller (both current consumers pass codec's
    `parseMarkdownBody`). Appearance is likewise injected via a
-   `SpatialAppearanceResolver` (`layout/spatial-appearance.ts`) — a set of
+   `SpatialAppearanceResolver` (`layout/nodes/spatial-appearance.ts`) — a set of
    FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static
    per-kind record, because appearance keys off both `node.type` and an
    authored `node.color`/`x-whiteboard` hint. (Geometry constants —
@@ -365,12 +394,12 @@ paths:
       only and are never traded against penalties; penalty rules are
       cost-tuple terms with a declared lexicographic tier. New routing
       feedback = one named rule + its own test, not a new branch in an
-      existing function. `layout/edge-rules.ts` implements the PREFERENCE
+      existing function. `layout/edges/edge-rules.ts` implements the PREFERENCE
       half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
       dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
       gap-valid-opposing-before-invalid, u-hook-span-exposed-first, and
       incumbent-wins-ties; `composeSidePairs` is the composition
-      `rankedSidePairs` (`layout/spatial-edges.ts`) wraps, and
+      `rankedSidePairs` (`layout/edges/spatial-edges.ts`) wraps, and
       `shouldAdoptCandidate` is the incumbent-wins-ties predicate
       `optimizeSideChoices` consults. `u-hook-span-exposed-first` demotes a
       same-side U-hook candidate whose DEPARTURE side border runs through
@@ -739,7 +768,7 @@ paths:
     reference, and it serves markdown documents with no file nodes at all.
 
 12. **Line breaking is UAX #14, not a hand-rolled character table**
-    (`layout/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
+    (`layout/nodes/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
     `lineBreak: 'strict'` supplies the break opportunities, which is what
     makes CJK wrap at all (the previous wrapper split on ASCII spaces, so a
     Japanese paragraph had no break opportunity anywhere and was emitted as
@@ -795,7 +824,7 @@ paths:
     published mcp-server bundle then fails to build at all. Tree-shaking
     cannot help — esbuild resolves the whole graph before eliminating
     anything — and the deep import is blocked by budoux's `exports` map.
-    **What cannot wrap is CUT, not left to overflow** (`layout/truncate.ts`,
+    **What cannot wrap is CUT, not left to overflow** (`layout/nodes/truncate.ts`,
     `fitToWidth`): a node label (one line is what makes it a label) and an
     atomic run. The run keeps the longest prefix that fits and is marked
     `truncated`, which the SVG backend paints as a fade — never an ellipsis,
@@ -864,7 +893,7 @@ paths:
   bounded, translated, or exported — has exactly one producing function;
   when two producers are unavoidable, a parity test pins their agreement
   (precedents: `theme/spatial-geometry-parity.test.ts` for layout
-  geometry, `layout/edge-rounding.ts` for the drawn-vs-hit curve). Two
+  geometry, `layout/edges/edge-rounding.ts` for the drawn-vs-hit curve). Two
   independently-grown producers of "the same" geometry is the pixel
   version of the Zod schema/interface drift class, and it has shipped
   real defects twice.
@@ -906,7 +935,7 @@ paths:
   the scoreboard exists to report. Metrics are an independent oracle
   (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
   and never calls the wrapping code.
-- `layout/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
+- `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say
   whether a fix moved the failure somewhere nobody had looked. It holds one

@@ -64,7 +64,7 @@ it('render', () => {
 ```bash
 mkdir -p tmp/screenshots
 OUT=$PWD/tmp/screenshots/after.svg  pnpm vitest run --project canvas-render-node __render
-git stash push -q packages/canvas-render/src/layout/spatial-edges.ts   # tracked files only
+git stash push -q packages/canvas-render/src/layout/edges/spatial-edges.ts   # tracked files only
 OUT=$PWD/tmp/screenshots/before.svg pnpm vitest run --project canvas-render-node __render
 git stash pop -q
 ```
