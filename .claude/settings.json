@@ -36,6 +36,12 @@
             "command": "node .claude/scripts/hooks/pre-pr-check-base.mjs",
             "_comment": "Blocks `gh pr create` when the branch is behind a freshly fetched origin/main, so PRs are never born stale. Fail-open no-op for every other Bash call.",
             "timeout": 30
+          },
+          {
+            "type": "command",
+            "command": "node .claude/scripts/hooks/pre-pr-visual-evidence.mjs",
+            "_comment": "Blocks `gh pr create` when the diff changes a surface a human looks at and the body carries neither a figure nor a stated reason for having none. AGENTS.md asked for this in prose and the practice hollowed out anyway \u2014 a heading over an after-only capture reads as compliance. Fail-open no-op for every other Bash call, and for a body it cannot read.",
+            "timeout": 30
           }
         ]
       }
