@@ -108,4 +108,19 @@ describe('local body search', () => {
     expect((await source.searchDocuments('renamed', 20))[0]?.document.path).toBe('drafts/renamed')
     expect(await source.searchDocuments('first', 20)).toEqual([])
   })
+
+  it('ranks its own hits 1-based, so a caller can tell a keyword hit from none', async () => {
+    // Local mode has no embedder, so every hit here IS a lexical hit — the
+    // rank is what says so, and its absence is what a semantic-only hit
+    // from the daemon would carry.
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    await seedMarkdown(index, 'ranked/heavy', 'zarquon zarquon zarquon exceeded on save')
+    await seedMarkdown(index, 'ranked/light', 'a passing mention of zarquon')
+    const source = createLocalFilesSource({ index })
+
+    const hits = await source.searchDocuments('zarquon', 20)
+    expect(hits.map((hit) => hit.document.path)).toEqual(['ranked/heavy', 'ranked/light'])
+    expect(hits.map((hit) => hit.lexicalRank)).toEqual([1, 2])
+  })
 })
