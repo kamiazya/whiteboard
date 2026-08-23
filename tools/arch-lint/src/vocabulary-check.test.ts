@@ -11,7 +11,7 @@
  * and the JSON Canvas format; only its use as the CONTAINER noun is wrong,
  * and telling those apart needs a reader.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -94,12 +94,21 @@ const BANNED = [
     pattern: /browser[-_]?local/i,
     word: 'browser-local (in any casing)',
     instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
-    // `docs` is here because prose is where this word decayed TWICE: the
-    // increment that rewrote the app's copy left the tutorial teaching the
-    // retired word in bold, and the sweep after it missed a camel-cased
-    // `BrowserLocalDocumentPage` in a table because the grep looked for a
-    // hyphen. A reader cannot be relied on to spell the search four ways.
-    dirs: ['apps/web/src', 'apps/web/scripts', 'docs'],
+    // Deliberately the whole prose surface, because a hand grep missed a
+    // place THREE times in one increment: `browserlocaldocumentpage-…` had no
+    // separator to match on, `testing.md` was camel-cased, and the workflow
+    // that comments a preview URL on every PR said "Browser-local mode" in a
+    // `.yml` nothing scanned. A reader cannot be relied on to spell the
+    // search five ways, in five file types, on every future change.
+    dirs: [
+      'apps/web/src',
+      'apps/web/scripts',
+      'docs',
+      '.github',
+      '.claude',
+      'README.md',
+      'apps/web/DESIGN.md',
+    ],
     exempt: [
       // PERSISTED value under a `.strict()` schema whose loader falls back to
       // defaults on any parse failure: renaming it in place would discard an
@@ -113,6 +122,10 @@ const BANNED = [
       'apps/web/src/docs-snapshots/browser-local-list.docs-snapshot.test.tsx',
       // Renders that same ADR-pinned asset.
       'docs/tutorials/getting-started.md',
+      // The rule this test is the executable half of. It is the one file that
+      // HAS to spell the retired words, because naming them is how it retires
+      // them — the same reason `resolve.test.ts` still writes `[[canvas:…]]`.
+      '.claude/rules/vocabulary.md',
     ],
   },
   // Deliberately NARROWER than its sibling above, and not an oversight: only
@@ -144,6 +157,9 @@ const BANNED = [
  * is the failure mode a rename is most likely to cause.
  */
 function listSourceFiles(dir: string): string[] {
+  // A scan root may be a single file: `README.md` and `apps/web/DESIGN.md`
+  // are prose this word decays in, and neither has a directory of its own.
+  if (statSync(dir).isFile()) return [dir]
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue
@@ -153,7 +169,7 @@ function listSourceFiles(dir: string): string[] {
       files.push(...listSourceFiles(full))
       continue
     }
-    if (/\.(ts|tsx|mts|js|mjs|cjs|json|md)$/.test(entry.name)) files.push(full)
+    if (/\.(ts|tsx|mts|js|mjs|cjs|json|md|ya?ml)$/.test(entry.name)) files.push(full)
   }
   return files
 }

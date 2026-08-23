@@ -17,7 +17,7 @@ your browser, run it locally for durable private storage, and self-host it for a
 team when you're ready.
 
 **Try it in your browser** — no account; your canvas data stays in your own
-browser. <sub>*Browser-local: runs in your browser, data stays on your machine.*</sub>
+browser. <sub>*Kept in your browser: runs in your browser, data stays on your machine.*</sub>
 *[Get started →](docs/tutorials/getting-started.md) — runs locally from a checkout today.*
 
 ### ▶ Draw with your AI agent
@@ -171,7 +171,7 @@ version history, branches, and merge, with live sync over WebSocket.
   precedence rules.
 
 See [Connect to a local daemon](docs/how-to/connect-to-local-daemon.md) for
-the full flow, including copy-first import of browser-local canvases.
+the full flow, including copy-first import of canvases kept in your browser.
 
 ## Bundled skills
 
@@ -214,7 +214,7 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 | Components, data flow, MCP tool surface, design boundaries | [docs/explanation/architecture.md](docs/explanation/architecture.md) |
 | Export formats (SVG, OKF Markdown, JSON Canvas) and their tools | [docs/reference/export-formats.md](docs/reference/export-formats.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
-| Trust model for all three runtimes (browser-local, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
+| Trust model for all three runtimes (browser, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
 | Pairing a browser tab to a local daemon, copy-first import | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
 | WebSocket message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
