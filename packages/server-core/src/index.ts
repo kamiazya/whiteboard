@@ -2,6 +2,19 @@ export { createServer } from './create-server.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
 export type { Embedder } from './search/embedder.js'
+export type { ConfidenceInterval, Judgments, PermutationResult } from './search/eval.js'
+export {
+  bootstrapCi,
+  ndcgAt,
+  pairedPermutationTest,
+  permutationFloor,
+  randomBaseline,
+  recallAt,
+  reciprocalRank,
+  requiredQueryCount,
+  standardDeviation,
+} from './search/eval.js'
+export type { QueryCategory } from './search/search-corpus.js'
 export type {
   AgentActivity,
   CanvasClientNotifier,

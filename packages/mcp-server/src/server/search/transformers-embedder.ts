@@ -12,7 +12,7 @@ const log = getLogger('search-embedder')
  * research shortlisted, this is the only one published with ONNX weights,
  * which is what transformers.js can actually run.
  */
-const DEFAULT_MODEL = 'Xenova/multilingual-e5-small'
+export const DEFAULT_MODEL = 'Xenova/multilingual-e5-small'
 
 /**
  * e5 is trained with these literal prefixes and loses accuracy without them.
