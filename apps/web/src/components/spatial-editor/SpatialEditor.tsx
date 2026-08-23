@@ -3329,12 +3329,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 node={target}
                 registry={bundledFacetRegistry}
                 onClose={() => setFacetPanelNodeId(null)}
-                onWrite={(key, payload) =>
+                onWrite={(key, payload) => {
+                  // Applies to the whole selection, the semantics the menu
+                  // bands had: reshaping five selected nodes must not become
+                  // five visits to this panel.
+                  const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
+                  const ids = members.has(target.id) ? [...members] : [target.id]
                   applyResult({
                     state: { kind: 'idle' },
-                    commands: [{ kind: 'set-node-facet', id: target.id, key, payload }],
+                    commands: ids.map((id) => ({
+                      kind: 'set-node-facet' as const,
+                      id,
+                      key,
+                      payload,
+                    })),
                   })
-                }
+                }}
               />
             )
           })()}

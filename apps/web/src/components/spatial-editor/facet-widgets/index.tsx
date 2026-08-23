@@ -14,39 +14,28 @@ import {
   LUCIDE_VIEWBOX,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
-  deriveFacetForm,
-  type FacetDefinition,
   type FacetRegistry,
   resolveCanvasEdgeStyle,
   resolveFacetContributions,
-  resolveNodeSymbol,
-  VISUAL_SYMBOL_KEY,
   type VisualSymbolFacet,
+  visualSymbolFacetSchema,
 } from '@kamiazya/whiteboard-facet-engine'
-import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Ban, SlidersHorizontal } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import type { EditorCommand } from '../commands.js'
-import { glyphIcon } from './glyph.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */
 export interface NodePropertiesContext {
-  readonly node: SpatialNode
-  /** Applies per-target commands with the menu's selection semantics. */
-  readonly applyToSelection: (
-    commandsFor: (targetIds: readonly string[]) => readonly EditorCommand[],
-  ) => void
   /**
-   * Opens the full facet panel for this node. The core surface owns the
-   * panel's mounting; the DOORWAY belongs here, so no point-owning surface
-   * has to name the facet concept to offer one.
+   * Opens the facet inspector for this node. The core surface owns the
+   * inspector's mounting; the DOORWAY belongs here, so no point-owning
+   * surface has to name the facet concept to offer one.
    */
   readonly openPanel: () => void
 }
-
-export type NodePropertiesWidget = (ctx: NodePropertiesContext) => readonly ContextMenuItem[]
 
 /** `canvasSettings`: what a canvas-settings panel widget receives. */
 export interface CanvasSettingsContext {
@@ -55,6 +44,22 @@ export interface CanvasSettingsContext {
 }
 
 export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
+
+/**
+ * `inspector.node`: a hand-written editor for one facet, rendered inside the
+ * inspector's row for it. Tier 3 of the editor ladder — for a picker the
+ * declared vocabulary cannot yet express.
+ *
+ * `write` is the panel's own writer, so it has already been through
+ * `validateFacetWrite`: a widget cannot store what `wb_facet_set` refuses.
+ * `undefined` clears the facet.
+ */
+export interface FacetEditorContext {
+  readonly value: unknown
+  readonly write: (payload: unknown) => void
+}
+
+export type FacetEditorWidget = (ctx: FacetEditorContext) => ReactNode
 
 // --- visual.shape/v0 -------------------------------------------------------
 
@@ -68,41 +73,53 @@ export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
  */
 const EMOJI_CHOICES = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
 
-const visualSymbolBand: NodePropertiesWidget = ({ node, applyToSelection }) => {
-  const current = resolveNodeSymbol(node)
-  const applySymbol = (payload: VisualSymbolFacet | undefined) => {
-    applyToSelection((ids) =>
-      ids.map((id) => ({ kind: 'set-node-facet' as const, id, key: VISUAL_SYMBOL_KEY, payload })),
-    )
-  }
-  return [
-    {
-      kind: 'options' as const,
-      label: 'Symbol',
-      options: [
-        {
-          label: 'none',
-          ariaLabel: 'No symbol',
-          icon: <Ban />,
-          selected: current === undefined,
-          onSelect: () => applySymbol(undefined),
-        },
-        ...BUILT_IN_ICON_NAMES.map((name) => ({
-          label: name,
-          ariaLabel: `Icon ${name}`,
-          icon: <BuiltInIcon name={name} />,
-          selected: current?.kind === 'icon' && current.name === name,
-          onSelect: () => applySymbol({ kind: 'icon', name }),
-        })),
-        ...EMOJI_CHOICES.map((char) => ({
-          label: char,
-          ariaLabel: `Emoji ${char}`,
-          selected: current?.kind === 'emoji' && current.char === char,
-          onSelect: () => applySymbol({ kind: 'emoji', char }),
-        })),
-      ],
-    },
-  ]
+const symbolEditor: FacetEditorWidget = ({ value, write }) => {
+  const current = visualSymbolFacetSchema.safeParse(value)
+  const selected = current.success ? current.data : undefined
+  const option = (
+    key: string,
+    label: string,
+    content: ReactNode,
+    on: boolean,
+    payload: VisualSymbolFacet | undefined,
+  ) => (
+    <button
+      key={key}
+      type="button"
+      role="radio"
+      aria-checked={on}
+      aria-label={label}
+      onClick={() => write(payload)}
+      className={cn(
+        'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs',
+        on ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent',
+      )}
+    >
+      <span aria-hidden="true" className="[&>svg]:size-4">
+        {content}
+      </span>
+    </button>
+  )
+  return (
+    <span role="radiogroup" aria-label="Symbol" className="flex flex-wrap items-center gap-0.5">
+      {option('none', 'No symbol', <Ban />, selected === undefined, undefined)}
+      {BUILT_IN_ICON_NAMES.map((name) =>
+        option(
+          name,
+          `Icon ${name}`,
+          <BuiltInIcon name={name} />,
+          selected?.kind === 'icon' && selected.name === name,
+          { kind: 'icon', name },
+        ),
+      )}
+      {EMOJI_CHOICES.map((char) =>
+        option(char, `Emoji ${char}`, char, selected?.kind === 'emoji' && selected.char === char, {
+          kind: 'emoji',
+          char,
+        }),
+      )}
+    </span>
+  )
 }
 
 /**
@@ -215,92 +232,36 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
  * phone once a third band landed.
  */
 /**
- * Tier 2: a facet that DECLARES its editor gets its quick band rendered
- * from the declaration — no per-facet React. The glyph vocabulary is the
- * core's (a plugin names one, it cannot ship one), which is what keeps a
- * declared editor a declaration rather than third-party UI code.
+ * The node context menu's entire facet surface: one doorway, and nothing
+ * that edits a facet.
+ *
+ * Quick bands used to live here. An action menu's entries run once and
+ * close it; a facet is state you look at and adjust several times in a row,
+ * so it belongs on the inspector — and the menu was growing a row per
+ * domain, with a stored value one tap from Delete.
+ *
+ * No doorway at all when nothing targets a node: an inspector with nothing
+ * in it is a dead end, not an empty state.
  */
-function declaredBands(
-  facetKey: string,
-  definition: FacetDefinition,
-  ctx: NodePropertiesContext,
-): readonly ContextMenuItem[] {
-  if (definition.editor === undefined) return []
-  const form = deriveFacetForm(definition.schema, definition.editor)
-  if (form.kind !== 'fields') return []
-  const stored = ctx.node['x-whiteboard']?.facets?.[facetKey] as Record<string, unknown> | undefined
-  return form.fields.flatMap((field) => {
-    if (!field.quick || field.control.kind !== 'segmented') return []
-    const current = stored?.[field.name]
-    return [
-      {
-        kind: 'options' as const,
-        label: field.label,
-        options: field.control.options.map((option) => ({
-          // The DECLARED label, both visible and accessible: a band whose
-          // options carry no drawable glyph is read, not looked at, and the
-          // stored value ("start") is not what a reader is choosing ("Top").
-          label: option.label,
-          ariaLabel: option.label,
-          // `icon` must be absent, not an element that renders nothing —
-          // the vessel branches on its presence, so an unconditional element
-          // drew three blank 28px buttons where the labels should be.
-          icon: glyphIcon(option.glyph),
-          // A null option means the facet's ABSENCE, which is why the
-          // comparison is against undefined rather than the value.
-          selected: option.value === null ? stored === undefined : current === option.value,
-          onSelect: () => {
-            ctx.applyToSelection((ids) =>
-              ids.map((id) => ({
-                kind: 'set-node-facet' as const,
-                id,
-                key: facetKey,
-                payload: option.value === null ? undefined : { [field.name]: option.value },
-              })),
-            )
-          },
-        })),
-      },
-    ]
-  })
-}
-
 export function nodePropertyItems(
   registry: FacetRegistry,
   ctx: NodePropertiesContext,
-  widgets: Readonly<Record<string, NodePropertiesWidget>> = NODE_PROPERTIES_WIDGETS,
 ): readonly ContextMenuItem[] {
-  const contributed = resolveFacetContributions(registry, 'contextMenu.node.properties')
-    .map((group) => ({
-      group,
-      // A hand-written widget still wins where one is registered (tier 2
-      // is a ladder, not a replacement): a picker the catalog cannot yet
-      // express keeps its code.
-      bands: group.facets.flatMap(
-        (facet) => widgets[facet.key]?.(ctx) ?? declaredBands(facet.key, facet.definition, ctx),
-      ),
-    }))
-    .filter((entry) => entry.bands.length > 0)
-  if (contributed.length === 0) return []
+  if (resolveFacetContributions(registry, 'inspector.node').length === 0) return []
   return [
     { kind: 'separator' as const },
-    ...contributed.flatMap(({ group, bands }) => [
-      { kind: 'heading' as const, label: group.displayName },
-      ...bands,
-    ]),
-    // The quick bands are one tier; everything a facet declares — including
-    // facets no band knows about — is reachable through here.
     { label: 'Facets…', icon: <SlidersHorizontal />, onSelect: ctx.openPanel },
   ]
 }
 
 // --- registrations ---------------------------------------------------------
 
-export const NODE_PROPERTIES_WIDGETS: Readonly<Record<string, NodePropertiesWidget>> = {
-  // visual.shape is NOT here: it declares its band (see visual.ts's editor
-  // spec) and is rendered from that declaration — the acceptance test for
-  // tier 2 being usable by the plugin that ships with the engine.
-  'visual.symbol/v0': visualSymbolBand,
+export const NODE_FACET_EDITORS: Readonly<Record<string, FacetEditorWidget>> = {
+  // visual.shape and visual.text are NOT here: they declare their editor
+  // (see visual.ts) and are rendered from that declaration. Only symbol
+  // needs code, because an icon-plus-emoji picker is outside the declared
+  // vocabulary — which is the gap the semantic layer is meant to close.
+  'visual.symbol/v0': symbolEditor,
 }
 
 export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidget>> = {

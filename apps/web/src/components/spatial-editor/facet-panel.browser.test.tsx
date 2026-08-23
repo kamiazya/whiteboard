@@ -55,10 +55,13 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // A CHOICE applies on pick, the way the same facet's quick band does —
   // there is no Save to press, and a facet made only of choices has none.
   fireEvent.click(hexagon)
-  // Scoped by accessible name: Symbol keeps a Save because it carries a
-  // free-entry field, so a panel-wide check would pass for the wrong reason.
-  expect(panel.querySelector('button[aria-label="Save Shape"]')).toBeNull()
-  expect(panel.querySelector('button[aria-label="Save Symbol"]')).not.toBeNull()
+  // Nothing in the bundled plugin needs a Save any more: shape and text are
+  // declared choices, and symbol renders its registered picker. A Save
+  // survives only for a facet with free entry — covered in the jsdom suite,
+  // where a fixture facet can have one.
+  expect(panel.querySelector('button[aria-label^="Save"]')).toBeNull()
+  // The picker that used to be a context-menu band is here instead.
+  expect(panel.querySelector('[aria-label="Emoji ⭐"]')).not.toBeNull()
 
   expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',
