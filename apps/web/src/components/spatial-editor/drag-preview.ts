@@ -22,8 +22,8 @@ import {
   flattenDrawnEdgePath,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
-import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
 import type { Box, NodeBox } from './geometry.js'
 import { hitTest, resizeBoxByDelta } from './geometry.js'
 import type { GestureState } from './gestures.js'

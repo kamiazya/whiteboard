@@ -8,4 +8,3 @@ export {
   type PluginUi,
   type PluginUiSection,
 } from './plugin-ui.js'
-export { visualUi } from './visual-ui.js'

@@ -1,3 +1,8 @@
+import {
+  LUCIDE_ICONS,
+  LUCIDE_VIEWBOX,
+  type LucideIconElement,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
@@ -16,7 +21,6 @@ import type {
   TableRowSceneNode,
   TextRunNode,
 } from '../scene-graph.js'
-import { LUCIDE_ICONS, LUCIDE_VIEWBOX, type LucideIconElement } from '../vendor/lucide/icons.js'
 import { collectDefs } from './defs.js'
 import type { PaintAttrs, SvgBoxAttrs, SvgElements, TextEmphasisAttrs } from './elements.js'
 import { formatCoord, sanitizeHref, trustedHref } from './format.js'

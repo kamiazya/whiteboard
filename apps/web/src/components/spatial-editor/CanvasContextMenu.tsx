@@ -6,13 +6,14 @@ import {
   SPATIAL_LIGHT_PALETTE,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
-import { bundledFacetRegistry, type FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasColor,
   ClipboardFragment,
   SpatialCanvas,
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   AlignCenterHorizontal,
   AlignCenterVertical,

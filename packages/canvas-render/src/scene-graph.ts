@@ -152,7 +152,7 @@ export interface ShapeSceneNode {
 }
 
 /**
- * A vendored-icon glyph (vendor/lucide) drawn at `bbox` via a shared
+ * A vendored-icon glyph (the visual plugin's table) drawn at `bbox` via a shared
  * `<symbol>` definition and a per-node `<use>` reference — one definition
  * per icon name regardless of how many nodes show it. `icon` names an
  * entry in the vendored table; an unknown name degrades to nothing, per

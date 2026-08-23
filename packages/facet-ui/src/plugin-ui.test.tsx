@@ -1,60 +1,101 @@
 // The facet system's React half. A plugin owns how its facets are edited;
 // this package holds what it builds that UI from, and the one path its
 // writes take.
-import { bundledFacetRegistry, VISUAL_SYMBOL_KEY } from '@kamiazya/whiteboard-facet-engine'
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+//
+// Deliberately built on a synthetic plugin rather than the bundled one: the
+// library must not know which plugins exist, and a test that reaches for
+// `visual` cannot tell the two apart. (It also cannot import it — the
+// bundled plugin depends on THIS package.)
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
+import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { createFacetWriter, visualUi } from './index.js'
+import { z } from 'zod'
+import { createFacetWriter, definePluginUi } from './index.js'
 
 afterEach(cleanup)
 
-describe('the bundled plugin declares its own settings', () => {
-  it('names its sections in its own order, not the registry order', () => {
-    // Registry order is alphabetical by facet name (shape, symbol, text).
-    // A plugin arranging its own panel is the whole point, so the
-    // declaration decides — here Badge sits between them.
-    expect(visualUi.sections.map((s) => s.title)).toEqual(['Shape', 'Badge', 'Text placement'])
-    expect(visualUi.plugin).toBe('visual')
+const MARK_KEY = 'demo.mark/v0'
+
+const registry = createFacetRegistry([
+  definePlugin({
+    id: 'demo',
+    displayName: 'Demo',
+    facets: [
+      defineFacet({
+        name: 'mark',
+        displayName: 'Mark',
+        version: 'v0',
+        targets: ['node'],
+        schema: z.object({ char: z.string().length(1) }),
+      }),
+    ],
+  }),
+])
+
+describe('definePluginUi', () => {
+  it('keeps the plugin’s own order, which the registry does not decide', () => {
+    const ui = definePluginUi({
+      plugin: 'demo',
+      sections: [
+        { title: 'Second', facet: 'b' },
+        { title: 'First', facet: 'a' },
+      ],
+    })
+    expect(ui.sections.map((s) => s.title)).toEqual(['Second', 'First'])
   })
 
-  it('ships a component only where the declared vocabulary cannot reach', () => {
-    const withComponent = visualUi.sections.filter((s) => s.component !== undefined)
-    // Shape and text are segmented choices — declarable. Only the badge
-    // picker (icons plus emoji) needs code.
-    expect(withComponent.map((s) => s.facet)).toEqual(['symbol'])
+  it('refuses two sections for one facet, which would render it twice', () => {
+    expect(() =>
+      definePluginUi({
+        plugin: 'demo',
+        sections: [
+          { title: 'One', facet: 'mark' },
+          { title: 'Again', facet: 'mark' },
+        ],
+      }),
+    ).toThrow()
   })
 })
 
 describe('createFacetWriter', () => {
   it('is the only path to storage, and it validates', () => {
     const onWrite = vi.fn()
-    const write = createFacetWriter(bundledFacetRegistry, VISUAL_SYMBOL_KEY, onWrite)
+    const write = createFacetWriter(registry, MARK_KEY, onWrite)
 
-    write({ kind: 'emoji', char: '⭐' })
-    expect(onWrite).toHaveBeenCalledWith(VISUAL_SYMBOL_KEY, { kind: 'emoji', char: '⭐' })
+    write({ char: 'x' })
+    expect(onWrite).toHaveBeenCalledWith(MARK_KEY, { char: 'x' })
 
-    // `char` is a single grapheme. A plugin's own component gets no shorter
-    // route to storage than a declared editor does.
+    // A plugin's own component gets no shorter route to storage than a
+    // declared editor does.
     onWrite.mockClear()
-    write({ kind: 'emoji', char: 'not one grapheme' })
+    write({ char: 'far too long' })
     expect(onWrite).not.toHaveBeenCalled()
   })
 
   it('passes undefined through, because clearing is not a payload', () => {
     const onWrite = vi.fn()
-    createFacetWriter(bundledFacetRegistry, VISUAL_SYMBOL_KEY, onWrite)(undefined)
-    expect(onWrite).toHaveBeenCalledWith(VISUAL_SYMBOL_KEY, undefined)
+    createFacetWriter(registry, MARK_KEY, onWrite)(undefined)
+    expect(onWrite).toHaveBeenCalledWith(MARK_KEY, undefined)
   })
 })
 
-describe("visual's badge editor", () => {
-  it('renders the picker and writes the picked value', () => {
+describe('a plugin-supplied component', () => {
+  it('is rendered by the host with the value and the writer it was given', () => {
     const write = vi.fn()
-    const Editor = visualUi.sections.find((s) => s.facet === 'symbol')?.component
+    const ui = definePluginUi({
+      plugin: 'demo',
+      sections: [
+        {
+          title: 'Mark',
+          facet: 'mark',
+          component: ({ value }) => <span>{String((value as { char: string })?.char)}</span>,
+        },
+      ],
+    })
+    const Editor = ui.sections[0]?.component
     expect(Editor).toBeDefined()
     if (Editor === undefined) return
-    render(<Editor value={undefined} write={write} />)
-    fireEvent.click(screen.getByLabelText('Emoji ⭐'))
-    expect(write).toHaveBeenCalledWith({ kind: 'emoji', char: '⭐' })
+    render(<Editor value={{ char: 'q' }} write={write} />)
+    expect(screen.getByText('q')).toBeTruthy()
   })
 })

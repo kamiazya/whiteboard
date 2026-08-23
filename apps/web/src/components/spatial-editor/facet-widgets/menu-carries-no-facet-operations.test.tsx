@@ -4,7 +4,7 @@
 //
 // This is the rule that answers the next domain too: whatever ticketing or
 // due-dates want, the menu's answer is the same doorway.
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, it } from 'vitest'
 import { nodePropertyItems } from './index.js'
 

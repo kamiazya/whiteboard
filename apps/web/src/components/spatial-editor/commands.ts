@@ -18,7 +18,7 @@
  * `toNode` referenced the removed node, so no command sequence can ever
  * produce a canvas with a dangling edge endpoint.
  */
-import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-facet-engine'
+
 import type {
   CanvasColor,
   CanvasEdge,
@@ -29,6 +29,7 @@ import type {
   SpatialNode,
   StoredCoreFacets,
 } from '@kamiazya/whiteboard-model'
+import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-plugin-visual'
 import { remintClipboardFragment } from '../../lib/clipboard-fragment.js'
 import type { Point } from './viewport.js'
 

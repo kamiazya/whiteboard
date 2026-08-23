@@ -1,7 +1,7 @@
+import { createFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { extensionFacetsSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { createFacetRegistry } from './registry.js'
 import {
   bundledPlugins,
   resolveCanvasEdgeStyle,
@@ -14,7 +14,7 @@ import {
   VISUAL_TEXT_KEY,
   visualPlugin,
   visualSymbolFacetSchema,
-} from './visual.js'
+} from './data.js'
 
 const registry = createFacetRegistry(bundledPlugins)
 

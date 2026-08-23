@@ -6,7 +6,6 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { deriveFacetForm } from './form.js'
 import { defineFacet } from './registry.js'
-import { visualShapeFacetSchema, visualSymbolFacetSchema } from './visual.js'
 
 describe('deriveFacetForm', () => {
   it('humanizes a derived label — the fallback should not read like a variable', () => {
@@ -42,7 +41,9 @@ describe('deriveFacetForm', () => {
   })
 
   it('maps an enum to a choice control carrying its options', () => {
-    const form = deriveFacetForm(visualShapeFacetSchema)
+    const form = deriveFacetForm(
+      z.object({ kind: z.enum(['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder']) }),
+    )
     expect(form.kind).toBe('fields')
     if (form.kind !== 'fields') throw new Error('unreachable')
     expect(form.fields).toHaveLength(1)
@@ -66,7 +67,12 @@ describe('deriveFacetForm', () => {
   })
 
   it('answers a variants form for a discriminated union, one per arm', () => {
-    const form = deriveFacetForm(visualSymbolFacetSchema)
+    const form = deriveFacetForm(
+      z.union([
+        z.object({ kind: z.literal('icon'), name: z.string() }),
+        z.object({ kind: z.literal('emoji'), char: z.string() }),
+      ]),
+    )
     expect(form.kind).toBe('variants')
     if (form.kind !== 'variants') throw new Error('unreachable')
     expect(form.variants.map((v) => v.label)).toEqual(['icon', 'emoji'])
@@ -191,8 +197,8 @@ describe('an editor spec refines the derived form', () => {
   })
 
   it('a spec may add an ABSENCE option, since some defaults are unrepresentable', () => {
-    // `visual.shape` has no 'rect' value — rect IS the absent facet — so a
-    // picker needs a way to say "clear this".
+    // A shape facet typically has no 'rect' value — rect IS the absent
+    // facet — so a picker needs a way to say "clear this".
     const form = deriveFacetForm(schema, {
       fields: {
         kind: {
