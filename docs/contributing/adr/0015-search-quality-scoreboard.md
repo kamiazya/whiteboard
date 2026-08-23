@@ -298,11 +298,11 @@ required the very change the spike exists to avoid.
 
 | metric (semantic only) | truncated | chunked | delta | 95% CI | p |
 |---|---|---|---|---|---|
-| nDCG@10 | 0.680 | 0.705 | +0.025 | [-0.030, +0.089] | 0.45 |
+| nDCG@10 | 0.680 | 0.704 | +0.024 | [-0.031, +0.089] | 0.46 |
 | recall@10 | 0.850 | 0.890 | +0.040 | [+0.000, +0.100] | 0.50 |
-| MRR | 0.639 | 0.653 | +0.014 | [-0.058, +0.092] | 0.72 |
+| MRR | 0.639 | 0.653 | +0.014 | [-0.059, +0.091] | 0.73 |
 
-Cost: 284 embeddings instead of 45, **6.3x**, up to 21 chunks for the
+Cost: 286 embeddings instead of 45, **6.4x**, up to 21 chunks for the
 longest document.
 
 **Declined for now.** Every interval crosses zero and no p-value comes
@@ -317,7 +317,18 @@ effect". All three point estimates are positive and the direction is
 consistent, and the largest single movement — paraphrase recall, +0.083 —
 is exactly where chunking should help. The instrument is not saying
 chunking fails. It is saying THIS CORPUS cannot referee it: resolving a
-0.05 difference needs 124-239 queries and there are 50.
+0.05 difference needs 124-240 queries and there are 50.
+
+Review caught a defect in the spike itself, which is worth recording
+because of its shape rather than its size: a line over the chunk budget was
+handed to the model unsplit, and the model truncates silently — an
+instrument built to measure truncation quietly doing the thing it measures.
+Measured before assuming: the corpus's longest line is 507 tokens, exactly
+one line exceeds the 480 budget, and NO line exceeds the model's real 512
+limit, so nothing was actually truncated and the verdict stood. Fixed
+anyway (over-budget lines split by word, a single over-budget word throws),
+and the figures above are from the corrected run — 284 chunks became 286
+and nDCG's delta moved from +0.025 to +0.024.
 
 #### What that reorders
 

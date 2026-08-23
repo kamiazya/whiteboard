@@ -57,22 +57,52 @@ async function chunk(text) {
       continue
     }
     if (current !== '') chunks.push(current)
-    // A single block over budget is cut by lines; nothing smaller is safe
-    // to assume about arbitrary markdown.
+    // A single block over budget is cut by lines, and a single LINE over
+    // budget by words. Both steps are needed: assigning an over-budget line
+    // straight to the accumulator hands it to the model, which truncates it
+    // silently — and an instrument built to measure truncation must not
+    // quietly do the same thing. The corpus has one 507-token line today,
+    // under the model's 512 limit but over this budget, so the path is
+    // reachable now rather than hypothetically.
     if ((await countTokens(block)) > CHUNK_BUDGET) {
       let part = ''
       for (const line of block.split('\n')) {
-        const next = part === '' ? line : `${part}\n${line}`
-        if ((await countTokens(next)) > CHUNK_BUDGET) {
-          if (part !== '') chunks.push(part)
-          part = line
-        } else part = next
+        for (const piece of await splitToBudget(line)) {
+          const next = part === '' ? piece : `${part}\n${piece}`
+          if ((await countTokens(next)) > CHUNK_BUDGET) {
+            if (part !== '') chunks.push(part)
+            part = piece
+          } else part = next
+        }
       }
       current = part
     } else current = block
   }
   if (current.trim() !== '') chunks.push(current)
   return chunks.length === 0 ? [text] : chunks
+}
+
+/**
+ * One line, cut into pieces that each fit the budget. Words are the
+ * smallest unit worth keeping whole; a single word over budget is
+ * pathological enough to be worth failing loudly rather than guessing at.
+ */
+async function splitToBudget(line) {
+  if ((await countTokens(line)) <= CHUNK_BUDGET) return [line]
+  const pieces = []
+  let part = ''
+  for (const word of line.split(/\s+/).filter((w) => w !== '')) {
+    if ((await countTokens(word)) > CHUNK_BUDGET) {
+      throw new Error(`a single word exceeds ${CHUNK_BUDGET} tokens: ${word.slice(0, 60)}...`)
+    }
+    const next = part === '' ? word : `${part} ${word}`
+    if ((await countTokens(next)) > CHUNK_BUDGET) {
+      pieces.push(part)
+      part = word
+    } else part = next
+  }
+  if (part !== '') pieces.push(part)
+  return pieces
 }
 
 const embed = async (texts, role) => {
