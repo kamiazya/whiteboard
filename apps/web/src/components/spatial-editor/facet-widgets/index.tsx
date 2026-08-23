@@ -83,22 +83,28 @@ const symbolEditor: FacetEditorWidget = ({ value, write }) => {
     on: boolean,
     payload: VisualSymbolFacet | undefined,
   ) => (
-    <button
+    // Real radios rather than buttons wearing the role: the roving-focus
+    // and arrow-key behaviour a segmented control needs comes free with the
+    // element, and the same choice was made for the declared controls.
+    <label
       key={key}
-      type="button"
-      role="radio"
-      aria-checked={on}
-      aria-label={label}
-      onClick={() => write(payload)}
       className={cn(
-        'flex h-7 min-w-7 items-center justify-center rounded px-1 text-xs',
+        'flex h-7 min-w-7 cursor-pointer items-center justify-center rounded px-1 text-xs',
         on ? 'bg-accent text-foreground' : 'text-muted-foreground hover:bg-accent',
       )}
     >
+      <input
+        type="radio"
+        name="visual-symbol"
+        aria-label={label}
+        checked={on}
+        onChange={() => write(payload)}
+        className="sr-only"
+      />
       <span aria-hidden="true" className="[&>svg]:size-4">
         {content}
       </span>
-    </button>
+    </label>
   )
   return (
     <span role="radiogroup" aria-label="Symbol" className="flex flex-wrap items-center gap-0.5">
