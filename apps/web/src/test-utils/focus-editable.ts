@@ -16,10 +16,20 @@ import { expect, vi } from 'vitest'
  * so this waits for `document.activeElement` to BE the element rather than to
  * contain it: focus sitting on an ancestor drops the keystrokes silently.
  *
- * Use this only where the click exists to establish focus. A click on a
- * specific `.cm-line` also places the caret at that position, and replacing it
- * with `focus()` would move the caret to wherever CodeMirror last had it — a
- * different test.
+ * Use this where the caret's position is not what the click was for. The rule
+ * is precise rather than a judgement call: **a click followed by an absolute
+ * caret move is a focus click**, because `Ctrl+Home` / `Ctrl+End` discards
+ * whatever position either the click or `focus()` produced. Only a test that
+ * reads the click's OWN position — one that does not immediately move the
+ * caret somewhere absolute — is a different test after the swap.
+ *
+ * That distinction was worth measuring rather than assuming. Every one of the
+ * seven `.cm-line` clicks left in this repo turned out to discard its own
+ * caret on the very next keystroke, so all seven converted without changing
+ * what they assert. Two of them wrote `{Home}` (start of the CURRENT line)
+ * and relied on the click having landed on the first line by hit-testing;
+ * those became `{Control>}{Home}{/Control}`, which states the same intent and
+ * cannot be moved by layout.
  *
  * Everything below is re-done on EVERY attempt, because each step can be
  * invalidated between attempts by state this test does not own:

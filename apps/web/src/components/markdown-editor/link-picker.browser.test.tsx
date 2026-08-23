@@ -5,6 +5,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import type { LinkTarget } from './link-target.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
@@ -21,11 +22,17 @@ const targets: readonly LinkTarget[] = [
 ]
 
 async function caretInto(container: HTMLElement, right: number): Promise<void> {
-  const editable = container
-    .querySelector('[data-testid="markdown-source-pane"]')
-    ?.querySelector('[contenteditable="true"]')
-  if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-  await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+  // Focus, then place the caret absolutely. The click this replaces was never
+  // placing it — Ctrl+Home discards whatever position it produced — so all it
+  // contributed was `userEvent.click`'s wait for the target to be "stable",
+  // which the preview pane's Canvas 2D re-measurement never satisfies under a
+  // saturated run.
+  await focusEditable(
+    () =>
+      container
+        .querySelector('[data-testid="markdown-source-pane"]')
+        ?.querySelector('[contenteditable="true"]') ?? null,
+  )
   await userEvent.keyboard('{Control>}{Home}{/Control}')
   for (let i = 0; i < right; i++) await userEvent.keyboard('{ArrowRight}')
 }
@@ -153,8 +160,7 @@ describe('the link picker (real browser)', () => {
 
     // Back into the document, caret to the end, then pick from the still-open
     // dialog.
-    const editable = container.querySelector('[contenteditable="true"]') as HTMLElement
-    await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+    await focusEditable(() => container.querySelector('[contenteditable="true"]'))
     await userEvent.keyboard('{Control>}{End}{/Control}')
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
@@ -174,8 +180,7 @@ describe('the link picker (real browser)', () => {
     expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
 
     // Type at the very start of the document while the picker is open.
-    const editable = container.querySelector('[contenteditable="true"]') as HTMLElement
-    await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+    await focusEditable(() => container.querySelector('[contenteditable="true"]'))
     await userEvent.keyboard('{Control>}{Home}{/Control}')
     await userEvent.keyboard('SEE ')
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
