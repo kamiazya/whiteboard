@@ -25,6 +25,19 @@ export interface Embedder {
   embed(texts: readonly string[], role: 'query' | 'document'): Promise<readonly Float32Array[]>
   /** Vector width, for a cheap shape check before scoring. */
   readonly dimensions: number
+  /**
+   * What produced these vectors — model and precision, e.g.
+   * `Xenova/multilingual-e5-small@q8`.
+   *
+   * Two embedders with the same width live in DIFFERENT vector spaces, so
+   * a cached vector has to record which one made it or a later reader will
+   * compare across them. Quantisation is the case that makes this concrete:
+   * q8 and fp32 of one model are both 384-wide, measurably different
+   * (nDCG@10 differs by 0.051 on JQaRA, p = 0.0003), and indistinguishable
+   * by anything else on this interface. Cosine across the two is not a
+   * similarity, and nothing throws — the results just quietly get worse.
+   */
+  readonly id: string
 }
 
 /** Cosine similarity of two L2-normalised vectors. */

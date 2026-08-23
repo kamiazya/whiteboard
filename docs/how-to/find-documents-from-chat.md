@@ -47,6 +47,19 @@ pnpm --filter @kamiazya/whiteboard-mcp search:fetch-model
 WHITEBOARD_SEMANTIC_SEARCH=1
 ```
 
+**You choose how good a job it does.** The same model ships in two
+precisions, and the download and the quality are the same dial:
+
+| | download | measured quality |
+|---|---|---|
+| `WHITEBOARD_SEMANTIC_SEARCH=1` | ~118MB | the default |
+| `WHITEBOARD_SEMANTIC_SEARCH=full` | ~470MB | 0.051 nDCG@10 higher |
+
+That 0.051 is about 11% better ranking, measured on a public Japanese
+retrieval benchmark rather than asserted. Add `--full` to the fetch command
+if you want that side of it — fetch the precision you intend to run, since
+the daemon never downloads on its own.
+
 After that everything is local and offline: nothing is sent anywhere, and
 the model is never re-fetched. The daemon never downloads on its own — if
 the model is missing, search quietly stays word-based rather than blocking
