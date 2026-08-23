@@ -39,7 +39,7 @@ import { shouldShowDaemonCta } from './daemon-cta-visibility.js'
 // gate that produced this notice in the first place. The "Open the local
 // app" link below is the escape hatch.
 export const UNSUPPORTED_BROWSER_NOTICE =
-  'This browser blocks the hosted app from reaching a local daemon over the network, so documents stay saved in this browser only. Use a Chromium-based browser to connect a local daemon.'
+  'This browser blocks the hosted app from reaching a daemon over the network, so documents stay kept in this browser only. Use a Chromium-based browser to connect a daemon.'
 
 // Docs are not served from apps/web (no /docs route), so the banner links to
 // the source-of-truth GitHub blob rather than fabricating a local route.
@@ -466,7 +466,7 @@ export function DaemonDetectedBanner({
             rel="noreferrer"
             className="font-medium underline"
           >
-            How to connect a local daemon
+            How to connect a daemon
           </a>
         </span>
       )}
@@ -478,7 +478,7 @@ export function DaemonDetectedBanner({
           aria-busy={checking}
           className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-60"
         >
-          Check for local daemon
+          Check for a daemon
         </button>
       )}
       {showManualAffordance && checking && (
@@ -606,7 +606,7 @@ export function DaemonDetectedBanner({
                 .
               </>
             ) : (
-              <>No local daemon found at {baseUrl}.</>
+              <>No daemon found at {baseUrl}.</>
             )}
           </span>
         )}
@@ -685,9 +685,12 @@ export function DaemonDetectedBanner({
         >
           <span>
             {isPairedTarget && identityStatus === 'verified' ? (
-              <>A local whiteboard daemon is running at {detectedBaseUrl} (identity verified).</>
+              <>
+                A whiteboard daemon is running on this machine at {detectedBaseUrl} (identity
+                verified).
+              </>
             ) : isPairedTarget && identityStatus !== 'failed' ? (
-              <>A local whiteboard daemon is running at {detectedBaseUrl}.</>
+              <>A whiteboard daemon is running on this machine at {detectedBaseUrl}.</>
             ) : (
               <>
                 A server responded at {detectedBaseUrl} (unverified — approve it on its own page to
@@ -707,7 +710,7 @@ export function DaemonDetectedBanner({
             target="_blank"
             rel="noreferrer"
             className="font-medium underline"
-            aria-label="Learn more about connecting to the local daemon"
+            aria-label="Learn more about connecting a daemon"
           >
             Learn more
           </a>

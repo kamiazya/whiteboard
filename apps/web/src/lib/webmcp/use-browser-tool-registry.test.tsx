@@ -2,7 +2,7 @@ import { render } from '@testing-library/react'
 import { afterEach, describe, expect, it } from 'vitest'
 import { createWhiteboardCommands } from '../commands/create-commands.js'
 import type { WhiteboardCommands } from '../commands/index.js'
-import { BROWSER_LOCAL_CAPABILITIES } from '../provider.js'
+import { BROWSER_CAPABILITIES } from '../provider.js'
 import { webMcpTools } from './tool-definitions.js'
 import type { ModelContext, WebMcpToolDescriptor } from './use-browser-tool-registry.js'
 import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
@@ -10,8 +10,8 @@ import { useBrowserToolRegistry } from './use-browser-tool-registry.js'
 function fakeCommands(): WhiteboardCommands {
   return {
     getAppContext: async () => ({
-      provider: { mode: 'browser-local' },
-      canvas: { kind: 'browser-local', documentId: 'c1' },
+      provider: { mode: 'browser' },
+      canvas: { kind: 'browser', documentId: 'c1' },
     }),
   }
 }
@@ -118,8 +118,8 @@ describe('useBrowserToolRegistry', () => {
     expect(serialized).not.toContain('secret')
     expect(serialized).not.toContain('daemonbaseurl')
     expect(result).toEqual({
-      provider: { mode: 'browser-local' },
-      canvas: { kind: 'browser-local', documentId: 'c1' },
+      provider: { mode: 'browser' },
+      canvas: { kind: 'browser', documentId: 'c1' },
     })
   })
 
@@ -235,7 +235,7 @@ describe('useBrowserToolRegistry', () => {
       ...fakeCommands(),
       getAppContext: async (input) => {
         receivedInput = input
-        return { provider: { mode: 'browser-local' }, canvas: null }
+        return { provider: { mode: 'browser' }, canvas: null }
       },
     }
 
@@ -259,7 +259,7 @@ describe('useBrowserToolRegistry', () => {
     // real command layer via fakeCommands()'s sibling, createWhiteboardCommands.
     const realCommands = createWhiteboardCommands({
       current: {
-        provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
+        provider: { kind: 'browser', capabilities: BROWSER_CAPABILITIES },
         canvas: { documentId: 'c1', name: 'c1' },
       },
     })

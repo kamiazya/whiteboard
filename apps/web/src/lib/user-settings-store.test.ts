@@ -31,12 +31,12 @@ describe('createUserSettingsStore', () => {
     const store = createUserSettingsStore()
     store.save({
       ...defaultUserSettings(),
-      storage: { preferredProvider: 'browser-local', lastBrowserLocalCanvasId: 'canvas-1' },
+      storage: { preferredProvider: 'browser', lastBrowserLocalCanvasId: 'canvas-1' },
     })
 
     const reloaded = createUserSettingsStore()
     expect(reloaded.load().storage).toMatchObject({
-      preferredProvider: 'browser-local',
+      preferredProvider: 'browser',
       lastBrowserLocalCanvasId: 'canvas-1',
     })
   })
@@ -135,7 +135,7 @@ describe('createUserSettingsStore', () => {
     const store = createUserSettingsStore()
     store.save({
       ...defaultUserSettings(),
-      storage: { preferredProvider: 'local-daemon' },
+      storage: { preferredProvider: 'daemon' },
     })
     store.reset()
 
@@ -159,7 +159,7 @@ describe('createUserSettingsStore', () => {
       STORAGE_KEY,
       JSON.stringify({
         version: 1,
-        storage: { preferredProvider: 'browser-local', daemonToken: 'super-secret' },
+        storage: { preferredProvider: 'browser', daemonToken: 'super-secret' },
         migration: {},
         capabilities: {},
       }),
@@ -210,13 +210,13 @@ describe('createUserSettingsStore — beta banner dismissal', () => {
       STORAGE_KEY,
       JSON.stringify({
         version: 1,
-        storage: { preferredProvider: 'local-daemon', lastBrowserLocalCanvasId: 'abc' },
+        storage: { preferredProvider: 'daemon', lastBrowserLocalCanvasId: 'abc' },
         migration: {},
         capabilities: {},
       }),
     )
     const store = createUserSettingsStore()
-    expect(store.load().storage.preferredProvider).toBe('local-daemon')
+    expect(store.load().storage.preferredProvider).toBe('daemon')
     expect(store.load().storage.lastBrowserLocalCanvasId).toBe('abc')
     expect(store.load().storage.dismissedBetaBannerAt).toBeUndefined()
   })

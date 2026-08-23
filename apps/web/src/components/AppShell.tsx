@@ -26,7 +26,7 @@ export interface AppShellProps {
    * a branch without the escape (settings, browser-local itself) leaves it
    * unset and the chip drops the two actions that depend on it.
    */
-  readonly onContinueBrowserLocal?: () => void
+  readonly onWorkInBrowser?: () => void
 }
 
 /**
@@ -37,7 +37,7 @@ export interface AppShellProps {
  * rule). Pages mount this shared component instead of owning any brand,
  * connection or settings chrome themselves.
  */
-export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
+export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
   const navigate = useNavigate()
   const location = useLocation()
   // Read fresh rather than cached in state: the store is a thin localStorage
@@ -75,7 +75,7 @@ export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
           <p className="font-medium">Alpha preview</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Data durability is not guaranteed yet. Browser storage can be evicted by the device —
-            export what matters, or protect it with persistent storage and a local daemon.
+            export what matters, or protect it with persistent storage and a daemon.
           </p>
           <Link
             to={settingsPath('data')}
@@ -106,9 +106,9 @@ export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
                   })
                 }
           }
-          onContinueBrowserLocal={onContinueBrowserLocal}
+          onWorkInBrowser={onWorkInBrowser}
           onDisconnect={
-            onContinueBrowserLocal === undefined || daemonBaseUrl === undefined
+            onWorkInBrowser === undefined || daemonBaseUrl === undefined
               ? undefined
               : () => {
                   // Recorded so discovery skips it next time: the default port
@@ -138,15 +138,15 @@ export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
                       },
                     }
                   })
-                  onContinueBrowserLocal()
+                  onWorkInBrowser()
                 }
           }
         >
-          {connection.state === 'local' && (
+          {connection.state === 'browser' && (
             <>
               <p className="text-muted-foreground">
-                Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
-                combining changes
+                Connect a daemon (MCP) for version history, workspaces, variations and merging.
+                Documents already in this browser stay here — import them one at a time.
               </p>
               <Suspense fallback={null}>
                 <DaemonDetectedBanner

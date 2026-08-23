@@ -23,7 +23,7 @@ export function CapabilityTeaser({ label, enabled, onAction }: CapabilityTeaserP
   const isInteractive = enabled && onAction !== undefined
   const description = enabled
     ? 'This feature is not yet available'
-    : `Connect a local daemon (MCP) to enable ${label}`
+    : `Connect a daemon (MCP) to enable ${label}`
 
   const button = (
     <button

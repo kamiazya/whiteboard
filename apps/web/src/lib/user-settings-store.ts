@@ -40,7 +40,7 @@ function safeRemoveItem(key: string): void {
 // safeParse fail, and callers fall back to defaults rather than persisting it.
 const storageSettingsSchema = z
   .object({
-    preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
+    preferredProvider: z.enum(['browser', 'daemon']).optional(),
     lastBrowserLocalCanvasId: z.string().optional(),
     // Constrained to http/https because this value is rendered into an `href`
     // (the "Open the local app" escape hatch). Anything that can write

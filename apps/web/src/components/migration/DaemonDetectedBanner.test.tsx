@@ -110,7 +110,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    await screen.findByRole('button', { name: /check for local daemon/i })
+    await screen.findByRole('button', { name: /check for a daemon/i })
     expect(probeFn).not.toHaveBeenCalled()
   })
 
@@ -150,7 +150,7 @@ describe('DaemonDetectedBanner', () => {
     // The silent auto-probe stays narrow: exactly the one stored/default
     // baseUrl, no port sweep.
     await waitFor(() => expect(probeFn).toHaveBeenCalledTimes(1))
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
     await waitFor(() => expect(probeFn.mock.calls.length).toBeGreaterThanOrEqual(2))
     expect(probeFn.mock.calls[1]?.[1]).toMatchObject({ forceRecheck: true })
   })
@@ -166,7 +166,9 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
+    await screen.findByText(
+      /(A whiteboard daemon is running on this machine at|A server responded at)/,
+    )
     // The daemon origin serves only /pair now — a bare-origin link would
     // just bounce off its redirect, so the banner must not offer one.
     expect(screen.queryByRole('link', { name: /open the local app|^open /i })).toBeNull()
@@ -204,7 +206,9 @@ describe('DaemonDetectedBanner', () => {
     fireEvent.click(await screen.findByRole('button', { name: /dismiss/i }))
 
     expect(
-      screen.queryByText(/(A local whiteboard daemon is running at|A server responded at)/),
+      screen.queryByText(
+        /(A whiteboard daemon is running on this machine at|A server responded at)/,
+      ),
     ).toBeNull()
 
     const saved = store.load()
@@ -236,7 +240,9 @@ describe('DaemonDetectedBanner', () => {
     fireEvent.click(await screen.findByRole('button', { name: /forget this daemon/i }))
 
     expect(
-      screen.queryByText(/(A local whiteboard daemon is running at|A server responded at)/),
+      screen.queryByText(
+        /(A whiteboard daemon is running on this machine at|A server responded at)/,
+      ),
     ).toBeNull()
     const saved = store.load()
     expect(saved.storage.localDaemonBaseUrl).toBeUndefined()
@@ -255,7 +261,9 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
+    await screen.findByText(
+      /(A whiteboard daemon is running on this machine at|A server responded at)/,
+    )
     expect(screen.queryByRole('button', { name: /forget this daemon/i })).toBeNull()
   })
 
@@ -270,15 +278,15 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
     await screen.findByText(UNSUPPORTED_BROWSER_NOTICE)
-    expect(screen.queryByRole('button', { name: /check for local daemon/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /check for a daemon/i })).toBeNull()
 
     // No daemon-origin escape hatch anymore (the daemon serves only /pair);
     // the honest affordance is the docs link.
     expect(screen.queryByRole('link', { name: /open the local app/i })).toBeNull()
-    const learnMore = screen.getByRole('link', { name: /how to connect a local daemon/i })
+    const learnMore = screen.getByRole('link', { name: /how to connect a daemon/i })
     expect(learnMore.getAttribute('href')).toContain('connect-to-local-daemon')
   })
 
@@ -374,7 +382,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
     await screen.findByText(/2 servers responded on local ports/i)
     // Each responder offers pairing IN PLACE (the hosted-app-first model).
@@ -455,11 +463,11 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
     await screen.findByText(/responded at/i)
     expect(screen.getByText(/unverified/i)).not.toBeNull()
-    expect(screen.queryByText(/a local whiteboard daemon is running/i)).toBeNull()
+    expect(screen.queryByText(/a whiteboard daemon is running/i)).toBeNull()
   })
 
   it('a previously paired daemon keeps the plain trusted label', async () => {
@@ -478,9 +486,9 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
-    await screen.findByText(/a local whiteboard daemon is running/i)
+    await screen.findByText(/a whiteboard daemon is running/i)
     expect(screen.queryByText(/unverified/i)).toBeNull()
   })
 
@@ -497,7 +505,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
     fireEvent.click(await screen.findByRole('button', { name: /use here/i }))
 
     await waitFor(() => expect(beginGrantFn).toHaveBeenCalledTimes(1))
@@ -522,7 +530,7 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
     await screen.findByText(/no daemon reachable from this origin/i)
     fireEvent.click(screen.getByRole('button', { name: /connect anyway/i }))
 
@@ -544,13 +552,13 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
     await screen.findByText(/no daemon reachable from this origin/i)
     const docsLink = screen.getByRole('link', { name: /how to connect/i })
     expect(docsLink.getAttribute('href')).toBe(HOW_TO_CONNECT_URL)
     // Retry stays available.
-    expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
+    expect(screen.getByRole('button', { name: /check for a daemon/i })).not.toBeNull()
   })
 
   it('a failed manual check on a loopback origin reports plainly that nothing was found', async () => {
@@ -564,9 +572,9 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
-    await screen.findByText(/no local daemon found/i)
+    await screen.findByText(/no daemon found/i)
     // No hosted-origin allowlist lecture on loopback — it does not apply.
     expect(screen.queryByText(/no daemon reachable from this origin/i)).toBeNull()
   })
@@ -585,13 +593,15 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
-    await screen.findByText(/no local daemon found/i)
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
+    await screen.findByText(/no daemon found/i)
 
     daemonUp = true
-    fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
-    await screen.findByText(/(A local whiteboard daemon is running at|A server responded at)/)
-    expect(screen.queryByText(/no local daemon found/i)).toBeNull()
+    fireEvent.click(screen.getByRole('button', { name: /check for a daemon/i }))
+    await screen.findByText(
+      /(A whiteboard daemon is running on this machine at|A server responded at)/,
+    )
+    expect(screen.queryByText(/no daemon found/i)).toBeNull()
   })
 
   it('keeps the CTA affordance when the probe fails inconclusively (not proven blocked)', async () => {
@@ -605,10 +615,10 @@ describe('DaemonDetectedBanner', () => {
       />,
     )
 
-    fireEvent.click(await screen.findByRole('button', { name: /check for local daemon/i }))
+    fireEvent.click(await screen.findByRole('button', { name: /check for a daemon/i }))
 
     await waitFor(() => expect(probeFn.mock.calls.length).toBeGreaterThanOrEqual(1))
-    expect(screen.getByRole('button', { name: /check for local daemon/i })).not.toBeNull()
+    expect(screen.getByRole('button', { name: /check for a daemon/i })).not.toBeNull()
     expect(screen.queryByText(UNSUPPORTED_BROWSER_NOTICE)).toBeNull()
     expect(screen.queryByRole('link', { name: /open the local app/i })).toBeNull()
   })
@@ -661,7 +671,7 @@ describe('DaemonDetectedBanner', () => {
         />,
       )
 
-      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      const button = screen.getByRole('button', { name: /check for a daemon/i })
       act(() => {
         fireEvent.click(button)
       })
@@ -683,7 +693,7 @@ describe('DaemonDetectedBanner', () => {
         />,
       )
 
-      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      const button = screen.getByRole('button', { name: /check for a daemon/i })
       expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
       act(() => {
         fireEvent.click(button)
@@ -733,7 +743,7 @@ describe('DaemonDetectedBanner', () => {
         />,
       )
 
-      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      const button = screen.getByRole('button', { name: /check for a daemon/i })
       act(() => {
         fireEvent.click(button)
       })
@@ -749,7 +759,7 @@ describe('DaemonDetectedBanner', () => {
 
       expect(screen.queryByText(LNA_HINT_TEXT)).toBeNull()
       expect(screen.queryByRole('status')).toBeNull()
-      const rechecked = screen.getByRole('button', { name: /check for local daemon/i })
+      const rechecked = screen.getByRole('button', { name: /check for a daemon/i })
       expect(rechecked.hasAttribute('disabled')).toBe(false)
     })
 
@@ -765,7 +775,7 @@ describe('DaemonDetectedBanner', () => {
         />,
       )
 
-      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      const button = screen.getByRole('button', { name: /check for a daemon/i })
       act(() => {
         fireEvent.click(button)
       })
@@ -793,7 +803,7 @@ describe('DaemonDetectedBanner', () => {
         />,
       )
 
-      const button = screen.getByRole('button', { name: /check for local daemon/i })
+      const button = screen.getByRole('button', { name: /check for a daemon/i })
       act(() => {
         fireEvent.click(button)
       })
@@ -807,7 +817,7 @@ describe('DaemonDetectedBanner', () => {
       // stale failure notice from the first sweep is still rendered.
       probeFn.mockReturnValueOnce(new Promise<DaemonProbeResult>(() => {}))
       act(() => {
-        fireEvent.click(screen.getByRole('button', { name: /check for local daemon/i }))
+        fireEvent.click(screen.getByRole('button', { name: /check for a daemon/i }))
       })
 
       expect(screen.getByRole('status').textContent).toMatch(/checking/i)

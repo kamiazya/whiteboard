@@ -186,9 +186,9 @@ function ConnectionsSection({ daemon }: { daemon?: { baseUrl: string; token: str
   if (!daemon) {
     return (
       <section>
-        <p className="text-sm">Local daemon — Not connected</p>
+        <p className="text-sm">Daemon — Not connected</p>
         <p className="mt-1 text-xs text-muted-foreground">
-          A local daemon holds durable storage and the AI agent connection for this app.
+          A daemon on this machine holds durable storage and the AI agent connection for this app.
         </p>
       </section>
     )

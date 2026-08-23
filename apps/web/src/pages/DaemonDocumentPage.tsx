@@ -54,7 +54,7 @@ import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import type { ContentClock } from '../lib/local-document-summary.js'
-import { LOCAL_DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -104,7 +104,7 @@ export function DaemonDocumentPage({
   workspaceId,
   path,
   token,
-  capabilities = LOCAL_DAEMON_CAPABILITIES,
+  capabilities = DAEMON_CAPABILITIES,
   createBackend,
   browserLocalStore,
   browserLocalClock,
@@ -402,7 +402,7 @@ export function DaemonDocumentPage({
   })
 
   const commands = useWhiteboardCommands({
-    provider: { kind: 'local-daemon', daemonBaseUrl, capabilities },
+    provider: { kind: 'daemon', daemonBaseUrl, capabilities },
     // The daemon canvas summary carries no display name yet (only
     // path/updatedAt) — the path doubles as `name` until that changes.
     canvas:

@@ -73,6 +73,36 @@ const BANNED = [
     word: 'slug',
     instead: "`path` (a document's place in the workspace) or `segment` (one level of it)",
   },
+  // `local` is NOT retired and cannot be: it still means "on this machine
+  // rather than remote" (localhost, Local Network Access, mcp-server's
+  // `authMode: 'local-daemon'` opposite `'server-mode'`). What IS retired is
+  // `local` used for WHERE A WORKSPACE IS KEPT — an axis it never fit, since
+  // a daemon is local too. The two names below spelled it that way and meant
+  // opposite things while sharing a word, which is as confusable as a pair
+  // gets.
+  //
+  // Scoped to the DISCRIMINANT VALUE (a quoted literal) rather than the word
+  // anywhere: file names and test ids still read `browser-local-backend`, and
+  // are their own mechanical increment. A guard that claimed them before they
+  // moved would be one nobody could make green.
+  {
+    pattern: /(['"])browser-local\1/,
+    word: "'browser-local' (as a value)",
+    instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
+    dirs: ['apps/web/src'],
+  },
+  {
+    pattern: /(['"])local-daemon\1/,
+    word: "'local-daemon' (as a value)",
+    instead: "'daemon'",
+    dirs: ['apps/web/src'],
+  },
+  {
+    pattern: /\b(?:BROWSER_LOCAL|LOCAL_DAEMON)_/,
+    word: 'BROWSER_LOCAL_ / LOCAL_DAEMON_ constants',
+    instead: 'BROWSER_ / DAEMON_',
+    dirs: ['apps/web/src'],
+  },
 ] as const
 
 /**
@@ -96,10 +126,14 @@ function listSourceFiles(dir: string): string[] {
 }
 
 describe('retired vocabulary', () => {
-  for (const { pattern, word, instead } of BANNED) {
+  for (const entry of BANNED) {
+    const { pattern, word, instead } = entry
+    // A word retired only within one package scans only that package, so the
+    // guard never claims coverage it does not have.
+    const dirs: readonly string[] = 'dirs' in entry ? entry.dirs : SCAN_DIRS
     it(`no source file says "${word}" — use ${instead}`, () => {
       const hits: string[] = []
-      for (const dir of SCAN_DIRS) {
+      for (const dir of dirs) {
         for (const file of listSourceFiles(join(REPO_ROOT, dir))) {
           const relativePath = relative(REPO_ROOT, file).split(sep).join('/')
           if (relativePath in EXEMPT_FILES) continue
