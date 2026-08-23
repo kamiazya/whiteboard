@@ -78,6 +78,15 @@ export async function importFsBlobs(
   db: Kysely<unknown>,
   dataDir: string,
   docKeyPrefix: string,
+  /**
+   * Chunk size, injectable for the same reason `docKeyPrefix` is: a caller
+   * that needs a different value should pass it rather than have the module
+   * decide. Here the caller is a TEST — proving that an over-size blob
+   * splits needs a blob over the threshold, not a blob over one megabyte,
+   * and pushing 1.3MB through SQLite to say so made that test the slowest
+   * in the suite and the first to blow the 10s per-test budget under load.
+   */
+  maxChunkBytes: number = IMPORT_MAX_CHUNK_BYTES,
 ): Promise<void> {
   const tdb = db as Kysely<MigrationSchema>
   const blobsRoot = join(dataDir, 'blobs')
@@ -89,7 +98,14 @@ export async function importFsBlobs(
     for (const file of files) {
       if (!file.endsWith('.loro')) continue
       const documentId = file.slice(0, -'.loro'.length)
-      await importOneBlob(tdb, workspaceId, documentId, join(canvasDir, file), docKeyPrefix)
+      await importOneBlob(
+        tdb,
+        workspaceId,
+        documentId,
+        join(canvasDir, file),
+        docKeyPrefix,
+        maxChunkBytes,
+      )
     }
   }
 }
@@ -122,6 +138,7 @@ async function importOneBlob(
   documentId: string,
   blobPath: string,
   docKeyPrefix: string,
+  maxChunkBytes: number,
 ): Promise<void> {
   const docKey = `${docKeyPrefix}${documentId}`
 
@@ -241,7 +258,7 @@ async function importOneBlob(
   }
   const frontier = decoded.frontier
 
-  const { manifest, chunks } = chunkSnapshot(bytes, IMPORT_MAX_CHUNK_BYTES)
+  const { manifest, chunks } = chunkSnapshot(bytes, maxChunkBytes)
 
   await db
     .insertInto('documentSnapshots')
