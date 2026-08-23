@@ -78,16 +78,29 @@ async function makeDeps() {
   }
 }
 
-/** Positions of both nodes as actually stored, after everything settles. */
-async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
+/** The canvas as actually stored, after everything settles. */
+async function storedCanvas(deps: Awaited<ReturnType<typeof makeDeps>>) {
   const stored = await deps.documentStore.loadSnapshot({
     docRef: { kind: 'document', documentId: DOCUMENT_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
-  const canvas = readSpatialCanvas(doc)
-  return Object.fromEntries(canvas.nodes.map((node) => [node.id, node.x]))
+  return readSpatialCanvas(doc)
+}
+
+/** Positions of both nodes as actually stored. */
+async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
+  const { nodes } = await storedCanvas(deps)
+  return Object.fromEntries(nodes.map((node) => [node.id, node.x]))
+}
+
+/** Text bodies of both nodes as actually stored. */
+async function storedTexts(deps: Awaited<ReturnType<typeof makeDeps>>) {
+  const { nodes } = await storedCanvas(deps)
+  return Object.fromEntries(
+    nodes.map((node) => [node.id, node.type === 'text' ? node.text : undefined]),
+  )
 }
 
 beforeEach(() => {
@@ -235,6 +248,56 @@ describe('registered MCP handlers', () => {
     expect(firstSave, `store traffic was ${events.join(',')}`).toBeGreaterThan(-1)
     expect(secondLoad, `store traffic was ${events.join(',')}`).toBeGreaterThan(firstSave)
     expect(await storedPositions(deps)).toEqual({ n1: 11, n2: 22 })
+  })
+
+  it('serializes two wb_body_patch calls on the same document', async () => {
+    // wb_body_patch is a load-modify-save exactly like wb_canvas_edit, and
+    // was registered outside withDocumentWriteLock until this fix — a
+    // second reachable path to the same lost-update hazard, on the tool
+    // whose schema previously rejected every call and so never exercised it.
+    const deps = await makeDeps()
+    const events: string[] = []
+    const load = deps.documentStore.loadSnapshot.bind(deps.documentStore)
+    const save = deps.documentStore.saveSnapshot.bind(deps.documentStore)
+    deps.documentStore.loadSnapshot = async (input) => {
+      if (input.docRef.kind === 'document') events.push('load')
+      return load(input)
+    }
+    deps.documentStore.saveSnapshot = async (input) => {
+      if (input.docRef.kind === 'document') events.push('save')
+      return save(input)
+    }
+
+    const handlers = registeredHandlers(deps)
+    const bodyPatch = handlers.get('wb_body_patch')!
+    await Promise.all([
+      bodyPatch(
+        {
+          mode: 'full',
+          workspaceId: WORKSPACE_ID,
+          documentId: DOCUMENT_ID,
+          nodeId: 'n1',
+          body: 'patched-1',
+        },
+        {},
+      ),
+      bodyPatch(
+        {
+          mode: 'full',
+          workspaceId: WORKSPACE_ID,
+          documentId: DOCUMENT_ID,
+          nodeId: 'n2',
+          body: 'patched-2',
+        },
+        {},
+      ),
+    ])
+
+    const firstSave = events.indexOf('save')
+    const secondLoad = events.indexOf('load', events.indexOf('load') + 1)
+    expect(firstSave, `store traffic was ${events.join(',')}`).toBeGreaterThan(-1)
+    expect(secondLoad, `store traffic was ${events.join(',')}`).toBeGreaterThan(firstSave)
+    expect(await storedTexts(deps)).toEqual({ n1: 'patched-1', n2: 'patched-2' })
   })
 
   it('does not queue a READ-ONLY handler behind a held write', async () => {
