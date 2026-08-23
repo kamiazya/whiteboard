@@ -818,7 +818,7 @@ describe('BrowserLocalDocumentPage', () => {
 
   describe('daemon-only capability messaging', () => {
     const CTA_TEXT =
-      'Connect a local daemon (MCP) to unlock version history, workspaces, variations, and combining changes'
+      'Connect a daemon (MCP) for version history, workspaces, variations and merging.'
 
     it('keeps the capability CTA out of page chrome and reports "local" to the shell', async () => {
       const store = new LocalStoreDouble()
@@ -843,7 +843,7 @@ describe('BrowserLocalDocumentPage', () => {
       // App-mounted shell draws it (and hosts the CTA in its popover) from
       // the state this page publishes.
       expect(screen.queryByTestId('connection-chip')).toBeNull()
-      expect(getShellConnection()).toEqual({ state: 'local' })
+      expect(getShellConnection()).toEqual({ state: 'browser' })
 
       cleanup()
       expect(getShellConnection()).toBeNull()

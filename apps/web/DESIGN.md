@@ -46,8 +46,11 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   named set, and each member says what QUESTION it answers — two carriers
   that look alike but answer differently is the defect this naming exists to
   prevent:
-  - **connection chip** (`ConnectionStatus`) — is this browser reaching its
-    backend? Filled dot. It lives in the AppShell, not in a page.
+  - **connection chip** (`ConnectionStatus`) — who keeps this workspace, and
+    is the session reaching it? Filled dot. It lives in the AppShell, not in
+    a page. Those are two questions in one carrier and the split is still
+    open: `browser` names the KEEPER (and survives navigation), while
+    `synced`/`reconnecting`/`sync-off` report a live session (and do not).
   - **save-state chip** (`SaveStatusChip`) — did the last write to this
     browser's storage land? Filled dot. Browser-local only; on a daemon the
     connection chip is what answers "is my work safe", and a second dot
@@ -86,7 +89,13 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   an `aria-label`.
 - **Sentence-length copy never sits in chrome.** Explanations live in
   popovers/tooltips/dialogs (see `ConnectionStatus`); chrome carries words
-  only as short labels ("Saved", "Local").
+  only as short labels ("Saved", "Browser").
+- **Name the keeper, never the locality.** A workspace is kept by the
+  **Browser** or by a **Daemon**; both are on the user's machine, so "Local"
+  named neither and collided with "local daemon" in its own popover. See
+  `.claude/rules/vocabulary.md`'s keeper section — including the rule that
+  copy may use the keeper framing but must not promise the source-of-truth
+  promotion, which is not implemented.
 - **Dialogs**: `max-h` + `overflow-y-auto` when content can grow; page-width
   cards must wrap (`min-w-0`, `break-all` for unbreakable strings) before
   entering a dialog.
