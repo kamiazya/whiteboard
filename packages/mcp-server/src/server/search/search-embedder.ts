@@ -25,7 +25,7 @@ import { createTransformersEmbedder } from './transformers-embedder.js'
  * whether to turn this on, and only then how well.
  */
 const FLAG = 'WHITEBOARD_SEMANTIC_SEARCH'
-export const PRECISION = { '1': 'q8', full: 'fp32' } as const
+const PRECISION = { '1': 'q8', full: 'fp32' } as const
 
 let held: Embedder | undefined
 
