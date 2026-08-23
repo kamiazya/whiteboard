@@ -20,6 +20,8 @@
  *                the old role="alert" banner loses no assistive-tech signal.
  */
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { settingsPath } from '@/lib/app-routes'
 import { cn } from '@/lib/utils'
 import { StateDot, type StateDotTone } from '../StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
@@ -43,12 +45,6 @@ export interface ConnectionStatusProps {
   readonly onWorkInBrowser?: () => void
   /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
-  /**
-   * synced only: stop using this daemon in this browser. It does NOT unpair
-   * and does NOT touch anything stored on the daemon — the copy says so,
-   * because "disconnect" reads like a destructive word.
-   */
-  readonly onDisconnect?: () => void
 }
 
 const CHIP_LABEL: Record<ConnectionState, string> = {
@@ -71,7 +67,6 @@ export function ConnectionStatus({
   daemonBaseUrl,
   onRepair,
   onWorkInBrowser,
-  onDisconnect,
   children,
 }: ConnectionStatusProps) {
   // Empty while sync is on: the region has to exist BEFORE the message, but
@@ -123,22 +118,15 @@ export function ConnectionStatus({
               ) : null}
               .
             </p>
-            {onDisconnect && (
-              <div className="mt-1 flex flex-col gap-1.5">
-                <button
-                  type="button"
-                  data-testid="connection-disconnect"
-                  onClick={onDisconnect}
-                  className="text-left font-medium underline"
-                >
-                  Disconnect from this daemon
-                </button>
-                <p className="text-xs text-muted-foreground">
-                  This browser stops using it and stops looking for it. Your data stays on the
-                  daemon and is not deleted; pairing is not revoked.
-                </p>
-              </div>
-            )}
+            {/* The chip reports; it does not manage. Changing which daemon
+                this browser uses is something you go looking for, so it
+                lives in Settings and this only points at it. */}
+            <Link
+              to={settingsPath('connections')}
+              className="mt-1 text-xs font-medium text-primary hover:underline"
+            >
+              Manage in Settings
+            </Link>
           </div>
         )}
         {state === 'reconnecting' && (
