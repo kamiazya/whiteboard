@@ -249,6 +249,24 @@ describe('run-shared-layer-tests.mjs (CLI)', () => {
     expect(exitCode).toBe(3) // exit-code fidelity: forwards vitest's own status
   })
 
+  it('exits zero and writes an OK summary to stdout when the spawned vitest run passes', async () => {
+    const { main } = await importRunSharedLayerTests()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+    ])
+    const stderr = makeSink()
+    const stdout = makeSink()
+    const exitCode = main({
+      repoRoot: fixtureRoot,
+      stdout,
+      stderr,
+      spawn: () => ({ status: 0 }),
+    })
+
+    expect(exitCode).toBe(0)
+    expect(stdout.chunks.join('')).toMatch(/OK: 1 project\(s\) passed/)
+  })
+
   it('exits non-zero when pnpm itself fails to start', async () => {
     const { main } = await importRunSharedLayerTests()
     await writeFixtureRepo(fixtureRoot, [
