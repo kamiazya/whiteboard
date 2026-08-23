@@ -130,10 +130,10 @@ formats — and neither needs its own mapping decision.
 - Nothing here depends on ADR-0016 landing first. A bundle exported before the
   trust family exists simply carries no `generated`, which is a conformant
   bundle.
-- `index.md` generation needs a `description` to be worth reading, and this
-  codebase does not model one yet — it survives in `facetsRaw` but nothing
-  produces it. An index built today would be a list of bare titles. That is a
-  reason to model `description`, and it is deliberately not decided here.
+- `index.md` generation needs a `description` to be worth reading. That was
+  listed here as an open prerequisite and has since landed: `description` is a
+  modelled core facet, edited in the properties panel as "Summary", so an index
+  built from it is a list of summaries rather than of bare titles.
 
 ## Alternatives considered
 

@@ -28,7 +28,9 @@ backed by more than one representation today. Read
   An OKF file with no `title` says nothing about the name, so importing
   it leaves the existing name alone.
 - **Facets** — a markdown canvas's OKF frontmatter: its `type`, its
-  `tags`, and any root-level keys this app does not model. A spatial
+  `description` (shown as Summary), its `resource` (shown as Describes),
+  its `tags`, and any root-level keys this app does not model, which are
+  preserved untouched rather than dropped. A spatial
   canvas has none. JSON Canvas is nodes and edges with no frontmatter
   concept, so there is nowhere in that format for a facet to live — which
   is why the editor offers the Properties disclosure on a markdown canvas

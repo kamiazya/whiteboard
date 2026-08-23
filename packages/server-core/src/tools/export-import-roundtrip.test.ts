@@ -317,6 +317,9 @@ describe('error paths do not silently produce corrupt output', () => {
     const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.frontmatter.type).toBe('Attested Computation')
+    expect(result.frontmatter.description).toBe(
+      'Recognized revenue for a fiscal year, per Finance definition.',
+    )
     expect(result.frontmatter.generated).toEqual({
       by: 'reference_agent/gemini-2.5-pro',
       at: '2026-06-20T22:53:05Z',
@@ -325,7 +328,6 @@ describe('error paths do not silently produce corrupt output', () => {
       { by: 'human:ahormati', at: '2026-06-25T09:00:00Z' },
     ])
     expect(result.frontmatter.facetsRaw).toEqual({
-      description: 'Recognized revenue for a fiscal year, per Finance definition.',
       status: 'stable',
       runtime: 'bigquery',
       parameters: [{ name: 'year', type: 'integer', required: true }],

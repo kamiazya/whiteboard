@@ -256,8 +256,10 @@ export function useDocumentFileSeams({
  * field is the heading, which become rows, what a tag list reads like — is
  * made here.
  *
- * `view` selects a template rather than carrying content, and `facetsRaw`
- * holds keys with no agreed presentation, so neither renders.
+ * `view` selects a template rather than carrying content, `resource` names
+ * what the document describes rather than saying anything about it, and
+ * `facetsRaw` holds keys with no agreed presentation, so none of the three
+ * renders.
  */
 export function toFacetCard(
   ref: string,
@@ -266,6 +268,13 @@ export function toFacetCard(
 ): FacetCardData | undefined {
   if (facets === undefined) return undefined
   const rows = [{ label: 'type', value: facets.type }]
+  // OKF's own words for `description`: the one sentence summarising the
+  // concept, "used by index.md generators, search snippets, and previews"
+  // (§4.1). An embed card IS a preview, so it is the row a reader wants most
+  // after knowing what kind of thing this is.
+  if (facets.description !== undefined) {
+    rows.push({ label: 'summary', value: facets.description })
+  }
   if (facets.tags !== undefined && facets.tags.length > 0) {
     rows.push({ label: 'tags', value: facets.tags.join(', ') })
   }

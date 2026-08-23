@@ -1,9 +1,9 @@
 import { describe, expect, it } from 'vitest'
 import {
   isHumanActor,
+  normalizeOkfVerified,
   okfActorSchema,
   okfTimestampSchema,
-  normalizeOkfVerified,
   trustFacetsSchema,
   trustTier,
 } from './trust.js'

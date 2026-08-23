@@ -872,11 +872,12 @@ async function main() {
     'This edits a JSON Canvas',
   )
 
-  // `description` and `status` are OKF root keys this server does not model.
-  // They ride along so the round trip below proves the preservation rule at
-  // runtime: the MCP SDK validates structuredContent against outputSchema, so
-  // a bucket the schema does not admit fails here and only here. The write
-  // declares no `generated`, so the server stamps the `actor` passed below.
+  // `status` is an OKF root key this server does not model; it rides along so
+  // the round trip below proves the preservation rule at runtime, where the
+  // MCP SDK validates structuredContent against outputSchema and a bucket the
+  // schema does not admit fails here and only here. `description` is modelled,
+  // so it comes back as a field. The write declares no `generated`, so the
+  // server stamps the `actor` passed below.
   const importMarkdown = [
     '---',
     'type: issue',
@@ -959,11 +960,13 @@ async function main() {
       `wb_document_set did not stamp the declared actor: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
+  if (exported.frontmatter.description !== 'An issue written by the e2e smoke.') {
+    throw new Error(
+      `modelled OKF description did not survive: ${JSON.stringify(exported.frontmatter)}`,
+    )
+  }
   const preserved = exported.frontmatter.facetsRaw
-  if (
-    preserved?.description !== 'An issue written by the e2e smoke.' ||
-    preserved?.status !== 'stable'
-  ) {
+  if (preserved?.status !== 'stable') {
     throw new Error(
       `unmodelled OKF root keys were not preserved: ${JSON.stringify(exported.frontmatter)}`,
     )

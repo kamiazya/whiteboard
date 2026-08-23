@@ -25,15 +25,14 @@ is not embedded in the output.
 
 OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))
 requires exactly one frontmatter field, `type`, and leaves producers free to add
-any others. This server gives meaning to four root keys — `type`, `title`,
-`tags`, `view` — plus its own `facets` extension bucket.
-
-It also models OKF v0.2's trust pair, `generated` and `verified`.
+any others. This server gives meaning to OKF's required `type`, its recommended
+`title`, `description`, `resource` and `tags`, v0.2's trust pair `generated`
+and `verified`, and its own `view` and `facets` extension keys.
 
 **Every other root key is preserved verbatim.** Write a document through
 `wb_document_set` and read it back with `wb_document_get`, and keys this server
 has no model for come back at the root they were written at, unchanged. That
-covers the rest of OKF v0.2's provenance and lifecycle families — `sources`,
+covers OKF v0.2's provenance and lifecycle families — `sources`,
 `usage_window`, `status`, `stale_after` — and the Attested Computation keys
 `runtime`, `parameters`, `computation`, `executor` and `attester`, none of
 which this server interprets.
