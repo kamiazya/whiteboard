@@ -25,7 +25,7 @@ import {
   type VisualSymbolFacet,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { Ban, Circle, Cylinder, Diamond, Hexagon, Square } from 'lucide-react'
+import { Ban, Circle, Cylinder, Diamond, Hexagon, SlidersHorizontal, Square } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { ContextMenuItem } from '../ContextMenu.js'
@@ -38,6 +38,12 @@ export interface NodePropertiesContext {
   readonly applyToSelection: (
     commandsFor: (targetIds: readonly string[]) => readonly EditorCommand[],
   ) => void
+  /**
+   * Opens the full facet panel for this node. The core surface owns the
+   * panel's mounting; the DOORWAY belongs here, so no point-owning surface
+   * has to name the facet concept to offer one.
+   */
+  readonly openPanel: () => void
 }
 
 export type NodePropertiesWidget = (ctx: NodePropertiesContext) => readonly ContextMenuItem[]
@@ -58,8 +64,14 @@ export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
  * split as everywhere else — the engine owns what may be said, the vessel
  * owns how it looks.
  */
-function FacetGlyphIcon({ glyph }: { readonly glyph?: FacetGlyph }) {
+function glyphIcon(glyph?: FacetGlyph): ReactNode | undefined {
   switch (glyph) {
+    case undefined:
+      return undefined
+    // 'none' is a real member of the vocabulary — the "no value" segment —
+    // and gets the same slash the hand-written symbol band uses for it.
+    case 'none':
+      return <Ban />
     case 'square':
       return <Square />
     case 'circle':
@@ -85,8 +97,6 @@ function FacetGlyphIcon({ glyph }: { readonly glyph?: FacetGlyph }) {
       )
     case 'cylinder':
       return <Cylinder />
-    default:
-      return undefined
   }
 }
 
@@ -234,10 +244,17 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
 }
 
 /**
- * The `contextMenu.node.properties` point resolved to menu items: bands per
- * contributing namespace, headed by the plugin's displayName only once a
- * SECOND namespace contributes (one namespace stays unlabeled). Group order
- * is namespace-id lexicographic — display wording never moves it.
+ * The `contextMenu.node.properties` point resolved to menu items: a
+ * separator fencing the region off from the core rows, then one band group
+ * per contributing namespace under the plugin's displayName, then the
+ * doorway to the full panel. Group order is namespace-id lexicographic —
+ * display wording never moves it.
+ *
+ * The heading is unconditional. An earlier rule dropped it while only one
+ * namespace contributed, on the reasoning that a lone heading says nothing
+ * — but what it actually says is WHERE THE CORE MENU ENDS, and without it
+ * a facet row is indistinguishable from Color or Order. Reported from a
+ * phone once a third band landed.
  */
 /**
  * Tier 2: a facet that DECLARES its editor gets its quick band rendered
@@ -262,9 +279,15 @@ function declaredBands(
         kind: 'options' as const,
         label: field.label,
         options: field.control.options.map((option) => ({
-          label: option.value ?? 'none',
+          // The DECLARED label, both visible and accessible: a band whose
+          // options carry no drawable glyph is read, not looked at, and the
+          // stored value ("start") is not what a reader is choosing ("Top").
+          label: option.label,
           ariaLabel: option.label,
-          icon: <FacetGlyphIcon glyph={option.glyph} />,
+          // `icon` must be absent, not an element that renders nothing —
+          // the vessel branches on its presence, so an unconditional element
+          // drew three blank 28px buttons where the labels should be.
+          icon: glyphIcon(option.glyph),
           // A null option means the facet's ABSENCE, which is why the
           // comparison is against undefined rather than the value.
           selected: option.value === null ? stored === undefined : current === option.value,
@@ -300,11 +323,17 @@ export function nodePropertyItems(
       ),
     }))
     .filter((entry) => entry.bands.length > 0)
-  return contributed.flatMap(({ group, bands }) =>
-    contributed.length >= 2
-      ? [{ kind: 'heading' as const, label: group.displayName }, ...bands]
-      : bands,
-  )
+  if (contributed.length === 0) return []
+  return [
+    { kind: 'separator' as const },
+    ...contributed.flatMap(({ group, bands }) => [
+      { kind: 'heading' as const, label: group.displayName },
+      ...bands,
+    ]),
+    // The quick bands are one tier; everything a facet declares — including
+    // facets no band knows about — is reachable through here.
+    { label: 'Facets…', icon: <SlidersHorizontal />, onSelect: ctx.openPanel },
+  ]
 }
 
 // --- registrations ---------------------------------------------------------
