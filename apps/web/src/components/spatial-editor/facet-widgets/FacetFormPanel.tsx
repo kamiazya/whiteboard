@@ -374,21 +374,27 @@ export function FacetFormPanel({
             <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
               {group.displayName}
             </span>
-            {group.facets.map((facet) =>
-              editors[facet.key] !== undefined ? (
+            {group.facets.map((facet) => {
+              const Editor = editors[facet.key]
+              return Editor !== undefined ? (
                 <div key={`${node.id}:${facet.key}`} className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium">{facet.definition.displayName}</span>
-                  {editors[facet.key]?.({
-                    value: stored[facet.key],
+                  {/* RENDERED, not called. Calling it would splice a plugin's
+                      hooks into this panel's own sequence, so two editors in
+                      the same position share a hook slot — measured: swapping
+                      one editor for another left the second reading the
+                      first's state. */}
+                  <Editor
+                    value={stored[facet.key]}
                     // Straight through the registry, exactly like the derived
                     // form's own writer — a hand-written editor gets no shorter
                     // path to storage than a declared one.
-                    write: (payload) => {
+                    write={(payload) => {
                       if (payload === undefined) return onWrite(facet.key, undefined)
                       const result = registry.validateFacetWrite(facet.key, payload)
                       if (result.ok) onWrite(facet.key, result.value)
-                    },
-                  })}
+                    }}
+                  />
                 </div>
               ) : (
                 <DerivedFacetForm
@@ -404,8 +410,8 @@ export function FacetFormPanel({
                   registry={registry}
                   onWrite={onWrite}
                 />
-              ),
-            )}
+              )
+            })}
           </div>
         ))}
       </div>
