@@ -86,6 +86,27 @@ vi.setConfig({ testTimeout: 30_000 })
 // import — which under fake-indexeddb on a loaded runner does not fit 5s.
 configure({ asyncUtilTimeout: 15_000 })
 
+// What the mounted editor was last handed, with enough context to diagnose a
+// failure in one occurrence rather than one investigation. `.at(-1)` is the
+// right read — the stub records every RENDER, and only the newest says what
+// the page currently shows — but on its own it fails as
+// `expected [] to include 'undo-probe-node'`, which cannot distinguish an
+// edit that never propagated from a later render that replaced it. Both flake
+// write-ups in this repo's backlog say the same thing: the assertion text was
+// the missing evidence, and by the time anyone looked it was gone.
+function latestCanvasIds(): { ids: string[]; detail: string } {
+  const latest = latestMountedCanvases.at(-1)
+  const ids = latest === undefined ? [] : latest.nodes.map((n) => n.id)
+  const trail = latestMountedCanvases
+    .slice(-4)
+    .map((canvas, index) => `[${index}] ${JSON.stringify(canvas.nodes.map((n) => n.id))}`)
+    .join(' ')
+  return {
+    ids,
+    detail: `renders=${latestMountedCanvases.length} last4: ${trail || '(none)'}`,
+  }
+}
+
 describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', () => {
   let documentId = ''
 
@@ -128,9 +149,9 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
     })
 
     await waitFor(() => {
-      const latest = latestMountedCanvases.at(-1)
-      expect(latest).toBeDefined()
-      expect(latest!.nodes.map((n) => n.id)).not.toContain('undo-probe-node')
+      expect(latestMountedCanvases.at(-1)).toBeDefined()
+      const { ids, detail } = latestCanvasIds()
+      expect(ids, `undo did not remove the node — ${detail}`).not.toContain('undo-probe-node')
     })
     // And redo brings it back through the same cluster.
     const redoButton = screen.getByRole('button', { name: 'Redo' })
@@ -139,8 +160,8 @@ describe('BrowserDocumentPage create/delete-node persistence (real IndexedDB)', 
       redoButton.click()
     })
     await waitFor(() => {
-      const latest = latestMountedCanvases.at(-1)
-      expect(latest!.nodes.map((n) => n.id)).toContain('undo-probe-node')
+      const { ids, detail } = latestCanvasIds()
+      expect(ids, `redo did not restore the node — ${detail}`).toContain('undo-probe-node')
     })
   })
 
