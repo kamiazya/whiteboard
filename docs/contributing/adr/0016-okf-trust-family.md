@@ -159,16 +159,20 @@ Recording the gap is the point of this paragraph.
   Note it is not an issue *status* — OKF's `status` is `draft`/`stable`/
   `deprecated`, a document lifecycle, and conflating the two would repeat the
   mistake that retired `issue/1`.
-- **The `apps/web` write path does not stamp yet, and that is the open half of
-  this ADR.** The browser writes browser-kept documents straight through
-  `loro-adapter`, so a document edited there carries no `generated` while the
-  same document edited through MCP does — the "present or absent depending on
-  which surface you used" state this ADR set out to avoid. It is left open
-  rather than guessed at because it needs two answers this codebase does not
-  have: what `human:<id>` means in an app with no accounts (`user-settings-store`
-  holds no identity), and at what cadence to stamp, given that
-  `writeMarkdownBody` runs on every keystroke in the editor and a per-keystroke
-  `generated.at` would churn the CRDT for no reader's benefit.
+- **The `apps/web` write path deliberately does not stamp.** The browser writes
+  browser-kept documents straight through `loro-adapter`, so a document edited
+  there carries no `generated` while the same document edited through MCP does.
+  That asymmetry is accepted for now rather than closed, because closing it
+  means answering what `human:<id>` identifies in an app with no accounts —
+  `user-settings-store` holds no identity — and **an identity minted locally
+  today would have to be reconciled with whatever a hosted product brings**.
+  Inventing `human:local` now buys one field and risks an identity model that
+  contradicts the real one later; the daemon half stands on its own until
+  there is an identity worth writing down.
+
+  (The cadence question is the smaller half and has an answer waiting:
+  `writeMarkdownBody` runs on every keystroke in the editor, so a stamp would
+  ride save/blur, never a keystroke.)
 - **A schema carrying a `transform` cannot be published.** The widening §5.2
   requires — read a bare `verified` mapping as a one-element list — was written
   first as a `z.union(...).transform()` on the frontmatter schema. That schema
