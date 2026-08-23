@@ -122,7 +122,7 @@ export interface CanvasCommands {
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly setDocumentPicker: (state: DocumentPickerState | null) => void
   /** Opens the node's full facet editor — the point knows no domain. */
-  readonly setFacetPanelNodeId: (nodeId: string | null) => void
+  readonly setFacetPanelOpen: (open: boolean) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -188,7 +188,7 @@ export function CanvasContextMenu({
     setSelectedEdgeId,
     setLinkDialog,
     setDocumentPicker,
-    setFacetPanelNodeId,
+    setFacetPanelOpen,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -648,7 +648,7 @@ export function CanvasContextMenu({
         // and now it does not carry their values either — an action menu runs
         // an entry and closes; a facet is state you adjust repeatedly.
         const facetItems = nodePropertyItems(facetRegistry, {
-          openPanel: () => setFacetPanelNodeId(node.id),
+          openPanel: () => setFacetPanelOpen(true),
         })
         // Z-order as one-tap options — the touch path to the [ / ]
         // keyboard shortcuts (see shortcuts.ts). Not a picker: no

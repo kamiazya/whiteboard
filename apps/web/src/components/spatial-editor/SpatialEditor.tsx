@@ -859,7 +859,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
     const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
     const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
-    const [facetPanelNodeId, setFacetPanelNodeId] = useState<string | null>(null)
+    // The inspector is open or shut; WHICH node it edits follows the
+    // selection. Pinning it to the node the menu was opened on made it a
+    // dialog you had to close before you could look at anything else.
+    const [facetPanelOpen, setFacetPanelOpen] = useState(false)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
@@ -3272,7 +3275,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setSelectedEdgeId,
               setLinkDialog,
               setDocumentPicker,
-              setFacetPanelNodeId,
+              setFacetPanelOpen,
             }}
             contextMenu={contextMenu}
             setContextMenu={setContextMenu}
@@ -3320,15 +3323,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setDocumentPicker(null)}
           />
         )}
-        {facetPanelNodeId !== null &&
+        {facetPanelOpen &&
           (() => {
-            const target = canvas.nodes.find((entry) => entry.id === facetPanelNodeId)
+            const target = canvas.nodes.find((entry) => entry.id === selectedId)
+            // Nothing selected: the inspector has nothing to show, but it
+            // stays OPEN — selecting the next node brings it straight back
+            // rather than making the doorway a two-tap trip again.
             if (target === undefined) return null
             return (
               <FacetFormPanel
                 node={target}
                 registry={bundledFacetRegistry}
-                onClose={() => setFacetPanelNodeId(null)}
+                onClose={() => setFacetPanelOpen(false)}
+                variant={rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'dock'}
                 onWrite={(key, payload) => {
                   // Applies to the whole selection, the semantics the menu
                   // bands had: reshaping five selected nodes must not become

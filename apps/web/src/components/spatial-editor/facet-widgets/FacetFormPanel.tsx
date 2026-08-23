@@ -20,7 +20,7 @@ import {
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { glyphIcon } from './glyph.js'
 import { type FacetEditorWidget, NODE_FACET_EDITORS } from './index.js'
@@ -44,6 +44,11 @@ export interface FacetFormPanelProps {
   readonly onWrite: (key: string, payload: unknown) => void
   /** Present when mounted as an overlay; absent renders the bare body. */
   readonly onClose?: () => void
+  /**
+   * Where the inspector sits. Follows the context menu's breakpoint so the
+   * two agree about what a narrow editor is.
+   */
+  readonly variant?: 'dock' | 'sheet'
 }
 
 type Draft = Record<string, unknown>
@@ -354,14 +359,8 @@ export function FacetFormPanel({
   onWrite,
   onClose,
   editors = NODE_FACET_EDITORS,
+  variant = 'dock',
 }: FacetFormPanelProps) {
-  const closeRef = useRef<HTMLButtonElement | null>(null)
-  // Focus on open: a dialog that never takes focus leaves Escape and Tab
-  // acting on the canvas behind it. The close button is the least
-  // surprising landing place — it is also the way out.
-  useEffect(() => {
-    closeRef.current?.focus()
-  }, [])
   const groups = resolveFacetContributions(registry, 'inspector.node')
   const stored = storedFacets(node)
   const body = (
@@ -416,37 +415,46 @@ export function FacetFormPanel({
     <div
       data-editor-overlay
       data-testid="facet-form-panel"
-      role="dialog"
+      // NOT a dialog: it stays open while you select other nodes, and taking
+      // focus would pull it off the canvas every time it opened. `complementary`
+      // is the landmark for a panel that supports the main surface rather than
+      // interrupting it.
+      role="complementary"
       aria-label="Facets"
-      className="rounded-md border bg-background p-3 shadow-lg"
-      style={{
-        position: 'absolute',
-        zIndex: 30,
-        left: '50%',
-        top: '35%',
-        transform: 'translate(-50%, -50%)',
-        maxHeight: '60%',
-        overflowY: 'auto',
-        width: 'max-content',
-        // max-content alone lets a long option row set a box wider than the
-        // phone it is opened on, and a centred box that does not fit spills
-        // off BOTH edges.
-        maxWidth: 'min(90%, 22rem)',
-        // max-content alone lets a long option row set a box wider than the
-        // phone it is opened on, and a centred box that does not fit spills
-        // off BOTH edges.
-      }}
-      onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.stopPropagation()
-          onClose()
-        }
-      }}
+      className={cn(
+        'bg-background p-3 shadow-lg',
+        variant === 'sheet' ? 'rounded-t-xl border-t' : 'rounded-md border',
+      )}
+      // A centred box cannot be non-modal: it covers the canvas, and
+      // `data-editor-overlay` makes it swallow the press that would have
+      // selected the node underneath. Measured while trying to select a node
+      // the panel was sitting on top of — the click never reached it.
+      style={
+        variant === 'sheet'
+          ? {
+              position: 'absolute',
+              zIndex: 30,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              maxHeight: '55%',
+              overflowY: 'auto',
+              paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+            }
+          : {
+              position: 'absolute',
+              zIndex: 30,
+              right: 8,
+              top: 8,
+              width: 'min(22rem, calc(100% - 16px))',
+              maxHeight: 'calc(100% - 16px)',
+              overflowY: 'auto',
+            }
+      }
     >
       <div className="flex items-center justify-between gap-4 pb-2">
         <span className="text-xs font-medium">Facets</span>
         <button
-          ref={closeRef}
           type="button"
           aria-label="Close facets"
           className="rounded px-2 text-xs text-muted-foreground hover:bg-accent"
