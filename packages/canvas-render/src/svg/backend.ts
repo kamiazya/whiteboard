@@ -1,8 +1,8 @@
 import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
-import { hopEndpoints, jumpsWithinSpan } from '../layout/edge-flatten.js'
-import { EDGE_JUMP_RADIUS_PX } from '../layout/edge-jumps.js'
-import { roundedEdgeCorners } from '../layout/edge-rounding.js'
-import { nodeOutline } from '../layout/node-outline.js'
+import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
+import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
+import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
+import { nodeOutline } from '../layout/nodes/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -235,7 +235,7 @@ function renderTextRun(run: TextRunNode): SvgChild {
 function renderShape(node: ShapeSceneNode): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
   // Non-rect silhouettes come from the shared decomposition (one producer
-  // for drawing and hit-testing — layout/node-outline.ts); an absent
+  // for drawing and hit-testing — layout/nodes/node-outline.ts); an absent
   // `shape` stays the historic rect byte-for-byte.
   if (node.shape !== undefined) {
     const outline = nodeOutline(node.shape, node.bbox)
@@ -399,7 +399,7 @@ function jumpedPathData(path: readonly EdgePoint[], jumps: readonly EdgeJump[]):
 
 /**
  * The same polyline with its corners rounded off, per the shared
- * `roundedEdgeCorners` decomposition (see layout/edge-rounding.ts — the
+ * `roundedEdgeCorners` decomposition (see layout/edges/edge-rounding.ts — the
  * editor's hit-testing flattens the SAME corners, which is what keeps a tap
  * landing on the ink). Degenerate inputs fall back to the straight reading
  * rather than emitting a malformed `d`, matching this package's never-throw

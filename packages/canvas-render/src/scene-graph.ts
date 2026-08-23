@@ -112,7 +112,7 @@ export interface TextRunNode {
 /**
  * Non-rect node silhouettes. `rect` is deliberately unrepresentable: an
  * absent `shape` field IS the rect, so a second spelling of it cannot
- * exist. Geometry derives from the bbox via `layout/node-outline.ts`.
+ * exist. Geometry derives from the bbox via `layout/nodes/node-outline.ts`.
  */
 export type NodeOutlineKind = 'ellipse' | 'diamond' | 'hexagon' | 'parallelogram' | 'cylinder'
 
@@ -142,7 +142,7 @@ export interface ShapeSceneNode {
   readonly radius?: number
   /**
    * Non-rect silhouette, derived at draw time from `bbox` by the shared
-   * decomposition in `layout/node-outline.ts` (one producer for drawing
+   * decomposition in `layout/nodes/node-outline.ts` (one producer for drawing
    * AND hit-testing). Absent = the historic rect, byte-identical to
    * before this field existed. A kind, never stored coordinates, so
    * translate/scale need no knowledge of it.

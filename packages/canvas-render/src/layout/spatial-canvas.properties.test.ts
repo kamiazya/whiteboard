@@ -5,7 +5,7 @@ import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
+import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import {
   layoutSpatialCanvas,
   layoutSpatialEdges,

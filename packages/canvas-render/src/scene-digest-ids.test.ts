@@ -6,7 +6,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { expect, it } from 'vitest'
-import type { SpatialAppearanceResolver } from './layout/spatial-appearance.js'
+import type { SpatialAppearanceResolver } from './layout/nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneDigest } from './scene-digest.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
