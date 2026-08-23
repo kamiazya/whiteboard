@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/search/**"
+---
+
 # search — lexical search over documents
 
 ## What belongs here
