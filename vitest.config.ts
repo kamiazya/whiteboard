@@ -11,6 +11,7 @@ export default defineConfig({
       'packages/codec/vitest.node.config.ts',
       'tools/arch-lint/vitest.node.config.ts',
       'packages/loro-adapter/vitest.node.config.ts',
+      'packages/search/vitest.node.config.ts',
       'packages/server-core/vitest.node.config.ts',
       'packages/canvas-render/vitest.node.config.ts',
       'packages/canvas-render/vitest.browser.config.ts',

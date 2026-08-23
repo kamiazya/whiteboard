@@ -19,6 +19,8 @@
  * with its judged document's path or name.
  */
 
+import type { Judgments } from './eval.js'
+
 export interface CorpusDocument {
   readonly path: string
   readonly name: string
@@ -51,8 +53,26 @@ export type QueryCategory = 'lexical' | 'bigram' | 'paraphrase' | 'cross-lingual
 export interface JudgedQuery {
   readonly query: string
   readonly category: QueryCategory
-  /** Paths of documents a person asking this would want. Order-insensitive. */
-  readonly relevant: readonly string[]
+  /**
+   * documentPath -> how badly a person asking this wants that document.
+   * Anything absent is not relevant.
+   *
+   * GRADED rather than binary, on the scale nDCG is defined over:
+   *
+   * - `3` — what the asker was looking for; returning anything else first
+   *   is a worse answer.
+   * - `2` — genuinely answers the question, but is not the one document
+   *   the query was reaching for.
+   * - `1` — worth showing, and a reader would not call it a mistake, but
+   *   they would keep scrolling.
+   *
+   * Every judgement below is a `3`, because each query was written against
+   * one document. The scale is here so that the corpus can grow into
+   * queries with several partial answers without a second migration — and
+   * because a metric that CAN read grades reports a flat corpus honestly,
+   * where one that cannot would hide the flatness.
+   */
+  readonly relevant: Judgments
 }
 
 export const CORPUS_DOCUMENTS: readonly CorpusDocument[] = [
@@ -130,14 +150,14 @@ export const CORPUS_DOCUMENTS: readonly CorpusDocument[] = [
 
 export const JUDGED_QUERIES: readonly JudgedQuery[] = [
   // --- lexical: the words are right there ---
-  { query: 'exponential backoff', category: 'lexical', relevant: ['notes/reconnect-runbook'] },
-  { query: 'QuotaExceededError', category: 'lexical', relevant: ['notes/storage-budget'] },
-  { query: 'redis', category: 'lexical', relevant: ['plans/untitled-3'] },
+  { query: 'exponential backoff', category: 'lexical', relevant: { 'notes/reconnect-runbook': 3 } },
+  { query: 'QuotaExceededError', category: 'lexical', relevant: { 'notes/storage-budget': 3 } },
+  { query: 'redis', category: 'lexical', relevant: { 'plans/untitled-3': 3 } },
 
   // --- bigram: Japanese, no spaces, no dictionary ---
-  { query: '再接続', category: 'bigram', relevant: ['notes/untitled-1'] },
-  { query: 'インフラ構成', category: 'bigram', relevant: ['plans/untitled-3'] },
-  { query: '初回ダウンロード', category: 'bigram', relevant: ['notes/untitled-2'] },
+  { query: '再接続', category: 'bigram', relevant: { 'notes/untitled-1': 3 } },
+  { query: 'インフラ構成', category: 'bigram', relevant: { 'plans/untitled-3': 3 } },
+  { query: '初回ダウンロード', category: 'bigram', relevant: { 'notes/untitled-2': 3 } },
 
   // --- paraphrase: same meaning, NO shared token with the target ---
   // Zero overlap is the definition here, not a nicety: a query sharing a
@@ -146,29 +166,33 @@ export const JUDGED_QUERIES: readonly JudgedQuery[] = [
   {
     query: '通信が不安定な場合の復旧',
     category: 'paraphrase',
-    relevant: ['notes/untitled-1'],
+    relevant: { 'notes/untitled-1': 3 },
   },
   {
     query: '回線トラブル時の対処',
     category: 'paraphrase',
-    relevant: ['notes/untitled-1'],
+    relevant: { 'notes/untitled-1': 3 },
   },
   {
     query: '新規ユーザーが最初に通る画面',
     category: 'paraphrase',
-    relevant: ['plans/onboarding-flow'],
+    relevant: { 'plans/onboarding-flow': 3 },
   },
 
   // --- cross-lingual: JA query, EN document (and the reverse) ---
-  { query: '再接続の手順書', category: 'cross-lingual', relevant: ['notes/reconnect-runbook'] },
+  {
+    query: '再接続の手順書',
+    category: 'cross-lingual',
+    relevant: { 'notes/reconnect-runbook': 3 },
+  },
   {
     query: 'ストレージ容量の見積もり',
     category: 'cross-lingual',
-    relevant: ['notes/storage-budget'],
+    relevant: { 'notes/storage-budget': 3 },
   },
   {
     query: 'embedding model download size',
     category: 'cross-lingual',
-    relevant: ['notes/untitled-2'],
+    relevant: { 'notes/untitled-2': 3 },
   },
 ]
