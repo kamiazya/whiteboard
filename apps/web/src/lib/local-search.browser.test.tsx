@@ -1,0 +1,95 @@
+import {
+  writeDocumentKind,
+  writeMarkdownBody,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { Loro } from 'loro-crdt'
+import { describe, expect, it } from 'vitest'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
+import { ensureLocalWorkspace } from './local-document-summary.js'
+import { createLocalFilesSource } from './local-files-source.js'
+import { LoroStore } from './loro-store.js'
+
+// Body search in local mode, against real IndexedDB: the browser ranks with
+// the same stage-0 core the daemon uses, so a query finds the same
+// documents in either mode.
+
+claimIsolatedWhiteboardDb('local-body-search')
+
+async function seedMarkdown(index: IdbDocumentIndex, path: string, body: string): Promise<string> {
+  const entry = await index.createDocument({ workspaceId: 'local', path, kind: 'markdown' })
+  const doc = new Loro()
+  writeDocumentKind(doc, 'markdown')
+  writeMarkdownBody(doc, body)
+  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+  return entry.documentId
+}
+
+async function seedSpatial(index: IdbDocumentIndex, path: string, canvas: SpatialCanvas) {
+  const entry = await index.createDocument({ workspaceId: 'local', path, kind: 'spatial' })
+  const doc = new Loro()
+  writeDocumentKind(doc, 'spatial')
+  writeSpatialCanvas(doc, canvas)
+  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+}
+
+describe('local body search', () => {
+  it('finds a document by a word that appears only in its body', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    await seedMarkdown(index, 'notes/one', 'The quota exceeded error shows up on save.')
+    await seedMarkdown(index, 'notes/two', 'Nothing relevant here at all.')
+    const source = createLocalFilesSource()
+
+    const hits = await source.searchDocuments('quota')
+    expect(hits.map((h) => h.document.path)).toEqual(['notes/one'])
+    // The excerpt says WHY the row is here.
+    expect(hits[0]?.contexts.join(' ')).toContain('quota')
+  })
+
+  it('searches a canvas through its node and edge labels', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    await seedSpatial(index, 'diagrams/auth', {
+      nodes: [
+        { id: 'n1', type: 'text', text: 'Session handshake', x: 0, y: 0, width: 80, height: 40 },
+      ],
+      edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n1', label: 'retries' }],
+    })
+    const source = createLocalFilesSource()
+
+    expect((await source.searchDocuments('handshake')).map((h) => h.document.path)).toEqual([
+      'diagrams/auth',
+    ])
+    expect((await source.searchDocuments('retries')).map((h) => h.document.path)).toEqual([
+      'diagrams/auth',
+    ])
+  })
+
+  it('answers nothing for an empty query', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    await seedMarkdown(index, 'solo', 'anything')
+    expect(await createLocalFilesSource().searchDocuments('   ')).toEqual([])
+  })
+
+  it('sees an edit without being told, and re-reads only what changed', async () => {
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    const id = await seedMarkdown(index, 'draft', 'first wording')
+    const source = createLocalFilesSource()
+    expect(await source.searchDocuments('rewritten')).toEqual([])
+
+    // Edit through the same store the app uses.
+    const doc = new Loro()
+    writeDocumentKind(doc, 'markdown')
+    writeMarkdownBody(doc, 'rewritten wording')
+    await new LoroStore().save(id, doc.export({ mode: 'snapshot' }))
+
+    expect((await source.searchDocuments('rewritten')).map((h) => h.document.path)).toEqual([
+      'draft',
+    ])
+  })
+})

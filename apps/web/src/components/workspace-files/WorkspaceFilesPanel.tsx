@@ -10,7 +10,11 @@ import { DocumentThumbnail } from './DocumentThumbnail.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
-import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
+import {
+  type DocumentSearchHit,
+  type WorkspaceFilesSource,
+  WorkspaceMissingError,
+} from './files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
@@ -20,6 +24,11 @@ import { SearchResults } from './SearchResults.js'
 import { searchDocuments } from './search-documents.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
+
+/** One screenful of results; the ranking makes a longer list noise. */
+const SEARCH_LIMIT = 20
+/** Long enough that typing a word is one search, short enough to feel live. */
+const SEARCH_DEBOUNCE_MS = 150
 
 export interface WorkspaceFilesPanelProps {
   /**
@@ -194,6 +203,14 @@ export function WorkspaceFilesPanel({
   // same-tick case it exists to catch.
   const [creating, setCreating] = useState(false)
   const [query, setQuery] = useState('')
+  // Search results come from the SOURCE now — the content it can read is
+  // the whole point, and no filter over the loaded list can see a body.
+  const [hits, setHits] = useState<readonly DocumentSearchHit[] | null>(null)
+  // True when the content search could not be reached — an older daemon
+  // without the route, or a network that said no. The panel then answers
+  // from the list it already holds and SAYS that it did, because a quietly
+  // narrower answer is indistinguishable from a document that is not there.
+  const [searchDegraded, setSearchDegraded] = useState(false)
   // The object-action menu: which document was right-clicked, and where.
   const [cardMenu, setCardMenu] = useState<{
     entry: WorkspaceDocumentEntry
@@ -228,6 +245,38 @@ export function WorkspaceFilesPanel({
   const loadOutline = useMemo(() => createRowOutlineLoader({ source }), [source])
 
   const readList = useCallback(() => source.listDocuments(), [source])
+
+  // Debounced, and the LATEST query decides: a slower answer for a query
+  // the user has already moved on from must never replace a newer one, so
+  // the cleanup marks its own request stale rather than trusting arrival
+  // order.
+  useEffect(() => {
+    const trimmed = query.trim()
+    if (trimmed === '' || trimmed.startsWith('#')) {
+      setHits(null)
+      setSearchDegraded(false)
+      return
+    }
+    let stale = false
+    const timer = setTimeout(() => {
+      source
+        .searchDocuments(trimmed, SEARCH_LIMIT)
+        .then((results) => {
+          if (stale) return
+          setHits(results)
+          setSearchDegraded(false)
+        })
+        .catch(() => {
+          if (stale) return
+          setHits(null)
+          setSearchDegraded(true)
+        })
+    }, SEARCH_DEBOUNCE_MS)
+    return () => {
+      stale = true
+      clearTimeout(timer)
+    }
+  }, [query, source])
 
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
@@ -739,8 +788,31 @@ export function WorkspaceFilesPanel({
           // be two features wearing one box.
           <div className="min-w-0 flex-1 overflow-y-auto md:border-r md:pr-3">
             <div data-testid="search-results">
+              {/* Always mounted, text swapped: a polite live region added to
+                  the DOM already carrying its message is announced
+                  inconsistently (see polite-live-region.test.ts). */}
+              <p
+                role="status"
+                className={searchDegraded ? 'text-muted-foreground mb-1 text-xs' : 'sr-only'}
+              >
+                {searchDegraded
+                  ? 'Searching names and paths only — this workspace’s content search is unavailable.'
+                  : ''}
+              </p>
               <SearchResults
-                results={searchDocuments(documents, query)}
+                // A `#tag` query is a FILTER over what is loaded (#975's
+                // contract), not a content search — it never leaves the
+                // client. Everything else asks the source.
+                results={
+                  activeTag !== null || hits === null
+                    ? // A `#tag` query is a FILTER over what is loaded
+                      // (#975's contract) and never leaves the client; and
+                      // while content search is unreachable or still in
+                      // flight, the names and paths already in hand are a
+                      // real answer rather than a blank pane.
+                      searchDocuments(documents, query).map((document) => ({ document }))
+                    : hits.map((hit) => ({ document: hit.document, contexts: hit.contexts }))
+                }
                 query={query}
                 selectedPath={selected?.path}
                 onSelect={setSelected}

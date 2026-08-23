@@ -45,6 +45,17 @@ export interface WorkspaceFilesSource {
    */
   setPinned?(entry: Pick<WorkspaceDocumentEntry, 'path'>, pinned: boolean): Promise<void>
   /**
+   * Documents whose CONTENT answers the query, best first — the search a
+   * name-and-path filter cannot do.
+   *
+   * Both modes answer through the same stage-0 core (`@kamiazya/whiteboard-search`),
+   * so a query finds the same documents whether a daemon or the browser
+   * ranked them. An empty query answers nothing: the caller shows the
+   * folder's own contents, and deciding that here would put it in two
+   * places (`search-documents.ts` says the same for the name filter).
+   */
+  searchDocuments(query: string, limit?: number): Promise<readonly DocumentSearchHit[]>
+  /**
    * The OKF markdown of a markdown document, for row thumbnails and the
    * preview pane. Empty string when the document has no body yet.
    */
@@ -64,6 +75,19 @@ export interface WorkspaceFilesSource {
  * implementation it is talking to: the daemon adapter maps its 404 onto this,
  * the local adapter maps the port's `WorkspaceNotFoundError`.
  */
+/**
+ * One search result: the document, plus why it is here.
+ *
+ * `contexts` are excerpts around the match, one per text source that
+ * matched. When the daemon's semantic search put a document here that no
+ * keyword matched, there IS no match window — the excerpt is then the
+ * document's opening, and nothing in it should be highlighted.
+ */
+export interface DocumentSearchHit {
+  readonly document: WorkspaceDocumentEntry
+  readonly contexts: readonly string[]
+}
+
 export class WorkspaceMissingError extends Error {
   constructor(workspaceId: string) {
     super(`Workspace not found: "${workspaceId}"`)

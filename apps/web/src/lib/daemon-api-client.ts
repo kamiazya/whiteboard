@@ -6,10 +6,12 @@ import {
   type DeleteDocumentResponse,
   type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
+  type DocumentSearchResponse,
   deleteDocumentResponseSchema,
   documentApiUrl,
   documentBacklinksResponseSchema,
   documentOkfV1ResponseSchema,
+  documentSearchResponseSchema,
   documentsApiUrl,
   type InstallFontResponse,
   installFontResponseSchema,
@@ -263,6 +265,22 @@ export function getDocumentBacklinks(
     fetchImpl,
     `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/backlinks`,
     documentBacklinksResponseSchema,
+  )
+}
+
+/** Content search across a workspace — bodies and canvas text, not only names. */
+export function searchWorkspaceDocuments(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  query: string,
+  limit: number,
+): Promise<DocumentSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/search?${params}`,
+    documentSearchResponseSchema,
   )
 }
 

@@ -35,6 +35,7 @@
     "@kamiazya/whiteboard-mcp": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
+    "@kamiazya/whiteboard-search": "workspace:*",
     "@lezer/highlight": "^1.2.1",
     "@lezer/markdown": "^1.7.2",
     "@radix-ui/react-alert-dialog": "^1.1.23",

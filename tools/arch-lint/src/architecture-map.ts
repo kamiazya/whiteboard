@@ -163,6 +163,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-mcp',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-search',
     ],
     allowedThirdParty: [],
   },

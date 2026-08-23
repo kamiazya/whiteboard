@@ -15,10 +15,15 @@ import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 // NotFoundErrors (measured on CI).
 afterEach(cleanup)
 
+const SEEDED = { documentId: 'd1', path: 'seed', kind: 'markdown' as const }
+
 function renderPanel() {
   const source = fakeFilesSource({
-    listDocuments: () =>
-      Promise.resolve([{ documentId: 'd1', path: 'seed', kind: 'markdown' as const }]),
+    listDocuments: () => Promise.resolve([SEEDED]),
+    // The layout toggles exist only while there ARE results, so the search
+    // has to answer with one; the default empty answer removes the very
+    // buttons this file is about.
+    searchDocuments: async () => [{ document: SEEDED, contexts: [] }],
   })
   return render(<WorkspaceFilesPanel source={source} />)
 }
@@ -56,8 +61,13 @@ describe('document browser toolbar tooltips (real browser)', () => {
     ) as HTMLInputElement
     search.focus()
     await userEvent.fill(search, 'seed')
+    // Search answers asynchronously now (the source reads content), so the
+    // results — and the toolbar sitting above them — keep moving until they
+    // land. Hovering mid-flight fails as "element is not stable", which
+    // reads like a tooltip bug and is not one.
     await vi.waitFor(() => {
       expect(document.querySelector('button[aria-label="List results"]')).not.toBeNull()
+      expect(document.querySelectorAll('[data-testid="result-title"]').length).toBeGreaterThan(0)
     })
     for (const label of ['List results', 'Grid results']) {
       await expectTooltip(label)
