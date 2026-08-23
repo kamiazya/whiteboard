@@ -1,6 +1,7 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
+import { ignoredDocumentWrites } from './test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
 import {
   inMemoryDocumentTeardown,
@@ -17,6 +18,7 @@ function makeServer() {
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
     documentTeardown: inMemoryDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   })
 }
 
@@ -175,6 +177,7 @@ describe('canvas OKF read route', () => {
       blobStore: {} as never,
       documentIndex,
       documentTeardown: unusedDocumentTeardown(),
+      documentWritten: ignoredDocumentWrites(),
     })
     await documentIndex.createWorkspace({ workspaceId: 'ws-1' })
     const { documentId } = await documentIndex.createDocument({

@@ -3,6 +3,7 @@ import { DocumentHasDescendantsError, DocumentPathTakenError } from '@kamiazya/w
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { WorkspaceDocumentNotFoundError, WorkspaceNotFoundError } from './document-crud.errors.js'
@@ -19,6 +20,7 @@ function makeDeps(): ServerDeps {
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
     documentTeardown: inMemoryDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 
