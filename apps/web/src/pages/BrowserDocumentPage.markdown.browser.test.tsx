@@ -176,7 +176,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
   it('the OKF summary and describes fields survive a remount', async () => {
     const store = new IdbDocumentIndex()
     await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
-    const first = render(<BrowserLocalDocumentPage store={store} />)
+    const first = render(<BrowserDocumentPage store={store} />)
     await findMarkdownTitleInput()
 
     await userEvent.click(screen.getByRole('button', { name: /properties/i }))
@@ -194,7 +194,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     await waitForSaved()
     first.unmount()
 
-    render(<BrowserLocalDocumentPage store={store} />)
+    render(<BrowserDocumentPage store={store} />)
     await findMarkdownTitleInput()
     await userEvent.click(screen.getByRole('button', { name: /properties/i }))
     await waitFor(
