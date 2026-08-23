@@ -2,6 +2,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 // Real-keyboard regression for the [[ completion: CodeMirror's completion
@@ -27,12 +28,9 @@ describe('wiki link completion (real browser)', () => {
     const { getByTestId } = render(
       <MarkdownEditor initialViewMode="write" value="" onChange={onChange} linkTargets={TARGETS} />,
     )
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
 
     // user-event treats [[ as an escaped literal [ — four brackets type two.
     await userEvent.keyboard('see [[[[Re')
@@ -72,12 +70,9 @@ describe('wiki link completion (real browser)', () => {
         linkTargets={TARGETS}
       />,
     )
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
     await userEvent.keyboard('see [[[[Ret')
     const option = await vi.waitFor(() => {
       const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
@@ -110,12 +105,9 @@ describe('wiki link completion (real browser)', () => {
       )
     }
     const { getByTestId } = render(<Harness />)
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
     await userEvent.keyboard('see [[[[Re')
     await vi.waitFor(() => {
       expect(
@@ -147,12 +139,9 @@ describe('wiki link completion (real browser)', () => {
         linkTargets={TARGETS}
       />,
     )
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
     await userEvent.keyboard('see [[[[Ret')
     const option = await vi.waitFor(() => {
       const el = [...document.querySelectorAll('.cm-tooltip-autocomplete li')].find((li) =>
@@ -215,12 +204,9 @@ describe('wiki link completion (real browser)', () => {
     const { getByTestId } = render(
       <MarkdownEditor initialViewMode="write" value="" onChange={() => {}} linkTargets={TARGETS} />,
     )
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
     await userEvent.keyboard('Release plan is due')
     // Give any (wrong) async popup a beat to appear before asserting absence.
     await new Promise((resolve) => setTimeout(resolve, 300))
