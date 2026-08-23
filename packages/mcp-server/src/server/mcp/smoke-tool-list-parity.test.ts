@@ -34,10 +34,9 @@ describe('the smoke script and the coverage module name the same tools', () => {
 // with a schema that rejected every payload, correctly absent from any
 // success-path test, but marked UNIT_ONLY rather than the smoke calling it.
 describe('the smoke script really calls what COVERED_TOOLS claims', () => {
-  const calledNames = [...smokeSource.matchAll(/callTool\(\s*'([a-z_]+)'/g)].map(
-    (match) => match[1],
+  const calledSet = new Set(
+    [...smokeSource.matchAll(/callTool\(\s*'([a-z_]+)'/g)].map((match) => match[1]),
   )
-  const calledSet = new Set(calledNames)
 
   it('found a plausible number of distinct callTool(...) names (scan sanity, not vacuous)', () => {
     // A regex or path that silently matched nothing would make the

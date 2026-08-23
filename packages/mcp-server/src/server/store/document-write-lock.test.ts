@@ -78,29 +78,28 @@ async function makeDeps() {
   }
 }
 
-/** Positions of both nodes as actually stored, after everything settles. */
-async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
+/** The canvas as actually stored, after everything settles. */
+async function storedCanvas(deps: Awaited<ReturnType<typeof makeDeps>>) {
   const stored = await deps.documentStore.loadSnapshot({
     docRef: { kind: 'document', documentId: DOCUMENT_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
-  const canvas = readSpatialCanvas(doc)
-  return Object.fromEntries(canvas.nodes.map((node) => [node.id, node.x]))
+  return readSpatialCanvas(doc)
 }
 
-/** Text bodies of both nodes as actually stored, after everything settles. */
+/** Positions of both nodes as actually stored. */
+async function storedPositions(deps: Awaited<ReturnType<typeof makeDeps>>) {
+  const { nodes } = await storedCanvas(deps)
+  return Object.fromEntries(nodes.map((node) => [node.id, node.x]))
+}
+
+/** Text bodies of both nodes as actually stored. */
 async function storedTexts(deps: Awaited<ReturnType<typeof makeDeps>>) {
-  const stored = await deps.documentStore.loadSnapshot({
-    docRef: { kind: 'document', documentId: DOCUMENT_ID },
-  })
-  if (stored === null) throw new Error('no snapshot')
-  const doc = new LoroDoc()
-  doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
-  const canvas = readSpatialCanvas(doc)
+  const { nodes } = await storedCanvas(deps)
   return Object.fromEntries(
-    canvas.nodes.map((node) => [node.id, node.type === 'text' ? node.text : undefined]),
+    nodes.map((node) => [node.id, node.type === 'text' ? node.text : undefined]),
   )
 }
 

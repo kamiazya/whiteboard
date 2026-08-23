@@ -5,14 +5,13 @@
 // These tests drive a real McpServer + Client over an in-memory transport,
 // the same pattern serve-stdio-eras.test.ts uses, so the SDK's own argument
 // validation is what judges the payload rather than a restatement of it.
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { Client } from '@modelcontextprotocol/client'
 import { InMemoryTransport, McpServer } from '@modelcontextprotocol/server'
-import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
 import { InMemoryDocumentStore } from '../store/inmemory/in-memory-document-store.js'
 import { registerDocumentTools } from './document-tools.js'
 
@@ -36,8 +35,7 @@ async function connectedClient() {
     kind: 'spatial',
   })
 
-  const seedDoc = new LoroDoc()
-  writeSpatialCanvas(seedDoc, CANVAS)
+  const seedDoc = makeSpatialDoc(CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
     docRef: { kind: 'document', documentId: DOCUMENT_ID },
@@ -68,63 +66,41 @@ describe('wb_body_patch registration', () => {
     await harness.server.close().catch(() => {})
   })
 
-  it('accepts the full-arm payload the real schema accepts', async () => {
-    const res = await harness.client.callTool({
+  /** Patches the seeded node; only the arm-specific arguments vary per test. */
+  const patch = (args: Record<string, unknown>) =>
+    harness.client.callTool({
       name: 'wb_body_patch',
-      arguments: {
-        mode: 'full',
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        nodeId: 'n1',
-        body: 'replaced whole body',
-      },
+      arguments: { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, nodeId: 'n1', ...args },
     })
+  const patchedText = (res: { structuredContent?: unknown }) =>
+    (res.structuredContent as { node?: { text?: string } } | undefined)?.node?.text
+
+  it('accepts the full-arm payload the real schema accepts', async () => {
+    const res = await patch({ mode: 'full', body: 'replaced whole body' })
     expect(res.isError, JSON.stringify(res)).not.toBe(true)
-    const structured = res.structuredContent as { node?: { text?: string } } | undefined
-    expect(structured?.node?.text).toBe('replaced whole body')
+    expect(patchedText(res)).toBe('replaced whole body')
   })
 
   it('accepts the range-arm payload the real schema accepts', async () => {
-    const res = await harness.client.callTool({
-      name: 'wb_body_patch',
-      arguments: {
-        mode: 'range',
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        nodeId: 'n1',
-        range: { startLine: 1, endLine: 1, replacement: 'patched' },
-      },
+    const res = await patch({
+      mode: 'range',
+      range: { startLine: 1, endLine: 1, replacement: 'patched' },
     })
     expect(res.isError, JSON.stringify(res)).not.toBe(true)
-    const structured = res.structuredContent as { node?: { text?: string } } | undefined
-    expect(structured?.node?.text).toBe('line0\npatched\nline2')
+    expect(patchedText(res)).toBe('line0\npatched\nline2')
   })
 
   it('rejects a full-arm payload that also carries range (cross-arm exclusivity)', async () => {
-    const res = await harness.client.callTool({
-      name: 'wb_body_patch',
-      arguments: {
-        mode: 'full',
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        nodeId: 'n1',
-        body: 'x',
-        range: { startLine: 0, endLine: 0, replacement: 'y' },
-      },
+    const res = await patch({
+      mode: 'full',
+      body: 'x',
+      range: { startLine: 0, endLine: 0, replacement: 'y' },
     })
     expect(res.isError).toBe(true)
   })
 
   it('rejects a range-mode payload missing range', async () => {
-    const res = await harness.client.callTool({
-      name: 'wb_body_patch',
-      arguments: {
-        mode: 'range',
-        workspaceId: WORKSPACE_ID,
-        documentId: DOCUMENT_ID,
-        nodeId: 'n1',
-      },
-    })
+    const res = await patch({ mode: 'range' })
     expect(res.isError).toBe(true)
   })
 })
