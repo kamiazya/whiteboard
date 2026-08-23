@@ -90,6 +90,13 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 - **Sentence-length copy never sits in chrome.** Explanations live in
   popovers/tooltips/dialogs (see `ConnectionStatus`); chrome carries words
   only as short labels ("Saved", "Browser").
+- **Status reports; Settings manages.** A surface that reports a state carries
+  only what you cannot go looking for — a dropped sync is not something anyone
+  seeks out, so its recovery (re-pair, work in the browser instead) stays on
+  the chip that reports it. Changing which daemon this browser uses is the
+  opposite: it has an intent behind it, so it lives in Settings and the chip
+  only points there. The dividing question is whether the user would know to
+  look.
 - **Name the keeper, never the locality.** A workspace is kept by the
   **Browser** or by a **Daemon**; both are on the user's machine, so "Local"
   named neither and collided with "local daemon" in its own popover. See

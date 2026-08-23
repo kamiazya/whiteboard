@@ -2,33 +2,37 @@
 // connection story collapses from standing banners into ONE header chip.
 // The chip is the always-visible state signal; everything sentence-shaped
 // (explanation, data location, recovery actions) lives in its popover.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConnectionStatus } from './ConnectionStatus.js'
+
+// The synced popover links into Settings, so the chip needs the router it
+// has in production.
+function render(ui: ReactElement, options?: Parameters<typeof rtlRender>[1]) {
+  return rtlRender(<MemoryRouter>{ui}</MemoryRouter>, options)
+}
 
 afterEach(cleanup)
 
 describe('ConnectionStatus chip', () => {
-  it('offers a way out while sync is on, and says what it does not do', () => {
-    // Connected was the one state with no exit: every other state offers a
-    // next step, so a user who picked the wrong daemon had to clear storage.
-    const onDisconnect = vi.fn()
-    render(
-      <ConnectionStatus
-        state="synced"
-        daemonBaseUrl="http://127.0.0.1:3099"
-        onDisconnect={onDisconnect}
-      />,
-      { container: document.body },
-    )
+  // Management belongs in Settings, recovery belongs here. Disconnecting is
+  // something you go looking for with an intent; sync dropping is not, and
+  // sending someone to Settings mid-failure adds a step at the worst moment.
+  it('carries no management action while sync is on — that lives in Settings', () => {
+    render(<ConnectionStatus state="synced" daemonBaseUrl="http://127.0.0.1:3099" />, {
+      container: document.body,
+    })
     fireEvent.click(screen.getByTestId('connection-chip'))
 
     const popover = screen.getByTestId('connection-popover')
-    // Disconnecting stops using this daemon here; it neither unpairs nor
-    // deletes anything on the daemon, and the copy has to say so.
-    expect(popover.textContent).toMatch(/stays on the daemon|not deleted/i)
-    fireEvent.click(screen.getByTestId('connection-disconnect'))
-    expect(onDisconnect).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('connection-disconnect')).toBeNull()
+    // It still says where the data is, and points at where the action lives.
+    expect(popover.textContent).toMatch(/127\.0\.0\.1:3099/)
+    expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe(
+      '/settings/connections',
+    )
   })
 
   it('explains the reconnecting state instead of opening an empty popover', () => {
