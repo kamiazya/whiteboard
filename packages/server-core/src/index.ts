@@ -18,6 +18,8 @@ export type { QueryCategory } from './search/search-corpus.js'
 export type {
   AgentActivity,
   CanvasClientNotifier,
+  DocumentTeardown,
+  FinalizeDocumentTeardown,
   ServerDeps,
   ViewportRequest,
 } from './server-deps.js'

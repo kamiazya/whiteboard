@@ -26,13 +26,12 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
-  DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
-  findDescendantPath,
   isSelfOrDescendant,
   planSubtreeMove,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
+import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
@@ -44,6 +43,7 @@ import {
   isCorruptStoredDataError,
   isMissingFileError,
 } from './corrupt-stored-data.js'
+import { deleteDocumentRow } from './db/delete-document-row.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -501,6 +501,43 @@ async function unlinkIfExists(path: string): Promise<void> {
 // file-gc (its collectReferencedFileIds targets uploaded images, not these
 // canvas/version blobs); revisit if orphan blobs start showing up in the
 // storage report.
+/**
+ * Everything about a document that is neither its `documents` row nor its
+ * Libsql bytes: the FS blob, its pre-migration backup, one thumbnail per
+ * version, and the cached doc instance. server-core cannot name any of it,
+ * so it reaches this through `ServerDeps.documentTeardown` — which is what
+ * makes `wb_document_delete` clean up the way the HTTP DELETE does instead
+ * of leaving stale files and a stale cache entry behind.
+ *
+ * Two phases because a thumbnail is filed under a VERSION id, and the
+ * versions rows cascade away the instant the document row goes: the ids
+ * have to be captured while the document is still whole.
+ */
+export const documentTeardown: DocumentTeardown = {
+  async begin({ workspaceId, documentId, path }) {
+    const db = await dbReady()
+    const versionRows = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('documentId', '=', documentId)
+      .execute()
+
+    return async () => {
+      const blobPath = documentBlobPath(workspaceId, documentId)
+      await unlinkIfExists(blobPath)
+      await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
+      for (const { id: versionId } of versionRows) {
+        await unlinkIfExists(thumbnailPath(workspaceId, versionId))
+      }
+
+      // Force the next getDoc() to reload from disk (there is nothing left to
+      // reload from — a fresh create should not inherit a doc instance that
+      // still holds the deleted canvas's history).
+      evictDoc(workspaceId, path)
+    }
+  },
+}
+
 export async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
@@ -509,54 +546,22 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return false
 
-    // Refusing here rather than cascading is the DocumentIndex contract this
-    // table's other writer already holds: a cascade is reachable from one
-    // call naming one path, and deletion has nothing to undo it.
-    const siblings = await db
-      .selectFrom('documents')
-      .select(['id', 'path'])
-      .where('workspaceId', '=', workspaceId)
-      .execute()
-    const descendant = findDescendantPath(siblings, path)
-    if (descendant !== undefined) {
-      throw new DocumentHasDescendantsError(
-        path,
-        `Delete "${descendant}" and any others below it first.`,
-      )
-    }
+    // Same three steps, in the same order, as wb_document_delete
+    // (server-core's document-crud.ts) — deliberately, because the two used
+    // to be separate implementations and only one of them cleaned up. Each
+    // step is now one shared piece rather than a copy: `deleteDocumentRow`
+    // holds the descendant refusal, `documentTeardown` holds the files.
+    const finalizeTeardown = await documentTeardown.begin({ workspaceId, documentId, path })
 
-    // Collect version ids before the row delete — the versions rows are
-    // gone the instant the cascade fires, so their ids must be captured
-    // first to know which thumbnail files to unlink.
-    const versionRows = await db
-      .selectFrom('versions')
-      .select(['id'])
-      .where('documentId', '=', documentId)
-      .execute()
+    await deleteDocumentRow(db, workspaceId, path)
 
-    // branches/versions rows cascade via the ON DELETE CASCADE FKs
-    // declared in migration 0001 (PRAGMA foreign_keys=ON is set per
-    // connection in db/index.ts).
-    await db.deleteFrom('documents').where('id', '=', documentId).execute()
-
-    // Mirrors wb_document_delete (document-crud.ts): the identity row goes
-    // first, then the Libsql snapshot/delta/frontier rows, so a crash
-    // between the two leaves an orphaned-but-unreachable snapshot rather
-    // than a listed canvas with no content.
+    // The identity row goes first, then the Libsql snapshot/delta/frontier
+    // rows, so a crash between the two leaves an orphaned-but-unreachable
+    // snapshot rather than a listed canvas with no content.
     const documentStore = await documentStoreReady()
     await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
 
-    const blobPath = documentBlobPath(workspaceId, documentId)
-    await unlinkIfExists(blobPath)
-    await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
-    for (const { id: versionId } of versionRows) {
-      await unlinkIfExists(thumbnailPath(workspaceId, versionId))
-    }
-
-    // Force the next getDoc() to reload from disk (there is nothing left to
-    // reload from — a fresh create should not inherit a doc instance that
-    // still holds the deleted canvas's history).
-    evictDoc(workspaceId, path)
+    await finalizeTeardown()
 
     return true
   })

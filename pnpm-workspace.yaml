@@ -82,6 +82,16 @@ overrides:
   dompurify@<3.4.12: ^3.4.12
   immutable@<4.3.9: ^4.3.9
   "@opentelemetry/propagator-jaeger@<2.9.0": ^2.9.0
+  # Reached only through @huggingface/transformers, whose latest release
+  # (4.2.0) still asks for `sharp ^0.34.5` and pulls adm-zip via
+  # onnxruntime-node. The embedding runtime is an OPTIONAL peer so nothing
+  # ships these by default, but a user who opts into semantic search would
+  # install them — a real exposure, not a gate to silence. Neither package
+  # is on a path this project enters: the embedder runs feature-extraction
+  # over text, never sharp's image decoding or adm-zip's archive reading.
+  # Drop each entry once transformers depends on a patched range itself.
+  sharp@<0.35.0: ^0.35.0
+  adm-zip@<0.6.0: ^0.6.0
 
 # Advisories acknowledged as not applicable to this codebase. Each entry needs a
 # reason and should be re-checked when the affected dependency is next touched.

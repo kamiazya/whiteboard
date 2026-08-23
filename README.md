@@ -88,7 +88,7 @@ This installs the MCP server **and** the bundled `/drawing-visuals`, `/coauthori
 claude mcp add whiteboard -- npx -y @kamiazya/whiteboard-mcp@latest
 ```
 
-> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way, and there is no manual step that adds them: they are carried by the plugin, not by the npm package. Use the plugin install above if you want them.
 
 </details>
 
@@ -115,7 +115,7 @@ command = "npx"
 args = ["-y", "@kamiazya/whiteboard-mcp@latest"]
 ```
 
-> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way, and there is no manual step that adds them: they are carried by the plugin, not by the npm package. Use the plugin install above if you want them.
 
 </details>
 
@@ -141,7 +141,7 @@ Add to `~/.gemini/settings.json`:
 }
 ```
 
-> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way. [Link them manually →](docs/contributing/development.md#bundled-skills-install)
+> Starts the MCP server only — the `/drawing-visuals`, `/coauthoring-visuals`, and `/auditing-workspaces` skills are **not** installed this way, and there is no manual step that adds them: they are carried by the plugin, not by the npm package. Use the plugin install above if you want them.
 
 </details>
 
@@ -175,7 +175,7 @@ the full flow, including copy-first import of browser-local canvases.
 
 ## Bundled skills
 
-Three opinionated `SKILL.md` packs ship inside the npm package. The recommended **plugin install above wires them up automatically** — no manual linking. If you instead used `claude mcp add`, the Codex CLI snippet, or `npx`, link them yourself per [docs/contributing/development.md#bundled-skills-install](docs/contributing/development.md#bundled-skills-install).
+Three opinionated `SKILL.md` packs ship with the **plugin**, which wires them up automatically. They are not part of the `@kamiazya/whiteboard-mcp` npm package, so the MCP-only routes above (`claude mcp add`, the Codex CLI snippet, `npx`, the Gemini `mcpServers` entry) start the server without them.
 
 | Skill | When to use |
 |---|---|

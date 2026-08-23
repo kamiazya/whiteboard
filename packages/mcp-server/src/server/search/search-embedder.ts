@@ -1,6 +1,6 @@
-import { join } from 'node:path'
 import type { Embedder } from '@kamiazya/whiteboard-server-core'
 import { getDataDir } from '../config.js'
+import { searchModelCacheDir } from './model-cache-dir.js'
 import { createTransformersEmbedder } from './transformers-embedder.js'
 
 /**
@@ -37,25 +37,18 @@ let held: Embedder | undefined
  *
  * Weights are read from the daemon's own data directory and never fetched
  * here. A download does not belong on a request path at any size, let alone
- * this one; `pnpm --filter @kamiazya/whiteboard-mcp search:fetch-model`
- * populates the cache as a deliberate step, and until it has, search simply
- * stays lexical.
+ * this one; `whiteboard search fetch-model` populates the cache as a
+ * deliberate step, and until it has, search simply stays lexical.
  */
 export function resolveSearchEmbedder(): Embedder | undefined {
   const dtype = PRECISION[process.env[FLAG] as keyof typeof PRECISION]
   if (dtype === undefined) return undefined
-  held ??= createTransformersEmbedder({ cacheDir: searchModelCacheDir(), offline: true, dtype })
+  held ??= createTransformersEmbedder({
+    cacheDir: searchModelCacheDir(getDataDir()),
+    offline: true,
+    dtype,
+  })
   return held
-}
-
-/**
- * Beside the daemon's other data rather than inside node_modules, which is
- * where transformers.js would otherwise put it — under pnpm that is the
- * shared content-addressed store, a location `pnpm store prune` empties and
- * every project on the machine shares.
- */
-export function searchModelCacheDir(): string {
-  return join(getDataDir(), 'models')
 }
 
 export function resetSearchEmbedderForTests(): void {

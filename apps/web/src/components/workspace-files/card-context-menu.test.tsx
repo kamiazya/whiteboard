@@ -119,9 +119,13 @@ describe('document card context menu', () => {
   })
 
   it('the grid layout of search results carries the menu too', async () => {
-    renderPanel({ onOpenDocument: () => {} })
+    const source = renderPanel({ onOpenDocument: () => {} })
     await waitFor(() => expect(screen.getAllByTestId('card-title').length).toBeGreaterThan(0))
     fireEvent.change(screen.getByLabelText('Search documents'), { target: { value: 'road' } })
+    // Wait for the SOURCE's answer, not just for something to render. Until
+    // it lands the panel is showing a client-side match over the loaded list,
+    // and a test that asserts inside that window is racing the debounce.
+    await waitFor(() => expect(source.searchDocuments).toHaveBeenCalledWith('road', 20))
     await screen.findByTestId('search-results-list')
     fireEvent.click(screen.getByRole('button', { name: 'Grid results' }))
     const row = await screen.findByTestId('result-title')

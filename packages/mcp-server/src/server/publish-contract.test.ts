@@ -256,6 +256,15 @@ describe('publish contract', () => {
     expect(packageReadme).toContain('`dist/` contains the runnable MCP server')
     expect(packageReadme).toContain('skills are NOT part of this package')
     expect(packageReadme).not.toContain('`skills/` contains the shared skill bundles')
+
+    // The root README is the surface a new user actually reads, and it was the
+    // one left claiming the opposite after the npm-sourced recipe was retired:
+    // "packs ship inside the npm package", plus three MCP-only notes offering
+    // to "link them manually" through a section that no longer existed.
+    expect(rootReadme).not.toContain('ship inside the npm package')
+    expect(rootReadme).not.toContain('link them yourself')
+    expect(rootReadme).not.toContain('Link them manually')
+    expect(rootReadme).toContain('ship with the **plugin**')
   })
 
   it('keeps published wrappers on @latest so release-please does not need extra-files sync', () => {
