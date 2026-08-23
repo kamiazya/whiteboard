@@ -27,7 +27,6 @@ const DEFAULT_REPO_ROOT = resolve(__dirname, '../../..')
 /**
  * @typedef {{
  *   repoRoot?: string,
- *   cwd?: string,
  *   stdout?: { write: (chunk: string) => boolean },
  *   stderr?: { write: (chunk: string) => boolean },
  *   spawn?: (cmd: string, args: string[], opts: Record<string, unknown>) => { status: number | null, error?: Error },
@@ -41,7 +40,6 @@ const DEFAULT_REPO_ROOT = resolve(__dirname, '../../..')
 export function main(options = {}) {
   const {
     repoRoot = DEFAULT_REPO_ROOT,
-    cwd = repoRoot,
     stdout = process.stdout,
     stderr = process.stderr,
     spawn = spawnSync,
@@ -60,7 +58,7 @@ export function main(options = {}) {
   stderr.write(`[run-shared-layer-tests] derived ${names.length} project(s): ${names.join(', ')}\n`)
 
   const argv = buildVitestArgv(names)
-  const result = spawn('pnpm', argv, { cwd, stdio: 'inherit' })
+  const result = spawn('pnpm', argv, { cwd: repoRoot, stdio: 'inherit' })
   if (result.error) {
     stderr.write(`[run-shared-layer-tests] pnpm could not start: ${result.error.message}\n`)
     return 1

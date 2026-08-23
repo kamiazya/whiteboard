@@ -42,7 +42,6 @@ interface VitestProjectsModule {
 interface RunSharedLayerTestsModule {
   main: (options?: {
     repoRoot?: string
-    cwd?: string
     stdout?: { write: (chunk: string) => boolean }
     stderr?: { write: (chunk: string) => boolean }
     spawn?: (

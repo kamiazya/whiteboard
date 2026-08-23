@@ -47,6 +47,15 @@ function readCiWorkflow(): string {
   return readFileSync(join(ROOT, '.github/workflows/ci.yml'), 'utf-8')
 }
 
+// Full-line comments stripped so a flag that was commented out (e.g.
+// `# --project=facet-engine-node`) cannot be counted as coverage.
+function readCiWorkflowWithoutComments(): string {
+  return readCiWorkflow()
+    .split('\n')
+    .filter((line) => !/^\s*#/.test(line))
+    .join('\n')
+}
+
 function readTestBrowserScript(): string {
   const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')) as {
     scripts?: Record<string, string>
@@ -197,13 +206,7 @@ describe('ci.yml runs every node vitest project registered in root vitest.config
   })
 
   it('every PROJECTS_RUN_ELSEWHERE exemption is actually covered in ci.yml by its declared mechanism', () => {
-    const ciText = readCiWorkflow()
-    // Strip full-line comments so a flag that was commented out (e.g.
-    // `# --project=facet-engine-node`) cannot be counted as coverage.
-    const withoutComments = ciText
-      .split('\n')
-      .filter((line) => !/^\s*#/.test(line))
-      .join('\n')
+    const withoutComments = readCiWorkflowWithoutComments()
 
     const missing: string[] = []
     for (const [configPath, entry] of Object.entries(PROJECTS_RUN_ELSEWHERE)) {
@@ -240,11 +243,7 @@ describe('ci.yml runs every node vitest project registered in root vitest.config
   // project silently starts running twice. These two catch that from ci.yml's
   // actual, unconditional text instead of from the map's bookkeeping.
   it('no derived project is also named by a literal --project=<name> flag elsewhere in ci.yml (would run twice)', () => {
-    const ciText = readCiWorkflow()
-    const withoutComments = ciText
-      .split('\n')
-      .filter((line) => !/^\s*#/.test(line))
-      .join('\n')
+    const withoutComments = readCiWorkflowWithoutComments()
     // run-shared-layer-tests.mjs's own step has no --project= literal (its
     // names are computed at run time), so every match found here comes from
     // some OTHER job's dedicated step.
@@ -268,12 +267,10 @@ describe('ci.yml runs every node vitest project registered in root vitest.config
     expect(ciText, 'ci.yml must run the apps/web jsdom+node suite via its own job').toContain(
       'whiteboard-web test',
     )
-    const derivedConfigPaths = new Set(
-      projectConfigs
-        .filter((p) => deriveSharedLayerProjectNames(ROOT).includes(p.name ?? ''))
-        .map((p) => p.configPath),
-    )
-    const doubleRun = [...derivedConfigPaths].filter((path) => path.startsWith('apps/web/'))
+    const derivedNames = deriveSharedLayerProjectNames(ROOT)
+    const doubleRun = projectConfigs
+      .filter((p) => derivedNames.includes(p.name ?? '') && p.configPath.startsWith('apps/web/'))
+      .map((p) => p.configPath)
     expect(
       doubleRun,
       `apps/web project(s) reached the derived list but apps/web already has its own dedicated CI job: ${doubleRun.join(', ')}`,
