@@ -281,6 +281,84 @@ somewhere to start — pooling from the systems under test is how test
 collections are normally grown, with the known caveat that a future third
 system did not contribute to the pool and is disadvantaged by it.
 
+### 3f. The check the judged corpus structurally cannot perform (2026-08-23)
+
+Everything in 3a-3e measures search quality on this project's own content,
+and all of it rests on an assumption nothing verifies: **that the embedder
+is being driven correctly.** Prefixes, pooling, L2 normalisation,
+quantisation — any of these can be subtly wrong, and a corpus of one's own
+documents cannot detect it. There is nothing to compare against, so a
+systematically weakened model simply reports lower numbers and they are
+read as the state of the art.
+
+A public dataset supplies the missing comparison. It cannot judge OUR
+documents — it has its own — but it can say whether this repository drives
+the model the way its authors did. JQaRA is Japanese retrieval scored with
+nDCG@10 over 100 candidate passages per question, and the shipped model has
+a published figure on it.
+
+Measured, 60 questions sampled of 1667, same prefixes and pooling the
+daemon uses:
+
+| | nDCG@10 |
+|---|---|
+| this repository, q8 weights | **0.451**, 95% CI [0.382, 0.520] |
+| published, full precision, all 1667 | **0.4917** |
+
+**The published figure sits inside the interval.** Nothing here is evidence
+of a bug, and that sentence could not be written from the judged corpus at
+any size.
+
+Run it with `pnpm --filter @kamiazya/whiteboard-mcp search:pipeline-check`.
+The data is fetched at run time and never committed — JQaRA is CC-BY-SA
+(questions from JAQKET, passages from Japanese Wikipedia), and a
+measurement script has no business vendoring someone else's corpus.
+
+#### The baseline itself had to be checked
+
+The first run of this compared against **0.636**, taken from a web search
+result, and reported a correct pipeline as missing its target by a third.
+The real figure is 0.4917 and it is on JQaRA's own dataset card. A
+measurement is only as good as the number it is measured against, and a
+search summary is not a source — the same discipline this ADR applies to
+its own figures applies to anybody else's.
+
+#### And the check found something, on its second question
+
+`transformers-embedder.ts` picked q8 weights with the comment *"the full
+precision model is several times the size for a difference the judged
+corpus has not been shown to notice — if a measurement says otherwise,
+this is the knob."* A measurement now says otherwise.
+
+Paired over 40 JQaRA questions, same questions through both:
+
+| variant | nDCG@10 |
+|---|---|
+| q8 + prefixes + title (what ships) | 0.429 [0.341, 0.512] |
+| q8, no prefixes | 0.405 [0.320, 0.489] |
+| fp32 + prefixes + title | 0.479 [0.396, 0.559] |
+
+**fp32 − q8 = +0.051, 95% CI [+0.024, +0.081], p = 0.0003.** The interval
+does not cross zero. Quantisation is costing about 11% relative, and the
+weights are 118MB against 470MB — four times the download for that 0.051.
+Whether to pay it is a product decision, not a measurement one.
+
+Note which comparison found it. Against the published number alone, q8 sat
+comfortably inside the interval and looked fine; only pairing the two
+variants over the same questions was sensitive enough to separate them.
+An earlier 12-question run of the same ablation reported +0.075, which was
+noise around a real effect — the paired test at a useful size is what
+turned a suspicion into a figure.
+
+The prefixes are confirmed working by the same table (+0.024 when present),
+which matters because nothing else in this repository could have told us
+whether they were reaching the model.
+
+One honest limit: this is measured on JQaRA, not on this project's
+documents. The direction should carry; the magnitude on our own content is
+unmeasurable here, because our corpus resolves about 0.10 and this effect
+is half that.
+
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
