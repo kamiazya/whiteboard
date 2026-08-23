@@ -51,7 +51,7 @@ describe('FacetFormPanel', () => {
     expect(screen.getByText('Planning')).not.toBeNull()
     expect(screen.getByText('Visual style')).not.toBeNull()
     // The facet with no quick band is the one this panel exists for.
-    expect(screen.getByLabelText('Due date')).not.toBeNull()
+    expect(screen.getByLabelText('Due Date')).not.toBeNull()
   })
 
   it('shows the stored value and writes an edited payload back', () => {
@@ -63,7 +63,7 @@ describe('FacetFormPanel', () => {
         onWrite={onWrite}
       />,
     )
-    const input = screen.getByLabelText('Due date') as HTMLInputElement
+    const input = screen.getByLabelText('Due Date') as HTMLInputElement
     expect(input.value).toBe('2026-08-22')
 
     fireEvent.change(input, { target: { value: '2026-09-01' } })
@@ -108,10 +108,10 @@ describe('control kinds the derived form emits', () => {
     )
     // Switching arms must not carry the previous arm's field into the
     // payload — `name` belongs to icon, `char` to emoji.
-    fireEvent.change(screen.getByLabelText('Symbol kind'), {
+    fireEvent.change(screen.getByLabelText('Symbol Kind'), {
       target: { value: 'emoji' },
     })
-    fireEvent.change(screen.getByLabelText('Symbol char'), { target: { value: '⭐' } })
+    fireEvent.change(screen.getByLabelText('Symbol Char'), { target: { value: '⭐' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save Symbol' }))
     expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'emoji', char: '⭐' })
   })
@@ -119,11 +119,11 @@ describe('control kinds the derived form emits', () => {
   it('a toggle writes a boolean and a number control writes a number', () => {
     const onWrite = vi.fn()
     render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
-    fireEvent.change(screen.getByLabelText('Due date'), {
+    fireEvent.change(screen.getByLabelText('Due Date'), {
       target: { value: '2026-08-22' },
     })
-    fireEvent.click(screen.getByLabelText('Due urgent'))
-    fireEvent.change(screen.getByLabelText('Due weight'), { target: { value: '3' } })
+    fireEvent.click(screen.getByLabelText('Due Urgent'))
+    fireEvent.change(screen.getByLabelText('Due Weight'), { target: { value: '3' } })
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
     expect(onWrite).toHaveBeenCalledWith('planning.due/v0', {
       date: '2026-08-22',
@@ -174,7 +174,7 @@ describe('a draft never outlives what it was seeded from', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Clear Due' }))
     // The host applies the clear and re-renders with the facet gone.
     rerender(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
-    expect((screen.getByLabelText('Due date') as HTMLInputElement).value).toBe('')
+    expect((screen.getByLabelText('Due Date') as HTMLInputElement).value).toBe('')
     onWrite.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
     expect(onWrite).not.toHaveBeenCalled()
@@ -189,10 +189,10 @@ describe('a draft never outlives what it was seeded from', () => {
         onWrite={onWrite}
       />,
     )
-    fireEvent.change(screen.getByLabelText('Symbol kind'), {
+    fireEvent.change(screen.getByLabelText('Symbol Kind'), {
       target: { value: 'emoji' },
     })
-    fireEvent.change(screen.getByLabelText('Symbol char'), {
+    fireEvent.change(screen.getByLabelText('Symbol Char'), {
       target: { value: '⭐' },
     })
     fireEvent.click(screen.getByRole('button', { name: 'Save Symbol' }))
@@ -214,7 +214,7 @@ describe('the panel is bound to ONE node', () => {
       />,
     )
     // Edit node A's draft without saving, then retarget the panel at node B.
-    fireEvent.change(screen.getByLabelText('Due date'), {
+    fireEvent.change(screen.getByLabelText('Due Date'), {
       target: { value: '2026-06-06' },
     })
     rerender(
@@ -226,7 +226,7 @@ describe('the panel is bound to ONE node', () => {
     )
 
     // B's stored value is what shows — A's abandoned edit must not survive.
-    expect((screen.getByLabelText('Due date') as HTMLInputElement).value).toBe('2026-12-31')
+    expect((screen.getByLabelText('Due Date') as HTMLInputElement).value).toBe('2026-12-31')
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
     expect(onWrite).toHaveBeenCalledWith('planning.due/v0', { date: '2026-12-31' })
   })
@@ -253,9 +253,31 @@ describe('choices apply on pick; free entry still needs Save', () => {
   it('a text field is still staged until Save — there is no "done" mid-typing', () => {
     const writes: unknown[] = []
     render(<FacetFormPanel node={node()} registry={registry} onWrite={() => writes.push(1)} />)
-    fireEvent.change(screen.getByLabelText('Due date'), { target: { value: '2026-09-01' } })
+    fireEvent.change(screen.getByLabelText('Due Date'), { target: { value: '2026-09-01' } })
     expect(writes).toEqual([])
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
     expect(writes).toEqual([1])
   })
+})
+
+describe('a segmented option draws its declared glyph', () => {
+  it('shows the shape, not the word — the same vocabulary the quick band uses', () => {
+    render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+    // visual.shape declares a glyph per option. A picker that names shapes in
+    // words while the band beside it draws them is two vocabularies.
+    const ellipse = screen.getByLabelText('Ellipse')
+    const drawn = ellipse.closest('label')?.querySelector('svg')
+    expect(drawn).not.toBeNull()
+    // The word stays as the accessible name, so nothing is lost for a reader.
+    expect(ellipse.getAttribute('aria-label')).toBe('Ellipse')
+  })
+})
+
+it('does not print a field label that repeats the facet name', () => {
+  render(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} />)
+  // visual.shape declares label 'Shape' on its only field, under a heading
+  // already reading 'Shape'.
+  expect(screen.getAllByText('Shape')).toHaveLength(1)
+  // The control still answers to that name.
+  expect(screen.getByLabelText('Shape')).not.toBeNull()
 })

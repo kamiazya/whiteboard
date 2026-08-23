@@ -22,6 +22,7 @@ import {
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { glyphIcon } from './glyph.js'
 
 export interface FacetFormPanelProps {
   readonly node: SpatialNode
@@ -86,21 +87,44 @@ function FieldInput({
   }
   if (field.control.kind === 'segmented') {
     return (
-      <span id={id} role="radiogroup" aria-label={name} className="flex items-center gap-0.5">
+      <span
+        id={id}
+        role="radiogroup"
+        aria-label={name}
+        className="flex flex-wrap items-center justify-end gap-0.5"
+      >
         {/* Real radios rather than buttons wearing the role: the keyboard
             behaviour a segmented control needs comes free with the element. */}
-        {field.control.options.map((option) => (
-          <label key={option.label} className={cn(common, 'flex items-center gap-1 px-1.5')}>
-            <input
-              type="radio"
-              name={id}
-              aria-label={option.label}
-              checked={option.value === null ? value === undefined : value === option.value}
-              onChange={() => (option.value === null ? onClear() : onChange(option.value))}
-            />
-            {option.label}
-          </label>
-        ))}
+        {field.control.options.map((option) => {
+          const glyph = glyphIcon(option.glyph)
+          return (
+            // A declared glyph is DRAWN, the way the quick band draws it —
+            // a shape picker spelling "Parallelogram" is both wider and
+            // slower to read than the shape itself. The word stays as the
+            // accessible name, so nothing is lost for a screen reader, and
+            // an option with no glyph still shows its label.
+            <label
+              key={option.label}
+              title={glyph === undefined ? undefined : option.label}
+              className={cn(common, 'flex items-center gap-1 px-1.5')}
+            >
+              <input
+                type="radio"
+                name={id}
+                aria-label={option.label}
+                checked={option.value === null ? value === undefined : value === option.value}
+                onChange={() => (option.value === null ? onClear() : onChange(option.value))}
+              />
+              {glyph === undefined ? (
+                option.label
+              ) : (
+                <span aria-hidden="true" className="[&>svg]:size-4">
+                  {glyph}
+                </span>
+              )}
+            </label>
+          )
+        })}
       </span>
     )
   }
@@ -236,10 +260,10 @@ function FacetEditor({
           htmlFor={`facet-variant-${facetKey}`}
           className="flex items-center justify-between gap-2 text-xs"
         >
-          <span className="text-muted-foreground">{form.discriminant}</span>
+          <span className="text-muted-foreground">{form.discriminantLabel}</span>
           <select
             id={`facet-variant-${facetKey}`}
-            aria-label={`${title} ${form.discriminant}`}
+            aria-label={`${title} ${form.discriminantLabel}`}
             className="rounded border border-border bg-background px-2 py-1 text-xs"
             value={activeVariant?.label ?? ''}
             onChange={(event) => set(form.discriminant, event.target.value)}
@@ -256,10 +280,16 @@ function FacetEditor({
         <label
           key={field.name}
           htmlFor={`facet-field-${facetKey}-${field.name}`}
-          className="flex items-center justify-between gap-2 text-xs"
+          // Wraps for the same reason the menu's option rows do: a segmented
+          // control with six options does not fit a phone beside its label,
+          // and the options past the edge are the ones nobody can tap.
+          className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs"
         >
+          {/* A single-field facet usually labels its field the way the facet
+              itself is named ("Shape" under "Shape"). Printing it twice adds
+              a line and says nothing; the accessible name still carries it. */}
           <span className={cn('text-muted-foreground', field.required && 'font-medium')}>
-            {field.label}
+            {field.label === title ? '' : field.label}
           </span>
           <FieldInput
             facetKey={facetKey}

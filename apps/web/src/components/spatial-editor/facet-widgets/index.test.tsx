@@ -88,6 +88,7 @@ describe('a declared band is legible', () => {
     facets: [
       defineFacet({
         name: 'place',
+        displayName: 'Placement',
         version: 'v0',
         targets: ['node' as const],
         schema: z.object({ align: z.enum(['start', 'center']) }),

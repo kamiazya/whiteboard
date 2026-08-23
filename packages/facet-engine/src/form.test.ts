@@ -9,6 +9,14 @@ import { defineFacet } from './registry.js'
 import { visualShapeFacetSchema, visualSymbolFacetSchema } from './visual.js'
 
 describe('deriveFacetForm', () => {
+  it('humanizes a derived label — the fallback should not read like a variable', () => {
+    const form = deriveFacetForm(z.object({ dueDate: z.string(), snake_case: z.string() }))
+    if (form.kind !== 'fields') throw new Error('unreachable')
+    expect(form.fields.map((f) => f.label)).toEqual(['Due date', 'Snake case'])
+    // The NAME is untouched: it is the storage key, not a caption.
+    expect(form.fields.map((f) => f.name)).toEqual(['dueDate', 'snake_case'])
+  })
+
   it('maps an object of primitives to one field each, in declaration order', () => {
     const form = deriveFacetForm(
       z.object({
@@ -20,16 +28,15 @@ describe('deriveFacetForm', () => {
     expect(form).toEqual({
       kind: 'fields',
       fields: [
-        { name: 'title', label: 'title', control: { kind: 'text' }, required: true, quick: false },
+        { name: 'title', label: 'Title', control: { kind: 'text' }, required: true, quick: false },
         {
           name: 'count',
-          displayName: 'Count',
-          label: 'count',
+          label: 'Count',
           control: { kind: 'number' },
           required: true,
           quick: false,
         },
-        { name: 'done', label: 'done', control: { kind: 'toggle' }, required: true, quick: false },
+        { name: 'done', label: 'Done', control: { kind: 'toggle' }, required: true, quick: false },
       ],
     })
   })
@@ -51,8 +58,7 @@ describe('deriveFacetForm', () => {
     if (form.kind !== 'fields') throw new Error('unreachable')
     expect(form.fields[0]).toEqual({
       name: 'note',
-      displayName: 'Note',
-      label: 'note',
+      label: 'Note',
       control: { kind: 'text' },
       required: false,
       quick: false,
@@ -168,7 +174,6 @@ describe('an editor spec refines the derived form', () => {
     const [first, second] = form.fields
     expect(first).toEqual({
       name: 'kind',
-      displayName: 'Kind',
       label: 'Shape',
       quick: true,
       control: {

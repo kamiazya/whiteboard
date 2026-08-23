@@ -46,4 +46,11 @@ it('the facets panel stays inside a phone-width editor', () => {
   )
   // A collapsed panel would also "fit".
   expect(box.width).toBeGreaterThan(100)
+  // And nothing INSIDE may stick out either — a capped box still clips a
+  // segmented row that refuses to wrap.
+  const escapees = [...panel.querySelectorAll('input,select,button')]
+    .map((el) => ({ name: el.getAttribute('aria-label') ?? '?', b: el.getBoundingClientRect() }))
+    .filter(({ b }) => b.right > box.right + 0.5 || b.left < box.left - 0.5)
+    .map(({ name, b }) => `${name} @${Math.round(b.left)}..${Math.round(b.right)}`)
+  expect(escapees).toEqual([])
 })

@@ -52,11 +52,13 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // ABSENCE rather than a stored value.
   const hexagon = panel.querySelector('input[aria-label="Hexagon"]') as HTMLInputElement
   expect(hexagon).not.toBeNull()
+  // A CHOICE applies on pick, the way the same facet's quick band does —
+  // there is no Save to press, and a facet made only of choices has none.
   fireEvent.click(hexagon)
-  const save = [...panel.querySelectorAll('button')].find((b) =>
-    b.textContent?.startsWith('Save Visual style shape'),
-  ) as HTMLElement
-  fireEvent.click(save)
+  // Scoped by accessible name: Symbol keeps a Save because it carries a
+  // free-entry field, so a panel-wide check would pass for the wrong reason.
+  expect(panel.querySelector('button[aria-label="Save Shape"]')).toBeNull()
+  expect(panel.querySelector('button[aria-label="Save Symbol"]')).not.toBeNull()
 
   expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',
