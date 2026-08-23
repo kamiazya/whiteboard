@@ -1,3 +1,4 @@
+import { parseOkf } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
@@ -15,7 +16,7 @@ import type {
 } from './document-crud.schemas.js'
 import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { saveDocumentSnapshot } from './document-io.js'
-import { createDocumentSetTool } from './document-set.js'
+import { createDocumentSetTool, OkfParseError } from './document-set.js'
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
@@ -47,12 +48,26 @@ export async function wbDocumentCreate(
   // routes — would otherwise skip that and have the content silently
   // dropped. A schema only guarantees what something actually runs.
   const input = wbDocumentCreateInputSchema.parse(rawInput)
+
   // Workspaces never materialize implicitly: a typo'd or hallucinated
   // workspaceId must fail loudly rather than silently writing data into a
   // workspace nobody asked for. `createWorkspace: true` is the explicit
   // opt-in that bootstraps a genuinely new workspace.
   if (input.createWorkspace === true) {
     await deps.documentIndex.createWorkspace({ workspaceId: input.workspaceId })
+  }
+
+  // Parsed before anything is written, and AFTER the workspace bootstrap so
+  // a missing workspace still reports itself first. The body is applied by
+  // delegating to `wb_document_set` once the document exists, so a
+  // malformed one used to fail there — leaving an empty document squatting
+  // the requested path while the caller held an error saying the create had
+  // not happened, and the retry then collided with the ghost.
+  if (input.kind === 'markdown' && input.markdown !== undefined) {
+    const preflight = parseOkf(input.markdown)
+    if (!preflight.ok) {
+      throw new OkfParseError(preflight.error.stage, preflight.error.message)
+    }
   }
 
   const entry = await rethrowWorkspaceNotFound(input.workspaceId, () =>

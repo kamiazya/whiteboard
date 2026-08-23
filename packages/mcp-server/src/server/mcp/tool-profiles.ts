@@ -46,6 +46,15 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   wb_document_get: { profile: READ_ONLY, title: 'Read a document in its own format' },
   wb_document_search: { profile: READ_ONLY, title: 'Find documents by content' },
   wb_document_create: { profile: MUTATING, title: 'Create a document' },
+  wb_workspace_edit: {
+    // Destructive because a batch may carry document.delete, and NOT
+    // idempotent because a create refuses a path already taken. Unlike
+    // wb_canvas_edit it is also not all-or-nothing: documents are separate
+    // CRDTs, so a rejected batch leaves the ops before the failure standing
+    // and a blind retry would create the earlier ones twice.
+    profile: DESTRUCTIVE,
+    title: 'Edit a workspace',
+  },
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
   wb_document_resolve: { profile: READ_ONLY, title: 'Resolve a document id to its placement' },
   wb_document_delete: { profile: DESTRUCTIVE_IDEMPOTENT, title: 'Delete a document' },

@@ -1,5 +1,6 @@
 import {
   createServer,
+  createWorkspaceEditTool,
   type ServerDeps,
   setLogSink as setServerCoreLogSink,
   WB_DOCUMENT_CREATE_DESCRIPTION,
@@ -18,6 +19,8 @@ import {
   wbDocumentResolve,
   wbDocumentResolveInputSchema,
   wbDocumentResolveOutputSchema,
+  workspaceEditInputSchema,
+  workspaceEditOutputSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { getLogger } from '../log.js'
@@ -295,6 +298,25 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
       const parsed = tools.documentSet.inputSchema.parse(args)
       const result = await withDocumentWriteLock(parsed.documentId, () =>
         tools.documentSet.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  // One call for several documents. Separate from wb_document_create rather
+  // than replacing it: a single create is the common case and should not
+  // have to be wrapped in an ops array to happen.
+  registerToolWithAnnotations(
+    server,
+    'wb_workspace_edit',
+    {
+      description: createWorkspaceEditTool(deps).description,
+      inputSchema: workspaceEditInputSchema,
+      outputSchema: workspaceEditOutputSchema,
+    },
+    async (args) => {
+      const result = await createWorkspaceEditTool(deps).execute(
+        workspaceEditInputSchema.parse(args),
       )
       return structuredJsonResult(result)
     },
