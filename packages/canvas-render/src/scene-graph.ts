@@ -114,7 +114,13 @@ export interface TextRunNode {
  * absent `shape` field IS the rect, so a second spelling of it cannot
  * exist. Geometry derives from the bbox via `layout/nodes/node-outline.ts`.
  */
-export type NodeOutlineKind = 'ellipse' | 'diamond' | 'hexagon' | 'parallelogram' | 'cylinder'
+/**
+ * A silhouette's NAMESPACED id (`visual.diamond`), resolved against the shape
+ * table both layout and the SVG backend are handed. A name rather than the
+ * geometry, because outlines derive from bbox + id — so `translateScene` needs
+ * no knowledge of them and `scaleScene` scales them implicitly.
+ */
+export type ShapeId = string
 
 export interface ShapeSceneNode {
   readonly kind: 'shape'
@@ -147,7 +153,7 @@ export interface ShapeSceneNode {
    * before this field existed. A kind, never stored coordinates, so
    * translate/scale need no knowledge of it.
    */
-  readonly shape?: NodeOutlineKind
+  readonly shape?: ShapeId
   readonly appearance?: Appearance
 }
 

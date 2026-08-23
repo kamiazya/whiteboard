@@ -26,20 +26,20 @@ const canvas: SpatialCanvas = {
   ],
 }
 
-const layout = (nodeOutlines?: Readonly<Record<string, 'ellipse'>>) =>
+const layout = (nodeOutlines?: Readonly<Record<string, 'visual.ellipse'>>) =>
   layoutSpatialCanvas(canvas, { measure: createFakeMeasure(), appearance, nodeOutlines })
 
 describe('nodeOutlines layout seam (plain data, worker-safe)', () => {
   it('threads the outline kind onto the chrome shape', () => {
-    const scene = layout({ a: 'ellipse' })
+    const scene = layout({ a: 'visual.ellipse' })
     const chrome = scene.nodes.find((n) => n.kind === 'shape' && n.id === 'a')
-    expect(chrome).toMatchObject({ shape: 'ellipse' })
+    expect(chrome).toMatchObject({ shape: 'visual.ellipse' })
     const plain = layout().nodes.find((n) => n.kind === 'shape' && n.id === 'a')
     expect(plain).not.toHaveProperty('shape')
   })
 
   it('pulls the edge terminal onto the outline rim instead of the bbox border', () => {
-    const withOutline = layout({ a: 'ellipse' })
+    const withOutline = layout({ a: 'visual.ellipse' })
     const without = layout()
     const edgeOf = (scene: typeof withOutline) =>
       scene.nodes.find((n) => n.kind === 'edge' && n.id === 'e')
@@ -51,7 +51,7 @@ describe('nodeOutlines layout seam (plain data, worker-safe)', () => {
     // The bbox-border terminal moved…
     expect(last).not.toEqual(baselineLast)
     // …onto the ellipse boundary (containment is boundary-inclusive).
-    expect(outlineContains('ellipse', { x: 0, y: 0, w: 100, h: 60 }, last)).toBe(true)
+    expect(outlineContains('visual.ellipse', { x: 0, y: 0, w: 100, h: 60 }, last)).toBe(true)
     // The source node has no outline kind, so its end stays put.
     expect(adjusted.path[0]).toEqual(baseline.path[0])
   })

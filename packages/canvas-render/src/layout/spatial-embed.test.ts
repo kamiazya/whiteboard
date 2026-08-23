@@ -445,7 +445,7 @@ describe('shape facets inside an embedded canvas', () => {
       }),
     )
     const childShape = embedOf(scene)?.children.find((n): n is ShapeSceneNode => n.kind === 'shape')
-    expect(childShape?.shape).toBe('hexagon')
+    expect(childShape?.shape).toBe('visual.hexagon')
   })
 
   it("a child node NEVER inherits a same-id ROOT node's shape", () => {
