@@ -237,7 +237,8 @@ for (const [label, metric] of METRICS) {
   out(
     `${label.padEnd(10)} ${mean(before).toFixed(3)} -> ${mean(after).toFixed(3)}  ` +
       `delta ${sign(test.observed)} [${sign(ci.low)}, ${sign(ci.high)}] ` +
-      `p=${test.p.toFixed(4)} (floor ${floor.toExponential(1)})`,
+      `p ${test.atSamplingFloor ? '<' : '='} ${test.p.toFixed(4)} ` +
+      `(exact floor ${floor.toExponential(1)})`,
   )
   // Sample sizes for differences chosen in advance as worth acting on, NOT
   // for the difference just observed — that would be post-hoc power, which

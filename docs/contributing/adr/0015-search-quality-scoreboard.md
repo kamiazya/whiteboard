@@ -239,14 +239,25 @@ script prints a corpus digest and a query digest on every run — separate,
 because when a figure moves the first question is whether the documents
 changed or the answer key did, and one combined hash cannot answer it.
 
-The figures here were measured at corpus `026ba02fea41`, queries
-`03069009f9ea`, model `Xenova/multilingual-e5-small`.
+The figures in 3d are from the run recorded in PR #1016, against model
+`Xenova/multilingual-e5-small`. To reproduce them exactly, check out that
+merge commit — the digests printed by a run identify the tree it read.
 
 Note the loop this creates: **this ADR is itself a document in the corpus.**
-Writing the paragraph above changed the corpus and moved the truncation
-figure from 21% to 20%. That is not a bug to fix — it is why the digest
-exists, and why a later reader finding a small discrepancy should check the
-digest before assuming someone mis-transcribed a number.
+Editing it changes the corpus and moves the figures a little; writing the
+paragraph above moved the truncation figure from 21% to 20% and stage-0
+nDCG from 0.324 to 0.328. That is not a bug to fix, and chasing the last
+digit here would never terminate. It is why the digest exists: a later
+reader finding a small discrepancy should check the digest rather than
+assume someone mis-transcribed a number. Update the figures when a FINDING
+changes, not when the third decimal drifts.
+
+One more thing the instrument now reports about itself: a p-value printed
+as `p < 0.0001` has hit the SAMPLER's resolution (`1 / (1 + trials)`), not
+the evidence's limit. The true value is somewhere below and this test
+cannot say where. Printed as a bound rather than an equality because
+`p = 0.0001` beside an exact floor of `2.3e-10` reads like a result with
+room to spare, when it is the sampler running out of digits.
 
 #### What the corpus still cannot do
 

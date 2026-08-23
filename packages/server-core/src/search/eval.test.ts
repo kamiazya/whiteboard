@@ -94,6 +94,55 @@ describe('pairedPermutationTest', () => {
   it('never reports p = 0, because a sampled test cannot prove impossibility', () => {
     expect(pairedPermutationTest(Array(40).fill(1), { trials: 100 }).p).toBeGreaterThan(0)
   })
+
+  it('flags a p that is only the SAMPLER running out of resolution', () => {
+    // 40 queries all improving: the exact p is around 2^-39, far below
+    // anything 100 trials can express, so the reported 1/101 is a property
+    // of the trial count rather than of the evidence.
+    const pinned = pairedPermutationTest(Array(40).fill(1), { trials: 100 })
+    expect(pinned.atSamplingFloor).toBe(true)
+    expect(pinned.p).toBeCloseTo(1 / 101, 12)
+    // A genuinely middling p is not flagged.
+    const ordinary = pairedPermutationTest([1, -1, 0.5, -0.4, 0.2], { trials: 5000 })
+    expect(ordinary.atSamplingFloor).toBe(false)
+  })
+})
+
+describe('pairedPermutationTest against exact enumeration', () => {
+  /**
+   * The independent reference: every one of the 2^n sign assignments,
+   * counted rather than sampled. Written here in the test and deliberately
+   * NOT shared with the implementation, so agreement between them is
+   * evidence rather than a tautology.
+   */
+  function exactP(deltas: readonly number[]): number {
+    const n = deltas.length
+    const target = Math.abs(deltas.reduce((a, b) => a + b, 0) / n)
+    let atLeastAsExtreme = 0
+    for (let mask = 0; mask < 2 ** n; mask++) {
+      let sum = 0
+      for (let i = 0; i < n; i++)
+        sum += (mask >> i) & 1 ? -(deltas[i] as number) : (deltas[i] as number)
+      if (Math.abs(sum / n) >= target - 1e-12) atLeastAsExtreme++
+    }
+    return atLeastAsExtreme / 2 ** n
+  }
+
+  it.each([
+    [[0.4, -0.1, 0.2, 0.9, -0.3, 0.5, 0.1, 0.2]],
+    [[1, 1, 1, 1, 1, 1]],
+    [[0.1, 0, -0.2, 0.35, 0, 0.05, -0.4, 0.9, 0.15]],
+    [[-0.5, -0.2, -0.7, 0.1]],
+  ])('agrees with exhaustive enumeration on %j', (deltas) => {
+    const sampled = pairedPermutationTest(deltas, { trials: 200_000, seed: 42 })
+    expect(sampled.p).toBeCloseTo(exactP(deltas), 2)
+  })
+
+  it('agrees on the direction and magnitude of the observed statistic', () => {
+    const deltas = [0.4, -0.1, 0.2, 0.9]
+    const expected = deltas.reduce((a, b) => a + b, 0) / deltas.length
+    expect(pairedPermutationTest(deltas, { trials: 100 }).observed).toBeCloseTo(expected, 12)
+  })
 })
 
 describe('permutationFloor', () => {

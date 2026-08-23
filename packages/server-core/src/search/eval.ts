@@ -91,6 +91,18 @@ export interface PermutationResult {
   /** Two-sided p-value. Never 0 — see below. */
   readonly p: number
   readonly trials: number
+  /**
+   * True when `p` landed on `1 / (1 + trials)` — the smallest value SAMPLING
+   * can produce, which is a property of the trial count and not of the
+   * evidence. The real p-value is somewhere below it and this test cannot
+   * say where.
+   *
+   * Reported because the alternative is a number that reads like a
+   * measurement: `p = 0.0001` next to an exact floor of `2.3e-10` looks like
+   * a result with room to spare, when it is really the sampler running out
+   * of resolution. Print it as `p < 0.0001`.
+   */
+  readonly atSamplingFloor: boolean
 }
 
 /**
@@ -149,7 +161,8 @@ export function pairedPermutationTest(
     for (const delta of deltas) sum += next() < 0.5 ? -delta : delta
     if (Math.abs(sum / (deltas.length || 1)) >= target - 1e-12) atLeastAsExtreme++
   }
-  return { observed, p: (1 + atLeastAsExtreme) / (1 + trials), trials }
+  const p = (1 + atLeastAsExtreme) / (1 + trials)
+  return { observed, p, trials, atSamplingFloor: atLeastAsExtreme === 0 }
 }
 
 export interface ConfidenceInterval {
