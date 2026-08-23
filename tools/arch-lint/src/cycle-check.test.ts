@@ -141,6 +141,46 @@ describe('buildValueImportGraph: path resolution', () => {
   })
 })
 
+describe('buildValueImportGraph: alias specifiers', () => {
+  // `apps/web` writes a fifth of its intra-package imports as `@/...`, so a
+  // resolver that follows only `./` and `../` sees a graph with a fifth of
+  // its edges missing and reports "no cycles" from a graph it cannot see.
+  // Measured on the real tree: 439 edges relative-only, 554 with the alias
+  // resolved.
+  const ALIASES = { '@/': 'apps/web/src/' } as const
+
+  it('follows an alias edge, and closes a cycle that only exists through one', () => {
+    const files = [
+      file('apps/web/src/a.ts', "import { b } from '@/b'"),
+      file('apps/web/src/b.ts', "import { a } from './a.js'"),
+    ]
+    expect(buildValueImportGraph(files).get('apps/web/src/a.ts')).toEqual([])
+    expect(findImportCycles(buildValueImportGraph(files))).toEqual([])
+
+    const aliased = buildValueImportGraph(files, ALIASES)
+    expect(aliased.get('apps/web/src/a.ts')).toEqual(['apps/web/src/b.ts'])
+    expect(findImportCycles(aliased)).toEqual([['apps/web/src/a.ts', 'apps/web/src/b.ts']])
+  })
+
+  it('drops a type-only alias edge, exactly as it drops a type-only relative one', () => {
+    const files = [
+      file('apps/web/src/a.ts', "import type { B } from '@/b'"),
+      file('apps/web/src/b.ts', 'export interface B { x: number }'),
+    ]
+    expect(buildValueImportGraph(files, ALIASES).get('apps/web/src/a.ts')).toEqual([])
+  })
+
+  it('does not throw on an alias that points at nothing', () => {
+    const files = [file('apps/web/src/a.ts', "import { x } from '@/ghost'")]
+    expect(buildValueImportGraph(files, ALIASES).get('apps/web/src/a.ts')).toEqual([])
+  })
+
+  it('leaves a bare specifier alone when no alias prefix matches it', () => {
+    const files = [file('apps/web/src/a.ts', "import { z } from 'zod'\nimport { r } from 'react'")]
+    expect(buildValueImportGraph(files, ALIASES).get('apps/web/src/a.ts')).toEqual([])
+  })
+})
+
 describe('buildValueImportGraph + findImportCycles: end-to-end', () => {
   it('does not flag a cycle that is type-only in one direction', () => {
     const files = [
