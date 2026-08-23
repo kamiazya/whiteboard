@@ -1,34 +1,67 @@
 /**
- * The stage-2 measurement: what a real embedding model adds to the judged
- * search corpus, scored the same way the pinned scoreboard scores stage 0.
+ * What an embedding model adds to search, measured on this project's own
+ * documentation.
  *
- * Deliberately a SCRIPT and not a test. It downloads ~100MB of model weights
- * on first run and takes seconds per query — a hermetic `pnpm test` must not
- * do either. The scoreboard test stays the guard; this is the instrument
- * that decides whether there is anything worth guarding.
+ * Deliberately a SCRIPT and not a test. It needs ~113MB of model weights
+ * and reads the live `docs/` tree, and `pnpm test` must be hermetic. The
+ * pinned scoreboard in `search-quality.test.ts` stays the regression guard
+ * over a small frozen corpus; this is the instrument that says whether one
+ * ranking is BETTER than another, which that corpus is far too small to
+ * answer.
  *
+ *   pnpm --filter @kamiazya/whiteboard-mcp search:fetch-model   # once
  *   node --import tsx/esm scripts/measure/search-quality-embedding.mjs
  *
- * Prints both columns side by side, so the debt rows are read as a
- * difference rather than as an absolute nobody can calibrate.
+ * Every difference is reported with a confidence interval and a
+ * significance test, never as a bare point estimate: a single mean cannot
+ * distinguish a real improvement from which questions happened to be
+ * asked, and reporting one alone is how a small corpus over-claims.
  */
+import { fileURLToPath } from 'node:url'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import {
-  createCanvasEditTool,
+  bootstrapCi,
   createDocumentSearchTool,
   createDocumentSetTool,
+  ndcgAt,
+  pairedPermutationTest,
+  permutationFloor,
+  randomBaseline,
+  recallAt,
+  reciprocalRank,
+  requiredQueryCount,
+  standardDeviation,
   wbDocumentCreate,
 } from '@kamiazya/whiteboard-server-core'
-import { CORPUS_DOCUMENTS, JUDGED_QUERIES } from '../../../server-core/src/search/search-corpus.ts'
-// Reached by path, not through the package's exports: the corpus and the
-// in-memory store are test fixtures, and widening server-core's published
-// surface for one local script would be the wrong trade.
 import { createInMemoryDocumentStore } from '../../../server-core/src/test-utils/in-memory-document-store.ts'
+import {
+  corpusDigest,
+  DOCS_JUDGED_QUERIES,
+  loadDocsCorpus,
+  queryDigest,
+} from '../../src/server/search/docs-corpus.ts'
 import { searchModelCacheDir } from '../../src/server/search/search-embedder.ts'
-import { createTransformersEmbedder } from '../../src/server/search/transformers-embedder.ts'
+import {
+  createTransformersEmbedder,
+  DEFAULT_MODEL as EMBEDDING_MODEL,
+} from '../../src/server/search/transformers-embedder.ts'
 
 const WS = 'quality'
-const K = 5
+/**
+ * The reporting cutoff, 10 to match what retrieval benchmarks publish —
+ * BEIR and the Japanese ones (JMTEB, JQaRA) all report nDCG@10.
+ */
+const K = 10
+/**
+ * Differences worth acting on, declared HERE rather than read off the
+ * result. 0.10 is a change a reader would notice; 0.05 is about the
+ * smallest anyone would tune for; 0.02 is the neighbourhood where a
+ * ranking change is indistinguishable from noise.
+ */
+const TARGET_EFFECTS = [0.1, 0.05, 0.02]
+
+const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
+const CORPUS = loadDocsCorpus(repoRoot)
 
 async function seed() {
   const deps = {
@@ -37,71 +70,43 @@ async function seed() {
     documentIndex: new InMemoryDocumentIndex(),
   }
   const set = createDocumentSetTool(deps)
-  const edit = createCanvasEditTool(deps)
-  for (const doc of CORPUS_DOCUMENTS) {
+  for (const doc of CORPUS) {
     const created = await wbDocumentCreate(deps, {
       workspaceId: WS,
       path: doc.path,
-      kind: doc.kind,
+      kind: 'markdown',
       name: doc.name,
       createWorkspace: true,
     })
-    if (doc.kind === 'markdown') {
-      const frontmatter =
-        doc.tags === undefined
-          ? 'type: note'
-          : `type: note\ntags:\n${doc.tags.map((t) => `  - ${t}`).join('\n')}`
-      await set.execute({
-        workspaceId: WS,
-        documentId: created.documentId,
-        markdown: `---\n${frontmatter}\n---\n${doc.body ?? ''}`,
-      })
-      continue
-    }
-    await edit.execute({
+    await set.execute({
       workspaceId: WS,
       documentId: created.documentId,
-      ops: [
-        ...(doc.nodes ?? []).map((n) => ({
-          op: 'node.add',
-          node: { id: n.id, type: 'text', text: n.text },
-        })),
-        ...(doc.groups ?? []).map((g) => ({
-          op: 'node.add',
-          node: { id: g.id, type: 'group', label: g.label },
-        })),
-        ...(doc.edges ?? []).map((e) => ({
-          op: 'edge.add',
-          edge: { id: e.id, fromNode: e.from, toNode: e.to, label: e.label },
-        })),
-      ],
+      markdown: `---\ntype: note\n---\n${doc.body}`,
     })
   }
   return deps
 }
 
+/** Per-query metric values, which is what significance testing needs. */
 async function score(search) {
-  const perCategory = new Map()
-  const misses = []
-  for (const judged of JUDGED_QUERIES) {
+  const perQuery = []
+  for (const judged of DOCS_JUDGED_QUERIES) {
     const out = await search.execute({ workspaceId: WS, query: judged.query, limit: K })
     const ranked = out.results.map((r) => r.path)
-    const bucket = perCategory.get(judged.category) ?? { hits: 0, top: 0, total: 0, rrSum: 0 }
-    bucket.total++
-    const firstHit = ranked.findIndex((path) => judged.relevant.includes(path))
-    if (firstHit === -1) misses.push(`${judged.category}: ${judged.query}`)
-    else {
-      bucket.hits++
-      if (firstHit === 0) bucket.top++
-      bucket.rrSum += 1 / (firstHit + 1)
-    }
-    perCategory.set(judged.category, bucket)
+    perQuery.push({
+      query: judged.query,
+      category: judged.category,
+      ndcg: ndcgAt(ranked, judged.relevant, K),
+      recall: recallAt(ranked, judged.relevant, K),
+      rr: reciprocalRank(ranked, judged.relevant, K),
+      rank: ranked.findIndex((path) => judged.relevant[path] !== undefined) + 1,
+      ranked,
+    })
   }
-  return { perCategory, misses }
+  return perQuery
 }
 
 const deps = await seed()
-
 const lexical = await score(createDocumentSearchTool(deps))
 
 const embedder = createTransformersEmbedder({ cacheDir: searchModelCacheDir() })
@@ -126,30 +131,164 @@ const startedAt = process.hrtime.bigint()
 const fused = await score(createDocumentSearchTool({ ...deps, embedder }))
 const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
 
-const CATEGORIES = ['lexical', 'bigram', 'paraphrase', 'cross-lingual']
-const cell = (result, category) => {
-  const b = result.perCategory.get(category)
-  if (b === undefined) return '        —       '
-  return `${b.top}/${b.total}  ${b.hits}/${b.total}  ${(b.rrSum / b.total).toFixed(2)}`
-}
-
 // The output IS this script's product.
 const out = console.log
+const mean = (xs) => (xs.length === 0 ? 0 : xs.reduce((a, b) => a + b, 0) / xs.length)
+const pick = (rows, metric, category) =>
+  rows.filter((r) => category === undefined || r.category === category).map((r) => r[metric])
+
+const CATEGORIES = ['lexical', 'paraphrase', 'cross-lingual']
+const METRICS = [
+  [`nDCG@${K}`, 'ndcg'],
+  [`recall@${K}`, 'recall'],
+  ['MRR', 'rr'],
+]
+
 out('')
-// hit@1 leads, because with a 6-document corpus hit@5 is nearly free —
-// a random ranking would score it 5/6. The rank-1 column and MRR are the
-// ones that discriminate.
-out(`category         stage 0 (BM25)      stage 2 (BM25 + vectors)`)
-out(`                 @1    @${K}   mrr      @1    @${K}   mrr`)
-out('─'.repeat(64))
-for (const category of CATEGORIES) {
-  out(`${category.padEnd(15)}  ${cell(lexical, category)}     ${cell(fused, category)}`)
+out(
+  `corpus: ${CORPUS.length} documents from docs/, ` +
+    `${DOCS_JUDGED_QUERIES.length} judged queries, cut at ${K}`,
+)
+// Which experiment this was. The corpus is read from the live tree, so two
+// runs a month apart are two different experiments and nothing else in this
+// output would say so.
+out(
+  `  corpus ${corpusDigest(CORPUS)} / queries ${queryDigest(DOCS_JUDGED_QUERIES)} / model ${EMBEDDING_MODEL}`,
+)
+if (K >= CORPUS.length) {
+  out('')
+  out(`  ! the cut admits the WHOLE corpus (k=${K} >= ${CORPUS.length} documents), so`)
+  out('    recall@k is free and only nDCG rank-weighting discriminates.')
 }
-out('─'.repeat(64))
-out(
-  `still unanswered with vectors: ${fused.misses.length ? fused.misses.sort().join(', ') : 'none'}`,
-)
-out(
-  `${JUDGED_QUERIES.length} queries, ${CORPUS_DOCUMENTS.length} documents, ${elapsedMs.toFixed(0)}ms including model load`,
-)
+
+// How much of each document the model actually reads. A retrieval model
+// has a fixed input length and silently truncates past it, so a corpus of
+// long documents can be mostly invisible to the semantic half while every
+// score still looks fine. Measured with the model's own tokenizer rather
+// than estimated from characters, because the estimate is exactly the kind
+// of approximation that hides a factor of four.
+{
+  const { AutoTokenizer, env } = await import('@huggingface/transformers')
+  env.cacheDir = searchModelCacheDir()
+  const tokenizer = await AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
+  const limit = tokenizer.model_max_length ?? 512
+  let overLimit = 0
+  let seen = 0
+  let total = 0
+  for (const doc of CORPUS) {
+    const encoded = await tokenizer(`passage: ${doc.name}\n${doc.path}\n${doc.body}`)
+    const length = encoded.input_ids.dims[1]
+    total += length
+    seen += Math.min(length, limit)
+    if (length > limit) overLimit++
+  }
+  out('')
+  out(`what the model READS: input limit ${limit} tokens`)
+  out('-'.repeat(64))
+  out(
+    `  ${overLimit}/${CORPUS.length} documents are truncated; ` +
+      `the model sees ${((seen / total) * 100).toFixed(0)}% of the corpus text ` +
+      `(mean ${Math.round(total / CORPUS.length)} tokens per document)`,
+  )
+  if (overLimit > 0) {
+    out('  every score below is achieved WITHOUT the truncated remainder.')
+  }
+}
+
+out('')
+out('by category                stage 0    stage 2     random')
+out('-'.repeat(64))
+for (const [label, metric] of METRICS) {
+  out(label)
+  for (const category of CATEGORIES) {
+    const rows = DOCS_JUDGED_QUERIES.filter((q) => q.category === category)
+    if (rows.length === 0) continue
+    const floor = randomBaseline({
+      corpusSize: CORPUS.length,
+      relevantCount: Math.round(mean(rows.map((q) => Object.keys(q.relevant).length))),
+      k: K,
+    })
+    const floorValue =
+      metric === 'ndcg' ? floor.ndcg : metric === 'recall' ? floor.recall : floor.mrr
+    out(
+      `  ${(`${category} (${rows.length})`).padEnd(22)} ` +
+        `${mean(pick(lexical, metric, category))
+          .toFixed(3)
+          .padStart(6)}   ` +
+        `${mean(pick(fused, metric, category))
+          .toFixed(3)
+          .padStart(6)}     ` +
+        `${floorValue.toFixed(3)}`,
+    )
+  }
+}
+
+out('')
+out('overall, with the difference tested rather than asserted')
+out('-'.repeat(64))
+for (const [label, metric] of METRICS) {
+  const before = pick(lexical, metric)
+  const after = pick(fused, metric)
+  const deltas = after.map((v, i) => v - before[i])
+  const ci = bootstrapCi(deltas)
+  const test = pairedPermutationTest(deltas)
+  const floor = permutationFloor(deltas)
+  const sd = standardDeviation(deltas)
+  const sign = (v) => `${v >= 0 ? '+' : ''}${v.toFixed(3)}`
+  out(
+    `${label.padEnd(10)} ${mean(before).toFixed(3)} -> ${mean(after).toFixed(3)}  ` +
+      `delta ${sign(test.observed)} [${sign(ci.low)}, ${sign(ci.high)}] ` +
+      `p ${test.atSamplingFloor ? '<' : '='} ${test.p.toFixed(4)} ` +
+      `(exact floor ${floor.toExponential(1)})`,
+  )
+  // Sample sizes for differences chosen in advance as worth acting on, NOT
+  // for the difference just observed — that would be post-hoc power, which
+  // only ever restates the p-value.
+  const needed = TARGET_EFFECTS.map(
+    (minDetectable) =>
+      `${minDetectable.toFixed(2)}:${requiredQueryCount({ sd, minDetectable }) ?? 'n/a'}`,
+  ).join('  ')
+  out(`           per-query sd ${sd.toFixed(3)};  queries needed for a delta of  ${needed}`)
+}
+
+out('')
+out('queries where the two systems disagree most')
+out('-'.repeat(64))
+const disagreements = lexical
+  .map((a, i) => ({ a, b: fused[i], delta: fused[i].ndcg - a.ndcg }))
+  .filter((row) => Math.abs(row.delta) > 0.01)
+  .sort((x, y) => x.delta - y.delta)
+for (const row of [...disagreements.slice(0, 5), ...disagreements.slice(-5)]) {
+  out(
+    `  ${row.delta >= 0 ? '+' : ''}${row.delta.toFixed(2)}  rank ${row.a.rank} -> ${row.b.rank}  ` +
+      `${row.a.category.padEnd(14)} ${row.a.query}`,
+  )
+}
+
+// The pool: documents both systems rank highly that nobody has judged.
+// Unjudged counts as irrelevant, which penalises a system for returning
+// something genuinely useful — so this list is where the next round of
+// judgements comes from, and reading it is how the collection grows.
+out('')
+out('unjudged documents ranked in the top 3 by either system')
+out('-'.repeat(64))
+const pool = new Map()
+for (let i = 0; i < lexical.length; i++) {
+  const judged = DOCS_JUDGED_QUERIES[i]
+  for (const row of [lexical[i], fused[i]]) {
+    for (const path of row.ranked.slice(0, 3)) {
+      if (judged.relevant[path] !== undefined) continue
+      const key = `${judged.query} -> ${path}`
+      pool.set(key, (pool.get(key) ?? 0) + 1)
+    }
+  }
+}
+if (pool.size === 0) out('  (none — judgements cover every top-3 result)')
+else {
+  for (const key of [...pool.keys()].slice(0, 15)) out(`  ${key}`)
+  if (pool.size > 15) out(`  ... and ${pool.size - 15} more`)
+}
+
+out('')
+out(`${elapsedMs.toFixed(0)}ms for the stage-2 pass including model load`)
 out('')

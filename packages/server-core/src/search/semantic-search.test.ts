@@ -137,6 +137,100 @@ describe('semantic fusion', () => {
     expect(out.results.map((r) => r.documentId)).toContain(bare.documentId)
   })
 
+  it('reports the lexical rank, 1-based, with no semantic rank when there is no embedder', async () => {
+    const deps = makeDeps()
+    const { storage } = await seed(deps)
+    const out = await createDocumentSearchTool(deps).execute({ workspaceId: WS, query: 'quota' })
+    expect(out.results[0]?.documentId).toBe(storage)
+    expect(out.results[0]?.lexicalRank).toBe(1)
+    // 0 would be falsy, so `if (hit.lexicalRank)` would read the top hit as
+    // no hit at all. There is no rank 0.
+    expect(out.results.every((r) => (r.lexicalRank ?? 1) >= 1)).toBe(true)
+    expect(out.results.every((r) => r.semanticRank === undefined)).toBe(true)
+  })
+
+  it('leaves the lexical rank undefined for a document only meaning could find', async () => {
+    const deps = makeDeps()
+    const { reconnect } = await seed(deps)
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: '復旧',
+    })
+    const hit = out.results.find((r) => r.documentId === reconnect)
+    // `復旧` shares no token with the English body, so BM25 never scored it:
+    // undefined is what tells a caller there is no match to highlight.
+    expect(hit?.lexicalRank).toBeUndefined()
+    expect(hit?.semanticRank).toBeGreaterThanOrEqual(1)
+  })
+
+  it('ranks against the WHOLE ranking, not the page the caller asked for', async () => {
+    const deps = makeDeps()
+    const { write } = await seed(deps)
+    // `zzz` is a term the fake embedder has never heard of, so it is a pure
+    // LEXICAL signal; `初回` is a pure SEMANTIC one. That separation is what
+    // lets the two rankings disagree on purpose.
+    await write('untitled-5', 'lexical only', 'zzz zzz zzz zzz zzz')
+    await write('untitled-6', 'both', 'zzz onboarding')
+    await write('untitled-7', 'partial a', 'onboarding 容量')
+    await write('untitled-8', 'partial b', 'onboarding socket')
+
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: 'zzz 初回',
+      limit: 1,
+    })
+
+    // One result asked for, and the winner is the document the two rankings
+    // AGREE on rather than the one keywords alone would put first — so its
+    // lexical rank is 2 while its position on this page is 1.
+    expect(out.results).toHaveLength(1)
+    expect(out.results[0]?.name).toBe('both')
+    expect(out.results[0]?.lexicalRank).toBe(2)
+    expect(out.results[0]?.semanticRank).toBe(1)
+  })
+
+  it('breaks a fused tie on evidence, not on which document was created first', async () => {
+    // RRF collides BY CONSTRUCTION: 1/(K+1) + 1/(K+2) is exactly
+    // 1/(K+2) + 1/(K+1). Of the 400 rank pairs up to 20th place, only 210
+    // distinct fused scores exist and 190 of them are shared — ties are the
+    // norm here, not an edge case.
+    //
+    // What broke them was `documentId.localeCompare`, and a document id is
+    // `encodeTime(Date.now()) + encodeRandom()`: creation order, with chance
+    // deciding inside a millisecond. So the answer to "which of these two
+    // equally-ranked documents comes first" was when they happened to be
+    // written, which is not a fact about the query.
+    const deps = makeDeps()
+    const set = createDocumentSetTool(deps)
+    const write = async (path: string, name: string, body: string) => {
+      const created = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path,
+        kind: 'markdown',
+        name,
+        createWorkspace: true,
+      })
+      await set.execute({
+        workspaceId: WS,
+        documentId: created.documentId,
+        markdown: `---\ntype: note\n---\n${body}`,
+      })
+    }
+    // `meaning` is written FIRST, so it holds the lower id and would win a
+    // tie decided by id. `keyword` matches the query's own word better, so
+    // it should win a tie decided by evidence.
+    await write('untitled-1', 'meaning', 'zzz onboarding') // lexical 2, semantic 1
+    await write('untitled-2', 'keyword', 'zzz zzz zzz') //    lexical 1, semantic 2
+
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: 'zzz 初回',
+      limit: 2,
+    })
+    expect(out.results.map((r) => r.name)).toEqual(['keyword', 'meaning'])
+    expect(out.results[0]?.score).toBeCloseTo(out.results[1]?.score ?? 0, 12)
+  })
+
   it('an embedder that throws degrades to lexical-only', async () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)

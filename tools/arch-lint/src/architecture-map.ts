@@ -85,6 +85,17 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
+  // Lexical search: a dictionary-free tokenizer (latin words, CJK bigrams),
+  // BM25 ranking, snippets, and the ONE definition of what text a document
+  // contributes. Pure and runtime-agnostic on purpose — the daemon and the
+  // browser must rank the same corpus the same way, and a second copy of
+  // either half is a second set of answers.
+  // It takes content already read (a body, or a canvas), so it needs
+  // neither the CRDT nor the bridge — model's types are the whole surface.
+  '@kamiazya/whiteboard-search': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
+    allowedThirdParty: [],
+  },
   '@kamiazya/whiteboard-loro-adapter': {
     // Deliberately NOT ports: this package adapts loro-crdt to the model and
     // knows nothing about where a document sits, so it implements no port.
@@ -106,6 +117,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-search',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
