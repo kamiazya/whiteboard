@@ -1,6 +1,7 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
 
 const WS = 'orphan'
@@ -15,6 +16,7 @@ describe('a create that cannot finish leaves nothing behind', () => {
     const deps = {
       documentStore: createInMemoryDocumentStore(),
       blobStore: {} as never,
+      documentTeardown: unusedDocumentTeardown(),
       documentIndex: new InMemoryDocumentIndex(),
     }
     await expect(
