@@ -47,6 +47,34 @@ export const documentSearchOutputSchema = z
            * carries the opening of its text instead.
            */
           contexts: z.array(z.string()),
+          /**
+           * Where this document sat in the keyword ranking, 1-based, or
+           * absent when keywords never matched it.
+           *
+           * ABSENT IS THE USEFUL CASE: it says there is nothing in
+           * `contexts` to highlight, because the excerpt is the opening of
+           * the document rather than a match. A caller that highlights
+           * needs to know this and cannot infer it from the excerpt's
+           * shape. On this project's own docs it is not an edge case —
+           * 16 of 50 judged queries score no document lexically at all.
+           *
+           * 1-based deliberately: a rank of 0 is falsy, so `if (hit.lexicalRank)`
+           * would read the top hit as no hit.
+           */
+          lexicalRank: z.number().int().min(1).optional(),
+          /**
+           * Where this document sat in the semantic ranking, 1-based, or
+           * absent when no embedder was configured.
+           *
+           * Reported rather than folded into a "why did this match" label
+           * because every embedded document appears in the semantic
+           * ranking — so mere PRESENCE there carries no information, and a
+           * label built on it would tell the caller "meaning helped" about
+           * every result. Whether a semantic rank is good enough to have
+           * promoted a document is a judgement with a threshold in it, and
+           * the threshold belongs to whoever is displaying the results.
+           */
+          semanticRank: z.number().int().min(1).optional(),
         })
         .strict(),
     ),
@@ -100,7 +128,15 @@ export function createDocumentSearchTool(
       }
 
       const byId = new Map(searchable.map((doc) => [doc.documentId, doc]))
-      const describe = (documentId: string, score: number, contexts: readonly string[]) => {
+      /** documentId -> 1-based position, for whichever rankings exist. */
+      const ranksOf = (ranking: readonly string[]): Map<string, number> =>
+        new Map(ranking.map((documentId, index) => [documentId, index + 1]))
+      const describe = (
+        documentId: string,
+        score: number,
+        contexts: readonly string[],
+        ranks: { lexical?: number; semantic?: number },
+      ) => {
         const doc = byId.get(documentId)
         return {
           documentId,
@@ -109,6 +145,8 @@ export function createDocumentSearchTool(
           ...(doc?.kind === undefined ? {} : { kind: doc.kind }),
           score,
           contexts: [...contexts],
+          ...(ranks.lexical === undefined ? {} : { lexicalRank: ranks.lexical }),
+          ...(ranks.semantic === undefined ? {} : { semanticRank: ranks.semantic }),
         }
       }
 
@@ -118,8 +156,14 @@ export function createDocumentSearchTool(
       // inside it degrades to lexical-only rather than failing the search.
       const { embedder } = deps
       if (embedder === undefined) {
+        // The returned page IS the prefix of the full ranking here, so the
+        // index is the rank.
         const hits = fullTextSearch(searchable, parsed.query, { limit: parsed.limit })
-        return { results: hits.map((hit) => describe(hit.documentId, hit.score, hit.contexts)) }
+        return {
+          results: hits.map((hit, index) =>
+            describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
+          ),
+        }
       }
 
       // Fusion needs the WHOLE lexical ranking, not the page the caller asked
@@ -137,15 +181,44 @@ export function createDocumentSearchTool(
         return {
           results: lexical
             .slice(0, parsed.limit)
-            .map((hit) => describe(hit.documentId, hit.score, hit.contexts)),
+            .map((hit, index) =>
+              describe(hit.documentId, hit.score, hit.contexts, { lexical: index + 1 }),
+            ),
         }
       }
 
       const fused = fuseByRank([lexical.map((hit) => hit.documentId), semantic])
-      const ordered = [...fused.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([documentId]) => documentId)
       const contexts = new Map(lexical.map((hit) => [hit.documentId, hit.contexts]))
+      // Ranks come from the COMPLETE rankings, not from the page returned:
+      // "3rd of 45" and "3rd of 5" are different facts, and only the former
+      // survives a change of `limit`.
+      const lexicalRanks = ranksOf(lexical.map((hit) => hit.documentId))
+      const semanticRanks = ranksOf(semantic)
+      /**
+       * Fused ties are the NORM, not an edge case: reciprocal-rank sums
+       * collide by construction, so a document at lexical 1 / semantic 2
+       * scores exactly what one at lexical 2 / semantic 1 does. Of the 400
+       * rank pairs inside the top 20, only 210 distinct scores exist and
+       * 190 are shared.
+       *
+       * Broken on evidence rather than on identity. The document whose
+       * keywords matched better wins, because those are the words the user
+       * actually typed; between two documents keywords never matched, the
+       * closer meaning wins. Ranks within a list are unique, so this is a
+       * total order with no appeal to a document id — which mattered, since
+       * an id is `encodeTime(Date.now()) + encodeRandom()` and ordering by
+       * it answered "which was written first", with chance deciding inside
+       * a millisecond.
+       */
+      const FAR = Number.MAX_SAFE_INTEGER
+      const ordered = [...fused.entries()]
+        .sort(
+          (a, b) =>
+            b[1] - a[1] ||
+            (lexicalRanks.get(a[0]) ?? FAR) - (lexicalRanks.get(b[0]) ?? FAR) ||
+            (semanticRanks.get(a[0]) ?? FAR) - (semanticRanks.get(b[0]) ?? FAR),
+        )
+        .map(([documentId]) => documentId)
       return {
         results: ordered
           .slice(0, parsed.limit)
@@ -154,6 +227,7 @@ export function createDocumentSearchTool(
               documentId,
               fused.get(documentId) ?? 0,
               contexts.get(documentId) ?? openingOf(byId.get(documentId)),
+              { lexical: lexicalRanks.get(documentId), semantic: semanticRanks.get(documentId) },
             ),
           ),
       }
