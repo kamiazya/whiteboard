@@ -56,6 +56,25 @@ function readCiWorkflowWithoutComments(): string {
     .join('\n')
 }
 
+/**
+ * The steps of one ci.yml job, comments stripped.
+ *
+ * A guard that only asks "does this string appear anywhere in ci.yml" cannot
+ * tell a step that RUNS from one that was commented out, nor one that sits in
+ * the job it is supposed to sit in from one that drifted to another. Both
+ * matter here: the shared-layer step is the only thing that runs nine
+ * projects, so a guard blind to either would stay green while they all
+ * stopped running — which is the very failure this file exists to prevent.
+ */
+function readCiJob(jobName: string): string {
+  const lines = readCiWorkflowWithoutComments().split('\n')
+  const start = lines.findIndex((line) => line === `  ${jobName}:`)
+  if (start === -1) throw new Error(`ci.yml declares no job named ${jobName}`)
+  const rest = lines.slice(start + 1)
+  const end = rest.findIndex((line) => /^ {2}[a-z][\w-]*:$/.test(line))
+  return (end === -1 ? rest : rest.slice(0, end)).join('\n')
+}
+
 function readTestBrowserScript(): string {
   const packageJson = JSON.parse(readFileSync(join(ROOT, 'package.json'), 'utf-8')) as {
     scripts?: Record<string, string>
@@ -201,8 +220,13 @@ describe('ci.yml runs every node vitest project registered in root vitest.config
   })
 
   it('ci.yml invokes the derivation script in a test-unit step', () => {
-    const text = readCiWorkflow()
-    expect(text).toMatch(/run:\s*node tools\/checks\/src\/run-shared-layer-tests\.mjs/)
+    // Scoped to the job AND read without comments, because this one step is
+    // what runs every derived project: commenting it out, or moving it to a
+    // job that does not run on a pull request, silently retires all nine.
+    // Measured against the unscoped version — it passed 14/14 with the step
+    // commented out.
+    const testUnit = readCiJob('test-unit')
+    expect(testUnit).toMatch(/run:\s*node tools\/checks\/src\/run-shared-layer-tests\.mjs/)
   })
 
   it('every PROJECTS_RUN_ELSEWHERE exemption is actually covered in ci.yml by its declared mechanism', () => {
@@ -259,7 +283,7 @@ describe('ci.yml runs every node vitest project registered in root vitest.config
   })
 
   it('no derived project lives under apps/web/, which always has its own dedicated test-jsdom job (would run twice)', () => {
-    const ciText = readCiWorkflow()
+    const ciText = readCiWorkflowWithoutComments()
     // This job step is unconditional YAML text, not generated from
     // PROJECTS_RUN_ELSEWHERE — it runs regardless of what the map records, so
     // any apps/web project reaching the derived list would run a second time
