@@ -137,6 +137,58 @@ describe('semantic fusion', () => {
     expect(out.results.map((r) => r.documentId)).toContain(bare.documentId)
   })
 
+  it('reports the lexical rank, 1-based, with no semantic rank when there is no embedder', async () => {
+    const deps = makeDeps()
+    const { storage } = await seed(deps)
+    const out = await createDocumentSearchTool(deps).execute({ workspaceId: WS, query: 'quota' })
+    expect(out.results[0]?.documentId).toBe(storage)
+    expect(out.results[0]?.lexicalRank).toBe(1)
+    // 0 would be falsy, so `if (hit.lexicalRank)` would read the top hit as
+    // no hit at all. There is no rank 0.
+    expect(out.results.every((r) => (r.lexicalRank ?? 1) >= 1)).toBe(true)
+    expect(out.results.every((r) => r.semanticRank === undefined)).toBe(true)
+  })
+
+  it('leaves the lexical rank undefined for a document only meaning could find', async () => {
+    const deps = makeDeps()
+    const { reconnect } = await seed(deps)
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: '復旧',
+    })
+    const hit = out.results.find((r) => r.documentId === reconnect)
+    // `復旧` shares no token with the English body, so BM25 never scored it:
+    // undefined is what tells a caller there is no match to highlight.
+    expect(hit?.lexicalRank).toBeUndefined()
+    expect(hit?.semanticRank).toBeGreaterThanOrEqual(1)
+  })
+
+  it('ranks against the WHOLE ranking, not the page the caller asked for', async () => {
+    const deps = makeDeps()
+    const { write } = await seed(deps)
+    // `zzz` is a term the fake embedder has never heard of, so it is a pure
+    // LEXICAL signal; `初回` is a pure SEMANTIC one. That separation is what
+    // lets the two rankings disagree on purpose.
+    await write('untitled-5', 'lexical only', 'zzz zzz zzz zzz zzz')
+    await write('untitled-6', 'both', 'zzz onboarding')
+    await write('untitled-7', 'partial a', 'onboarding 容量')
+    await write('untitled-8', 'partial b', 'onboarding socket')
+
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: 'zzz 初回',
+      limit: 1,
+    })
+
+    // One result asked for, and the winner is the document the two rankings
+    // AGREE on rather than the one keywords alone would put first — so its
+    // lexical rank is 2 while its position on this page is 1.
+    expect(out.results).toHaveLength(1)
+    expect(out.results[0]?.name).toBe('both')
+    expect(out.results[0]?.lexicalRank).toBe(2)
+    expect(out.results[0]?.semanticRank).toBe(1)
+  })
+
   it('an embedder that throws degrades to lexical-only', async () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)
