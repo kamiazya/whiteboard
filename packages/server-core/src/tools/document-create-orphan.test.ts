@@ -1,5 +1,6 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
@@ -17,6 +18,7 @@ describe('a create that cannot finish leaves nothing behind', () => {
       documentStore: createInMemoryDocumentStore(),
       blobStore: {} as never,
       documentTeardown: unusedDocumentTeardown(),
+      documentWritten: ignoredDocumentWrites(),
       documentIndex: new InMemoryDocumentIndex(),
     }
     await expect(
