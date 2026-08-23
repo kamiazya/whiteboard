@@ -151,3 +151,43 @@ describe('createDaemonFilesSource tags', () => {
     expect(degraded[0]?.tags).toBeUndefined()
   })
 })
+
+describe('createDaemonFilesSource searchDocuments', () => {
+  function searchFetchStub(results: unknown[]): typeof globalThis.fetch {
+    return vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.includes('/search')) return Promise.resolve(jsonResponse({ results }))
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+  }
+
+  it('carries the ranks through, so a semantic-only hit can be told apart', async () => {
+    const source = createDaemonFilesSource(
+      searchFetchStub([
+        {
+          documentId: '01M0P7D8CDZ5TP3C8ZYM8G275W',
+          path: 'plans/roadmap',
+          score: 2.5,
+          contexts: ['…the quota exceeded error…'],
+          lexicalRank: 1,
+          semanticRank: 3,
+        },
+        // Found by meaning alone: its excerpt is the document's opening, and
+        // there is no keyword in it to mark.
+        {
+          documentId: '01M0P7D8CDZ5TP3C8ZYM8G276X',
+          path: 'notes/storage',
+          score: 1.1,
+          contexts: ['An opening line.'],
+          semanticRank: 1,
+        },
+      ]),
+      BASE,
+      'ws',
+    )
+
+    const hits = await source.searchDocuments('quota', 20)
+    expect(hits.map((hit) => hit.lexicalRank)).toEqual([1, undefined])
+    expect(hits.map((hit) => hit.semanticRank)).toEqual([3, 1])
+  })
+})

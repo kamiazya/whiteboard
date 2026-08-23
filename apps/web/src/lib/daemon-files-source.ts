@@ -95,6 +95,8 @@ export function createDaemonFilesSource(
           ...(hit.kind === undefined ? {} : { kind: hit.kind }),
         },
         contexts: hit.contexts,
+        ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
+        ...(hit.semanticRank === undefined ? {} : { semanticRank: hit.semanticRank }),
       }))
     },
 
