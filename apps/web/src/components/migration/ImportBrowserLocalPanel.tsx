@@ -137,7 +137,7 @@ export function ImportBrowserLocalPanel({
   }
 
   if (documents === null) {
-    return <p className="text-sm text-muted-foreground">Loading browser-local documents…</p>
+    return <p className="text-sm text-muted-foreground">Loading documents kept in this browser…</p>
   }
 
   if (documents.length === 0) {

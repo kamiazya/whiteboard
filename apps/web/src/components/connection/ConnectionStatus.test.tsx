@@ -52,7 +52,7 @@ describe('ConnectionStatus chip', () => {
     expect(chip).toBeTruthy()
     // No standing sentence copy outside the popover: the actual popover
     // explanation must not be rendered until the chip is opened.
-    expect(screen.queryByText(/changes are saved to your local daemon/i)).toBeNull()
+    expect(screen.queryByText(/changes are saved to the daemon on this machine/i)).toBeNull()
     expect(screen.queryByText(/live sync is on/i)).toBeNull()
 
     fireEvent.click(chip)
@@ -60,28 +60,24 @@ describe('ConnectionStatus chip', () => {
     expect(screen.getByText(/127\.0\.0\.1:3099/)).toBeTruthy()
   })
 
-  it('local state explains browser-only storage and hosts extra content (daemon detection)', async () => {
+  it('browser state explains browser-only storage and hosts extra content (daemon detection)', async () => {
     render(
-      <ConnectionStatus state="local">
+      <ConnectionStatus state="browser">
         <button type="button">Use here</button>
       </ConnectionStatus>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /local/i }))
-    expect(await screen.findByText(/only in this browser/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /browser/i }))
+    expect(await screen.findByText(/other browsers cannot see them/i)).toBeTruthy()
     // The slot for daemon-detection / capability content renders inside.
     expect(screen.getByRole('button', { name: 'Use here' })).toBeTruthy()
   })
 
   it('sync-off state carries attention styling and BOTH recovery actions', async () => {
     const onRepair = vi.fn()
-    const onContinueBrowserLocal = vi.fn()
+    const onWorkInBrowser = vi.fn()
     render(
-      <ConnectionStatus
-        state="sync-off"
-        onRepair={onRepair}
-        onContinueBrowserLocal={onContinueBrowserLocal}
-      />,
+      <ConnectionStatus state="sync-off" onRepair={onRepair} onWorkInBrowser={onWorkInBrowser} />,
     )
 
     const chip = screen.getByRole('button', { name: /sync off/i })
@@ -92,8 +88,8 @@ describe('ConnectionStatus chip', () => {
     // ...and offers both ways forward.
     fireEvent.click(screen.getByRole('button', { name: /re-pair/i }))
     expect(onRepair).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('button', { name: /continue in browser-local/i }))
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: /work in this browser instead/i }))
+    expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
 
   it('sync-off announces itself to assistive tech without a visual banner', () => {

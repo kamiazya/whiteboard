@@ -58,17 +58,19 @@ describe('shell connection chip over a real browser-local document', () => {
     )
 
     const chip = await waitFor(() => screen.getByTestId('connection-chip'), { timeout: 5000 })
-    expect(chip.textContent).toMatch(/local/i)
+    expect(chip.textContent).toMatch(/browser/i)
     // The chip sits in the shell's own row, not inside the document's top bar
     // — that separation is the whole point of the move, and a DOM assertion is
     // the only thing that can tell the two rows apart.
     expect(chip.closest('header')?.querySelector('[data-testid="shell-settings"]')).toBeTruthy()
 
     // Sentence-length copy stays out of chrome: it appears only once opened.
-    expect(screen.queryByText(/only in this browser/i)).toBeNull()
+    expect(screen.queryByText(/other browsers cannot see them/i)).toBeNull()
     fireEvent.click(chip)
-    expect(await screen.findByText(/only in this browser/i)).toBeInTheDocument()
-    expect(await screen.findByText(/unlock version history/i)).toBeInTheDocument()
+    expect(await screen.findByText(/other browsers cannot see them/i)).toBeInTheDocument()
+    expect(
+      await screen.findByText(/Connect a daemon \(MCP\) for version history/i),
+    ).toBeInTheDocument()
   })
 
   it('leaving the document takes the claim with it', async () => {

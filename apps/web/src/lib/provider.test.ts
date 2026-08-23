@@ -8,24 +8,22 @@ import {
 
 describe('resolveProviderState', () => {
   it('returns browser-local when daemonBaseUrl is absent', () => {
-    expect(resolveProviderState(EMPTY_RUNTIME_CONFIG).kind).toBe('browser-local')
+    expect(resolveProviderState(EMPTY_RUNTIME_CONFIG).kind).toBe('browser')
   })
 
   it('returns local-daemon only when daemonBaseUrl is present', () => {
-    expect(resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
-      'local-daemon',
-    )
+    expect(resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe('daemon')
   })
 
   it('local-daemon state carries daemonBaseUrl', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    expect(state).toMatchObject({ kind: 'local-daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
+    expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
   it('browser-local capabilities: workspaces and versions are false', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
     expect(state).toMatchObject({
-      kind: 'browser-local',
+      kind: 'browser',
       capabilities: { workspaces: false, versions: false },
     })
   })
@@ -33,7 +31,7 @@ describe('resolveProviderState', () => {
   it('local-daemon capabilities: workspaces and versions are true', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(state).toMatchObject({
-      kind: 'local-daemon',
+      kind: 'daemon',
       capabilities: { workspaces: true, versions: true },
     })
   })
@@ -41,7 +39,7 @@ describe('resolveProviderState', () => {
   it('browser-local capabilities: branches and merge are false', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
     expect(state).toMatchObject({
-      kind: 'browser-local',
+      kind: 'browser',
       capabilities: { branches: false, merge: false },
     })
   })
@@ -49,7 +47,7 @@ describe('resolveProviderState', () => {
   it('local-daemon capabilities: branches and merge are true', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(state).toMatchObject({
-      kind: 'local-daemon',
+      kind: 'daemon',
       capabilities: { branches: true, merge: true },
     })
   })
@@ -66,12 +64,12 @@ describe('resolveProviderState', () => {
 
 describe('resolveProviderStateFromRaw', () => {
   it('empty object returns browser-local state', () => {
-    expect(resolveProviderStateFromRaw({}).kind).toBe('browser-local')
+    expect(resolveProviderStateFromRaw({}).kind).toBe('browser')
   })
 
   it('valid daemonBaseUrl returns local-daemon state', () => {
     expect(resolveProviderStateFromRaw({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
-      'local-daemon',
+      'daemon',
     )
   })
 
@@ -118,14 +116,14 @@ describe('resolveProviderStateFromRaw', () => {
 
 describe('resolveHostedProviderStateFromRaw', () => {
   it('empty object returns browser-local state', () => {
-    expect(resolveHostedProviderStateFromRaw({}).kind).toBe('browser-local')
+    expect(resolveHostedProviderStateFromRaw({}).kind).toBe('browser')
   })
 
   it('production publicOrigin with no daemon returns browser-local', () => {
     const state = resolveHostedProviderStateFromRaw({
       publicOrigin: 'https://kamiazya-whiteboard.pages.dev',
     })
-    expect(state.kind).toBe('browser-local')
+    expect(state.kind).toBe('browser')
   })
 
   it('preview publicOrigin returns invalid-config', () => {
@@ -159,7 +157,7 @@ describe('resolveHostedProviderStateFromRaw', () => {
       {},
       'https://abc123.kamiazya-whiteboard.pages.dev',
     )
-    expect(state.kind).toBe('browser-local')
+    expect(state.kind).toBe('browser')
   })
 
   it('latest-alias browserOrigin with empty runtime config returns browser-local', () => {
@@ -167,7 +165,7 @@ describe('resolveHostedProviderStateFromRaw', () => {
       {},
       'https://latest.kamiazya-whiteboard.pages.dev',
     )
-    expect(state.kind).toBe('browser-local')
+    expect(state.kind).toBe('browser')
   })
 
   it('preview browserOrigin with a daemonBaseUrl config returns invalid-config (daemon refused on previews)', () => {
@@ -180,12 +178,12 @@ describe('resolveHostedProviderStateFromRaw', () => {
 
   it('production browserOrigin with empty runtime config returns browser-local', () => {
     const state = resolveHostedProviderStateFromRaw({}, 'https://kamiazya-whiteboard.pages.dev')
-    expect(state.kind).toBe('browser-local')
+    expect(state.kind).toBe('browser')
   })
 
   it('localhost browserOrigin with empty runtime config returns browser-local (local dev)', () => {
     const state = resolveHostedProviderStateFromRaw({}, 'https://localhost:5173')
-    expect(state.kind).toBe('browser-local')
+    expect(state.kind).toBe('browser')
   })
 
   it('custom domain publicOrigin surfaces the specific unsupported-custom-domain copy (no browserOrigin)', () => {

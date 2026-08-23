@@ -6,7 +6,7 @@
 // every declared capability must be read somewhere outside its own module.
 
 import { describe, expect, it } from 'vitest'
-import { BROWSER_LOCAL_CAPABILITIES } from './provider.js'
+import { BROWSER_CAPABILITIES } from './provider.js'
 
 // `?raw` rather than node:fs — apps/web is browser-only and must not import a
 // Node builtin (the same reason App.lazy-coverage.test.ts reads files this way).
@@ -23,7 +23,7 @@ function readerModules(): Array<[string, string]> {
 }
 
 describe('every declared capability is read by production code', () => {
-  const capabilities = Object.keys(BROWSER_LOCAL_CAPABILITIES)
+  const capabilities = Object.keys(BROWSER_CAPABILITIES)
 
   it('declares at least one capability, so an empty map cannot pass vacuously', () => {
     expect(capabilities.length).toBeGreaterThan(0)
