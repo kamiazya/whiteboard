@@ -33,22 +33,20 @@ function projectCanvasContext(
   if (canvas.workspaceId !== undefined) {
     return { kind: 'daemon', workspaceId: canvas.workspaceId, path: canvas.documentId }
   }
-  return { kind: 'browser-local', documentId: canvas.documentId }
+  return { kind: 'browser', documentId: canvas.documentId }
 }
 
 // Exhaustive over every ProviderState.kind rather than a two-way ternary: an
 // `invalid-config` provider (a failed/rejected runtime config) has no
-// meaningful "browser-local" or "daemon" mode to report, so getAppContext
+// meaningful "browser" or "daemon" mode to report, so getAppContext
 // must fail loudly instead of guessing. The `default` branch's `never`
 // assignment makes a future ProviderState variant a compile error here.
-function projectProviderMode(
-  provider: WhiteboardCommandDeps['provider'],
-): 'daemon' | 'browser-local' {
+function projectProviderMode(provider: WhiteboardCommandDeps['provider']): 'daemon' | 'browser' {
   switch (provider.kind) {
-    case 'local-daemon':
+    case 'daemon':
       return 'daemon'
-    case 'browser-local':
-      return 'browser-local'
+    case 'browser':
+      return 'browser'
     case 'invalid-config': {
       throw new CommandError(
         'invalid-provider-state',

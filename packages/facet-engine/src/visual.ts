@@ -103,12 +103,14 @@ export const visualPlugin = definePlugin({
   facets: [
     defineFacet({
       name: 'edges',
+      displayName: 'Edges',
       version: 'v0',
       targets: ['canvas'],
       schema: visualEdgesFacetSchema,
     }),
     defineFacet({
       name: 'shape',
+      displayName: 'Shape',
       version: 'v0',
       targets: ['node'],
       schema: visualShapeFacetSchema,
@@ -136,6 +138,7 @@ export const visualPlugin = definePlugin({
     }),
     defineFacet({
       name: 'text',
+      displayName: 'Text placement',
       version: 'v0',
       targets: ['node'],
       schema: visualTextFacetSchema,
@@ -156,6 +159,7 @@ export const visualPlugin = definePlugin({
     }),
     defineFacet({
       name: 'symbol',
+      displayName: 'Symbol',
       version: 'v0',
       targets: ['node'],
       schema: visualSymbolFacetSchema,

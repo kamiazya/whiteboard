@@ -68,13 +68,16 @@ export function createTransformersEmbedder(options: TransformersEmbedderOptions)
     const { pipeline, env } = await import('@huggingface/transformers')
     env.cacheDir = options.cacheDir
     if (options.offline === true) env.allowRemoteModels = false
-    log.info({ model, dtype: options.dtype ?? DEFAULT_DTYPE }, 'loading embedding model')
-    return (await pipeline('feature-extraction', model, {
-      dtype: options.dtype ?? DEFAULT_DTYPE,
-    })) as unknown as ExtractorLike
+    log.info({ model, dtype }, 'loading embedding model')
+    return (await pipeline('feature-extraction', model, { dtype })) as unknown as ExtractorLike
   }
 
+  const dtype = options.dtype ?? DEFAULT_DTYPE
   return {
+    // Model AND precision, because a cached vector is only comparable to
+    // one made the same way — q8 and fp32 of this model are both 384-wide
+    // and measurably different.
+    id: `${model}@${dtype}`,
     // multilingual-e5-small. Wrong here means every vector is rejected by
     // the shape check rather than silently mis-scored.
     dimensions: 384,

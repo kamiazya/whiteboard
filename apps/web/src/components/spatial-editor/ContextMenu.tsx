@@ -245,7 +245,17 @@ export function ContextMenu({
       style={
         sheet
           ? { position: 'absolute', zIndex: 20, left: 0, right: 0, bottom: 0 }
-          : { position: 'absolute', zIndex: 20, width: 'max-content', left: pos.x, top: pos.y }
+          : {
+              position: 'absolute',
+              zIndex: 20,
+              width: 'max-content',
+              // max-content alone lets a long options row set a box wider
+              // than the editor, and no clamp can place a box that does not
+              // fit. Measured at 390px: the menu came out 434.6px.
+              maxWidth: '100%',
+              left: pos.x,
+              top: pos.y,
+            }
       }
       onKeyDown={(e) => {
         if (e.key === 'Escape') {
@@ -317,10 +327,14 @@ export function ContextMenu({
       <Fragment key={item.label}>
         <fieldset
           aria-label={item.label}
-          className="m-0 flex items-center justify-between gap-2 border-0 p-0 px-3 py-1"
+          className="m-0 flex flex-wrap items-center justify-between gap-x-2 gap-y-1 border-0 p-0 px-3 py-1"
         >
           <span className="text-xs text-muted-foreground">{item.label}</span>
-          <span className="flex items-center gap-0.5">
+          {/* An options row is a PICKER, so an option pushed past the edge is
+              not merely ugly — it cannot be tapped. The set grows with every
+              contributing facet and the sheet is only as wide as the phone,
+              so the row wraps rather than trusting it to fit. */}
+          <span className="flex flex-wrap items-center justify-end gap-0.5">
             {item.options.map((option) => (
               <button
                 key={option.label}

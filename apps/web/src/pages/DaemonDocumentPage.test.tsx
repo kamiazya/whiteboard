@@ -256,7 +256,7 @@ describe('DaemonDocumentPage', () => {
     expect(createdBackends[0]?.connectCount).toBe(1)
   })
 
-  it('renders capability badges from LOCAL_DAEMON_CAPABILITIES', async () => {
+  it('renders capability badges from DAEMON_CAPABILITIES', async () => {
     await act(async () => {
       render(
         <DaemonDocumentPage daemonBaseUrl={DAEMON_BASE_URL} createBackend={makeCreateBackend()} />,

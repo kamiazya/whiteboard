@@ -42,7 +42,7 @@
  * `toMatchScreenshot` FAILS rather than auto-creating when a baseline is
  * missing, so a forgotten PNG commit is loud, not silently green.
  */
-import { computeEdgeJumps } from '../layout/edge-jumps.js'
+import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 
 const EDGE_APPEARANCE = { stroke: '#1f2933', strokeWidth: 2 } as const

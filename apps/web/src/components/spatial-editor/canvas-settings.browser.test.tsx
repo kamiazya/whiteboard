@@ -130,7 +130,13 @@ it('a second contributing namespace introduces displayName tabs; one namespace s
     id: 'planning',
     displayName: 'Planning',
     facets: [
-      defineFacet({ name: 'board', version: 'v0', targets: ['canvas'], schema: z.object({}) }),
+      defineFacet({
+        name: 'board',
+        displayName: 'Board',
+        version: 'v0',
+        targets: ['canvas'],
+        schema: z.object({}),
+      }),
     ],
   })
   const registry = createFacetRegistry([...bundledPlugins, planning])

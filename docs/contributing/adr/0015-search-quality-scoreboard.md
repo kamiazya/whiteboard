@@ -343,6 +343,123 @@ The spike stays in the tree rather than being deleted with its result: it
 is the instrument that answers this question again once the corpus is big
 enough to answer it.
 
+||||||| 348c53a4
+
+### 3f. The check the judged corpus structurally cannot perform (2026-08-23)
+
+Everything in 3a-3e measures search quality on this project's own content,
+and all of it rests on an assumption nothing verifies: **that the embedder
+is being driven correctly.** Prefixes, pooling, L2 normalisation,
+quantisation — any of these can be subtly wrong, and a corpus of one's own
+documents cannot detect it. There is nothing to compare against, so a
+systematically weakened model simply reports lower numbers and they are
+read as the state of the art.
+
+A public dataset supplies the missing comparison. It cannot judge OUR
+documents — it has its own — but it can say whether this repository drives
+the model the way its authors did. JQaRA is Japanese retrieval scored with
+nDCG@10 over 100 candidate passages per question, and the shipped model has
+a published figure on it.
+
+Measured, 60 questions sampled of 1667, same prefixes and pooling the
+daemon uses:
+
+| | nDCG@10 |
+|---|---|
+| this repository, q8 weights | **0.451**, 95% CI [0.382, 0.520] |
+| published, full precision, all 1667 | **0.4917** |
+
+**The published figure sits inside the interval.** Nothing here is evidence
+of a bug, and that sentence could not be written from the judged corpus at
+any size.
+
+Run it with `pnpm --filter @kamiazya/whiteboard-mcp search:pipeline-check`.
+The data is fetched at run time and never committed — JQaRA is CC-BY-SA
+(questions from JAQKET, passages from Japanese Wikipedia), and a
+measurement script has no business vendoring someone else's corpus.
+
+#### The baseline itself had to be checked
+
+The first run of this compared against **0.636**, taken from a web search
+result, and reported a correct pipeline as missing its target by a third.
+The real figure is 0.4917 and it is on JQaRA's own dataset card. A
+measurement is only as good as the number it is measured against, and a
+search summary is not a source — the same discipline this ADR applies to
+its own figures applies to anybody else's.
+
+#### And the check found something, on its second question
+
+`transformers-embedder.ts` picked q8 weights with the comment *"the full
+precision model is several times the size for a difference the judged
+corpus has not been shown to notice — if a measurement says otherwise,
+this is the knob."* A measurement now says otherwise.
+
+Paired over 40 JQaRA questions, same questions through both:
+
+| variant | nDCG@10 |
+|---|---|
+| q8 + prefixes + title (what ships) | 0.429 [0.341, 0.512] |
+| q8, no prefixes | 0.405 [0.320, 0.489] |
+| fp32 + prefixes + title | 0.479 [0.396, 0.559] |
+
+**fp32 − q8 = +0.051, 95% CI [+0.024, +0.081], p = 0.0003.** The interval
+does not cross zero. Quantisation is costing about 11% relative, and the
+weights are 118MB against 470MB — four times the download for that 0.051.
+Whether to pay it is a product decision, not a measurement one.
+
+Note which comparison found it. Against the published number alone, q8 sat
+comfortably inside the interval and looked fine; only pairing the two
+variants over the same questions was sensitive enough to separate them.
+An earlier 12-question run of the same ablation reported +0.075, which was
+noise around a real effect — the paired test at a useful size is what
+turned a suspicion into a figure.
+
+The prefixes are confirmed working by the same table (+0.024 when present),
+which matters because nothing else in this repository could have told us
+whether they were reaching the model.
+
+One honest limit: this is measured on JQaRA, not on this project's
+documents. The direction should carry; the magnitude on our own content is
+unmeasurable here, because our corpus resolves about 0.10 and this effect
+is half that.
+
+||||||| 7bd42e9c
+### 3g. Mining the repository for queries — measured, and abandoned
+
+The corpus's weakest joint is that its questions are AUTHORED: written by
+someone who already knew the documents, which is exactly why it is thin in
+the categories worth measuring. An obvious-looking fix is to harvest
+questions from the repository's own history — pull request titles and
+bodies pair an information need with the documents that answer it, and the
+judgement would be mechanical rather than someone's opinion.
+
+It does not work, and the reason is structural rather than fixable.
+
+Of the 34 merged pull requests that touched exactly one document under
+`docs/`, **33 shared a search token with that document and none did not** —
+8 of 10 tokens, 10 of 11, 16 of 16. A second pass looking for bodies that
+merely NAME a document without editing it (no edit, so no contamination
+from the change itself) yielded 18 pairs, most pointing at README, which is
+a navigational hub rather than an answer.
+
+Anyone writing about this repository already speaks its vocabulary. Mining
+it therefore produces `lexical` queries — the one category already answered
+well (0.783) and the one needing no help. Text from someone who does NOT
+know the documents' words is by definition not in the repository.
+
+The same measurement rules out the other obvious source. Session
+transcripts hold 961 user turns, 814 of them Japanese, but the ones phrased
+as questions are design discussion rather than retrieval: only 48 use
+find-or-locate language at all, and reading those shows almost none is
+looking for a document. The reason is worth keeping: **in this product the
+user does not search — they ask the agent, and the agent reads files
+directly.** Absence of a behaviour under the presence of a better
+alternative is not evidence about the behaviour's value; it just means the
+transcripts are not where it lives.
+
+What follows is that a query worth judging exists only at the moment a
+search fails, and only for whoever is doing the searching — which in this
+product is increasingly the agent rather than the person.
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix

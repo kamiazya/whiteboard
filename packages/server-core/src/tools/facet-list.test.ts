@@ -17,6 +17,7 @@ const planning = definePlugin({
   facets: [
     defineFacet({
       name: 'due',
+      displayName: 'Due',
       version: 'v0',
       targets: ['document', 'node'],
       schema: z.object({ date: z.string(), urgent: z.boolean().optional() }),
@@ -85,6 +86,7 @@ describe('wb_facet_list', () => {
       facets: [
         defineFacet({
           name: 'stamped',
+          displayName: 'Stamped',
           version: 'v0',
           targets: ['document'],
           schema: z.object({ at: z.date() }),

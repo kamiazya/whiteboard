@@ -26,7 +26,7 @@ export interface AppShellProps {
    * a branch without the escape (settings, browser-local itself) leaves it
    * unset and the chip drops the two actions that depend on it.
    */
-  readonly onContinueBrowserLocal?: () => void
+  readonly onWorkInBrowser?: () => void
 }
 
 /**
@@ -37,7 +37,7 @@ export interface AppShellProps {
  * rule). Pages mount this shared component instead of owning any brand,
  * connection or settings chrome themselves.
  */
-export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
+export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
   const navigate = useNavigate()
   const location = useLocation()
   // Read fresh rather than cached in state: the store is a thin localStorage
@@ -75,7 +75,7 @@ export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
           <p className="font-medium">Alpha preview</p>
           <p className="mt-1 text-xs text-muted-foreground">
             Data durability is not guaranteed yet. Browser storage can be evicted by the device —
-            export what matters, or protect it with persistent storage and a local daemon.
+            export what matters, or protect it with persistent storage and a daemon.
           </p>
           <Link
             to={settingsPath('data')}
@@ -106,47 +106,13 @@ export function AppShell({ daemon, onContinueBrowserLocal }: AppShellProps) {
                   })
                 }
           }
-          onContinueBrowserLocal={onContinueBrowserLocal}
-          onDisconnect={
-            onContinueBrowserLocal === undefined || daemonBaseUrl === undefined
-              ? undefined
-              : () => {
-                  // Recorded so discovery skips it next time: the default port
-                  // range is rescanned on every visit, so forgetting alone
-                  // would bring this daemon straight back and make the action
-                  // look like a no-op.
-                  settingsStore.update((current) => {
-                    const known = (current.storage.knownDaemonBaseUrls ?? []).filter(
-                      (entry) => entry !== daemonBaseUrl,
-                    )
-                    const dismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(
-                      (entry) => entry !== daemonBaseUrl,
-                    )
-                    // Clearing the stored target is what makes this outlive
-                    // the page: App.tsx reads localDaemonBaseUrl to decide a
-                    // load is daemon-backed, so leaving it set reconnects on
-                    // the next visit and the popover's "this browser stops
-                    // using it" becomes false.
-                    const { localDaemonBaseUrl, ...storage } = current.storage
-                    return {
-                      ...current,
-                      storage: {
-                        ...storage,
-                        ...(localDaemonBaseUrl === daemonBaseUrl ? {} : { localDaemonBaseUrl }),
-                        knownDaemonBaseUrls: known,
-                        dismissedDaemonBaseUrls: [daemonBaseUrl, ...dismissed].slice(0, 5),
-                      },
-                    }
-                  })
-                  onContinueBrowserLocal()
-                }
-          }
+          onWorkInBrowser={onWorkInBrowser}
         >
-          {connection.state === 'local' && (
+          {connection.state === 'browser' && (
             <>
               <p className="text-muted-foreground">
-                Connect a local daemon (MCP) to unlock version history, workspaces, variations, and
-                combining changes
+                Connect a daemon (MCP) for version history, workspaces, variations and merging.
+                Documents already in this browser stay here — import them one at a time.
               </p>
               <Suspense fallback={null}>
                 <DaemonDetectedBanner

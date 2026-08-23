@@ -29,22 +29,22 @@ export type WhiteboardCapabilities = {
 }
 
 export type ProviderState =
-  | { readonly kind: 'browser-local'; readonly capabilities: WhiteboardCapabilities }
+  | { readonly kind: 'browser'; readonly capabilities: WhiteboardCapabilities }
   | {
-      readonly kind: 'local-daemon'
+      readonly kind: 'daemon'
       readonly daemonBaseUrl: string
       readonly capabilities: WhiteboardCapabilities
     }
   | { readonly kind: 'invalid-config'; readonly message: string }
 
-export const BROWSER_LOCAL_CAPABILITIES: WhiteboardCapabilities = {
+export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
   workspaces: false,
   versions: false,
   branches: false,
   merge: false,
 }
 
-export const LOCAL_DAEMON_CAPABILITIES: WhiteboardCapabilities = {
+export const DAEMON_CAPABILITIES: WhiteboardCapabilities = {
   workspaces: true,
   versions: true,
   branches: true,
@@ -54,14 +54,14 @@ export const LOCAL_DAEMON_CAPABILITIES: WhiteboardCapabilities = {
 export function resolveProviderState(config: RuntimeConfig): ProviderState {
   if (config.daemonBaseUrl !== undefined) {
     return {
-      kind: 'local-daemon',
+      kind: 'daemon',
       daemonBaseUrl: config.daemonBaseUrl,
-      capabilities: LOCAL_DAEMON_CAPABILITIES,
+      capabilities: DAEMON_CAPABILITIES,
     }
   }
   return {
-    kind: 'browser-local',
-    capabilities: BROWSER_LOCAL_CAPABILITIES,
+    kind: 'browser',
+    capabilities: BROWSER_CAPABILITIES,
   }
 }
 
@@ -88,7 +88,7 @@ export function resolveHostedProviderStateFromRaw(
     browserOrigin !== undefined && classifyPagesOrigin(browserOrigin) === 'preview'
   try {
     const state = resolveProviderState(resolveHostedRuntimeConfig(raw))
-    if (isPreviewOrigin && state.kind === 'local-daemon') {
+    if (isPreviewOrigin && state.kind === 'daemon') {
       return { kind: 'invalid-config', message: GENERIC_INVALID_CONFIG_MESSAGE }
     }
     return state

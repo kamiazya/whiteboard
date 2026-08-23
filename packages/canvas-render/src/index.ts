@@ -1,7 +1,14 @@
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
-export { flattenDrawnEdgePath } from './layout/edge-flatten.js'
-export { edgeLabelAnchor } from './layout/edge-label-anchor.js'
-export { flattenRoundedEdgePath } from './layout/edge-rounding.js'
+export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
+export { edgeLabelAnchor } from './layout/edges/edge-label-anchor.js'
+export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
+export {
+  assignEdgeAnchors,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+  type EdgeSides,
+  routeEdge,
+} from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
 export type {
   CodeToken,
@@ -10,20 +17,24 @@ export type {
   FittedBlocks,
   MdastLayoutOptions,
   RenderedSvgFragment,
-} from './layout/mdast-blocks.js'
-export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX, layoutMdastBlocks } from './layout/mdast-blocks.js'
+} from './layout/nodes/mdast-blocks.js'
+export {
+  BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
+  layoutMdastBlocks,
+} from './layout/nodes/mdast-blocks.js'
 export {
   type NodeOutline,
   nodeOutline,
   outlineContains,
   outlineEntryPoint,
-} from './layout/node-outline.js'
-export { scaleScene } from './layout/scale-scene.js'
-export { createStyleRandom, seedFromId } from './layout/seed.js'
+} from './layout/nodes/node-outline.js'
 export type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
-} from './layout/spatial-appearance.js'
+} from './layout/nodes/spatial-appearance.js'
+export { scaleScene } from './layout/scale-scene.js'
+export { createStyleRandom, seedFromId } from './layout/seed.js'
 export type {
   FacetCardData,
   ResolvedReference,
@@ -37,13 +48,6 @@ export {
   layoutSpatialEdges,
   naturalNodeContentSize,
 } from './layout/spatial-canvas.js'
-export {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  type EdgeSides,
-  routeEdge,
-} from './layout/spatial-edges.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'

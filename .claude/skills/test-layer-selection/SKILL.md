@@ -1,6 +1,6 @@
 ---
 name: test-layer-selection
-description: How to pick the nearest test layer in the whiteboard repo (mcp-node / canvas-viewer-node / canvas-viewer-jsdom / canvas-viewer-browser / apps/web jsdom / web-browser / E2E), when to reach for a property or model-based test instead of an example, and the commands to run each. Use when writing the red test for a change, or deciding where a regression belongs.
+description: How to pick the nearest test layer in the whiteboard repo (mcp-node / canvas-viewer-node / canvas-viewer-jsdom / canvas-viewer-browser / web-jsdom / web-browser / E2E), when to reach for a property or model-based test instead of an example, and the commands to run each. Use when writing the red test for a change, or deciding where a regression belongs.
 ---
 
 # Test Layer Selection
@@ -13,7 +13,7 @@ Start with the smallest failing test at the **nearest** layer. Do not jump to br
 | `canvas-viewer-node` | pure parsing/serialization logic in `packages/canvas-viewer` with no DOM dependency | `pnpm test --project canvas-viewer-node` |
 | `canvas-viewer-jsdom` | `packages/canvas-viewer` components/hooks when browser layout & pointer behavior are NOT the core risk | `pnpm test --project canvas-viewer-jsdom` |
 | `canvas-viewer-browser` | `packages/canvas-viewer` popovers, dialogs, scroll, focus, keyboard, pointer, restore flows (real browser) | `pnpm test --project canvas-viewer-browser` |
-| `apps/web` jsdom project | React components/hooks in `apps/web` when browser layout & pointer behavior are NOT the core risk | `pnpm --filter @kamiazya/whiteboard-web test` |
+| `web-jsdom` | React components/hooks in `apps/web` when browser layout & pointer behavior are NOT the core risk | `pnpm test:web-jsdom` (jsdom project only) or `pnpm --filter @kamiazya/whiteboard-web test` (what CI runs: jsdom + `web-node`) |
 | `web-browser` | `apps/web` tests needing real browser APIs jsdom lacks: IndexedDB, OPFS, `window.showOpenFilePicker`. File suffix `.browser.test.tsx` | part of `pnpm test:browser` |
 | E2E | real routes, server composition, websocket timing, persistence order, multi-step page flows | promote only when needed |
 

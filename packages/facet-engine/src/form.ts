@@ -86,7 +86,10 @@ export type FacetForm =
   | { readonly kind: 'fields'; readonly fields: readonly FacetFormField[] }
   | {
       readonly kind: 'variants'
+      /** The schema field that selects the arm — a storage key. */
       readonly discriminant: string
+      /** What to CALL it on screen, humanized like any other field label. */
+      readonly discriminantLabel: string
       readonly variants: readonly FacetFormVariant[]
     }
   | { readonly kind: 'unsupported' }
@@ -141,7 +144,7 @@ function fieldsOf(
     const spec = editor?.fields[name]
     fields.push({
       name,
-      label: spec?.label ?? name,
+      label: spec?.label ?? humanize(name),
       control: specControl(spec) ?? derived,
       required,
       quick: spec?.quick ?? false,
@@ -159,6 +162,17 @@ function discriminantOf(shape: Record<string, z.ZodTypeAny>): [string, string] |
     }
   }
   return undefined
+}
+
+/**
+ * A schema field name turned into something a person reads: `dueDate` ->
+ * `Due date`. The derived label is a FALLBACK — a facet that cares declares
+ * one in its editor spec — but a fallback is what most tier-1 facets ship
+ * with, so it should not read like a variable.
+ */
+function humanize(name: string): string {
+  const spaced = name.replace(/([a-z0-9])([A-Z])/g, '$1 $2').replace(/[_-]+/g, ' ')
+  return spaced.charAt(0).toUpperCase() + spaced.slice(1).toLowerCase()
 }
 
 export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec): FacetForm {
@@ -185,7 +199,14 @@ export function deriveFacetForm(schema: z.ZodTypeAny, editor?: FacetEditorSpec):
       if (fields === undefined) return UNSUPPORTED
       variants.push({ label, fields })
     }
-    return discriminant === undefined ? UNSUPPORTED : { kind: 'variants', discriminant, variants }
+    return discriminant === undefined
+      ? UNSUPPORTED
+      : {
+          kind: 'variants',
+          discriminant,
+          discriminantLabel: humanize(discriminant),
+          variants,
+        }
   }
   return UNSUPPORTED
 }

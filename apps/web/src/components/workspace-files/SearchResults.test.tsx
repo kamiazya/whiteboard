@@ -15,10 +15,13 @@ import { SearchResults } from './SearchResults.js'
 
 afterEach(cleanup)
 
-const entries: WorkspaceDocumentEntry[] = [
+const documents: WorkspaceDocumentEntry[] = [
   { documentId: 'd1', path: 'plans/roadmap', name: 'Road map', kind: 'markdown' },
   { documentId: 'd2', path: 'sketches/map-of-rome', kind: 'spatial' },
 ]
+// A row is the document plus why it is here; these cases are about the
+// name and the path, so they carry no content excerpt.
+const entries = documents.map((document) => ({ document }))
 
 describe('SearchResults', () => {
   it('highlights the matched substring in the title', () => {

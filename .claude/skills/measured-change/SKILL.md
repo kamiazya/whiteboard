@@ -27,7 +27,7 @@ Every one of them would have shipped on argument alone.
 For "does this look better", one canvas cannot answer — it says the fix
 worked, never whether the failure moved somewhere nobody looked.
 
-Build a corpus plus an aggregate. `packages/canvas-render/src/layout/edge-routing-quality.test.ts`
+Build a corpus plus an aggregate. `packages/canvas-render/src/layout/edges/edge-routing-quality.test.ts`
 is the worked example.
 
 - **Metrics live in an independent oracle.** `test-utils/routing-metrics.ts`
@@ -51,7 +51,7 @@ expectation edited, has demonstrated it changed nothing but speed.
 
 ## Performance: `pnpm bench`
 
-`vitest bench` (`packages/canvas-render/src/layout/spatial-edges.bench.ts`),
+`vitest bench` (`packages/canvas-render/src/layout/edges/spatial-edges.bench.ts`),
 never a hand-rolled `performance.now()` loop — you need the variance and the
 sample count to know whether you measured anything.
 

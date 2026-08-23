@@ -13,12 +13,14 @@ const planning = definePlugin({
   facets: [
     defineFacet({
       name: 'due',
+      displayName: 'Due',
       version: 'v0',
       targets: ['node', 'document'],
       schema: z.object({ date: z.string() }),
     }),
     defineFacet({
       name: 'assignee',
+      displayName: 'Assignee',
       version: 'v0',
       targets: ['node'],
       schema: z.object({ member: z.string() }),
@@ -30,7 +32,7 @@ const registry = createFacetRegistry([visualPlugin, planning])
 
 describe('resolveFacetContributions', () => {
   it('groups a point by namespace in id order, facets in name order, headed by displayName', () => {
-    const groups = resolveFacetContributions(registry, 'contextMenu.node.properties')
+    const groups = resolveFacetContributions(registry, 'inspector.node')
     expect(groups.map((g) => g.namespace)).toEqual(['planning', 'visual'])
     expect(groups.map((g) => g.displayName)).toEqual(['Planning', 'Visual style'])
     expect(groups[0]?.facets.map((f) => f.key)).toEqual(['planning.assignee/v0', 'planning.due/v0'])
@@ -53,7 +55,7 @@ describe('resolveFacetContributions', () => {
   })
 
   it('each contribution carries its definition, so a vessel can read targets and schema', () => {
-    const groups = resolveFacetContributions(registry, 'contextMenu.node.properties')
+    const groups = resolveFacetContributions(registry, 'inspector.node')
     const shape = groups.find((g) => g.namespace === 'visual')?.facets[0]
     expect(shape?.definition.name).toBe('shape')
     expect(shape?.definition.targets).toContain('node')

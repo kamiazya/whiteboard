@@ -10,7 +10,7 @@ import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
 import type { MeasureText } from '../measure.js'
 import type { Scene, SceneNode } from '../scene-graph.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
+import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { layoutSpatialCanvas } from './spatial-canvas.js'
 
 // Deliberately NOT the shared `createFakeMeasure`, which ignores

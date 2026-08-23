@@ -8,6 +8,27 @@
  *
  * Optional everywhere. With no embedder, search is stage 0 exactly as it
  * shipped; supplying one adds semantic recall on top by rank fusion.
+ *
+ * ## An implementation that sends text off the machine needs its own consent
+ *
+ * This interface is deliberately transport-agnostic — a hosted embedding
+ * API satisfies it as readily as a local model, and `role` exists precisely
+ * so each implementation can express query/document asymmetry its own way
+ * (e5 prefixes the text, other APIs take a parameter, some need neither).
+ *
+ * That generality has one boundary the type system cannot hold. Every
+ * implementation shipped so far runs ON the user's machine, and the product
+ * around it is built on documents not leaving it. An implementation that
+ * posts document bodies to a third party is not a faster embedder — it
+ * changes what the product is, and it must NOT be reachable through
+ * `WHITEBOARD_SEMANTIC_SEARCH`, which today means "how good a job should
+ * the local model do".
+ *
+ * Anything remote gets its own explicit opt-in, naming the destination, and
+ * says so where a user reads about search rather than only here. Written
+ * down at the point of temptation, because the cheapest moment to add one
+ * behind an existing flag is exactly when someone is already editing this
+ * file.
  */
 export interface Embedder {
   /**
@@ -25,6 +46,43 @@ export interface Embedder {
   embed(texts: readonly string[], role: 'query' | 'document'): Promise<readonly Float32Array[]>
   /** Vector width, for a cheap shape check before scoring. */
   readonly dimensions: number
+  /**
+   * What produced these vectors — model and precision, e.g.
+   * `Xenova/multilingual-e5-small@q8`.
+   *
+   * Two embedders with the same width live in DIFFERENT vector spaces, so
+   * a cached vector has to record which one made it or a later reader will
+   * compare across them. Quantisation is the case that makes this concrete:
+   * q8 and fp32 of one model are both 384-wide, measurably different
+   * (nDCG@10 differs by 0.051 on JQaRA, p = 0.0003), and indistinguishable
+   * by anything else on this interface. Cosine across the two is not a
+   * similarity, and nothing throws — the results just quietly get worse.
+   */
+  readonly id: string
+}
+
+/**
+ * Checks a batch against the width its embedder promised.
+ *
+ * `dimensions` is otherwise a decorative field: `cosine` answers 0 for
+ * mismatched widths, so a model returning something unexpected makes every
+ * similarity 0, leaves the ranking arbitrary, and raises nothing. Search
+ * goes on looking like it works. Throwing is safe because every caller of
+ * an embedder already degrades to lexical results.
+ */
+export function assertVectorWidth(
+  vectors: readonly Float32Array[],
+  embedder: { id: string; dimensions: number },
+): void {
+  for (const vector of vectors) {
+    if (vector.length !== embedder.dimensions) {
+      throw new Error(
+        `${embedder.id} declares ${embedder.dimensions} dimensions but returned ` +
+          `a ${vector.length}-wide vector. Comparing across widths is not a ` +
+          'similarity; refusing rather than scoring everything as 0.',
+      )
+    }
+  }
 }
 
 /** Cosine similarity of two L2-normalised vectors. */

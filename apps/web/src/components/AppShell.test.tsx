@@ -3,7 +3,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
 import { resetShellStatusForTests, setShellConnection } from '@/lib/shell-status-store'
-import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
 import { AppShell } from './AppShell.js'
 
@@ -19,18 +18,12 @@ afterEach(() => {
   Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
 })
 
-function renderShell(
-  daemonConnected: boolean,
-  at = '/local/c1',
-  onContinueBrowserLocal?: () => void,
-) {
+function renderShell(daemonConnected: boolean, at = '/local/c1', onWorkInBrowser?: () => void) {
   const router = createMemoryRouter(
     [
       {
         path: '*',
-        element: (
-          <AppShell daemon={daemonConnected} onContinueBrowserLocal={onContinueBrowserLocal} />
-        ),
+        element: <AppShell daemon={daemonConnected} onWorkInBrowser={onWorkInBrowser} />,
       },
     ],
     {
@@ -103,8 +96,10 @@ describe('AppShell', () => {
 // It lives beside the settings gear for the same reason the gear does — the
 // document's own surface is for the document.
 describe('AppShell — the connection chip', () => {
-  const CTA_TEXT =
-    'Connect a local daemon (MCP) to unlock version history, workspaces, variations, and combining changes'
+  // Matched loosely: the CTA is two sentences across JSX lines, so an exact
+  // string match would be asserting the source's line breaks, not the copy.
+  const CTA = /Connect a daemon \(MCP\) for version history/i
+  const CTA_LIMIT = /Documents already in this browser stay here/i
 
   it('shows no chip until a page publishes a live session', () => {
     renderShell(true)
@@ -112,13 +107,13 @@ describe('AppShell — the connection chip', () => {
   })
 
   it.each([
-    ['local', /local/i],
+    ['browser', /browser/i],
     ['synced', /synced/i],
     ['reconnecting', /reconnecting/i],
     ['sync-off', /sync off/i],
   ] as const)('renders the %s state the page published', async (state, label) => {
     setShellConnection({ state, daemonBaseUrl: 'http://127.0.0.1:3099' })
-    renderShell(state !== 'local')
+    renderShell(state !== 'browser')
     expect((await screen.findByTestId('connection-chip')).textContent).toMatch(label)
   })
 
@@ -137,61 +132,38 @@ describe('AppShell — the connection chip', () => {
   })
 
   it('carries the capability CTA inside the Local popover, not in page chrome', async () => {
-    setShellConnection({ state: 'local' })
+    setShellConnection({ state: 'browser' })
     renderShell(false)
-    expect(screen.queryByText(CTA_TEXT)).toBeNull()
+    expect(screen.queryByText(CTA)).toBeNull()
 
     fireEvent.click(await screen.findByTestId('connection-chip'))
-    expect(await screen.findByText(CTA_TEXT)).toBeTruthy()
+    expect(await screen.findByText(CTA)).toBeTruthy()
+    // The CTA names what connecting does NOT do today: documents already in
+    // this browser are not carried over, they are imported one at a time.
+    expect(screen.getByText(CTA_LIMIT)).toBeTruthy()
   })
 
   it('offers the browser-local escape from the sync-off popover', async () => {
-    const onContinueBrowserLocal = vi.fn()
+    const onWorkInBrowser = vi.fn()
     setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
-    renderShell(true, '/w/ws/document/a.canvas', onContinueBrowserLocal)
+    renderShell(true, '/w/ws/document/a.canvas', onWorkInBrowser)
 
     fireEvent.click(await screen.findByTestId('connection-chip'))
-    fireEvent.click(await screen.findByRole('button', { name: /continue in browser-local/i }))
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+    fireEvent.click(await screen.findByRole('button', { name: /work in this browser instead/i }))
+    expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
 
-  it('disconnecting records the dismissal so discovery does not bring it straight back', async () => {
-    const daemonBaseUrl = 'http://127.0.0.1:3099'
-    const onContinueBrowserLocal = vi.fn()
-    // Seeded through the store, not by writing JSON: a hand-built payload that
-    // fails the store's own validation is silently replaced by defaults, and
-    // every assertion below would then pass without touching the real state.
-    createUserSettingsStore().update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: daemonBaseUrl,
-        knownDaemonBaseUrls: [daemonBaseUrl],
-      },
-    }))
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(daemonBaseUrl)
-
-    setShellConnection({ state: 'synced', daemonBaseUrl })
-    renderShell(true, '/w/ws/document/a.canvas', onContinueBrowserLocal)
-
-    fireEvent.click(await screen.findByTestId('connection-chip'))
-    fireEvent.click(await screen.findByTestId('connection-disconnect'))
-
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
-    const storage = createUserSettingsStore().load().storage
-    expect(storage.dismissedDaemonBaseUrls).toContain(daemonBaseUrl)
-    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(daemonBaseUrl)
-    // App.tsx reads localDaemonBaseUrl to decide a page is daemon-backed, so
-    // leaving it set reconnects on the next load — which makes the popover's
-    // "this browser stops using it" false the moment the user reloads.
-    expect(storage.localDaemonBaseUrl).toBeUndefined()
-  })
-
-  it('withholds the disconnect action where the app has no browser-local escape', async () => {
+  // The management action moved to Settings (see SettingsPage.test.tsx). What
+  // the shell keeps is the report and the pointer to where the action lives.
+  it('points at Settings rather than carrying the management action itself', async () => {
     setShellConnection({ state: 'synced', daemonBaseUrl: 'http://127.0.0.1:3099' })
     renderShell(true)
     fireEvent.click(await screen.findByTestId('connection-chip'))
     await waitFor(() => expect(screen.getByTestId('connection-popover')).toBeTruthy())
+
     expect(screen.queryByTestId('connection-disconnect')).toBeNull()
+    expect(screen.getByRole('link', { name: /manage in settings/i }).getAttribute('href')).toBe(
+      '/settings/connections',
+    )
   })
 })

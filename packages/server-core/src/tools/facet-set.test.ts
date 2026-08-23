@@ -201,6 +201,7 @@ describe('registered-facet validation (ADR-0013 decision 6)', () => {
     facets: [
       defineFacet({
         name: 'sample',
+        displayName: 'Sample',
         version: 'v0',
         targets: ['document'],
         schema: z.object({ status: z.enum(['open', 'done']) }),

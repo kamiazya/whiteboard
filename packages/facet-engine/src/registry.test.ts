@@ -8,6 +8,7 @@ const samplePlugin = definePlugin({
   facets: [
     defineFacet({
       name: 'sample',
+      displayName: 'Sample',
       version: 'v0',
       targets: ['document'],
       schema: z.object({ status: z.string().min(1) }),
@@ -18,7 +19,13 @@ const samplePlugin = definePlugin({
 describe('defineFacet / definePlugin', () => {
   it('rejects an invalid facet name segment at definition time', () => {
     expect(() =>
-      defineFacet({ name: 'Bad Name', version: 'v0', targets: ['document'], schema: z.object({}) }),
+      defineFacet({
+        name: 'Bad Name',
+        displayName: 'Bad',
+        version: 'v0',
+        targets: ['document'],
+        schema: z.object({}),
+      }),
     ).toThrow(/name/)
   })
 
@@ -26,6 +33,7 @@ describe('defineFacet / definePlugin', () => {
     expect(() =>
       defineFacet({
         name: 'ok',
+        displayName: 'Ok',
         version: '1' as never,
         targets: ['document'],
         schema: z.object({}),
@@ -35,7 +43,13 @@ describe('defineFacet / definePlugin', () => {
 
   it('rejects an empty targets list', () => {
     expect(() =>
-      defineFacet({ name: 'ok', version: 'v0', targets: [], schema: z.object({}) }),
+      defineFacet({
+        name: 'ok',
+        displayName: 'Ok',
+        version: 'v0',
+        targets: [],
+        schema: z.object({}),
+      }),
     ).toThrow(/targets/)
   })
 
@@ -46,6 +60,7 @@ describe('defineFacet / definePlugin', () => {
   it('rejects two facets with the same name inside one plugin', () => {
     const twice = defineFacet({
       name: 'sample',
+      displayName: 'Sample',
       version: 'v0',
       targets: ['document'],
       schema: z.object({}),
@@ -106,6 +121,7 @@ describe('resolveFacetPayload', () => {
     facets: [
       defineFacet({
         name: 'thing',
+        displayName: 'Thing',
         version: 'v2',
         targets: ['document'],
         schema: z.object({ c: z.string() }),
@@ -156,6 +172,7 @@ describe('resolveFacetPayload', () => {
         facets: [
           defineFacet({
             name: 'thing',
+            displayName: 'Thing',
             version: 'v2',
             targets: ['document'],
             schema: z.object({ c: z.string() }),
@@ -211,6 +228,7 @@ describe('write rejection messages are for a reader, not a dump', () => {
     facets: [
       defineFacet({
         name: 'badge',
+        displayName: 'Badge',
         version: 'v0',
         targets: ['node'],
         schema: z.union([
@@ -242,5 +260,28 @@ describe('write rejection messages are for a reader, not a dump', () => {
     const message = result.ok ? '' : result.message
     expect(message).not.toContain('"code"')
     expect(message).toContain('name')
+  })
+})
+
+describe('a facet carries its own human name', () => {
+  const base = {
+    version: 'v0' as const,
+    targets: ['node' as const],
+    schema: z.object({ a: z.string() }),
+  }
+
+  it('rejects a blank displayName, the way a plugin already is', () => {
+    expect(() => defineFacet({ ...base, name: 'thing', displayName: '  ' })).toThrow(
+      /needs a non-blank displayName/,
+    )
+  })
+
+  it('keeps the name it was given', () => {
+    // The panel used to build a title by concatenating the plugin's name
+    // with this identifier ("Visual style shape"). A facet that says what
+    // it is called ends that, and ends it for every later reader too.
+    expect(defineFacet({ ...base, name: 'text', displayName: 'Text placement' }).displayName).toBe(
+      'Text placement',
+    )
   })
 })

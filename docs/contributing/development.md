@@ -159,7 +159,7 @@ pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 Default regression triple after a change:
 
 ```bash
-pnpm test        # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model node, ports node, facet-engine node, codec node, workspace node, search node, server-core node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
+pnpm test        # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model node, ports node, facet-engine node, facet-ui jsdom, codec node, workspace node, search node, server-core node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
 pnpm typecheck   # tsc --noEmit (~10s)
 pnpm smoke:e2e   # stdio MCP subprocess: wb_document_create -> wb_canvas_edit -> version save/list/restore -> wb_document_set -> wb_document_get
 ```

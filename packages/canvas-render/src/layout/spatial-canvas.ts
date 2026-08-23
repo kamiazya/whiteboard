@@ -51,26 +51,26 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { computeEdgeJumps } from './edge-jumps.js'
-import { edgeLabelAnchor } from './edge-label-anchor.js'
+import { computeEdgeJumps } from './edges/edge-jumps.js'
+import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
+import {
+  assignEdgeAnchors,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+  routeEdge,
+} from './edges/spatial-edges.js'
 import {
   type FittedBlocks,
   firstLineOfBlocks,
   fitBlocksToHeight,
   layoutMdastBlocks,
   type MdastLayoutOptions,
-} from './mdast-blocks.js'
-import { type NodeOutlineKind, outlineContentBox, outlineEntryPoint } from './node-outline.js'
+} from './nodes/mdast-blocks.js'
+import { type NodeOutlineKind, outlineContentBox, outlineEntryPoint } from './nodes/node-outline.js'
+import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import { fitToWidth } from './nodes/truncate.js'
 import { scaleScene } from './scale-scene.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  routeEdge,
-} from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
-import { fitToWidth } from './truncate.js'
 
 /**
  * A degradation `layoutSpatialCanvas` hit while composing one node, reported

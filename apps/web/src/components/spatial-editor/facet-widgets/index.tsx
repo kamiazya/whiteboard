@@ -9,38 +9,27 @@
  * later editor-spec tier derives a default form instead of failing here.
  */
 import {
-  BUILT_IN_ICON_NAMES,
-  LUCIDE_ICONS,
-  LUCIDE_VIEWBOX,
-} from '@kamiazya/whiteboard-canvas-render'
-import {
-  deriveFacetForm,
-  type FacetDefinition,
-  type FacetGlyph,
   type FacetRegistry,
   resolveCanvasEdgeStyle,
   resolveFacetContributions,
-  resolveNodeSymbol,
-  VISUAL_SYMBOL_KEY,
-  type VisualSymbolFacet,
 } from '@kamiazya/whiteboard-facet-engine'
-import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { Ban, Circle, Cylinder, Diamond, Hexagon, Square } from 'lucide-react'
-import { createElement, type ReactNode } from 'react'
+import { type FacetEditor, type PluginUi, visualUi } from '@kamiazya/whiteboard-facet-ui'
+import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { SlidersHorizontal } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import type { EditorCommand } from '../commands.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */
 export interface NodePropertiesContext {
-  readonly node: SpatialNode
-  /** Applies per-target commands with the menu's selection semantics. */
-  readonly applyToSelection: (
-    commandsFor: (targetIds: readonly string[]) => readonly EditorCommand[],
-  ) => void
+  /**
+   * Opens the facet inspector for this node. The core surface owns the
+   * inspector's mounting; the DOORWAY belongs here, so no point-owning
+   * surface has to name the facet concept to offer one.
+   */
+  readonly openPanel: () => void
 }
-
-export type NodePropertiesWidget = (ctx: NodePropertiesContext) => readonly ContextMenuItem[]
 
 /** `canvasSettings`: what a canvas-settings panel widget receives. */
 export interface CanvasSettingsContext {
@@ -52,115 +41,14 @@ export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
 
 // --- visual.shape/v0 -------------------------------------------------------
 
-/**
- * The core's glyph vocabulary rendered: a spec NAMES a glyph, this maps the
- * name to a drawing. Keeping the map here (not in the engine) is the same
- * split as everywhere else — the engine owns what may be said, the vessel
- * owns how it looks.
- */
-function FacetGlyphIcon({ glyph }: { readonly glyph?: FacetGlyph }) {
-  switch (glyph) {
-    case 'square':
-      return <Square />
-    case 'circle':
-      return <Circle />
-    case 'diamond':
-      return <Diamond />
-    case 'hexagon':
-      return <Hexagon />
-    case 'parallelogram':
-      // No lucide glyph for a parallelogram; drawn in the same 24-grid
-      // stroke style so a row of these reads as one set.
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M7 5h14l-4 14H3Z" />
-        </svg>
-      )
-    case 'cylinder':
-      return <Cylinder />
-    default:
-      return undefined
-  }
-}
-
 // --- visual.symbol/v0 ------------------------------------------------------
 
 /**
- * The badge picker. Icons come from the RENDERER's vendored set, so the row
- * can never offer a name the canvas would silently drop; the emoji arm
- * carries a small starter set — a free-entry field is the editor-spec tier's
- * job, not a quick band's.
+ * The plugin UI halves this composition root loads. A plugin's data half is
+ * registered in the facet registry; this is the matching list for the half
+ * that draws — joined by plugin id, so neither half imports the other.
  */
-const EMOJI_CHOICES = ['✅', '⚠️', '🔥', '⭐', '📌'] as const
-
-const visualSymbolBand: NodePropertiesWidget = ({ node, applyToSelection }) => {
-  const current = resolveNodeSymbol(node)
-  const applySymbol = (payload: VisualSymbolFacet | undefined) => {
-    applyToSelection((ids) =>
-      ids.map((id) => ({ kind: 'set-node-facet' as const, id, key: VISUAL_SYMBOL_KEY, payload })),
-    )
-  }
-  return [
-    {
-      kind: 'options' as const,
-      label: 'Symbol',
-      options: [
-        {
-          label: 'none',
-          ariaLabel: 'No symbol',
-          icon: <Ban />,
-          selected: current === undefined,
-          onSelect: () => applySymbol(undefined),
-        },
-        ...BUILT_IN_ICON_NAMES.map((name) => ({
-          label: name,
-          ariaLabel: `Icon ${name}`,
-          icon: <BuiltInIcon name={name} />,
-          selected: current?.kind === 'icon' && current.name === name,
-          onSelect: () => applySymbol({ kind: 'icon', name }),
-        })),
-        ...EMOJI_CHOICES.map((char) => ({
-          label: char,
-          ariaLabel: `Emoji ${char}`,
-          selected: current?.kind === 'emoji' && current.char === char,
-          onSelect: () => applySymbol({ kind: 'emoji', char }),
-        })),
-      ],
-    },
-  ]
-}
-
-/**
- * Draws a vendored icon by name, from the SAME geometry the canvas renders,
- * so the picker cannot drift from the badge it produces.
- */
-function BuiltInIcon({ name }: { readonly name: string }) {
-  return (
-    <svg
-      viewBox={LUCIDE_VIEWBOX}
-      fill="none"
-      stroke="currentColor"
-      strokeWidth="2"
-      strokeLinecap="round"
-      strokeLinejoin="round"
-      aria-hidden="true"
-    >
-      {(LUCIDE_ICONS[name] ?? []).map((element, index) => {
-        const { tag, ...attrs } = element
-        // The vendored geometry is a fixed, never-reordered list, so the
-        // index is a stable identity here.
-        return createElement(tag, { ...attrs, key: `${tag}-${index}` })
-      })}
-    </svg>
-  )
-}
+const PLUGIN_UIS: readonly PluginUi[] = [visualUi]
 
 // --- visual.edges/v0 -------------------------------------------------------
 
@@ -234,87 +122,58 @@ const visualEdgesPanel: CanvasSettingsWidget = ({ canvas, run }) => {
 }
 
 /**
- * The `contextMenu.node.properties` point resolved to menu items: bands per
- * contributing namespace, headed by the plugin's displayName only once a
- * SECOND namespace contributes (one namespace stays unlabeled). Group order
- * is namespace-id lexicographic — display wording never moves it.
+ * The `contextMenu.node.properties` point resolved to menu items: a
+ * separator fencing the region off from the core rows, then one band group
+ * per contributing namespace under the plugin's displayName, then the
+ * doorway to the full panel. Group order is namespace-id lexicographic —
+ * display wording never moves it.
+ *
+ * The heading is unconditional. An earlier rule dropped it while only one
+ * namespace contributed, on the reasoning that a lone heading says nothing
+ * — but what it actually says is WHERE THE CORE MENU ENDS, and without it
+ * a facet row is indistinguishable from Color or Order. Reported from a
+ * phone once a third band landed.
  */
 /**
- * Tier 2: a facet that DECLARES its editor gets its quick band rendered
- * from the declaration — no per-facet React. The glyph vocabulary is the
- * core's (a plugin names one, it cannot ship one), which is what keeps a
- * declared editor a declaration rather than third-party UI code.
+ * The node context menu's entire facet surface: one doorway, and nothing
+ * that edits a facet.
+ *
+ * Quick bands used to live here. An action menu's entries run once and
+ * close it; a facet is state you look at and adjust several times in a row,
+ * so it belongs on the inspector — and the menu was growing a row per
+ * domain, with a stored value one tap from Delete.
+ *
+ * No doorway at all when nothing targets a node: an inspector with nothing
+ * in it is a dead end, not an empty state.
  */
-function declaredBands(
-  facetKey: string,
-  definition: FacetDefinition,
-  ctx: NodePropertiesContext,
-): readonly ContextMenuItem[] {
-  if (definition.editor === undefined) return []
-  const form = deriveFacetForm(definition.schema, definition.editor)
-  if (form.kind !== 'fields') return []
-  const stored = ctx.node['x-whiteboard']?.facets?.[facetKey] as Record<string, unknown> | undefined
-  return form.fields.flatMap((field) => {
-    if (!field.quick || field.control.kind !== 'segmented') return []
-    const current = stored?.[field.name]
-    return [
-      {
-        kind: 'options' as const,
-        label: field.label,
-        options: field.control.options.map((option) => ({
-          label: option.value ?? 'none',
-          ariaLabel: option.label,
-          icon: <FacetGlyphIcon glyph={option.glyph} />,
-          // A null option means the facet's ABSENCE, which is why the
-          // comparison is against undefined rather than the value.
-          selected: option.value === null ? stored === undefined : current === option.value,
-          onSelect: () => {
-            ctx.applyToSelection((ids) =>
-              ids.map((id) => ({
-                kind: 'set-node-facet' as const,
-                id,
-                key: facetKey,
-                payload: option.value === null ? undefined : { [field.name]: option.value },
-              })),
-            )
-          },
-        })),
-      },
-    ]
-  })
-}
-
 export function nodePropertyItems(
   registry: FacetRegistry,
   ctx: NodePropertiesContext,
-  widgets: Readonly<Record<string, NodePropertiesWidget>> = NODE_PROPERTIES_WIDGETS,
 ): readonly ContextMenuItem[] {
-  const contributed = resolveFacetContributions(registry, 'contextMenu.node.properties')
-    .map((group) => ({
-      group,
-      // A hand-written widget still wins where one is registered (tier 2
-      // is a ladder, not a replacement): a picker the catalog cannot yet
-      // express keeps its code.
-      bands: group.facets.flatMap(
-        (facet) => widgets[facet.key]?.(ctx) ?? declaredBands(facet.key, facet.definition, ctx),
-      ),
-    }))
-    .filter((entry) => entry.bands.length > 0)
-  return contributed.flatMap(({ group, bands }) =>
-    contributed.length >= 2
-      ? [{ kind: 'heading' as const, label: group.displayName }, ...bands]
-      : bands,
-  )
+  if (resolveFacetContributions(registry, 'inspector.node').length === 0) return []
+  return [
+    { kind: 'separator' as const },
+    { label: 'Facets…', icon: <SlidersHorizontal />, onSelect: ctx.openPanel },
+  ]
 }
 
 // --- registrations ---------------------------------------------------------
 
-export const NODE_PROPERTIES_WIDGETS: Readonly<Record<string, NodePropertiesWidget>> = {
-  // visual.shape is NOT here: it declares its band (see visual.ts's editor
-  // spec) and is rendered from that declaration — the acceptance test for
-  // tier 2 being usable by the plugin that ships with the engine.
-  'visual.symbol/v0': visualSymbolBand,
-}
+/**
+ * Tier-3 editors by facet key, resolved from what each PLUGIN declares.
+ * This vessel registers none of its own: a facet's editor is the plugin's
+ * to own, which is what stops the same facet from having one face here and
+ * a different one on the next surface.
+ */
+export const NODE_FACET_EDITORS: Readonly<Record<string, FacetEditor>> = Object.fromEntries(
+  PLUGIN_UIS.flatMap((ui) =>
+    ui.sections.flatMap((section) =>
+      section.component === undefined
+        ? []
+        : [[`${ui.plugin}.${section.facet}/v0`, section.component] as const],
+    ),
+  ),
+)
 
 export const CANVAS_SETTINGS_WIDGETS: Readonly<Record<string, CanvasSettingsWidget>> = {
   'visual.edges/v0': visualEdgesPanel,

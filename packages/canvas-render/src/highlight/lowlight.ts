@@ -30,7 +30,7 @@ import typescript from 'highlight.js/lib/languages/typescript'
 import xml from 'highlight.js/lib/languages/xml'
 import yaml from 'highlight.js/lib/languages/yaml'
 import { createLowlight } from 'lowlight'
-import type { CodeTokenLines, CodeTokenRole } from '../layout/mdast-blocks.js'
+import type { CodeTokenLines, CodeTokenRole } from '../layout/nodes/mdast-blocks.js'
 
 // Registered eagerly and never on demand: a fence's language is only known
 // mid-layout, and layout is synchronous — an await there would either block

@@ -45,12 +45,25 @@ function openNodeMenu(container: HTMLElement): HTMLElement {
   return container.querySelector('[data-testid="context-menu"]') as HTMLElement
 }
 
+/** Opens the node menu, then the inspector behind its one facet entry. */
+function openInspector(container: HTMLElement): HTMLElement {
+  const menu = openNodeMenu(container)
+  const entry = [...menu.querySelectorAll('button')].find((b) =>
+    (b.textContent ?? '').startsWith('Facets'),
+  )
+  expect(entry).toBeDefined()
+  fireEvent.click(entry as HTMLElement)
+  const opened = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
+  expect(opened).not.toBeNull()
+  return opened
+}
+
 it('an icon pick stores the facet and the scene draws the badge', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  const menu = openNodeMenu(container)
-  fireEvent.click(menu.querySelector('[aria-label="Icon star"]') as HTMLElement)
+  const panel = openInspector(container)
+  fireEvent.click(panel.querySelector('[aria-label="Icon star"]') as HTMLElement)
 
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'icon', name: 'star' })
   // The badge is a <use> of the vendored icon symbol, drawn in the scene.
@@ -67,13 +80,13 @@ it('an emoji pick draws a glyph, and No symbol removes the facet', () => {
       .map((t) => t.textContent)
       .filter((value) => value === '⭐')
 
-  const menu = openNodeMenu(container)
-  fireEvent.click(menu.querySelector('[aria-label="Emoji ⭐"]') as HTMLElement)
+  const panel = openInspector(container)
+  fireEvent.click(panel.querySelector('[aria-label="Emoji ⭐"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toEqual({ kind: 'emoji', char: '⭐' })
   // The badge is DRAWN, not merely stored.
   expect(glyphText()).toHaveLength(1)
 
-  fireEvent.click(menu.querySelector('[aria-label="No symbol"]') as HTMLElement)
+  fireEvent.click(panel.querySelector('[aria-label="No symbol"]') as HTMLElement)
   expect(symbolOf(latest.canvas)).toBeUndefined()
   expect(latest.canvas.nodes[0]).not.toHaveProperty('x-whiteboard')
   expect(glyphText()).toHaveLength(0)
