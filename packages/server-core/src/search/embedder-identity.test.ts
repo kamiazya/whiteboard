@@ -3,6 +3,7 @@ import { describe, expect, it } from 'vitest'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
+import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import type { Embedder } from './embedder.js'
 
@@ -45,6 +46,42 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
   })
   return created.documentId
 }
+
+describe('a declared width is enforced, not decorative', () => {
+  /** Declares 384 and returns 3 — the shape a swapped model produces. */
+  function liar(): Embedder {
+    return {
+      id: 'liar@v1',
+      dimensions: 384,
+      async embed(texts: readonly string[], _role: 'query' | 'document') {
+        return texts.map(() => Float32Array.from([1, 0, 0]))
+      },
+    }
+  }
+
+  it('refuses vectors whose width contradicts the embedder', async () => {
+    // `cosine` answers 0 for mismatched widths, so without this check every
+    // similarity silently becomes 0: the ranking goes arbitrary, no error
+    // is raised, and search looks like it is working.
+    const deps = makeDeps()
+    await seed(deps)
+    const entries = await deps.documentIndex.listDocuments({ workspaceId: WS })
+    await expect(new ContentFactsCache().vectorsFor(deps, WS, entries, liar())).rejects.toThrow(
+      /384/,
+    )
+  })
+
+  it('degrades to lexical rather than failing the search', async () => {
+    const deps = makeDeps()
+    const documentId = await seed(deps)
+    const out = await createDocumentSearchTool({ ...deps, embedder: liar() }).execute({
+      workspaceId: WS,
+      query: 'body',
+    })
+    // The lexical half still answers; the caller never sees the throw.
+    expect(out.results.map((r) => r.documentId)).toEqual([documentId])
+  })
+})
 
 describe('a cached vector remembers which embedder made it', () => {
   it('re-embeds when the embedder changes, even though the document did not', async () => {

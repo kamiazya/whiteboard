@@ -1,5 +1,6 @@
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { Embedder } from '../search/embedder.js'
+import { assertVectorWidth } from '../search/embedder.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from '../tools/document-io.js'
 import { type ContentFacts, extractContentFacts } from './extract.js'
@@ -121,6 +122,7 @@ export class ContentFactsCache {
         pending.map((entry) => entry.text),
         'document',
       )
+      assertVectorWidth(vectors, embedder)
       pending.forEach((p, index) => {
         const cached = held.get(p.documentId)
         const vector = vectors[index]
