@@ -118,7 +118,7 @@ export async function wbDocumentDelete(
   }
   // Before either delete: what the composition root has to clean up is only
   // discoverable while the document is still whole (see DocumentTeardown).
-  const finalizeTeardown = await deps.documentTeardown?.begin({
+  const finalizeTeardown = await deps.documentTeardown.begin({
     workspaceId: input.workspaceId,
     documentId: entry.documentId,
     path: entry.path,
@@ -132,6 +132,6 @@ export async function wbDocumentDelete(
     path: entry.path,
   })
   await deps.documentStore.deleteDoc({ docRef: { kind: 'document', documentId: entry.documentId } })
-  await finalizeTeardown?.()
+  await finalizeTeardown()
   return { deleted: true }
 }

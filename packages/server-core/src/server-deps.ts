@@ -111,12 +111,19 @@ export interface ServerDeps {
    * root's own path would not have left behind. Two teardown paths that
    * disagree is worse than one that is incomplete.
    *
-   * Optional like `measure` and `clientNotifier`: a composition with nothing
-   * outside the index and the store is a valid server, and every existing
-   * test is one. `resolveServerDeps` supplies it, and container.test.ts
-   * pins that — optional must not become a synonym for unwired.
+   * REQUIRED, unlike `measure` and `clientNotifier`, and that is the whole
+   * defence: a composition root that forgets it is a compile error rather
+   * than a server that silently half-deletes. Optional is what let the
+   * original defect exist, and a hand-written "is it wired?" assertion only
+   * ever covers the dependencies somebody remembered to write one for.
+   *
+   * A test whose subject is elsewhere passes `unusedDocumentTeardown()`,
+   * whose `begin` throws — the same idiom as `unusedDocumentIndex`, and for
+   * the same reason: a no-op double would let a delete test pass while
+   * asserting nothing about the cleanup, which is the state this repo was
+   * in before the seam existed.
    */
-  documentTeardown?: DocumentTeardown
+  documentTeardown: DocumentTeardown
 }
 
 /**

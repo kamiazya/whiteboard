@@ -84,18 +84,12 @@ describe('ports TOKENS identity', () => {
 })
 
 describe('resolveServerDeps document teardown', () => {
-  // documentTeardown is optional on ServerDeps so every existing composition
-  // and every test stays a valid server. Optional is one keystroke from
-  // unwired, and unwired here means wb_document_delete goes back to leaving
-  // thumbnails, blobs and a cached doc behind — silently, with the tool
-  // still answering { deleted: true }. This is the assertion that stops it.
-  it('supplies a documentTeardown, so an agent delete cleans up like an HTTP delete', () => {
-    const deps = resolveServerDeps(createContainer())
-
-    expect(deps.documentTeardown).toBeDefined()
-    expect(typeof deps.documentTeardown?.begin).toBe('function')
-  })
-
+  // There is deliberately NO "is documentTeardown defined?" test here: the
+  // field is required on ServerDeps, so its absence is a compile error and
+  // that assertion could not fail. What can still fail is wiring an inert
+  // stub in place of the composition root's own teardown — which would put
+  // wb_document_delete back to leaving thumbnails, blobs and a cached doc
+  // behind, silently, with the tool still answering { deleted: true }.
   it("supplies the composition root's own teardown, not an inert stub", () => {
     const deps = resolveServerDeps(createContainer())
 
