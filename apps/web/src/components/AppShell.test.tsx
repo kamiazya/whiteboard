@@ -3,7 +3,6 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
 import { resetShellStatusForTests, setShellConnection } from '@/lib/shell-status-store'
-import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
 import { AppShell } from './AppShell.js'
 
@@ -154,43 +153,17 @@ describe('AppShell — the connection chip', () => {
     expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
 
-  it('disconnecting records the dismissal so discovery does not bring it straight back', async () => {
-    const daemonBaseUrl = 'http://127.0.0.1:3099'
-    const onWorkInBrowser = vi.fn()
-    // Seeded through the store, not by writing JSON: a hand-built payload that
-    // fails the store's own validation is silently replaced by defaults, and
-    // every assertion below would then pass without touching the real state.
-    createUserSettingsStore().update((current) => ({
-      ...current,
-      storage: {
-        ...current.storage,
-        localDaemonBaseUrl: daemonBaseUrl,
-        knownDaemonBaseUrls: [daemonBaseUrl],
-      },
-    }))
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(daemonBaseUrl)
-
-    setShellConnection({ state: 'synced', daemonBaseUrl })
-    renderShell(true, '/w/ws/document/a.canvas', onWorkInBrowser)
-
-    fireEvent.click(await screen.findByTestId('connection-chip'))
-    fireEvent.click(await screen.findByTestId('connection-disconnect'))
-
-    expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
-    const storage = createUserSettingsStore().load().storage
-    expect(storage.dismissedDaemonBaseUrls).toContain(daemonBaseUrl)
-    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(daemonBaseUrl)
-    // App.tsx reads localDaemonBaseUrl to decide a page is daemon-backed, so
-    // leaving it set reconnects on the next load — which makes the popover's
-    // "this browser stops using it" false the moment the user reloads.
-    expect(storage.localDaemonBaseUrl).toBeUndefined()
-  })
-
-  it('withholds the disconnect action where the app has no browser-local escape', async () => {
+  // The management action moved to Settings (see SettingsPage.test.tsx). What
+  // the shell keeps is the report and the pointer to where the action lives.
+  it('points at Settings rather than carrying the management action itself', async () => {
     setShellConnection({ state: 'synced', daemonBaseUrl: 'http://127.0.0.1:3099' })
     renderShell(true)
     fireEvent.click(await screen.findByTestId('connection-chip'))
     await waitFor(() => expect(screen.getByTestId('connection-popover')).toBeTruthy())
+
     expect(screen.queryByTestId('connection-disconnect')).toBeNull()
+    expect(screen.getByRole('link', { name: /manage in settings/i }).getAttribute('href')).toBe(
+      '/settings/connections',
+    )
   })
 })

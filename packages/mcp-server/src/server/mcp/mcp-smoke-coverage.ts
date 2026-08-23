@@ -31,6 +31,14 @@
  *   UNIT_ONLY_TOOLS     — covered by unit tests but not yet wired into the smoke.
  *   DEFERRED_TOOLS      — require infrastructure the offline smoke cannot provide.
  *                         Each entry carries reason and unblock.
+ *
+ * smoke-tool-list-parity.test.ts checks these categories against the smoke
+ * script's real `callTool('<name>')` call sites, not only against each
+ * other: a COVERED_TOOLS entry the smoke never calls, or a UNIT_ONLY_TOOLS /
+ * DEFERRED_TOOLS entry it does, both fail. Internal-consistency-only checks
+ * (the four-place list above) can pass while a tool is registered with a
+ * schema that rejects every payload and no test ever calls it through a
+ * real MCP client — which is exactly how wb_body_patch shipped dead.
  */
 
 // Authoritative list — keep in sync with registerDocumentTools calls.
@@ -68,6 +76,10 @@ export const COVERED_TOOLS = [
   'wb_version_list',
   'wb_document_create',
   'canvas_view',
+  'wb_body_patch',
+  'wb_scene_render',
+  'wb_document_get',
+  'wb_document_list',
 ] as const
 
 // Empty since the seeding batch gives every later step something to act on: every tool
@@ -86,14 +98,7 @@ export const ERROR_PATH_ONLY_TOOLS = [] as const
 // be a claim nobody checks.
 export const UI_LINKED_TOOLS = ['canvas_view'] as const
 
-export const UNIT_ONLY_TOOLS = [
-  'wb_body_patch',
-  'wb_scene_render',
-  'wb_document_get',
-  'wb_document_delete',
-  'wb_document_resolve',
-  'wb_document_list',
-] as const
+export const UNIT_ONLY_TOOLS = ['wb_document_delete', 'wb_document_resolve'] as const
 
 export type DeferredTool = {
   name: string

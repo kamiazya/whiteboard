@@ -107,40 +107,6 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
                 }
           }
           onWorkInBrowser={onWorkInBrowser}
-          onDisconnect={
-            onWorkInBrowser === undefined || daemonBaseUrl === undefined
-              ? undefined
-              : () => {
-                  // Recorded so discovery skips it next time: the default port
-                  // range is rescanned on every visit, so forgetting alone
-                  // would bring this daemon straight back and make the action
-                  // look like a no-op.
-                  settingsStore.update((current) => {
-                    const known = (current.storage.knownDaemonBaseUrls ?? []).filter(
-                      (entry) => entry !== daemonBaseUrl,
-                    )
-                    const dismissed = (current.storage.dismissedDaemonBaseUrls ?? []).filter(
-                      (entry) => entry !== daemonBaseUrl,
-                    )
-                    // Clearing the stored target is what makes this outlive
-                    // the page: App.tsx reads localDaemonBaseUrl to decide a
-                    // load is daemon-backed, so leaving it set reconnects on
-                    // the next visit and the popover's "this browser stops
-                    // using it" becomes false.
-                    const { localDaemonBaseUrl, ...storage } = current.storage
-                    return {
-                      ...current,
-                      storage: {
-                        ...storage,
-                        ...(localDaemonBaseUrl === daemonBaseUrl ? {} : { localDaemonBaseUrl }),
-                        knownDaemonBaseUrls: known,
-                        dismissedDaemonBaseUrls: [daemonBaseUrl, ...dismissed].slice(0, 5),
-                      },
-                    }
-                  })
-                  onWorkInBrowser()
-                }
-          }
         >
           {connection.state === 'browser' && (
             <>
