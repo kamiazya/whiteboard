@@ -145,4 +145,28 @@ describe('a contributed shape', () => {
     const svg = renderSceneToSvg(scene, { shapes: { 'demo.triangle': TRIANGLE } })
     expect(svg).toContain('200,0')
   })
+
+  it('is MERGED over the built-ins, so passing a table keeps visual’s shapes', () => {
+    // A caller supplying one shape must not lose the five that ship. Caught
+    // by rendering a real canvas, not by a test: every case above passes
+    // either only a contributed table or none, so a table that REPLACED the
+    // built-ins looked correct from both sides.
+    const scene = layoutSpatialCanvas(
+      canvasWith('visual.shape/v0', 'diamond'),
+      baseOptions({ shapes: { 'demo.triangle': TRIANGLE } }),
+    )
+
+    expect(shapeOf(scene.nodes)?.shape).toBe('visual.diamond')
+    expect(renderSceneToSvg(scene, { shapes: { 'demo.triangle': TRIANGLE } })).toContain('polygon')
+  })
+
+  it('lets a caller override a built-in under its own id', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith('visual.shape/v0', 'diamond'),
+      baseOptions({ shapes: { 'visual.diamond': TRIANGLE } }),
+    )
+    const svg = renderSceneToSvg(scene, { shapes: { 'visual.diamond': TRIANGLE } })
+    // The triangle's own vertices, not the diamond's.
+    expect(svg).toContain('200,0')
+  })
 })

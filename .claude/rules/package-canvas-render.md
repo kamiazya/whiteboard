@@ -26,15 +26,33 @@ the clusters may not import each other, and may not reach up to the
 composer. Tests are exempt — an edge-router test that builds its fixture by
 composing a whole scene is doing setup, not depending on the composer.
 
-That the clusters are disjoint is also the reason a facet-style plugin
-seam is NOT what this directory needs. Extension already arrives through
-`facet-engine`: `spatial-canvas.ts` resolves shape, edge style, symbol and
-text alignment from registered facets, so a new rendering behaviour is a
-plugin declaration plus a small composer change (`visual.text/v0` cost ten
-lines here). The scene-node union stays closed on purpose — every consumer
-is in this repo, and an open union would buy dispatch flexibility nobody
-has asked for at the cost of the exhaustiveness checking the SVG backend
-relies on.
+**The scene-node union stays closed** — every consumer is in this repo, and
+an open union would buy dispatch flexibility nobody has asked for at the
+cost of the exhaustiveness checking the SVG backend relies on. That has not
+changed and should not.
+
+What DID change (2026-08-24, human gate) is the claim this paragraph used to
+open with: that a plugin seam was not needed here because "a new rendering
+behaviour is a plugin declaration plus a small composer change". The second
+half was the problem — a plugin could not add a silhouette without someone
+editing this package, so the extension point was this repo's own commit
+history. Shapes are now a TABLE keyed by namespaced id (`ShapeTable`,
+`layout/nodes/node-outline.ts`), merged over the built-ins by both
+`SpatialLayoutOptions.shapes` and `SvgDocumentOptions.shapes`, exactly as
+`icons` already worked.
+
+It cost less than the old paragraph implies because three of the four outline
+functions never knew a shape's name: `outlineContains` switches on the
+returned `NodeOutline`'s kind and `outlineEntryPoint` bisects against that.
+Only the geometry and the content box are per-shape — which is the whole of
+`ShapeContribution`.
+
+Ids are COMPOSED from the declaring facet's key plus its bare payload kind,
+never stored whole, so nothing migrates and a plugin cannot name another
+plugin's geometry. The remaining asymmetry is recorded at
+`resolveNodeOutlines`: the bundled facet is read through `resolveNodeShape`
+(compat chain + schema) while a caller-declared one is read raw and gated by
+the table alone.
 
 - Plain-TS scene graph types (`scene-graph.ts`): resolved bounding boxes,
   shape kind, text runs, list/heading/table structure, the SVG-fragment

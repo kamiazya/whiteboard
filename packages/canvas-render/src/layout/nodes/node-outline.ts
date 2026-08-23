@@ -27,6 +27,16 @@ import type { BoundingBox } from '../../scene-graph.js'
  * per-shape judgement (how much of the box may text use) that no formula
  * derives from a polygon. A shape that omits it gets the bbox — content may
  * then cross the silhouette, exactly the degradation an unknown id gets.
+ *
+ * ponytail: a returned polygon must be CONVEX. `outlineContains` answers
+ * through `convexPolygonContains` and `outlineEntryPoint` bisects assuming
+ * the outline is convex along the probed ray — true of every built-in, and
+ * now a contract a contributor can break. A concave shape still DRAWS
+ * correctly; what degrades is hit-testing and where an edge terminates,
+ * both falling back to the convex hull. Lifting it means a general
+ * point-in-polygon test plus a ray intersection that does not assume a
+ * single crossing, and is worth doing when a contributed concave shape is
+ * real rather than a demo.
  */
 export interface ShapeContribution {
   readonly outline: (box: BoundingBox) => NodeOutline | null
@@ -39,6 +49,16 @@ export interface ShapeContribution {
  * so a document cannot name another plugin's geometry.
  */
 export type ShapeTable = Readonly<Record<string, ShapeContribution>>
+
+/**
+ * A caller's table is MERGED OVER the built-ins, never a replacement — an id
+ * it does not carry still resolves, and an id it does overrides. Done as a
+ * fallback lookup rather than an object spread because this runs per node
+ * per layout, and because it keeps the merge correct for a direct caller
+ * (hit-testing, a test) that never went through the layout entry point.
+ */
+const lookup = (shapes: ShapeTable, shapeId: string): ShapeContribution | undefined =>
+  shapes[shapeId] ?? BUILT_IN_SHAPES[shapeId]
 
 export type NodeOutline =
   | {
@@ -188,7 +208,7 @@ export function nodeOutline(
   shapes: ShapeTable = BUILT_IN_SHAPES,
 ): NodeOutline | null {
   if (!isFiniteBox(box)) return null
-  return shapes[shapeId]?.outline(box) ?? null
+  return lookup(shapes, shapeId)?.outline(box) ?? null
 }
 
 /**
@@ -209,7 +229,7 @@ export function outlineContentBox(
   shapes: ShapeTable = BUILT_IN_SHAPES,
 ): BoundingBox {
   if (shapeId === undefined || !isFiniteBox(box)) return box
-  return shapes[shapeId]?.contentBox?.(box) ?? box
+  return lookup(shapes, shapeId)?.contentBox?.(box) ?? box
 }
 
 /**
