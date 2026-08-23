@@ -30,6 +30,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     title: 'Apply a batch of edits to the spatial canvas',
   },
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
+  wb_facet_list: { profile: READ_ONLY, title: 'List the facets this deployment registered' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_viewport_set: {
     // Mutating rather than read-only: it changes what a human is looking at.

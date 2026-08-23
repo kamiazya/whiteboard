@@ -443,7 +443,10 @@ export function App({ providerState }: AppProps) {
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <div className="flex h-dvh flex-col">
-            <AppShellLazy daemon={true} />
+            <AppShellLazy
+              daemon={true}
+              onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
+            />
             <div className="min-h-0 flex-1">
               <Suspense
                 fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -464,7 +467,6 @@ export function App({ providerState }: AppProps) {
                     workspaceId={daemonView.workspaceId}
                     path={daemonView.path}
                     token={pairedToken}
-                    onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
                     browserLocalStore={browserLocalStore}
                     onNavigateBack={() =>
                       setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
@@ -530,7 +532,7 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShellLazy daemon={true} />
+          <AppShellLazy daemon={true} onContinueBrowserLocal={() => setForcedBrowserLocal(true)} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -553,7 +555,6 @@ export function App({ providerState }: AppProps) {
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
                   browserLocalStore={browserLocalStore}
-                  onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
                   onNavigateBack={() =>
                     setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
                   }

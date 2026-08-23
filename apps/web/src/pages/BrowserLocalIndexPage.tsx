@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
+import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
@@ -132,6 +133,8 @@ export function BrowserLocalIndexPage({
     }
   }, [index, clock, pointer, pendingDelete])
 
+  const { folder: routedFolder, setFolder: setRoutedFolder } = useRoutedFolder()
+
   const handleCreate = useCallback(
     async (kind: DocumentKind) => {
       setCreating(true)
@@ -192,6 +195,8 @@ export function BrowserLocalIndexPage({
       ) : snapshots !== null ? (
         <WorkspaceFilesPanel
           source={filesSource}
+          initialFolder={routedFolder}
+          onFolderChange={setRoutedFolder}
           onOpenDocument={onOpenDocument}
           onRequestDelete={(path, displayName, kind) =>
             setPendingDelete({ path, displayName, kind })

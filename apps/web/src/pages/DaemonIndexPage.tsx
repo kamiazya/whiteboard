@@ -4,6 +4,7 @@ import { DeleteDocumentDialog } from '../components/document-list/DeleteDocument
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
+import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
 import {
   createDaemonFetch,
   createDocument,
@@ -190,6 +191,8 @@ export function DaemonIndexPage({
   // 3). A path is derived from the loaded rows so it never collides with a
   // canvas already in the list; naming happens afterwards, in the opened
   // canvas's own top bar.
+  const { folder: routedFolder, setFolder: setRoutedFolder } = useRoutedFolder()
+
   const handleCreate = useCallback(
     async (kind: DocumentKind) => {
       if (!selectedWorkspace) return
@@ -393,6 +396,8 @@ export function DaemonIndexPage({
           <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
             <WorkspaceFilesPanel
               source={filesSource}
+              initialFolder={routedFolder}
+              onFolderChange={setRoutedFolder}
               onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}
               onDuplicateDocument={(path) => void handleDuplicate(path)}
               onRequestDelete={(path, displayName, kind) =>

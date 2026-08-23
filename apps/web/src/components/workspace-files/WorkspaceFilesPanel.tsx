@@ -1,5 +1,5 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { Columns2, FilePlus2, LayoutGrid, List, Search } from 'lucide-react'
+import { Columns2, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
@@ -13,6 +13,7 @@ import { FolderContentsList } from './FolderContentsList.js'
 import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
+import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { newDocumentPathIn } from './new-document-path.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
@@ -29,6 +30,19 @@ export interface WorkspaceFilesPanelProps {
   source: WorkspaceFilesSource
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
+  /**
+   * The folder to open in, and a report of every move away from it.
+   *
+   * Uncontrolled-with-a-default rather than a controlled `folder` prop: the
+   * panel deliberately holds no router (its tests render it bare, and
+   * `app-routes.ts` is framework-agnostic on purpose), so the host reads the
+   * URL and the panel owns the state. Which means a host must WRITE the
+   * address with `replace`, never push — an uncontrolled panel cannot follow
+   * a Back that changes only the query string, and a URL the UI silently
+   * disagrees with is worse than no folder in the URL at all.
+   */
+  initialFolder?: string
+  onFolderChange?: (folder: string) => void
   /**
    * Copy and ask-to-delete. Both stay with the page: it already owns the
    * duplicate that the grid used and the confirmation dialog that guards a
@@ -62,6 +76,46 @@ export interface WorkspaceFilesPanelProps {
  */
 export type BrowserColumns = 'one' | 'two'
 
+const COLUMNS_STORAGE_KEY = 'whiteboard.document-browser.columns.v1'
+
+/**
+ * The column count is a per-device PREFERENCE, deliberately not part of the
+ * address: a link someone shares must not impose the sender's layout on
+ * whoever opens it. The open folder is the other side of that line — it is
+ * what you are looking at, so it lives in the URL.
+ *
+ * Every access is guarded because storage does not merely come back empty
+ * when it is unavailable — a private window or blocked site data makes the
+ * accessor itself throw — and because nothing stops the stored value being
+ * anything at all.
+ */
+function readStoredColumns(): BrowserColumns {
+  try {
+    return globalThis.localStorage?.getItem(COLUMNS_STORAGE_KEY) === 'one' ? 'one' : 'two'
+  } catch {
+    return 'two'
+  }
+}
+
+function storeColumns(next: BrowserColumns): void {
+  try {
+    globalThis.localStorage?.setItem(COLUMNS_STORAGE_KEY, next)
+  } catch {
+    // A remembered layout is a courtesy; losing it must never break the view.
+  }
+}
+
+/**
+ * How a write that landed is named once its list refresh failed. The verb is
+ * the message: it says what is now TRUE despite the stale list, which is what
+ * stops the person pressing again.
+ */
+const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = {
+  created: 'Created',
+  pinned: 'Pinned',
+  unpinned: 'Unpinned',
+}
+
 /**
  * The workspace document browser (`/api/v1`), in three panes: the folder
  * sidebar, the contents of the selected folder, and the selected document
@@ -75,6 +129,8 @@ export type BrowserColumns = 'one' | 'two'
 export function WorkspaceFilesPanel({
   source,
   onOpenDocument,
+  initialFolder,
+  onFolderChange,
   onDuplicateDocument,
   onRequestDelete,
   revision,
@@ -85,10 +141,53 @@ export function WorkspaceFilesPanel({
   // a failure. 'error' is a genuine fetch/schema failure and keeps the alert.
   const [listStatus, setListStatus] = useState<'ok' | 'not-found' | 'error'>('ok')
   const [selected, setSelected] = useState<WorkspaceDocumentEntry | null>(null)
-  // '' is the workspace root, which is where a freshly loaded tree starts.
-  const [folder, setFolder] = useState('')
-  const [columns, setColumns] = useState<BrowserColumns>('two')
-  const [createError, setCreateError] = useState<string | null>(null)
+  // '' is the workspace root, which is where a freshly loaded tree starts —
+  // unless the address named a folder, which is the whole point of naming it.
+  const [folder, setFolder] = useState(initialFolder ?? '')
+  const [columns, setColumns] = useState<BrowserColumns>(readStoredColumns)
+  /**
+   * A write that LANDED, whose list refresh or open failed after the fact.
+   * Separate from the refusal states because the two need opposite things:
+   * a refusal invites another attempt, this one must not — pressing again
+   * would create a second document, or toggle the pin straight back off.
+   *
+   * Carries the action because the verb is the whole message: "Created" and
+   * "Pinned" tell the person a different thing about what is now true.
+   */
+  const [refreshError, setRefreshError] = useState<{
+    action: 'created' | 'pinned' | 'unpinned'
+    path: string
+  } | null>(null)
+  /**
+   * A refused pin, as the direction that was asked for and the source's own
+   * reason. Only the store knows why it said no — that a workspace is
+   * read-only, say — and a pin is the one verb on the card menu with no form
+   * of its own to report into.
+   */
+  const [pinError, setPinError] = useState<{
+    pinning: boolean
+    path: string
+    reason: string
+  } | null>(null)
+  /**
+   * A refused create, as the kind that was asked for and the reason given.
+   *
+   * The reason is the source's own words — the same treatment a refused MOVE
+   * already gets, and for the same purpose: only the store knows which path
+   * actually collided, and an address the message will not name cannot be
+   * corrected.
+   *
+   * The dialog renders `reason` too, so both are in the DOM while it is
+   * open. Only one is ANNOUNCED — Radix marks the page behind a modal
+   * `aria-hidden` (measured: DOM 2, accessible 1) — and dismissing the form
+   * clears this, so the panel's generic line never outlives the submission
+   * it describes. That is why there is no "which surface asked" flag here:
+   * it would be a second rule for an outcome the clearing already produces,
+   * and no test could tell the two apart.
+   */
+  const [createError, setCreateError] = useState<{ kind: DocumentKind; reason: string } | null>(
+    null,
+  )
   // The `disabled` attribute is the whole double-press mechanism: React
   // flushes this state before a second click can dispatch, while a
   // handler-side early return would read a stale closure in exactly the
@@ -130,12 +229,39 @@ export function WorkspaceFilesPanel({
 
   const readList = useCallback(() => source.listDocuments(), [source])
 
+  // Through a ref so it never joins an effect's dependencies: a host that
+  // passes an inline arrow would otherwise re-run the workspace-load effect
+  // on every render of the page above.
+  const onFolderChangeRef = useRef(onFolderChange)
+  onFolderChangeRef.current = onFolderChange
+  // Same reason as the folder callback: kept out of createHere's dependency
+  // list so an inline arrow from the page above cannot re-create it.
+  const onOpenDocumentRef = useRef(onOpenDocument)
+  onOpenDocumentRef.current = onOpenDocument
+  const lastReadListRef = useRef(readList)
+
+  const chooseColumns = (next: BrowserColumns) => {
+    setColumns(next)
+    storeColumns(next)
+  }
+
   useEffect(() => {
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
     setSelected(null)
-    setFolder('')
+    // Guarded by the source's IDENTITY, not by a first-run flag: an
+    // `initialFolder` is a deliberate address and must survive mounting,
+    // while StrictMode replays this effect with the SAME readList — which a
+    // run-count flag would read as a second workspace and reset (the trap
+    // App.tsx's route sync documents). Only an actual change is a switch.
+    if (lastReadListRef.current !== readList) {
+      lastReadListRef.current = readList
+      setFolder('')
+      // The host's address still names the old workspace's folder; left
+      // unsaid, it would keep pointing at a folder nobody is looking at.
+      onFolderChangeRef.current?.('')
+    }
     readList()
       .then((entries) => {
         if (!cancelled) setDocuments(entries)
@@ -192,31 +318,93 @@ export function WorkspaceFilesPanel({
    * this is the only place that knows it was the server's words.
    */
   /**
+   * The address a create with no opinion lands at: inside the folder the
+   * browser is standing in, numbered past whatever is already there.
+   *
+   * Derived once and shared, because the menu's dialog has to PRE-FILL with
+   * the very path its plain entries would have used — submitting that form
+   * untouched must produce what not opening it would have. Two separate
+   * derivations would drift the moment one of them was given a different
+   * list.
+   */
+  const derivedNewPath = useMemo(
+    () =>
+      newDocumentPathIn(
+        folder,
+        (documents ?? []).map((row) => row.path),
+      ),
+    [folder, documents],
+  )
+
+  /**
    * Create a document in the folder the browser is standing in.
    *
    * Until now the only way to put a document anywhere but the workspace root
    * was MCP or raw HTTP, which left the browser showing a hierarchy it had
-   * no way to add to. No name is collected: naming follows creation
-   * (ADR-0006), and a path is never derived from a name (ADR-0008).
+   * no way to add to. Naming still follows creation (ADR-0006) — the menu's
+   * two kind entries collect nothing — and the dialog behind its third entry
+   * is an opt-in for someone who already knows, never a gate. A path is
+   * still never derived from a name (ADR-0008); the dialog takes both, and
+   * neither field feeds the other.
    */
   const createHere = useCallback(
-    async (kind: DocumentKind) => {
+    async (kind: DocumentKind, options?: { path: string; name: string | undefined }) => {
+      // Every action here clears ALL of the panel's transient reports, not
+      // just its own: an alert that outlives the action it describes is
+      // attached to nothing the person can still see.
       setCreateError(null)
+      setPinError(null)
+      setRefreshError(null)
       setCreating(true)
       try {
-        const path = newDocumentPathIn(
-          folder,
-          (documents ?? []).map((row) => row.path),
-        )
-        await source.createDocument(path, kind)
-        const entries = await readList()
-        setDocuments(entries)
-        setSelected(entries.find((row) => row.path === path) ?? null)
+        // No options means nobody expressed an opinion, so the address is
+        // derived exactly as it always was. The dialog is the only caller
+        // that supplies one.
+        const path = options?.path ?? derivedNewPath
+        // ONLY this write decides whether the create was refused. Everything
+        // below is bookkeeping on a document that already exists, and
+        // reporting a failed refresh as "could not create" invites a retry
+        // that collides with what was just made — from the dialog, while the
+        // form is still open holding the path that now exists.
+        try {
+          await source.createDocument(path, kind, options?.name)
+        } catch (err) {
+          setCreateError({
+            kind,
+            reason:
+              err instanceof Error ? err.message : `Could not create a ${kind} document here.`,
+          })
+          // Re-thrown so the caller can tell a refusal from a success — the
+          // dialog stays open on one and closes on the other, and swallowing
+          // it here would close it either way.
+          throw err
+        }
+        try {
+          const entries = await readList()
+          setDocuments(entries)
+          setSelected(entries.find((row) => row.path === path) ?? null)
+          // Creating exists to produce content, and an empty document is
+          // worth nothing until it is open — so the create ends where the
+          // next thing happens, as every other creation path in the app
+          // already did.
+          //
+          // Only affordable because the open folder is in the address now:
+          // the way back returns to the folder this was made in, rather than
+          // to the workspace root. The selection above still lands, so a
+          // host that offers no way to open leaves someone looking at the
+          // new document rather than at nothing.
+          onOpenDocumentRef.current?.(path)
+        } catch {
+          // Swallowed as a REJECTION, reported as its own message. The
+          // document exists; letting this propagate would hold the dialog
+          // open on a form whose only offer is to make it again.
+          setRefreshError({ action: 'created', path })
+        }
       } finally {
         setCreating(false)
       }
     },
-    [source, readList, folder, documents],
+    [source, readList, derivedNewPath],
   )
 
   /**
@@ -299,10 +487,34 @@ export function WorkspaceFilesPanel({
   const togglePinned = useCallback(
     async (entry: WorkspaceDocumentEntry) => {
       if (source.setPinned === undefined) return
-      await source.setPinned(entry, entry.pinOrder === undefined)
-      const entries = await readList()
-      setDocuments(entries)
-      setSelected(entries.find((row) => row.path === entry.path) ?? null)
+      const pinning = entry.pinOrder === undefined
+      setPinError(null)
+      setCreateError(null)
+      setRefreshError(null)
+      // ONLY this write decides whether the pin was refused. What follows is
+      // bookkeeping on an order that has already changed, and reporting a
+      // failed refresh as "could not pin" invites a second press that would
+      // undo the pin that landed.
+      try {
+        await source.setPinned(entry, pinning)
+      } catch (err) {
+        setPinError({
+          pinning,
+          path: entry.path,
+          reason: err instanceof Error ? err.message : 'The store gave no reason.',
+        })
+        // Not re-thrown, unlike a refused create: nothing is waiting on this
+        // one. The menu entry that calls it has already closed, and the
+        // report above is the whole outcome.
+        return
+      }
+      try {
+        const entries = await readList()
+        setDocuments(entries)
+        setSelected(entries.find((row) => row.path === entry.path) ?? null)
+      } catch {
+        setRefreshError({ action: pinning ? 'pinned' : 'unpinned', path: entry.path })
+      }
     },
     [source, readList],
   )
@@ -313,7 +525,9 @@ export function WorkspaceFilesPanel({
       const entries = await readList()
       setDocuments(entries)
       setSelected(entries.find((row) => row.path === newPath) ?? null)
-      setFolder(newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : '')
+      const landedIn = newPath.includes('/') ? newPath.slice(0, newPath.lastIndexOf('/')) : ''
+      setFolder(landedIn)
+      onFolderChangeRef.current?.(landedIn)
     },
     [source, readList],
   )
@@ -335,6 +549,7 @@ export function WorkspaceFilesPanel({
   const selectFolder = (path: string) => {
     setFolder(path)
     setSelected(null)
+    onFolderChangeRef.current?.(path)
   }
 
   if (listStatus === 'error') {
@@ -438,36 +653,13 @@ export function WorkspaceFilesPanel({
             className="w-36 rounded border py-1 pl-7 pr-2 text-xs sm:w-48"
           />
         </div>
-        <div className="flex shrink-0 items-center gap-1">
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="New markdown document"
-                disabled={creating}
-                onClick={() => void createHere('markdown').catch(() => setCreateError('markdown'))}
-                className="text-muted-foreground hover:text-foreground rounded border p-1.5"
-              >
-                <FilePlus2 className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>New markdown document</TooltipContent>
-          </Tooltip>
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                aria-label="New canvas"
-                disabled={creating}
-                onClick={() => void createHere('spatial').catch(() => setCreateError('spatial'))}
-                className="text-muted-foreground hover:text-foreground rounded border p-1.5"
-              >
-                <LayoutGrid className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>New canvas</TooltipContent>
-          </Tooltip>
-        </div>
+        <NewDocumentMenu
+          disabled={creating}
+          defaultPath={derivedNewPath}
+          createError={createError?.reason ?? null}
+          onCreate={createHere}
+          onDismiss={() => setCreateError(null)}
+        />
         <fieldset className="flex shrink-0 items-center gap-0.5 rounded border p-0.5">
           <legend className="sr-only">Column layout</legend>
           <Tooltip>
@@ -476,7 +668,7 @@ export function WorkspaceFilesPanel({
                 type="button"
                 aria-label="One column"
                 aria-pressed={columns === 'one'}
-                onClick={() => setColumns('one')}
+                onClick={() => chooseColumns('one')}
                 className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
               >
                 <List className="size-4" />
@@ -490,7 +682,7 @@ export function WorkspaceFilesPanel({
                 type="button"
                 aria-label="Two columns"
                 aria-pressed={columns === 'two'}
-                onClick={() => setColumns('two')}
+                onClick={() => chooseColumns('two')}
                 className="text-muted-foreground aria-pressed:bg-accent aria-pressed:text-foreground rounded p-1"
               >
                 <Columns2 className="size-4" />
@@ -503,7 +695,20 @@ export function WorkspaceFilesPanel({
 
       {createError !== null && (
         <p role="alert" className="text-destructive text-sm">
-          Could not create a {createError} document here.
+          Could not create a {createError.kind} document here.
+        </p>
+      )}
+
+      {pinError !== null && (
+        <p role="alert" className="text-destructive text-sm">
+          Could not {pinError.pinning ? 'pin' : 'unpin'} “{pinError.path}”. {pinError.reason}
+        </p>
+      )}
+
+      {refreshError !== null && (
+        <p role="alert" className="text-destructive text-sm">
+          {REFRESH_FAILURE_VERB[refreshError.action]} “{refreshError.path}”, but this list could not
+          be refreshed. Reload to see it.
         </p>
       )}
 

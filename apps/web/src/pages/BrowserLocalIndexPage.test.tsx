@@ -5,6 +5,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
+import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
 
 afterEach(cleanup)
@@ -94,7 +95,7 @@ describe('BrowserLocalIndexPage', () => {
     expect(onOpenDocument).toHaveBeenCalledWith('solo')
   })
 
-  it('creates a markdown document from the panel toolbar without leaving the browser', async () => {
+  it('creates a markdown document from the panel toolbar and opens it', async () => {
     const store = await seededStore([
       {
         documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
@@ -108,16 +109,18 @@ describe('BrowserLocalIndexPage', () => {
     const { onOpenDocument } = renderPage(store)
     await screen.findAllByTestId('card-title')
 
-    // The panel's create is in-place: the document appears in the pane and
-    // the user stays in the browser. Auto-open (and the default-pointer
-    // repoint that rides with it) lives only on the onboarding path now.
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    // Creating ends where the next thing happens. An empty document is worth
+    // nothing until it is open, and every other creation path in the app
+    // already opened what it made — the browser was the one that left you
+    // looking at a card. Affordable now that the open folder is in the
+    // address, so the way back returns to the folder rather than the root.
+    await pickNewDocumentKind('markdown')
 
     await waitFor(async () => {
       const all = await store.listDocuments()
       expect(all.some((s) => s.kind === 'markdown')).toBe(true)
     })
-    expect(onOpenDocument).not.toHaveBeenCalled()
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('untitled'))
   })
 
   it('empty store shows the empty state whose action creates a spatial canvas', async () => {

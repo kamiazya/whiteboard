@@ -43,6 +43,7 @@ import {
   Pencil,
   Scissors,
   SendToBack,
+  SlidersHorizontal,
   Sparkles,
   SquareDashed,
   StickyNote,
@@ -121,6 +122,8 @@ export interface CanvasCommands {
   readonly setSelectedEdgeId: (id: string | null) => void
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly setDocumentPicker: (state: DocumentPickerState | null) => void
+  /** Opens the node's full facet editor — the point knows no domain. */
+  readonly setFacetPanelNodeId: (nodeId: string | null) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -186,6 +189,7 @@ export function CanvasContextMenu({
     setSelectedEdgeId,
     setLinkDialog,
     setDocumentPicker,
+    setFacetPanelNodeId,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -654,6 +658,13 @@ export function CanvasContextMenu({
             applyResult({ state: { kind: 'idle' }, commands: [...commandsFor(nodeTargets)] })
           }
           properties.push(...nodePropertyItems(facetRegistry, { node, applyToSelection }))
+          // The quick bands are one tier; everything a facet declares —
+          // including facets no band knows about — is reachable here.
+          properties.push({
+            label: 'Facets…',
+            icon: <SlidersHorizontal />,
+            onSelect: () => setFacetPanelNodeId(node.id),
+          })
         }
         // Z-order as one-tap options — the touch path to the [ / ]
         // keyboard shortcuts (see shortcuts.ts). Not a picker: no

@@ -30,6 +30,7 @@ import {
   resolveCanvasEdgeStyle,
   resolveNodeShape,
   resolveNodeSymbol,
+  resolveNodeTextAlign,
 } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
@@ -471,8 +472,15 @@ function placeInNode(
   // box, so the offset is 0 and the top-aligned truncate+fade contract is
   // untouched; a plain rect never gets an offset, keeping every existing
   // canvas byte-identical.
+  //
+  // `visual.text/v0` OVERRIDES that default in either direction: a rect may
+  // ask to centre, a shaped node to start at the top. Absent, the default
+  // above is what happens — which is why the facet has no third value.
+  const align = resolveNodeTextAlign(node)
+  const centres =
+    align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
   let dy = 0
-  if (options.fitToBox && options.nodeOutlines?.[node.id] !== undefined) {
+  if (options.fitToBox && centres) {
     const innerH = bounds.h - 2 * padding
     const contentH = Math.max(
       0,

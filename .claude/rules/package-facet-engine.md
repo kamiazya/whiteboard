@@ -31,6 +31,35 @@ paths:
   `facet-wiring-guard.test.ts` so point-owning surfaces never name a
   domain.
 
+- The editor-ladder TIER 1 derivation (`form.ts`): `deriveFacetForm` turns
+  a facet's own schema into a form spec in a CLOSED control vocabulary
+  (`text`/`number`/`toggle`/`choice`, plus a discriminated-union variants
+  form). A schema outside that vocabulary answers `unsupported` — the
+  honest signal that the facet wants a hand-written widget (tier 2), never
+  a half-rendered payload. Rendering is the vessel's job, exactly as with
+  contributions: `apps/web`'s `FacetFormPanel` is today's vessel, and
+  writes there go back through `validateFacetWrite`, so a panel can never
+  store what `wb_facet_set` would refuse.
+
+- TIER 2, in the same module: an optional `editor` spec on a facet
+  definition, declaring per-field widget/label/quick-band from a CLOSED
+  vocabulary (`text`/`number`/`toggle`/`choice`/`segmented`, glyphs from
+  `FACET_GLYPHS`). `deriveFacetForm(schema, editor)` merges it over the
+  derived form; `assertEditorSpecFits` rejects at definition time a spec
+  naming a field the schema does not declare, or one on a schema with no
+  derivable form. A segmented option's `value: null` means the facet's
+  ABSENCE — some defaults are unrepresentable as a stored value (a rect
+  node stores no shape facet), and a picker with no way to say that
+  cannot express them. The bundled `visual.shape` declares its band this
+  way and ships NO hand-written widget, which is how the mechanism is
+  proved by the plugin that ships with the engine.
+
+  `visual.text/v0` is the stronger proof, and the shape to copy for a new
+  node property: it was added to `visual.ts` alone, and reached the
+  context menu — row, segmented control, write path, clear — with zero
+  lines changed in `apps/web`. If a new facet needs a vessel edit to be
+  usable, the editor spec is the thing to extend, not the vessel.
+
 ## What does NOT belong here
 
 - Facet KEY grammar and the `facets` bucket schemas — those are model's

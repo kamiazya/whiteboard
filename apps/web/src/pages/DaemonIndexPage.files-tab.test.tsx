@@ -13,6 +13,7 @@ import {
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
 // The page now reads useNavigate (Settings navigation), so every render
@@ -361,12 +362,12 @@ describe('DaemonIndexPage tree view', () => {
     const contents = await screen.findByTestId('folder-contents')
 
     // At the root it lands at the root.
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
     await waitFor(() => expect(created).toEqual(['untitled']))
 
     // Inside a folder it lands in that folder — the whole point.
     fireEvent.click(within(contents).getByRole('button', { name: 'Open folder notes' }))
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
     await waitFor(() => expect(created).toEqual(['untitled', 'notes/untitled']))
 
     // And it is selected, so the preview says where it went.
@@ -466,11 +467,11 @@ describe('DaemonIndexPage tree view', () => {
     )
     await screen.findByTestId('folder-contents')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
     const alert = await screen.findByText(/Could not create/)
     expect(alert.textContent).toContain('markdown')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
     await waitFor(() => {
       expect(screen.queryByText(/Could not create/)).toBeNull()
     })
@@ -508,9 +509,9 @@ describe('DaemonIndexPage tree view', () => {
     )
     await screen.findByTestId('folder-contents')
 
-    fireEvent.click(screen.getByRole('button', { name: 'New canvas' }))
+    await pickNewDocumentKind('spatial')
     await waitFor(() => expect(kinds).toEqual(['spatial']))
-    fireEvent.click(screen.getByRole('button', { name: 'New markdown document' }))
+    await pickNewDocumentKind('markdown')
     await waitFor(() => expect(kinds).toEqual(['spatial', 'markdown']))
   })
 

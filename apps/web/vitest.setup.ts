@@ -70,6 +70,18 @@ export async function runSharedTestTeardown(currentTestName: string | undefined)
         'silently here would hide the leak from whichever test runs next.',
     )
   }
+  // localStorage outlives a test, and a worker runs many test FILES, so a
+  // preference one test flips is a preference every later test inherits.
+  // Measured: one test switching the document browser to a single column
+  // made `folder-contents` — which only the two-column layout renders —
+  // vanish for the thirteen tests after it, each failing on a missing
+  // element with nothing naming the test that moved it.
+  try {
+    globalThis.localStorage?.clear()
+  } catch {
+    // Unavailable storage (a private window, blocked site data) throws on
+    // access rather than answering empty. Nothing to clear either way.
+  }
   recordSharedAfterEachRan()
   await drainSchedulerMacrotasks()
 }

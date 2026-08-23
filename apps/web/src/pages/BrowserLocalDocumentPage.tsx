@@ -6,7 +6,6 @@ import { LoroSyncPlugin } from 'loro-codemirror'
 import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
@@ -53,6 +52,7 @@ import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
 import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -63,16 +63,6 @@ import {
   useBrowserLocalDocumentController,
 } from './use-browser-local-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
-
-// React.lazy: DaemonDetectedBanner pulls in daemon-probe.ts + Zod parsing
-// that would otherwise ship in the entry chunk, which is already close to
-// its gzip budget (apps/web/scripts/smoke-bundle-size.mjs). Deferred load
-// keeps first paint unaffected by a feature most sessions never render.
-const DaemonDetectedBanner = lazy(() =>
-  import('../components/migration/DaemonDetectedBanner.js').then((m) => ({
-    default: m.DaemonDetectedBanner,
-  })),
-)
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
@@ -155,9 +145,18 @@ export function BrowserLocalDocumentPage({
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
-  // re-read from localStorage on every render.
+  // Stable across re-renders so the settings payload isn't re-read from
+  // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
+
+  // The connection is app-level, so the App-mounted shell draws it and this
+  // page only reports what it knows: while a browser-local document is open,
+  // the data lives in this browser and nowhere else. Cleared on unmount so an
+  // index page makes no claim of its own.
+  useEffect(() => {
+    setShellConnection({ state: 'local' })
+    return () => setShellConnection(null)
+  }, [])
 
   // duplicateDocument() rejects on failure (see the controller hook) rather
   // than carrying its own error/pending state, so this page owns both: a
@@ -792,20 +791,6 @@ export function BrowserLocalDocumentPage({
               // the daemon's `/names`, so the identity the bar offers is unused
               // here and `documentName`/`onTitleChange` stay the source.
               titleSlot={() => documentTitleSlot}
-              statusSlot={
-                <ConnectionStatus state="local">
-                  <p className="text-muted-foreground">
-                    Connect a local daemon (MCP) to unlock version history, workspaces, variations,
-                    and combining changes
-                  </p>
-                  <Suspense fallback={null}>
-                    <DaemonDetectedBanner
-                      settingsStore={settingsStore}
-                      fetch={window.fetch.bind(window)}
-                    />
-                  </Suspense>
-                </ConnectionStatus>
-              }
               dataMode="local"
               workspaceId="local"
               path={renderState.snapshot.path}

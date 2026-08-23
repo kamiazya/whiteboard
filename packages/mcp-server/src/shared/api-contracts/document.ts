@@ -17,6 +17,15 @@ export const createDocumentRequestSchema = z.object({
   // Defaulted so every existing caller (which posts { path } alone) keeps
   // creating a spatial canvas byte-identically to before this field existed.
   kind: documentKindSchema.default('spatial'),
+  // What a human reads, applied by the same request that creates the
+  // document — the shape wb_document_create has always had. Split into a
+  // create then a PUT /name, the second half can fail alone and leave a
+  // document the user named sitting in the list as untitled-N.
+  //
+  // Optional because naming must never gate creation (ADR-0006 point 3):
+  // omitted, the document has no name of its own and readers fall back to
+  // the path's last segment.
+  name: z.string().optional(),
 })
 
 // `name: ''` deletes the stored name and falls back to the path/workspaceId.

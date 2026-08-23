@@ -101,9 +101,15 @@ export function createLocalFilesSource(
       }))
     },
 
-    async createDocument(path: string, kind: DocumentKind): Promise<void> {
+    async createDocument(path: string, kind: DocumentKind, name?: string): Promise<void> {
       await ensureLocalWorkspace(index)
-      const entry = await index.createDocument({ workspaceId: LOCAL_WORKSPACE_ID, path, kind })
+      const trimmed = name?.trim()
+      const entry = await index.createDocument({
+        workspaceId: LOCAL_WORKSPACE_ID,
+        path,
+        kind,
+        ...(trimmed ? { name: trimmed } : {}),
+      })
       // Seeded like every other local create: a document with no content
       // record has no last-edited time and nothing to open. Rolled back if
       // the seed fails, so a failed create never leaves a row with nothing

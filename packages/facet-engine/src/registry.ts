@@ -1,4 +1,5 @@
 import type { z } from 'zod'
+import { assertEditorSpecFits, type FacetEditorSpec } from './form.js'
 
 /**
  * The facet engine's definition + registry machinery (ADR-0013 decisions 3,
@@ -34,6 +35,14 @@ export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
    * so no N² converters ever exist.
    */
   readonly compat?: Readonly<Record<string, FacetCompatEntry>>
+  /**
+   * Tier 2 of the editor ladder: how this facet's fields should be
+   * presented, declared from a closed widget/glyph vocabulary rather than
+   * shipped as UI code. Absent, every field falls back to the control
+   * `deriveFacetForm` reads off the schema. Checked at definition time
+   * against the schema, so a spec cannot name a field that does not exist.
+   */
+  readonly editor?: FacetEditorSpec
 }
 
 export interface FacetPlugin {
@@ -59,6 +68,9 @@ export function defineFacet<S extends z.ZodTypeAny>(
   }
   if (definition.targets.length === 0) {
     throw new Error(`facet "${definition.name}" declares no targets`)
+  }
+  if (definition.editor !== undefined) {
+    assertEditorSpecFits(definition.name, definition.schema, definition.editor)
   }
   for (const tag of Object.keys(definition.compat ?? {})) {
     if (!VERSION_PATTERN.test(tag)) {
