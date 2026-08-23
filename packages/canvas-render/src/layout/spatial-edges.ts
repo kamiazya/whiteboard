@@ -2,6 +2,21 @@ import type { CanvasEdge, EdgeRoutingStyle, SpatialNode } from '@kamiazya/whiteb
 import type { ResolvedEdgeNode } from '../scene-graph.js'
 import { buildPairwiseScores, scoreQuantizedSegmentPair } from './edge-crossing-sweep.js'
 import {
+  centerOf,
+  containsPoint,
+  outwardNormal,
+  pathIsClear,
+  pathLength,
+  rectOf,
+  segmentCrossesRect,
+  sidePoint,
+  sidePointAt,
+  strictlyInside,
+  tangentCoordinate,
+  unionRect,
+  withoutRepeats,
+} from './edge-geometry.js'
+import {
   accumulateCost,
   addCost,
   bendCount,
@@ -24,45 +39,6 @@ import {
 } from './edge-rules.js'
 import { routeOnGrid } from './grid-route.js'
 
-function rectOf(node: SpatialNode): Rect {
-  return { x: node.x, y: node.y, w: node.width, h: node.height }
-}
-
-function centerOf(rect: Rect): Point {
-  return { x: rect.x + rect.w / 2, y: rect.y + rect.h / 2 }
-}
-
-/** Border-inclusive: a point sitting exactly on the rect's edge counts as inside. */
-function containsPoint(rect: Rect, point: Point): boolean {
-  return (
-    point.x >= rect.x &&
-    point.x <= rect.x + rect.w &&
-    point.y >= rect.y &&
-    point.y <= rect.y + rect.h
-  )
-}
-
-function sidePoint(rect: Rect, side: Side): Point {
-  switch (side) {
-    case 'top':
-      return { x: rect.x + rect.w / 2, y: rect.y }
-    case 'bottom':
-      return { x: rect.x + rect.w / 2, y: rect.y + rect.h }
-    case 'left':
-      return { x: rect.x, y: rect.y + rect.h / 2 }
-    case 'right':
-      return { x: rect.x + rect.w, y: rect.y + rect.h / 2 }
-  }
-}
-
-/** Strict interior: a point exactly on the border is NOT inside, so a node
- * merely touching another (tidy adjacent layouts) never reads as occluding. */
-function strictlyInside(rect: Rect, point: Point): boolean {
-  return (
-    point.x > rect.x && point.x < rect.x + rect.w && point.y > rect.y && point.y < rect.y + rect.h
-  )
-}
-
 /**
  * Side preference for the FROM end, best first: the side facing the other
  * node on the dominant axis (the pre-existing default, so an unoccluded
@@ -78,22 +54,6 @@ function facingSides(dx: number, dy: number): readonly [Side, Side, Side, Side] 
     : [v, h, oppositeSide(h), oppositeSide(v)]
 }
 
-/**
- * Deterministic default-side derivation for an edge with no explicit
- * fromSide/toSide, occlusion-aware: the preferred side is the pre-existing
- * center-offset derivation, but a side whose midpoint anchor sits strictly
- * INSIDE another node is skipped for the first exposed one. The endpoint
- * rects themselves are never obstacles (the edge has to reach them), so an
- * occluded anchor means the route legally cuts straight through the
- * occluding node — moving to an exposed side is what keeps it outside.
- *
- * Not occluders: the edge's other endpoint (entering the shared region IS
- * the edge's job), and any rect fully containing the endpoint node (a
- * group frame around its member occludes every side equally, which says
- * nothing about which side to prefer). With every side occluded the
- * derivation falls back to the preferred side, so fully-boxed-in nodes
- * keep the old behaviour.
- */
 /**
  * Side-pair candidates ranked by ESTIMATED bends, best first — a thin
  * composer over the named PREFERENCE rules declared in edge-rules.ts
@@ -115,6 +75,22 @@ function rankedSidePairs(
   return composeSidePairs({ dx, dy, fromRect, toRect, crowd })
 }
 
+/**
+ * Deterministic default-side derivation for an edge with no explicit
+ * fromSide/toSide, occlusion-aware: the preferred side is the pre-existing
+ * center-offset derivation, but a side whose midpoint anchor sits strictly
+ * INSIDE another node is skipped for the first exposed one. The endpoint
+ * rects themselves are never obstacles (the edge has to reach them), so an
+ * occluded anchor means the route legally cuts straight through the
+ * occluding node — moving to an exposed side is what keeps it outside.
+ *
+ * Not occluders: the edge's other endpoint (entering the shared region IS
+ * the edge's job), and any rect fully containing the endpoint node (a
+ * group frame around its member occludes every side equally, which says
+ * nothing about which side to prefer). With every side occluded the
+ * derivation falls back to the preferred side, so fully-boxed-in nodes
+ * keep the old behaviour.
+ */
 function deriveDefaultSides(
   nodes: readonly SpatialNode[],
   edge: CanvasEdge,
@@ -212,25 +188,6 @@ export interface EdgeAnchorPair {
    */
   readonly fromSide?: Side
   readonly toSide?: Side
-}
-
-/** The coordinate that orders ends along a side: y on vertical sides, x on horizontal. */
-function tangentCoordinate(side: Side, point: Point): number {
-  return side === 'left' || side === 'right' ? point.y : point.x
-}
-
-/** The point a fraction of the way along a side, 0 at its top/left end. */
-function sidePointAt(rect: Rect, side: Side, fraction: number): Point {
-  switch (side) {
-    case 'top':
-      return { x: rect.x + rect.w * fraction, y: rect.y }
-    case 'bottom':
-      return { x: rect.x + rect.w * fraction, y: rect.y + rect.h }
-    case 'left':
-      return { x: rect.x, y: rect.y + rect.h * fraction }
-    case 'right':
-      return { x: rect.x + rect.w, y: rect.y + rect.h * fraction }
-  }
 }
 
 /**
@@ -1456,87 +1413,6 @@ const ROUTE_MARGIN_PX = 8
 const OBSTACLE_CLEARANCE_PX = 16
 
 /**
- * Whether a segment passes through a rect's INTERIOR. Touching a border does
- * not count: every edge starts and ends on a border by construction, and a
- * route that grazes a corner is not the failure this is looking for.
- *
- * Slab method, with the parallel-to-an-axis case handled by the same
- * comparison rather than a special branch.
- */
-function segmentCrossesRect(a: Point, b: Point, rect: Rect): boolean {
-  const right = rect.x + rect.w
-  const bottom = rect.y + rect.h
-  // Bounding-box reject first: this is the innermost test of candidate
-  // routing, called once per segment per obstacle, and almost every pair
-  // is nowhere near each other.
-  if (
-    Math.max(a.x, b.x) < rect.x ||
-    Math.min(a.x, b.x) > right ||
-    Math.max(a.y, b.y) < rect.y ||
-    Math.min(a.y, b.y) > bottom
-  ) {
-    return false
-  }
-  const dx = b.x - a.x
-  const dy = b.y - a.y
-  let enter = 0
-  let exit = 1
-  // Slab method, one axis at a time, no per-call allocation.
-  if (dx === 0) {
-    // Parallel to this axis: no crossing unless it already lies within.
-    if (rect.x - a.x > 0 || right - a.x < 0) return false
-  } else {
-    const t0 = (rect.x - a.x) / dx
-    const t1 = (right - a.x) / dx
-    enter = Math.max(enter, Math.min(t0, t1))
-    exit = Math.min(exit, Math.max(t0, t1))
-    if (enter >= exit) return false
-  }
-  if (dy === 0) {
-    if (rect.y - a.y > 0 || bottom - a.y < 0) return false
-  } else {
-    const t0 = (rect.y - a.y) / dy
-    const t1 = (bottom - a.y) / dy
-    enter = Math.max(enter, Math.min(t0, t1))
-    exit = Math.min(exit, Math.max(t0, t1))
-    if (enter >= exit) return false
-  }
-  return exit > enter
-}
-
-const pathIsClear = (path: readonly Point[], obstacles: readonly Rect[]) =>
-  path.every(
-    (point, i) =>
-      i === 0 || obstacles.every((rect) => !segmentCrossesRect(path[i - 1] as Point, point, rect)),
-  )
-
-function unionRect(rects: readonly Rect[]): Rect | undefined {
-  const [first, ...rest] = rects
-  if (first === undefined) return undefined
-  let minX = first.x
-  let minY = first.y
-  let maxX = first.x + first.w
-  let maxY = first.y + first.h
-  for (const rect of rest) {
-    minX = Math.min(minX, rect.x)
-    minY = Math.min(minY, rect.y)
-    maxX = Math.max(maxX, rect.x + rect.w)
-    maxY = Math.max(maxY, rect.y + rect.h)
-  }
-  return { x: minX, y: minY, w: maxX - minX, h: maxY - minY }
-}
-
-const pathLength = (path: readonly Point[]) =>
-  path.reduce(
-    (total, point, i) =>
-      i === 0
-        ? 0
-        : total +
-          Math.hypot(point.x - (path[i - 1] as Point).x, point.y - (path[i - 1] as Point).y),
-    0,
-  )
-
-/**
  * A path from `start` to `end` that steps around everything in `obstacles`.
  *
  * Four candidates — over, under, left of, right of the blocking region — each
@@ -1727,34 +1603,12 @@ const ORTHOGONAL_STUB_PX = 20
  * if that ever hurts. */
 const STUB_LANE_STEP_PX = 12
 
-/** The direction a side faces, away from the node's interior. */
-function outwardNormal(side: Side): Point {
-  switch (side) {
-    case 'top':
-      return { x: 0, y: -1 }
-    case 'bottom':
-      return { x: 0, y: 1 }
-    case 'left':
-      return { x: -1, y: 0 }
-    case 'right':
-      return { x: 1, y: 0 }
-  }
-}
-
 function stubFrom(point: Point, side: Side, depth: number = ORTHOGONAL_STUB_PX): Point {
   const normal = outwardNormal(side)
   return {
     x: point.x + normal.x * depth,
     y: point.y + normal.y * depth,
   }
-}
-
-/** Drops repeated points, so a collapsed corner never becomes a zero-length segment. */
-function withoutRepeats(path: readonly Point[]): Point[] {
-  return path.filter((point, i) => {
-    const prev = path[i - 1]
-    return i === 0 || prev === undefined || point.x !== prev.x || point.y !== prev.y
-  })
 }
 
 /**
