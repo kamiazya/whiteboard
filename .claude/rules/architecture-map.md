@@ -12,9 +12,10 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
 | `packages/loro-adapter` | LoroDoc<->model bridge | model, ports, loro-crdt |
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, facet-engine, search, hono, zod, loro-crdt |
+| `packages/facet-ui` | the facet system's React half: primitives, the validated writer, plugin settings declarations, and the bundled `visual` plugin's UI half | canvas-render, facet-engine, react, lucide-react |
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, search, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, search, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
 
 **A third-party dependency is judged by that criterion, not by a quota.** The
 `allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has

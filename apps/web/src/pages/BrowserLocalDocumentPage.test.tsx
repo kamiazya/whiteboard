@@ -449,7 +449,9 @@ describe('BrowserLocalDocumentPage', () => {
     expect(await screen.findAllByRole('button', { name: 'More actions' })).toHaveLength(1)
 
     await openDocumentOpsMenu()
-    expect(await documentOpsItem(/copy link/i)).toBeTruthy()
+    // No link handout: a document kept in this browser is reachable from no
+    // other browser, so a link is a promise this keeper cannot honour.
+    expect(screen.queryByText(/copy link/i)).toBeNull()
     expect(await documentOpsItem(/export as png/i)).toBeTruthy()
     expect(await documentOpsItem(/export as svg/i)).toBeTruthy()
     expect(await documentOpsItem(/duplicate/i)).toBeTruthy()
