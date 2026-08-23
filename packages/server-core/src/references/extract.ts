@@ -7,8 +7,8 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
+import { searchableTexts, snippetAround } from '@kamiazya/whiteboard-search'
 import type { LoroDoc } from 'loro-crdt'
-import { snippetAround } from '../search/snippet.js'
 import type { DocumentReferenceFacts, RawReference } from './reference-aggregate.js'
 
 function textReferences(value: string): RawReference[] {
@@ -17,16 +17,6 @@ function textReferences(value: string): RawReference[] {
     via: 'wikilink' as const,
     context: snippetAround(value, match.index, match.full.length),
   }))
-}
-
-function spatialTexts(canvas: SpatialCanvas): string[] {
-  const texts: string[] = []
-  for (const node of canvas.nodes) {
-    if (node.type === 'text') texts.push(node.text)
-    if (node.type === 'group' && node.label !== undefined) texts.push(node.label)
-  }
-  for (const edge of canvas.edges) if (edge.label !== undefined) texts.push(edge.label)
-  return texts
 }
 
 function spatialReferences(canvas: SpatialCanvas): RawReference[] {
@@ -74,8 +64,11 @@ export function extractContentFacts(
     refs: markdown
       ? textReferences(readMarkdownBody(doc))
       : spatialReferences(canvas as SpatialCanvas),
-    // The prose itself, for mention detection against other documents' names.
-    texts: markdown ? [readMarkdownBody(doc)] : spatialTexts(canvas as SpatialCanvas),
+    // The prose itself, for mention detection against other documents'
+    // names — and the same strings search ranks, by construction.
+    texts: markdown
+      ? searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
+      : searchableTexts({ kind: 'spatial', canvas: canvas as SpatialCanvas }),
     tags: markdown ? readCoreFacets(doc)?.tags : undefined,
   }
 }
