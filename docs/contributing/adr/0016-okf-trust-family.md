@@ -1,6 +1,6 @@
 # ADR-0016: OKF v0.2's trust family — a declared actor, a server-stamped time, and a bucket of its own
 
-**Status:** Proposed
+**Status:** Accepted — daemon write path implemented; the `apps/web` write path is not (see Consequences)
 
 ## Context
 
@@ -87,15 +87,23 @@ A `server-mode` deployment SHOULD prefer its authenticated OAuth subject over
 the declared actor, because there it has a real one. That is a refinement of
 this rule, not an exception to it: the field means the same thing either way.
 
-### 2. `generated.at` is stamped by the server
+### 2. A declared `generated` is honoured; only a stamp the server makes uses
+the server's clock
 
-The clock is the server's. A client that could name its own write time could
-date a document into the future or the past, and `generated.at` is precisely
-the field a consumer uses to tell a recent edit from a stale fact.
+If the OKF being written already carries a `generated`, it is kept. That is
+the truth about how the content was produced (§5.2), and importing a bundle
+did not author what is in it — restamping would destroy exactly the provenance
+this family exists to carry.
 
-"Last meaningful change" means a write that changed the body or the facets. A
-write that stores identical content does not move the timestamp — otherwise
-any polling writer keeps a document permanently, and falsely, fresh.
+What the server stamps is the other case: content whose origin is this write.
+There the clock is the server's, because a client that could name its own
+write time could date a document into the future or the past, and
+`generated.at` is precisely the field a consumer uses to tell a recent edit
+from a stale fact.
+
+`generated.by` requires a value (§5.2), so a stamp has to name someone. With
+no actor declared it names `process:whiteboard-server` — the honest answer is
+the server the write came through, not a guess at which agent was driving.
 
 ### 3. `verified` is never a side effect of a write
 
@@ -151,12 +159,32 @@ Recording the gap is the point of this paragraph.
   Note it is not an issue *status* — OKF's `status` is `draft`/`stable`/
   `deprecated`, a document lifecycle, and conflating the two would repeat the
   mistake that retired `issue/1`.
-- Every write path has to stamp, so the seam must sit low enough that both
-  reach it. That is a constraint on the implementation, not a cost: a stamp
-  bolted onto the MCP tools alone would be the half-implemented version.
-- `generated.at` becomes a reason for a write to be a no-op, so "did this write
-  change anything" has to be answerable before the write. Loro can answer it;
-  nothing else needs to.
+- **The `apps/web` write path does not stamp yet, and that is the open half of
+  this ADR.** The browser writes browser-kept documents straight through
+  `loro-adapter`, so a document edited there carries no `generated` while the
+  same document edited through MCP does — the "present or absent depending on
+  which surface you used" state this ADR set out to avoid. It is left open
+  rather than guessed at because it needs two answers this codebase does not
+  have: what `human:<id>` means in an app with no accounts (`user-settings-store`
+  holds no identity), and at what cadence to stamp, given that
+  `writeMarkdownBody` runs on every keystroke in the editor and a per-keystroke
+  `generated.at` would churn the CRDT for no reader's benefit.
+- **A schema carrying a `transform` cannot be published.** The widening §5.2
+  requires — read a bare `verified` mapping as a one-element list — was written
+  first as a `z.union(...).transform()` on the frontmatter schema. That schema
+  reaches `wb_document_get`'s `outputSchema`, which the MCP SDK converts to
+  JSON Schema for `tools/list`, and the whole listing failed with *"Transforms
+  cannot be represented in JSON Schema"*. The widening therefore happens in
+  `parseOkf`, on the way in, and every published schema states the single shape
+  it holds. Worth knowing before adding a `transform` to anything under
+  `okfMarkdownFrontmatterSchema`.
+- Self-verification is possible: nothing stops a client writing
+  `verified: { by: human:… }` in the OKF it hands to `wb_document_set`, and
+  nothing should — a bundle's verification history has to survive an import.
+  Decision 3 buys that verification is never an *implicit* side effect of a
+  write, not that it is authenticated. §5.3 says trust tiers are advisory
+  signals rather than access control, so this is the spec's posture, not a gap
+  in the implementation.
 - The field is a self-report, and a consumer that treats it as authenticated
   provenance will be wrong. This is inherent to OKF's actor convention, not to
   this decision — but it belongs in the user docs, not only here.

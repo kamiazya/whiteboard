@@ -28,13 +28,39 @@ requires exactly one frontmatter field, `type`, and leaves producers free to add
 any others. This server gives meaning to four root keys — `type`, `title`,
 `tags`, `view` — plus its own `facets` extension bucket.
 
+It also models OKF v0.2's trust pair, `generated` and `verified`.
+
 **Every other root key is preserved verbatim.** Write a document through
 `wb_document_set` and read it back with `wb_document_get`, and keys this server
 has no model for come back at the root they were written at, unchanged. That
-covers OKF v0.2's trust, provenance and lifecycle families — `sources`,
-`usage_window`, `generated`, `verified`, `status`, `stale_after` — and the
-Attested Computation keys `runtime`, `parameters`, `computation`, `executor`
-and `attester`, none of which this server interprets.
+covers the rest of OKF v0.2's provenance and lifecycle families — `sources`,
+`usage_window`, `status`, `stale_after` — and the Attested Computation keys
+`runtime`, `parameters`, `computation`, `executor` and `attester`, none of
+which this server interprets.
+
+## Who wrote a document
+
+`wb_document_set` and `wb_document_create` take an optional `actor`, and record
+it as OKF `generated.by` alongside the server's clock as `generated.at`. Use
+[OKF's actor convention](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
+`<producer>/<version>` for an agent or tool, `human:<id>` for a person,
+`process:<id>` for an automated process.
+
+- Identify yourself. A write with no `actor` is recorded as
+  `process:whiteboard-server`, which is true but tells a later reader nothing
+  about what produced the content.
+- **A document that already declares `generated` keeps it.** Importing a
+  document does not make this server its author, so an incoming stamp is
+  honoured rather than replaced.
+- `verified` is carried through as written, including the single bare mapping
+  the spec allows, which is normalised to a one-element list. Nothing in this
+  server adds a verification on your behalf: `generated` says who wrote the
+  content, `verified` says who confirmed it, and they are different claims.
+- The actor is a **self-report**, exactly as it is in OKF. Trust tiers derived
+  from it are advisory signals, not access control.
+
+Documents edited in the browser app do not yet carry `generated`; only writes
+through the daemon's tools do.
 
 Two consequences worth knowing:
 

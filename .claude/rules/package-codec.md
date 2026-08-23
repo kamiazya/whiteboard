@@ -67,6 +67,12 @@ guard applies to composition roots), so this note is the boundary's only documen
   document carrying a literal root `facetsRaw:` round-trips like any other unknown key.
   A plain `z.object` parse silently strips unknown keys, so the routing step is load-bearing and
   both halves are mutation-checked by the round-trip properties in codec and server-core.
+- **Never put a `transform` under `okfMarkdownFrontmatterSchema`.** It is published as
+  `wb_document_get`'s `outputSchema`, which the MCP SDK converts to JSON Schema for `tools/list` —
+  a transform anywhere inside fails the WHOLE listing with "Transforms cannot be represented in
+  JSON Schema", and no unit test sees it. Normalise on the way in, in `parseOkf`, and let every
+  published schema state the single shape it holds. OKF §5.2's bare-`verified`-mapping widening is
+  the standing example (`normalizeOkfVerified` in model).
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
   node. No per-kind special casing. Extended mode is lossless (round-trip property).
 - The extension contract — `x-whiteboard` is the only non-standard key ever emitted, foreign keys

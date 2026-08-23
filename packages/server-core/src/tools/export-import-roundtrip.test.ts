@@ -279,11 +279,11 @@ describe('error paths do not silently produce corrupt output', () => {
 
   /**
    * The concrete shape the preservation rule exists for: an OKF v0.2 document
-   * written by some other producer, none of whose trust/provenance/lifecycle
-   * families this codebase models. A read-edit-write through the whiteboard
-   * must hand every one of them back (OKF v0.2 §4.1, §5, §10.2).
+   * written by some other producer. A read-edit-write through the whiteboard
+   * must hand every family back (§4.1, §5, §10.2) — the trust pair as typed
+   * fields it models (ADR-0016), everything else carried verbatim.
    */
-  test('preserves an OKF v0.2 document whose trust, provenance and computation families this codebase does not model', async () => {
+  test('preserves an OKF v0.2 document: the trust family as typed fields, the rest carried verbatim', async () => {
     const { documentSet, deps } = await setupTools()
 
     const markdown = [
@@ -317,6 +317,13 @@ describe('error paths do not silently produce corrupt output', () => {
     const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.frontmatter.type).toBe('Attested Computation')
+    expect(result.frontmatter.generated).toEqual({
+      by: 'reference_agent/gemini-2.5-pro',
+      at: '2026-06-20T22:53:05Z',
+    })
+    expect(result.frontmatter.verified).toEqual([
+      { by: 'human:ahormati', at: '2026-06-25T09:00:00Z' },
+    ])
     expect(result.frontmatter.facetsRaw).toEqual({
       description: 'Recognized revenue for a fiscal year, per Finance definition.',
       status: 'stable',
@@ -327,8 +334,6 @@ describe('error paths do not silently produce corrupt output', () => {
         receipt: ['job_id', 'executed_sql', 'result'],
       },
       attester: { resource: 'references/attesters/revenue.py' },
-      generated: { by: 'reference_agent/gemini-2.5-pro', at: '2026-06-20T22:53:05Z' },
-      verified: { by: 'human:ahormati', at: '2026-06-25T09:00:00Z' },
       stale_after: '2026-09-23T00:00:00Z',
       sources: [
         {

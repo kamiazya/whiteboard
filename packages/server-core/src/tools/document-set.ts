@@ -7,8 +7,9 @@ import {
   writeDocumentKind,
   writeFacets,
   writeMarkdownBody,
+  writeTrustFacets,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, okfActorSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'
@@ -38,6 +39,19 @@ export const documentSetInputSchema = z
     workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     markdown: z.string(),
+    /**
+     * Who is producing this content, in OKF's actor convention (§7):
+     * `<producer>/<version>` for an agent or tool, `human:<id>` for a
+     * person, `process:<id>` for an automated process.
+     *
+     * Declared rather than inferred, because there is nothing here to infer
+     * it from: `/mcp` builds a fresh server per request, so the `clientInfo`
+     * from `initialize` never reaches a tool call, and local-daemon mode
+     * authenticates every client on the machine with one shared token
+     * (ADR-0016). OKF puts the obligation on the producer for the same
+     * reason — trust tiers are advisory signals, not access control (§5.3).
+     */
+    actor: okfActorSchema.optional(),
   })
   .strict()
 export type DocumentSetInput = z.infer<typeof documentSetInputSchema>
@@ -49,6 +63,14 @@ export const documentSetOutputSchema = z
   })
   .strict()
 export type DocumentSetOutput = z.infer<typeof documentSetOutputSchema>
+
+/**
+ * What `generated.by` says when the client did not identify itself. OKF
+ * requires `by` inside `generated` (§5.2), so a stamp has to name someone —
+ * and the honest answer is the server the write came through, not a guess at
+ * which agent was driving. `process:<id>` is §7's form for exactly this.
+ */
+const UNATTRIBUTED_ACTOR = 'process:whiteboard-server'
 
 export class OkfParseError extends Error {
   constructor(
@@ -64,7 +86,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_set' as const,
     description:
-      'Replace the entire content of an existing document from an OKF Markdown string. The document must already exist; core facets, extension facets and the body are all overwritten rather than merged.',
+      'Replace the entire content of an existing document from an OKF Markdown string. The document must already exist; core facets, extension facets and the body are all overwritten rather than merged. Pass `actor` to identify yourself — it is recorded as OKF `generated.by`, so a later reader can tell what wrote the document.',
     inputSchema: documentSetInputSchema,
     outputSchema: documentSetOutputSchema,
     execute: async (input: DocumentSetInput): Promise<DocumentSetOutput> => {
@@ -113,7 +135,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       //
       // Absent is not cleared: an OKF with no `title` says nothing about the
       // name, so omitting it must not erase one.
-      const { facets, title, ...coreFacets } = frontmatter
+      const { facets, title, generated, verified, ...coreFacets } = frontmatter
       if (title !== undefined) {
         // A blank title is not a name, and the two are deliberately one
         // state — so writing one clears the name rather than storing '' for
@@ -129,6 +151,18 @@ export function createDocumentSetTool(deps: ServerDeps) {
       if (facets) {
         writeFacets(doc, facets)
       }
+
+      // A `generated` the document already declares is the truth about how
+      // that content was produced (§5.2) — importing it did not author it —
+      // so it is honoured rather than restamped. Only content this write is
+      // the origin of gets the server's clock.
+      writeTrustFacets(doc, {
+        generated: generated ?? {
+          by: input.actor ?? UNATTRIBUTED_ACTOR,
+          at: new Date().toISOString(),
+        },
+        ...(verified === undefined ? {} : { verified }),
+      })
 
       // The body goes in the CRDT text container, and this clears the
       // spatial canvas with it (see writeMarkdownBody). Older documents

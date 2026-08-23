@@ -1,4 +1,4 @@
-import { RESERVED_ROOT_KEYS } from '@kamiazya/whiteboard-model'
+import { normalizeOkfVerified, RESERVED_ROOT_KEYS } from '@kamiazya/whiteboard-model'
 import { parse as parseYaml } from 'yaml'
 import { type CodecParseResult, codecFailure, codecSuccess } from '../errors.js'
 import { type OkfMarkdownDocument, okfMarkdownFrontmatterSchema } from './schema.js'
@@ -28,7 +28,10 @@ function routeUnknownRootKeys(frontmatter: object): Record<string, unknown> {
   let sawUnknown = false
   for (const [key, value] of Object.entries(frontmatter)) {
     if (RESERVED.has(key)) {
-      reserved[key] = value
+      // §5.2 requires a consumer to read a bare `verified` mapping as a
+      // one-element list. Widening here rather than in the schema keeps every
+      // published schema JSON-Schema-representable — see `normalizeOkfVerified`.
+      reserved[key] = key === 'verified' ? normalizeOkfVerified(value) : value
       continue
     }
     raw[key] = value

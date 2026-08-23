@@ -10,6 +10,7 @@ export {
   readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
+  readTrustFacets,
   type SpatialBatchWriter,
   setEdgeLock,
   setNodeLock,
@@ -21,4 +22,5 @@ export {
   writeSpatialCanvas,
   writeSpatialEdge,
   writeSpatialNode,
+  writeTrustFacets,
 } from './loro-bridge.js'

@@ -1,6 +1,11 @@
 import type { OkfMarkdownFrontmatter } from '@kamiazya/whiteboard-codec'
 import { okfMarkdownFrontmatterSchema, serializeOkf } from '@kamiazya/whiteboard-codec'
-import { readCoreFacets, readFacets, readMarkdownBody } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readCoreFacets,
+  readFacets,
+  readMarkdownBody,
+  readTrustFacets,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -61,9 +66,14 @@ export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promis
   })
   const facets = readFacets(doc)
   const body = readMarkdownBody(doc)
+  // The trust family lives in its own bucket (ADR-0016 decision 4) and is
+  // projected back to the frontmatter ROOT, where OKF puts it — the same
+  // projection `title` gets from the workspace name.
+  const trust = readTrustFacets(doc)
   const frontmatter: OkfMarkdownFrontmatter = {
     ...(coreFacets ?? { type: OKF_EXPORT_PLACEHOLDER_TYPE }),
     ...(entry?.name === undefined ? {} : { title: entry.name }),
+    ...(trust ?? {}),
     facets,
   }
   const markdown = serializeOkf({ frontmatter, body })

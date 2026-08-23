@@ -46,12 +46,25 @@ export type ExtensionFacets = z.infer<typeof extensionFacetsSchema>
 
 /**
  * Root-level frontmatter keys that are NOT free for `facetsRaw` to preserve:
- * the core facet fields plus the `facets` extension bucket itself. Keeping
- * this list exported means both `coreFacetsSchema` consumers and
- * `facetsRawSchema` share one definition of "reserved", so a key can never
- * legally live in two buckets at once.
+ * the core facet fields, the `facets` extension bucket itself, and the OKF
+ * v0.2 trust family (`trust.ts`), which this codebase models rather than
+ * merely carrying. Keeping this list exported means both `coreFacetsSchema`
+ * consumers and `facetsRawSchema` share one definition of "reserved", so a
+ * key can never legally live in two buckets at once.
+ *
+ * A key joins this list the moment something INTERPRETS it. Until then
+ * `facetsRaw` is the right home: preserved verbatim, and never
+ * half-understood.
  */
-export const RESERVED_ROOT_KEYS = ['type', 'title', 'tags', 'view', 'facets'] as const
+export const RESERVED_ROOT_KEYS = [
+  'type',
+  'title',
+  'tags',
+  'view',
+  'facets',
+  'generated',
+  'verified',
+] as const
 
 /**
  * Unknown root-level frontmatter keys are preserved verbatim as future

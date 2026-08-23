@@ -1,4 +1,9 @@
-import { documentIdSchema, documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentIdSchema,
+  documentPathSchema,
+  okfActorSchema,
+  workspaceIdSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 /**
@@ -49,6 +54,11 @@ export const wbDocumentCreateInputSchema = z
           .optional()
           .describe(
             'The document, as OKF Markdown — frontmatter and body. Optional; without it the document is created empty, which is what a caller wants when the content comes from somewhere else. Supplying it here saves the separate `wb_document_set` that every "create a note" flow otherwise needs.',
+          ),
+        actor: okfActorSchema
+          .optional()
+          .describe(
+            "Who is producing this content, in OKF's actor convention: `<producer>/<version>` for an agent or tool (e.g. `claude-code/2.1`), `human:<id>` for a person, `process:<id>` for an automated process. Recorded as OKF `generated.by` so a later reader knows what wrote the document. Identify yourself here; omitted, the write is attributed to the server rather than to you.",
           ),
       })
       .strict(),

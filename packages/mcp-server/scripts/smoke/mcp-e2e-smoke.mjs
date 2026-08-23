@@ -872,11 +872,11 @@ async function main() {
     'This edits a JSON Canvas',
   )
 
-  // `description`, `status` and `generated` are OKF root keys this server does
-  // not model. They ride along so the round trip below proves the preservation
-  // rule at runtime: the MCP SDK validates structuredContent against
-  // outputSchema, so a bucket the schema does not admit fails here and only
-  // here.
+  // `description` and `status` are OKF root keys this server does not model.
+  // They ride along so the round trip below proves the preservation rule at
+  // runtime: the MCP SDK validates structuredContent against outputSchema, so
+  // a bucket the schema does not admit fails here and only here. The write
+  // declares no `generated`, so the server stamps the `actor` passed below.
   const importMarkdown = [
     '---',
     'type: issue',
@@ -886,7 +886,6 @@ async function main() {
     '  - e2e',
     'description: An issue written by the e2e smoke.',
     'status: stable',
-    'generated: { by: "process:mcp-e2e-smoke", at: 2026-06-20T22:53:05Z }',
     'facets:',
     '  example.sample/v1:',
     '    status: open',
@@ -897,6 +896,7 @@ async function main() {
     workspaceId: WORKSPACE_ID,
     documentId: mdCanvasId,
     markdown: importMarkdown,
+    actor: 'process:mcp-e2e-smoke',
   })
   if (!imported.imported || imported.documentId !== mdCanvasId) {
     throw new Error(`wb_document_set returned unexpected shape: ${JSON.stringify(imported)}`)
@@ -951,11 +951,18 @@ async function main() {
       `canvas_export_okf core facets mismatch after import: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
+  // The trust family is MODELLED, so it comes back as a typed field rather
+  // than in the preserved bucket, and `at` is the server's clock.
+  const generated = exported.frontmatter.generated
+  if (generated?.by !== 'process:mcp-e2e-smoke' || !Number.isFinite(Date.parse(generated?.at))) {
+    throw new Error(
+      `wb_document_set did not stamp the declared actor: ${JSON.stringify(exported.frontmatter)}`,
+    )
+  }
   const preserved = exported.frontmatter.facetsRaw
   if (
     preserved?.description !== 'An issue written by the e2e smoke.' ||
-    preserved?.status !== 'stable' ||
-    preserved?.generated?.by !== 'process:mcp-e2e-smoke'
+    preserved?.status !== 'stable'
   ) {
     throw new Error(
       `unmodelled OKF root keys were not preserved: ${JSON.stringify(exported.frontmatter)}`,
@@ -966,7 +973,9 @@ async function main() {
       `preserved OKF keys were not re-emitted at the frontmatter root: ${exported.content}`,
     )
   }
-  console.log('[e2e] wb_document_get → unmodelled OKF root keys preserved at the root')
+  console.log(
+    '[e2e] wb_document_get → generated stamped from the declared actor, unmodelled OKF keys preserved at the root',
+  )
   console.log('[e2e] wb_document_get → round-trip verified (core facets + extension facets)')
 
   console.log('\n[e2e] ALL OK')
