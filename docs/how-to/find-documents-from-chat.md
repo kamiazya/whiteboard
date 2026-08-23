@@ -36,21 +36,35 @@ but it is no longer the only voice — on a large workspace a weak keyword
 match can be ranked below a strong match by meaning, and fall off the end
 of the results you asked for.
 
-It is off by default because the model is a ~113MB download. Two deliberate
-steps turn it on:
+It is off by default because it is not small: the embedding runtime is
+~384MB installed, and the model itself is a further ~113MB download. Neither
+arrives unless you ask for it. Three deliberate steps turn it on:
 
 ```bash
-# once — downloads the model into your data directory
-pnpm --filter @kamiazya/whiteboard-mcp search:fetch-model
+# once — install the embedding runtime beside the server
+npm install @huggingface/transformers
+
+# once — download the model into your data directory
+whiteboard search fetch-model --json
 
 # then start the daemon with
 WHITEBOARD_SEMANTIC_SEARCH=1
 ```
 
+`whiteboard search fetch-model` verifies by USE rather than by looking for
+files: it reports success only once an embedding actually comes back at the
+width the search index is built for. If a step is missing it says which one
+— `runtime-missing` means the first command, `weights-missing` means the
+second.
+
+Working from a clone of the repository instead? `pnpm --filter
+@kamiazya/whiteboard-mcp search:fetch-model` runs the same command against
+your checkout.
+
 After that everything is local and offline: nothing is sent anywhere, and
 the model is never re-fetched. The daemon never downloads on its own — if
-the model is missing, search quietly stays word-based rather than blocking
-on a download.
+the model is missing, search stays word-based rather than blocking on a
+download, and says so in its log with the step that would fix it.
 
 Measured on the project's judged corpus, with the model on: queries that
 word-based search could not answer at all (a paraphrase, or a Japanese

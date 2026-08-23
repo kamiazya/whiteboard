@@ -1,6 +1,6 @@
-import { join } from 'node:path'
 import type { Embedder } from '@kamiazya/whiteboard-server-core'
 import { getDataDir } from '../config.js'
+import { searchModelCacheDir } from './model-cache-dir.js'
 import { createTransformersEmbedder } from './transformers-embedder.js'
 
 /**
@@ -32,18 +32,11 @@ let held: Embedder | undefined
  */
 export function resolveSearchEmbedder(): Embedder | undefined {
   if (process.env[FLAG] !== '1') return undefined
-  held ??= createTransformersEmbedder({ cacheDir: searchModelCacheDir(), offline: true })
+  held ??= createTransformersEmbedder({
+    cacheDir: searchModelCacheDir(getDataDir()),
+    offline: true,
+  })
   return held
-}
-
-/**
- * Beside the daemon's other data rather than inside node_modules, which is
- * where transformers.js would otherwise put it — under pnpm that is the
- * shared content-addressed store, a location `pnpm store prune` empties and
- * every project on the machine shares.
- */
-export function searchModelCacheDir(): string {
-  return join(getDataDir(), 'models')
 }
 
 export function resetSearchEmbedderForTests(): void {

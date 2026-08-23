@@ -105,6 +105,14 @@
     }
   },
   "ignoreDependencies": [
+    // The semantic-search embedding runtime. `packages/mcp-server` declares it
+    // as an OPTIONAL peerDependency (384MB installed, for a feature that is off
+    // by default), so knip attributes the only import statement there and sees
+    // nothing left pointing at the root entry. The root devDependency is still
+    // load-bearing: it is what makes `search:fetch-model` and
+    // `scripts/measure/search-quality-embedding.mjs` runnable from a clone,
+    // which is the only place either is ever run.
+    "@huggingface/transformers",
     // Referenced only as a createRequire().resolve() string in apps/web's
     // vite.config.ts / vitest.browser.config.ts: the direct devDependency is
     // what makes that resolve legal under pnpm's strict node_modules, and the

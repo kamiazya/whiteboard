@@ -1,33 +1,24 @@
 /**
- * Downloads the semantic-search model into the daemon's data directory.
- *
- * A deliberate step rather than something a search does for you. The
- * weights are ~113MB; fetching them on a request path would make one
- * user's first search block on a download, and `/mcp` being stateless per
- * request means that path is entered far more often than "once". The
- * daemon therefore runs strictly offline and simply stays lexical until
- * this script has run.
+ * Repo-side alias for `whiteboard search fetch-model`.
  *
  *   pnpm --filter @kamiazya/whiteboard-mcp search:fetch-model
  *
- * Idempotent: an already-populated cache re-verifies and exits.
+ * The command itself lives in src/cli so it ships in dist — an installed
+ * user cannot run anything under scripts/. This file exists only so a
+ * contributor working from source does not have to build first.
  */
-import { searchModelCacheDir } from '../../src/server/search/search-embedder.ts'
-import { createTransformersEmbedder } from '../../src/server/search/transformers-embedder.ts'
 
-const cacheDir = searchModelCacheDir()
+import { runSearchFetchModel } from '../../src/cli/search-fetch-model.ts'
+import { getDataDir } from '../../src/server/config.ts'
+import { searchModelCacheDir } from '../../src/server/search/model-cache-dir.ts'
+
+const cacheDir = searchModelCacheDir(getDataDir())
 process.stdout.write(`fetching the search model into ${cacheDir}\n`)
 
-const embedder = createTransformersEmbedder({ cacheDir })
-const startedAt = Date.now()
-const [vector] = await embedder.embed(['warm the model'], 'document')
-
-if (vector === undefined || vector.length !== embedder.dimensions) {
-  process.stderr.write('the model did not load; search will stay lexical\n')
-  process.exit(1)
-}
-
+const { result, exitCode } = await runSearchFetchModel({ cacheDir })
 process.stdout.write(
-  `ready in ${((Date.now() - startedAt) / 1000).toFixed(1)}s — ` +
-    'set WHITEBOARD_SEMANTIC_SEARCH=1 to use it\n',
+  result.ok
+    ? `ready in ${(result.elapsedMs / 1000).toFixed(1)}s — set WHITEBOARD_SEMANTIC_SEARCH=1 to use it\n`
+    : `${result.remedy}\n`,
 )
+process.exit(exitCode)

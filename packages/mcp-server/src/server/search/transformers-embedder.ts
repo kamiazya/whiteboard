@@ -15,6 +15,12 @@ const log = getLogger('search-embedder')
 export const DEFAULT_MODEL = 'Xenova/multilingual-e5-small'
 
 /**
+ * multilingual-e5-small's width. Wrong here means every vector is rejected
+ * by the port's shape check rather than silently mis-scored.
+ */
+export const EMBEDDING_DIMENSIONS = 384
+
+/**
  * e5 is trained with these literal prefixes and loses accuracy without them.
  * https://huggingface.co/intfloat/multilingual-e5-small#faq
  */
@@ -49,6 +55,60 @@ export interface TransformersEmbedderOptions {
 }
 
 /**
+ * Why the load is separate from the embedder that uses it: the embedder's
+ * contract is to degrade to lexical results, so it must swallow whatever
+ * goes wrong here. The fetch command's contract is the opposite — it exists
+ * to tell the user what went wrong — and both must exercise the same load,
+ * or the diagnostic stops describing the thing it diagnoses.
+ *
+ * Throws. Callers classify with {@link classifyEmbedderLoadFailure}.
+ */
+export async function loadEmbeddingPipeline(
+  options: TransformersEmbedderOptions,
+): Promise<ExtractorLike> {
+  const model = options.model ?? DEFAULT_MODEL
+  const dtype = options.dtype ?? DEFAULT_DTYPE
+  const { pipeline, env } = await import('@huggingface/transformers')
+  env.cacheDir = options.cacheDir
+  if (options.offline === true) env.allowRemoteModels = false
+  log.info({ model, dtype }, 'loading embedding model')
+  return (await pipeline('feature-extraction', model, { dtype })) as unknown as ExtractorLike
+}
+
+/**
+ * The three ways loading fails need three different answers, and the one
+ * that used to be logged for all of them ("unavailable") is actionable for
+ * none. `runtime-missing` is a packaging state the user fixes by installing
+ * the optional peer; `weights-missing` is fixed by running the fetch
+ * command; anything else is a real fault worth reporting as one.
+ */
+export type EmbedderLoadFailure = 'runtime-missing' | 'weights-missing' | 'load-failed'
+
+export function classifyEmbedderLoadFailure(err: unknown): EmbedderLoadFailure {
+  const code = (err as NodeJS.ErrnoException | undefined)?.code
+  if (code === 'ERR_MODULE_NOT_FOUND' || code === 'MODULE_NOT_FOUND') return 'runtime-missing'
+  const message = err instanceof Error ? err.message : String(err)
+  // transformers.js reports a cache miss under `allowRemoteModels = false`
+  // by naming the file it could not produce; there is no error code to read.
+  if (/could not locate file|no such file|unauthorized access to file/i.test(message)) {
+    return 'weights-missing'
+  }
+  return 'load-failed'
+}
+
+/**
+ * What to tell a user who opted in and got lexical results anyway. Keyed by
+ * failure so the message names the ONE step that actually unblocks them.
+ */
+export const EMBEDDER_LOAD_REMEDY: Record<EmbedderLoadFailure, string> = {
+  'runtime-missing':
+    'semantic search needs the optional @huggingface/transformers runtime — install it beside the server',
+  'weights-missing':
+    'the embedding model has not been downloaded yet — run `whiteboard search fetch-model`',
+  'load-failed': 'the embedding model failed to load',
+}
+
+/**
  * A local, offline-after-first-run embedder over transformers.js.
  *
  * The model is loaded lazily on the first embed and never at construction:
@@ -64,30 +124,22 @@ export function createTransformersEmbedder(options: TransformersEmbedderOptions)
   let pipe: Promise<ExtractorLike> | undefined
   let broken = false
 
-  const load = async (): Promise<ExtractorLike> => {
-    const { pipeline, env } = await import('@huggingface/transformers')
-    env.cacheDir = options.cacheDir
-    if (options.offline === true) env.allowRemoteModels = false
-    log.info({ model, dtype: options.dtype ?? DEFAULT_DTYPE }, 'loading embedding model')
-    return (await pipeline('feature-extraction', model, {
-      dtype: options.dtype ?? DEFAULT_DTYPE,
-    })) as unknown as ExtractorLike
-  }
-
   return {
-    // multilingual-e5-small. Wrong here means every vector is rejected by
-    // the shape check rather than silently mis-scored.
-    dimensions: 384,
+    dimensions: EMBEDDING_DIMENSIONS,
     async embed(texts, role) {
       if (broken || texts.length === 0) return []
-      pipe ??= load()
+      pipe ??= loadEmbeddingPipeline(options)
       let extractor: ExtractorLike
       try {
         extractor = await pipe
       } catch (err) {
         broken = true
         pipe = undefined
-        log.warning({ model, err }, 'embedding model unavailable, search stays lexical')
+        const failure = classifyEmbedderLoadFailure(err)
+        log.warning(
+          { model, failure, err },
+          `search stays lexical: ${EMBEDDER_LOAD_REMEDY[failure]}`,
+        )
         return []
       }
       // pooling+normalize in the runtime rather than in JS: the port's

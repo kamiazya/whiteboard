@@ -199,7 +199,7 @@ describe('docs layout contract', () => {
   })
 })
 
-// GitHub's heading-anchor slug: lowercase, drop everything that is not a
+// GitHub's heading anchor: lowercase, drop everything that is not a
 // word character, space or hyphen, then hyphenate the spaces. Inline markdown
 // (backticks, emphasis, links) contributes only its visible text.
 function headingAnchors(markdown: string): Set<string> {
@@ -213,14 +213,14 @@ function headingAnchors(markdown: string): Set<string> {
     if (inFence) continue
     const heading = line.match(/^#{1,6}\s+(.*)$/)
     if (!heading) continue
-    const slug = heading[1]
+    const anchor = heading[1]
       .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
       .replace(/[`*_~]/g, '')
       .trim()
       .toLowerCase()
       .replace(/[^\w\s-]/g, '')
       .replace(/\s/g, '-')
-    anchors.add(slug)
+    anchors.add(anchor)
   }
   return anchors
 }
