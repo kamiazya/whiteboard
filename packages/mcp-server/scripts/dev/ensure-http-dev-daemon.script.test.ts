@@ -313,36 +313,35 @@ describe('ensure-http-dev-daemon.mjs (subprocess)', () => {
       const { port, env } = await prepareHookRun()
       const logPath = join(REPO_ROOT, LOG_PATH_SUFFIX)
 
-      // reserveFreePort() binds port 0, reads the number, then CLOSES the
-      // listener — so between that close and the spawned server's own
-      // listen() the OS may hand the same ephemeral port to anything else on
-      // the machine. On a sharded CI runner that is a real, observed race
-      // (2026-08-09). Steal the port inside that window: the hook's probe
-      // still sees it free, and the delayed bind then fails.
+      // The failure is INJECTED into the spawned process rather than
+      // manufactured by racing the OS for the port. What is under test is
+      // the hook: when the dev server cannot bind, does it say so and point
+      // at the log? Producing a real EADDRINUSE meant squatting the port
+      // inside the window between `reserveFreePort()`'s close and the
+      // delayed listen(), timed by a 250ms sleep against a 600ms delay —
+      // and under load the sleep overran, the squat landed after the bind,
+      // and the server started normally. The assertion then read
+      // `expected '[ensure-http-dev-daemon] http://127.0…' to contain
+      // 'tmp/logs/mcp-http-dev.log'`, which looks like a product defect and
+      // is really the test failing to build its own premise. Three pre-push
+      // runs died on it while three isolated runs passed.
+      // The readiness timeout still has to be short: the spawned process
+      // dies immediately, but the hook waits out its own budget before
+      // giving up, and the default outlives this test's.
       const hookRun = runHook({
         ...env,
         WHITEBOARD_DEV_READY_TIMEOUT_MS: '3000',
-        FAKE_PNPM_BIND_DELAY_MS: '600',
+        FAKE_PNPM_BIND_FAILS: '1',
       })
-      await new Promise((settle) => setTimeout(settle, 250))
-      // Drops every connection on arrival: this server exists only to hold
-      // the port, and a lingering socket from the hook's probe would make
-      // close() below wait on it.
-      const squatter = createServer((socket) => socket.destroy())
-      await new Promise<void>((listening) => squatter.listen(port, HOST, () => listening()))
 
-      try {
-        const { exitCode, stderr } = await hookRun
-        expect(exitCode).not.toBe(0)
-        // The hook points at the log; the log must actually name the cause,
-        // or "spawned process exited with code 1" is all anyone ever sees.
-        expect(stderr).toContain(LOG_PATH_SUFFIX)
-        const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : ''
-        expect(log).toContain('EADDRINUSE')
-        expect(log).toContain(String(port))
-      } finally {
-        await new Promise<void>((closed) => squatter.close(() => closed()))
-      }
+      const { exitCode, stderr } = await hookRun
+      expect(exitCode).not.toBe(0)
+      // The hook points at the log; the log must actually name the cause,
+      // or "spawned process exited with code 1" is all anyone ever sees.
+      expect(stderr).toContain(LOG_PATH_SUFFIX)
+      const log = existsSync(logPath) ? readFileSync(logPath, 'utf8') : ''
+      expect(log).toContain('EADDRINUSE')
+      expect(log).toContain(String(port))
     },
   )
 

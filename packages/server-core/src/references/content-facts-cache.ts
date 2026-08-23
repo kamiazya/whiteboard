@@ -1,5 +1,6 @@
 import type { DocumentEntry } from '@kamiazya/whiteboard-ports'
 import type { Embedder } from '../search/embedder.js'
+import { assertVectorWidth } from '../search/embedder.js'
 import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from '../tools/document-io.js'
 import { type ContentFacts, extractContentFacts } from './extract.js'
@@ -30,7 +31,7 @@ export class ContentFactsCache {
    *  an edit invalidates both together and neither can go stale alone. */
   private readonly held = new Map<
     string,
-    Map<string, { stamp: string; facts: ContentFacts; vector?: Float32Array }>
+    Map<string, { stamp: string; facts: ContentFacts; vector?: Float32Array; vectorFrom?: string }>
   >()
 
   /**
@@ -105,7 +106,11 @@ export class ContentFactsCache {
     const pending: { documentId: string; text: string }[] = []
     for (const entry of entries) {
       const cached = held.get(entry.documentId)
-      if (cached === undefined || cached.vector !== undefined) continue
+      // A vector from a DIFFERENT embedder is not a cache hit: it belongs
+      // to another vector space, and reusing it would have the query
+      // measured against documents nobody scored the same way.
+      if (cached === undefined) continue
+      if (cached.vector !== undefined && cached.vectorFrom === embedder.id) continue
       const text = [entry.name ?? '', entry.path, ...(facts.get(entry.documentId)?.texts ?? [])]
         .join('\n')
         .trim()
@@ -117,17 +122,23 @@ export class ContentFactsCache {
         pending.map((entry) => entry.text),
         'document',
       )
+      assertVectorWidth(vectors, embedder)
       pending.forEach((p, index) => {
         const cached = held.get(p.documentId)
         const vector = vectors[index]
-        if (cached !== undefined && vector !== undefined) cached.vector = vector
+        if (cached !== undefined && vector !== undefined) {
+          cached.vector = vector
+          cached.vectorFrom = embedder.id
+        }
       })
     }
 
     const out: { documentId: string; vector: Float32Array }[] = []
     for (const entry of entries) {
-      const vector = held.get(entry.documentId)?.vector
-      if (vector !== undefined) out.push({ documentId: entry.documentId, vector })
+      const cached = held.get(entry.documentId)
+      if (cached?.vector !== undefined && cached.vectorFrom === embedder.id) {
+        out.push({ documentId: entry.documentId, vector: cached.vector })
+      }
     }
     return out
   }
