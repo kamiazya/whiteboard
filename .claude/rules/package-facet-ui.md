@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/facet-ui/**"
+---
+
 # facet-ui — the facet system's React half
 
 ## What belongs here
