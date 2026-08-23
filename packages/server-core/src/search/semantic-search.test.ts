@@ -48,6 +48,7 @@ function fakeVector(text: string): Float32Array {
 }
 function fakeEmbedder(): Embedder & { calls: number } {
   const impl = {
+    id: 'fake@v1',
     dimensions: 3,
     calls: 0,
     async embed(texts: readonly string[], _role: 'query' | 'document') {
@@ -237,6 +238,7 @@ describe('semantic fusion', () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)
     const broken: Embedder = {
+      id: 'broken@v1',
       dimensions: 3,
       embed: () => Promise.reject(new Error('model unavailable')),
     }

@@ -1,0 +1,36 @@
+{
+  "name": "@kamiazya/whiteboard-facet-ui",
+  "private": true,
+  "version": "0.0.0",
+  "license": "Apache-2.0",
+  "description": "The React half of the facet system: the primitives a plugin builds its settings UI from, the validated writer every editor goes through, and the bundled visual plugin's own editors. Never published to npm.",
+  "type": "module",
+  "main": "./src/index.ts",
+  "types": "./src/index.ts",
+  "exports": {
+    ".": {
+      "types": "./src/index.ts",
+      "import": "./src/index.ts"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run --config vitest.jsdom.config.ts"
+  },
+  "dependencies": {
+    "@kamiazya/whiteboard-canvas-render": "workspace:*",
+    "@kamiazya/whiteboard-facet-engine": "workspace:*",
+    "react": "catalog:",
+    "lucide-react": "^1.28.0"
+  },
+  "devDependencies": {
+    "@testing-library/react": "^16.0.0",
+    "@types/react": "^19",
+    "@vitejs/plugin-react": "^6.0.5",
+    "react-dom": "catalog:",
+    "typescript": "catalog:",
+    "vitest": "catalog:",
+    "zod": "catalog:"
+  }
+}

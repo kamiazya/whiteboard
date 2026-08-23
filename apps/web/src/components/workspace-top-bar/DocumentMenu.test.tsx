@@ -1,32 +1,26 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { DocumentMenu } from './DocumentMenu'
 
-const URL_UNDER_TEST = 'https://example.test/w/ws_1/document/canvas-a'
-
 function renderMenu(props?: {
   onExport?: (format: 'png' | 'svg') => void
-  documentUrl?: string
   children?: React.ReactNode
 }) {
   // Radix portals render into document.body, a DOM sibling of the default
   // container — rooting React at body is what lets portal events reach it.
-  return render(
-    <DocumentMenu documentUrl={props?.documentUrl ?? URL_UNDER_TEST} onExport={props?.onExport}>
-      {props?.children}
-    </DocumentMenu>,
-    { container: document.body },
-  )
+  return render(<DocumentMenu onExport={props?.onExport}>{props?.children}</DocumentMenu>, {
+    container: document.body,
+  })
 }
 
 // Radix DropdownMenuTrigger opens on pointerDown; DropdownMenuItem selects on pointerUp.
 async function openMenu() {
   fireEvent.pointerDown(screen.getByLabelText('More actions'), { button: 0, ctrlKey: false })
-  return screen.findByText('Copy link')
+  return screen.findByRole('menu')
 }
 
 afterEach(() => {
@@ -75,78 +69,29 @@ describe('DocumentMenu — page-contributed entries', () => {
     await openMenu()
 
     const labels = screen.getAllByRole('menuitem').map((item) => item.textContent?.trim())
-    expect(labels).toEqual(['Copy link', 'Export as PNG', 'Export as SVG', 'Delete'])
+    expect(labels).toEqual(['Export as PNG', 'Export as SVG', 'Delete'])
   })
 })
 
-describe('DocumentMenu — copy link feedback', () => {
-  afterEach(() => {
-    // @ts-expect-error -- test-only cleanup of a property defined per-test below
-    delete navigator.clipboard
+// Handing out a link is a promise the keeper may not be able to keep: a
+// browser-kept document is reachable from no other browser, and the link this
+// menu used to copy was built from the document's PATH, so renaming it broke
+// every link already handed out. The affordance is gone until sharing is
+// designed against the keeper that has to honour it.
+describe('DocumentMenu — no link handout', () => {
+  it('offers nothing that copies a link', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
+
+    expect(screen.queryByText(/copy link/i)).toBeNull()
+    expect(screen.queryByText(/copied/i)).toBeNull()
   })
 
-  it('shows a "Copied!" confirmation after a successful copy, then reverts', async () => {
-    vi.useFakeTimers({ shouldAdvanceTime: true })
-    const writeText = vi.fn().mockResolvedValue(undefined)
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
+  it('mounts no copy-status live region and no fallback link field', async () => {
+    renderMenu({ onExport: vi.fn() })
+    await openMenu()
 
-    try {
-      renderMenu()
-      fireEvent.pointerUp(await openMenu())
-
-      await vi.waitFor(() => expect(screen.getByText('Copied!')).toBeTruthy())
-      expect(writeText).toHaveBeenCalledWith(URL_UNDER_TEST)
-      // Screen-reader announcement, independent of the visible label swap.
-      expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
-        'Document link copied to clipboard.',
-      )
-
-      await act(async () => {
-        vi.advanceTimersByTime(2000)
-      })
-      await vi.waitFor(() => expect(screen.queryByText('Copied!')).toBeNull())
-      expect(screen.getByText('Copy link')).toBeTruthy()
-    } finally {
-      vi.useRealTimers()
-    }
-  })
-
-  it('surfaces a rejected clipboard write as a visible error instead of a false success', async () => {
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-
-    renderMenu()
-    fireEvent.pointerUp(await openMenu())
-
-    expect((await screen.findByRole('alert')).textContent).toContain("Couldn't copy automatically")
-    expect(screen.queryByText('Copied!')).toBeNull()
-    expect(screen.getByRole('status', { name: 'Copy status' }).textContent).toContain(
-      "Couldn't copy the document link automatically.",
-    )
-
-    // Fallback: the link is still available as selectable text.
-    const fallback = screen.getByLabelText('Document link') as HTMLInputElement
-    expect(fallback.value).toBe(URL_UNDER_TEST)
-    expect(fallback.readOnly).toBe(true)
-  })
-
-  it('does not nest the live region or the error fallback inside the role="menu" container', async () => {
-    // WAI-ARIA menu pattern: an element with role="menu" may only own
-    // menuitem/menuitemcheckbox/menuitemradio/group descendants. A
-    // role="status"/role="alert" live region nested directly inside it
-    // violates that contract (axe/AccessLint: aria-required-children) even
-    // though the text is never focusable or reachable by arrow keys.
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-
-    renderMenu()
-    fireEvent.pointerUp(await openMenu())
-
-    const alert = await screen.findByRole('alert')
-    const status = screen.getByRole('status', { name: 'Copy status' })
-    const menu = screen.getByRole('menu')
-
-    expect(menu.contains(alert)).toBe(false)
-    expect(menu.contains(status)).toBe(false)
+    expect(screen.queryByRole('status', { name: /copy status/i })).toBeNull()
+    expect(screen.queryByLabelText(/document link/i)).toBeNull()
   })
 })

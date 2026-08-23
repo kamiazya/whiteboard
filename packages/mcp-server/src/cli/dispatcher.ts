@@ -50,7 +50,7 @@ whiteboard server run            --json --dry-run [--external-url=<url>] [--auth
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
-whiteboard search fetch-model    --json [--data-dir=<path>]
+whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
 `
 
 function writeJsonObject(value: unknown): void {
@@ -217,7 +217,13 @@ async function dispatchSearch(
     process.stderr.write(`Unknown search subcommand. Currently supported:\n  ${USAGE}`)
     return 64
   }
-  const parsed = parseDaemonSubcommandArgs(rest, 'search fetch-model')
+  // --full is stripped before the shared parser sees it: that parser's job
+  // is --json/--data-dir, and it rejects anything else by design.
+  const full = rest.includes('--full')
+  const parsed = parseDaemonSubcommandArgs(
+    rest.filter((arg) => arg !== '--full'),
+    'search fetch-model',
+  )
   if (parsed.kind === 'usage-error') {
     process.stderr.write(`${parsed.message}\n`)
     return 64
@@ -230,6 +236,7 @@ async function dispatchSearch(
   const { runSearchFetchModel } = await import('./search-fetch-model.js')
   const { result, exitCode } = await runSearchFetchModel({
     cacheDir: searchModelCacheDir(dataDir),
+    dtype: full ? 'fp32' : 'q8',
   })
   writeJsonObject(result)
   return exitCode

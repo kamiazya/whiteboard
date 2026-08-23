@@ -37,19 +37,34 @@ match can be ranked below a strong match by meaning, and fall off the end
 of the results you asked for.
 
 It is off by default because it is not small: the embedding runtime is
-~384MB installed, and the model itself is a further ~113MB download. Neither
-arrives unless you ask for it. Three deliberate steps turn it on:
+~384MB installed, and the model itself is a further ~118MB download (~470MB
+at full precision — see below). Neither arrives unless you ask for it. Three
+deliberate steps turn it on:
 
 ```bash
 # once — install the embedding runtime beside the server
 npm install @huggingface/transformers
 
-# once — download the model into your data directory
+# once — download the model into your data directory (add --full for the
+# higher-precision weights)
 whiteboard search fetch-model --json
 
 # then start the daemon with
 WHITEBOARD_SEMANTIC_SEARCH=1
 ```
+
+**You choose how good a job it does.** The same model ships in two
+precisions, and the download and the quality are the same dial:
+
+| | download | measured quality |
+|---|---|---|
+| `WHITEBOARD_SEMANTIC_SEARCH=1` | ~118MB | the default |
+| `WHITEBOARD_SEMANTIC_SEARCH=full` | ~470MB | 0.051 nDCG@10 higher |
+
+That 0.051 is about 11% better ranking, measured on a public Japanese
+retrieval benchmark rather than asserted. Add `--full` to the fetch command
+if you want that side of it — fetch the precision you intend to run, since
+the daemon never downloads on its own.
 
 `whiteboard search fetch-model` verifies by USE rather than by looking for
 files: it reports success only once an embedding actually comes back at the

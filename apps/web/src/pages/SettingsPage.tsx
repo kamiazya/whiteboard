@@ -20,6 +20,7 @@ import { useThemeMode } from '@/hooks/useThemeMode'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '@/lib/app-routes'
 import { celebrate } from '@/lib/celebrate'
 import { createDaemonFetch } from '@/lib/daemon-api-client'
+import { disconnectFromDaemon } from '@/lib/disconnect-daemon'
 import type { FaviconStyle } from '@/lib/favicon'
 import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
 import { ensurePersistentStorage, queryPersistentStorage } from '@/lib/persistent-storage'
@@ -30,6 +31,13 @@ import { StorageReportCard } from '../components/StorageReportCard.js'
 
 export interface SettingsPageProps {
   daemon?: { baseUrl: string; token: string | null }
+  /**
+   * Called after this browser stops using the daemon, so the App branch can
+   * follow the settings it just wrote. Without it the change only takes
+   * effect on the next load, and the copy's "stops using it" reads as a
+   * no-op for the rest of the session.
+   */
+  onDisconnected?: () => void
 }
 
 const THEME_OPTIONS: Array<{
@@ -182,7 +190,13 @@ function GeneralSection({
 // below) is an accepted tradeoff: PairedOriginsCard/StorageReportCard already
 // own their fetch/error/loading state, and splitting that state out to share
 // across two layouts would add real complexity for a cheap, idempotent GET.
-function ConnectionsSection({ daemon }: { daemon?: { baseUrl: string; token: string | null } }) {
+function ConnectionsSection({
+  daemon,
+  onDisconnected,
+}: {
+  daemon?: { baseUrl: string; token: string | null }
+  onDisconnected?: () => void
+}) {
   if (!daemon) {
     return (
       <section>
@@ -203,9 +217,35 @@ function ConnectionsSection({ daemon }: { daemon?: { baseUrl: string; token: str
         <section aria-label="Storage">
           <StorageReportCard />
         </section>
+        {/* Management, not status: the chip reports which daemon keeps this
+            workspace, and changing that is an intent you arrive here with. */}
+        <section aria-label="This daemon" className="flex flex-col gap-1.5">
+          <p className="text-sm">
+            Connected to <span className="font-mono text-xs">{stripScheme(daemon.baseUrl)}</span>
+          </p>
+          <button
+            type="button"
+            data-testid="settings-disconnect"
+            onClick={() => {
+              disconnectFromDaemon(settingsStore, daemon.baseUrl)
+              onDisconnected?.()
+            }}
+            className="self-start rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+          >
+            Disconnect from this daemon
+          </button>
+          <p className="text-xs text-muted-foreground">
+            This browser stops using it and stops looking for it. Your data stays on the daemon and
+            is not deleted; pairing is not revoked.
+          </p>
+        </section>
       </div>
     </DaemonApiContext.Provider>
   )
+}
+
+function stripScheme(baseUrl: string): string {
+  return baseUrl.replace(/^https?:\/\//, '')
 }
 
 /**
@@ -250,6 +290,7 @@ function sectionContent(
     onProtect: () => void
     installStatus: 'installed' | 'installable' | 'not-captured'
     daemon?: { baseUrl: string; token: string | null }
+    onDisconnected?: () => void
   },
 ) {
   switch (section) {
@@ -284,7 +325,7 @@ function sectionContent(
     case 'fonts':
       return <FontsSection daemon={props.daemon} />
     case 'connections':
-      return <ConnectionsSection daemon={props.daemon} />
+      return <ConnectionsSection daemon={props.daemon} onDisconnected={props.onDisconnected} />
   }
 }
 
@@ -304,7 +345,7 @@ const SECTION_TITLE: Record<SettingsSection, string> = {
  * current section's content twice while it's the active route (see
  * ConnectionsSection's fetch-cost note above).
  */
-export function SettingsPage({ daemon }: SettingsPageProps) {
+export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
   const location = useLocation()
   const navigate = useNavigate()
   const parsed = parseSettingsRoute(location.pathname)
@@ -421,6 +462,7 @@ export function SettingsPage({ daemon }: SettingsPageProps) {
     onProtect: handleProtect,
     installStatus: installState.status,
     daemon,
+    onDisconnected,
   }
 
   return (

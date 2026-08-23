@@ -20,6 +20,13 @@ import { redactDiagnosticText } from '../shared/diagnostics/redact.js'
 export interface SearchFetchModelOptions {
   /** Where weights are written. The daemon reads the same directory. */
   cacheDir: string
+  /**
+   * Fetch what the daemon will actually load. Downloading q8 and then
+   * running `WHITEBOARD_SEMANTIC_SEARCH=full` would leave the first search
+   * reaching for weights that are not there — and the daemon is offline by
+   * design, so it would stay lexical rather than say why.
+   */
+  dtype?: 'q8' | 'fp32'
   model?: string
 }
 
@@ -28,6 +35,7 @@ export type SearchFetchModelResult =
       ok: true
       cacheDir: string
       model: string
+      dtype: 'q8' | 'fp32'
       dimensions: number
       elapsedMs: number
     }
@@ -35,6 +43,7 @@ export type SearchFetchModelResult =
       ok: false
       cacheDir: string
       model: string
+      dtype: 'q8' | 'fp32'
       failure: EmbedderLoadFailure | 'unexpected-dimensions'
       remedy: string
       /**
@@ -62,12 +71,13 @@ export async function runSearchFetchModel(
   options: SearchFetchModelOptions,
 ): Promise<{ result: SearchFetchModelResult; exitCode: number }> {
   const model = options.model ?? DEFAULT_MODEL
+  const dtype = options.dtype ?? 'q8'
   const startedAt = Date.now()
 
   let extractor: Awaited<ReturnType<typeof loadEmbeddingPipeline>>
   try {
     // Deliberately NOT offline: this command is the download.
-    extractor = await loadEmbeddingPipeline({ cacheDir: options.cacheDir, model })
+    extractor = await loadEmbeddingPipeline({ cacheDir: options.cacheDir, model, dtype })
   } catch (err) {
     const failure = classifyEmbedderLoadFailure(err)
     const raw = err instanceof Error ? err.message : String(err)
@@ -76,6 +86,7 @@ export async function runSearchFetchModel(
         ok: false,
         cacheDir: options.cacheDir,
         model,
+        dtype,
         failure,
         remedy: EMBEDDER_LOAD_REMEDY[failure],
         // Paths and tokens can appear in a transformers.js or undici message,
@@ -99,6 +110,7 @@ export async function runSearchFetchModel(
         ok: false,
         cacheDir: options.cacheDir,
         model,
+        dtype,
         failure: 'unexpected-dimensions',
         remedy: UNEXPECTED_DIMENSIONS_REMEDY,
       },
@@ -111,6 +123,7 @@ export async function runSearchFetchModel(
       ok: true,
       cacheDir: options.cacheDir,
       model,
+      dtype,
       dimensions: EMBEDDING_DIMENSIONS,
       elapsedMs: Date.now() - startedAt,
     },

@@ -11,7 +11,7 @@ function renderMenuWithSibling() {
   return render(
     <div>
       <button type="button">Back to documents</button>
-      <DocumentMenu documentUrl="https://example.test/local/untitled" />
+      <DocumentMenu onExport={vi.fn()} />
     </div>,
   )
 }
@@ -21,31 +21,6 @@ afterEach(() => {
 })
 
 describe('DocumentMenu (real Radix)', () => {
-  it('announces a failed copy without nesting the alert inside the role="menu" element', async () => {
-    const writeText = vi.fn().mockRejectedValue(new Error('Clipboard permission denied'))
-    Object.defineProperty(navigator, 'clipboard', { value: { writeText }, configurable: true })
-
-    renderMenuWithSibling()
-
-    await page.getByRole('button', { name: 'More actions' }).click()
-    await page.getByText('Copy link').click()
-
-    const alert = await screen.findByRole('alert')
-    expect(alert.textContent).toContain("Couldn't copy automatically")
-
-    const menu = screen.getByRole('menu')
-    expect(menu.contains(alert)).toBe(false)
-
-    // The announcement stays reachable in the accessibility tree even though
-    // it is no longer a DOM child of the menu.
-    const status = screen.getByRole('status', { name: 'Copy status' })
-    expect(status.textContent).toContain("Couldn't copy the document link automatically.")
-    expect(menu.contains(status)).toBe(false)
-
-    // @ts-expect-error -- test-only cleanup of a property defined above
-    delete navigator.clipboard
-  })
-
   it('leaves no sibling control aria-hidden once the menu closes', async () => {
     renderMenuWithSibling()
 

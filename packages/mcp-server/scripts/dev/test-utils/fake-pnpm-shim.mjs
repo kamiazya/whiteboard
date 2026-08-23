@@ -17,6 +17,9 @@
 //     many times `pnpm mcp:http:dev` was actually spawned (the single-file
 //     sentinel above can only tell you "at least once").
 //   FAKE_PNPM_BIND_DELAY_MS        - ms to sleep before binding (default 0).
+//   FAKE_PNPM_BIND_FAILS           - when set, throws EADDRINUSE from the
+//     same path a real bind failure takes, so a test does not have to win a
+//     race against the OS to produce one.
 //   FAKE_PNPM_NEVER_BIND           - when set, sleeps indefinitely instead
 //     of ever calling startFakeMcpResponder, simulating a daemon stuck
 //     before its listen() call.
@@ -63,6 +66,18 @@ if (process.env.FAKE_PNPM_NEVER_BIND === '1') {
 }
 
 try {
+  if (process.env.FAKE_PNPM_BIND_FAILS === '1') {
+    // Injected rather than manufactured. Proving that a bind failure is
+    // reported is about THIS process failing and the hook saying so; making
+    // it happen for real meant racing a squatter into the window between
+    // the hook's probe and the listen() below, and under load the race is
+    // lost in the direction that looks like a product bug — the server
+    // starts, the hook reports success, and the assertion complains that a
+    // log path is missing.
+    throw Object.assign(new Error(`listen EADDRINUSE: address already in use ${port}`), {
+      code: 'EADDRINUSE',
+    })
+  }
   await startFakeMcpResponder({ port, token })
 } catch (err) {
   // Without this the rejection is unhandled: the process dies with exit 1

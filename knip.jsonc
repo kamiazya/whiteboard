@@ -156,6 +156,12 @@
     "openssl",
     // lefthook.yml invokes secretlint via its literal node_modules/.bin path
     // rather than a bare command name, which knip parses as the "binary".
-    "node_modules/.bin/secretlint"
+    "node_modules/.bin/secretlint",
+    // ImageMagick, used by compose-figure.mjs to build a PR's before/after
+    // figure. A developer tool on the visual-evidence path, deliberately not
+    // a project dependency: nothing in the shipped product rasterises here,
+    // and the figure workflow is run by a human on a machine, not in CI.
+    "convert",
+    "identify"
   ]
 }

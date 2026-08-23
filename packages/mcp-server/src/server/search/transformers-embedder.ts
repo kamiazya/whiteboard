@@ -55,6 +55,17 @@ export interface TransformersEmbedderOptions {
 }
 
 /**
+ * A local, offline-after-first-run embedder over transformers.js.
+ *
+ * The model is loaded lazily on the first embed and never at construction:
+ * a daemon that starts must not pay a model download before it can answer
+ * anything, and a workspace nobody searches should pay nothing at all.
+ *
+ * A load failure is remembered, not retried per query. Retrying a missing
+ * or broken model on every keystroke turns one slow search into a permanently
+ * slow one, and the caller already degrades to lexical results.
+ */
+/**
  * Why the load is separate from the embedder that uses it: the embedder's
  * contract is to degrade to lexical results, so it must swallow whatever
  * goes wrong here. The fetch command's contract is the opposite — it exists
@@ -108,23 +119,17 @@ export const EMBEDDER_LOAD_REMEDY: Record<EmbedderLoadFailure, string> = {
   'load-failed': 'the embedding model failed to load',
 }
 
-/**
- * A local, offline-after-first-run embedder over transformers.js.
- *
- * The model is loaded lazily on the first embed and never at construction:
- * a daemon that starts must not pay a model download before it can answer
- * anything, and a workspace nobody searches should pay nothing at all.
- *
- * A load failure is remembered, not retried per query. Retrying a missing
- * or broken model on every keystroke turns one slow search into a permanently
- * slow one, and the caller already degrades to lexical results.
- */
 export function createTransformersEmbedder(options: TransformersEmbedderOptions): Embedder {
   const model = options.model ?? DEFAULT_MODEL
   let pipe: Promise<ExtractorLike> | undefined
   let broken = false
 
+  const dtype = options.dtype ?? DEFAULT_DTYPE
   return {
+    // Model AND precision, because a cached vector is only comparable to
+    // one made the same way — q8 and fp32 of this model are both 384-wide
+    // and measurably different.
+    id: `${model}@${dtype}`,
     dimensions: EMBEDDING_DIMENSIONS,
     async embed(texts, role) {
       if (broken || texts.length === 0) return []

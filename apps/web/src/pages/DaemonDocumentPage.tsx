@@ -40,7 +40,6 @@ import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { documentPath } from '../lib/app-routes.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import {
   createDaemonFetch,
@@ -605,11 +604,7 @@ export function DaemonDocumentPage({
                             {exportError}
                           </span>
                         )}
-                        <DocumentMenu
-                          documentUrl={`${window.location.origin}${documentPath(canvas.workspaceId, canvas.path)}`}
-                          onExport={(format) => void handleExport(format)}
-                          log={log}
-                        />
+                        <DocumentMenu onExport={(format) => void handleExport(format)} />
                       </>
                     }
                   />

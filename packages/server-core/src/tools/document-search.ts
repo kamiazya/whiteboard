@@ -8,7 +8,7 @@ import { fullTextSearch, type SearchableDocument } from '@kamiazya/whiteboard-se
 import { z } from 'zod'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
 import type { Embedder } from '../search/embedder.js'
-import { rankByVector } from '../search/embedder.js'
+import { assertVectorWidth, rankByVector } from '../search/embedder.js'
 import { fuseByRank } from '../search/rrf.js'
 import type { ServerDeps } from '../server-deps.js'
 
@@ -255,6 +255,7 @@ async function rankSemantically(
     if (documents.length === 0) return []
     const [queryVector] = await embedder.embed([query], 'query')
     if (queryVector === undefined) return undefined
+    assertVectorWidth([queryVector], embedder)
     return rankByVector(queryVector, documents)
   } catch {
     return undefined

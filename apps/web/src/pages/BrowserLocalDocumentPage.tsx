@@ -490,15 +490,6 @@ export function BrowserLocalDocumentPage({
 
   const nodeInEditor = useNodeInEditor(canvas, onChange)
 
-  // The browser-local route, NOT the daemon's `/w/:workspaceId/document/*`
-  // shape the header used to build for every mode — that URL does not route
-  // here at all, so "copy link" handed out an address that landed on the
-  // document list.
-  const documentUrl =
-    documentPath === null
-      ? window.location.href
-      : `${window.location.origin}${browserLocalDocumentPath(documentPath)}`
-
   const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
   const { exportError, handleExport } = useSceneExport({
     onExport: exportScene,
@@ -651,10 +642,8 @@ export function BrowserLocalDocumentPage({
         </div>
       )}
       <DocumentMenu
-        documentUrl={documentUrl}
         onExport={(format) => void handleExport(format)}
         triggerRef={canvasOpsButtonRef}
-        log={log}
       >
         <DropdownMenuItem
           onSelect={() => {
