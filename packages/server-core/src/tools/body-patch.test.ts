@@ -7,6 +7,8 @@ import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createBodyPatchTool } from './body-patch.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
@@ -28,7 +30,13 @@ async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanva
 }
 
 function makeDeps(documentStore: FakeDocumentStore) {
-  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
+  return {
+    documentStore,
+    blobStore: {} as never,
+    documentIndex: documentStore.documentIndex,
+    documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
+  }
 }
 
 describe('wb_body_patch tool', () => {

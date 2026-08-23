@@ -80,13 +80,13 @@ The proxy survives daemon watch restarts and never loses the session-start conne
 
 ## Repo-local config auto-override
 
-Opening this repo in Claude Code or Codex auto-overrides the published `npx` config with the local checkout. Three configs participate:
+Opening this repo in Codex auto-overrides the published `npx` config with the local checkout; Claude Code does so once you have run the one-time registration above. Three configs participate:
 
 | File | Launch target | Role |
 |---|---|---|
 | `.mcp.json` | `npx -y @kamiazya/whiteboard-mcp@latest` | Published `stdio` config. The Codex plugin (`./.codex-plugin/plugin.json`) references it via `"mcpServers": "./.mcp.json"`, and it is bundled into the release tarball. |
-| `mcpServers.whiteboard` in `.claude/settings.json` | `node ./packages/mcp-server/scripts/dev/mcp-dev-launch.mjs` (`WHITEBOARD_DEV=1`) | Claude Code project-scope dev override. Project scope takes precedence over `.mcp.json`. |
-| `[mcp_servers.whiteboard]` in `.codex/config.toml` | same as above | Codex repo-layer dev override. Codex merges layers `system < user < cwd < tree < repo < runtime`, with later layers winning. |
+| `whiteboard` at `--scope local` in `~/.claude.json` | `node ./packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs` | Claude Code dev override, registered once per checkout with the `claude mcp add --scope local` command above. Local scope takes precedence over `.mcp.json`'s project scope. It is machine-private, so it is not tracked here. |
+| `[mcp_servers.whiteboard_dev]` in `.codex/config.toml` | the same stdio proxy | Codex repo-layer dev override. The `_dev` suffix is load-bearing: `[mcp_servers.whiteboard]` in the same file is the published entry, pinned `enabled = false` so it does not compete. Codex merges layers `system < user < cwd < tree < repo < runtime`, with later layers winning. |
 
 The Claude plugin (`.claude-plugin/plugin.json`) carries `mcpServers` inline. Keep it in sync with `.mcp.json`. The Codex plugin (`.codex-plugin/plugin.json`) uses `./`-relative paths. Update both manifests and the actual file layout together.
 
@@ -102,7 +102,7 @@ trust_level = "trusted"
 
 ### Same-name server conflicts
 
-- Claude Code: project-scope `.claude/settings.json` should override `.mcp.json`. Verify with `/mcp` if you change this.
+- Claude Code: the `--scope local` registration should override `.mcp.json` (precedence: local > project). `.claude/settings.json` is not an option — its schema has no `mcpServers` field, and a definition placed there is silently ignored. Verify with `/mcp` if you change this.
 - Codex: confirmed in source that `mcp_servers` is fully overwritten by later layers ([codex-rs/config/src/merge.rs](https://github.com/openai/codex/blob/main/codex-rs/config/src/merge.rs)).
 
 If behavior diverges, fall back to renaming `.mcp.json` to `.mcp.json.published` and updating the Codex plugin path.
@@ -159,12 +159,12 @@ pnpm --filter @kamiazya/whiteboard-canvas-viewer build:widget
 Default regression triple after a change:
 
 ```bash
-pnpm test        # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model node, ports node, facet-engine node, facet-ui jsdom, codec node, workspace node, search node, server-core node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
+pnpm test           # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, arch-lint-node, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser (Playwright projects are slower)
 pnpm typecheck   # tsc --noEmit (~10s)
 pnpm smoke:e2e   # stdio MCP subprocess: wb_document_create -> wb_canvas_edit -> version save/list/restore -> wb_document_set -> wb_document_get
 ```
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the seventeen configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, model node, ports node, facet-engine node, codec node, workspace node, search node, server-core node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all three browser projects (canvas-render-browser, canvas-viewer-browser, web-browser)):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-one configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all three browser projects (canvas-render-browser, canvas-viewer-browser, web-browser)):
 
 ```bash
 pnpm test --project mcp-node

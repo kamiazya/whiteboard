@@ -1,4 +1,4 @@
-// The browser-local autosave state as a color-only dot beside the title
+// The browser keeper's autosave state as a color-only dot beside the title
 // (owner decision): the label lives in the accessible name and tooltip,
 // the sentence-shaped explanation in a popover — assistive tech always
 // gets the state as text even though sighted glances read color alone.

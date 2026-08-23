@@ -3,7 +3,9 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool, DocumentKindUnknownError } from './document-get.js'
 import { saveDocumentSnapshot } from './document-io.js'
@@ -35,6 +37,8 @@ function makeDeps(): ServerDeps {
     documentStore: createInMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
+    documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 
@@ -176,6 +180,8 @@ describe('wb_document_get reads a document in its own format', () => {
       ...deps,
       // simulates the wrong-workspace / not-found case
       documentIndex: withResolveOverride(deps.documentIndex, async () => null),
+      documentTeardown: unusedDocumentTeardown(),
+      documentWritten: ignoredDocumentWrites(),
     }
 
     await expect(

@@ -4,7 +4,9 @@ import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -13,6 +15,8 @@ const canvasDeps = (documentStore: FakeDocumentStore) => ({
   documentStore,
   blobStore: {} as never,
   documentIndex: unusedDocumentIndex(),
+  documentTeardown: unusedDocumentTeardown(),
+  documentWritten: ignoredDocumentWrites(),
 })
 
 describe('document-io', () => {
@@ -80,5 +84,94 @@ describe('document-io', () => {
     expect(reloaded.canvas.nodes).toHaveLength(2)
     const n2 = reloaded.canvas.nodes.find((node) => node.id === 'n2')
     expect(n2).toEqual(canvas.nodes[1])
+  })
+})
+
+// The write side of the same gap `documentTeardown` closed on the delete
+// side: a composition root has work to do after a document changes that
+// server-core cannot name. The daemon's is auto-compaction — its HTTP write
+// path fires a saved-listener that schedules one, and this path, which is
+// every agent write, reached the store directly and told nobody. An
+// agent-driven canvas therefore never compacted its op-log.
+describe('documentWritten', () => {
+  function observed() {
+    const seen: string[] = []
+    return {
+      seen,
+      observer: async ({ documentId }: { documentId: string }) => {
+        seen.push(documentId)
+      },
+    }
+  }
+
+  test('a saved snapshot tells the composition root which document changed', async () => {
+    const documentStore = new FakeDocumentStore()
+    const { seen, observer } = observed()
+
+    await saveDocumentBodySnapshot(
+      { ...canvasDeps(documentStore), documentWritten: observer },
+      DOCUMENT_ID,
+      new LoroDoc(),
+      { nodes: [], edges: [] } satisfies SpatialCanvas,
+    )
+
+    expect(seen).toEqual([DOCUMENT_ID])
+  })
+
+  test('the bytes are stored before the observer hears about it', async () => {
+    const documentStore = new FakeDocumentStore()
+    const order: string[] = []
+    const documentStoreSpy = new Proxy(documentStore, {
+      get(target, key, receiver) {
+        if (key === 'saveSnapshot') {
+          return async (...args: Parameters<FakeDocumentStore['saveSnapshot']>) => {
+            order.push('saved')
+            return await target.saveSnapshot(...args)
+          }
+        }
+        return Reflect.get(target, key, receiver)
+      },
+    })
+
+    await saveDocumentBodySnapshot(
+      {
+        ...canvasDeps(documentStoreSpy as FakeDocumentStore),
+        documentWritten: async () => {
+          order.push('observed')
+        },
+      },
+      DOCUMENT_ID,
+      new LoroDoc(),
+      { nodes: [], edges: [] } satisfies SpatialCanvas,
+    )
+
+    expect(order).toEqual(['saved', 'observed'])
+  })
+
+  // Scheduling a background compaction is not part of the write's
+  // correctness — the user's bytes are already safe. An observer that
+  // throws must not turn a successful write into a failed one, and this
+  // pins that rather than leaving it to a comment the next caller may not
+  // read.
+  test('a throwing observer does not fail a write that already succeeded', async () => {
+    const documentStore = new FakeDocumentStore()
+
+    await expect(
+      saveDocumentBodySnapshot(
+        {
+          ...canvasDeps(documentStore),
+          documentWritten: async () => {
+            throw new Error('scheduler exploded')
+          },
+        },
+        DOCUMENT_ID,
+        new LoroDoc(),
+        { nodes: [], edges: [] } satisfies SpatialCanvas,
+      ),
+    ).resolves.toBeUndefined()
+
+    expect(
+      await documentStore.loadSnapshot({ docRef: { kind: 'document', documentId: DOCUMENT_ID } }),
+    ).not.toBeNull()
   })
 })

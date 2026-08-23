@@ -2,14 +2,9 @@
 // pick applies the canvas-wide command immediately and keeps it open for
 // the next tweak, consecutive picks chain under a deferred parent, and
 // dismissal returns focus to the gear.
-import {
-  bundledPlugins,
-  createFacetRegistry,
-  defineFacet,
-  definePlugin,
-  type VisualEdgesFacet,
-} from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { bundledPlugins, type VisualEdgesFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

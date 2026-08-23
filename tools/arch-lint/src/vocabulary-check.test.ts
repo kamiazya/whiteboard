@@ -11,7 +11,7 @@
  * and the JSON Canvas format; only its use as the CONTAINER noun is wrong,
  * and telling those apart needs a reader.
  */
-import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative, sep } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -51,8 +51,13 @@ const SCAN_DIRS = [
  * A migration is HISTORY: its log key is recorded in the database and every
  * table and column it names is the name as it stood at that point in the
  * log, so it is the one place an old word must survive verbatim.
+ *
+ * An ADR is history for the same reason: it reports what was decided at its
+ * point in the log, so rewriting its words would misreport the decision.
+ * `vocabulary.md` says so outright, which is why this is an exclusion rather
+ * than a per-file exemption — there is no future ADR that should be caught.
  */
-const EXCLUDED_SEGMENTS = ['migrations']
+const EXCLUDED_SEGMENTS = ['migrations', 'adr']
 
 /**
  * Files outside `migrations/` that are nonetheless writing history, with the
@@ -81,23 +86,53 @@ const BANNED = [
   // opposite things while sharing a word, which is as confusable as a pair
   // gets.
   //
-  // Scoped to the DISCRIMINANT VALUE (a quoted literal) rather than the word
-  // anywhere: file names and test ids still read `browser-local-backend`, and
-  // are their own mechanical increment. A guard that claimed them before they
-  // moved would be one nobody could make green.
+  // Every spelling at once — `browser-local`, `browserLocal`, `BrowserLocal`,
+  // `BROWSER_LOCAL` — because they are one word wearing four cases, and a
+  // guard that caught only the quoted value is what let file names, test ids
+  // and comment prose keep saying it while the symbols beside them did not.
   {
-    pattern: /(['"])browser-local\1/,
-    word: "'browser-local' (as a value)",
+    pattern: /browser[-_]?local/i,
+    word: 'browser-local (in any casing)',
     instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
-    dirs: ['apps/web/src'],
-    // PERSISTED value under a `.strict()` schema whose loader falls back to
-    // defaults on any parse failure: renaming it in place would discard an
-    // existing reader's whole settings payload. It moves with a migration.
+    // Deliberately the whole prose surface, because a hand grep missed a
+    // place THREE times in one increment: `browserlocaldocumentpage-…` had no
+    // separator to match on, `testing.md` was camel-cased, and the workflow
+    // that comments a preview URL on every PR said "Browser-local mode" in a
+    // `.yml` nothing scanned. A reader cannot be relied on to spell the
+    // search five ways, in five file types, on every future change.
+    dirs: [
+      'apps/web/src',
+      'apps/web/scripts',
+      'docs',
+      '.github',
+      '.claude',
+      'README.md',
+      'apps/web/DESIGN.md',
+    ],
     exempt: [
+      // PERSISTED value under a `.strict()` schema whose loader falls back to
+      // defaults on any parse failure: renaming it in place would discard an
+      // existing reader's whole settings payload. It moves with a migration.
       'apps/web/src/lib/user-settings-store.ts',
       'apps/web/src/lib/user-settings-store.test.ts',
+      // Generates `docs/assets/browser-local-list.png`, which ADR-0008 names
+      // in its own prose. Renaming the asset would make a decision record
+      // false about a file that no longer exists, and rewriting the ADR to
+      // match is what vocabulary.md forbids.
+      'apps/web/src/docs-snapshots/browser-local-list.docs-snapshot.test.tsx',
+      // Renders that same ADR-pinned asset.
+      'docs/tutorials/getting-started.md',
+      // The rule this test is the executable half of. It is the one file that
+      // HAS to spell the retired words, because naming them is how it retires
+      // them — the same reason `resolve.test.ts` still writes `[[canvas:…]]`.
+      '.claude/rules/vocabulary.md',
     ],
   },
+  // Deliberately NARROWER than its sibling above, and not an oversight: only
+  // the discriminant VALUE is claimed. `localDaemonBaseUrl` is a persisted
+  // settings key whose rename needs a settings migration, so the identifier
+  // casings stay legal until that increment lands. Widening this pattern
+  // before then produces a guard nobody can make green.
   {
     pattern: /(['"])local-daemon\1/,
     word: "'local-daemon' (as a value)",
@@ -109,9 +144,9 @@ const BANNED = [
     ],
   },
   {
-    pattern: /\b(?:BROWSER_LOCAL|LOCAL_DAEMON)_/,
-    word: 'BROWSER_LOCAL_ / LOCAL_DAEMON_ constants',
-    instead: 'BROWSER_ / DAEMON_',
+    pattern: /\bLOCAL_DAEMON_/,
+    word: 'LOCAL_DAEMON_ constants',
+    instead: 'DAEMON_',
     dirs: ['apps/web/src'],
   },
 ] as const
@@ -122,6 +157,9 @@ const BANNED = [
  * is the failure mode a rename is most likely to cause.
  */
 function listSourceFiles(dir: string): string[] {
+  // A scan root may be a single file: `README.md` and `apps/web/DESIGN.md`
+  // are prose this word decays in, and neither has a directory of its own.
+  if (statSync(dir).isFile()) return [dir]
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue
@@ -131,7 +169,7 @@ function listSourceFiles(dir: string): string[] {
       files.push(...listSourceFiles(full))
       continue
     }
-    if (/\.(ts|tsx|mts|js|mjs|cjs|json)$/.test(entry.name)) files.push(full)
+    if (/\.(ts|tsx|mts|js|mjs|cjs|json|md|ya?ml)$/.test(entry.name)) files.push(full)
   }
   return files
 }

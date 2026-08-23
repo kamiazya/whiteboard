@@ -50,6 +50,7 @@ whiteboard server run            --json --dry-run [--external-url=<url>] [--auth
 whiteboard server backup         --json --output-dir=<path> [--data-dir=<path>]
 whiteboard server restore        --json --backup-dir=<path> --target-dir=<path>
 whiteboard server support-bundle --json --output-dir=<path> [--data-dir=<path>]
+whiteboard search fetch-model    --json [--full] [--data-dir=<path>]
 `
 
 function writeJsonObject(value: unknown): void {
@@ -84,6 +85,10 @@ export async function main(argv: readonly string[]): Promise<number> {
     return await dispatchServer(subcommand, rest)
   }
 
+  if (command === 'search') {
+    return await dispatchSearch(subcommand, rest)
+  }
+
   if (
     command !== 'daemon' ||
     (subcommand !== 'status' &&
@@ -105,7 +110,7 @@ export async function main(argv: readonly string[]): Promise<number> {
     return await dispatchSupportBundle(rest)
   }
 
-  const parsed = parseDaemonSubcommandArgs(rest, subcommand)
+  const parsed = parseDaemonSubcommandArgs(rest, `daemon ${subcommand}`)
   if (parsed.kind === 'usage-error') {
     // stdout stays empty on usage errors so consumers that pipe
     // stdout into JSON.parse never see an unexpected payload.
@@ -201,6 +206,39 @@ async function dispatchSupportBundle(rest: readonly string[]): Promise<number> {
   })
   if (stdout) process.stdout.write(stdout)
   if (stderr) process.stderr.write(stderr)
+  return exitCode
+}
+
+async function dispatchSearch(
+  subcommand: string | undefined,
+  rest: readonly string[],
+): Promise<number> {
+  if (subcommand !== 'fetch-model') {
+    process.stderr.write(`Unknown search subcommand. Currently supported:\n  ${USAGE}`)
+    return 64
+  }
+  // --full is stripped before the shared parser sees it: that parser's job
+  // is --json/--data-dir, and it rejects anything else by design.
+  const full = rest.includes('--full')
+  const parsed = parseDaemonSubcommandArgs(
+    rest.filter((arg) => arg !== '--full'),
+    'search fetch-model',
+  )
+  if (parsed.kind === 'usage-error') {
+    process.stderr.write(`${parsed.message}\n`)
+    return 64
+  }
+  // The daemon reads weights from the same place, and searchModelCacheDir
+  // is that one definition. It lives apart from search-embedder.js so
+  // naming it here does not drag in server/config, which mkdirs on load.
+  const { searchModelCacheDir } = await import('../server/search/model-cache-dir.js')
+  const dataDir = parsed.dataDir ?? resolveDefaultDataDir(process.env)
+  const { runSearchFetchModel } = await import('./search-fetch-model.js')
+  const { result, exitCode } = await runSearchFetchModel({
+    cacheDir: searchModelCacheDir(dataDir),
+    dtype: full ? 'fp32' : 'q8',
+  })
+  writeJsonObject(result)
   return exitCode
 }
 

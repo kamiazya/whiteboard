@@ -60,7 +60,7 @@ export function parseDaemonSubcommandArgs(
   if (!json) {
     return {
       kind: 'usage-error',
-      message: `Only --json is supported. Re-run with: whiteboard daemon ${commandName} --json`,
+      message: `Only --json is supported. Re-run with: whiteboard ${commandName} --json`,
     }
   }
 

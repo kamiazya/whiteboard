@@ -24,7 +24,7 @@ function assertValidInput(schema: z.ZodTypeAny, input: unknown, commandName: str
 
 // Projects the open-canvas identity into the tool-facing shape field-by-field
 // (never a spread) so a daemon canvas exposes only workspaceId/path and a
-// browser-local canvas only documentId — no other ProviderState/canvas field
+// canvas kept in this browser only documentId — no other ProviderState/canvas field
 // can leak through.
 function projectCanvasContext(
   canvas: WhiteboardCommandDeps['canvas'],

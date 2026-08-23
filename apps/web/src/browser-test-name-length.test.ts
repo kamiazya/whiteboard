@@ -4,7 +4,7 @@
 // ENAMETOOLONG — and the throw lands in the file's teardown, so vitest abandons
 // the REST OF THE FILE.
 //
-// Measured, by forcing one failure in BrowserLocalDocumentPage.rename twice:
+// Measured, by forcing one failure in BrowserDocumentPage.rename twice:
 //
 //   failed test with a 194-char name -> ENAMETOOLONG, "1 failed | 2 passed (6)"
 //   failed test with a  58-char name -> no error,     "1 failed | 5 passed (6)"

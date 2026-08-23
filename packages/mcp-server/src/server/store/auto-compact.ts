@@ -160,6 +160,14 @@ export async function disposeAutoCompact(): Promise<void> {
   }
 }
 
+// Test-only introspection: how many debounces are PENDING, as opposed to
+// how many compactions are in flight. It is what lets a test assert that a
+// write scheduled one — asserting only that the write did not throw is the
+// proxy indicator that let the agent-write path go untriggered for so long.
+export function _autoCompactTimerCountForTests(): number {
+  return autoCompactTimers.size
+}
+
 // Test-only introspection, matching the `_destinationCountForTests` pattern
 // in log.ts: lets tests poll for "a compaction has fired and is mid-flight"
 // without a bespoke gate inside compactDocument itself.

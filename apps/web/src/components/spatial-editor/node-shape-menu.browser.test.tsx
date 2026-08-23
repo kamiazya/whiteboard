@@ -1,8 +1,9 @@
 // The inspector's Shape row: a pick must not just record the
 // visual.shape/v0 facet on the node, it must change the silhouette the
 // scene DRAWS — and `rect` must remove the facet without a trace.
-import type { VisualShapeFacet } from '@kamiazya/whiteboard-facet-engine'
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { VisualShapeFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'

@@ -143,7 +143,7 @@ describe('AppShell — the connection chip', () => {
     expect(screen.getByText(CTA_LIMIT)).toBeTruthy()
   })
 
-  it('offers the browser-local escape from the sync-off popover', async () => {
+  it('offers the escape to the browser from the sync-off popover', async () => {
     const onWorkInBrowser = vi.fn()
     setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
     renderShell(true, '/w/ws/document/a.canvas', onWorkInBrowser)

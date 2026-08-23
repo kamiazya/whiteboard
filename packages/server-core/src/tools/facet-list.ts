@@ -1,4 +1,5 @@
-import { bundledFacetRegistry, type FacetTarget } from '@kamiazya/whiteboard-facet-engine'
+import type { FacetTarget } from '@kamiazya/whiteboard-facet-engine'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 

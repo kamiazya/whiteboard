@@ -116,7 +116,7 @@ the intended model is that connecting a daemon PROMOTES a workspace's source
 of truth to it, with everything below becoming a replica.
 
 That model is **not implemented**. What ships is a per-document, one-way
-import (`components/migration/import-browser-local.ts`) whose request carries
+import (`components/migration/import-from-browser.ts`) whose request carries
 `{ path, kind }` and no document id, so the daemon mints a new one and the
 document's identity does not survive. Copy may use the keeper vocabulary —
 "Kept in this browser" is true today — but must not promise the promotion:
@@ -137,17 +137,34 @@ machine rather than remote", which is its correct sense in `localhost`, in
 `'server-mode'`, making it exactly the network sense. Only `local` used for
 WHERE A WORKSPACE IS KEPT is retired.
 
-`vocabulary-check.test.ts` pins the retired spellings as DISCRIMINANT VALUES
-(a quoted `'browser-local'` / `'local-daemon'`) and as `BROWSER_LOCAL_` /
-`LOCAL_DAEMON_` constants, scoped to `apps/web/src`. Two things it
-deliberately does not yet claim, each its own increment:
+`vocabulary-check.test.ts` pins the browser half in EVERY casing
+(`/browser[-_]?local/i` — so `browser-local`, `browserLocal`, `BrowserLocal`,
+`BROWSER_LOCAL` and `browserlocal` alike), across `apps/web/src`,
+`apps/web/scripts`, `docs`, `.github`, `.claude`, and the root `README.md`
+and `apps/web/DESIGN.md`. The daemon half is deliberately narrower — only the
+discriminant value (a quoted `'local-daemon'`) and `LOCAL_DAEMON_` constants
+— because `localDaemonBaseUrl` is still legal until its migration lands.
 
-- **File names and test ids** (`browser-local-backend.ts`,
-  `data-testid="browser-local-index-page"`) — mechanical, ~100 files.
+The scan is that wide because a hand grep kept missing places, three times in
+one increment: `claimIsolatedWhiteboardDb('browserlocaldocumentpage-…')` had
+no separator for a `browser-local` grep to match on; `testing.md` spelled it
+camel-cased; and the workflow that posts a preview-URL comment on every PR
+said "Browser-local mode" in a `.yml` nothing scanned. Prose is where this
+word decays, so prose is what the guard reads.
+
+`migrations` and `adr` are excluded as history, and THIS FILE is exempt — it
+is the one place that has to spell the retired words in order to retire them.
+
+One thing it deliberately does not yet claim, its own increment:
+
 - **`localDaemonBaseUrl`**, the persisted settings key
-  (`lib/user-settings-store.ts`). A stored shape: renaming it drops an
-  existing reader's daemon connection at schema validation, so it needs a
-  settings migration rather than a sweep.
+  (`lib/user-settings-store.ts`), and `preferredProvider`'s enum beside it.
+  A stored shape under a `.strict()` schema whose loader falls back to
+  defaults on ANY parse failure — so renaming it in place discards an
+  existing reader's WHOLE settings payload (daemon URL, known and dismissed
+  daemons, theme, fonts), not merely the daemon connection. Measured, not
+  assumed: a sweep did exactly that and the loss was invisible because
+  nothing reads `preferredProvider`. It needs a settings migration.
 
 `slug` is the one word retired outright, and `vocabulary-check.test.ts` in
 `tools/arch-lint` keeps it retired — the only part of this rule that is not

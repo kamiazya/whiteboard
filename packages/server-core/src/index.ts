@@ -18,6 +18,9 @@ export type { QueryCategory } from './search/search-corpus.js'
 export type {
   AgentActivity,
   CanvasClientNotifier,
+  DocumentTeardown,
+  DocumentWritten,
+  FinalizeDocumentTeardown,
   ServerDeps,
   ViewportRequest,
 } from './server-deps.js'
@@ -141,3 +144,10 @@ export {
   versionSaveInputSchema,
   versionSaveOutputSchema,
 } from './tools/version-save.js'
+export type { WorkspaceEditInput, WorkspaceEditOutput } from './tools/workspace-edit.js'
+export {
+  createWorkspaceEditTool,
+  WorkspaceEditError,
+  workspaceEditInputSchema,
+  workspaceEditOutputSchema,
+} from './tools/workspace-edit.js'

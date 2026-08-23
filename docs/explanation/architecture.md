@@ -61,6 +61,7 @@ The MCP server exposes a small, opinionated set of tools that match the canvas l
 | Tool | Purpose |
 |---|---|
 | `wb_document_create` / `wb_document_list` / `wb_document_resolve` / `wb_document_delete` | Document lifecycle (CRUD). |
+| `wb_workspace_edit` | Apply an ordered list of document operations — `document.create`, `document.set`, `document.delete` — to a workspace in one call, so seeding or reorganising a workspace does not cost one round trip per document. Ids minted by a `document.create` come back in the result. Unlike `wb_canvas_edit` this does **not** roll back: each document is its own CRDT, so a failure reports the op index that failed and how many before it stand, and the caller resumes from that index rather than resending the batch. |
 | `wb_body_patch` | Update a node's Markdown body. Updates only — a node that is not there is an error, not a create. |
 | `wb_facet_set` | Set structured facet metadata on a document, or on one node of a spatial document. |
 | `wb_facet_list` | List the facets this deployment registered — the exact key to write, which objects each may be attached to, and the payload schema. |

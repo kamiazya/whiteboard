@@ -15,7 +15,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { LOCAL_WORKSPACE_ID } from '../lib/local-document-summary.js'
+import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
@@ -1818,12 +1818,12 @@ describe('DaemonDocumentPage', () => {
     })
   })
 
-  describe('browser-local import panel', () => {
+  describe('browser import panel', () => {
     it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
-      const browserLocalStore = new LocalStoreDouble()
-      await browserLocalStore.save({
+      const browserStore = new LocalStoreDouble()
+      await browserStore.save({
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-        workspaceId: LOCAL_WORKSPACE_ID,
+        workspaceId: BROWSER_WORKSPACE_ID,
         path: 'my-local-canvas',
         name: 'My local canvas',
         updatedAt: '2026-01-01T00:00:00Z',
@@ -1835,8 +1835,8 @@ describe('DaemonDocumentPage', () => {
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
-            browserLocalStore={browserLocalStore.index}
-            browserLocalClock={browserLocalStore.clock}
+            browserStore={browserStore.index}
+            browserClock={browserStore.clock}
           />,
           { container: document.body },
         )
@@ -1854,17 +1854,17 @@ describe('DaemonDocumentPage', () => {
       })
     })
 
-    it('does not touch the browser-local store until the disclosure is opened', async () => {
-      const browserLocalStore = new LocalStoreDouble()
-      const listSpy = vi.spyOn(browserLocalStore.index, 'listDocuments')
+    it('does not touch the browser store until the disclosure is opened', async () => {
+      const browserStore = new LocalStoreDouble()
+      const listSpy = vi.spyOn(browserStore.index, 'listDocuments')
 
       await act(async () => {
         render(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
-            browserLocalStore={browserLocalStore.index}
-            browserLocalClock={browserLocalStore.clock}
+            browserStore={browserStore.index}
+            browserClock={browserStore.clock}
           />,
           { container: document.body },
         )
@@ -1888,7 +1888,7 @@ describe('DaemonDocumentPage', () => {
       await waitFor(() => expect(listSpy).toHaveBeenCalled())
     })
 
-    it('does not render the import disclosure when browserLocalStore is not provided', async () => {
+    it('does not render the import disclosure when browserStore is not provided', async () => {
       await act(async () => {
         render(
           <DaemonDocumentPage

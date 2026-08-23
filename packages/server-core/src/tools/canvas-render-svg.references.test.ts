@@ -9,6 +9,8 @@
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
 import { createCanvasSnapshotTool } from './canvas-snapshot.js'
 
@@ -18,7 +20,13 @@ const DIAGRAM_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(documentStore: FakeDocumentStore) {
-  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
+  return {
+    documentStore,
+    blobStore: {} as never,
+    documentIndex: documentStore.documentIndex,
+    documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
+  }
 }
 
 /**

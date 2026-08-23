@@ -9,6 +9,8 @@ import { Container, type ContainerModule } from 'inversify'
 import { createCanvasClientNotifier } from '../server/canvas-client-notifier.js'
 import { createOpentypeMeasureText } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
+import { documentTeardown } from '../server/store/document-store.js'
+import { documentWritten } from '../server/store/document-written.js'
 import { storeMemoryModule } from './store-memory.module.js'
 
 export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {
@@ -48,5 +50,17 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // the first search rather than here — a daemon that starts must not pay
     // a model download before it can answer anything.
     embedder: resolveSearchEmbedder(),
+    // Wired here for the same reason clientNotifier is: it is this package's
+    // own filesystem and doc cache, not an interchangeable implementation.
+    // Without it wb_document_delete removes the rows and leaves the
+    // thumbnails, the blob and a cached doc instance behind — the HTTP
+    // DELETE has always cleaned those up, and the two paths disagreeing is
+    // the defect this closes.
+    documentTeardown,
+    // Same reason as documentTeardown: this package's own op-log
+    // maintenance, not an interchangeable implementation. Wired HERE rather
+    // than in the HTTP route registration, which is what confined the old
+    // saved-listener to one deployment shape.
+    documentWritten,
   }
 }

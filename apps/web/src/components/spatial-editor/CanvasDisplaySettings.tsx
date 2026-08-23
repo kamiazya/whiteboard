@@ -16,12 +16,9 @@
  * Radix owns dismissal (outside click, Escape) and returns focus to the
  * gear, so a keyboard user never falls to <body>.
  */
-import {
-  bundledFacetRegistry,
-  type FacetRegistry,
-  resolveFacetContributions,
-} from '@kamiazya/whiteboard-facet-engine'
+import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { SlidersHorizontal } from 'lucide-react'
 import { Fragment, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'

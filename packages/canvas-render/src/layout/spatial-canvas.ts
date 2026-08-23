@@ -26,12 +26,6 @@
 // the same SVG twice regardless.
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import {
-  resolveCanvasEdgeStyle,
-  resolveNodeShape,
-  resolveNodeSymbol,
-  resolveNodeTextAlign,
-} from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasEdge,
   EdgeRoutingStyle,
@@ -39,6 +33,12 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
+import {
+  resolveCanvasEdgeStyle,
+  resolveNodeShape,
+  resolveNodeSymbol,
+  resolveNodeTextAlign,
+} from '@kamiazya/whiteboard-plugin-visual'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'

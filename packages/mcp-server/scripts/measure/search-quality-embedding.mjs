@@ -34,13 +34,14 @@ import {
   wbDocumentCreate,
 } from '@kamiazya/whiteboard-server-core'
 import { createInMemoryDocumentStore } from '../../../server-core/src/test-utils/in-memory-document-store.ts'
+import { getDataDir } from '../../src/server/config.ts'
 import {
   corpusDigest,
   DOCS_JUDGED_QUERIES,
   loadDocsCorpus,
   queryDigest,
 } from '../../src/server/search/docs-corpus.ts'
-import { searchModelCacheDir } from '../../src/server/search/search-embedder.ts'
+import { searchModelCacheDir } from '../../src/server/search/model-cache-dir.ts'
 import {
   createTransformersEmbedder,
   DEFAULT_MODEL as EMBEDDING_MODEL,
@@ -109,7 +110,7 @@ async function score(search) {
 const deps = await seed()
 const lexical = await score(createDocumentSearchTool(deps))
 
-const embedder = createTransformersEmbedder({ cacheDir: searchModelCacheDir() })
+const embedder = createTransformersEmbedder({ cacheDir: searchModelCacheDir(getDataDir()) })
 
 // Preflight, and it is not ceremony. A model that is missing, gated, or
 // broken makes `embed` return nothing and the search tool fall back to
@@ -169,7 +170,7 @@ if (K >= CORPUS.length) {
 // of approximation that hides a factor of four.
 {
   const { AutoTokenizer, env } = await import('@huggingface/transformers')
-  env.cacheDir = searchModelCacheDir()
+  env.cacheDir = searchModelCacheDir(getDataDir())
   const tokenizer = await AutoTokenizer.from_pretrained(EMBEDDING_MODEL)
   const limit = tokenizer.model_max_length ?? 512
   let overLimit = 0

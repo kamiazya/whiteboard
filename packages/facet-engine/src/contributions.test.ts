@@ -5,7 +5,6 @@ import { describe, expect, it } from 'vitest'
 import { z } from 'zod'
 import { resolveFacetContributions } from './contributions.js'
 import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
-import { visualPlugin } from './visual.js'
 
 const planning = definePlugin({
   id: 'planning',
@@ -28,25 +27,45 @@ const planning = definePlugin({
   ],
 })
 
-const registry = createFacetRegistry([visualPlugin, planning])
+// Synthetic on both sides. The engine must not know which plugins exist —
+// a test built on the bundled one reads its declaration as if it were the
+// engine's behaviour, and would have to change whenever that plugin does.
+const styling = definePlugin({
+  id: 'styling',
+  displayName: 'Styling',
+  facets: [
+    defineFacet({
+      name: 'shape',
+      displayName: 'Shape',
+      version: 'v0',
+      targets: ['node'],
+      schema: z.object({ kind: z.string() }),
+    }),
+    defineFacet({
+      name: 'edges',
+      displayName: 'Edges',
+      version: 'v0',
+      targets: ['canvas'],
+      schema: z.object({ routing: z.string() }),
+    }),
+  ],
+})
+
+const registry = createFacetRegistry([styling, planning])
 
 describe('resolveFacetContributions', () => {
   it('groups a point by namespace in id order, facets in name order, headed by displayName', () => {
     const groups = resolveFacetContributions(registry, 'inspector.node')
-    expect(groups.map((g) => g.namespace)).toEqual(['planning', 'visual'])
-    expect(groups.map((g) => g.displayName)).toEqual(['Planning', 'Visual style'])
+    expect(groups.map((g) => g.namespace)).toEqual(['planning', 'styling'])
+    expect(groups.map((g) => g.displayName)).toEqual(['Planning', 'Styling'])
     expect(groups[0]?.facets.map((f) => f.key)).toEqual(['planning.assignee/v0', 'planning.due/v0'])
-    expect(groups[1]?.facets.map((f) => f.key)).toEqual([
-      'visual.shape/v0',
-      'visual.symbol/v0',
-      'visual.text/v0',
-    ])
+    expect(groups[1]?.facets.map((f) => f.key)).toEqual(['styling.shape/v0'])
   })
 
   it('a point only carries facets whose targets include its object', () => {
     const canvas = resolveFacetContributions(registry, 'canvasSettings')
-    expect(canvas.map((g) => g.namespace)).toEqual(['visual'])
-    expect(canvas[0]?.facets.map((f) => f.key)).toEqual(['visual.edges/v0'])
+    expect(canvas.map((g) => g.namespace)).toEqual(['styling'])
+    expect(canvas[0]?.facets.map((f) => f.key)).toEqual(['styling.edges/v0'])
   })
 
   it('a plugin contributing nothing to a point produces no empty group', () => {
@@ -56,7 +75,7 @@ describe('resolveFacetContributions', () => {
 
   it('each contribution carries its definition, so a vessel can read targets and schema', () => {
     const groups = resolveFacetContributions(registry, 'inspector.node')
-    const shape = groups.find((g) => g.namespace === 'visual')?.facets[0]
+    const shape = groups.find((g) => g.namespace === 'styling')?.facets[0]
     expect(shape?.definition.name).toBe('shape')
     expect(shape?.definition.targets).toContain('node')
   })
@@ -69,7 +88,8 @@ describe('plugin displayName', () => {
     )
   })
 
-  it('the bundled visual plugin names itself for humans', () => {
-    expect(visualPlugin.displayName).toBe('Visual style')
+  it('carries the plugin displayName through to the group heading', () => {
+    const groups = resolveFacetContributions(registry, 'canvasSettings')
+    expect(groups[0]?.displayName).toBe('Styling')
   })
 })

@@ -19,10 +19,9 @@
     "test": "vitest run --config vitest.jsdom.config.ts"
   },
   "dependencies": {
-    "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-facet-engine": "workspace:*",
-    "react": "catalog:",
-    "lucide-react": "^1.28.0"
+    "lucide-react": "^1.28.0",
+    "react": "catalog:"
   },
   "devDependencies": {
     "@testing-library/react": "^16.0.0",

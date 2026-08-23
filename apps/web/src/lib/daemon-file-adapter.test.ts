@@ -1,7 +1,7 @@
 /**
  * The daemon binding of the editor's file seams. Until this existed, the
  * daemon page passed no seams at all, so canvas embeds (J5a) and image nodes
- * (J5b) silently did nothing there while working in browser-local mode.
+ * (J5b) silently did nothing there while working in browser mode.
  */
 import {
   writeCoreFacets,
@@ -25,7 +25,7 @@ function snapshotOf(text: string): Uint8Array {
   return doc.export({ mode: 'snapshot' })
 }
 
-/** A markdown document as the browser-local editor stores one. */
+/** A markdown document as the browser editor stores one. */
 function markdownSnapshot(): Uint8Array {
   const doc = new Loro()
   doc.getText('body').insert(0, '# Weekly notes')
@@ -58,7 +58,7 @@ describe('createDaemonFileAdapter', () => {
       path: path,
     })
 
-    // The SAME convention browser-local uses, so a canvas keeps meaning the
+    // The SAME convention browser uses, so a canvas keeps meaning the
     // same thing in both modes. A daemon path can never collide: paths match
     // /^[a-zA-Z0-9_-]+$/ and so cannot contain a colon.
     expect(adapter.isImageRef('asset:abc')).toBe(true)

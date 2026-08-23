@@ -9,6 +9,8 @@ export default defineConfig({
       'packages/ports/vitest.node.config.ts',
       'packages/facet-engine/vitest.node.config.ts',
       'packages/facet-ui/vitest.jsdom.config.ts',
+      'packages/plugin-visual/vitest.node.config.ts',
+      'packages/plugin-visual/vitest.jsdom.config.ts',
       'packages/codec/vitest.node.config.ts',
       'tools/arch-lint/vitest.node.config.ts',
       'packages/loro-adapter/vitest.node.config.ts',

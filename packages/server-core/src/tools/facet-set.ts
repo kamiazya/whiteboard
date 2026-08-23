@@ -1,4 +1,3 @@
-import { bundledFacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import {
   readDocumentKind,
   readFacets,
@@ -14,6 +13,7 @@ import {
   type SpatialNode,
   workspaceIdSchema,
 } from '@kamiazya/whiteboard-model'
+import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { assertDocumentInWorkspace } from './assert-document-in-workspace.js'

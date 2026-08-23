@@ -8,13 +8,11 @@
  * A facet with no widget registered simply contributes nothing yet — the
  * later editor-spec tier derives a default form instead of failing here.
  */
-import {
-  type FacetRegistry,
-  resolveCanvasEdgeStyle,
-  resolveFacetContributions,
-} from '@kamiazya/whiteboard-facet-engine'
-import { type FacetEditor, type PluginUi, visualUi } from '@kamiazya/whiteboard-facet-ui'
+import { type FacetRegistry, resolveFacetContributions } from '@kamiazya/whiteboard-facet-engine'
+import type { FacetEditor, PluginUi } from '@kamiazya/whiteboard-facet-ui'
 import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import { visualUi } from '@kamiazya/whiteboard-plugin-visual/ui'
 import { SlidersHorizontal } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { cn } from '@/lib/utils'

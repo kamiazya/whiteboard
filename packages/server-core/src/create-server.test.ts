@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
+import { ignoredDocumentWrites } from './test-utils/ignored-document-writes.js'
 import { unusedDocumentIndex } from './test-utils/unused-document-index.js'
+import { unusedDocumentTeardown } from './test-utils/unused-document-teardown.js'
 
 describe('createServer', () => {
   it('returns an app', () => {
@@ -8,6 +10,8 @@ describe('createServer', () => {
       documentStore: {} as never,
       blobStore: {} as never,
       documentIndex: unusedDocumentIndex(),
+      documentTeardown: unusedDocumentTeardown(),
+      documentWritten: ignoredDocumentWrites(),
     })
     expect(app).toBeDefined()
     expect(app.fetch).toBeTypeOf('function')
@@ -18,6 +22,8 @@ describe('createServer', () => {
       documentStore: {} as never,
       blobStore: {} as never,
       documentIndex: unusedDocumentIndex(),
+      documentTeardown: unusedDocumentTeardown(),
+      documentWritten: ignoredDocumentWrites(),
     })
     expect(tools.facetSet.name).toBe('wb_facet_set')
     expect(tools.facetSet.execute).toBeTypeOf('function')
@@ -28,6 +34,8 @@ describe('createServer', () => {
       documentStore: {} as never,
       blobStore: {} as never,
       documentIndex: unusedDocumentIndex(),
+      documentTeardown: unusedDocumentTeardown(),
+      documentWritten: ignoredDocumentWrites(),
     })
 
     const expectations = [

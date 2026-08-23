@@ -1,5 +1,6 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type { DocumentId } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { Embedder } from './search/embedder.js'
 
@@ -100,4 +101,71 @@ export interface ServerDeps {
    * root overrides it only when a deployment configures its own plugin set.
    */
   facetRegistry?: FacetRegistry
+  /**
+   * How a composition root disposes of everything about a document that is
+   * NOT its index row or its stored bytes — thumbnail and blob files on
+   * disk, a cached doc instance, anything else it alone knows about.
+   *
+   * It exists because those two are all server-core can name, and deleting
+   * only them left an agent-deleted document half-deleted: stale files and
+   * a stale cache entry that a document deleted through the composition
+   * root's own path would not have left behind. Two teardown paths that
+   * disagree is worse than one that is incomplete.
+   *
+   * REQUIRED, unlike `measure` and `clientNotifier`, and that is the whole
+   * defence: a composition root that forgets it is a compile error rather
+   * than a server that silently half-deletes. Optional is what let the
+   * original defect exist, and a hand-written "is it wired?" assertion only
+   * ever covers the dependencies somebody remembered to write one for.
+   *
+   * A test whose subject is elsewhere passes `unusedDocumentTeardown()`,
+   * whose `begin` throws — the same idiom as `unusedDocumentIndex`, and for
+   * the same reason: a no-op double would let a delete test pass while
+   * asserting nothing about the cleanup, which is the state this repo was
+   * in before the seam existed.
+   */
+  documentTeardown: DocumentTeardown
+  /**
+   * Told which document a write just changed, so a composition root can do
+   * whatever it keeps outside the store — the daemon schedules a debounced
+   * auto-compaction of the op-log.
+   *
+   * The write side of the gap `documentTeardown` closed on the delete side.
+   * The daemon's HTTP write path fired a saved-listener that scheduled
+   * compaction; this path — every agent write — reached the store directly
+   * and told nobody, so an agent-driven canvas never compacted.
+   *
+   * REQUIRED for the same reason as `documentTeardown`: optional is one
+   * keystroke from unwired, and unwired here is invisible until a canvas
+   * has grown unbounded.
+   *
+   * Awaited but never allowed to fail the write. The bytes are already
+   * safe by the time this runs, and a background compaction that could not
+   * be SCHEDULED is not a reason to report a failed save — so the caller
+   * swallows what this throws, and `document-io.test.ts` pins that rather
+   * than leaving it to a comment.
+   */
+  documentWritten: DocumentWritten
 }
+
+export type DocumentWritten = (input: { documentId: DocumentId }) => Promise<void>
+
+/**
+ * Split in two because the information the cleanup needs stops existing
+ * partway through the delete: a version's thumbnail is filed under the
+ * version id, and version rows cascade away with the document. `begin` runs
+ * while the document is still whole and returns what to run once it is gone.
+ *
+ * The finalizer runs only if the delete actually happened — the index
+ * refuses while documents sit below this one, and a refused delete must
+ * destroy nothing.
+ */
+export interface DocumentTeardown {
+  begin(input: {
+    workspaceId: string
+    documentId: string
+    path: string
+  }): Promise<FinalizeDocumentTeardown>
+}
+
+export type FinalizeDocumentTeardown = () => Promise<void>

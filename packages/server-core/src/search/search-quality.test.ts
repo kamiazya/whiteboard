@@ -22,7 +22,10 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { tokenize } from '@kamiazya/whiteboard-search'
 import { beforeAll, describe, expect, it } from 'vitest'
+import type { DocumentTeardown, DocumentWritten } from '../server-deps.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
@@ -48,6 +51,8 @@ type Deps = {
   documentStore: ReturnType<typeof createInMemoryDocumentStore>
   blobStore: never
   documentIndex: InMemoryDocumentIndex
+  documentTeardown: DocumentTeardown
+  documentWritten: DocumentWritten
 }
 
 let deps: Deps
@@ -58,6 +63,8 @@ beforeAll(async () => {
     documentStore: createInMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
+    documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
   const set = createDocumentSetTool(deps)
   const edit = createCanvasEditTool(deps)

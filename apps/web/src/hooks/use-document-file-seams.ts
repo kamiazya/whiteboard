@@ -5,7 +5,7 @@
  *
  * This exists because the logic was written inline in one page, so the other
  * page shipped without any of it: canvas embeds and image nodes worked in
- * browser-local mode and silently did nothing in daemon mode. The caching
+ * browser mode and silently did nothing in daemon mode. The caching
  * rules here (staleness stamps, the same-instance guard, URL revocation) are
  * subtle enough that a second hand-written copy is the wrong answer.
  *

@@ -13,7 +13,7 @@ Guides:
 - **[organize-with-tags](organize-with-tags.md)** — tag documents and filter the document
   browser by tag.
 - **[connect-to-local-daemon](connect-to-local-daemon.md)** — detect a local daemon from the web
-  app and copy browser-local canvases onto it.
+  app and copy canvases kept in your browser onto it.
 - **[install-fonts-for-export](install-fonts-for-export.md)** — stop exports rendering Japanese,
   Chinese, Korean and other scripts as empty boxes.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas

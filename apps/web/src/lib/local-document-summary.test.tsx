@@ -2,7 +2,7 @@
  * The summary layer: what `DocumentIndex` does not own.
  *
  * The port answers placement, identity, kind and name. Two things a
- * browser-local user still needs are not in it and are not gaps in it — the
+ * browser user still needs are not in it and are not gaps in it — the
  * pointer to the document a plain load resumes into, and when a document was
  * last edited. Both are apps/web product concerns, so they live here rather
  * than bending the contract around them.
@@ -10,16 +10,16 @@
 
 // jsdom + fake-indexeddb: this file exercises IndexedDB persistence logic,
 // not browser layout or input fidelity — the real-IDB contract stays pinned
-// by idb-document-index/loro-store/browser-local-backend/browser-idb-migration
+// by idb-document-index/loro-store/browser-backend/browser-idb-migration
 // in the browser project.
 import 'fake-indexeddb/auto'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
+  BROWSER_WORKSPACE_ID,
   IdbDefaultDocumentPointer,
   idbContentClock,
-  LOCAL_WORKSPACE_ID,
   listLocalDocuments,
 } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
@@ -36,7 +36,7 @@ async function clearDb(): Promise<void> {
 
 async function seedWorkspace(): Promise<IdbDocumentIndex> {
   const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: LOCAL_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
   return index
 }
 
@@ -53,7 +53,7 @@ describe('local document summary', () => {
   it('carries the index entry plus the time its content was last written', async () => {
     const index = await seedWorkspace()
     const entry = await index.createDocument({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       path: 'notes',
       kind: 'markdown',
       name: 'Notes',
@@ -75,7 +75,7 @@ describe('local document summary', () => {
     // a title. Choosing the fallback is this layer's job, not the port's.
     const index = await seedWorkspace()
     const entry = await index.createDocument({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       path: 'archive/untitled',
       kind: 'spatial',
     })
@@ -92,7 +92,7 @@ describe('local document summary', () => {
     // the sort puts it last rather than first.
     const index = await seedWorkspace()
     await index.createDocument({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       path: 'contentless',
       kind: 'spatial',
     })

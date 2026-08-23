@@ -1,5 +1,5 @@
 import { spawnSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
@@ -80,6 +80,106 @@ function listTarballEntries(tarballPath: string): string[] {
     throw new Error(`[tarball-smoke] tar -tzf failed: ${(result.stderr as string)?.trim()}`)
   }
   return (result.stdout as string).split('\n').filter(Boolean)
+}
+
+/**
+ * Semantic search is the one feature whose runtime is NOT bundled: it is an
+ * optional peer, resolved by node at the install site. That edge is invisible
+ * to typecheck, to tsup and to every test that runs inside the workspace —
+ * where the root's devDependency satisfies it — so a real install is the only
+ * place the wiring can be checked at all.
+ *
+ * Two claims, neither of which downloads the 113MB of weights:
+ *
+ *  1. A default install stays small. The runtime is 384MB installed, for a
+ *     feature that is off by default, so it must not arrive unasked. This is
+ *     what `dependencies` or `optionalDependencies` would silently undo.
+ *  2. The user who opted in is TOLD what is missing. Running the shipped
+ *     fetch command with the runtime absent must name the install step, not
+ *     fail obscurely — and the command must be in dist at all, which is the
+ *     defect this whole check exists for: it used to live only in scripts/,
+ *     which is never published.
+ */
+export function assertSemanticSearchOptIn(options: {
+  installDir: string
+  installedPackageRoot: string
+  installedBin: string
+  env: NodeJS.ProcessEnv
+}): void {
+  // Ask node to resolve the specifier the way the SHIPPED code will: a
+  // child process whose cwd is the installed package's real path, so lookup
+  // walks the same directories dist/**/*.js walks.
+  //
+  // Two cheaper checks were tried and BOTH passed against an install that
+  // did contain the runtime, which is the shape of a guard that cannot fail:
+  // an existsSync on <installDir>/node_modules/@huggingface/transformers
+  // (pnpm hoists only direct dependencies, so a transitive one is never
+  // there), and createRequire on the installed package's manifest path
+  // (which resolves from the SYMLINK's directory, not the .pnpm directory
+  // it points into). Measured on this install: optional peer → 213MB and
+  // unresolvable; plain dependency → 591MB and resolved.
+  const probe = spawnSync(
+    process.execPath,
+    [
+      '-e',
+      "import('@huggingface/transformers').then(() => process.exit(9), () => process.exit(0))",
+    ],
+    { cwd: realpathSync(options.installedPackageRoot), encoding: 'utf-8', env: options.env },
+  )
+  if (probe.status === 9) {
+    throw new Error(
+      '[tarball-smoke] a default install resolved @huggingface/transformers (384MB) — ' +
+        'it must stay an OPTIONAL peer so an install that never asked for semantic search does not pay for it',
+    )
+  }
+  if (probe.status !== 0) {
+    throw new Error(
+      `[tarball-smoke] the resolution probe itself failed (status ${probe.status ?? 'null'}): ${
+        (probe.stderr as string) ?? ''
+      }`,
+    )
+  }
+
+  const dataDir = mkdtempSync(join(tmpdir(), 'whiteboard-fetch-model-'))
+  try {
+    const result = spawnSync(
+      process.execPath,
+      [options.installedBin, 'search', 'fetch-model', '--json', `--data-dir=${dataDir}`],
+      { cwd: options.installDir, encoding: 'utf-8', env: options.env },
+    )
+    if (result.status === 0) {
+      throw new Error(
+        '[tarball-smoke] `search fetch-model` reported success with no embedding runtime installed',
+      )
+    }
+    const stdout = (result.stdout as string) ?? ''
+    let reported: { failure?: string; remedy?: string }
+    try {
+      reported = JSON.parse(stdout.trim()) as { failure?: string; remedy?: string }
+    } catch {
+      throw new Error(
+        `[tarball-smoke] \`search fetch-model\` did not emit a JSON object. stdout=${JSON.stringify(
+          stdout,
+        )} stderr=${JSON.stringify((result.stderr as string) ?? '')}`,
+      )
+    }
+    if (reported.failure !== 'runtime-missing') {
+      throw new Error(
+        `[tarball-smoke] \`search fetch-model\` reported ${JSON.stringify(
+          reported.failure,
+        )} instead of runtime-missing; the user is not being told what to install`,
+      )
+    }
+    if (!reported.remedy?.includes('@huggingface/transformers')) {
+      throw new Error(
+        `[tarball-smoke] the remedy does not name the package to install: ${JSON.stringify(
+          reported.remedy,
+        )}`,
+      )
+    }
+  } finally {
+    rmSync(dataDir, { recursive: true, force: true })
+  }
 }
 
 export async function runPackedTarballSmoke({
@@ -188,6 +288,14 @@ export async function runPackedTarballSmoke({
 
     console.log(`[tarball-smoke] installed package → ${installedPackageRoot}`)
     console.log(`[tarball-smoke] installed entry → ${installedEntry}`)
+
+    assertSemanticSearchOptIn({
+      installDir,
+      installedPackageRoot,
+      installedBin: resolve(installedPackageRoot, 'dist/cli/index.js'),
+      env: buildTarballSmokeChildEnv(process.env),
+    })
+    console.log('[tarball-smoke] semantic-search opt-in wiring OK')
 
     // The tarball smoke runs as a standalone node script (no vitest
     // testTimeout ceiling), so it can afford bounded retry across multiple

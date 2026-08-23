@@ -148,6 +148,7 @@ const EXPECTED_TOOLS = [
   'wb_version_restore',
   'wb_version_save',
   'wb_document_create',
+  'wb_workspace_edit',
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',
@@ -244,6 +245,49 @@ async function main() {
     'with markdown on a spatial document',
     'markdown',
   )
+
+  // wb_workspace_edit: several documents in one call, and the ids come back
+  // so no round trip is needed to learn them.
+  const batch = await callTool('wb_workspace_edit', {
+    workspaceId: WORKSPACE_ID,
+    ops: [
+      {
+        op: 'document.create',
+        path: 'e2e-batch-a',
+        kind: 'markdown',
+        markdown: '---\ntype: note\n---\nalpha',
+      },
+      { op: 'document.create', path: 'e2e-batch-b', kind: 'spatial', name: 'batch canvas' },
+    ],
+  })
+  if (batch.applied !== 2 || batch.results.length !== 2) {
+    throw new Error(`wb_workspace_edit returned unexpected shape: ${JSON.stringify(batch)}`)
+  }
+  if (batch.results.some((r) => typeof r.documentId !== 'string')) {
+    throw new Error(`wb_workspace_edit did not report the ids it minted: ${JSON.stringify(batch)}`)
+  }
+  console.log('[e2e] wb_workspace_edit → two documents, ids returned')
+
+  // A failing op stops the run, and the message must say how far it got:
+  // documents are separate CRDTs, so "nothing was written" would be false
+  // and a caller acting on it would create the earlier ones twice.
+  await expectToolError(
+    'wb_workspace_edit',
+    {
+      workspaceId: WORKSPACE_ID,
+      ops: [
+        { op: 'document.create', path: 'e2e-batch-c', kind: 'markdown' },
+        { op: 'document.create', path: 'e2e-batch-a', kind: 'markdown' },
+      ],
+    },
+    'with an op that collides with an existing path',
+    'were applied and stand',
+  )
+  const afterPartial = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  if (!afterPartial.documents.some((d) => d.path === 'e2e-batch-c')) {
+    throw new Error('wb_workspace_edit rolled back an op it reported as applied')
+  }
+  console.log('[e2e] wb_workspace_edit → partial application is reported, not hidden')
 
   const namedList = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
   const namedRow = namedList.documents.find((c) => c.documentId === named.documentId)

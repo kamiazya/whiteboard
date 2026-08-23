@@ -1,12 +1,8 @@
 // The other half of the visibility gap: increment 6a made an agent's
 // facet write visible to a human, and this makes the human's registered
 // facets discoverable to an agent — which until now had to guess a key.
-import {
-  bundledPlugins,
-  createFacetRegistry,
-  defineFacet,
-  definePlugin,
-} from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
+import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { describe, expect, test } from 'vitest'
 import { z } from 'zod'
 import { createFacetListTool, facetListOutputSchema } from './facet-list.js'

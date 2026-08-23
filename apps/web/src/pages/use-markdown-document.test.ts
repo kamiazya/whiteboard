@@ -16,7 +16,7 @@ import {
 import { act, renderHook, waitFor } from '@testing-library/react'
 import { type Loro, LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import type { LoroStoreLike } from './use-browser-local-document-controller.js'
+import type { LoroStoreLike } from './use-browser-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
 
 function fakeStore(): LoroStoreLike & { saves: Uint8Array[] } {
