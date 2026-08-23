@@ -22,6 +22,7 @@ import {
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
+import { glyphIcon } from './glyph.js'
 
 export interface FacetFormPanelProps {
   readonly node: SpatialNode
@@ -69,7 +70,9 @@ function FieldInput({
   // accessible NAME is qualified for the same reason — a dialog with two
   // controls both called "kind" tells a screen-reader user nothing.
   const id = `facet-field-${facetKey}-${field.name}`
-  const name = `${title} ${field.label}`
+  // A single-field facet often labels its field the way the facet is named
+  // ("Shape" / "Shape"); saying it twice tells a reader nothing.
+  const name = field.label === title ? title : `${title} ${field.label}`
   const common = 'rounded border border-border bg-background px-2 py-1 text-xs'
   if (field.control.kind === 'toggle') {
     return (
@@ -84,21 +87,44 @@ function FieldInput({
   }
   if (field.control.kind === 'segmented') {
     return (
-      <span id={id} role="radiogroup" aria-label={name} className="flex items-center gap-0.5">
+      <span
+        id={id}
+        role="radiogroup"
+        aria-label={name}
+        className="flex flex-wrap items-center justify-end gap-0.5"
+      >
         {/* Real radios rather than buttons wearing the role: the keyboard
             behaviour a segmented control needs comes free with the element. */}
-        {field.control.options.map((option) => (
-          <label key={option.label} className={cn(common, 'flex items-center gap-1 px-1.5')}>
-            <input
-              type="radio"
-              name={id}
-              aria-label={option.label}
-              checked={option.value === null ? value === undefined : value === option.value}
-              onChange={() => (option.value === null ? onClear() : onChange(option.value))}
-            />
-            {option.label}
-          </label>
-        ))}
+        {field.control.options.map((option) => {
+          const glyph = glyphIcon(option.glyph)
+          return (
+            // A declared glyph is DRAWN, the way the quick band draws it —
+            // a shape picker spelling "Parallelogram" is both wider and
+            // slower to read than the shape itself. The word stays as the
+            // accessible name, so nothing is lost for a screen reader, and
+            // an option with no glyph still shows its label.
+            <label
+              key={option.label}
+              title={glyph === undefined ? undefined : option.label}
+              className={cn(common, 'flex items-center gap-1 px-1.5')}
+            >
+              <input
+                type="radio"
+                name={id}
+                aria-label={option.label}
+                checked={option.value === null ? value === undefined : value === option.value}
+                onChange={() => (option.value === null ? onClear() : onChange(option.value))}
+              />
+              {glyph === undefined ? (
+                option.label
+              ) : (
+                <span aria-hidden="true" className="[&>svg]:size-4">
+                  {glyph}
+                </span>
+              )}
+            </label>
+          )
+        })}
       </span>
     )
   }
@@ -197,11 +223,11 @@ function FacetEditor({
       : undefined
   const fields = form.kind === 'fields' ? form.fields : (activeVariant?.fields ?? [])
 
-  const save = () => {
+  const commit = (next: Draft) => {
     const payload =
       form.kind === 'variants' && activeVariant !== undefined
-        ? { ...prune(draft), [form.discriminant]: activeVariant.label }
-        : prune(draft)
+        ? { ...prune(next), [form.discriminant]: activeVariant.label }
+        : prune(next)
     const result = registry.validateFacetWrite(facetKey, payload)
     if (!result.ok) {
       setError(result.message)
@@ -209,6 +235,21 @@ function FacetEditor({
     }
     setError(undefined)
     onWrite(facetKey, result.value)
+  }
+
+  /**
+   * A CHOICE applies on pick, the way the same facet's quick band does.
+   * Staging it behind Save gave one facet two behaviours depending on which
+   * surface you reached it from. Free entry has no moment mid-typing that
+   * means "done", so a facet carrying one keeps its Save button.
+   */
+  const applies = (field: FacetFormField) =>
+    field.control.kind !== 'text' && field.control.kind !== 'number'
+  const needsSave = fields.some((field) => !applies(field))
+  const change = (field: FacetFormField, value: unknown) => {
+    const next = { ...draft, [field.name]: value }
+    setDraft(next)
+    if (applies(field)) commit(next)
   }
 
   return (
@@ -219,10 +260,10 @@ function FacetEditor({
           htmlFor={`facet-variant-${facetKey}`}
           className="flex items-center justify-between gap-2 text-xs"
         >
-          <span className="text-muted-foreground">{form.discriminant}</span>
+          <span className="text-muted-foreground">{form.discriminantLabel}</span>
           <select
             id={`facet-variant-${facetKey}`}
-            aria-label={`${title} ${form.discriminant}`}
+            aria-label={`${title} ${form.discriminantLabel}`}
             className="rounded border border-border bg-background px-2 py-1 text-xs"
             value={activeVariant?.label ?? ''}
             onChange={(event) => set(form.discriminant, event.target.value)}
@@ -239,17 +280,23 @@ function FacetEditor({
         <label
           key={field.name}
           htmlFor={`facet-field-${facetKey}-${field.name}`}
-          className="flex items-center justify-between gap-2 text-xs"
+          // Wraps for the same reason the menu's option rows do: a segmented
+          // control with six options does not fit a phone beside its label,
+          // and the options past the edge are the ones nobody can tap.
+          className="flex flex-wrap items-center justify-between gap-x-2 gap-y-1 text-xs"
         >
+          {/* A single-field facet usually labels its field the way the facet
+              itself is named ("Shape" under "Shape"). Printing it twice adds
+              a line and says nothing; the accessible name still carries it. */}
           <span className={cn('text-muted-foreground', field.required && 'font-medium')}>
-            {field.label}
+            {field.label === title ? '' : field.label}
           </span>
           <FieldInput
             facetKey={facetKey}
             title={title}
             field={field}
             value={draft[field.name]}
-            onChange={(next) => set(field.name, next)}
+            onChange={(next) => change(field, next)}
             onClear={() => onWrite(facetKey, undefined)}
           />
         </label>
@@ -260,20 +307,27 @@ function FacetEditor({
         </span>
       )}
       <span className="flex items-center gap-1">
-        <button
-          type="button"
-          className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
-          onClick={save}
-        >
-          Save {title}
-        </button>
+        {/* The visible words say what the button does; WHICH facet is the
+            heading's job on screen and the accessible name's for a reader
+            who has no heading in view. */}
+        {needsSave && (
+          <button
+            type="button"
+            aria-label={`Save ${title}`}
+            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+            onClick={() => commit(draft)}
+          >
+            Save
+          </button>
+        )}
         {stored !== undefined && (
           <button
             type="button"
+            aria-label={`Clear ${title}`}
             className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
             onClick={() => onWrite(facetKey, undefined)}
           >
-            Clear {title}
+            Clear
           </button>
         )}
       </span>
@@ -306,7 +360,7 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
               // and saved — as another node's value.
               key={`${node.id}:${facet.key}`}
               facetKey={facet.key}
-              title={`${group.displayName} ${facet.definition.name}`}
+              title={facet.definition.displayName}
               form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
               stored={stored[facet.key]}
               registry={registry}
@@ -338,6 +392,13 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
         maxHeight: '60%',
         overflowY: 'auto',
         width: 'max-content',
+        // max-content alone lets a long option row set a box wider than the
+        // phone it is opened on, and a centred box that does not fit spills
+        // off BOTH edges.
+        maxWidth: 'min(90%, 22rem)',
+        // max-content alone lets a long option row set a box wider than the
+        // phone it is opened on, and a centred box that does not fit spills
+        // off BOTH edges.
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {

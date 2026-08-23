@@ -11,7 +11,13 @@ const node = { id: 'n1', type: 'text' as const, x: 0, y: 0, width: 10, height: 1
 const ctx = { node, applyToSelection: () => {}, openPanel: () => {} }
 
 const nodeFacet = (name: string) =>
-  defineFacet({ name, version: 'v0', targets: ['node' as const], schema: z.object({}) })
+  defineFacet({
+    name,
+    displayName: name,
+    version: 'v0',
+    targets: ['node' as const],
+    schema: z.object({}),
+  })
 
 const band =
   (label: string): NodePropertiesWidget =>
@@ -82,6 +88,7 @@ describe('a declared band is legible', () => {
     facets: [
       defineFacet({
         name: 'place',
+        displayName: 'Placement',
         version: 'v0',
         targets: ['node' as const],
         schema: z.object({ align: z.enum(['start', 'center']) }),

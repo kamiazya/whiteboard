@@ -16,7 +16,6 @@ import {
 import {
   deriveFacetForm,
   type FacetDefinition,
-  type FacetGlyph,
   type FacetRegistry,
   resolveCanvasEdgeStyle,
   resolveFacetContributions,
@@ -25,11 +24,12 @@ import {
   type VisualSymbolFacet,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { EdgeRoutingStyle, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
-import { Ban, Circle, Cylinder, Diamond, Hexagon, SlidersHorizontal, Square } from 'lucide-react'
+import { Ban, SlidersHorizontal } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
 import { cn } from '@/lib/utils'
 import type { ContextMenuItem } from '../ContextMenu.js'
 import type { EditorCommand } from '../commands.js'
+import { glyphIcon } from './glyph.js'
 
 /** `contextMenu.node.properties`: what a node quick-band widget receives. */
 export interface NodePropertiesContext {
@@ -57,48 +57,6 @@ export interface CanvasSettingsContext {
 export type CanvasSettingsWidget = (ctx: CanvasSettingsContext) => ReactNode
 
 // --- visual.shape/v0 -------------------------------------------------------
-
-/**
- * The core's glyph vocabulary rendered: a spec NAMES a glyph, this maps the
- * name to a drawing. Keeping the map here (not in the engine) is the same
- * split as everywhere else — the engine owns what may be said, the vessel
- * owns how it looks.
- */
-function glyphIcon(glyph?: FacetGlyph): ReactNode | undefined {
-  switch (glyph) {
-    case undefined:
-      return undefined
-    // 'none' is a real member of the vocabulary — the "no value" segment —
-    // and gets the same slash the hand-written symbol band uses for it.
-    case 'none':
-      return <Ban />
-    case 'square':
-      return <Square />
-    case 'circle':
-      return <Circle />
-    case 'diamond':
-      return <Diamond />
-    case 'hexagon':
-      return <Hexagon />
-    case 'parallelogram':
-      // No lucide glyph for a parallelogram; drawn in the same 24-grid
-      // stroke style so a row of these reads as one set.
-      return (
-        <svg
-          viewBox="0 0 24 24"
-          fill="none"
-          stroke="currentColor"
-          strokeWidth="2"
-          strokeLinejoin="round"
-          aria-hidden="true"
-        >
-          <path d="M7 5h14l-4 14H3Z" />
-        </svg>
-      )
-    case 'cylinder':
-      return <Cylinder />
-  }
-}
 
 // --- visual.symbol/v0 ------------------------------------------------------
 

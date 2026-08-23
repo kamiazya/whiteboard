@@ -13,12 +13,14 @@ const planning = definePlugin({
   facets: [
     defineFacet({
       name: 'due',
+      displayName: 'Due',
       version: 'v0',
       targets: ['node', 'document'],
       schema: z.object({ date: z.string() }),
     }),
     defineFacet({
       name: 'assignee',
+      displayName: 'Assignee',
       version: 'v0',
       targets: ['node'],
       schema: z.object({ member: z.string() }),
