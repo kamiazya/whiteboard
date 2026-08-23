@@ -18,6 +18,7 @@ import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 
@@ -33,7 +34,12 @@ const WORKSPACE_ID = 'ws-1'
 async function depsWithNoSnapshot() {
   const documentStore = new FakeDocumentStore()
   await registerDocumentInWorkspace(documentStore, WORKSPACE_ID, DOCUMENT_ID)
-  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
+  return {
+    documentStore,
+    blobStore: {} as never,
+    documentIndex: documentStore.documentIndex,
+    documentTeardown: unusedDocumentTeardown(),
+  }
 }
 
 /** The error `run` raises, or a failure if it resolves. */

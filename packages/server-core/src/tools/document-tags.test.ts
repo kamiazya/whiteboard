@@ -2,6 +2,7 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentSetTool } from './document-set.js'
 import { documentTagsOutputSchema } from './document-tags.js'
@@ -13,6 +14,7 @@ function makeDeps() {
     documentStore: createInMemoryDocumentStore(),
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
+    documentTeardown: unusedDocumentTeardown(),
   }
 }
 

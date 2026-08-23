@@ -8,6 +8,7 @@ import {
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import {
   canvasSnapshotSchema,
   createCanvasSnapshotTool,
@@ -21,7 +22,12 @@ const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(documentStore: FakeDocumentStore) {
-  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
+  return {
+    documentStore,
+    blobStore: {} as never,
+    documentIndex: documentStore.documentIndex,
+    documentTeardown: unusedDocumentTeardown(),
+  }
 }
 
 describe('wb_canvas_snapshot tool', () => {
