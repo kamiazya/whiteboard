@@ -198,3 +198,65 @@ describe('docs layout contract', () => {
     expect(archLine).not.toContain('ADRs')
   })
 })
+
+// GitHub's heading-anchor slug: lowercase, drop everything that is not a
+// word character, space or hyphen, then hyphenate the spaces. Inline markdown
+// (backticks, emphasis, links) contributes only its visible text.
+function headingAnchors(markdown: string): Set<string> {
+  const anchors = new Set<string>()
+  let inFence = false
+  for (const line of markdown.split('\n')) {
+    if (/^\s*```/.test(line)) {
+      inFence = !inFence
+      continue
+    }
+    if (inFence) continue
+    const heading = line.match(/^#{1,6}\s+(.*)$/)
+    if (!heading) continue
+    const slug = heading[1]
+      .replace(/\[([^\]]*)\]\([^)]*\)/g, '$1')
+      .replace(/[`*_~]/g, '')
+      .trim()
+      .toLowerCase()
+      .replace(/[^\w\s-]/g, '')
+      .replace(/\s/g, '-')
+    anchors.add(slug)
+  }
+  return anchors
+}
+
+describe('docs anchor links', () => {
+  // A cross-file `#anchor` breaks silently: the link still renders, still
+  // clicks, and lands the reader at the top of a page that no longer has the
+  // section. Four README links pointed at a `#bundled-skills-install` section
+  // that had been deliberately deleted, and nothing noticed.
+  it('every cross-file markdown anchor link resolves to a real heading', () => {
+    const docsDir = resolve(repoRoot, 'docs')
+    const files = [
+      ...(existsSync(docsDir) ? walkMd(docsDir, repoRoot) : []),
+      'README.md',
+      'CONTRIBUTING.md',
+      'AGENTS.md',
+    ].filter((relPath) => existsSync(resolve(repoRoot, relPath)))
+
+    const anchorsByFile = new Map<string, Set<string>>()
+    const broken: string[] = []
+
+    for (const relPath of files) {
+      for (const link of readText(relPath).matchAll(/\]\((?!https?:)([^)\s#]+)#([^)\s]+)\)/g)) {
+        const target = resolve(repoRoot, dirname(relPath), link[1])
+        if (!target.endsWith('.md') || !existsSync(target)) continue
+        let anchors = anchorsByFile.get(target)
+        if (!anchors) {
+          anchors = headingAnchors(readFileSync(target, 'utf-8'))
+          anchorsByFile.set(target, anchors)
+        }
+        if (!anchors.has(link[2])) {
+          broken.push(`${relPath} -> ${link[1]}#${link[2]}`)
+        }
+      }
+    }
+
+    expect(broken).toEqual([])
+  })
+})
