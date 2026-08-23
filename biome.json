@@ -69,6 +69,16 @@
   "overrides": [
     {
       "includes": [
+        ".claude-plugin/marketplace.json",
+        ".claude-plugin/plugin.json",
+        ".codex-plugin/plugin.json",
+        "gemini-extension.json",
+        "server.json"
+      ],
+      "formatter": { "enabled": false }
+    },
+    {
+      "includes": [
         "packages/mcp-server/src/server/**/*.ts",
         "!packages/mcp-server/src/server/log.ts",
         "!packages/mcp-server/src/server/**/*.test.ts",
