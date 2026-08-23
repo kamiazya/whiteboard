@@ -19,6 +19,7 @@ export type {
   AgentActivity,
   CanvasClientNotifier,
   DocumentTeardown,
+  DocumentWritten,
   FinalizeDocumentTeardown,
   ServerDeps,
   ViewportRequest,

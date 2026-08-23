@@ -10,6 +10,7 @@ import { createCanvasClientNotifier } from '../server/canvas-client-notifier.js'
 import { createOpentypeMeasureText } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { documentTeardown } from '../server/store/document-store.js'
+import { documentWritten } from '../server/store/document-written.js'
 import { storeMemoryModule } from './store-memory.module.js'
 
 export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {
@@ -56,5 +57,10 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // DELETE has always cleaned those up, and the two paths disagreeing is
     // the defect this closes.
     documentTeardown,
+    // Same reason as documentTeardown: this package's own op-log
+    // maintenance, not an interchangeable implementation. Wired HERE rather
+    // than in the HTTP route registration, which is what confined the old
+    // saved-listener to one deployment shape.
+    documentWritten,
   }
 }

@@ -20,6 +20,7 @@ import {
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import {
   canvasEditInputSchema,
@@ -38,6 +39,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
     blobStore: {} as never,
     documentIndex: documentStore.documentIndex,
     documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 

@@ -1,6 +1,7 @@
 import { writeFacets, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { SnapshotNotFoundError } from './document-io.js'
 import { exportOkf } from './export-okf.js'
@@ -14,6 +15,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
     blobStore: {} as never,
     documentIndex: documentStore.documentIndex,
     documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 

@@ -13,6 +13,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { canvasViewOutputSchema, createCanvasViewTool } from './canvas-view.js'
 
@@ -26,6 +27,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
     blobStore: {} as never,
     documentIndex: documentStore.documentIndex,
     documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 

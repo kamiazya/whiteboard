@@ -18,6 +18,7 @@ import { scanReferences } from '@kamiazya/whiteboard-codec'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { computeBacklinks } from '../tools/backlinks.js'
@@ -213,6 +214,7 @@ describe('reference semantics under command sequences', () => {
         blobStore: {} as never,
         documentIndex: new InMemoryDocumentIndex(),
         documentTeardown: unusedDocumentTeardown(),
+        documentWritten: ignoredDocumentWrites(),
       }
       const setTool = createDocumentSetTool(deps)
       const editTool = createCanvasEditTool(deps)

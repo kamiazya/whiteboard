@@ -1,5 +1,6 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import type { DocumentId } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { Embedder } from './search/embedder.js'
 
@@ -124,7 +125,30 @@ export interface ServerDeps {
    * in before the seam existed.
    */
   documentTeardown: DocumentTeardown
+  /**
+   * Told which document a write just changed, so a composition root can do
+   * whatever it keeps outside the store — the daemon schedules a debounced
+   * auto-compaction of the op-log.
+   *
+   * The write side of the gap `documentTeardown` closed on the delete side.
+   * The daemon's HTTP write path fired a saved-listener that scheduled
+   * compaction; this path — every agent write — reached the store directly
+   * and told nobody, so an agent-driven canvas never compacted.
+   *
+   * REQUIRED for the same reason as `documentTeardown`: optional is one
+   * keystroke from unwired, and unwired here is invisible until a canvas
+   * has grown unbounded.
+   *
+   * Awaited but never allowed to fail the write. The bytes are already
+   * safe by the time this runs, and a background compaction that could not
+   * be SCHEDULED is not a reason to report a failed save — so the caller
+   * swallows what this throws, and `document-io.test.ts` pins that rather
+   * than leaving it to a comment.
+   */
+  documentWritten: DocumentWritten
 }
+
+export type DocumentWritten = (input: { documentId: DocumentId }) => Promise<void>
 
 /**
  * Split in two because the information the cleanup needs stops existing

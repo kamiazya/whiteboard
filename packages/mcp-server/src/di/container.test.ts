@@ -4,6 +4,7 @@ import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
 import { documentTeardown } from '../server/store/document-store.js'
+import { documentWritten } from '../server/store/document-written.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
 import { InMemoryDocumentStore } from '../server/store/inmemory/in-memory-document-store.js'
 import { createContainer, resolveServerDeps } from './container.js'
@@ -90,6 +91,16 @@ describe('resolveServerDeps document teardown', () => {
   // stub in place of the composition root's own teardown — which would put
   // wb_document_delete back to leaving thumbnails, blobs and a cached doc
   // behind, silently, with the tool still answering { deleted: true }.
+  // Wired in the CONTAINER, not in the HTTP route registration. The old
+  // saved-listener was installed from createDocumentRouter, so stdio MCP —
+  // which never registers routes — had no subscriber at all. Asserting the
+  // container supplies it is what stops that shape returning.
+  it('supplies the write observer, so stdio MCP schedules compaction too', () => {
+    const deps = resolveServerDeps(createContainer())
+
+    expect(deps.documentWritten).toBe(documentWritten)
+  })
+
   it("supplies the composition root's own teardown, not an inert stub", () => {
     const deps = resolveServerDeps(createContainer())
 
