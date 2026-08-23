@@ -360,17 +360,29 @@ When the change has a user-visible effect (canvas rendering, UI surface, MCP too
 
 Workflow:
 
-1. Capture screenshots while doing the manual verification step from the workflow above. Save them under `tmp/screenshots/` per the tmp-workspace rule.
-2. Upload the captured screenshots to GitHub via the `gh image` extension (`drogers0/gh-image`):
+1. Capture screenshots while doing the manual verification step from the workflow above. Save them under `tmp/screenshots/` per the tmp-workspace rule. For a FIX that means two: the same case rendered by the code before and after.
+2. Compose the two into one figure:
+   ```
+   node .claude/scripts/compose-figure.mjs \
+     --before tmp/screenshots/before.png --after tmp/screenshots/after.png \
+     --out tmp/screenshots/figure.png \
+     [--before-label "…"] [--after-label "…"] [--ring x1,y1,x2,y2]
+   ```
+   It refuses two panels that are the same picture — which is what every failed attempt at producing a real "before" looks like — and prints both pixel signatures for the body. A new affordance has nothing to compare against; one capture of it is the whole figure, and this step is skipped.
+3. Upload the figure to GitHub via the `gh image` extension (`drogers0/gh-image`):
    ```
    gh extension install drogers0/gh-image  # one-time setup
-   gh image tmp/screenshots/before.png tmp/screenshots/after.png
+   gh image tmp/screenshots/figure.png
    ```
-   This prints `![file.png](https://github.com/user-attachments/...)` lines.
-3. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section. Show before/after when the change is a fix; show one annotated capture when adding a new affordance. Compose a before/after through `node .claude/scripts/compose-figure.mjs --before <png> --after <png> --out <png>` — it refuses two identical panels, which is what every failed attempt at producing a real "before" looks like.
-4. Keep the actual screenshot file in `tmp/screenshots/` until the PR merges; remove it afterward to keep the dir lean (the GitHub upload is the durable copy).
+   This prints an `![figure.png](https://github.com/user-attachments/...)` line.
+4. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section, with one sentence naming what to look at — and say what the figure CANNOT show, when something about it is staged (a case only reachable behind a flag, a state supplied through a seam rather than by its real producer).
+5. Keep the PNGs in `tmp/screenshots/` until the PR merges; remove them afterward to keep the dir lean (the GitHub upload is the durable copy).
 
-Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `canvas-viewer-browser`/`web-browser` regressions. **Say so when you skip**: a PreToolUse hook blocks `gh pr create` when the diff touches a surface a human looks at and the body has no figure, and one line — `Visual evidence: none — <reason>` — passes it. The hook exists because this section was prose alone for a long time and the practice decayed into a heading over an after-only capture.
+Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt.
+
+**Say so when you skip**, in the body: `Visual evidence: none — <reason>`. A PreToolUse hook blocks `gh pr create` when the diff touches a surface a human looks at and the body carries neither a figure nor that line, so the skip is a decision on the record rather than an omission — and the reason is required, because a bare "none" is the same omission with a sentence in front of it. Everything that is real evidence but not a picture goes there too: a `pnpm test` output paste for a `canvas-viewer-browser`/`web-browser` regression is a perfectly good reason, and reads as one.
+
+The hook exists because this section was prose alone for a long time and the practice decayed into a `## Visual repro` heading over an after-only capture — which satisfies a reader skimming for the section while showing a reviewer nothing.
 
 ## Source Comment Discipline
 
