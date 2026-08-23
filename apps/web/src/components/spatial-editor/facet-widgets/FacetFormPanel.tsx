@@ -412,14 +412,9 @@ export function FacetFormPanel({
   // is absent (browser-mode component tests), and marked
   // `data-editor-overlay` so canvas gesture handlers ignore presses inside.
   return (
-    <div
+    <aside
       data-editor-overlay
       data-testid="facet-form-panel"
-      // NOT a dialog: it stays open while you select other nodes, and taking
-      // focus would pull it off the canvas every time it opened. `complementary`
-      // is the landmark for a panel that supports the main surface rather than
-      // interrupting it.
-      role="complementary"
       aria-label="Facets"
       className={cn(
         'bg-background p-3 shadow-lg',
@@ -464,6 +459,6 @@ export function FacetFormPanel({
         </button>
       </div>
       {body}
-    </div>
+    </aside>
   )
 }

@@ -68,7 +68,6 @@ it('stays open across a selection change and edits the newly selected node', asy
   expect(panelOf(container)).not.toBeNull()
 
   fireEvent.click(panelOf(container)?.querySelector('[aria-label="Diamond"]') as HTMLElement)
-  // biome-ignore lint/suspicious/noConsole: measurement probe
   console.log(
     'PROBE a=',
     JSON.stringify(shapeOf(latest.canvas, 'a')),
