@@ -42,7 +42,7 @@
  * `toMatchScreenshot` FAILS rather than auto-creating when a baseline is
  * missing, so a forgotten PNG commit is loud, not silently green.
  */
-import { computeEdgeJumps } from '../layout/edge-jumps.js'
+import { computeEdgeJumps } from '../layout/edges/edge-jumps.js'
 import type { ResolvedEdgeNode, Scene, ShapeSceneNode } from '../scene-graph.js'
 
 const EDGE_APPEARANCE = { stroke: '#1f2933', strokeWidth: 2 } as const
@@ -159,4 +159,35 @@ export function buildRoundedRectScene(): Scene {
     appearance: { fill: '#e0e7ff', stroke: '#1f2933', strokeWidth: 2 },
   }
   return { nodes: [rect] }
+}
+
+/** All five non-rect silhouettes side by side — the arc-bearing cylinder is
+ * the one a byte golden cannot protect (sweep flags), the rest ride along
+ * so a proportion regression in any outline is equally loud. */
+export function buildNodeOutlinesScene(): Scene {
+  const appearance = { fill: '#e0e7ff', stroke: '#1f2933', strokeWidth: 2 }
+  const shapes = ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const
+  return {
+    nodes: shapes.map((shape, index) => ({
+      kind: 'shape',
+      bbox: { x: index * 140, y: 0, w: 120, h: 80 },
+      shape,
+      appearance,
+    })),
+  }
+}
+
+/** The whole vendored lucide subset at badge size — pins that the vendored
+ * geometry actually draws the icons it claims (a bad path lands here as a
+ * visibly wrong glyph, which no byte golden can notice). */
+export function buildIconSetScene(): Scene {
+  const icons = ['database', 'file', 'image', 'link', 'lock', 'star'] as const
+  return {
+    nodes: icons.map((icon, index) => ({
+      kind: 'icon',
+      icon,
+      bbox: { x: index * 40, y: 0, w: 32, h: 32 },
+      appearance: { stroke: '#1f2933' },
+    })),
+  }
 }

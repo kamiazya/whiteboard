@@ -10,13 +10,14 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 |---|---|---|
 | **Workspace** | the tree that holds documents; owns placement (`segment`, derived `alias`) and naming (display name) | anything about a document's content |
 | **Document** | the unit a workspace contains. Has a kind | a canvas |
-| **Facet** | OKF frontmatter (`type`, `tags`, extension `{domain}/{version}` buckets) | metadata on a JSON Canvas document — that concept does not exist yet |
+| **Facet** | a namespaced, versioned, schema'd attribute group attached to an object — key grammar `{namespace}.{name}/v{n}`, registered by a plugin at distribution time ([ADR-0013](../../docs/contributing/adr/0013-facet-system.md)). OKF core frontmatter (`type`, `tags`) stays a markdown-document concern | a runtime-definable schema, or anything with a privileged "core" namespace — no facet is core; only the engine is |
 | **Body** | an OKF document's markdown body | a spatial document's content |
 | **Node** / **Edge** | JSON Canvas elements | anything in an OKF document |
 | **Canvas** | the spatial surface, and the JSON Canvas format | the container a workspace holds — that is a Document |
 | **OpenCanvas** | nothing. Retired — it was a working name for this project's document world, never a spec | the format (that is **JSON Canvas 1.0**) or the entity (that is a **Document**) |
 | **Scene** | the laid-out projection of a spatial document (what `composeCanvasScene` produces) | stored content |
 | **Version** | a saved point in a document's history | a branch |
+| **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |
 
 Two consequences that catch people out:
 
@@ -105,6 +106,48 @@ a later sweep does not "fix" them.
   stood at its point in the log. ADR-0007/0008/0009 keep `slug` and
   `OpenCanvas` behind a dated note: a decision record is history, and
   rewriting the reasoning would misreport what was decided.
+
+## The keeper axis, and why `local` was never on it
+
+A workspace is KEPT by something: today the browser's own storage or the
+whiteboard daemon, later a self-hosted or SaaS backend. **`Browser` and
+`Daemon` name the keeper.** They are not modes and not an exclusive pair —
+the intended model is that connecting a daemon PROMOTES a workspace's source
+of truth to it, with everything below becoming a replica.
+
+That model is **not implemented**. What ships is a per-document, one-way
+import (`components/migration/import-browser-local.ts`) whose request carries
+`{ path, kind }` and no document id, so the daemon mints a new one and the
+document's identity does not survive. Copy may use the keeper vocabulary —
+"Kept in this browser" is true today — but must not promise the promotion:
+the capability CTA says outright that documents already in the browser stay
+there and are imported one at a time.
+
+`local` was the wrong word for this axis and could never have been the right
+one, because **a daemon is local too**. Two names spelled it that way and
+meant opposite things — `browser-local` (kept in the browser) and
+`local-daemon` (kept by the daemon) — which is as confusable as a pair gets,
+and it was visible: the chip read `Local` while its own popover said "Connect
+a local daemon".
+
+`local` is therefore NOT retired, and cannot be. It still means "on this
+machine rather than remote", which is its correct sense in `localhost`, in
+`Local Network Access` (a W3C spec name), in `local-network-gate.ts`, and in
+`packages/mcp-server`'s `authMode: 'local-daemon'` — whose opposite is
+`'server-mode'`, making it exactly the network sense. Only `local` used for
+WHERE A WORKSPACE IS KEPT is retired.
+
+`vocabulary-check.test.ts` pins the retired spellings as DISCRIMINANT VALUES
+(a quoted `'browser-local'` / `'local-daemon'`) and as `BROWSER_LOCAL_` /
+`LOCAL_DAEMON_` constants, scoped to `apps/web/src`. Two things it
+deliberately does not yet claim, each its own increment:
+
+- **File names and test ids** (`browser-local-backend.ts`,
+  `data-testid="browser-local-index-page"`) — mechanical, ~100 files.
+- **`localDaemonBaseUrl`**, the persisted settings key
+  (`lib/user-settings-store.ts`). A stored shape: renaming it drops an
+  existing reader's daemon connection at schema validation, so it needs a
+  settings migration rather than a sweep.
 
 `slug` is the one word retired outright, and `vocabulary-check.test.ts` in
 `tools/arch-lint` keeps it retired — the only part of this rule that is not

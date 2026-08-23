@@ -1,5 +1,5 @@
+import type { UniqueNameEntry } from '@kamiazya/whiteboard-codec'
 import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
-import type { AliasResolverEntry } from '../components/markdown-editor/alias-resolver.js'
 import type { LinkTarget } from '../components/markdown-editor/link-target.js'
 
 /**
@@ -24,7 +24,7 @@ function documentId(entry: DocumentSummary): string {
  */
 export function daemonLinkEntries(
   documents: readonly DocumentSummary[],
-): readonly AliasResolverEntry[] {
+): readonly UniqueNameEntry[] {
   return documents.flatMap((entry) => {
     const id = documentId(entry)
     const byPath = { id, name: entry.path }
@@ -39,10 +39,25 @@ export function daemonLinkEntries(
  * known by. Unlike the resolver above this is a list a human reads, so a
  * document appearing twice would be noise rather than tolerance.
  */
-export function daemonLinkTargets(documents: readonly DocumentSummary[]): readonly LinkTarget[] {
-  return documents.map((entry) => ({
-    id: documentId(entry),
-    name: entry.displayName ?? entry.path,
-    ...(entry.kind ? { kind: entry.kind } : {}),
-  }))
+/**
+ * `excludeDocumentId` is the OPEN document: a link's whole job is to reach
+ * some other document, and offering the one being edited invites the
+ * self-reference the Connections surface would then have to explain away
+ * (backlinks already skip self, so a self-link is invisible everywhere).
+ */
+export function daemonLinkTargets(
+  documents: readonly DocumentSummary[],
+  { excludeDocumentId }: { excludeDocumentId?: string } = {},
+): readonly LinkTarget[] {
+  return documents.flatMap((entry) => {
+    const id = documentId(entry)
+    if (id === excludeDocumentId) return []
+    return [
+      {
+        id,
+        name: entry.displayName ?? entry.path,
+        ...(entry.kind ? { kind: entry.kind } : {}),
+      },
+    ]
+  })
 }

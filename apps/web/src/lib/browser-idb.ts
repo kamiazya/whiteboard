@@ -7,6 +7,9 @@
  * Owning DB_VERSION and onupgradeneeded in one place makes that impossible by
  * construction instead of relying on a hand-synced comment.
  */
+import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
+import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
+
 const DB_NAME = 'whiteboard'
 
 // The name every opener below resolves when its caller passes none. Module
@@ -114,6 +117,17 @@ export function whiteboardDbName(): string {
  * a published address (the daemon's file route validates it) and is not this
  * increment's to change.
  *
+ * v11 -> v12: adds `syncDocuments`, the `DocumentStore` port's store. One
+ * record per `docRefKey`, holding the snapshot manifest, its chunk bytes, the
+ * frontier and the delta log together — the daemon spreads the same state
+ * across four SQL tables because a row is the unit there, and a record is the
+ * unit here, so one `readwrite` transaction over one key gives the port's
+ * atomicity without a join.
+ *
+ * Purely additive, and deliberately NOT where `LoroStore` writes: that store
+ * keeps `loroDocuments` until its callers move, and two writers on one shape
+ * during a transition is how a subtle corruption gets in.
+ *
  * Cross-tab upgrades are handled rather than accepted from v8 on: every
  * connection this module opens closes itself on `versionchange`, so a newer
  * tab's upgrade is not blocked by an older one sitting idle, and a block that
@@ -121,7 +135,7 @@ export function whiteboardDbName(): string {
  * message a caller can show instead of hanging on a request that never
  * settles.
  */
-export const DB_VERSION = 11
+export const DB_VERSION = 12
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -134,6 +148,29 @@ export const BLOBS_STORE = 'blobs'
 
 /** Where a document's file references live: fileId -> BlobRef. */
 export const DOCUMENT_FILES_STORE = 'documentFiles'
+
+/** The `DocumentStore` port's store, keyed by `docRefKey`. */
+export const SYNC_DOCUMENTS_STORE = 'syncDocuments'
+
+/**
+ * When a document's content was last written, keyed by documentId.
+ *
+ * Its own store because it belongs to neither port. `DocumentStore` has no
+ * notion of wall-clock time — a frontier is the only ordering it knows — and
+ * `DocumentIndex` deliberately holds only placement and naming. This is the
+ * third app-side concern beside the default-document pointer and the content
+ * clock that reads it, and it lives where those do: outside the contracts.
+ */
+export const CONTENT_TIMESTAMPS_STORE = 'contentTimestamps'
+
+/**
+ * The chunk size the v12 migration writes its carried snapshots with.
+ *
+ * Frozen here rather than read from `LoroStore`: a migration's numbers are
+ * the ones it RAN with, and a later change to what the app chunks at must not
+ * retroactively change what an already-migrated record claims about itself.
+ */
+const LEGACY_MAX_CHUNK_BYTES = 1_000_000
 
 const RENAMED_STORES: readonly (readonly [from: string, to: string])[] = [
   ['canvases', 'documents'],
@@ -243,7 +280,67 @@ function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
  * `LOCAL_WORKSPACE_ID` is still written unconditionally, because that is the
  * one the browser-local UI opens.
  */
-function backfillDocumentIndex(tx: IDBTransaction): void {
+/**
+ * Moves every Loro content record into the `DocumentStore` port's store, and
+ * its `updatedAt` into the content-timestamp store, then drops the old one.
+ *
+ * A copy, not a conversion: the snapshot bytes go across unchanged, wrapped in
+ * the manifest `chunkSnapshot` derives for them. That derivation is a pure,
+ * SYNCHRONOUS function of the bytes and a chunk size, which is what makes this
+ * a migration the upgrade transaction can run at all — an async step (a digest,
+ * a fetch) would lose the transaction mid-walk.
+ *
+ * The delta log travels too. A record that carried one is a document whose
+ * snapshot alone is not its current state, so leaving the log behind would
+ * silently roll every unsaved edit back.
+ */
+function carryLoroDocuments(tx: IDBTransaction): void {
+  const loro = tx.objectStore('loroDocuments')
+  const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
+  const stamps = tx.objectStore(CONTENT_TIMESTAMPS_STORE)
+  const cursorReq = loro.openCursor()
+  cursorReq.onsuccess = () => {
+    const cursor = cursorReq.result
+    if (!cursor) {
+      // Only once the walk is done: deleting the store mid-cursor would end
+      // the walk with records still uncarried.
+      tx.db.deleteObjectStore('loroDocuments')
+      return
+    }
+    const documentId = String(cursor.primaryKey)
+    const parsed = loroRecordEnvelopeSchema.safeParse(cursor.value)
+    if (!parsed.success) {
+      // Carried VERBATIM rather than skipped. A record this build cannot
+      // parse is one written by a newer one, or one that is damaged — and
+      // both are things `loadSnapshot` reports as an unreadable document,
+      // which is a recoverable answer. Skipping it here would delete it with
+      // the store at the end of this walk, turning "your build is old" into
+      // "your document is gone" and destroying the bytes on the way.
+      sync.put(cursor.value, `document:${documentId}`)
+      cursor.continue()
+      return
+    }
+    {
+      const { manifest, chunks } = chunkSnapshot(parsed.data.snapshot, LEGACY_MAX_CHUNK_BYTES)
+      sync.put(
+        {
+          v: 1,
+          snapshot: { manifest, chunks },
+          // Empty, matching what `LoroStore` writes: nothing in the browser
+          // reads a frontier, and inventing one on migration would be a value
+          // the first real reader has to unpick.
+          frontier: new Uint8Array(),
+          deltas: parsed.data.deltas ?? [],
+        },
+        `document:${documentId}`,
+      )
+      stamps.put(parsed.data.updatedAt, documentId)
+    }
+    cursor.continue()
+  }
+}
+
+function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
   const documents = tx.objectStore('documents')
   const workspaces = tx.objectStore(WORKSPACES_STORE)
   const index = tx.objectStore(DOCUMENT_INDEX_STORE)
@@ -255,6 +352,7 @@ function backfillDocumentIndex(tx: IDBTransaction): void {
       // Only once the walk is done: deleting the store mid-cursor would end
       // the walk with rows still uncopied.
       tx.db.deleteObjectStore('documents')
+      done()
       return
     }
     const row = cursor.value
@@ -300,6 +398,12 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
       }
       if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
       if (!db.objectStoreNames.contains(BLOBS_STORE)) db.createObjectStore(BLOBS_STORE)
+      if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
+        db.createObjectStore(SYNC_DOCUMENTS_STORE)
+      }
+      if (!db.objectStoreNames.contains(CONTENT_TIMESTAMPS_STORE)) {
+        db.createObjectStore(CONTENT_TIMESTAMPS_STORE)
+      }
       if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
         const index = db.createObjectStore(DOCUMENT_INDEX_STORE, {
           keyPath: ['workspaceId', 'path'],
@@ -326,7 +430,7 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
           // discard decides which of those rows are worth carrying. Reading
           // before either drains sees an empty store and silently indexes
           // nothing.
-          discardPrePathDocuments(tx, () => backfillDocumentIndex(tx))
+          discardPrePathDocuments(tx, () => backfillDocumentIndex(tx, () => carryLoroDocuments(tx)))
         }
       }
       for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to, onCopyDone)

@@ -135,7 +135,7 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
  * of its own — the daemon page supplies its own adapter over the daemon's
  * `/api/w/:workspaceId/document/:path/file/:fileId` endpoints.
  */
-export const BROWSER_LOCAL_FILE_ADAPTER: DocumentFileAdapter = {
+export const BROWSER_FILE_ADAPTER: DocumentFileAdapter = {
   isImageRef,
   loadDocument: loadEmbeddedDocument,
   loadImageUrl: loadImageAssetUrl,

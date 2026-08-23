@@ -21,7 +21,14 @@
 // browser-mode keeper suites (see loro-store.browser.test.tsx).
 import 'fake-indexeddb/auto'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
+import {
+  act,
+  cleanup,
+  configure,
+  render as rtlRender,
+  screen,
+  waitFor,
+} from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -66,6 +73,20 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 
 const { BrowserLocalDocumentPage } = await import('./BrowserLocalDocumentPage.js')
 
+// These suites came from browser mode, where the per-test budget is 60s, and
+// kept their 10s waits when they moved to jsdom — whose default is 5s, so a
+// wait that actually has to wait can never finish inside its own test. Not
+// theoretical: content persistence now goes through the `DocumentStore` port,
+// which costs two to three IndexedDB round trips where it used to cost one,
+// and `fake-indexeddb` is slower per round trip than the real thing.
+vi.setConfig({ testTimeout: 30_000 })
+// One budget for every wait in the file, rather than a number per call site.
+// These waits came from browser mode with 60s per test; none of them is a
+// deliberate "this must be fast" assertion, and reading a document back is
+// two IndexedDB round trips behind the `DocumentStore` port plus a Loro
+// import — which under fake-indexeddb on a loaded runner does not fit 5s.
+configure({ asyncUtilTimeout: 15_000 })
+
 describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -79,10 +100,8 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
 
   it('persists a node across remount and never writes a __placeholder__ row', async () => {
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
-      timeout: 5000,
-    })
-    await waitFor(() => expect(latestOnChange).not.toBeNull(), { timeout: 5000 })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
+    await waitFor(() => expect(latestOnChange).not.toBeNull())
 
     const next = textNodeCanvas('reload-regression-node', 10, 10)
 
@@ -105,7 +124,7 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
         })
         expect(await persistedNodeIds(documentId as string)).toContain('reload-regression-node')
       },
-      { timeout: 10000, interval: 600 },
+      { interval: 600 },
     )
 
     const keysAfterDraw = await loroDocumentsKeys()
@@ -114,18 +133,13 @@ describe('BrowserLocalDocumentPage reload persistence (browser — real IndexedD
     cleanup()
     latestMountedCanvases = []
     render(<BrowserLocalDocumentPage store={new IdbDocumentIndex()} />)
-    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy(), {
-      timeout: 5000,
-    })
+    await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
 
     // The restored scene must include the node written before remount.
-    await waitFor(
-      () => {
-        const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
-        expect(restoredIds).toContain('reload-regression-node')
-      },
-      { timeout: 5000 },
-    )
+    await waitFor(() => {
+      const restoredIds = latestMountedCanvases.flatMap((canvas) => canvas.nodes.map((n) => n.id))
+      expect(restoredIds).toContain('reload-regression-node')
+    })
 
     const keysAfterRemount = await loroDocumentsKeys()
     expect(keysAfterRemount).not.toContain('__placeholder__')

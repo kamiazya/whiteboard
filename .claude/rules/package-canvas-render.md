@@ -7,12 +7,56 @@ paths:
 
 ## What belongs here
 
+`layout/` is split by the two JSON Canvas element kinds it serves, because
+the code that serves them shares nothing:
+
+- `layout/edges/` — the orthogonal edge router (side choice, cost model,
+  Hanan-grid A*, crossings, jumps, rounding). Pure geometry over boxes; it
+  has no idea what is drawn inside one.
+- `layout/nodes/` — how a node's box is drawn and filled: outline shape,
+  appearance resolution, the markdown body typesetter, truncation.
+- `layout/` itself — `spatial-canvas.ts`, the composer that draws on both,
+  plus the kind-agnostic scene transforms it uses.
+
+The split was made because the two clusters were measured to have ZERO
+production imports between each other while sitting in one flat directory,
+so the directory gave a reader no signal which of two unrelated engines a
+file belonged to. `layout/layer-boundary.test.ts` is what keeps that true:
+the clusters may not import each other, and may not reach up to the
+composer. Tests are exempt — an edge-router test that builds its fixture by
+composing a whole scene is doing setup, not depending on the composer.
+
+That the clusters are disjoint is also the reason a facet-style plugin
+seam is NOT what this directory needs. Extension already arrives through
+`facet-engine`: `spatial-canvas.ts` resolves shape, edge style, symbol and
+text alignment from registered facets, so a new rendering behaviour is a
+plugin declaration plus a small composer change (`visual.text/v0` cost ten
+lines here). The scene-node union stays closed on purpose — every consumer
+is in this repo, and an open union would buy dispatch flexibility nobody
+has asked for at the cost of the exhaustiveness checking the SVG backend
+relies on.
+
 - Plain-TS scene graph types (`scene-graph.ts`): resolved bounding boxes,
   shape kind, text runs, list/heading/table structure, the SVG-fragment
   (math/diagram) seam node, resolved edges.
-- Pure layout functions: spatial-canvas edge routing (`layout/spatial-edges.ts`),
+- `layout/edges/edge-geometry.ts`: the geometry VOCABULARY the edge layer is
+  written in — rectangles, points, sides, polylines — with no opinion about
+  routing or side choice. It exists because that vocabulary had no home:
+  `spatial-edges.ts` held the side-choice search, the router and these
+  primitives in one file, and the search reached into the router's half for
+  `rectOf`/`centerOf`/`pathLength`/`tangentCoordinate` only because that is
+  where the words lived. Judgement stays out: which side to prefer and what
+  makes one route better are `edge-rules.ts` and `spatial-edges.ts`. Keeping
+  this layer opinion-free is what lets both share it without either
+  importing the other — and it is the piece a later router/search split
+  would need first. That split is NOT proposed: the dependency is
+  one-directional (the router calls nothing search-side), but the seam is
+  eight entry points rather than the one `routeEdge` a reading suggests,
+  so it is a three-module decomposition with no measurable payoff, on the
+  file most likely to change next.
+- Pure layout functions: spatial-canvas edge routing (`layout/edges/spatial-edges.ts`),
   embed recursion over a resolved doc bundle (`layout/embed-recursion.ts`),
-  and mdast block layout (`layout/mdast-blocks.ts`) — the single mdast ->
+  and mdast block layout (`layout/nodes/mdast-blocks.ts`) — the single mdast ->
   scene-graph render path shared by preview / spatial text node / export.
 - `layoutSpatialCanvas` (`layout/spatial-canvas.ts`): the single
   `SpatialCanvas` -> `Scene` builder shared by every consumer (Node export,
@@ -222,7 +266,7 @@ paths:
    codec, so `parseBody: (text: string) => MdastRoot` is supplied by
    the caller (both current consumers pass codec's
    `parseMarkdownBody`). Appearance is likewise injected via a
-   `SpatialAppearanceResolver` (`layout/spatial-appearance.ts`) — a set of
+   `SpatialAppearanceResolver` (`layout/nodes/spatial-appearance.ts`) — a set of
    FUNCTIONS (`resolveNode`, `resolveEdge`, `resolveLabel`), not a static
    per-kind record, because appearance keys off both `node.type` and an
    authored `node.color`/`x-whiteboard` hint. (Geometry constants —
@@ -350,12 +394,12 @@ paths:
       only and are never traded against penalties; penalty rules are
       cost-tuple terms with a declared lexicographic tier. New routing
       feedback = one named rule + its own test, not a new branch in an
-      existing function. `layout/edge-rules.ts` implements the PREFERENCE
+      existing function. `layout/edges/edge-rules.ts` implements the PREFERENCE
       half: `SIDE_PREFERENCE_RULES` names zero-bend-facing-first,
       dominant-axis-first, l-pair-crowding-tie-break, u-hook-when-degenerate,
       gap-valid-opposing-before-invalid, u-hook-span-exposed-first, and
       incumbent-wins-ties; `composeSidePairs` is the composition
-      `rankedSidePairs` (`layout/spatial-edges.ts`) wraps, and
+      `rankedSidePairs` (`layout/edges/spatial-edges.ts`) wraps, and
       `shouldAdoptCandidate` is the incumbent-wins-ties predicate
       `optimizeSideChoices` consults. `u-hook-span-exposed-first` demotes a
       same-side U-hook candidate whose DEPARTURE side border runs through
@@ -473,9 +517,203 @@ paths:
       Deferred rather than shipped because `canvas-render` is a shared-layer
       package with no worker, no SIMD path, and no `navigator.gpu` (a DOM
       global this layer forbids) — so today it would buy a 36% regression for
-      a few percent of crossings. Revisit when a composition root can supply a
-      parallel executor through a seam, which is a larger design than the
-      search itself.
+      a few percent of crossings.
+      **Re-measured 2026-08-22 on the then-current search, and the case for
+      a parallel executor did not survive.** Batch re-implemented (best
+      candidate per edge against one base, disjoint old+new bounding boxes,
+      merged configuration re-evaluated) needs ~24 rounds to match the
+      sequential search on avoidable ink, not 6, and at that point costs
+      4x (345 edges) to 10x (200 edges) the sequential time in interleaved
+      `pnpm bench` — not +36%. Profiled, pair scoring — the only part a GPU
+      can take, because trial shapes are generated on the CPU — is 46% of
+      the 200-edge batch time and under 10% everywhere else; anchors,
+      routing and trial bookkeeping are the rest. A WGSL pair-scoring kernel
+      was built anyway and held bit-identical to the CPU narrow phase
+      (`scoreQuantizedSegmentPair`): 8-10x faster than the CPU at 100k+
+      pairs on a real GPU, equal to it on SwiftShader, with a ~2.7ms floor
+      per dispatch against rounds of 27-79k pairs. Amdahl's law then puts the
+      best achievable batch+GPU layout at ~2.4s for the 200-edge case the
+      sequential search does in 0.6s. No production router found (libavoid,
+      ELK, yFiles, Excalidraw) parallelises this step; the comparable one
+      (Excalidraw's elbow arrows) shrank the routing search space instead.
+      Both experiments were left on local branches (`batch-side-choice`,
+      `webgpu-pair-scorer`) that were never pushed and are not reachable
+      from this repository — so the paragraph above, not a branch, is what
+      has to carry the conclusion. Enough to rebuild either: the batch form
+      is the one described under the 2026-08-14 measurement (best candidate
+      per edge scored against ONE base configuration, adopted where old and
+      new bounding boxes are both disjoint, merged configuration
+      re-evaluated), and the kernel is one WGSL compute shader over
+      `scoreQuantizedSegmentPair`'s integer narrow phase — which is exactly
+      why that function was made integer-only and is documented as
+      reproducible by a second implementation.
+      Do not re-propose GPU or batch search for SPEED; what batch still
+      offers is QUALITY on large canvases (345-edge clustered: violations
+      183 -> 138, interior ink -22%) at 4x the time, which is a separate
+      trade. The speed work goes
+      into the CPU-side costs the profile named. Two of the four are done:
+      `addCost`/`lessCost` allocation (the trial sums into one scratch
+      array) and `routeEdge`'s repeated `deriveDefaultSides` scan.
+      `computeAnchorsFor` is done: it gave up its layout-invariant half
+      (node index, rects, centers, hoisted into an `AnchorContext` built
+      once per search), and its partition is now patched per trial rather
+      than rebuilt (`patchAnchorGroups`). Timing its three phases is what
+      made the second half tractable — grouping 15.4ms, placement 27.2ms,
+      alignment 3.8ms of 46.4ms on the 200-edge bench — because it showed
+      alignment could stay a FULL pass. That is the part worth remembering:
+      the hard question was which edges' alignment a re-side can flip
+      (the aligned run's slide reads group SIZES), and at 8% of the
+      function it never had to be answered. `selfPenalty` was measured
+      rather than assumed and the answer moved the target: its cost is
+      overlap-and-intrusion (10.9% of layout), not border-tracing (3.1%),
+      and that term now rejects by axis before measuring.
+      **All four are landed, and re-profiling afterwards moved the target
+      off that list entirely.** On the 345-edge clustered canvas — the size
+      an AI-authored document reaches — `routeEdge` is now 60% of layout,
+      and inside it the fallback chain is nearly all of that: the grid
+      search `routeOnGrid` 27%, `bestCandidate` 8%, the detour `region`
+      union 5%. The elbow shortcut, which the code is written around as the
+      common case, is taken on only 292 of 1215 routings there; the grid
+      search runs on 719 of them. On the 200-edge grid canvas none of this
+      shows (routing is 13%, pair scoring 22%) — so the two bench shapes
+      now disagree about where the time is, and a change judged on one of
+      them has not been judged.
+      One cost off that profile is taken: the routed-path cache is owned by
+      the REGION rather than by each `optimizeSideChoices`, so it spans a
+      region's unaligned and aligned runs. That pairing is where the repeats
+      are — 1021 of 1900 routings on the clustered canvas repeat a key the
+      other run of their own region already saw, against 567 caught by the
+      per-search caches. Worth 15-19% there in six of six interleaved
+      comparisons, within noise on the grid canvas. Sound because `nodes`,
+      `style` and an edge's obstacle list are fixed across those two runs,
+      leaving the anchor pair as the only variable — and `routeCacheKey`
+      covers it field by field, pinned one case per field, because a field
+      the key misses is a wrong path rather than a slow one.
+      **It was first written one scope too wide, and the reason is worth
+      keeping.** A cache owned by `assignEdgeAnchors` measured exactly the
+      same, so nothing flagged it: regions PARTITION the edge list, an edge
+      is routed in only the region that holds it, and `routeCacheKey` starts
+      with `edge.id` — so a later region can never hit an earlier one's
+      entry. Measured 0 cross-region hits on canvases of one, two and four
+      regions. The wider scope bought nothing and held every completed
+      region's paths until the layout finished. The gap in the reasoning was
+      specific: soundness was checked (may these searches share?) and
+      usefulness was not (do they ever have anything to share?). A sharing
+      change needs both, and the cheap way to get the second is to attribute
+      the hits, not to count them.
+      **The obstacle preparation was tried and rejected**, the second
+      measurement in this series to refuse a change that argued well.
+      `routeEdge` rebuilds two 286-element arrays per call — the
+      endpoint-containment filter and the margin-inflated copy — 1333 times
+      per clustered layout, and only 421 of those filters drop anything.
+      Memoizing the inflated array and returning the shared one untouched
+      when nothing is dropped measured neutral-to-negative (clustered
+      494/502/491 against 508/470/485ms, rounds disagreeing in sign; grid
+      slightly worse in all three). The 11% the phase profile attributes to
+      those two lines is the SCAN, not the allocation: 1333 calls x 286
+      rects x two `containsPoint` tests is 760k tests, and the prototype
+      keeps every one of them. Nothing here gets cheaper without cutting
+      the obstacle SET down spatially, which changes what is tested rather
+      than how fast it is tested.
+      A note on method, because it cost a wrong conclusion before it was
+      caught: the first interleaved run said the grid canvas regressed 3-4%
+      consistently, in all three rounds. Running the same pairs with the
+      ORDER FLIPPED said neutral. Whichever variant runs first in a round
+      carries that round's warm-up, and three rounds of a fixed order
+      reproduce the artifact rather than test it. Alternate the order, not
+      only the variant.
+      **`routeOnGrid` searches with A*, and finding that out took refuting the
+      obvious answer first.** The profile pointed at it (27% of layout on the
+      clustered canvas), and the plan was to cut the obstacle SET down
+      spatially, as the rejected prototype's post-mortem above suggested.
+      Measured inside the function, that was already done: its window filter
+      keeps 31 of 287 rects, and costs 0.3% of layout to do it. The time was
+      the search itself — 161k heap pops per layout, 331 per call over grids
+      averaging 422 cells — expanding the grid blind because the priority was
+      `g` alone. A Manhattan heuristic makes it A*: admissible (a step costs
+      its own Manhattan length plus a non-negative bend charge) and consistent
+      (the same inequality edge by edge), so the first pop of the goal stays
+      optimal. Worth 8-11% on the clustered canvas, five of five interleaved
+      comparisons in both orders; neutral on the grid canvas.
+      It is NOT free, and the price is a kind worth recognising. A* is fast
+      precisely because it does not expand the states a blind search does, so
+      among EQUAL-cost shortest paths it settles on a different member. Over
+      7419 generated cases the two never disagreed about what an optimal route
+      costs — never worse, never better — and disagreed about which one to
+      draw in 10-30% of them. On the 345-edge canvas exactly 2 of 345 edges
+      then settled on different sides, which is what moved that scoreboard's
+      violations 99 -> 100 and interior ink by 1.1%; the corpus-wide debt
+      metrics did not move at all.
+      That cost cannot be bought back inside the router, and the reason is
+      structural rather than a tuning failure: `routeOnGrid` is handed every
+      obstacle including the edge's own endpoints and avoids all their
+      interiors, so its path can never BE a violation — the difference arrives
+      through the side-choice search, which a per-edge routing cost cannot see.
+      Two attempts confirmed it: a lower-g heap tie-break (paths differing 394
+      -> 408, i.e. worse) and a canonical predecessor on equal-cost relaxations
+      (394 -> 363, i.e. barely moved). The second failure is the instructive
+      one — canonicalising among the alternatives requires having LOOKED at
+      them, which is the exact work A* skips.
+      **The per-trial pair loop was measured next, and REJECTED after three
+      variants.** After A* the two bench canvases stop agreeing about what is
+      expensive, which is itself the finding: on the 345-edge clustered canvas
+      `routeEdge` is 47% and the trial's pair loop 11.5%, while on the
+      200-edge grid canvas routing is 10.5% and the pair loop is **55%** — of
+      which only 22.5% is `pairScore` itself, leaving ~32% in the loop's own
+      bookkeeping. That loop walks every edge per touched edge (309k
+      iterations per layout on the grid canvas) computing a key, three map
+      probes and a bounds test just to reject.
+      Replacing the walk with an x-sorted index over path bounds, plus a
+      `neighbours` adjacency so pairs that scored non-zero BEFORE can still be
+      subtracted, is the obvious fix and does not pay. Interleaved in both
+      orders: a Set-per-touched-edge version was 8% WORSE on the grid canvas;
+      hoisting an accidental O(E) scan out of the query made it 10% worse;
+      an allocation-free version (stamp array plus scratch list) settled at 6%
+      worse on the grid canvas and 4% better on the clustered one.
+      **What DID pay was pruning the obstacle set per routing call.** The same
+      re-profile that named the pair loop also split `routeEdge`: on the
+      clustered canvas `routeOnGrid` is 16.3% after A*, `bestCandidate` 7.2%,
+      the endpoint-containment filter 7.1% and the detour `region` union 4.6%.
+      Only `routeOnGrid` prunes; the others each walk all 286 rects, and
+      `routeOrthogonal` walks that set six to fifteen times per call — two
+      elbow clearance tests, `crossedBy`, and `bestCandidate` up to three
+      times, each testing its ranked candidates. One extra pass to build a
+      small set buys ten cheap ones. Measured 10-13% on the clustered canvas,
+      five of five in both orders; within noise on the grid canvas, where 58
+      obstacles leave nothing to prune.
+      The bound is where the care is, and the first version got it wrong.
+      Elbows live inside `bbox(start, exit, entry, end)`, which is exact for
+      the clearance tests and for `crossedBy` — that only ever tests elbow
+      segments. But a DETOUR waypoint is placed `OBSTACLE_CLEARANCE_PX`
+      OUTSIDE the region, so a box stopping at the region dropped obstacles a
+      detour still ran into. The routing scoreboard caught it, as moved pins
+      rather than as a crash — which is a long way from naming the cause. So
+      the bound is pinned rather than remembered: `DETOUR_REACH_PX` is
+      exported beside `detourCandidates` and
+      `detour-reach.properties.test.ts` asserts every waypoint stays inside
+      it, mutation-checked by zeroing the constant (the bug as shipped) and by
+      moving a waypoint one pixel further out. A prune whose bound is too
+      small does not throw; it quietly reroutes.
+      The reason is in the fixture's own documentation: the stride canvas is
+      the worst case for spatial pruning, where **55% of edge pairs survive a
+      bounding-box test**. The index therefore returns nearly everything, so
+      the binary search, the walk and the stamp writes are all paid on top of
+      visiting the same edges — and a flat `for (let j = 0; j < E; j++)` with
+      an inline bounds test is simply cheaper per element than an indexed walk
+      with an indirect read. Gating the index on a density estimate would buy
+      the clustered 4%, and would also be a threshold tuned against two
+      synthetic canvases, which is how one of them becomes the convention by
+      accident. Not worth 4%.
+      The guard for all of this is `grid-route.optimality.properties.test.ts`,
+      an independent-oracle property: a plain Dijkstra written in the test from
+      the definition, asserting equal COST (never equal path — equal-cost
+      routes are the norm on a lattice). It exists because an inadmissible
+      heuristic fails silently: it returns a merely-good path, and every debt
+      metric the scoreboard pins stays put because a slightly-long detour still
+      avoids every body. Mutation-checked twice, and the second mutation is not
+      hypothetical — accumulating the successor's `g` from the popped `f` was
+      written during this change and caught by reading the push site, not by a
+      test. The property catches it now.
     - **Facet-driven rendering rides the injected-resolver pattern.**
       Shipped as the `facets` field of `ResolvedReference`
       (`layout/spatial-canvas.ts`) — synchronous, optional, caller-supplied,
@@ -530,7 +768,7 @@ paths:
     reference, and it serves markdown documents with no file nodes at all.
 
 12. **Line breaking is UAX #14, not a hand-rolled character table**
-    (`layout/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
+    (`layout/nodes/mdast-blocks.ts`, `breakSegments`). `css-line-break` with
     `lineBreak: 'strict'` supplies the break opportunities, which is what
     makes CJK wrap at all (the previous wrapper split on ASCII spaces, so a
     Japanese paragraph had no break opportunity anywhere and was emitted as
@@ -586,7 +824,7 @@ paths:
     published mcp-server bundle then fails to build at all. Tree-shaking
     cannot help — esbuild resolves the whole graph before eliminating
     anything — and the deep import is blocked by budoux's `exports` map.
-    **What cannot wrap is CUT, not left to overflow** (`layout/truncate.ts`,
+    **What cannot wrap is CUT, not left to overflow** (`layout/nodes/truncate.ts`,
     `fitToWidth`): a node label (one line is what makes it a label) and an
     atomic run. The run keeps the longest prefix that fits and is marked
     `truncated`, which the SVG backend paints as a fade — never an ellipsis,
@@ -655,7 +893,7 @@ paths:
   bounded, translated, or exported — has exactly one producing function;
   when two producers are unavoidable, a parity test pins their agreement
   (precedents: `theme/spatial-geometry-parity.test.ts` for layout
-  geometry, `layout/edge-rounding.ts` for the drawn-vs-hit curve). Two
+  geometry, `layout/edges/edge-rounding.ts` for the drawn-vs-hit curve). Two
   independently-grown producers of "the same" geometry is the pixel
   version of the Zod schema/interface drift class, and it has shipped
   real defects twice.
@@ -697,7 +935,7 @@ paths:
   the scoreboard exists to report. Metrics are an independent oracle
   (`test-utils/text-wrapping-metrics.ts`) that reads geometry off the scene
   and never calls the wrapping code.
-- `layout/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
+- `layout/edges/edge-routing-quality.test.ts` is the routing SCOREBOARD, and the
   answer to "did that rule change help overall". Four reported defects were
   each pinned by the one canvas that exposed it, which could never say
   whether a fix moved the failure somewhere nobody had looked. It holds one

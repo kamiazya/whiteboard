@@ -20,6 +20,7 @@
     "test:coverage": "pnpm --filter @kamiazya/whiteboard-mcp test:coverage",
     "test:node": "vitest run --project mcp-node",
     "test:mcp-node": "vitest run --project mcp-node",
+    "test:web-jsdom": "vitest run --project web-jsdom",
     "test:distribution": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution",
     "test:browser": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser",
     "test:browser:trace": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser --browser.trace=on",
@@ -74,6 +75,7 @@
   "devDependencies": {
     "@biomejs/biome": "^2.5.3",
     "@cyclonedx/cyclonedx-npm": "^5.0.0",
+    "@huggingface/transformers": "^4.2.0",
     "@secretlint/secretlint-rule-pattern": "13.0.2",
     "@secretlint/secretlint-rule-preset-recommend": "13.0.2",
     "@tanstack/intent": "^0.0.40",

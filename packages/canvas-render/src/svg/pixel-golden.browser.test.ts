@@ -11,7 +11,9 @@ import { page } from 'vitest/browser'
 import type { Scene } from '../scene-graph.js'
 import {
   buildArrowheadsScene,
+  buildIconSetScene,
   buildJumpHopScene,
+  buildNodeOutlinesScene,
   buildRoundedCornersScene,
   buildRoundedRectScene,
 } from '../test-utils/pixel-golden-scenes.js'
@@ -65,5 +67,15 @@ describe('pixel-level golden regression (real browser)', () => {
   it('rect-radius: a shape node with a corner radius renders rx', async () => {
     mountScene(buildRoundedRectScene(), 'rect-radius')
     await expect.element(page.getByTestId('rect-radius')).toMatchScreenshot('rect-radius')
+  })
+
+  it('node-outlines: the five non-rect silhouettes, cylinder arcs included', async () => {
+    mountScene(buildNodeOutlinesScene(), 'node-outlines')
+    await expect.element(page.getByTestId('node-outlines')).toMatchScreenshot('node-outlines')
+  })
+
+  it('icon-set: every vendored lucide glyph draws as itself', async () => {
+    mountScene(buildIconSetScene(), 'icon-set')
+    await expect.element(page.getByTestId('icon-set')).toMatchScreenshot('icon-set')
   })
 })

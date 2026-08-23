@@ -18,10 +18,13 @@
  * it is moving, and so anyone adding a move affordance knows what it costs.
  */
 
-import { parseMarkdownBody, resolveReferences } from '@kamiazya/whiteboard-codec'
+import {
+  createUniqueNameResolver,
+  parseMarkdownBody,
+  resolveReferences,
+} from '@kamiazya/whiteboard-codec'
 import type { DocumentSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { describe, expect, it } from 'vitest'
-import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import { daemonLinkEntries } from './daemon-link-entries.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -35,7 +38,7 @@ const listed = (path: string, displayName: string): DocumentSummary[] => [
 function resolvedCount(body: string, docs: readonly DocumentSummary[]): number {
   const root = resolveReferences(
     parseMarkdownBody(body),
-    createSnapshotAliasResolver(daemonLinkEntries(docs)),
+    createUniqueNameResolver(daemonLinkEntries(docs)),
   )
   let found = 0
   const walk = (node: { type: string; children?: unknown[] }): void => {

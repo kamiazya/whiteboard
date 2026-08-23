@@ -7,6 +7,7 @@
  * slightly differently.
  */
 
+import { z } from 'zod'
 import { openWhiteboardDb } from './browser-idb.js'
 
 /** One IndexedDB request as a promise. */
@@ -57,3 +58,24 @@ export async function inTransaction<T>(
     db.close()
   }
 }
+
+/**
+ * A `Uint8Array` that came back OUT of IndexedDB.
+ *
+ * `instanceof` is the wrong test here and it fails silently. IndexedDB returns
+ * values through structured clone, and an implementation may build them in a
+ * different realm — measured under `fake-indexeddb` in jsdom, where a stored
+ * `Uint8Array` reads back with `constructor.name === 'Uint8Array'` and
+ * `value instanceof Uint8Array === false`. A schema gated on `instanceof` then
+ * rejects a perfectly good record as corrupt, and every document in the
+ * database reads as damaged.
+ *
+ * `Object.prototype.toString` asks the internal brand instead, which crosses
+ * realms. The value is COPIED rather than passed through, so everything
+ * downstream — `loro.import` included — gets an array from this realm.
+ */
+export const storedBytesSchema = z
+  .custom<Uint8Array>((value) => Object.prototype.toString.call(value) === '[object Uint8Array]', {
+    message: 'expected stored bytes',
+  })
+  .transform((value) => new Uint8Array(value as Uint8Array))

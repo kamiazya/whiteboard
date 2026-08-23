@@ -20,7 +20,6 @@ import {
   wbDocumentResolveOutputSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
-import type { z } from 'zod'
 import { getLogger } from '../log.js'
 import { withDocumentWriteLock } from '../store/workspace-lock.js'
 import { CANVAS_VIEW_RESOURCE_URI } from './mcp-apps.js'
@@ -69,6 +68,21 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
   // degrades into an `as unknown as` cast.
   registerToolWithAnnotations(
     server,
+    tools.facetList.name,
+    {
+      description: tools.facetList.description,
+      inputSchema: tools.facetList.inputSchema.shape,
+      outputSchema: tools.facetList.outputSchema,
+    },
+    async (args) => {
+      // Read-only and document-independent: no write lock, no workspace.
+      const result = await tools.facetList.execute(tools.facetList.inputSchema.parse(args))
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.facetSet.name,
     {
       description: tools.facetSet.description,
@@ -115,6 +129,21 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     async (args) => {
       const parsed = tools.canvasView.inputSchema.parse(args)
       const result = await tools.canvasView.execute(parsed)
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
+    tools.documentSearch.name,
+    {
+      description: tools.documentSearch.description,
+      inputSchema: tools.documentSearch.inputSchema.shape,
+      outputSchema: tools.documentSearch.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.documentSearch.inputSchema.parse(args)
+      const result = await tools.documentSearch.execute(parsed)
       return structuredJsonResult(result)
     },
   )
@@ -237,18 +266,19 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     },
   )
 
-  // wb_body_patch uses z.discriminatedUnion — flatten its options into a
-  // raw shape so registerToolWithAnnotations can consume it.
-  const bp = tools.bodyPatch
-  const bpOptions = bp.inputSchema.options
-  const flatShape = Object.assign({}, ...bpOptions.map((o) => o.shape)) as z.ZodRawShape
   registerToolWithAnnotations(
     server,
-    bp.name,
-    { description: bp.description, inputSchema: flatShape, outputSchema: bp.outputSchema },
+    tools.bodyPatch.name,
+    {
+      description: tools.bodyPatch.description,
+      inputSchema: tools.bodyPatch.inputSchema,
+      outputSchema: tools.bodyPatch.outputSchema,
+    },
     async (args) => {
-      const parsed = bp.inputSchema.parse(args)
-      const result = await bp.execute(parsed)
+      const parsed = tools.bodyPatch.inputSchema.parse(args)
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
+        tools.bodyPatch.execute(parsed),
+      )
       return structuredJsonResult(result)
     },
   )

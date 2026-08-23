@@ -22,7 +22,7 @@ paths:
 ## Conventions
 
 - Every exported type is `z.infer`-derived. Sole exception: mutually-recursive mdast category types use the documented explicit `z.ZodType<T>` annotation, guarded by a compile-time assignability test.
-- Facet buckets are disjoint by construction: extension facets live only under the reserved `facets` key (`{domain}/{version}` keys; malformed keys are rejected, not dropped). Unknown ROOT-level frontmatter keys belong to `facetsRaw`, never to extension facets.
+- Facet buckets are disjoint by construction: extension facets live only under the reserved `facets` key (`{namespace}.{name}/v{n}` keys per ADR-0013; malformed keys are rejected, not dropped). Unknown ROOT-level frontmatter keys belong to `facetsRaw`, never to extension facets.
 - mdast schemas follow the mdast spec content-model hierarchy (flow / phrasing / list / table / row content). Do not widen a parent's `children` back to the flat node union.
 - IDs: canvas ID = canonical ULID (first char `[0-7]`); node ID = nanoid (charset deliberately unenforced — documented looseness).
 - JSON Canvas geometry is integer, with no extension carve-out: `x-whiteboard` carries no geometry of its own.

@@ -24,13 +24,26 @@
 // reproducibility does not need a sort to hold: document order is already
 // a total function of a deterministic canvas, so the same canvas renders
 // the same SVG twice regardless.
+
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
-import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  resolveCanvasEdgeStyle,
+  resolveNodeShape,
+  resolveNodeSymbol,
+  resolveNodeTextAlign,
+} from '@kamiazya/whiteboard-facet-engine'
+import type {
+  CanvasEdge,
+  EdgeRoutingStyle,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
+  BoundingBox,
   ResolvedEdgeNode,
   Scene,
   SceneNode,
@@ -38,25 +51,26 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
-import { computeEdgeJumps } from './edge-jumps.js'
-import { edgeLabelAnchor } from './edge-label-anchor.js'
+import { computeEdgeJumps } from './edges/edge-jumps.js'
+import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
+import {
+  assignEdgeAnchors,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+  routeEdge,
+} from './edges/spatial-edges.js'
 import {
   type FittedBlocks,
   firstLineOfBlocks,
   fitBlocksToHeight,
   layoutMdastBlocks,
   type MdastLayoutOptions,
-} from './mdast-blocks.js'
+} from './nodes/mdast-blocks.js'
+import { type NodeOutlineKind, outlineContentBox, outlineEntryPoint } from './nodes/node-outline.js'
+import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
+import { fitToWidth } from './nodes/truncate.js'
 import { scaleScene } from './scale-scene.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
-import {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  routeEdge,
-} from './spatial-edges.js'
 import { translateScene } from './translate-scene.js'
-import { fitToWidth } from './truncate.js'
 
 /**
  * A degradation `layoutSpatialCanvas` hit while composing one node, reported
@@ -123,6 +137,15 @@ export interface SpatialLayoutOptions {
    * through the full pipeline.
    */
   readonly edgeSideOverrides?: ReadonlyMap<string, EdgeAnchorOverride>
+  /**
+   * Non-rect silhouettes per node id, threaded onto each node's chrome
+   * shape and consulted when finishing edge routes (a terminal on the
+   * bbox border is pulled onto the outline rim via `outlineEntryPoint`).
+   * Plain DATA — a record, never a resolver function — for the same
+   * reason as `ResolvedReference`: it must cross `postMessage` so worker
+   * layout keeps working when outlines are wired.
+   */
+  readonly nodeOutlines?: Readonly<Record<string, NodeOutlineKind>>
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
@@ -342,19 +365,39 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
   }
 }
 
-function contentWidth(nodeWidth: number, options: ResolvedLayoutOptions): number {
-  const width = nodeWidth - 2 * options.geometry.paddingPx
+/**
+ * The box a node's content lays out against: the silhouette's inscribed box
+ * for a shaped node, the node box itself otherwise. Natural sizing
+ * (`fitToBox: false`) stays rect-based — it asks how big the BOX must be,
+ * and the inscribed mapping would have to be inverted, not applied.
+ * ponytail: auto-fit under-sizes a shaped node; invert outlineContentBox in
+ * naturalNodeContentSize when shaped auto-fit matters.
+ *
+ * The placement policy (inscribed box + vertical centering below) is fixed
+ * today; a later visual text-placement facet resolves per node HERE, the
+ * same seam `resolveNodeOutlines` fills for the silhouette itself.
+ */
+function nodeContentBounds(node: SpatialNode, options: ResolvedLayoutOptions): BoundingBox {
+  const box = { x: node.x, y: node.y, w: node.width, h: node.height }
+  if (!options.fitToBox) return box
+  return outlineContentBox(options.nodeOutlines?.[node.id], box)
+}
+
+function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number {
+  const width = nodeContentBounds(node, options).w - 2 * options.geometry.paddingPx
   const floor = options.geometry.minContentWidthPx
   return Number.isFinite(width) && width > floor ? width : floor
 }
 
 function chromeShape(node: SpatialNode, options: ResolvedLayoutOptions): ShapeSceneNode {
   const resolved = options.appearance.resolveNode(node)
+  const shape = options.nodeOutlines?.[node.id]
   return {
     kind: 'shape',
     id: node.id,
     bbox: { x: node.x, y: node.y, w: node.width, h: node.height },
     ...(resolved.radius !== undefined ? { radius: resolved.radius } : {}),
+    ...(shape !== undefined ? { shape } : {}),
     ...(resolved.appearance !== undefined ? { appearance: resolved.appearance } : {}),
   }
 }
@@ -423,7 +466,29 @@ function placeInNode(
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
   const padding = options.geometry.paddingPx
-  return translateScene(content, node.x + padding, node.y + padding).nodes
+  const bounds = nodeContentBounds(node, options)
+  // A SHAPED node centers content that fits vertically — the diagram-symbol
+  // convention (Excalidraw/draw.io). An overflowing body fills the inscribed
+  // box, so the offset is 0 and the top-aligned truncate+fade contract is
+  // untouched; a plain rect never gets an offset, keeping every existing
+  // canvas byte-identical.
+  //
+  // `visual.text/v0` OVERRIDES that default in either direction: a rect may
+  // ask to centre, a shaped node to start at the top. Absent, the default
+  // above is what happens — which is why the facet has no third value.
+  const align = resolveNodeTextAlign(node)
+  const centres =
+    align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
+  let dy = 0
+  if (options.fitToBox && centres) {
+    const innerH = bounds.h - 2 * padding
+    const contentH = Math.max(
+      0,
+      ...content.nodes.map((entry) => (entry.kind === 'edge' ? 0 : entry.bbox.y + entry.bbox.h)),
+    )
+    if (contentH < innerH) dy = (innerH - contentH) / 2
+  }
+  return translateScene(content, bounds.x + padding, bounds.y + padding + dy).nodes
 }
 
 /** Gap between a container's outside label and its frame's top edge. */
@@ -477,13 +542,20 @@ function composeTextNode(
   node: Extract<SpatialNode, { type: 'text' }>,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const maxWidth = contentWidth(node.width, options)
+  const maxWidth = contentWidth(node, options)
   // Position deliberately absent from the key: the cached value is
   // origin-relative (see `contentCache`'s contract), so a moved node hits.
+  // The silhouette is part of the key: a shaped node lays out against its
+  // inscribed box, so the same (width, height, text) fits differently.
   const cacheKey =
     options.contentCache === undefined
       ? undefined
-      : JSON.stringify([node.width, node.height, node.text])
+      : JSON.stringify([
+          node.width,
+          node.height,
+          node.text,
+          options.nodeOutlines?.[node.id] ?? null,
+        ])
   const cached = cacheKey === undefined ? undefined : options.contentCache?.get(cacheKey)
   let body: FittedBlocks
   if (cached !== undefined) {
@@ -566,6 +638,11 @@ function composeFileEmbed(
 
   const childScene = layoutSpatialCanvasInternalScene(child, {
     ...options,
+    // Silhouettes resolve per CANVAS, keyed by that canvas's own node ids:
+    // spreading the parent's map both drops the child's facets and leaks a
+    // same-id root node's shape into the embedded canvas. Explicit per-node
+    // overrides are root-keyed by contract, so they do not descend.
+    nodeOutlines: resolveNodeOutlines(child, undefined),
     embedPath: new Set([...options.embedPath, node.file]),
     embedDepth: options.embedDepth + 1,
   })
@@ -634,8 +711,9 @@ function contentBox(
   options: ResolvedLayoutOptions,
 ): { readonly w: number; readonly h: number } | undefined {
   const padding = options.geometry.paddingPx
-  const w = node.width - 2 * padding
-  const h = node.height - 2 * padding
+  const bounds = nodeContentBounds(node, options)
+  const w = bounds.w - 2 * padding
+  const h = bounds.h - 2 * padding
   return w > 0 && h > 0 ? { w, h } : undefined
 }
 
@@ -673,7 +751,7 @@ function fitBodyInNode(
   // box" reported the label's height for a small box and the body's for a
   // large one.
   if (options.fitToBox && contentBox(node, options) === undefined) return undefined
-  const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node.width, options), options))
+  const body = layoutMdastBlocks(root, mdastOptionsFor(contentWidth(node, options), options))
   return fitSceneInNode(body, node, options)
 }
 
@@ -845,7 +923,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
             chrome,
             ...placeInNode(
               node,
-              { nodes: [labelRun(label, options, contentWidth(node.width, options))] },
+              { nodes: [labelRun(label, options, contentWidth(node, options))] },
               options,
             ),
           ]
@@ -874,7 +952,7 @@ function composeNode(node: SpatialNode, options: ResolvedLayoutOptions): readonl
             chrome,
             ...placeInNode(
               node,
-              { nodes: [labelRun(label, options, contentWidth(node.width, options))] },
+              { nodes: [labelRun(label, options, contentWidth(node, options))] },
               options,
             ),
           ]
@@ -899,6 +977,7 @@ function composeEdge(
   canvas: SpatialCanvas,
   edge: CanvasEdge,
   options: ResolvedLayoutOptions,
+  routingStyle: EdgeRoutingStyle | undefined,
   anchors: EdgeAnchorPair | undefined,
 ): ResolvedEdgeNode {
   // `routeEdge` already degrades a missing endpoint per canvas-render's own
@@ -907,9 +986,66 @@ function composeEdge(
   // The routing style rides on the canvas, which this function already has,
   // so honouring it costs no new plumbing through the consumers: editor,
   // export and viewer all pass the canvas and get the same routes from it.
-  const routed = routeEdge(canvas.nodes, edge, canvas['x-whiteboard']?.edgeRouting?.style, anchors)
+  const routed = pullEdgeOntoOutlines(
+    routeEdge(canvas.nodes, edge, routingStyle, anchors),
+    canvas,
+    edge,
+    options.nodeOutlines,
+  )
   const appearance = options.appearance.resolveEdge(edge)
   return appearance === undefined ? routed : { ...routed, appearance }
+}
+
+/**
+ * A route terminates ON the endpoint's bbox border, which for every
+ * inscribed outline is OUTSIDE the silhouette except at tangent points —
+ * an arrowhead would float off an ellipse's shoulder. Each end whose node
+ * declares an outline is pulled inward along its own approach segment via
+ * `outlineEntryPoint`, AFTER routing: the router and its cost model keep
+ * reading rects, so routing behaviour (and the routing scoreboard) is
+ * untouched by construction.
+ */
+function pullEdgeOntoOutlines(
+  routed: ResolvedEdgeNode,
+  canvas: SpatialCanvas,
+  edge: CanvasEdge,
+  nodeOutlines: Readonly<Record<string, NodeOutlineKind>> | undefined,
+): ResolvedEdgeNode {
+  if (nodeOutlines === undefined || routed.path.length < 2) return routed
+  const boxOf = (id: string): BoundingBox | undefined => {
+    const node = canvas.nodes.find((candidate) => candidate.id === id)
+    return node === undefined ? undefined : { x: node.x, y: node.y, w: node.width, h: node.height }
+  }
+  let path = routed.path
+  // Compare coordinates, not object identity: relying on outlineEntryPoint
+  // returning the very same object on its no-op paths is an unstated
+  // contract, and a fresh-but-equal point must not rewrite the path (the
+  // scene-diff scoreboard pins that untouched edges stay byte-identical).
+  const moved = (
+    a: { readonly x: number; readonly y: number },
+    b: { readonly x: number; readonly y: number },
+  ): boolean => a.x !== b.x || a.y !== b.y
+  const toKind = nodeOutlines[edge.toNode]
+  const toBox = toKind === undefined ? undefined : boxOf(edge.toNode)
+  if (toKind !== undefined && toBox !== undefined) {
+    const last = path[path.length - 1]
+    const inward = path[path.length - 2]
+    if (last !== undefined && inward !== undefined) {
+      const pulled = outlineEntryPoint(toKind, toBox, inward, last)
+      if (moved(pulled, last)) path = [...path.slice(0, -1), pulled]
+    }
+  }
+  const fromKind = nodeOutlines[edge.fromNode]
+  const fromBox = fromKind === undefined ? undefined : boxOf(edge.fromNode)
+  if (fromKind !== undefined && fromBox !== undefined) {
+    const first = path[0]
+    const inward = path[1]
+    if (first !== undefined && inward !== undefined) {
+      const pulled = outlineEntryPoint(fromKind, fromBox, inward, first)
+      if (moved(pulled, first)) path = [pulled, ...path.slice(1)]
+    }
+  }
+  return path === routed.path ? routed : { ...routed, path }
 }
 
 /**
@@ -975,6 +1111,7 @@ export function layoutSpatialCanvasWithAnchors(
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
+    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines),
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
@@ -1032,11 +1169,54 @@ function layoutSpatialCanvasInternalScene(
   return layoutSpatialCanvasInternal(canvas, resolved).scene
 }
 
+/** Badge geometry: a small corner mark, not content — fixed, not themed. */
+const SYMBOL_BADGE_SIZE_PX = 16
+const SYMBOL_BADGE_MARGIN_PX = 4
+
+/**
+ * The node's `visual.symbol/v0` badge: an icon (stroke assigned from the
+ * label appearance — layout assigns, never invents) or an emoji glyph, at
+ * the top-right of the node's content bounds so a shaped node keeps its
+ * badge inside the silhouette. Emitted AFTER the node's own content, so it
+ * draws on top. An icon name the renderer's vendored set does not carry
+ * degrades to nothing at draw time (the backend's own rule).
+ */
+function composeNodeBadge(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
+  const symbol = resolveNodeSymbol(node)
+  if (symbol === undefined) return []
+  const bounds = nodeContentBounds(node, options)
+  const size = SYMBOL_BADGE_SIZE_PX
+  const margin = SYMBOL_BADGE_MARGIN_PX
+  // The badge plus its margin must FIT: pricing the glyph alone let an
+  // 18px-wide node place a 16px badge at x = -2, painting it outside the
+  // node the badge is supposed to mark.
+  if (bounds.w < size + margin || bounds.h < size + margin) return []
+  const bbox = {
+    x: bounds.x + bounds.w - margin - size,
+    y: bounds.y + margin,
+    w: size,
+    h: size,
+  }
+  if (symbol.kind === 'emoji') return [{ kind: 'glyph', bbox, glyph: symbol.char }]
+  const label = options.appearance.resolveLabel()
+  return [
+    {
+      kind: 'icon',
+      bbox,
+      icon: symbol.name,
+      ...(label.fill === undefined ? {} : { appearance: { stroke: label.fill } }),
+    },
+  ]
+}
+
 function layoutSpatialCanvasInternal(
   canvas: SpatialCanvas,
   resolved: ResolvedLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
-  const nodeContent = canvas.nodes.flatMap((node) => composeNode(node, resolved))
+  const nodeContent = canvas.nodes.flatMap((node) => [
+    ...composeNode(node, resolved),
+    ...composeNodeBadge(node, resolved),
+  ])
   const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
   return { scene: { nodes: [...nodeContent, ...content] }, anchors }
 }
@@ -1047,18 +1227,23 @@ function composeEdgesAndLabels(
 ): { content: SceneNode[]; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   // One anchor pass for the whole edge set: fan-out needs to see every end
   // sharing a side, which a per-edge route cannot.
+  // Facet-aware by DEFAULT (visual.edges/v0 first, legacy edgeRouting
+  // fallback): resolution lives here rather than at the call sites for the
+  // same reason the tokeniser default does — every surface that lays a
+  // canvas out wants it, and the one that forgets draws different routes.
+  const edgeStyle = resolveCanvasEdgeStyle(canvas)
   const anchors = assignEdgeAnchors(
     canvas.nodes,
     canvas.edges,
-    canvas['x-whiteboard']?.edgeRouting?.style,
+    edgeStyle.style,
     resolved.edgeSideOverrides,
   )
   const routedEdges = canvas.edges.map((edge) =>
-    composeEdge(canvas, edge, resolved, anchors.get(edge.id)),
+    composeEdge(canvas, edge, resolved, edgeStyle.style, anchors.get(edge.id)),
   )
   // Canvas-wide today; the same resolution is where a per-edge
   // x-whiteboard override slots in later without touching the pipeline.
-  const lineJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+  const lineJumps = edgeStyle.lineJumps ?? 'none'
   const jumpsByEdge = lineJumps === 'arc' ? computeEdgeJumps(routedEdges) : undefined
   const edgeContent =
     jumpsByEdge === undefined
@@ -1095,4 +1280,28 @@ export function layoutSpatialEdges(
     embedDepth: 0,
     fitToBox: true,
   }).content
+}
+
+/**
+ * The effective silhouette per node: the visual.shape/v0 facet is the
+ * DEFAULT source (same rule as edge style — resolution lives in the shared
+ * renderer so every surface draws the same picture), and an explicit
+ * `nodeOutlines` entry overrides the facet for that node. The facet enum
+ * and NodeOutlineKind are the same vocabulary; the assignment below is the
+ * compile-time check, and a test pins it.
+ */
+function resolveNodeOutlines(
+  canvas: SpatialCanvas,
+  explicit: Readonly<Record<string, NodeOutlineKind>> | undefined,
+): Readonly<Record<string, NodeOutlineKind>> | undefined {
+  let fromFacets: Record<string, NodeOutlineKind> | undefined
+  for (const node of canvas.nodes) {
+    const kind: NodeOutlineKind | undefined = resolveNodeShape(node)
+    if (kind !== undefined) {
+      fromFacets ??= {}
+      fromFacets[node.id] = kind
+    }
+  }
+  if (fromFacets === undefined) return explicit
+  return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }
 }

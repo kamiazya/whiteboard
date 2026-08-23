@@ -138,10 +138,12 @@ const EXPECTED_TOOLS = [
   'wb_canvas_snapshot',
   'wb_canvas_edit',
   'wb_document_get',
+  'wb_document_search',
   'wb_document_set',
   'wb_scene_render',
   'canvas_view',
   'wb_facet_set',
+  'wb_facet_list',
   'wb_version_list',
   'wb_version_restore',
   'wb_version_save',
@@ -225,7 +227,7 @@ async function main() {
   const facets = await callTool('wb_facet_set', {
     workspaceId: WORKSPACE_ID,
     documentId: named.documentId,
-    facets: { 'e2e/1': { note: 'before-save' } },
+    facets: { 'e2e.check/v1': { note: 'before-save' } },
   })
   if (facets.documentId !== named.documentId) {
     throw new Error(`wb_facet_set returned unexpected shape: ${JSON.stringify(facets)}`)
@@ -234,10 +236,29 @@ async function main() {
 
   await expectToolError(
     'wb_facet_set',
-    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e/1': { note: 'nope' } } },
+    { workspaceId: WORKSPACE_ID, documentId, facets: { 'e2e.check/v1': { note: 'nope' } } },
     'on a spatial document',
     'Facets are OKF frontmatter',
   )
+
+  // A REGISTERED facet is checked on write (ADR-0013 decision 6). What this
+  // step provably exercises is the TARGET check: visual.edges is
+  // canvas-target, and this document-writing tool rejects it before the
+  // payload schema is consulted. The schema-invalid branch for a
+  // document-target registered facet is covered at the unit layer
+  // (facet-set.test.ts) — the bundled registry has no document-target facet
+  // for this smoke to send.
+  await expectToolError(
+    'wb_facet_set',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId: named.documentId,
+      facets: { 'visual.edges/v0': { routing: 'spiral' } },
+    },
+    'with a canvas-target registered facet',
+    'visual.edges/v0',
+  )
+  console.log('[e2e] wb_facet_set → registered-facet validation rejects an invalid payload')
 
   // The seed the rest of this flow needs: two nodes and the edge between
   // them, drawn the way an agent actually draws — one call, explicit
@@ -269,6 +290,87 @@ async function main() {
   if (seedBatch.applied !== 3 || seedBatch.snapshot.edges[0]?.id !== 'link') {
     throw new Error(`wb_canvas_edit returned unexpected shape: ${JSON.stringify(seedBatch)}`)
   }
+
+  // Facet discovery: an agent learns the exact keys and payload contracts
+  // rather than guessing them, which is what the writes below rely on.
+  const registered = await callTool('wb_facet_list', {})
+  const registeredKeys = (registered.facets ?? []).map((facet) => facet.key)
+  for (const expected of ['visual.edges/v0', 'visual.shape/v0', 'visual.symbol/v0']) {
+    if (!registeredKeys.includes(expected)) {
+      throw new Error(`wb_facet_list omitted ${expected}: ${JSON.stringify(registeredKeys)}`)
+    }
+  }
+  const shapeEntry = (registered.facets ?? []).find((facet) => facet.key === 'visual.shape/v0')
+  if (!shapeEntry?.targets?.includes('node') || shapeEntry?.schema?.type !== 'object') {
+    throw new Error(`wb_facet_list entry is not actionable: ${JSON.stringify(shapeEntry)}`)
+  }
+  console.log(`[e2e] wb_facet_list → ${registeredKeys.length} registered facets, with schemas`)
+  const nodeOnly = await callTool('wb_facet_list', { target: 'node' })
+  const nodeKeys = (nodeOnly.facets ?? []).map((facet) => facet.key)
+  // Both directions: nothing foreign leaked in, and the filter did not
+  // simply answer with nothing — an empty list would satisfy the first
+  // check alone.
+  if ((nodeOnly.facets ?? []).some((facet) => !facet.targets.includes('node'))) {
+    throw new Error(`wb_facet_list(target) leaked a non-node facet: ${JSON.stringify(nodeOnly)}`)
+  }
+  if (!nodeKeys.includes('visual.shape/v0') || nodeKeys.includes('visual.edges/v0')) {
+    throw new Error(`wb_facet_list(target: node) filtered wrongly: ${JSON.stringify(nodeKeys)}`)
+  }
+  console.log('[e2e] wb_facet_list(target: node) → filtered to node-target facets')
+
+  // Node-target facets (ADR-0013): set a silhouette on one node of the
+  // spatial document, then delete it with the null tombstone.
+  const nodeFacet = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+  })
+  if (nodeFacet.facets?.['visual.shape/v0']?.kind !== 'hexagon') {
+    throw new Error(`wb_facet_set(nodeId) returned unexpected shape: ${JSON.stringify(nodeFacet)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → visual.shape set on a node')
+  const nodeFacetCleared = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': null },
+  })
+  if (Object.keys(nodeFacetCleared.facets ?? { leftover: true }).length !== 0) {
+    throw new Error(`null tombstone did not delete: ${JSON.stringify(nodeFacetCleared)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → null tombstone deletes the facet')
+  // Two node facets coexist on one node: the write merges rather than
+  // replacing the bucket, which is what a second plugin's facet depends on.
+  await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+  })
+  const bothFacets = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.symbol/v0': { kind: 'icon', name: 'star' } },
+  })
+  if (
+    bothFacets.facets?.['visual.symbol/v0']?.name !== 'star' ||
+    bothFacets.facets?.['visual.shape/v0']?.kind !== 'ellipse'
+  ) {
+    throw new Error(`node facets did not merge: ${JSON.stringify(bothFacets)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → visual.symbol merges beside visual.shape')
+  const bothCleared = await callTool('wb_facet_set', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    nodeId: 'target',
+    facets: { 'visual.shape/v0': null, 'visual.symbol/v0': null },
+  })
+  if (Object.keys(bothCleared.facets ?? { leftover: true }).length !== 0) {
+    throw new Error(`combined null tombstones did not delete: ${JSON.stringify(bothCleared)}`)
+  }
+  console.log('[e2e] wb_facet_set(nodeId) → one call deletes both node facets')
   console.log('[e2e] wb_canvas_edit → lockable, target, lockable→target')
 
   await expectToolError(
@@ -443,6 +545,46 @@ async function main() {
     )
   }
   console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
+
+  // wb_body_patch's inputSchema is a z.discriminatedUnion, and only a real
+  // MCP SDK client (not a hand-rolled unit test) can prove the registered
+  // schema actually accepts both arms — this is what tools/list validates
+  // arguments against. Exercise full mode then range mode on the seeded
+  // 'target' node, and read the result back through wb_canvas_snapshot
+  // rather than trusting the tool's own echo, so persistence is what is
+  // being checked.
+  const fullPatched = await callTool('wb_body_patch', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'full',
+    nodeId: 'target',
+    body: 'line0\nline1\nline2',
+  })
+  if (fullPatched.node?.text !== 'line0\nline1\nline2') {
+    throw new Error(`wb_body_patch(full) returned unexpected shape: ${JSON.stringify(fullPatched)}`)
+  }
+  const rangePatched = await callTool('wb_body_patch', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'range',
+    nodeId: 'target',
+    range: { startLine: 1, endLine: 1, replacement: 'patched' },
+  })
+  if (rangePatched.node?.text !== 'line0\npatched\nline2') {
+    throw new Error(
+      `wb_body_patch(range) returned unexpected shape: ${JSON.stringify(rangePatched)}`,
+    )
+  }
+  const afterPatch = await callTool('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId })
+  const patchedNode = Array.isArray(afterPatch.nodes)
+    ? afterPatch.nodes.find((node) => node.id === 'target')
+    : undefined
+  if (patchedNode?.text !== 'line0\npatched\nline2') {
+    throw new Error(
+      `wb_body_patch did not persist through the store: ${JSON.stringify(patchedNode)}`,
+    )
+  }
+  console.log('[e2e] wb_body_patch → both arms accepted, patched text persisted')
 
   // wb_canvas_edit is the whole spatial-mutation surface, so the smoke has
   // to reach the parts a unit test cannot: the batch's structuredContent vs
@@ -704,7 +846,7 @@ async function main() {
     '  - smoke',
     '  - e2e',
     'facets:',
-    '  issue/1:',
+    '  example.sample/v1:',
     '    status: open',
     '---',
     'Imported body.',
@@ -719,6 +861,33 @@ async function main() {
   }
   console.log('[e2e] wb_document_set → imported')
 
+  // wb_document_search over the body just imported — the runtime guard for
+  // this tool's structuredContent-vs-outputSchema drift, plus tag filtering.
+  const searched = await callTool('wb_document_search', {
+    workspaceId: WORKSPACE_ID,
+    query: 'Imported body',
+    tags: ['smoke'],
+  })
+  if (!searched.results.some((r) => r.documentId === mdCanvasId)) {
+    throw new Error(`wb_document_search missed the imported document: ${JSON.stringify(searched)}`)
+  }
+  if (!(searched.results[0].contexts[0] ?? '').includes('Imported body')) {
+    throw new Error(`wb_document_search snippet mismatch: ${JSON.stringify(searched.results[0])}`)
+  }
+  // The rank a caller uses to decide whether `contexts` is a match to
+  // highlight or just an opening excerpt. This daemon has no embedder, so
+  // every hit is lexical and none carries a semantic rank — the shape a
+  // client sees by default, and the one that must survive schema drift.
+  if (searched.results[0].lexicalRank !== 1) {
+    throw new Error(
+      `wb_document_search lexicalRank mismatch: ${JSON.stringify(searched.results[0])}`,
+    )
+  }
+  if (searched.results.some((r) => r.semanticRank !== undefined)) {
+    throw new Error(`wb_document_search reported a semantic rank with no embedder configured`)
+  }
+  console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
+
   const exported = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
     documentId: mdCanvasId,
@@ -726,7 +895,7 @@ async function main() {
   if (!exported.content.includes('Imported body.')) {
     throw new Error(`canvas_export_okf body mismatch after import: ${exported.content}`)
   }
-  if (!exported.frontmatter.facets?.['issue/1']) {
+  if (!exported.frontmatter.facets?.['example.sample/v1']) {
     throw new Error(
       `canvas_export_okf facets missing after import: ${JSON.stringify(exported.frontmatter)}`,
     )

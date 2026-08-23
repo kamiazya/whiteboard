@@ -115,6 +115,12 @@ enableGlobalVirtualStore: true
 # @secretlint/resolver itself, not merely available somewhere in the
 # workspace's devDependencies.
 packageExtensions:
+  # transformers.node.mjs imports onnxruntime-common directly while declaring
+  # only onnxruntime-node, which owns it — the same undeclared-dependency gap
+  # GVS exposes for @secretlint/resolver below.
+  "@huggingface/transformers":
+    dependencies:
+      onnxruntime-common: "*"
   "@secretlint/resolver":
     dependencies:
       "@secretlint/secretlint-rule-pattern": "*"
@@ -139,6 +145,7 @@ allowBuilds:
   lefthook: false
   libxmljs2: false
   msw: false
+  onnxruntime-node: true
   sharp: false
   workerd: false
 

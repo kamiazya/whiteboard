@@ -14,12 +14,33 @@ pnpm install
 pnpm --filter @kamiazya/whiteboard-web dev   # open http://localhost:5173
 ```
 
-The page lands on your canvas list. On a fresh browser it's empty — click
-**Create a canvas** (or the **+** menu, which also offers a markdown note)
-and the new canvas opens ready to draw; the list is where you come back to
-switch between canvases later.
+On a fresh browser the page asks what you'll make first — pick **Canvas**
+(notes you place and connect in space) or **Markdown note** (start writing;
+you can put it on a canvas later) and it opens ready to work in.
 
-![Browser-local canvas list](../assets/browser-local-list.png)
+![Onboarding chooser](../assets/onboarding-chooser.png)
+
+Once you have documents, the page lands on your document browser: a folder
+tree with a preview pane. Click a card to preview it, **Open** to edit it,
+and use the toolbar to search everything or move a document to a new path.
+
+**New** in that toolbar opens the same two choices — **Canvas** or **Markdown
+note** — and creates one in whichever folder you are standing in. A kind
+cannot be changed later, which is why you pick it by name rather than by
+icon; everything else about a document is editable afterwards, so nothing
+else is asked for. If you already know what the document is called and where
+it goes, **Name and location…** in that menu takes both up front; leaving its
+form untouched creates exactly what the plain entries would have.
+
+Either way the new document opens straight away, ready to work in. The folder
+you are standing in is part of the address — the URL carries a `?folder=`
+while you are inside one — so coming back lands you where you were, a reload
+keeps your place, and a link you paste to someone opens the folder you meant.
+The column layout is not in the link: that is a per-browser preference, so
+your choice is remembered here without being imposed on whoever you send it
+to.
+
+![Browser-local document browser](../assets/browser-local-list.png)
 
 A fresh canvas starts empty. Double-click empty canvas space to make a note
 and start typing immediately, or open the **+** menu in the bottom dock: tap

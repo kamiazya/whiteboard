@@ -45,7 +45,15 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // codec: the mdast body parser this package DEFAULTS to. Every consumer
     // already bundles codec to pass it in, so the dependency adds nothing to
     // any bundle and removes the same line from seven call sites.
-    allowedInternalDeps: ['@kamiazya/whiteboard-model', '@kamiazya/whiteboard-codec'],
+    // facet-engine: resolveCanvasEdgeStyle is the DEFAULT read for edge
+    // style (facet first, legacy x-whiteboard.edgeRouting fallback) — the
+    // lowlight lesson again: an opt-in resolution step at four call sites
+    // is a step that gets missed, so the shared renderer owns the default.
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-codec',
+      '@kamiazya/whiteboard-facet-engine',
+    ],
     // css-line-break: deciding WHERE a line may break is this package's own
     // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
     // which is where Japanese kinsoku lives), not something to hand-roll from
@@ -68,6 +76,26 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     allowedInternalDeps: ['@kamiazya/whiteboard-model'],
     allowedThirdParty: ['zod'],
   },
+  // The facet ENGINE (ADR-0013): definePlugin/defineFacet, the registry,
+  // write validation and compat resolution, plus the bundled `visual`
+  // plugin. Machinery, not schemas — which is why it is not in model (whose
+  // rule excludes runtime behavior beyond validation). Pure zod over model
+  // types, so it holds on Node, the browser and a worker alike.
+  '@kamiazya/whiteboard-facet-engine': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
+    allowedThirdParty: ['zod'],
+  },
+  // Lexical search: a dictionary-free tokenizer (latin words, CJK bigrams),
+  // BM25 ranking, snippets, and the ONE definition of what text a document
+  // contributes. Pure and runtime-agnostic on purpose — the daemon and the
+  // browser must rank the same corpus the same way, and a second copy of
+  // either half is a second set of answers.
+  // It takes content already read (a body, or a canvas), so it needs
+  // neither the CRDT nor the bridge — model's types are the whole surface.
+  '@kamiazya/whiteboard-search': {
+    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
+    allowedThirdParty: [],
+  },
   '@kamiazya/whiteboard-loro-adapter': {
     // Deliberately NOT ports: this package adapts loro-crdt to the model and
     // knows nothing about where a document sits, so it implements no port.
@@ -88,6 +116,8 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-render',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-loro-adapter',
+      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-search',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
@@ -132,6 +162,8 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-mcp',
       '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-search',
     ],
     allowedThirdParty: [],
   },

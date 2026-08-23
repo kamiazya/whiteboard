@@ -2,7 +2,10 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
-import { DocumentListView } from '../components/document-list/DocumentListView.js'
+import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
+import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
+import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
@@ -12,6 +15,7 @@ import {
   LOCAL_WORKSPACE_ID,
   listLocalDocuments,
 } from '../lib/local-document-summary.js'
+import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import {
@@ -28,10 +32,11 @@ export interface BrowserLocalIndexPageProps {
   onOpenDocument: (path: string) => void
 }
 
-// The browser-local landing surface: the same shared list the daemon gallery
-// renders, minus its daemon-only capabilities (no thumbnails, no workspace
-// selector). Rows come straight from the store; the editor page owns
-// everything after onOpenDocument fires.
+// The browser-local landing surface: the same three-pane document browser
+// the daemon page renders, minus its daemon-only capabilities (no workspace
+// selector). The page keeps its own snapshot list only to know which of the
+// loading / onboarding / panel states to show; the panel reads the store
+// through its own source.
 // Module-level, NOT default parameters. A default in the parameter list is
 // evaluated on every render, so `idbContentClock()` hands back a new function
 // identity each time; the load effect depends on it, `setSnapshots` stores a
@@ -56,6 +61,16 @@ export function BrowserLocalIndexPage({
   // and a handler-side `if (creating) return` reads a stale closure in
   // exactly the same-tick case it would have to catch.
   const [creating, setCreating] = useState(false)
+  // The panel reads through the SAME stores this page was given — never a
+  // second instance that merely happens to open the same database.
+  const filesSource = useMemo(
+    () => createLocalFilesSource({ index, loro, clock }),
+    [index, loro, clock],
+  )
+  // Deletions happen in this page's dialog, behind the panel's back — the
+  // panel re-reads whenever this identity changes, exactly as on the daemon
+  // page.
+  const [filesRevision, setFilesRevision] = useState(0)
 
   useEffect(() => {
     let cancelled = false
@@ -76,28 +91,12 @@ export function BrowserLocalIndexPage({
     }
   }, [index, clock])
 
-  const rows = useMemo(() => {
-    if (!snapshots) return []
-    const sorted = [...snapshots].sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
-    // A local document has a real path now, so `secondary` shows it on the
-    // same terms the daemon list does: worth a second line only when a
-    // display name covers the first. It is still never DERIVED from the name
-    // — ADR-0008 measured that and every non-Latin name collapsed to
-    // `untitled-N`.
-    return sorted.map((s) => ({
-      path: s.path,
-      displayName: s.name,
-      ...(s.name === s.path ? {} : { secondary: s.path }),
-      updatedAt: s.updatedAt,
-      kind: s.kind,
-    }))
-  }, [snapshots])
-
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
   const [pendingDelete, setPendingDelete] = useState<{
     path: string
     displayName: string
+    kind?: DocumentKind
   } | null>(null)
   const [deleting, setDeleting] = useState(false)
   const [deleteError, setDeleteError] = useState<string | null>(null)
@@ -123,13 +122,18 @@ export function BrowserLocalIndexPage({
         await pointer.clear()
       }
       setSnapshots(await listLocalDocuments(index, clock))
+      // The tree view holds its own copy of the list; this identity change is
+      // its signal to re-read, same contract as the daemon page's `revision`.
+      setFilesRevision((revision) => revision + 1)
       setPendingDelete(null)
     } catch {
-      setDeleteError('Failed to delete the canvas from this browser.')
+      setDeleteError('Failed to delete the document from this browser.')
     } finally {
       setDeleting(false)
     }
   }, [index, clock, pointer, pendingDelete])
+
+  const { folder: routedFolder, setFolder: setRoutedFolder } = useRoutedFolder()
 
   const handleCreate = useCallback(
     async (kind: DocumentKind) => {
@@ -151,7 +155,7 @@ export function BrowserLocalIndexPage({
         await pointer.set(created.documentId)
         onOpenDocument(created.path)
       } catch {
-        setError('Failed to create a canvas in this browser.')
+        setError(`Failed to create a ${kindNoun(kind)} in this browser.`)
       } finally {
         setCreating(false)
       }
@@ -161,7 +165,7 @@ export function BrowserLocalIndexPage({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
-      <h1 className="sr-only">Canvases</h1>
+      <h1 className="sr-only">Documents</h1>
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}
@@ -179,26 +183,25 @@ export function BrowserLocalIndexPage({
             </div>
           ))}
         </div>
-      ) : snapshots !== null ? (
-        <DocumentListView
-          rows={rows}
-          onOpen={onOpenDocument}
+      ) : snapshots !== null && snapshots.length === 0 ? (
+        // The onboarding state renders INSTEAD of the panel: a three-pane
+        // browser of nothing teaches less than one sentence and one button,
+        // and this button also OPENS what it creates.
+        <EmptyWorkspaceState
           onCreate={(kind) => void handleCreate(kind)}
-          createDisabled={creating}
-          renderActions={(row) => (
-            <button
-              type="button"
-              aria-label={`Delete ${row.displayName}`}
-              onClick={(event) => {
-                // Prevents the click from bubbling to the wrapping open-button.
-                event.stopPropagation()
-                setPendingDelete({ path: row.path, displayName: row.displayName })
-              }}
-              className="absolute right-1 top-1 rounded-md border bg-background px-1.5 py-0.5 text-xs font-medium opacity-0 transition-opacity hover:bg-accent focus-visible:opacity-100 group-hover:opacity-100"
-            >
-              Delete
-            </button>
-          )}
+          disabled={creating}
+          subtitle="Everything stays in this browser — no account, no upload."
+        />
+      ) : snapshots !== null ? (
+        <WorkspaceFilesPanel
+          source={filesSource}
+          initialFolder={routedFolder}
+          onFolderChange={setRoutedFolder}
+          onOpenDocument={onOpenDocument}
+          onRequestDelete={(path, displayName, kind) =>
+            setPendingDelete({ path, displayName, kind })
+          }
+          revision={filesRevision}
         />
       ) : (
         // Load failed (error set, snapshots never arrived): creating does
@@ -218,7 +221,7 @@ export function BrowserLocalIndexPage({
         pending={pendingDelete}
         busy={deleting}
         error={deleteError}
-        description="This permanently removes the canvas from this browser. There is no undo."
+        description={`This permanently removes the ${kindNoun(pendingDelete?.kind)} from this browser. There is no undo.`}
         onCancel={() => {
           setPendingDelete(null)
           setDeleteError(null)

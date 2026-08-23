@@ -14,7 +14,9 @@ const SHARED_LAYER_PACKAGES = [
   'packages/codec',
   'packages/canvas-render',
   'packages/ports',
+  'packages/facet-engine',
   'packages/loro-adapter',
+  'packages/search',
   'packages/server-core',
   // Browser-runtime UI package, not a "shared" model/codec/... layer package
   // in the architecture-map.md sense, but scanned the same way — see its

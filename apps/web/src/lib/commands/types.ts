@@ -42,9 +42,9 @@ export type GetAppContextInput = z.infer<typeof getAppContextInputSchema>
 // The provider projection is built field-by-field in create-commands.ts
 // (never a spread of the real ProviderState) so this schema is the
 // contract that keeps daemonBaseUrl — and any future connection-ish field
-// added to ProviderState — out of a WebMCP tool result. "local-daemon" is
-// renamed to "daemon" here because this is a tool-facing vocabulary, not a
-// re-export of the internal ProviderState.kind literal.
+// added to ProviderState — out of a WebMCP tool result. The values are
+// spelled out here rather than re-exported from ProviderState.kind: this is
+// a tool-facing vocabulary that agents read, so it changes on its own terms.
 //
 // Deliberately structural-only: this schema mirrors the static
 // get-app-context.schema.json literal field-for-field (see
@@ -59,7 +59,7 @@ export const getAppContextResultSchema = z
   .object({
     provider: z
       .object({
-        mode: z.enum(['daemon', 'browser-local']),
+        mode: z.enum(['daemon', 'browser']),
       })
       .strict(),
     canvas: z
@@ -73,7 +73,7 @@ export const getAppContextResultSchema = z
           .strict(),
         z
           .object({
-            kind: z.literal('browser-local'),
+            kind: z.literal('browser'),
             documentId: z.string(),
           })
           .strict(),

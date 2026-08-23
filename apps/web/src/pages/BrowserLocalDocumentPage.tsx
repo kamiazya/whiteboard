@@ -1,19 +1,17 @@
-import { serializeSpatial } from '@kamiazya/whiteboard-codec'
+import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
 import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Download, EllipsisVertical, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
-import { ConnectionStatus } from '../components/connection/ConnectionStatus.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
-import { createSnapshotAliasResolver } from '../components/markdown-editor/alias-resolver.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
@@ -28,13 +26,8 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
-import {
-  DropdownMenu,
-  DropdownMenuContent,
-  DropdownMenuItem,
-  DropdownMenuTrigger,
-} from '../components/ui/dropdown-menu.js'
-import { Tooltip, TooltipContent, TooltipTrigger } from '../components/ui/tooltip.js'
+import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
+import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
@@ -44,35 +37,32 @@ import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { browserLocalDocumentPath, parseBrowserLocalRoute } from '../lib/app-routes.js'
+import {
+  browserLocalDocumentPath,
+  browserLocalIndexPath,
+  parseBrowserLocalRoute,
+} from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
-import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
+import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
+import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
-import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { derivePageState } from './browser-local-page-state.js'
+import { derivePageState, refineForContentReadFailure } from './browser-local-page-state.js'
 import {
   type LoroStoreLike,
   useBrowserLocalDocumentController,
 } from './use-browser-local-document-controller.js'
 import { useMarkdownDocument } from './use-markdown-document.js'
-
-// React.lazy: DaemonDetectedBanner pulls in daemon-probe.ts + Zod parsing
-// that would otherwise ship in the entry chunk, which is already close to
-// its gzip budget (apps/web/scripts/smoke-bundle-size.mjs). Deferred load
-// keeps first paint unaffected by a feature most sessions never render.
-const DaemonDetectedBanner = lazy(() =>
-  import('../components/migration/DaemonDetectedBanner.js').then((m) => ({
-    default: m.DaemonDetectedBanner,
-  })),
-)
 
 // WorkspaceTopBar statically imports Radix, lucide, HeaderSaveDot,
 // VersionTimeline, HeaderBranchChip, and the Zod-validated
@@ -133,7 +123,7 @@ function titleOf(name: string | null, path: string | null): string {
 export function BrowserLocalDocumentPage({
   store,
   loro,
-  capabilities = BROWSER_LOCAL_CAPABILITIES,
+  capabilities = BROWSER_CAPABILITIES,
   initialPath,
   pointer,
   clock,
@@ -155,9 +145,18 @@ export function BrowserLocalDocumentPage({
   const location = useLocation()
   const navigate = useNavigate()
 
-  // Stable across re-renders so DaemonDetectedBanner's dismissal state isn't
-  // re-read from localStorage on every render.
+  // Stable across re-renders so the settings payload isn't re-read from
+  // localStorage on every render.
   const [settingsStore] = useState(() => createUserSettingsStore())
+
+  // The connection is app-level, so the App-mounted shell draws it and this
+  // page only reports what it knows: while a browser-local document is open,
+  // the data lives in this browser and nowhere else. Cleared on unmount so an
+  // index page makes no claim of its own.
+  useEffect(() => {
+    setShellConnection({ state: 'browser' })
+    return () => setShellConnection(null)
+  }, [])
 
   // duplicateDocument() rejects on failure (see the controller hook) rather
   // than carrying its own error/pending state, so this page owns both: a
@@ -174,7 +173,9 @@ export function BrowserLocalDocumentPage({
     try {
       await duplicateDocument()
     } catch (err) {
-      setDuplicateError(err instanceof Error ? err.message : 'Failed to duplicate canvas.')
+      setDuplicateError(
+        err instanceof Error ? err.message : `Failed to duplicate ${kindNoun(documentKind)}.`,
+      )
     } finally {
       setIsDuplicating(false)
     }
@@ -274,11 +275,11 @@ export function BrowserLocalDocumentPage({
   // [[Name]] resolution for the markdown preview: display names from the
   // same snapshot list the switcher shows, so a link resolves exactly when
   // the author can see one unambiguous canvas by that name.
-  // `createSnapshotAliasResolver` takes {id, name}; a stored row now says
+  // `createUniqueNameResolver` takes {id, name}; a stored row now says
   // `documentId`, so the projection is explicit rather than structural.
   const resolveAlias = useMemo(
     () =>
-      createSnapshotAliasResolver(
+      createUniqueNameResolver(
         documents.map((entry) => ({ id: entry.documentId, name: entry.name })),
       ),
     [documents],
@@ -323,12 +324,16 @@ export function BrowserLocalDocumentPage({
 
   const linkTargets = useMemo(
     () =>
-      switcherOptions.map((entry) => ({
-        id: entry.documentId,
-        name: entry.name,
-        kind: entry.kind,
-      })),
-    [switcherOptions],
+      switcherOptions
+        // Never the open document itself: a link's whole job is to reach
+        // some OTHER document, and backlinks skip self-references anyway.
+        .filter((entry) => entry.documentId !== documentId)
+        .map((entry) => ({
+          id: entry.documentId,
+          name: entry.name,
+          kind: entry.kind,
+        })),
+    [switcherOptions, documentId],
   )
   // ![[embed]] bodies, pre-fetched so the layout's sync seam has content.
   const resolveEmbed = useMarkdownEmbedContent({
@@ -472,12 +477,28 @@ export function BrowserLocalDocumentPage({
     setNodeLock,
     lockedEdgeIds,
     setEdgeLock,
+    backendError,
   } = useDocumentSync(backend)
+
+  // The second phase of the page state. `pageState` above is derived from what
+  // the INDEX knows; this is what reading the CONTENT said, which can only
+  // arrive after the id it needed came out of that first phase.
+  const renderState = refineForContentReadFailure(
+    pageState,
+    isDocumentReadFailure(backendError) ? backendError : null,
+  )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange)
 
-  // Export rides the canvas row's operations kebab on this page (the top
-  // bar keeps its export only in daemon mode, which has no canvas row).
+  // The browser-local route, NOT the daemon's `/w/:workspaceId/document/*`
+  // shape the header used to build for every mode — that URL does not route
+  // here at all, so "copy link" handed out an address that landed on the
+  // document list.
+  const documentUrl =
+    documentPath === null
+      ? window.location.href
+      : `${window.location.origin}${browserLocalDocumentPath(documentPath)}`
+
   const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
   const { exportError, handleExport } = useSceneExport({
     onExport: exportScene,
@@ -490,7 +511,7 @@ export function BrowserLocalDocumentPage({
   // stamps that make an edit made elsewhere show up on the next refresh.
   const fileSeams = useDocumentFileSeams({
     canvas,
-    adapter: BROWSER_LOCAL_FILE_ADAPTER,
+    adapter: BROWSER_FILE_ADAPTER,
     stampOf: useMemo(
       () => new Map(documents.map((entry) => [entry.documentId, entry.updatedAt])),
       [documents],
@@ -498,7 +519,7 @@ export function BrowserLocalDocumentPage({
   })
 
   const commands = useWhiteboardCommands({
-    provider: { kind: 'browser-local', capabilities },
+    provider: { kind: 'browser', capabilities },
     canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
   })
 
@@ -567,14 +588,14 @@ export function BrowserLocalDocumentPage({
   // schedule another refresh. The snapshot is this canvas's live truth; the
   // list is only the copy the switcher reads for the OTHER documents.
 
-  if (pageState.kind === 'load-degraded') {
+  if (renderState.kind === 'load-degraded') {
     return (
       <div
         role="alert"
         aria-live="assertive"
         className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
       >
-        <p className="max-w-md text-sm text-destructive">{pageState.message}</p>
+        <p className="max-w-md text-sm text-destructive">{renderState.message}</p>
         <button
           type="button"
           onClick={() => void startFresh()}
@@ -586,7 +607,7 @@ export function BrowserLocalDocumentPage({
     )
   }
 
-  if (pageState.kind === 'cleanup-completed') {
+  if (renderState.kind === 'cleanup-completed') {
     return (
       <div
         data-testid="cleanup-completed"
@@ -604,7 +625,7 @@ export function BrowserLocalDocumentPage({
     )
   }
 
-  if (pageState.kind === 'loading') {
+  if (renderState.kind === 'loading') {
     return <DocumentPageSkeleton label="Loading canvas" />
   }
 
@@ -629,59 +650,37 @@ export function BrowserLocalDocumentPage({
           {exportError}
         </div>
       )}
-      <DropdownMenu>
-        <Tooltip>
-          <TooltipTrigger asChild>
-            <DropdownMenuTrigger asChild>
-              <Button
-                ref={canvasOpsButtonRef}
-                type="button"
-                aria-label="More actions"
-                variant="ghost"
-                size="sm"
-                className="size-7 p-0"
-              >
-                <EllipsisVertical aria-hidden="true" className="size-4" />
-              </Button>
-            </DropdownMenuTrigger>
-          </TooltipTrigger>
-          <TooltipContent>More actions</TooltipContent>
-        </Tooltip>
-        <DropdownMenuContent align="end">
-          <DropdownMenuItem onSelect={() => void handleExport('png')}>
-            <Download aria-hidden="true" className="size-3.5" />
-            Export as PNG
-          </DropdownMenuItem>
-          <DropdownMenuItem onSelect={() => void handleExport('svg')}>
-            <Download aria-hidden="true" className="size-3.5" />
-            Export as SVG
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            onSelect={() => {
-              // Text on the clipboard survives any chat/paste channel intact,
-              // which a binary download cannot — the phone-friendly way to
-              // hand the exact canvas (coordinates included) to a debugger.
-              void navigator.clipboard
-                ?.writeText(serializeSpatial(canvas, 'extended'))
-                .catch(() => {})
-            }}
-          >
-            <Braces aria-hidden="true" className="size-3.5" />
-            Copy as JSON Canvas
-          </DropdownMenuItem>
-          <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
-            <Copy aria-hidden="true" className="size-3.5" />
-            Duplicate
-          </DropdownMenuItem>
-          <DropdownMenuItem
-            className="text-destructive focus:bg-destructive/10 focus:text-destructive"
-            onSelect={() => setConfirmDelete(true)}
-          >
-            <Trash2 aria-hidden="true" className="size-3.5" />
-            Delete
-          </DropdownMenuItem>
-        </DropdownMenuContent>
-      </DropdownMenu>
+      <DocumentMenu
+        documentUrl={documentUrl}
+        onExport={(format) => void handleExport(format)}
+        triggerRef={canvasOpsButtonRef}
+        log={log}
+      >
+        <DropdownMenuItem
+          onSelect={() => {
+            // Text on the clipboard survives any chat/paste channel intact,
+            // which a binary download cannot — the phone-friendly way to
+            // hand the exact canvas (coordinates included) to a debugger.
+            void navigator.clipboard
+              ?.writeText(serializeSpatial(canvas, 'extended'))
+              .catch(() => {})
+          }}
+        >
+          <Braces aria-hidden="true" className="size-3.5" />
+          Copy as JSON Canvas
+        </DropdownMenuItem>
+        <DropdownMenuItem disabled={isDuplicating} onSelect={() => void handleDuplicate()}>
+          <Copy aria-hidden="true" className="size-3.5" />
+          Duplicate
+        </DropdownMenuItem>
+        <DropdownMenuItem
+          className="text-destructive focus:bg-destructive/10 focus:text-destructive"
+          onSelect={() => setConfirmDelete(true)}
+        >
+          <Trash2 aria-hidden="true" className="size-3.5" />
+          Delete
+        </DropdownMenuItem>
+      </DocumentMenu>
       <AlertDialog open={confirmDelete} onOpenChange={setConfirmDelete}>
         <AlertDialogContent
           // The menu item that opened this dialog unmounted with the menu;
@@ -692,10 +691,10 @@ export function BrowserLocalDocumentPage({
           }}
         >
           <AlertDialogHeader>
-            <AlertDialogTitle>Delete this canvas?</AlertDialogTitle>
+            <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the canvas and its drawing data from this browser. This
-              action cannot be undone.
+              This permanently removes the {kindNoun(documentKind)} and its content from this
+              browser. This action cannot be undone.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
@@ -733,7 +732,7 @@ export function BrowserLocalDocumentPage({
         <DocumentProperties
           inline
           key={documentId ?? 'no-canvas'}
-          status={<SaveStatusChip state={pageState.persistence} />}
+          status={<SaveStatusChip state={renderState.persistence} />}
           actions={canvasRowActions}
           title={titleOf(documentName, documentPath)}
           onTitleChange={onTitleChange}
@@ -750,7 +749,7 @@ export function BrowserLocalDocumentPage({
       <DocumentProperties
         inline
         key={documentId ?? 'no-canvas'}
-        status={<SaveStatusChip state={pageState.persistence} />}
+        status={<SaveStatusChip state={renderState.persistence} />}
         settings={<CanvasDisplaySettings canvas={canvas} onChange={onChange} />}
         actions={canvasRowActions}
         title={titleOf(documentName, documentPath)}
@@ -776,7 +775,7 @@ export function BrowserLocalDocumentPage({
         {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
           is the visible title control, but the page keeps a real <h1> for
           accessibility trees. */}
-        <h1 className="sr-only">{pageState.snapshot.name}</h1>
+        <h1 className="sr-only">{renderState.snapshot.name}</h1>
         {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
             switcher, rename, menus — steps aside. The floating control below
             replaces its exit path, Escape still works natively, and the dock
@@ -792,41 +791,13 @@ export function BrowserLocalDocumentPage({
               // the daemon's `/names`, so the identity the bar offers is unused
               // here and `documentName`/`onTitleChange` stay the source.
               titleSlot={() => documentTitleSlot}
-              statusSlot={
-                <ConnectionStatus state="local">
-                  <p className="text-muted-foreground">
-                    Connect a local daemon (MCP) to unlock version history, workspaces, variations,
-                    and combining changes
-                  </p>
-                  <Suspense fallback={null}>
-                    <DaemonDetectedBanner
-                      settingsStore={settingsStore}
-                      fetch={window.fetch.bind(window)}
-                    />
-                  </Suspense>
-                </ConnectionStatus>
-              }
               dataMode="local"
               workspaceId="local"
-              path={pageState.snapshot.path}
-              documents={switcherOptions.map((c) => ({
-                path: c.path,
-                name: c.name,
-                updatedAt: c.updatedAt,
-              }))}
-              onNavigateToDocument={(path) => {
-                const id = documentIdOfPath(path)
-                if (id !== null) void switchDocument(id)
-              }}
-              onRenameDocument={renameDocument}
-              onCreateDocument={async () => {
-                const created = await createDocument()
-                await switchDocument(created.documentId)
-              }}
-              onCreateMarkdownCanvas={async () => {
-                const created = await createDocument(undefined, 'markdown')
-                await switchDocument(created.documentId)
-              }}
+              path={renderState.snapshot.path}
+              // The way out of the editor. This page had none until now —
+              // the app-shell brand mark was the only exit, and it says
+              // nothing about where it goes.
+              onNavigateBack={() => navigate(browserLocalIndexPath())}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {
                 // Entering hides this whole bar; the floating exit control and

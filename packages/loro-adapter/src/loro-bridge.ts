@@ -395,7 +395,7 @@ function replaceBucket(doc: LoroDoc, mapKey: string, entries: Fields): void {
 }
 
 /**
- * Extension facets (the `{domain}/{version}` keyed bucket from
+ * Extension facets (the `{namespace}.{name}/v{n}` keyed bucket from
  * model's `extensionFacetsSchema`) are stored the same way as
  * nodes/edges above: a plain-object-valued `LoroMap` keyed by facet key, so
  * one domain's CRDT merge never overwrites another's.

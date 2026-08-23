@@ -61,3 +61,44 @@ describe('searchDocuments', () => {
     expect(searchDocuments(docs, '   ')).toEqual([])
   })
 })
+
+describe('searchDocuments pinned order', () => {
+  // Same contract as the folder pane: a pinned document outranks the path
+  // sort, because the user put it there by hand.
+  it('lists pinned matches first, in pinOrder', () => {
+    // The pinned document is the one the path sort would put LAST — a
+    // fixture where it already sorts first would pass without the rule.
+    const pinnable: WorkspaceDocumentEntry[] = [
+      { documentId: 'd1', path: 'archive/old-login' },
+      { documentId: 'd4', path: 'design/login', pinOrder: 0 },
+    ]
+    expect(searchDocuments(pinnable, 'login').map((d) => d.path)).toEqual([
+      'design/login',
+      'archive/old-login',
+    ])
+  })
+})
+
+describe('tag matching', () => {
+  const docs = [
+    { documentId: 'A', path: 'plans/release', name: 'Release plan', tags: ['release', 'q3'] },
+    { documentId: 'B', path: 'notes/retro', name: 'Retro', tags: ['q3'] },
+    { documentId: 'C', path: 'notes/misc', name: 'Misc' },
+  ]
+
+  it('a plain query substring-matches tags alongside path and name', () => {
+    expect(searchDocuments(docs, 'relea').map((d) => d.documentId)).toEqual(['A'])
+    // 'q3' appears only as a tag; both carriers match, the tagless one does not.
+    expect(searchDocuments(docs, 'q3').map((d) => d.documentId)).toEqual(['B', 'A'])
+  })
+
+  it('a #query matches ONLY the exact tag, never path or name', () => {
+    // 'release' is also a path segment of A — but #q3 must not read paths.
+    expect(searchDocuments(docs, '#q3').map((d) => d.documentId)).toEqual(['B', 'A'])
+    expect(searchDocuments(docs, '#Release').map((d) => d.documentId)).toEqual(['A'])
+    // Substring of a tag is not the tag.
+    expect(searchDocuments(docs, '#q').map((d) => d.documentId)).toEqual([])
+    // Matches the name/path of C? '#misc' names no tag, so nothing.
+    expect(searchDocuments(docs, '#misc').map((d) => d.documentId)).toEqual([])
+  })
+})

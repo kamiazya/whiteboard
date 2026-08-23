@@ -38,6 +38,13 @@ jobs:
       - name: Secret scan (secretlint)
         run: pnpm secretlint
 
+      # compose-figure.mjs shells out to ImageMagick, which the runner image no
+      # longer ships. Installed rather than skipped-when-absent: a guard that
+      # quietly does not run in CI is the exact failure the script it covers
+      # exists to prevent.
+      - name: Install ImageMagick (compose-figure tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends imagemagick
+
       # cleanup-worktrees.mjs can force-remove worktrees and delete local
       # branches; keep its regression test enforced in the same gate as the
       # other repo-hygiene tooling checks.
@@ -84,17 +91,16 @@ jobs:
       # what fails CI when a generated artifact (e.g.
       # docs/reference/x-whiteboard.schema.json) drifts from its source
       # schema: file-snapshot tests only reject in CI-mode runs like this one.
+      #
+      # The project list is DERIVED (tools/checks/src/vitest-projects.mjs),
+      # not hand-listed: every non-browser vitest project in root
+      # vitest.config.ts that isn't covered by another CI step
+      # (PROJECTS_RUN_ELSEWHERE in that file) runs here automatically, so a
+      # new shared-layer package is covered by CI the moment it registers a
+      # project, with no edit to this file.
       - name: Test shared-layer packages + arch-lint
         if: matrix.shard == 2
-        run: >-
-          pnpm exec vitest run
-          --project=model-node
-          --project=ports-node
-          --project=codec-node
-          --project=loro-adapter-node
-          --project=server-core-node
-          --project=canvas-render-node
-          --project=arch-lint-node
+        run: node tools/checks/src/run-shared-layer-tests.mjs
 
   test-jsdom:
     runs-on: ubuntu-latest

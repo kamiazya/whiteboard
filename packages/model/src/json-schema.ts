@@ -1,8 +1,27 @@
 import { z } from 'zod'
+import { EXTENSION_FACET_KEY_PATTERN } from './facets.js'
 import { canvasExtensionSchema, xWhiteboardSchema } from './spatial.js'
 
 function toDef(schema: z.ZodType): Record<string, unknown> {
   const { $schema: _root, ...def } = z.toJSONSchema(schema, { target: 'draft-2020-12' })
+  return def
+}
+
+/**
+ * `extensionFacetsSchema` enforces its key grammar in a `superRefine`, which
+ * `z.toJSONSchema` cannot translate — emitted as-is the published schema
+ * would accept any string key while the code rejects everything outside
+ * `{namespace}.{name}/v{n}`. The grammar is injected as `propertyNames` so
+ * the artifact keeps its promise of never drifting from what the code
+ * accepts.
+ */
+function canvasExtensionDef(): Record<string, unknown> {
+  const def = toDef(canvasExtensionSchema)
+  const properties = def.properties as Record<string, Record<string, unknown>> | undefined
+  const facets = properties?.facets
+  if (facets !== undefined) {
+    facets.propertyNames = { type: 'string', pattern: EXTENSION_FACET_KEY_PATTERN.source }
+  }
   return def
 }
 
@@ -29,7 +48,7 @@ export function xWhiteboardJsonSchema(): Record<string, unknown> {
       'non-standard fields beyond these two sites. Consumers that drop the ' +
       'key still read a valid JSON Canvas 1.0 document.',
     $defs: {
-      canvasExtension: toDef(canvasExtensionSchema),
+      canvasExtension: canvasExtensionDef(),
       nodeExtension: toDef(xWhiteboardSchema),
     },
   }

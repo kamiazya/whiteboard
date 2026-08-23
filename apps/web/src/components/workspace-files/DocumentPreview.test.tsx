@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { DocumentPreview } from './DocumentPreview.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
@@ -118,68 +118,22 @@ describe('DocumentPreview', () => {
     )
   })
 
-  // The path is where a document LIVES, and until now the only way to change
-  // it was an HTTP route with no caller. This is that caller.
-  describe('moving a document', () => {
-    async function open() {
-      const onMove = vi.fn(async () => undefined)
-      render(<DocumentPreview document={doc} loadRender={async () => drawn} onMove={onMove} />)
+  // The path is where a document LIVES. Editing it — and the display name
+  // beside it — belongs to the Rename dialog, which is the one surface that
+  // explains how the two differ; this pane only opens it.
+  describe('renaming a document', () => {
+    it('asks the caller to open the rename dialog for THIS document', async () => {
+      const onRename = vi.fn()
+      render(<DocumentPreview document={doc} loadRender={async () => drawn} onRename={onRename} />)
       await act(async () => {})
-      fireEvent.click(screen.getByRole('button', { name: /Move/ }))
-      return onMove
-    }
-
-    it('offers the current path as the starting point', async () => {
-      await open()
-      expect(screen.getByRole('textbox', { name: /path/i })).toHaveProperty('value', 'design/login')
+      fireEvent.click(screen.getByRole('button', { name: /Rename/ }))
+      expect(onRename).toHaveBeenCalledWith(doc)
     })
 
-    it('moves the document to the typed path', async () => {
-      const onMove = await open()
-      fireEvent.change(screen.getByRole('textbox', { name: /path/i }), {
-        target: { value: 'archive/login' },
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-      await waitFor(() => expect(onMove).toHaveBeenCalledWith(doc, 'archive/login'))
-    })
-
-    // Saving the path it already has is not a move — it is a round trip that
-    // can only fail (the destination is occupied by the document itself).
-    it('does nothing when the path was not changed', async () => {
-      const onMove = await open()
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-      await act(async () => {})
-      expect(onMove).not.toHaveBeenCalled()
-    })
-
-    // The server names the PRODUCED path that collided, which on a subtree
-    // move is often not the one that was typed. Showing our own sentence
-    // would send someone to retry the one thing that was never the problem.
-    it('shows the server’s own refusal, not a rebuilt one', async () => {
-      render(
-        <DocumentPreview
-          document={doc}
-          loadRender={async () => drawn}
-          onMove={async () => {
-            throw new Error('Path "archive/login/notes" already exists')
-          }}
-        />,
-      )
-      await act(async () => {})
-      fireEvent.click(screen.getByRole('button', { name: /Move/ }))
-      fireEvent.change(screen.getByRole('textbox', { name: /path/i }), {
-        target: { value: 'archive/login' },
-      })
-      fireEvent.click(screen.getByRole('button', { name: 'Save' }))
-
-      const alert = await screen.findByRole('alert')
-      expect(alert.textContent).toContain('archive/login/notes')
-    })
-
-    it('has no move affordance when the caller supplies no way to move', async () => {
+    it('has no rename affordance when the caller supplies no way to rename', async () => {
       render(<DocumentPreview document={doc} loadRender={async () => drawn} />)
       await act(async () => {})
-      expect(screen.queryByRole('button', { name: /Move/ })).toBeNull()
+      expect(screen.queryByRole('button', { name: /Rename/ })).toBeNull()
     })
   })
 
@@ -187,7 +141,7 @@ describe('DocumentPreview', () => {
   // carry them or retiring the grid loses them. They live on the SELECTED
   // document, which is the one the pane is already about.
   describe('acting on the selected document', () => {
-    it('duplicates, and does not open or move anything', async () => {
+    it('duplicates, and does not open or rename anything', async () => {
       const onDuplicate = vi.fn()
       const onOpen = vi.fn()
       render(

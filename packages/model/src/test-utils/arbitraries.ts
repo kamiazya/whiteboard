@@ -36,12 +36,13 @@ export const coreFacetsArbitrary = fc.record(
   { requiredKeys: ['type'] },
 )
 
-const domainArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
-const versionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => String(n))
+// Namespace = owning plugin id, name = the facet within it (ADR-0013).
+const facetSegmentArbitrary = fc.stringMatching(/^[a-z][a-z0-9-]{0,9}$/)
+const facetVersionArbitrary = fc.integer({ min: 0, max: 99 }).map((n) => `v${n}`)
 
 const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
-  .tuple(domainArbitrary, versionArbitrary)
-  .map(([domain, version]) => `${domain}/${version}`)
+  .tuple(facetSegmentArbitrary, facetSegmentArbitrary, facetVersionArbitrary)
+  .map(([namespace, name, version]) => `${namespace}.${name}/${version}`)
 
 /**
  * `fc.jsonValue()` can place an own `__proto__` key inside a generated
@@ -55,6 +56,12 @@ const extensionFacetKeyArbitrary: fc.Arbitrary<string> = fc
  */
 function stripProtoKeys(value: unknown): unknown {
   if (Array.isArray(value)) return value.map(stripProtoKeys)
+  // Negative zero is legal JS but not a JSON-text value: JSON.stringify(-0)
+  // emits "0" and JSON.parse never yields -0, so a facet value holding one
+  // cannot round-trip through ANY JSON-text codec. Normalize at generation
+  // — the same call as the __proto__ strip below (narrow the generator,
+  // never teach a parser to reproduce the unreachable value).
+  if (typeof value === 'number') return Object.is(value, -0) ? 0 : value
   if (value === null || typeof value !== 'object') return value
   const out: Record<string, unknown> = {}
   for (const [key, child] of Object.entries(value)) {
@@ -129,23 +136,42 @@ const spatialGroupNodeArbitrary = fc.record({
   type: fc.constant('group' as const),
 })
 
-export const spatialNodeArbitrary = fc.oneof(
+// Both variants of the node-extension union: embed (facets optional) and
+// facets-only. Declared before the node arbitraries that attach it.
+export const xWhiteboardArbitrary = fc.oneof(
+  fc.record(
+    {
+      kind: fc.constant('embed' as const),
+      documentId: canonicalUlidArbitrary,
+      facets: extensionFacetsArbitrary,
+    },
+    { requiredKeys: ['kind', 'documentId'] },
+  ),
+  fc.record({ facets: extensionFacetsArbitrary }, { requiredKeys: [] }),
+)
+
+// Every node kind may carry the x-whiteboard extension (embed | facets-only
+// union), so the property suites that consume `spatialCanvasArbitrary`
+// (model's schema property, codec's round-trip and extension-contract
+// properties) exercise node facets rather than being blind to the union.
+const bareSpatialNodeArbitrary = fc.oneof(
   spatialTextNodeArbitrary,
   spatialFileNodeArbitrary,
   spatialLinkNodeArbitrary,
   spatialGroupNodeArbitrary,
 )
 
+export const spatialNodeArbitrary = fc
+  .tuple(bareSpatialNodeArbitrary, fc.option(xWhiteboardArbitrary, { nil: undefined }))
+  .map(([node, extension]) =>
+    extension === undefined ? node : { ...node, 'x-whiteboard': extension },
+  )
+
 export const canvasEdgeArbitrary = fc.record({
   id: nodeIdArbitrary,
   fromNode: nodeIdArbitrary,
   toNode: nodeIdArbitrary,
   color: fc.option(canvasColorArbitrary, { nil: undefined }),
-})
-
-export const xWhiteboardArbitrary = fc.record({
-  kind: fc.constant('embed' as const),
-  documentId: canonicalUlidArbitrary,
 })
 
 export const markdownCanvasArbitrary = fc.record({ body: fc.string({ maxLength: 200 }) })

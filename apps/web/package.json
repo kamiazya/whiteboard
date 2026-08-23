@@ -21,6 +21,7 @@
     "smoke:pwa-precache": "node scripts/check-pwa-precache.mjs"
   },
   "dependencies": {
+    "@codemirror/autocomplete": "^6.20.3",
     "@codemirror/commands": "^6.10.4",
     "@codemirror/lang-markdown": "^6.5.1",
     "@codemirror/language": "^6.11.4",
@@ -29,10 +30,12 @@
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-codec": "workspace:*",
+    "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-mcp": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
+    "@kamiazya/whiteboard-search": "workspace:*",
     "@lezer/highlight": "^1.2.1",
     "@lezer/markdown": "^1.7.2",
     "@radix-ui/react-alert-dialog": "^1.1.23",
@@ -83,6 +86,6 @@
     "vite-plugin-wasm": "^3",
     "vitest": "catalog:",
     "workbox-window": "7.4.1",
-    "wrangler": "^4.105.0"
+    "wrangler": "^4.123.0"
   }
 }

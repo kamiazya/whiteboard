@@ -1,12 +1,28 @@
 export { createServer } from './create-server.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
+export type { Embedder } from './search/embedder.js'
+export type { ConfidenceInterval, Judgments, PermutationResult } from './search/eval.js'
+export {
+  bootstrapCi,
+  ndcgAt,
+  pairedPermutationTest,
+  permutationFloor,
+  randomBaseline,
+  recallAt,
+  reciprocalRank,
+  requiredQueryCount,
+  standardDeviation,
+} from './search/eval.js'
+export type { QueryCategory } from './search/search-corpus.js'
 export type {
   AgentActivity,
   CanvasClientNotifier,
   ServerDeps,
   ViewportRequest,
 } from './server-deps.js'
+export type { BacklinksInput, BacklinksOutput } from './tools/backlinks.js'
+export { backlinksInputSchema, backlinksOutputSchema, computeBacklinks } from './tools/backlinks.js'
 export type { BodyPatchInput, BodyPatchOutput, BodyPatchRange } from './tools/body-patch.js'
 export {
   bodyPatchInputSchema,
@@ -53,6 +69,12 @@ export {
   wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
 export { SnapshotNotFoundError } from './tools/document-io.js'
+export type { DocumentSearchInput, DocumentSearchOutput } from './tools/document-search.js'
+export {
+  createDocumentSearchTool,
+  documentSearchInputSchema,
+  documentSearchOutputSchema,
+} from './tools/document-search.js'
 export type { DocumentSetInput, DocumentSetOutput } from './tools/document-set.js'
 export {
   createDocumentSetTool,
@@ -60,6 +82,12 @@ export {
   documentSetOutputSchema,
   OkfParseError,
 } from './tools/document-set.js'
+export type { DocumentTagsInput, DocumentTagsOutput } from './tools/document-tags.js'
+export {
+  computeDocumentTags,
+  documentTagsInputSchema,
+  documentTagsOutputSchema,
+} from './tools/document-tags.js'
 export {
   NodeNotFoundError,
   NotATextNodeError,
@@ -80,8 +108,20 @@ export {
   exportOkfInputSchema,
   exportOkfOutputSchema,
 } from './tools/export-okf.js'
+export {
+  createFacetListTool,
+  facetListInputSchema,
+  facetListOutputSchema,
+} from './tools/facet-list.js'
 export type { FacetSetInput, FacetSetOutput } from './tools/facet-set.js'
 export { createFacetSetTool, facetSetInputSchema, facetSetOutputSchema } from './tools/facet-set.js'
+export type { LinkifyMentionsInput, LinkifyMentionsOutput } from './tools/linkify-mentions.js'
+export {
+  linkifyMentions,
+  linkifyMentionsInputSchema,
+  linkifyMentionsOutputSchema,
+  NamelessLinkifyTargetError,
+} from './tools/linkify-mentions.js'
 export type { VersionListInput, VersionListOutput } from './tools/version-list.js'
 export {
   createVersionListTool,

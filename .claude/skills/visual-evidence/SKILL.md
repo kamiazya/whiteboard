@@ -64,7 +64,7 @@ it('render', () => {
 ```bash
 mkdir -p tmp/screenshots
 OUT=$PWD/tmp/screenshots/after.svg  pnpm vitest run --project canvas-render-node __render
-git stash push -q packages/canvas-render/src/layout/spatial-edges.ts   # tracked files only
+git stash push -q packages/canvas-render/src/layout/edges/spatial-edges.ts   # tracked files only
 OUT=$PWD/tmp/screenshots/before.svg pnpm vitest run --project canvas-render-node __render
 git stash pop -q
 ```
@@ -84,6 +84,24 @@ the two files are the same size and the figure shows no difference.
 committed.** Re-apply them, and check with `git status` before moving on.
 
 ## 3. Compose the two panels
+
+**Compose through the script, not by hand:**
+
+```bash
+node .claude/scripts/compose-figure.mjs \
+  --before tmp/screenshots/before.png --after tmp/screenshots/after.png \
+  --out tmp/screenshots/figure.png \
+  --before-label "before — 170px through B" --after-label "after — clean path" \
+  [--ring x1,y1,x2,y2]
+```
+
+It **refuses two identical panels** — the trap above, made mechanical — and
+prints both digests so the PR body can cite them. `--ring` draws the same
+rectangle on both panels, so the reader is not asked to spot the difference
+unaided. It works on finished PNGs; the SVG splicing below is for a figure
+composed from raw `canvas-render` output.
+
+### Composing an SVG figure by hand
 
 The serializer emits no `fill` on `<rect>` (appearance is assigned, not
 invented), and ImageMagick renders an unfilled rect **black**. Inject fills
@@ -157,9 +175,19 @@ gh image tmp/screenshots/figure.png     # prints the markdown
 ```
 
 Paste under a `## Visual repro` heading with one sentence naming what to look
-at. Delete the throwaway test and the intermediate `.svg` files; keep the PNG
-in `tmp/screenshots/` until the PR merges (the GitHub upload is the durable
-copy).
+at, and say what the figure CANNOT show (a case only reachable behind a flag,
+a panel state supplied through a seam rather than by the real producer). Cite
+the two digests the script printed: they are what tells a reader the panels
+were two different renders. Delete the throwaway test and the intermediate
+`.svg` files; keep the PNG in `tmp/screenshots/` until the PR merges (the
+GitHub upload is the durable copy).
+
+`gh pr create` is gated on this: a diff touching a surface a human looks at
+needs a figure in the body, or one line saying why a picture is the wrong
+evidence — `Visual evidence: none — <reason>`. The hook
+(`.claude/scripts/hooks/pre-pr-visual-evidence.mjs`) exists because this rule
+spent a long time as prose and stopped being followed; it only checks that
+SOMETHING is there, so everything above is still yours to get right.
 
 ## When a figure is the wrong evidence
 

@@ -67,3 +67,16 @@ describe('daemonLinkTargets', () => {
     ])
   })
 })
+
+describe('self-reference exclusion', () => {
+  it('daemonLinkTargets leaves the open document out of its own link targets', () => {
+    const documents = [
+      { path: 'self', id: 'id-self', updatedAt: 't', displayName: 'Self' },
+      { path: 'other', id: 'id-other', updatedAt: 't', displayName: 'Other' },
+    ]
+    const targets = daemonLinkTargets(documents, { excludeDocumentId: 'id-self' })
+    expect(targets.map((t) => t.id)).toEqual(['id-other'])
+    // Without the exclusion everything stays listed (existing callers).
+    expect(daemonLinkTargets(documents).map((t) => t.id)).toEqual(['id-self', 'id-other'])
+  })
+})

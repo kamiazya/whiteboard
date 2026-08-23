@@ -1,10 +1,10 @@
 /**
- * Browser-local list landing flow (real IndexedDB + real routing): '/'
- * lands on the canvas list, the empty state and the + menu create real
- * documents through the same store the editor uses, and browser Back
- * crosses the editor/list boundary with the list reflecting what was just
- * created. SpatialEditor is mocked (the subject is routing + list wiring,
- * not gesture input); the markdown editor and IndexedDB are real.
+ * Browser-local landing flow (real IndexedDB + real routing): '/' lands on
+ * the document browser, the onboarding empty state and the panel's create
+ * buttons make real documents through the same store the editor uses, and
+ * browser Back crosses the editor/list boundary with the panel reflecting
+ * what was just created. SpatialEditor is mocked (the subject is routing +
+ * wiring, not gesture input); the markdown editor and IndexedDB are real.
  */
 
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
@@ -55,23 +55,30 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
     const router = renderApp()
 
     // Fresh store: the list's empty state, not an auto-opened editor.
-    await screen.findByText('No documents yet', undefined, { timeout: 15_000 })
+    await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
 
     // Empty-state create opens a spatial canvas at /local/:id.
     await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
     await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
     expect(router.state.location.pathname).toMatch(/^\/local\//)
 
-    // Back: the boundary crossing returns to the list, which now has the row.
+    // Back: the boundary crossing returns to the browser, which now has the
+    // row in its folder pane.
     await router.navigate(-1)
-    const firstCards = await screen.findAllByTestId('document-list-card', undefined, {
+    const firstCards = await screen.findAllByTestId('card-title', undefined, {
       timeout: 15_000,
     })
     expect(firstCards).toHaveLength(1)
 
-    // The + menu creates a markdown note and opens the real editor.
-    await userEvent.click(screen.getByRole('button', { name: 'New canvas' }))
-    await userEvent.click(await screen.findByRole('menuitem', { name: 'New markdown note' }))
+    // The panel's create OPENS what it made, like every other creation path
+    // in the app — an empty document is worth nothing until it is open, and
+    // the folder you were standing in is in the address, so Back returns to
+    // it rather than to the workspace root.
+    await userEvent.click(screen.getByRole('button', { name: 'New document' }))
+    await userEvent.click(await screen.findByTestId('new-document-markdown'))
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/local\//), {
+      timeout: 15_000,
+    })
     const editable = await waitFor(
       () => {
         const el = document.querySelector('[contenteditable="true"]')
@@ -80,7 +87,7 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       },
       { timeout: 15_000 },
     )
-    // A fresh note is focused for typing immediately (no click). Exact
+    // An opened note is focused for typing immediately (no click). Exact
     // contentDOM identity — not .cm-editor containment — is what real
     // keyboard-event delivery depends on; containment can pass while focus
     // still sits on another in-flight descendant and race the first keys.
@@ -105,13 +112,15 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
 
     // Back again: both documents listed, the note marked as markdown.
     await router.navigate(-1)
-    const cards = await screen.findAllByTestId('document-list-card', undefined, { timeout: 15_000 })
+    const cards = await screen.findAllByTestId('card-title', undefined, { timeout: 15_000 })
     expect(cards).toHaveLength(2)
-    const markdownCard = cards.find((c) => within(c).queryByText(/markdown/i))
-    expect(markdownCard).toBeDefined()
+    const backSubtitles = screen.getAllByTestId('card-subtitle')
+    const noteIndex = backSubtitles.findIndex((el) => el.textContent?.includes('markdown'))
+    expect(noteIndex).toBeGreaterThanOrEqual(0)
 
     // Reopening the note restores the typed body from the same store.
-    await userEvent.click(markdownCard!)
+    await userEvent.click(screen.getAllByTestId('card-title')[noteIndex]!)
+    await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     await waitFor(
       () => {
         expect(document.querySelector('.cm-content')?.textContent).toContain('# From the list')
@@ -119,19 +128,25 @@ describe('browser-local list landing (browser — real IndexedDB)', () => {
       { timeout: 15_000 },
     )
 
-    // Back to the list, then delete both documents through the real
-    // AlertDialog: the empty state returns.
+    // Back to the browser, then delete both documents through the preview
+    // pane's Delete and the real AlertDialog: the onboarding state returns.
     await router.navigate(-1)
-    await screen.findAllByTestId('document-list-card', undefined, { timeout: 15_000 })
+    await screen.findAllByTestId('card-title', undefined, { timeout: 15_000 })
     for (let remaining = 2; remaining > 0; remaining--) {
-      const deleteButtons = await screen.findAllByRole('button', { name: /^Delete / })
-      await userEvent.click(deleteButtons[0]!)
+      await userEvent.click(screen.getAllByTestId('card-title')[0]!)
+      await userEvent.click(await screen.findByRole('button', { name: 'Delete' }))
       const dialog = await screen.findByRole('alertdialog')
       await userEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
       await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull(), {
         timeout: 15_000,
       })
+      await waitFor(
+        () => expect(screen.queryAllByTestId('card-title')).toHaveLength(remaining - 1),
+        {
+          timeout: 15_000,
+        },
+      )
     }
-    await screen.findByText('No documents yet', undefined, { timeout: 15_000 })
+    await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
   })
 })

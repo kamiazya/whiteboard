@@ -15,7 +15,14 @@ import {
   writeSpatialEdge,
   writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentBackend } from '@kamiazya/whiteboard-mcp/browser-contract'
+import type {
+  DocumentBackend,
+  DocumentBackendHandlers,
+} from '@kamiazya/whiteboard-mcp/browser-contract'
+
+/** Why a backend read or write failed. The published contract's own union. */
+export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
+
 import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
@@ -116,6 +123,16 @@ export interface SessionDeps {
   // the session having to be recreated.
   getOptions: () => UseDocumentSyncOptions
   onStatusChange: (status: SyncStatus) => void
+  /**
+   * WHY the backend failed, not just that it did.
+   *
+   * `onStatusChange('error')` is the whole story for a transport that dropped;
+   * it is not for a document that is intact and unreadable by THIS build.
+   * Collapsing those into one status is how a user with a future-version
+   * document gets shown an empty canvas — which says their work is gone when
+   * it is sitting on disk.
+   */
+  onBackendError: (reason: BackendErrorReason) => void
   onRestoreChange: (inProgress: boolean, label: string | null) => void
   dispatchIdentityEvent: (eventName: string, identity: UseDocumentSyncOptions['identity']) => void
   generations: GenerationCounters
@@ -697,8 +714,9 @@ export function createDocumentSyncSession(
         }
       },
 
-      onError: () => {
+      onError: (reason) => {
         if (isStale()) return
+        deps.onBackendError(reason)
         deps.onStatusChange('error')
       },
     })

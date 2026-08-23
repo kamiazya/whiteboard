@@ -9,6 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { renderCanvasToSvg } from '../components/spatial-editor/scene-render.js'
 import {
+  type BackendErrorReason,
   createDocumentSyncSession,
   createGenerationCounters,
   type DocumentSyncSession,
@@ -29,6 +30,7 @@ export type SceneExportFormat = 'png' | 'svg'
 
 export interface UseDocumentSyncResult {
   syncStatus: SyncStatus
+  backendError: BackendErrorReason | null
   /**
    * True once the backend has published this canvas's document at least
    * once. The document arrives AFTER mount, so anything deriving a decision
@@ -182,6 +184,15 @@ export function useDocumentSync(
   const generationsRef = useRef(createGenerationCounters())
 
   const [syncStatus, setSyncStatus] = useState<SyncStatus>('idle')
+  /**
+   * Why the last backend failure happened, or null.
+   *
+   * Kept beside `syncStatus` rather than folded into it: 'error' answers
+   * whether the editor is live, and this answers what to tell the user about
+   * their document — which for an unreadable one is the opposite of "it is
+   * empty".
+   */
+  const [backendError, setBackendError] = useState<BackendErrorReason | null>(null)
   const [canvas, setCanvas] = useState<SpatialCanvas>(EMPTY_CANVAS)
   const [loaded, setLoaded] = useState(false)
   const [externalVersion, setExternalVersion] = useState(0)
@@ -217,6 +228,11 @@ export function useDocumentSync(
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')
     setCoreFacetsState(undefined)
+    // And the failure reason, for the same reason and with a sharper
+    // consequence: it describes ONE document, and carried across a switch it
+    // turns the next one — which may be perfectly readable — into an error
+    // screen the page cannot distinguish from a real failure.
+    setBackendError(null)
 
     if (backend === null) {
       sessionRef.current = null
@@ -233,6 +249,7 @@ export function useDocumentSync(
     const session = createDocumentSyncSession(backend, {
       getOptions: () => optionsRef.current,
       onStatusChange: setSyncStatus,
+      onBackendError: setBackendError,
       onRestoreChange: (inProgress, label) => {
         setRestoreInProgress(inProgress)
         setRestoreLabel(label)
@@ -391,6 +408,7 @@ export function useDocumentSync(
 
   return {
     syncStatus,
+    backendError,
     loaded,
     canvas,
     onChange,

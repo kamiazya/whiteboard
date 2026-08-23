@@ -109,6 +109,13 @@ export interface TextRunNode {
  * spatial node kind today, so ellipse/polygon/path are not added
  * speculatively (see package-canvas-render.md).
  */
+/**
+ * Non-rect node silhouettes. `rect` is deliberately unrepresentable: an
+ * absent `shape` field IS the rect, so a second spelling of it cannot
+ * exist. Geometry derives from the bbox via `layout/nodes/node-outline.ts`.
+ */
+export type NodeOutlineKind = 'ellipse' | 'diamond' | 'hexagon' | 'parallelogram' | 'cylinder'
+
 export interface ShapeSceneNode {
   readonly kind: 'shape'
   /**
@@ -130,9 +137,51 @@ export interface ShapeSceneNode {
    */
   readonly id?: string
   readonly bbox: BoundingBox
-  /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely. */
+  /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely.
+   * Applies to the rect form only — ignored when `shape` is set. */
   readonly radius?: number
+  /**
+   * Non-rect silhouette, derived at draw time from `bbox` by the shared
+   * decomposition in `layout/nodes/node-outline.ts` (one producer for drawing
+   * AND hit-testing). Absent = the historic rect, byte-identical to
+   * before this field existed. A kind, never stored coordinates, so
+   * translate/scale need no knowledge of it.
+   */
+  readonly shape?: NodeOutlineKind
   readonly appearance?: Appearance
+}
+
+/**
+ * A vendored-icon glyph (vendor/lucide) drawn at `bbox` via a shared
+ * `<symbol>` definition and a per-node `<use>` reference — one definition
+ * per icon name regardless of how many nodes show it. `icon` names an
+ * entry in the vendored table; an unknown name degrades to nothing, per
+ * the never-throw rule. A bbox-only leaf for bounds/translate/scale, like
+ * `ImageSceneNode`.
+ */
+export interface IconSceneNode {
+  readonly kind: 'icon'
+  readonly bbox: BoundingBox
+  readonly icon: string
+  readonly appearance?: Appearance
+}
+
+/**
+ * A character badge drawn as one centered text glyph sized to `bbox` (the
+ * smaller side). Intended for a single visual glyph — an emoji (including
+ * multi-codepoint ZWJ/flag/skin-tone clusters, which SVG text renders as
+ * one glyph with no handling here), a CJK character, a dingbat. Longer
+ * text still renders, centered, and may overflow the box by design — prose
+ * belongs in text runs, not badges. Color comes from the font itself, so
+ * unlike `IconSceneNode` there is no appearance to assign. A bbox-only
+ * leaf for bounds/translate/scale, like `ImageSceneNode`. Rendering
+ * depends on the host's fonts: the resvg PNG export path ships only a
+ * Roboto face, so emoji degrade to that font's fallback glyph there.
+ */
+export interface GlyphSceneNode {
+  readonly kind: 'glyph'
+  readonly bbox: BoundingBox
+  readonly glyph: string
 }
 
 /** Semantic provenance for an inline link-like run. Never flattened away. */
@@ -361,6 +410,8 @@ export type SceneNode =
   | ResolvedEdgeNode
   | ShapeSceneNode
   | ImageSceneNode
+  | IconSceneNode
+  | GlyphSceneNode
 
 /** A fully laid-out document: ordered top-level scene nodes in paint order. */
 export interface Scene {

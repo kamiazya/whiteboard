@@ -1,4 +1,7 @@
+import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
 import type { Extension } from '@codemirror/state'
+import { Prec } from '@codemirror/state'
+import { keymap } from '@codemirror/view'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
@@ -39,6 +42,11 @@ import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { setHeadingLevel } from './set-heading-level.js'
 import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import {
+  wikiLinkCompletionSource,
+  wikiLinkCompletionTheme,
+  wikiLinkTouchAccept,
+} from './wiki-link-completion.js'
 
 export interface MarkdownEditorProps {
   value: string
@@ -262,6 +270,47 @@ export function MarkdownEditor({
   sourceExtensions,
 }: MarkdownEditorProps) {
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
+  // [[ completion reads targets through a ref: the source is installed once
+  // at view creation, while the document list keeps refreshing under it.
+  const linkTargetsRef = useRef<readonly LinkTarget[]>(linkTargets ?? [])
+  linkTargetsRef.current = linkTargets ?? []
+  const completionExtension = useMemo(
+    () => [
+      autocompletion({
+        override: [wikiLinkCompletionSource(() => linkTargetsRef.current)],
+        // The upstream default (75ms) rejects an Enter that lands too soon
+        // after the popup (re)opens, to protect a popup that appeared under
+        // an Enter meant as a newline. This completion only ever opens
+        // inside an explicit `[[` trigger, where Enter means accept — and
+        // with the delay in place a fast typist's Enter fell through to the
+        // markdown keymap and put a NEWLINE under the visible popup.
+        interactionDelay: 0,
+      }),
+      // While the popup is OPEN ('active'), Enter is accept-or-nothing —
+      // never a newline under a visible option list. 'pending' (the source
+      // still running, typically for plain prose that will produce no
+      // popup) must fall through, or Enter after typing "- item" would eat
+      // the list continuation.
+      Prec.highest(
+        keymap.of([
+          {
+            key: 'Enter',
+            run: (view) => {
+              if (completionStatus(view.state) !== 'active') return false
+              return acceptCompletion(view) || true
+            },
+          },
+        ]),
+      ),
+      wikiLinkCompletionTheme,
+      wikiLinkTouchAccept,
+    ],
+    [],
+  )
+  const paneExtensions = useMemo(
+    () => [completionExtension, ...(sourceExtensions ?? [])],
+    [completionExtension, sourceExtensions],
+  )
   const debouncedValue = useDebouncedValue(value, previewDebounceMs)
   // Watches the DEBOUNCED value: fragment sources only exist once the
   // preview would draw them, and rendering per raw keystroke would race
@@ -677,7 +726,7 @@ export function MarkdownEditor({
             apiRef={sourceApiRef}
             placeholderText="Write in Markdown…"
             className="markdown-editor-source"
-            extensions={sourceExtensions}
+            extensions={paneExtensions}
             // A CRDT binding owns editor<->document sync; the controlled
             // reconcile path would race it (see SourcePane).
             reconcileExternalValue={sourceExtensions === undefined}

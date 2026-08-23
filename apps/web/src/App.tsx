@@ -44,7 +44,7 @@ import {
 } from './lib/app-routes.js'
 import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import {
-  BROWSER_LOCAL_CAPABILITIES,
+  BROWSER_CAPABILITIES,
   type ProviderState,
   resolveHostedProviderStateFromRaw,
 } from './lib/provider.js'
@@ -188,7 +188,7 @@ export function App({ providerState }: AppProps) {
     if (isPairRoute) return
     if (daemonConnection.status !== 'none') return
     if (grantConnection !== null) return
-    if ((providerState ?? defaultProviderState).kind !== 'browser-local') return
+    if ((providerState ?? defaultProviderState).kind !== 'browser') return
     const storedBaseUrl = userSettingsStore.load().storage.localDaemonBaseUrl
     if (storedBaseUrl === undefined) return
     void renewPairingToken({
@@ -369,7 +369,7 @@ export function App({ providerState }: AppProps) {
         }
       : grantPairedForSettings !== null
         ? { baseUrl: grantPairedForSettings.daemonBaseUrl, token: grantPairedForSettings.token }
-        : providerStateForSettings.kind === 'local-daemon'
+        : providerStateForSettings.kind === 'daemon'
           ? { baseUrl: providerStateForSettings.daemonBaseUrl, token: daemonToken ?? null }
           : undefined
 
@@ -407,7 +407,10 @@ export function App({ providerState }: AppProps) {
           <AppShellLazy daemon={settingsDaemon !== undefined} />
           <div className="min-h-0 flex-1">
             <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-              <SettingsPage daemon={settingsDaemon} />
+              <SettingsPage
+                daemon={settingsDaemon}
+                onDisconnected={() => setForcedBrowserLocal(true)}
+              />
             </Suspense>
           </div>
         </div>
@@ -415,7 +418,7 @@ export function App({ providerState }: AppProps) {
     )
   }
 
-  // The 'Continue in browser-local' escape hatch opts out of the pairing
+  // The 'Work in this browser instead' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
   if (!forcedBrowserLocal) {
     // Both pairing paths converge here: the legacy #wb= fragment carries
@@ -443,7 +446,7 @@ export function App({ providerState }: AppProps) {
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <div className="flex h-dvh flex-col">
-            <AppShellLazy daemon={true} />
+            <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowserLocal(true)} />
             <div className="min-h-0 flex-1">
               <Suspense
                 fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -464,7 +467,6 @@ export function App({ providerState }: AppProps) {
                     workspaceId={daemonView.workspaceId}
                     path={daemonView.path}
                     token={pairedToken}
-                    onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
                     browserLocalStore={browserLocalStore}
                     onNavigateBack={() =>
                       setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
@@ -495,7 +497,7 @@ export function App({ providerState }: AppProps) {
               onClick={() => setForcedBrowserLocal(true)}
               className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
             >
-              Continue in browser-local
+              Work in this browser instead
             </button>
           </div>
         </ErrorBoundary>
@@ -505,15 +507,15 @@ export function App({ providerState }: AppProps) {
 
   const state = providerState ?? defaultProviderState
 
-  // The 'Continue in browser-local' escape hatch collapses a local-daemon OR
+  // The 'Work in this browser instead' escape hatch collapses a daemon OR
   // invalid-config state to browser-local capabilities, so every downstream
   // consumer (chip, banner, canvas page) reads this effective state rather
   // than the raw one — otherwise the escape could leave daemon capabilities
   // or copy leaking into a mode the user explicitly opted out of, or bounce
   // a failed-pairing escape onto the invalid-config error page.
   const effectiveState =
-    forcedBrowserLocal && (state.kind === 'local-daemon' || state.kind === 'invalid-config')
-      ? { kind: 'browser-local' as const, capabilities: BROWSER_LOCAL_CAPABILITIES }
+    forcedBrowserLocal && (state.kind === 'daemon' || state.kind === 'invalid-config')
+      ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
       : state
 
   if (effectiveState.kind === 'invalid-config') {
@@ -526,11 +528,11 @@ export function App({ providerState }: AppProps) {
     )
   }
 
-  if (effectiveState.kind === 'local-daemon') {
+  if (effectiveState.kind === 'daemon') {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShellLazy daemon={true} />
+          <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowserLocal(true)} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -553,7 +555,6 @@ export function App({ providerState }: AppProps) {
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
                   browserLocalStore={browserLocalStore}
-                  onContinueBrowserLocal={() => setForcedBrowserLocal(true)}
                   onNavigateBack={() =>
                     setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
                   }

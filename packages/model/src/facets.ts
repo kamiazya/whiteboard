@@ -11,13 +11,18 @@ export const coreFacetsSchema = z.object({
 
 export type CoreFacets = z.infer<typeof coreFacetsSchema>
 
-const EXTENSION_FACET_KEY_PATTERN = /^[a-z][a-z0-9-]*\/[0-9]+$/
+export const EXTENSION_FACET_KEY_PATTERN = /^[a-z][a-z0-9-]*\.[a-z][a-z0-9-]*\/v[0-9]+$/
 
 /**
  * Extension facets live under the reserved root key `facets`, keyed by
- * `{domain}/{version}` (e.g. `kanban/1`). Values are intentionally
- * `z.unknown()` — an unknown domain's payload round-trips unvalidated so
- * this package doesn't need to know every extension ever registered.
+ * `{namespace}.{name}/v{n}` (e.g. `visual.shape/v0`) per ADR-0013. The
+ * namespace is the owning plugin's id — every facet belongs to a plugin,
+ * so an unnamespaced key is unrepresentable (there is no privileged core
+ * namespace; k8s's unprefixed legacy group is the debt this avoids).
+ * `v0` marks an unstable facet whose payload may still change shape;
+ * `v1`+ bumps only on breaking change. Values are intentionally
+ * `z.unknown()` — an unknown facet's payload round-trips unvalidated so
+ * this package doesn't need to know every plugin ever registered.
  *
  * A malformed key is rejected (via superRefine issuing a ZodError), not
  * silently dropped from the record: `z.record` with a validated key schema
@@ -30,7 +35,7 @@ export const extensionFacetsSchema = z.record(z.string(), z.unknown()).superRefi
     if (!EXTENSION_FACET_KEY_PATTERN.test(key)) {
       ctx.addIssue({
         code: 'custom',
-        message: `extension facet key "${key}" must match {domain}/{version}, e.g. "kanban/1"`,
+        message: `extension facet key "${key}" must match {namespace}.{name}/v{n}, e.g. "visual.shape/v0"`,
         path: [key],
       })
     }

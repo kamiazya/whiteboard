@@ -1,38 +1,51 @@
 /**
- * Canvas-wide display settings (edge routing style, line jumps) as a gear
- * popover for the canvas header row. Standalone from SpatialEditor so the
- * PAGE places it with the other canvas-level chrome; it speaks the same
- * (canvas, onChange) command contract the editor does.
+ * Canvas-wide display settings as a gear popover for the canvas header row.
+ * Standalone from SpatialEditor so the PAGE places it with the other
+ * canvas-level chrome; it speaks the same (canvas, onChange) command
+ * contract the editor does.
+ *
+ * This surface OWNS the `canvasSettings` contribution point and knows no
+ * facet domain (facet-wiring-guard.test.ts): panels come from the registry,
+ * grouped per plugin namespace. With one contributing namespace the panel
+ * renders bare; a second namespace introduces a tab strip headed by each
+ * plugin's displayName (ordering stays namespace-id lexicographic — a
+ * display name may be reworded or localized and must not move the order).
  *
  * Picks apply immediately and keep the popover open — these are property
  * pickers, and closing per pick would force a reopen for every adjustment.
  * Radix owns dismissal (outside click, Escape) and returns focus to the
  * gear, so a keyboard user never falls to <body>.
  */
-import type { EdgeRoutingStyle, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import {
+  bundledFacetRegistry,
+  type FacetRegistry,
+  resolveFacetContributions,
+} from '@kamiazya/whiteboard-facet-engine'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { SlidersHorizontal } from 'lucide-react'
-import { useEffect, useRef } from 'react'
+import { Fragment, useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
+import { CANVAS_SETTINGS_WIDGETS, type CanvasSettingsWidget } from './facet-widgets/index.js'
 
 export interface CanvasDisplaySettingsProps {
   readonly canvas: SpatialCanvas
   readonly onChange: (next: SpatialCanvas, command: EditorCommand) => void
+  /** Contribution source; a test seam — production uses the bundled registry. */
+  readonly facetRegistry?: FacetRegistry
+  /** Widget lookup; a test seam — production uses the registered widgets. */
+  readonly widgets?: Readonly<Record<string, CanvasSettingsWidget>>
 }
 
-const EDGE_ROUTING_CHOICES: readonly { style: EdgeRoutingStyle; label: string }[] = [
-  { style: 'straight', label: 'Straight' },
-  { style: 'orthogonal', label: 'Orthogonal' },
-  { style: 'curved', label: 'Curved' },
-]
-
-const OPTION_CLASS =
-  'flex h-7 min-w-7 items-center justify-center rounded px-2 text-xs transition-colors duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent focus-visible:bg-accent focus-visible:outline-none'
-
-export function CanvasDisplaySettings({ canvas, onChange }: CanvasDisplaySettingsProps) {
+export function CanvasDisplaySettings({
+  canvas,
+  onChange,
+  facetRegistry = bundledFacetRegistry,
+  widgets = CANVAS_SETTINGS_WIDGETS,
+}: CanvasDisplaySettingsProps) {
   // Eager command chaining: two picks from the same open popover can land
   // before a slow parent commits the first, and the second must build on
   // the first's result, not the stale prop. The ref follows the prop only
@@ -47,8 +60,18 @@ export function CanvasDisplaySettings({ canvas, onChange }: CanvasDisplaySetting
     onChange(running, command)
   }
 
-  const currentRouting = canvas['x-whiteboard']?.edgeRouting?.style ?? 'straight'
-  const currentJumps = canvas['x-whiteboard']?.edgeRouting?.lineJumps ?? 'none'
+  const groups = resolveFacetContributions(facetRegistry, 'canvasSettings')
+    .map((group) => ({
+      group,
+      widgets: group.facets.flatMap((facet) => {
+        const widget = widgets[facet.key]
+        return widget === undefined ? [] : [{ key: facet.key, widget }]
+      }),
+    }))
+    .filter((entry) => entry.widgets.length > 0)
+
+  const [activeNamespace, setActiveNamespace] = useState<string | null>(null)
+  const active = groups.find((entry) => entry.group.namespace === activeNamespace) ?? groups[0]
 
   return (
     <Popover>
@@ -68,55 +91,30 @@ export function CanvasDisplaySettings({ canvas, onChange }: CanvasDisplaySetting
         <TooltipContent>Display settings</TooltipContent>
       </Tooltip>
       <PopoverContent data-testid="canvas-settings-menu" className="w-auto min-w-52 p-2">
-        <div className="flex flex-col gap-1">
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">Edge routing</span>
-            <span className="flex items-center gap-0.5">
-              {EDGE_ROUTING_CHOICES.map(({ style, label }) => (
-                <button
-                  key={style}
-                  type="button"
-                  aria-pressed={currentRouting === style}
-                  onClick={() => run({ kind: 'set-edge-routing', style })}
-                  className={cn(
-                    OPTION_CLASS,
-                    currentRouting === style
-                      ? 'bg-accent font-medium text-foreground'
-                      : 'text-muted-foreground',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </span>
+        {groups.length >= 2 && (
+          <div role="tablist" className="mb-2 flex items-center gap-1 border-b border-border">
+            {groups.map(({ group }) => (
+              <button
+                key={group.namespace}
+                type="button"
+                role="tab"
+                aria-selected={group.namespace === active?.group.namespace}
+                onClick={() => setActiveNamespace(group.namespace)}
+                className={cn(
+                  'rounded-t px-2 py-1 text-xs',
+                  group.namespace === active?.group.namespace
+                    ? 'bg-accent font-medium text-foreground'
+                    : 'text-muted-foreground hover:text-foreground',
+                )}
+              >
+                {group.displayName}
+              </button>
+            ))}
           </div>
-          <div className="flex items-center justify-between gap-3">
-            <span className="text-xs text-muted-foreground">Line jumps</span>
-            <span className="flex items-center gap-0.5">
-              {(
-                [
-                  { lineJumps: 'none', label: 'Off' },
-                  { lineJumps: 'arc', label: 'On' },
-                ] as const
-              ).map(({ lineJumps, label }) => (
-                <button
-                  key={lineJumps}
-                  type="button"
-                  aria-pressed={currentJumps === lineJumps}
-                  onClick={() => run({ kind: 'set-line-jumps', lineJumps })}
-                  className={cn(
-                    OPTION_CLASS,
-                    currentJumps === lineJumps
-                      ? 'bg-accent font-medium text-foreground'
-                      : 'text-muted-foreground',
-                  )}
-                >
-                  {label}
-                </button>
-              ))}
-            </span>
-          </div>
-        </div>
+        )}
+        {active?.widgets.map(({ key, widget }) => (
+          <Fragment key={key}>{widget({ canvas, run })}</Fragment>
+        ))}
       </PopoverContent>
     </Popover>
   )

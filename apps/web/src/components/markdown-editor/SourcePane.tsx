@@ -279,6 +279,13 @@ export function SourcePane({
             caretColor: 'var(--foreground)',
           },
           '.cm-line': { padding: '0 24px' },
+          // Out of the line's flow: upstream renders the placeholder as an
+          // inline-block INSIDE the first line, and Android places the
+          // native caret (and its selection handle) after that span — the
+          // cursor appears mid-line on an empty document. Absolute takes
+          // the span out of caret geometry; the <br> CodeMirror keeps in an
+          // empty line preserves the line's height.
+          '.cm-placeholder': { position: 'absolute' },
         }),
         EditorView.updateListener.of((update) => {
           if (update.docChanged) {

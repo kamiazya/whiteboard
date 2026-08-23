@@ -168,6 +168,40 @@ describe('x-whiteboard extension', () => {
     })
     expect(result.success).toBe(true)
   })
+
+  it('carries node-target facets without an embed (ADR-0013 decision 5)', () => {
+    const result = xWhiteboardSchema.safeParse({
+      facets: { 'visual.shape/v0': { kind: 'hexagon' } },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.facets).toEqual({ 'visual.shape/v0': { kind: 'hexagon' } })
+    }
+  })
+
+  it('carries facets beside an embed', () => {
+    const result = xWhiteboardSchema.safeParse({
+      kind: 'embed',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      facets: { 'visual.shape/v0': { kind: 'ellipse' } },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data.facets).toEqual({ 'visual.shape/v0': { kind: 'ellipse' } })
+    }
+  })
+
+  it('a malformed node facet key costs the facets bucket only, never the embed', () => {
+    const result = xWhiteboardSchema.safeParse({
+      kind: 'embed',
+      documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7',
+      facets: { 'not a key': {} },
+    })
+    expect(result.success).toBe(true)
+    if (result.success) {
+      expect(result.data).toEqual({ kind: 'embed', documentId: '01H8XJZ9K5N4M3P2Q1R0S9T8V7' })
+    }
+  })
 })
 
 describe('canvasEdgeSchema', () => {
@@ -307,6 +341,30 @@ describe('canvas-level x-whiteboard', () => {
 
   it('is absent-by-default, so a strict JSON Canvas document parses unchanged', () => {
     expect(spatialCanvasSchema.parse({ nodes: [], edges: [] })['x-whiteboard']).toBeUndefined()
+  })
+
+  it('carries a canvas-target facets bucket beside the rendering preferences', () => {
+    const parsed = spatialCanvasSchema.parse(
+      canvasWith({
+        edgeRouting: { style: 'orthogonal' },
+        facets: { 'visual.edges/v0': { routing: 'curved' } },
+      }),
+    )
+    expect(parsed['x-whiteboard']).toEqual({
+      edgeRouting: { style: 'orthogonal' },
+      facets: { 'visual.edges/v0': { routing: 'curved' } },
+    })
+  })
+
+  it('a malformed facet key costs the facets bucket only, never the sibling preferences', () => {
+    const parsed = spatialCanvasSchema.parse(
+      canvasWith({
+        edgeRouting: { style: 'orthogonal' },
+        facets: { 'not a key': {} },
+      }),
+    )
+    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
+    expect(parsed.nodes).toEqual([])
   })
 
   // Same escape-hatch rule the node-level key follows: a payload this version

@@ -1,7 +1,14 @@
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
-export { flattenDrawnEdgePath } from './layout/edge-flatten.js'
-export { edgeLabelAnchor } from './layout/edge-label-anchor.js'
-export { flattenRoundedEdgePath } from './layout/edge-rounding.js'
+export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
+export { edgeLabelAnchor } from './layout/edges/edge-label-anchor.js'
+export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
+export {
+  assignEdgeAnchors,
+  type EdgeAnchorOverride,
+  type EdgeAnchorPair,
+  type EdgeSides,
+  routeEdge,
+} from './layout/edges/spatial-edges.js'
 export * from './layout/embed-recursion.js'
 export type {
   CodeToken,
@@ -10,14 +17,24 @@ export type {
   FittedBlocks,
   MdastLayoutOptions,
   RenderedSvgFragment,
-} from './layout/mdast-blocks.js'
-export { BODY_FONT_SIZE_PX, BODY_LINE_HEIGHT_PX, layoutMdastBlocks } from './layout/mdast-blocks.js'
-export { scaleScene } from './layout/scale-scene.js'
-export { createStyleRandom, seedFromId } from './layout/seed.js'
+} from './layout/nodes/mdast-blocks.js'
+export {
+  BODY_FONT_SIZE_PX,
+  BODY_LINE_HEIGHT_PX,
+  layoutMdastBlocks,
+} from './layout/nodes/mdast-blocks.js'
+export {
+  type NodeOutline,
+  nodeOutline,
+  outlineContains,
+  outlineEntryPoint,
+} from './layout/nodes/node-outline.js'
 export type {
   SpatialAppearanceResolver,
   SpatialNodeAppearance,
-} from './layout/spatial-appearance.js'
+} from './layout/nodes/spatial-appearance.js'
+export { scaleScene } from './layout/scale-scene.js'
+export { createStyleRandom, seedFromId } from './layout/seed.js'
 export type {
   FacetCardData,
   ResolvedReference,
@@ -31,13 +48,6 @@ export {
   layoutSpatialEdges,
   naturalNodeContentSize,
 } from './layout/spatial-canvas.js'
-export {
-  assignEdgeAnchors,
-  type EdgeAnchorOverride,
-  type EdgeAnchorPair,
-  type EdgeSides,
-  routeEdge,
-} from './layout/spatial-edges.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'
 export { clampAdvance, constantRatioMeasureText, isFullWidthCodePoint } from './measure.js'
@@ -53,11 +63,14 @@ export type {
   Dimensions,
   EmbedPlaceholderNode,
   EmbedResolvedNode,
+  GlyphSceneNode,
   GroupSceneNode,
   HeadingBlockNode,
+  IconSceneNode,
   LinkProvenance,
   ListBlockNode,
   ListItemNode,
+  NodeOutlineKind,
   ParagraphBlockNode,
   RawHtmlNode,
   ResolvedEdgeNode,
@@ -72,12 +85,14 @@ export type {
   ThematicBreakNode,
   UnresolvedReferenceNode,
 } from './scene-graph.js'
-export type { SvgDocumentOptions } from './svg/backend.js'
+export type { IconTable, SvgDocumentOptions } from './svg/backend.js'
 export { renderSceneToSvg } from './svg/backend.js'
 export { escapeXmlAttr, escapeXmlText, formatCoord } from './svg/format.js'
 export type { KeyedSvgGroup, KeyedSvgRender } from './svg/keyed.js'
 export { renderSceneToKeyedSvg } from './svg/keyed.js'
 export { SPATIAL_THEME_FONT_FAMILY } from './theme/font-family.js'
+export type { MarkdownTheme } from './theme/markdown-theme.js'
+export { MARKDOWN_THEME_DOCUMENT, MARKDOWN_THEME_NODE } from './theme/markdown-theme.js'
 export type { SpatialGeometry } from './theme/spatial-geometry.js'
 export { SPATIAL_THEME_GEOMETRY } from './theme/spatial-geometry.js'
 export type {
@@ -91,3 +106,5 @@ export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-them
 export { createSpatialTheme } from './theme/spatial-theme.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyNodes } from './tidy.js'
+export type { LucideIconElement } from './vendor/lucide/icons.js'
+export { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './vendor/lucide/icons.js'

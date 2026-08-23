@@ -1,4 +1,5 @@
 import { lazy, Suspense } from 'react'
+import type { AppShellProps } from './AppShell.js'
 
 const AppShell = lazy(() => import('./AppShell.js').then((m) => ({ default: m.AppShell })))
 
@@ -9,12 +10,12 @@ const AppShell = lazy(() => import('./AppShell.js').then((m) => ({ default: m.Ap
  * with it. The fallback reserves the shell's exact height so the swap-in
  * never shifts the page below.
  */
-export function AppShellLazy({ daemon }: { daemon: boolean }) {
+export function AppShellLazy(props: AppShellProps) {
   return (
     <Suspense
       fallback={<div aria-hidden="true" className="h-10 shrink-0 border-b bg-background" />}
     >
-      <AppShell daemon={daemon} />
+      <AppShell {...props} />
     </Suspense>
   )
 }

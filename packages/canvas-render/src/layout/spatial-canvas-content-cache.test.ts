@@ -4,7 +4,7 @@ import type { MeasureText } from '../measure.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createSpatialTheme } from '../theme/spatial-theme.js'
-import type { FittedBlocks } from './mdast-blocks.js'
+import type { FittedBlocks } from './nodes/mdast-blocks.js'
 import {
   layoutSpatialCanvas,
   type SpatialContentCache,

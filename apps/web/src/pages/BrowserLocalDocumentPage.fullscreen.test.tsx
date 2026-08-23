@@ -1,18 +1,26 @@
 // Fullscreen means the CANVAS, maximised. The top bar rode along into the
-// top layer — workspace switcher, rename, menus — which is 48px of chrome
+// top layer — the way back, the title, its menus — which is 48px of chrome
 // nobody entered fullscreen to see. It now steps aside, leaving the canvas
 // and the dock, with one floating way back out.
+// jsdom has no IndexedDB, and the page's backend reads content from a real
+// one. Without this every content read fails — which the page now reports as
+// an unreadable document instead of silently drawing an editor over it, so a
+// suite about fullscreen chrome would otherwise be testing the error screen.
+import 'fake-indexeddb/auto'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserLocalDocumentPage } from './BrowserLocalDocumentPage.js'
 // The top bar is React.lazy in the page; loading it in the collection phase
 // keeps its chunk cost out of findBy*'s 1000ms retry budget (the lazy-race
 // flake shape integrator-flow.md documents).
 import '../components/WorkspaceTopBar.js'
+
+claimIsolatedWhiteboardDb('browserlocaldocumentpage-fullscreen')
 
 beforeEach(() => {
   // jsdom has no fullscreen at all; start each test explicitly OUT of it.
@@ -67,7 +75,7 @@ async function renderLoaded() {
   // 1s retry budget loses that race under a parallel suite (the documented
   // lazy-race flake shape), so this wait carries the same 10s budget the
   // other page tests use.
-  await screen.findByRole('button', { name: /^Workspace:/i }, { timeout: 10_000 })
+  await screen.findByRole('button', { name: 'Back to documents' }, { timeout: 10_000 })
 }
 
 it('hides the top bar in fullscreen and brings it back on exit', async () => {
@@ -77,12 +85,12 @@ it('hides the top bar in fullscreen and brings it back on exit', async () => {
     setFullscreenElement(screen.getByRole('main'))
   })
   // The chrome steps aside — the canvas is what fullscreen is FOR.
-  expect(screen.queryByRole('button', { name: /^Workspace:/i })).toBeNull()
+  expect(screen.queryByRole('button', { name: 'Back to documents' })).toBeNull()
 
   await act(async () => {
     setFullscreenElement(null)
   })
-  await screen.findByRole('button', { name: /^Workspace:/i })
+  await screen.findByRole('button', { name: 'Back to documents' })
 })
 
 it('floats one exit control while the chrome is gone, and it exits', async () => {

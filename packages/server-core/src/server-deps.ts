@@ -1,5 +1,7 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
+import type { Embedder } from './search/embedder.js'
 
 /**
  * What a batch of agent edits touched, as the browser needs to hear it.
@@ -79,9 +81,23 @@ export interface ServerDeps {
    */
   measure?: () => Promise<MeasureText>
   /**
+   * Turns document search from lexical-only into lexical fused with
+   * semantic. Optional for the same reason `measure` is: server-core is a
+   * shared layer and cannot load a model itself, and absent means search
+   * behaves exactly as it did before embeddings existed — the pinned
+   * scoreboard passes unchanged either way.
+   */
+  embedder?: Embedder
+  /**
    * Optional on purpose: every existing composition — and every test — is a
    * valid server without one, and a tool that needed a browser to be present
    * would stop being headless. Absent means nobody is told anything.
    */
   clientNotifier?: CanvasClientNotifier
+  /**
+   * The facet registry validating registered-facet writes (ADR-0013
+   * decision 6). Optional: absent means the bundled plugins — a composition
+   * root overrides it only when a deployment configures its own plugin set.
+   */
+  facetRegistry?: FacetRegistry
 }

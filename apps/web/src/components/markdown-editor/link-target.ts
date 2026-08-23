@@ -76,7 +76,7 @@ const UNWRITABLE_AS_ALIAS = /[\]\r\n]/
  *
  * The readable form wins where it works, because the reference is prose the
  * author will read again — but `[[Name]]` resolves only when exactly one
- * document carries that name (see `createSnapshotAliasResolver`), so a
+ * document carries that name (see codec's `createUniqueNameResolver`), so a
  * duplicate name would produce a link that silently stays literal text. The
  * picker is the one place that KNOWS which document was chosen, so it spends
  * that knowledge here: the opaque `[[<id>]]` form appears only when the

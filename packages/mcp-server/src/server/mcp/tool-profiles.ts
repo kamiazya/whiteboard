@@ -30,6 +30,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     title: 'Apply a batch of edits to the spatial canvas',
   },
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
+  wb_facet_list: { profile: READ_ONLY, title: 'List the facets this deployment registered' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },
   wb_viewport_set: {
     // Mutating rather than read-only: it changes what a human is looking at.
@@ -43,6 +44,7 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   },
   wb_document_set: { profile: MUTATING, title: 'Replace a document from OKF Markdown' },
   wb_document_get: { profile: READ_ONLY, title: 'Read a document in its own format' },
+  wb_document_search: { profile: READ_ONLY, title: 'Find documents by content' },
   wb_document_create: { profile: MUTATING, title: 'Create a document' },
   wb_document_list: { profile: READ_ONLY, title: 'List the documents in a workspace' },
   wb_document_resolve: { profile: READ_ONLY, title: 'Resolve a document id to its placement' },

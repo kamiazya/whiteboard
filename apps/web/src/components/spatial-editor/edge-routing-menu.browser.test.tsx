@@ -5,12 +5,16 @@
 // host composes the popover and the editor over one canvas state, exactly
 // as the page does; the popover's own wiring is pinned in
 // canvas-settings.browser.test.tsx.
+import type { VisualEdgesFacet } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { CanvasDisplaySettings } from './CanvasDisplaySettings.js'
 import { SpatialEditor } from './SpatialEditor.js'
+
+const edgesFacetOf = (canvas: SpatialCanvas) =>
+  canvas['x-whiteboard']?.facets?.['visual.edges/v0'] as VisualEdgesFacet | undefined
 
 afterEach(cleanup)
 
@@ -83,7 +87,7 @@ it('records the choice on the canvas and bends the edge', async () => {
   optionButton(container, 'Orthogonal')?.click()
 
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+    expect(edgesFacetOf(latest.canvas)?.routing).toBe('orthogonal')
   })
   // The scene follows: a bent edge has more than the two endpoint points.
   await vi.waitFor(() => {
@@ -101,9 +105,7 @@ it('drops the setting again when the style returns to straight', async () => {
   openSettings(container)
   await vi.waitFor(() => expect(optionButton(container, 'Orthogonal')).toBeDefined())
   optionButton(container, 'Orthogonal')?.click()
-  await vi.waitFor(() =>
-    expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal'),
-  )
+  await vi.waitFor(() => expect(edgesFacetOf(latest.canvas)?.routing).toBe('orthogonal'))
 
   // The popover stays open after a pick — flip straight from the same surface.
   await vi.waitFor(() => expect(optionButton(container, 'Straight')).toBeDefined())
@@ -126,7 +128,7 @@ it('draws a curve when the canvas asks for one', async () => {
   optionButton(container, 'Curved')?.click()
 
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting?.style).toBe('curved')
+    expect(edgesFacetOf(latest.canvas)?.routing).toBe('curved')
   })
   await vi.waitFor(() => {
     const path = container.querySelector('[data-testid="viewport-transform"] path')
@@ -173,7 +175,7 @@ it('toggles line jumps from the canvas menu and draws the hop arc', async () => 
   optionButton(container, 'On')?.click()
 
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting?.lineJumps).toBe('arc')
+    expect(edgesFacetOf(latest.canvas)?.lineJumps).toBe('arc')
   })
   // The crossing edge is now a path with a hop arc.
   await vi.waitFor(() => {
@@ -220,8 +222,8 @@ it('consecutive style + jumps picks both survive a deferred parent', async () =>
   optionButton(container, 'On')?.click()
 
   await vi.waitFor(() => {
-    expect(latest.canvas['x-whiteboard']?.edgeRouting).toEqual({
-      style: 'orthogonal',
+    expect(edgesFacetOf(latest.canvas)).toEqual({
+      routing: 'orthogonal',
       lineJumps: 'arc',
     })
   })

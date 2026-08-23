@@ -22,6 +22,7 @@ import {
   flattenDrawnEdgePath,
   routeEdge,
 } from '@kamiazya/whiteboard-canvas-render'
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import type { Box, NodeBox } from './geometry.js'
 import { hitTest, resizeBoxByDelta } from './geometry.js'
@@ -151,18 +152,14 @@ export function computeDragPreview(
         fromNode: gestureState.fromNodeId,
         toNode: targetId,
       }
+      const routingStyle = resolveCanvasEdgeStyle(canvas).style
       const anchors = assignEdgeAnchors(
         nodes,
         [...canvas.edges, tentative],
-        canvas['x-whiteboard']?.edgeRouting?.style,
+        routingStyle,
         connect.frozenEdgeSides,
       )
-      const routed = routeEdge(
-        nodes,
-        tentative,
-        canvas['x-whiteboard']?.edgeRouting?.style,
-        anchors.get(tentative.id),
-      )
+      const routed = routeEdge(nodes, tentative, routingStyle, anchors.get(tentative.id))
       // The preview shows the DRAWN line the drop will produce: rounded
       // corners flattened and the committed arrowheads, from the same
       // producers the editor's committed render uses.

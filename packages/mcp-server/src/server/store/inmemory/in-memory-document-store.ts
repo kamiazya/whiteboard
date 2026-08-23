@@ -2,6 +2,7 @@ import type {
   AppendDeltasInput,
   AppendDeltasResult,
   DeleteDocInput,
+  DocRef,
   DocumentStore,
   Frontier,
   LoadDeltasInput,
@@ -10,13 +11,21 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  SaveCompactedSnapshotInput,
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
+  StoredDocumentUnreadableCode,
 } from '@kamiazya/whiteboard-ports'
-import { docRefKey } from '../doc-ref-key.js'
+import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { cloneBytes } from './clone-bytes.js'
 
+/**
+ * What a stored record can be. The `unreadable` arm exists so this double can
+ * reach the state a real store reaches on its own — a record written by a
+ * shape the reader does not know — which the port's conformance suite
+ * requires every implementation to be able to produce.
+ */
 interface DocRecord {
   readonly snapshot: {
     readonly manifest: SnapshotManifest
@@ -24,6 +33,7 @@ interface DocRecord {
   } | null
   readonly frontier: Frontier | null
   readonly deltas: readonly Uint8Array[]
+  readonly unreadable?: StoredDocumentUnreadableCode
 }
 
 function emptyRecord(): DocRecord {
@@ -48,14 +58,35 @@ export class InMemoryDocumentStore implements DocumentStore {
     return this.docs.get(key) ?? emptyRecord()
   }
 
+  /**
+   * Put a record this store cannot read under `docRef`. Test-only, and named
+   * so at the call site: the port's conformance suite needs every
+   * implementation to be able to reach that state.
+   */
+  writeUnreadableRecord(docRef: DocRef): void {
+    const key = docRefKey(docRef)
+    this.docs.set(key, { ...this.getRecord(key), unreadable: 'malformed' })
+  }
+
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const record = this.docs.get(docRefKey(input.docRef))
+    if (record?.unreadable !== undefined) {
+      throw new StoredDocumentUnreadableError(
+        record.unreadable,
+        `Stored document ${docRefKey(input.docRef)} is unreadable: ${record.unreadable}`,
+      )
+    }
     if (!record?.snapshot || !record.frontier) {
       return null
     }
     return {
       manifest: record.snapshot.manifest,
-      chunks: record.snapshot.chunks.map(cloneChunk),
+      // Sorted by index, not returned in insertion order: the libSQL store
+      // reads its chunks back through `order by chunkIndex`, so a double that
+      // preserved write order would let a test pass against the double and
+      // fail against the real store — the exact drift the shared conformance
+      // suite exists to catch, and did.
+      chunks: [...record.snapshot.chunks].sort((a, b) => a.index - b.index).map(cloneChunk),
       frontier: cloneBytes(record.frontier),
     }
   }
@@ -70,6 +101,24 @@ export class InMemoryDocumentStore implements DocumentStore {
         chunks: input.chunks.map(cloneChunk),
       },
       frontier: cloneBytes(input.frontier),
+    })
+  }
+
+  /**
+   * ONE map write, with no `await` between reading the record and replacing
+   * it. Delegating to `saveSnapshot` and then clearing looked equivalent and
+   * was not: the await let a concurrent `appendDeltas` land in between, and
+   * the clear then threw away an update that could not be in the snapshot.
+   */
+  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+    const key = docRefKey(input.docRef)
+    const existing = this.getRecord(key)
+    this.docs.set(key, {
+      snapshot: { manifest: input.manifest, chunks: input.chunks.map(cloneChunk) },
+      frontier: cloneBytes(input.frontier),
+      // Exactly the superseded prefix. Anything appended after the caller
+      // folded is not in the snapshot and stays.
+      deltas: existing.deltas.slice(input.supersededDeltaCount),
     })
   }
 

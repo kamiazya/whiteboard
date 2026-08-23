@@ -22,24 +22,18 @@ afterEach(cleanup)
 function renderTopBar(props?: Partial<ComponentProps<typeof WorkspaceTopBar>>) {
   return render(
     <div className="h-[200px] w-[1100px] bg-background p-6">
-      <WorkspaceTopBar
-        workspaceId="local"
-        path="my-canvas"
-        documents={[{ path: 'my-canvas', updatedAt: '2026-04-24T11:00:00Z' }]}
-        onNavigateToDocument={() => {}}
-        {...props}
-      />
+      <WorkspaceTopBar workspaceId="local" path="my-canvas" {...props} />
     </div>,
   )
 }
 
 describe('top bar scopes', () => {
-  it('names the workspace, not the canvas, on the switcher trigger', () => {
-    renderTopBar({ workspaceId: 'local', path: 'my-canvas' })
-    // The canvas name belongs to row two's title field. Row one says where
-    // you are, and picking a canvas is navigation WITHIN that workspace.
-    expect(screen.queryByRole('button', { name: /my-canvas/ })).toBeNull()
-    expect(screen.getByRole('button', { name: /workspace/i })).toBeTruthy()
+  it("offers no way to reach another document — finding one is the browser's job", () => {
+    // `onNavigateBack` supplied deliberately: the control renders only when
+    // the host page wires it, so asserting without it would pass vacuously.
+    renderTopBar({ workspaceId: 'local', path: 'my-canvas', onNavigateBack: () => {} })
+    expect(screen.queryByRole('button', { name: /workspace/i })).toBeNull()
+    expect(screen.getByRole('button', { name: 'Back to documents' })).toBeTruthy()
   })
 
   it('offers no theme control — Settings already owns the full three-way choice', () => {
@@ -58,7 +52,7 @@ describe('top bar scopes', () => {
     // canvas-name resolution lifted out of this component, which the
     // identity-model work owns. Rename is the part that duplicated row two.
     expect(screen.queryByRole('menuitem', { name: /rename/i })).toBeNull()
-    expect(screen.queryByLabelText('Canvas title')).toBeNull()
+    expect(screen.queryByLabelText('Document title')).toBeNull()
   })
 
   it('toggles fullscreen rather than only entering it', async () => {

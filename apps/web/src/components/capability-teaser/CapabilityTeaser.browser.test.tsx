@@ -14,7 +14,7 @@ describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
     await expect
       .element(
         page.getByRole('tooltip', {
-          name: 'Connect a local daemon (MCP) to enable Version history',
+          name: 'Connect a daemon (MCP) to enable Version history',
         }),
       )
       .toBeVisible()
@@ -36,9 +36,7 @@ describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
     expect(control).toHaveFocus()
 
     await expect
-      .element(
-        page.getByRole('tooltip', { name: 'Connect a local daemon (MCP) to enable Workspaces' }),
-      )
+      .element(page.getByRole('tooltip', { name: 'Connect a daemon (MCP) to enable Workspaces' }))
       .toBeVisible()
   })
 
@@ -53,7 +51,7 @@ describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
     const describedBy = control.getAttribute('aria-describedby')
     expect(describedBy).toBeTruthy()
     const descEl = document.getElementById(describedBy!.split(' ')[0])
-    expect(descEl?.textContent).toBe('Connect a local daemon (MCP) to enable Branches')
+    expect(descEl?.textContent).toBe('Connect a daemon (MCP) to enable Branches')
   })
 
   it('does not render a Radix tooltip trigger once the capability is enabled', async () => {
@@ -61,6 +59,6 @@ describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
     const control = screen.getByRole('button', { name: 'Merge' })
 
     await userEvent.hover(control)
-    expect(screen.queryByText('Connect a local daemon (MCP) to enable Merge')).toBeNull()
+    expect(screen.queryByText('Connect a daemon (MCP) to enable Merge')).toBeNull()
   })
 })

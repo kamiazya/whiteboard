@@ -185,6 +185,47 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     expect(snapshotRes.status).toBe(200)
   })
 
+  // A dialog that collects a name has to apply it in the SAME request. Split
+  // across create-then-PUT-name, the second half can fail on its own and
+  // leave a document the user named sitting in the list as untitled-N, with
+  // nothing on screen explaining which half went wrong. wb_document_create
+  // has taken a name in one call since it shipped; this is the HTTP surface
+  // catching up.
+  it('applies an optional name in the same request that creates the document', async () => {
+    const app = createDocumentRouter()
+    const createRes = await app.request('/api/workspaces/ws1/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'notes/weekly', kind: 'markdown', name: '週次メモ' }),
+    })
+    expect(createRes.status).toBe(200)
+    // Still just { path }: the name is not echoed, exactly like kind.
+    expect(await createRes.json()).toEqual({ path: 'notes/weekly' })
+
+    const namesRes = await app.request('/api/workspaces/ws1/names')
+    const names = (await namesRes.json()) as { documents: Record<string, string> }
+    expect(names.documents['notes/weekly']).toBe('週次メモ')
+  })
+
+  // What drops a blank name is `setDocumentDisplayName`'s own trim, not
+  // anything in this route — verified by removing the route's guard and
+  // watching this stay green. Pinned here anyway because the end-to-end
+  // promise is the route's: a name never decides whether the document
+  // exists, whichever layer keeps that true.
+  it('creates the document anyway when the name is blank', async () => {
+    const app = createDocumentRouter()
+    const res = await app.request('/api/workspaces/ws1/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'blank', kind: 'spatial', name: '   ' }),
+    })
+    expect(res.status).toBe(200)
+
+    const namesRes = await app.request('/api/workspaces/ws1/names')
+    const names = (await namesRes.json()) as { documents: Record<string, string> }
+    expect(names.documents.blank).toBeUndefined()
+  })
+
   it('creates a canvas without kind — response and list stay byte-identical to spatial back-compat', async () => {
     const app = createDocumentRouter()
     const createRes = await app.request('/api/workspaces/ws1/documents', {

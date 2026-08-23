@@ -18,6 +18,7 @@
  * `toNode` referenced the removed node, so no command sequence can ever
  * produce a canvas with a dangling edge endpoint.
  */
+import { resolveCanvasEdgeStyle, VISUAL_EDGES_KEY } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasColor,
   CanvasEdge,
@@ -84,6 +85,19 @@ export type EditorLeafCommand =
       readonly id: string
       // undefined returns the object to the theme default (field removed).
       readonly color: CanvasColor | undefined
+    }
+  | {
+      /**
+       * Writes one facet on one node. Deliberately facet-GENERIC: the key
+       * comes from the caller (a facet widget, the extension side of the
+       * contribution seam), so this module never names a domain.
+       */
+      readonly kind: 'set-node-facet'
+      readonly id: string
+      readonly key: string
+      // undefined removes the facet — for a facet whose absence IS a value
+      // (visual.shape's rect), that is how the default is restored.
+      readonly payload: unknown
     }
   | {
       // Edits the canvas ENVELOPE rather than its contents, so it names no
@@ -308,37 +322,89 @@ function setEdgeEnds(
  * opened the menu on would carry a redundant extension forever.
  */
 /**
- * Rebuilds the canvas envelope from the CANONICAL form of its edgeRouting:
- * default values (style straight, jumps none) are omitted, an empty
- * edgeRouting is dropped, and an empty x-whiteboard disappears — so a
- * canvas that chose a setting and reverted serializes identically to one
- * that never touched it. Style and jumps are independent fields of the
- * same object; writing one must never erase the other.
+ * Rebuilds the canvas envelope from the CANONICAL form of the visual.edges
+ * facet: default values (routing straight, jumps none) are omitted, an
+ * empty payload drops the facet key, an empty facets bucket disappears,
+ * and an empty x-whiteboard disappears — so a canvas that chose a setting
+ * and reverted serializes identically to one that never touched it.
+ * Routing and jumps are independent fields of the same facet; writing one
+ * must never erase the other.
  */
-function withEdgeRouting(
+function withEdgeStyle(
   canvas: SpatialCanvas,
-  patch: { style?: EdgeRoutingStyle; lineJumps?: LineJumps },
+  patch: { routing?: EdgeRoutingStyle; lineJumps?: LineJumps },
 ): SpatialCanvas {
   const { 'x-whiteboard': extension, ...rest } = canvas
-  const merged = { ...extension?.edgeRouting, ...patch }
+  // Seed the merge from the RESOLVED current value (facet first, legacy
+  // fallback), so the first write on a legacy canvas carries its setting
+  // into the facet — the write is where the migration persists.
+  const current = resolveCanvasEdgeStyle(canvas)
+  const merged = {
+    routing: patch.routing ?? current.style,
+    lineJumps: patch.lineJumps ?? current.lineJumps,
+  }
   const canonical = {
-    ...(merged.style !== undefined && merged.style !== 'straight' ? { style: merged.style } : {}),
+    ...(merged.routing !== undefined && merged.routing !== 'straight'
+      ? { routing: merged.routing }
+      : {}),
     ...(merged.lineJumps !== undefined && merged.lineJumps !== 'none'
       ? { lineJumps: merged.lineJumps }
       : {}),
   }
-  const { edgeRouting: _removed, ...others } = extension ?? {}
-  const nextExtension =
-    Object.keys(canonical).length === 0 ? others : { ...others, edgeRouting: canonical }
+  // The legacy edgeRouting key is absorbed above and removed here — one
+  // facet, one version, no second place for the same answer to live.
+  const { edgeRouting: _legacy, facets, ...others } = extension ?? {}
+  const { [VISUAL_EDGES_KEY]: _previous, ...otherFacets } = facets ?? {}
+  const nextFacets =
+    Object.keys(canonical).length === 0
+      ? otherFacets
+      : { ...otherFacets, [VISUAL_EDGES_KEY]: canonical }
+  const nextExtension = {
+    ...others,
+    ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
+  }
   return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
 }
 
 function setEdgeRouting(canvas: SpatialCanvas, style: EdgeRoutingStyle): SpatialCanvas {
-  return withEdgeRouting(canvas, { style })
+  return withEdgeStyle(canvas, { routing: style })
 }
 
 function setLineJumps(canvas: SpatialCanvas, lineJumps: LineJumps): SpatialCanvas {
-  return withEdgeRouting(canvas, { lineJumps })
+  return withEdgeStyle(canvas, { lineJumps })
+}
+
+/**
+ * Same envelope discipline as the canvas-level facet write: the shape lives
+ * as the visual.shape/v0 facet in the node's x-whiteboard facets bucket,
+ * `undefined` (the historic rect) removes it, an empty bucket disappears,
+ * and an empty extension disappears — while an embed extension and facets
+ * this command does not own survive untouched.
+ */
+function setNodeFacet(
+  canvas: SpatialCanvas,
+  id: string,
+  key: string,
+  payload: unknown,
+): SpatialCanvas {
+  if (!canvas.nodes.some((node) => node.id === id)) return canvas
+  return {
+    ...canvas,
+    nodes: canvas.nodes.map((node) => {
+      if (node.id !== id) return node
+      const { facets, ...extensionRest } = node['x-whiteboard'] ?? {}
+      const { [key]: _previous, ...otherFacets } = facets ?? {}
+      const nextFacets = payload === undefined ? otherFacets : { ...otherFacets, [key]: payload }
+      const nextExtension = {
+        ...extensionRest,
+        ...(Object.keys(nextFacets).length === 0 ? {} : { facets: nextFacets }),
+      }
+      const { 'x-whiteboard': _extension, ...rest } = node
+      return Object.keys(nextExtension).length === 0
+        ? (rest as typeof node)
+        : ({ ...rest, 'x-whiteboard': nextExtension } as typeof node)
+    }),
+  }
 }
 
 function setNodeColor(
@@ -501,6 +567,8 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return setEdgeSide(canvas, command.id, command.endpoint, command.side)
     case 'set-node-color':
       return setNodeColor(canvas, command.id, command.color)
+    case 'set-node-facet':
+      return setNodeFacet(canvas, command.id, command.key, command.payload)
     case 'set-edge-routing':
       return setEdgeRouting(canvas, command.style)
     case 'set-line-jumps':

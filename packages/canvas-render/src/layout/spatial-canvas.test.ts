@@ -4,7 +4,8 @@ import { describe, expect, it, vi } from 'vitest'
 import type { HeadingBlockNode, Scene, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
-import type { SpatialAppearanceResolver } from './spatial-appearance.js'
+import { outlineContains } from './nodes/node-outline.js'
+import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import type { SpatialLayoutDegradation, SpatialLayoutOptions } from './spatial-canvas.js'
 import {
   layoutSpatialCanvas,
@@ -166,6 +167,230 @@ describe('layoutSpatialCanvas', () => {
     )
     expect(label).toBeDefined()
     expect(label?.appearance?.fill).toBe('#303030')
+  })
+
+  it('draws the silhouette the visual.shape facet asks for, with no option wired', () => {
+    const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
+    const shaped = {
+      ...node,
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' as const } } },
+    }
+    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+    const chrome = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+    )
+    expect(chrome?.shape).toBe('hexagon')
+  })
+
+  it('a shaped node lays its text inside the silhouette, never across the outline', () => {
+    // The box is the RECT's content area; a silhouette is inscribed in it,
+    // so rect-based placement puts the first line straight through an
+    // ellipse's rim and a cylinder's lid. Every content corner must satisfy
+    // the same containment the outline itself is drawn and hit-tested by.
+    for (const kind of ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const) {
+      const bbox = { x: 0, y: 0, w: 200, h: 100 }
+      const shaped = {
+        ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'inset me' }),
+        'x-whiteboard': { facets: { 'visual.shape/v0': { kind } } },
+      }
+      const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+      const content = scene.nodes.filter((n) => n.kind !== 'shape' && 'bbox' in n)
+      expect(content.length, kind).toBeGreaterThan(0)
+      for (const n of content) {
+        if (!('bbox' in n)) continue
+        const { x, y, w, h } = n.bbox
+        const corners = [
+          { x, y },
+          { x: x + w, y },
+          { x, y: y + h },
+          { x: x + w, y: y + h },
+        ]
+        for (const corner of corners) {
+          expect(
+            outlineContains(kind, bbox, corner),
+            `${kind} content corner ${JSON.stringify(corner)}`,
+          ).toBe(true)
+        }
+      }
+    }
+  })
+
+  it('short content in a shaped node sits vertically centered; a plain rect stays top-aligned', () => {
+    // Policy: inscribed box + vertical centering when the content fits
+    // (an overflowing body fills the box, so centering degrades to the
+    // top-aligned truncate+fade contract untouched). Rect nodes keep their
+    // exact top-aligned placement — byte-stable for every existing canvas.
+    const shaped = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'ellipse' as const } } },
+    }
+    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+    const block = scene.nodes.find((n) => n.kind === 'paragraph')
+    expect(block).toBeDefined()
+    const blockCenter = (block?.bbox.y ?? 0) + (block?.bbox.h ?? 0) / 2
+    expect(Math.abs(blockCenter - 50)).toBeLessThan(6)
+
+    const plain = textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'one line' })
+    const plainScene = layoutSpatialCanvas(canvas([plain]), baseOptions())
+    const plainBlock = plainScene.nodes.find((n) => n.kind === 'paragraph')
+    expect(plainBlock?.bbox.y).toBe(NODE_PADDING_PX)
+  })
+
+  it('a visual.symbol facet draws a badge: an icon by name, an emoji as a glyph', () => {
+    const iconNode = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'a' }),
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
+    }
+    const scene = layoutSpatialCanvas(canvas([iconNode]), baseOptions())
+    const badge = scene.nodes.find((n) => n.kind === 'icon')
+    expect(badge).toBeDefined()
+    if (badge?.kind !== 'icon') throw new Error('unreachable')
+    expect(badge.icon).toBe('star')
+    // Top-right of the content area, inside the node box, on top of content
+    // (emitted after it).
+    expect(badge.bbox.x + badge.bbox.w).toBeLessThanOrEqual(200)
+    expect(badge.bbox.y).toBeGreaterThanOrEqual(0)
+    expect(badge.appearance?.stroke).toBe('#303030')
+
+    const emojiNode = {
+      ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'b' }),
+      'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'emoji' as const, char: '✅' } } },
+    }
+    const emojiScene = layoutSpatialCanvas(canvas([emojiNode]), baseOptions())
+    const glyph = emojiScene.nodes.find((n) => n.kind === 'glyph')
+    expect(glyph?.kind === 'glyph' && glyph.glyph).toBe('✅')
+  })
+
+  it('a badge on a SHAPED node sits inside the silhouette', () => {
+    const shaped = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: '' }),
+      'x-whiteboard': {
+        facets: {
+          'visual.shape/v0': { kind: 'ellipse' as const },
+          'visual.symbol/v0': { kind: 'icon' as const, name: 'star' },
+        },
+      },
+    }
+    const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
+    const badge = scene.nodes.find((n) => n.kind === 'icon')
+    expect(badge).toBeDefined()
+    if (badge?.kind !== 'icon') throw new Error('unreachable')
+    const corners = [
+      { x: badge.bbox.x, y: badge.bbox.y },
+      { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y },
+      { x: badge.bbox.x, y: badge.bbox.y + badge.bbox.h },
+      { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y + badge.bbox.h },
+    ]
+    for (const corner of corners) {
+      expect(outlineContains('ellipse', { x: 0, y: 0, w: 200, h: 100 }, corner)).toBe(true)
+    }
+  })
+
+  it('a node too narrow for a badge draws none, and never paints one outside itself', () => {
+    // The badge is a fixed 16px inset by a 4px margin, so a node has to be
+    // wider than 16 to hold one — the guard has to price the MARGIN too, or
+    // an 18px node gets a badge starting at x = -2.
+    for (const width of [8, 18, 20]) {
+      const node = {
+        ...textNode({ id: 'a', x: 0, y: 0, width, height: width, text: '' }),
+        'x-whiteboard': { facets: { 'visual.symbol/v0': { kind: 'icon' as const, name: 'star' } } },
+      }
+      const scene = layoutSpatialCanvas(canvas([node]), baseOptions())
+      const badge = scene.nodes.find((n) => n.kind === 'icon')
+      if (badge === undefined) continue
+      if (badge.kind !== 'icon') throw new Error('unreachable')
+      expect(badge.bbox.x, `width ${width}`).toBeGreaterThanOrEqual(0)
+      expect(badge.bbox.x + badge.bbox.w, `width ${width}`).toBeLessThanOrEqual(width)
+      expect(badge.bbox.y, `width ${width}`).toBeGreaterThanOrEqual(0)
+      expect(badge.bbox.y + badge.bbox.h, `width ${width}`).toBeLessThanOrEqual(width)
+    }
+  })
+
+  it('visual.text overrides the placement a node would otherwise choose, both ways', () => {
+    // A plain RECT asked to centre: the default would top-align it.
+    const centredRect = {
+      ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      'x-whiteboard': { facets: { 'visual.text/v0': { align: 'center' as const } } },
+    }
+    const rectScene = layoutSpatialCanvas(canvas([centredRect]), baseOptions())
+    const rectBlock = rectScene.nodes.find((n) => n.kind === 'paragraph')
+    const rectCentre = (rectBlock?.bbox.y ?? 0) + (rectBlock?.bbox.h ?? 0) / 2
+    expect(Math.abs(rectCentre - 50)).toBeLessThan(6)
+
+    // A SHAPED node asked to start: the default would centre it.
+    const toppedShape = {
+      ...textNode({ id: 'b', x: 0, y: 0, width: 200, height: 100, text: 'one line' }),
+      'x-whiteboard': {
+        facets: {
+          'visual.shape/v0': { kind: 'ellipse' as const },
+          'visual.text/v0': { align: 'start' as const },
+        },
+      },
+    }
+    const shapeScene = layoutSpatialCanvas(canvas([toppedShape]), baseOptions())
+    const shapeBlock = shapeScene.nodes.find((n) => n.kind === 'paragraph')
+    // The inscribed box's top plus padding — well above the node's middle.
+    expect(shapeBlock?.bbox.y ?? 0).toBeLessThan(40)
+  })
+
+  it('an explicit nodeOutlines option overrides the facet for that node', () => {
+    const node = textNode({ id: 'a', x: 0, y: 0, width: 100, height: 60, text: 'a' })
+    const shaped = {
+      ...node,
+      'x-whiteboard': { facets: { 'visual.shape/v0': { kind: 'hexagon' as const } } },
+    }
+    const scene = layoutSpatialCanvas(
+      canvas([shaped]),
+      baseOptions({ nodeOutlines: { a: 'ellipse' } }),
+    )
+    const chrome = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
+    )
+    expect(chrome?.shape).toBe('ellipse')
+  })
+
+  it('routes by the visual.edges facet when the canvas carries one', () => {
+    // The facet is the successor of the legacy edgeRouting preference
+    // (ADR-0013); resolution is canvas-render's own default so every
+    // surface — editor, export, viewer, widget — reads the same answer.
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const scene = layoutSpatialCanvas(
+      {
+        ...canvas([a, b], [edge]),
+        'x-whiteboard': { facets: { 'visual.edges/v0': { routing: 'orthogonal' } } },
+      },
+      baseOptions(),
+    )
+    const routed = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+    )
+    expect(routed).toBeDefined()
+    // Diagonal neighbours under orthogonal routing draw an L, never a
+    // straight two-point segment.
+    expect(routed?.path.length).toBeGreaterThan(2)
+  })
+
+  it('the facet takes whole-value precedence over the legacy edgeRouting preference', () => {
+    const a = textNode({ id: 'a', x: 0, y: 0, width: 50, height: 50, text: 'a' })
+    const b = textNode({ id: 'b', x: 300, y: 200, width: 50, height: 50, text: 'b' })
+    const edge = { id: 'e1', fromNode: 'a', toNode: 'b' }
+    const scene = layoutSpatialCanvas(
+      {
+        ...canvas([a, b], [edge]),
+        'x-whiteboard': {
+          edgeRouting: { style: 'orthogonal' },
+          facets: { 'visual.edges/v0': { routing: 'straight' } },
+        },
+      },
+      baseOptions(),
+    )
+    const routed = scene.nodes.find(
+      (n): n is import('../scene-graph.js').ResolvedEdgeNode => n.kind === 'edge',
+    )
+    expect(routed).toBeDefined()
+    expect(routed?.path.length).toBe(2)
   })
 
   it('centers a multi-segment edge label at the arc-length midpoint, not a corner vertex', () => {

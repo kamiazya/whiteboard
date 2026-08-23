@@ -1,6 +1,6 @@
 # Integrator Flow (git / CI mechanics)
 
-Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, a PreToolUse hook blocks `gh pr create` while the branch is behind origin/main, and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
+Hard-won mechanics for the integrator session. Each rule exists because skipping it caused a real incident. Mechanics that could be automated live in automation instead: a PostToolUse hook syncs local main after every `gh pr merge`, PreToolUse hooks block `gh pr create` while the branch is behind origin/main and when a diff a human can see ships with no figure in the body, and `new-worktree.mjs` branches from a freshly fetched `origin/main` under the main checkout. When a hook reports "pull skipped" or blocks a PR, resolve the cause rather than working around it.
 
 ## pnpm-lock.yaml conflict recipe
 
@@ -124,6 +124,16 @@ When a preview contradicts a green test, suspect the cache before suspecting the
   Two obvious causes were refuted by measurement rather than argument: cutting
   `--maxWorkers` to 4 made it WORSE (33–39s, 40% more wall clock), and the
   shared-IndexedDB theory died on the twelve-file run.
+- **A ninth: a test's own teardown wiping the DOM out from under React.**
+  `afterEach(() => { document.body.innerHTML = '' })` leaves React roots
+  mounted on detached nodes; the NEXT render's reconciler then throws
+  unhandled `NotFoundError: removeChild ... not a child` — and vitest
+  reports every test in the file as PASSED while the file exits 1
+  ("Unhandled Errors"). Measured on CI: `Tests 3 passed (3)`, `Errors 4
+  errors`, job red. Always unmount through testing-library's `cleanup()`;
+  a raw DOM wipe also races the shared setup's own cleanup, so in
+  isolation it reproduces only intermittently (1 in 17 reruns) while CI
+  load makes it reliable.
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
   list was ever opened — and raising the query's timeout only buys a slower identical failure.

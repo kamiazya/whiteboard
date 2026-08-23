@@ -6,6 +6,7 @@ import {
   SPATIAL_LIGHT_PALETTE,
   tidyNodes,
 } from '@kamiazya/whiteboard-canvas-render'
+import { bundledFacetRegistry, type FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type {
   CanvasColor,
   ClipboardFragment,
@@ -57,6 +58,7 @@ import { ContextMenu, type ContextMenuItem } from './ContextMenu.js'
 import type { EditorCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import type { FileRefOption } from './DocumentPickerDialog.js'
+import { nodePropertyItems } from './facet-widgets/index.js'
 import { type GestureResult, type GestureState, reduceGesture } from './gestures.js'
 import type { Point } from './viewport.js'
 
@@ -119,6 +121,8 @@ export interface CanvasCommands {
   readonly setSelectedEdgeId: (id: string | null) => void
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly setDocumentPicker: (state: DocumentPickerState | null) => void
+  /** Opens the node's full facet editor — the point knows no domain. */
+  readonly setFacetPanelOpen: (open: boolean) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -138,6 +142,8 @@ export interface CanvasContextMenuProps {
   readonly extraIds: ReadonlySet<string>
   readonly selectedId: string | null
   readonly isImageFileRef?: (file: string) => boolean
+  /** Contribution source; a test seam — production uses the bundled registry. */
+  readonly facetRegistry?: FacetRegistry
   readonly missingFileRef?: (file: string) => boolean
 }
 
@@ -159,6 +165,7 @@ export function CanvasContextMenu({
   selectedId,
   isImageFileRef,
   missingFileRef,
+  facetRegistry = bundledFacetRegistry,
 }: CanvasContextMenuProps) {
   const {
     applyResult,
@@ -181,6 +188,7 @@ export function CanvasContextMenu({
     setSelectedEdgeId,
     setLinkDialog,
     setDocumentPicker,
+    setFacetPanelOpen,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -635,6 +643,13 @@ export function CanvasContextMenu({
             })
           }),
         )
+        // Facets reach this surface as ONE doorway. This menu never names a
+        // plugin or facet key (facet-wiring-guard.test.ts keeps it that way),
+        // and now it does not carry their values either — an action menu runs
+        // an entry and closes; a facet is state you adjust repeatedly.
+        const facetItems = nodePropertyItems(facetRegistry, {
+          openPanel: () => setFacetPanelOpen(true),
+        })
         // Z-order as one-tap options — the touch path to the [ / ]
         // keyboard shortcuts (see shortcuts.ts). Not a picker: no
         // option is ever "selected", each tap applies a move.
@@ -742,6 +757,8 @@ export function CanvasContextMenu({
         }
         return [
           ...properties,
+          // Extensions come after every core row, behind their own fence.
+          ...facetItems,
           { kind: 'separator' as const },
           ...verbs,
           { kind: 'separator' as const },

@@ -4,16 +4,22 @@ import {
   createDocumentResponseSchema,
   createGrantResponseSchema,
   type DeleteDocumentResponse,
+  type DocumentBacklinksResponse,
   type DocumentOkfV1Response,
+  type DocumentSearchResponse,
   deleteDocumentResponseSchema,
   documentApiUrl,
+  documentBacklinksResponseSchema,
   documentOkfV1ResponseSchema,
+  documentSearchResponseSchema,
   documentsApiUrl,
   type InstallFontResponse,
   installFontResponseSchema,
+  type LinkifyMentionsResponse,
   type ListDocumentsResponse,
   type ListFontsResponse,
   type ListWorkspacesResponse,
+  linkifyMentionsResponseSchema,
   listDocumentsResponseSchema,
   listFontsResponseSchema,
   listWorkspacesResponseSchema,
@@ -22,7 +28,9 @@ import {
   renameDocumentPathResponseSchema,
   type UpdateDocumentResponse,
   updateDocumentResponseSchema,
+  type WorkspaceDocumentTagsResponse,
   type WorkspaceNames,
+  workspaceDocumentTagsResponseSchema,
   workspaceNamesSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -99,6 +107,7 @@ export function createDocument(
   workspaceId: string,
   path: string,
   kind?: DocumentKind,
+  name?: string,
 ): Promise<CreateDocumentResponse> {
   return fetchAndParse(
     fetchFn,
@@ -107,9 +116,13 @@ export function createDocument(
     {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      // Omitted kind stays omitted (not null) so an older daemon that
+      // Omitted fields stay omitted (not null) so an older daemon that
       // rejects unknown fields never sees one it can't parse.
-      body: JSON.stringify(kind === undefined ? { path } : { path, kind }),
+      body: JSON.stringify({
+        path,
+        ...(kind === undefined ? {} : { kind }),
+        ...(name === undefined ? {} : { name }),
+      }),
     },
   )
 }
@@ -189,6 +202,37 @@ export function updateDocument(
   )
 }
 
+export function getWorkspaceNames(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<WorkspaceNames> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/names`,
+    workspaceNamesSchema,
+  )
+}
+
+export function setDocumentPinned(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  path: string,
+  pinned: boolean,
+): Promise<WorkspaceNames> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${documentsApiUrl(workspaceId, path, 'pin')}`,
+    workspaceNamesSchema,
+    {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ pinned }),
+    },
+  )
+}
+
 export function setDocumentDisplayName(
   fetchFn: typeof globalThis.fetch,
   daemonBaseUrl: string,
@@ -209,6 +253,69 @@ export function setDocumentDisplayName(
 }
 
 // ---- /api/v1 document surface (documentId + derived alias world) ----
+
+/** Documents in this workspace that reference `documentId` (the Connections panel). */
+export function getDocumentBacklinks(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  documentId: string,
+): Promise<DocumentBacklinksResponse> {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(documentId)}/backlinks`,
+    documentBacklinksResponseSchema,
+  )
+}
+
+/** Content search across a workspace — bodies and canvas text, not only names. */
+export function searchWorkspaceDocuments(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  query: string,
+  limit: number,
+): Promise<DocumentSearchResponse> {
+  const params = new URLSearchParams({ q: query, limit: String(limit) })
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/search?${params}`,
+    documentSearchResponseSchema,
+  )
+}
+
+/** The workspace's tag projection (documentId -> tags), for the document browser. */
+export function getWorkspaceDocumentTags(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<WorkspaceDocumentTagsResponse> {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/document-tags`,
+    workspaceDocumentTagsResponseSchema,
+  )
+}
+
+/** Convert a source document's unlinked mentions of the target into [[...]] links. */
+export function linkifyDocumentMentions(
+  fetchImpl: typeof fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  sourceDocumentId: string,
+  targetDocumentId: string,
+): Promise<LinkifyMentionsResponse> {
+  return fetchAndParse(
+    fetchImpl,
+    `${daemonBaseUrl}/api/v1/workspaces/${encodeURIComponent(workspaceId)}/documents/${encodeURIComponent(sourceDocumentId)}/linkify-mentions`,
+    linkifyMentionsResponseSchema,
+    {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ targetDocumentId }),
+    },
+  )
+}
 
 export function getDocumentOkfV1(
   fetchFn: typeof globalThis.fetch,

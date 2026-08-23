@@ -10,6 +10,7 @@ import {
 import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
 // The page now reads useNavigate (Settings navigation), so every render
@@ -30,7 +31,10 @@ function jsonResponse(body: unknown, status = 200): Response {
 
 interface MockRoutes {
   workspaces: Array<{ workspaceId: string }>
-  documentsByWorkspace: Record<string, Array<{ path: string; updatedAt: string; kind?: string }>>
+  documentsByWorkspace: Record<
+    string,
+    Array<{ path: string; updatedAt: string; kind?: string; displayName?: string }>
+  >
   namesByWorkspace?: Record<
     string,
     { workspace?: string; documents: Record<string, string>; pinned: string[] } | 'fail'
@@ -125,22 +129,23 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-// The toolbar's + is a kind menu (spatial / markdown), not a direct create
-// button: creating means opening the menu and picking an entry. Radix menus
-// activate on pointerDown (trigger) + pointerUp (item) in jsdom.
-async function createViaMenu(itemName: string | RegExp = 'New canvas') {
-  const trigger = screen.getByRole('button', { name: 'New canvas' })
-  fireEvent.pointerDown(trigger, { button: 0, ctrlKey: false })
-  const item = await screen.findByRole('menuitem', { name: itemName })
-  fireEvent.pointerUp(item)
+// The panel's document cards fill the preview pane on click; Open /
+// Duplicate / Delete live there, so acting on a document is select-then-act.
+async function selectCard(name: string) {
+  fireEvent.click(await screen.findByText(name))
+  await screen.findByTestId('okf-preview')
 }
 
 describe('DaemonIndexPage', () => {
-  it('renders one card per canvas of the selected workspace with display name and relative updatedAt', async () => {
+  it('renders one card per document of the selected workspace with display name and relative updatedAt', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
-        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        // displayName rides on the list row exactly as the daemon's
+        // documents table serves it; /names projects the same column.
+        'ws-a': [
+          { path: 'alpha', displayName: 'Alpha Board', updatedAt: new Date().toISOString() },
+        ],
         'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: {
@@ -151,6 +156,7 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
     expect(await screen.findByText('Alpha Board')).toBeTruthy()
+    expect(screen.getByTestId('card-subtitle').textContent).toMatch(/ago/)
     expect(screen.queryByText('beta')).toBeNull()
   })
 
@@ -172,11 +178,13 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('note')
 
-    const cards = screen.getAllByTestId('document-list-card')
+    // The kind marker is the card SUBTITLE (`markdown · …`); the thumbnail
+    // placeholder is excluded because it labels unknown kinds "markdown" too.
+    const cards = screen.getAllByRole('button', { name: /note|board/ })
     const noteCard = cards.find((c) => within(c).queryByText('note'))!
     const boardCard = cards.find((c) => within(c).queryByText('board'))!
-    expect(within(noteCard).getByText(/markdown/i)).toBeTruthy()
-    expect(within(boardCard).queryByText(/markdown/i)).toBeNull()
+    expect(within(noteCard).getByTestId('card-subtitle').textContent).toMatch(/markdown/)
+    expect(within(boardCard).getByTestId('card-subtitle').textContent).not.toMatch(/markdown/)
   })
 
   it('keeps a create entry point when the canvas list fails to load', async () => {
@@ -200,7 +208,7 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual([['ws-a', 'untitled']])
   })
 
-  it('fades the loaded grid in for skeleton-to-content continuity', async () => {
+  it('fades the loaded panel in for skeleton-to-content continuity', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
@@ -210,8 +218,8 @@ describe('DaemonIndexPage', () => {
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
-    const card = await screen.findByTestId('document-list-card')
-    const wrapper = card.closest('.animate-in') as HTMLElement | null
+    const panel = await screen.findByTestId('workspace-files-panel')
+    const wrapper = panel.closest('.animate-in') as HTMLElement | null
     expect(wrapper).not.toBeNull()
     expect(wrapper?.className).toMatch(/\bfade-in-0\b/)
   })
@@ -235,7 +243,9 @@ describe('DaemonIndexPage', () => {
 
     expect(await screen.findByText('beta')).toBeTruthy()
     expect(screen.queryByText('alpha')).toBeNull()
-    expect((screen.getByLabelText('Workspace') as HTMLSelectElement).value).toBe('ws-b')
+    expect((screen.getByRole('combobox', { name: 'Workspace' }) as HTMLSelectElement).value).toBe(
+      'ws-b',
+    )
   })
 
   it('falls back to the first-listed workspace when initialWorkspaceId is not in the daemon list', async () => {
@@ -270,7 +280,9 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     expect(await screen.findByText('alpha')).toBeTruthy()
 
-    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
+      target: { value: 'ws-b' },
+    })
 
     expect(await screen.findByText('beta')).toBeTruthy()
     expect(screen.queryByText('alpha')).toBeNull()
@@ -281,8 +293,13 @@ describe('DaemonIndexPage', () => {
     // id with the OLD workspace's path — a mismatched identity.
     // Each pending call gets its own deferred + fresh Response (a Response
     // body is single-use, and the load may retry/refire).
+    // The panel re-reads ws-b AFTER the page's rows arrive, so the gate
+    // must stay open once released — a one-shot release would strand the
+    // panel's own later fetch and 'beta' would never render.
     const waiters: Array<() => void> = []
+    let released = false
     const releaseB = () => {
+      released = true
       for (const w of waiters.splice(0)) w()
     }
     const fetchMock = vi.fn((input: RequestInfo | URL) => {
@@ -298,12 +315,11 @@ describe('DaemonIndexPage', () => {
         )
       }
       if (url.includes('/ws-b/documents')) {
+        const respond = () =>
+          jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] })
+        if (released) return Promise.resolve(respond())
         return new Promise<Response>((resolve) => {
-          waiters.push(() =>
-            resolve(
-              jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
-            ),
-          )
+          waiters.push(() => resolve(respond()))
         })
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
@@ -313,7 +329,9 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     expect(await screen.findByText('alpha')).toBeTruthy()
 
-    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
+      target: { value: 'ws-b' },
+    })
 
     // ws-b's documents request is still pending — the old grid must be gone NOW.
     expect(screen.queryByText('alpha')).toBeNull()
@@ -322,7 +340,7 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('beta')).toBeTruthy()
   })
 
-  it('sorts pinned documents before unpinned, and unpinned by updatedAt desc', async () => {
+  it('sorts pinned documents before unpinned in the folder pane', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
@@ -340,11 +358,9 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('pinned-one')
 
-    const cards = screen.getAllByTestId('document-list-card')
-    expect(cards).toHaveLength(3)
-    expect(within(cards[0]!).getByText('pinned-one')).toBeTruthy()
-    expect(within(cards[1]!).getByText('new')).toBeTruthy()
-    expect(within(cards[2]!).getByText('old')).toBeTruthy()
+    // Non-vacuous: by the pane's path order alone, `pinned-one` sorts LAST.
+    const titles = screen.getAllByTestId('card-title').map((el) => el.textContent)
+    expect(titles).toEqual(['pinned-one', 'new', 'old'])
   })
 
   it('filters cards by search input matching path or display name', async () => {
@@ -363,8 +379,11 @@ describe('DaemonIndexPage', () => {
 
     fireEvent.change(screen.getByLabelText('Search documents'), { target: { value: 'bet' } })
 
+    // The match highlight splits the title across a <mark>, so read the
+    // row's textContent rather than matching a contiguous text node.
     expect(screen.queryByText('alpha')).toBeNull()
-    expect(screen.getByText('beta')).toBeTruthy()
+    const titles = (await screen.findAllByTestId('result-title')).map((el) => el.textContent)
+    expect(titles).toEqual(['beta'])
   })
 
   it('degrades gracefully to unpinned/path-only when the names fetch fails', async () => {
@@ -426,8 +445,10 @@ describe('DaemonIndexPage', () => {
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
 
-    await waitFor(() => expect(screen.getByLabelText('Workspace')).toBeTruthy())
-    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Workspace' })).toBeTruthy())
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
+      target: { value: 'ws-b' },
+    })
     expect(await screen.findByText('beta')).toBeTruthy()
 
     resolveA?.(
@@ -439,7 +460,7 @@ describe('DaemonIndexPage', () => {
     expect(screen.getByText('beta')).toBeTruthy()
   })
 
-  it('calls onOpenDocument with the card identity on click', async () => {
+  it('calls onOpenDocument with the card identity via the preview Open action', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
@@ -449,20 +470,20 @@ describe('DaemonIndexPage', () => {
     const onOpenDocument = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
-    const card = await screen.findByTestId('document-list-card')
-    fireEvent.click(card)
+    await selectCard('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
     expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
   })
 
-  it('duplicates a canvas via its card Duplicate action without opening it', async () => {
+  it('duplicates a canvas via the preview Duplicate action without opening it', async () => {
     const updates: Array<[string, string, Uint8Array]> = []
     const created: Array<[string, string]> = []
     const names: Array<[string, string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
-        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', displayName: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
       snapshotByCanvas: { alpha: new Uint8Array([1, 2, 3]) },
@@ -473,8 +494,8 @@ describe('DaemonIndexPage', () => {
     const onOpenDocument = vi.fn()
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
-    const duplicateBtn = await screen.findByRole('button', { name: /duplicate/i })
-    fireEvent.click(duplicateBtn)
+    await selectCard('Alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
 
     await waitFor(() => {
       expect(created).toEqual([['ws-a', 'alpha-copy']])
@@ -485,7 +506,7 @@ describe('DaemonIndexPage', () => {
     expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
-  it('disables the card Duplicate button while in flight, and double-clicking produces exactly one copy', async () => {
+  it('a second Duplicate press while one is in flight starts no second copy', async () => {
     let resolveSnapshot: ((res: Response) => void) | undefined
     let snapshotCalls = 0
     const created: Array<[string, string]> = []
@@ -495,8 +516,20 @@ describe('DaemonIndexPage', () => {
         return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
       }
       if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
+        // markdown: the panel's thumbnail/preview loaders then read OKF (a
+        // harmless 404 below) instead of racing this test's deferred
+        // snapshot read, which must stay the duplicate's alone.
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: [
+              {
+                path: 'alpha',
+                displayName: 'Alpha',
+                updatedAt: new Date().toISOString(),
+                kind: 'markdown',
+              },
+            ],
+          }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
@@ -524,13 +557,13 @@ describe('DaemonIndexPage', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
-    const duplicateBtn = (await screen.findByRole('button', {
-      name: /duplicate/i,
-    })) as HTMLButtonElement
+    await selectCard('Alpha')
+    const duplicateBtn = screen.getByRole('button', { name: 'Duplicate' })
     fireEvent.click(duplicateBtn)
-    await waitFor(() => expect(duplicateBtn.disabled).toBe(true))
+    await waitFor(() => expect(snapshotCalls).toBe(1))
 
-    // A second click while disabled must not start a second duplicate read.
+    // React has flushed the in-flight state by the second press; the
+    // handler's guard must swallow it — no second snapshot read.
     fireEvent.click(duplicateBtn)
     expect(snapshotCalls).toBe(1)
 
@@ -541,23 +574,21 @@ describe('DaemonIndexPage', () => {
       }),
     )
     await waitFor(() => expect(created).toEqual([['ws-a', 'alpha-copy']]))
-    await waitFor(() => expect(duplicateBtn.disabled).toBe(false))
     vi.unstubAllGlobals()
   })
 
-  it('shows an alert and re-enables the Duplicate button when duplicating fails', async () => {
+  it('shows an alert and keeps the Duplicate button usable when duplicating fails', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
-        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [{ path: 'alpha', displayName: 'Alpha', updatedAt: new Date().toISOString() }],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha' }, pinned: [] } },
       // No snapshotByCanvas entry for 'alpha' -> the mock 404s the snapshot read.
     })
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
-    const duplicateBtn = (await screen.findByRole('button', {
-      name: /duplicate/i,
-    })) as HTMLButtonElement
+    await selectCard('Alpha')
+    const duplicateBtn = screen.getByRole('button', { name: 'Duplicate' }) as HTMLButtonElement
     fireEvent.click(duplicateBtn)
 
     expect((await screen.findByRole('alert')).textContent).toMatch(/not found/i)
@@ -575,12 +606,16 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: [{ path: 'alpha', updatedAt: new Date().toISOString(), kind: 'markdown' }],
+          }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-b/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: [{ path: 'beta', updatedAt: new Date().toISOString(), kind: 'markdown' }],
+          }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
@@ -609,11 +644,13 @@ describe('DaemonIndexPage', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
-    const duplicateBtn = await screen.findByRole('button', { name: /duplicate/i })
-    fireEvent.click(duplicateBtn)
+    await selectCard('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
 
     // Switch workspaces while the duplicate (still reading alpha's snapshot) is in flight.
-    fireEvent.change(screen.getByLabelText('Workspace'), { target: { value: 'ws-b' } })
+    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
+      target: { value: 'ws-b' },
+    })
     expect(await screen.findByText('beta')).toBeTruthy()
 
     resolveSnapshot?.(
@@ -633,7 +670,7 @@ describe('DaemonIndexPage', () => {
     vi.unstubAllGlobals()
   })
 
-  it('creates a canvas via the New canvas menu and opens it, with no name typed first', async () => {
+  it("creates a canvas from the panel's New menu, opening it with no name typed first", async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -647,14 +684,20 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
-    await createViaMenu()
+    await pickNewDocumentKind('spatial')
 
+    await waitFor(() => expect(created).toEqual([['ws-a', 'untitled']]))
+    // Creating ends where the next thing happens — an empty document is
+    // worth nothing until it is open, and the panel was the last creation
+    // path in the app that left you looking at a card instead. The open
+    // folder is in the address now, so the way back is not a trip to the
+    // workspace root.
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
-    expect(created).toEqual([['ws-a', 'untitled']])
+    // Still no form in front of it: naming does not gate creation.
     expect(screen.queryByRole('dialog')).toBeNull()
   })
 
-  it('creates a markdown canvas when the menu entry is picked, sending kind to the daemon', async () => {
+  it('creates a markdown document from the panel button, sending kind to the daemon', async () => {
     const created: Array<[string, string, string | undefined]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -668,13 +711,12 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('existing')
 
-    await createViaMenu('New markdown note')
+    await pickNewDocumentKind('markdown')
 
-    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
-    expect(created).toEqual([['ws-a', 'untitled', 'markdown']])
+    await waitFor(() => expect(created).toEqual([['ws-a', 'untitled', 'markdown']]))
   })
 
-  it('derives a unique path from the loaded rows, skipping an already-used "untitled"', async () => {
+  it('derives a unique path from the listed documents, skipping an already-used "untitled"', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
@@ -688,10 +730,9 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
     await screen.findByText('untitled')
 
-    await createViaMenu()
+    await pickNewDocumentKind('spatial')
 
-    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled-2'))
-    expect(created).toEqual([['ws-a', 'untitled-2']])
+    await waitFor(() => expect(created).toEqual([['ws-a', 'untitled-2']]))
   })
 
   it('shows an alert when create canvas fails', async () => {
@@ -754,53 +795,6 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(button)
 
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalled())
-    expect(created).toEqual(['untitled'])
-  })
-
-  // Mirrors the Duplicate action's own in-flight test above: the path is derived from the loaded
-  // rows, so two creates racing on the same rows derive the SAME path and the loser 409s. Covers
-  // both entry points — the empty state's button shares one `creating` flag with the toolbar's
-  // menu trigger.
-  it('disables the toolbar create menu while a create is in flight', async () => {
-    let resolveCreate: ((res: Response) => void) | undefined
-    const created: string[] = []
-    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
-      const url = typeof input === 'string' ? input : input.toString()
-      if (url.endsWith('/api/workspaces')) {
-        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
-      }
-      if (url.endsWith('/api/workspaces/ws-a/documents') && init?.method === 'POST') {
-        created.push(JSON.parse(String(init.body)).path as string)
-        return new Promise<Response>((resolve) => {
-          resolveCreate = resolve
-        })
-      }
-      if (url.endsWith('/api/workspaces/ws-a/documents')) {
-        return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'existing', updatedAt: new Date().toISOString() }] }),
-        )
-      }
-      return Promise.resolve(jsonResponse({ documents: {}, pinned: [] }))
-    })
-    vi.stubGlobal('fetch', fetchMock)
-    const onOpenDocument = vi.fn()
-
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
-    await screen.findByText('existing')
-
-    await createViaMenu()
-    await waitFor(() => expect(created).toEqual(['untitled']))
-    // The create is still in flight: the trigger is disabled AND the menu
-    // items (still mounted if the menu stayed open) are dead, so a second
-    // create cannot start from either path.
-    const trigger = screen.getByRole('button', { name: 'New canvas' })
-    await waitFor(() => expect(trigger.hasAttribute('disabled')).toBe(true))
-    const item = screen.queryByRole('menuitem', { name: 'New canvas' })
-    if (item) fireEvent.pointerUp(item)
-    expect(created).toEqual(['untitled'])
-
-    resolveCreate?.(jsonResponse({ path: 'untitled' }))
-    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledTimes(1))
     expect(created).toEqual(['untitled'])
   })
 
@@ -883,19 +877,55 @@ describe('DaemonIndexPage', () => {
     expect((await screen.findByRole('alert')).textContent).toContain('already exists')
 
     // The failed create re-reads the list, which now shows the colliding
-    // canvas — so the retry entry point is the toolbar menu, and it must not
-    // repeat the losing path.
+    // canvas — the page leaves the onboarding state and mounts the panel,
+    // whose own create button must not repeat the losing path.
     await screen.findByText('untitled')
-    await waitFor(() =>
-      expect(screen.getByRole('button', { name: 'New canvas' }).hasAttribute('disabled')).toBe(
-        false,
-      ),
-    )
-    await createViaMenu()
-    await waitFor(() => expect(onOpenDocument).toHaveBeenCalled())
+    await pickNewDocumentKind('spatial')
 
-    expect(created).toEqual(['untitled', 'untitled-2'])
-    expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled-2')
+    await waitFor(() => expect(created).toEqual(['untitled', 'untitled-2']))
+    // The point of this test is the PATH the retry picks, not where the user
+    // ends up — but both creates open what they made now, so the onboarding
+    // one having fired first is why this asserts on the second.
+    await waitFor(() => expect(onOpenDocument).toHaveBeenLastCalledWith('ws-a', 'untitled-2'))
+  })
+
+  it('the delete dialog names the kind: note for markdown, canvas for spatial', async () => {
+    // Hardcoding "canvas" back into this page's dialog must go red here —
+    // the local page has the same pin, and the daemon page is not exempt.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: {
+        'ws-a': [
+          {
+            path: 'meeting-notes',
+            displayName: 'Meeting notes',
+            updatedAt: '2026-08-01T00:00:00Z',
+            kind: 'markdown',
+          },
+          {
+            path: 'trip-plan',
+            displayName: 'Trip plan',
+            updatedAt: '2026-08-02T00:00:00Z',
+            kind: 'spatial',
+          },
+        ],
+      },
+    })
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
+      container: document.body,
+    })
+
+    await selectCard('Meeting notes')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    let dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/removes the note, including its versions/)).toBeTruthy()
+    fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
+    await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
+
+    await selectCard('Trip plan')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    dialog = await screen.findByRole('alertdialog')
+    expect(within(dialog).getByText(/removes the canvas, including its versions/)).toBeTruthy()
   })
 
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
@@ -903,7 +933,9 @@ describe('DaemonIndexPage', () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: {
-        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-a': [
+          { path: 'alpha', displayName: 'Alpha Board', updatedAt: new Date().toISOString() },
+        ],
       },
       namesByWorkspace: { 'ws-a': { documents: { alpha: 'Alpha Board' }, pinned: [] } },
       onDeleteCanvas: (_ws, path) => {
@@ -916,16 +948,17 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />, {
       container: document.body,
     })
-    await screen.findByText('Alpha Board')
+    await selectCard('Alpha Board')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete Alpha Board' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
     expect(within(dialog).getByText(/Delete "Alpha Board"\?/)).toBeTruthy()
 
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
     expect(deleted).toEqual([])
-    expect(screen.getByText('Alpha Board')).toBeTruthy()
+    // Card title AND the preview heading both say it — still present, twice.
+    expect(screen.getAllByText('Alpha Board').length).toBeGreaterThan(0)
     expect(onOpenDocument).not.toHaveBeenCalled()
   })
 
@@ -953,9 +986,9 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
     })
-    await screen.findByText('alpha')
+    await selectCard('alpha')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     fireEvent.click(
       within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }),
     )
@@ -987,9 +1020,9 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
     })
-    await screen.findByText('alpha')
+    await selectCard('alpha')
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     const confirm = within(await screen.findByRole('alertdialog')).getByRole('button', {
       name: 'Delete',
     })
@@ -1020,10 +1053,10 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />, {
       container: document.body,
     })
-    await screen.findByText('alpha')
+    await selectCard('alpha')
     const fetchesBefore = listFetches
 
-    fireEvent.click(screen.getByRole('button', { name: 'Delete alpha' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     const dialog = await screen.findByRole('alertdialog')
     fireEvent.click(within(dialog).getByRole('button', { name: 'Delete' }))
 
@@ -1079,10 +1112,10 @@ describe('DaemonIndexPage', () => {
 
     // One workspace = nothing to choose; the raw id has no reason to be
     // page chrome. Multi-workspace daemons keep the selector.
-    expect(screen.queryByLabelText('Workspace')).toBeNull()
+    expect(screen.queryByRole('combobox', { name: 'Workspace' })).toBeNull()
   })
 
-  it('exposes the New canvas control as an icon-only button whose glyph is aria-hidden', async () => {
+  it('names the create control in text and hides its glyph from the accessible name', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
@@ -1091,9 +1124,12 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
-    const button = screen.getByRole('button', { name: 'New canvas' })
-    expect(button.getAttribute('aria-label')).toBe('New canvas')
-    // The only visible content is the aria-hidden glyph — no leaked text name.
+    const button = screen.getByRole('button', { name: 'New document' })
+    expect(button.getAttribute('aria-label')).toBe('New document')
+    // WCAG 2.5.3: the visible label is a substring of the accessible name,
+    // so "click New" reaches this control by voice. The glyph stays out of
+    // the name entirely.
+    expect(button.textContent).toContain('New')
     const svg = button.querySelector('svg')
     expect(svg?.getAttribute('aria-hidden')).toBe('true')
   })
@@ -1107,10 +1143,6 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
-    expect(screen.queryByLabelText(/new canvas name/i)).toBeNull()
-    expect(screen.queryByRole('button', { name: 'Create canvas' })).toBeNull()
-
-    fireEvent.click(screen.getByRole('button', { name: 'Tree view' }))
     expect(screen.queryByLabelText(/new canvas name/i)).toBeNull()
     expect(screen.queryByRole('button', { name: 'Create canvas' })).toBeNull()
   })
@@ -1149,7 +1181,12 @@ describe('DaemonIndexPage', () => {
 
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
 
-    expect(await screen.findByText('No documents yet')).toBeTruthy()
+    expect(await screen.findByText('What will you make first?')).toBeTruthy()
+    // Mode-honest copy: the daemon page must NOT show local mode's
+    // "stays in this browser" promise — documents live in the daemon here.
+    expect(screen.getByTestId('empty-state-subtitle').textContent).toBe(
+      'Documents live in this workspace, kept by your local daemon.',
+    )
     fireEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
 
     // The action creates immediately — no naming step gates it — and opens
@@ -1158,7 +1195,27 @@ describe('DaemonIndexPage', () => {
     expect(created).toEqual([['ws-a', 'untitled']])
   })
 
-  it('offers Grid/Tree as a view toggle of the one canvas surface', async () => {
+  it('the empty state also offers a markdown note, sending its kind and opening it', async () => {
+    // The onboarding moment is where a writing-first user arrives too — an
+    // empty state that can only make a canvas turns them away at the door.
+    const kinds: Array<string | undefined> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: { 'ws-a': [] },
+      onCreateDocument: (_workspaceId, _path, kind) => kinds.push(kind),
+    })
+    const onOpenDocument = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+
+    await screen.findByText('What will you make first?')
+    fireEvent.click(screen.getByRole('button', { name: 'Create a markdown note' }))
+
+    await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
+    expect(kinds).toEqual(['markdown'])
+  })
+
+  it('renders the panel as the one document surface, with no view toggle left', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }],
       documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
@@ -1167,9 +1224,8 @@ describe('DaemonIndexPage', () => {
     render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
     await screen.findByText('alpha')
 
-    const grid = screen.getByRole('button', { name: 'Grid view' })
-    const tree = screen.getByRole('button', { name: 'Tree view' })
-    expect(grid.getAttribute('aria-pressed')).toBe('true')
-    expect(tree.getAttribute('aria-pressed')).toBe('false')
+    expect(screen.getByTestId('workspace-files-panel')).toBeTruthy()
+    expect(screen.queryByRole('button', { name: 'Grid view' })).toBeNull()
+    expect(screen.queryByRole('button', { name: 'Tree view' })).toBeNull()
   })
 })

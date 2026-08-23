@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
@@ -21,19 +22,37 @@ export type CanvasColor = z.infer<typeof canvasColorSchema>
  * an existing node type (a diagram becomes a `file` node pointing at an
  * image) rather than through a variant only this project can read.
  */
-export const xWhiteboardSchema = z.object({
-  kind: z.literal('embed'),
+export const xWhiteboardSchema = z.union([
+  z.object({
+    kind: z.literal('embed'),
+    /**
+     * The DOCUMENT this node embeds. Written into exported JSON Canvas files
+     * and published as `docs/reference/x-whiteboard.schema.json`, so this is a
+     * format contract and not only a name: a document stored with the previous
+     * spelling loses its embed on read. Renamed anyway at 0.0.x with no users,
+     * because a format that says `canvasId` for a document id teaches the wrong
+     * model to everyone who reads the published schema.
+     */
+    documentId: documentIdSchema,
+    versionRef: z.string().min(1).optional(),
+    facets: extensionFacetsSchema.optional().catch(undefined),
+  }),
   /**
-   * The DOCUMENT this node embeds. Written into exported JSON Canvas files
-   * and published as `docs/reference/x-whiteboard.schema.json`, so this is a
-   * format contract and not only a name: a document stored with the previous
-   * spelling loses its embed on read. Renamed anyway at 0.0.x with no users,
-   * because a format that says `canvasId` for a document id teaches the wrong
-   * model to everyone who reads the published schema.
+   * Node-target facets without an embed (ADR-0013 decision 5): payload only,
+   * so the node-level content-only rule holds. `.strict()`, so a broken
+   * embed (`kind` present, `documentId` missing/invalid) fails this variant
+   * too instead of being silently stripped down to its facets — the outer
+   * `.catch(undefined)` then drops the extension whole, exactly as before
+   * this variant existed. The facets bucket carries its own catch for the
+   * same reason the canvas-level one does: a bad key costs the bucket, not
+   * its siblings.
    */
-  documentId: documentIdSchema,
-  versionRef: z.string().min(1).optional(),
-})
+  z
+    .object({
+      facets: extensionFacetsSchema.optional().catch(undefined),
+    })
+    .strict(),
+])
 
 export type XWhiteboard = z.infer<typeof xWhiteboardSchema>
 
@@ -154,6 +173,20 @@ export const edgeRoutingSchema = z.object({
  */
 export const canvasExtensionSchema = z.object({
   edgeRouting: edgeRoutingSchema.optional(),
+  /**
+   * Canvas-target facets (ADR-0013 decision 5): the spatial counterpart of a
+   * markdown document's `facets` bucket, carrying `{namespace}.{name}/v{n}`
+   * keyed payloads. The rendering preferences above are slated to fold INTO
+   * this bucket as canvas-target facets; until then both coexist and the
+   * facet takes precedence where both speak (the engine's resolver owns that
+   * rule).
+   *
+   * `.catch(undefined)` on the BUCKET, not the whole extension: facets is a
+   * record schema that rejects on any malformed key, and without its own
+   * catch one bad key would take the sibling preferences down with it. A bad
+   * bucket costs the bucket; edgeRouting and the canvas survive.
+   */
+  facets: extensionFacetsSchema.optional().catch(undefined),
 })
 
 export type CanvasExtension = z.infer<typeof canvasExtensionSchema>

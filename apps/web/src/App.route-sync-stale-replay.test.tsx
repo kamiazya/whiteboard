@@ -90,8 +90,8 @@ vi.mock('./hooks/useDaemonConnection.js', () => ({
 
 const { App } = await import('./App.js')
 
-const BROWSER_LOCAL_STATE: ProviderState = {
-  kind: 'browser-local',
+const BROWSER_STATE: ProviderState = {
+  kind: 'browser',
   capabilities: {
     workspaces: false,
     versions: false,
@@ -117,7 +117,7 @@ describe('App route sync against an asynchronously-propagating router', () => {
   it('a StrictMode replay must not overwrite the #wb= canvas view with the stale pathname', async () => {
     render(
       <StrictMode>
-        <App providerState={BROWSER_LOCAL_STATE} />
+        <App providerState={BROWSER_STATE} />
       </StrictMode>,
     )
     // Drain the navigation timers until the system settles (or the storm

@@ -5,7 +5,7 @@
  *
  * States:
  * - `synced`   — daemon-backed page with live sync running.
- * - `local`    — browser-local page; data exists only in this browser.
+ * - `browser`  — the workspace is kept in this browser and nowhere else.
  *                `children` hosts page-supplied extras (daemon detection,
  *                capability hint) inside the popover.
  * - `reconnecting` — live sync is not running: the transport has not come up
@@ -15,15 +15,25 @@
  *                whose socket is closed drops the delta it was handed.
  * - `sync-off` — daemon-backed page whose session was rejected. The chip
  *                turns attention-colored and the popover carries the two
- *                ways forward (re-pair / continue browser-local). A polite
+ *                ways forward (re-pair / work in the browser). A polite
  *                sr-only live region announces the transition so dropping
  *                the old role="alert" banner loses no assistive-tech signal.
  */
 import type { ReactNode } from 'react'
+import { Link } from 'react-router-dom'
+import { settingsPath } from '@/lib/app-routes'
 import { cn } from '@/lib/utils'
+import { StateDot, type StateDotTone } from '../StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
-export type ConnectionState = 'synced' | 'local' | 'reconnecting' | 'sync-off'
+/**
+ * Two different questions share this type, and only one of them survives
+ * navigation: `browser` names WHO KEEPS the workspace, while the other three
+ * report whether a live session is healthy. Splitting them is its own slice;
+ * this one only stops the keeper from being called "local", which a daemon
+ * running on the same machine is too.
+ */
+export type ConnectionState = 'synced' | 'browser' | 'reconnecting' | 'sync-off'
 
 export interface ConnectionStatusProps {
   readonly state: ConnectionState
@@ -31,38 +41,32 @@ export interface ConnectionStatusProps {
   readonly daemonBaseUrl?: string
   /** sync-off only: starts the pairing grant flow on the daemon's /pair page. */
   readonly onRepair?: () => void
-  /** sync-off only: switches this canvas to the browser-local flow. */
-  readonly onContinueBrowserLocal?: () => void
-  /** local only: page-supplied popover extras (daemon detection, capability hint). */
+  /** sync-off only: switches to the documents kept in this browser. */
+  readonly onWorkInBrowser?: () => void
+  /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
-  /**
-   * synced only: stop using this daemon in this browser. It does NOT unpair
-   * and does NOT touch anything stored on the daemon — the copy says so,
-   * because "disconnect" reads like a destructive word.
-   */
-  readonly onDisconnect?: () => void
 }
 
 const CHIP_LABEL: Record<ConnectionState, string> = {
   synced: 'Synced',
-  local: 'Local',
+  browser: 'Browser',
   reconnecting: 'Reconnecting',
   'sync-off': 'Sync off',
 }
 
-const DOT_CLASS: Record<ConnectionState, string> = {
-  synced: 'bg-emerald-500',
-  local: 'bg-muted-foreground/60',
-  reconnecting: 'bg-amber-500',
-  'sync-off': 'bg-amber-500',
+// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
+const DOT_TONE: Record<ConnectionState, StateDotTone> = {
+  synced: 'safe',
+  browser: 'neutral',
+  reconnecting: 'attention',
+  'sync-off': 'attention',
 }
 
 export function ConnectionStatus({
   state,
   daemonBaseUrl,
   onRepair,
-  onContinueBrowserLocal,
-  onDisconnect,
+  onWorkInBrowser,
   children,
 }: ConnectionStatusProps) {
   // Empty while sync is on: the region has to exist BEFORE the message, but
@@ -87,18 +91,14 @@ export function ConnectionStatus({
             state === 'sync-off' && 'border-amber-500/40 bg-amber-500/10 text-amber-700',
           )}
         >
-          <span aria-hidden="true" className="relative inline-flex size-2">
-            {state === 'sync-off' && (
-              // One-shot attention echo behind the dot: mounts exactly when
-              // the chip enters sync-off, pulses twice, then rests. Finite
-              // by design — a standing ping would be noise, not guidance.
-              <span
-                data-testid="connection-chip-pulse"
-                className="absolute inset-0 rounded-full bg-amber-500 animate-[attention-pulse_900ms_var(--motion-ease-out)_2]"
-              />
-            )}
-            <span className={cn('absolute inset-0 rounded-full', DOT_CLASS[state])} />
-          </span>
+          <StateDot
+            tone={DOT_TONE[state]}
+            // One-shot attention echo behind the dot: mounts exactly when the
+            // chip enters sync-off, pulses twice, then rests. Finite by
+            // design — a standing ping would be noise, not guidance.
+            pulse={state === 'sync-off'}
+            pulseTestId="connection-chip-pulse"
+          />
           {CHIP_LABEL[state]}
         </button>
       </PopoverTrigger>
@@ -107,7 +107,7 @@ export function ConnectionStatus({
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>
             <p className="text-muted-foreground">
-              Changes are saved to your local daemon
+              Changes are saved to the daemon on this machine
               {daemonBaseUrl ? (
                 <>
                   {' at '}
@@ -118,37 +118,33 @@ export function ConnectionStatus({
               ) : null}
               .
             </p>
-            {onDisconnect && (
-              <div className="mt-1 flex flex-col gap-1.5">
-                <button
-                  type="button"
-                  data-testid="connection-disconnect"
-                  onClick={onDisconnect}
-                  className="text-left font-medium underline"
-                >
-                  Disconnect from this daemon
-                </button>
-                <p className="text-xs text-muted-foreground">
-                  This browser stops using it and stops looking for it. Your data stays on the
-                  daemon and is not deleted; pairing is not revoked.
-                </p>
-              </div>
-            )}
+            {/* The chip reports; it does not manage. Changing which daemon
+                this browser uses is something you go looking for, so it
+                lives in Settings and this only points at it. */}
+            <Link
+              to={settingsPath('connections')}
+              className="mt-1 text-xs font-medium text-primary hover:underline"
+            >
+              Manage in Settings
+            </Link>
           </div>
         )}
         {state === 'reconnecting' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is not running</p>
             <p className="text-muted-foreground">
-              This canvas is not receiving changes from your local daemon right now. Your edits are
-              kept and sent when the connection returns. Reload the page if it does not recover.
+              This document is not receiving changes from the daemon right now. Your edits are kept
+              and sent when the connection returns. Reload the page if it does not recover.
             </p>
           </div>
         )}
-        {state === 'local' && (
+        {state === 'browser' && (
           <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">Browser-local canvas</p>
-            <p className="text-muted-foreground">Your data is stored only in this browser.</p>
+            <p className="font-medium">Kept in this browser</p>
+            <p className="text-muted-foreground">
+              Your documents live in this browser's storage. Other browsers cannot see them, and
+              clearing site data removes them.
+            </p>
             {children}
           </div>
         )}
@@ -168,13 +164,13 @@ export function ConnectionStatus({
                   Re-pair with the daemon
                 </button>
               )}
-              {onContinueBrowserLocal && (
+              {onWorkInBrowser && (
                 <button
                   type="button"
-                  onClick={onContinueBrowserLocal}
+                  onClick={onWorkInBrowser}
                   className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
                 >
-                  Continue in browser-local
+                  Work in this browser instead
                 </button>
               )}
             </div>

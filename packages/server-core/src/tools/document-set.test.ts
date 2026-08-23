@@ -43,7 +43,7 @@ describe('wb_document_set tool', () => {
       '---',
       'type: issue',
       'facets:',
-      '  example/1:',
+      '  example.sample/v1:',
       '    status: open',
       '    priority: high',
       '---',
@@ -63,7 +63,7 @@ describe('wb_document_set tool', () => {
 
     const doc = await loadDoc(store, DOCUMENT_ID)
     const facets = readFacets(doc)
-    expect(facets).toEqual({ 'example/1': { status: 'open', priority: 'high' } })
+    expect(facets).toEqual({ 'example.sample/v1': { status: 'open', priority: 'high' } })
 
     expect(readMarkdownBody(doc)).toBe('# Bug report\n\nSomething is broken.')
     // And the document is NOT also a spatial canvas. The body used to be
@@ -97,15 +97,16 @@ describe('wb_document_set tool', () => {
     await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
     const tool = createDocumentSetTool(makeDeps(store))
 
-    const v1 = '---\ntype: issue\nfacets:\n  example/1:\n    status: open\n---\nFirst body.'
+    const v1 = '---\ntype: issue\nfacets:\n  example.sample/v1:\n    status: open\n---\nFirst body.'
     await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown: v1 })
 
-    const v2 = '---\ntype: issue\nfacets:\n  example/1:\n    status: closed\n---\nUpdated body.'
+    const v2 =
+      '---\ntype: issue\nfacets:\n  example.sample/v1:\n    status: closed\n---\nUpdated body.'
     await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown: v2 })
 
     const doc = await loadDoc(store, DOCUMENT_ID)
     const facets = readFacets(doc)
-    expect(facets['example/1']).toEqual({ status: 'closed' })
+    expect(facets['example.sample/v1']).toEqual({ status: 'closed' })
 
     // Overwritten, not appended: the second import replaces the body rather
     // than leaving the first one alongside it.
