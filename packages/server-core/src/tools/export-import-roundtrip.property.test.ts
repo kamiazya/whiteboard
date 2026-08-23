@@ -9,6 +9,7 @@ import {
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createDocumentSetTool } from './document-set.js'
 import { exportOkf } from './export-okf.js'
@@ -82,6 +83,7 @@ async function setupTools() {
     blobStore: {} as never,
     documentIndex: store.documentIndex,
     documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
   return {
     deps,

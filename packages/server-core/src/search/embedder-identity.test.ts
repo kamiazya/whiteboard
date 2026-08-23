@@ -1,6 +1,7 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { ContentFactsCache } from '../references/content-facts-cache.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -16,6 +17,7 @@ function makeDeps() {
     blobStore: {} as never,
     documentIndex: new InMemoryDocumentIndex(),
     documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 

@@ -15,6 +15,7 @@ import {
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
+import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { DocumentKindMismatchError, FacetWriteRejectedError, NodeNotFoundError } from './errors.js'
@@ -29,6 +30,7 @@ function makeDeps(documentStore: FakeDocumentStore) {
     blobStore: {} as never,
     documentIndex: documentStore.documentIndex,
     documentTeardown: unusedDocumentTeardown(),
+    documentWritten: ignoredDocumentWrites(),
   }
 }
 
