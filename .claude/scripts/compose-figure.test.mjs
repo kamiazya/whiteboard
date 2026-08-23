@@ -8,7 +8,7 @@
 // same picture twice under a "before" and an "after" label.
 
 import { execFileSync } from 'node:child_process'
-import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -68,7 +68,7 @@ test('refuses two panels that are byte-identical', () => {
   const out = join(dir, 'figure.png')
   const { status, stderr } = run(['--before', before, '--after', after, '--out', out])
   assert.equal(status, 1)
-  assert.match(stderr, /identical/i)
+  assert.match(stderr, /same picture/i)
   assert.equal(existsSync(out), false, 'must not leave a figure that shows one picture twice')
 })
 
@@ -86,6 +86,61 @@ test('composes a figure when the panels differ, and reports both digests', () =>
   // two panels were actually different renders rather than one file twice.
   const digests = stdout.match(/\b[0-9a-f]{8}\b/g) ?? []
   assert.equal(new Set(digests).size >= 2, true, `expected two distinct digests, got ${stdout}`)
+})
+
+test('refuses two panels that differ only in metadata', () => {
+  // A byte compare says these differ; they are the same picture. Whatever
+  // wrote them stamped something incidental, and the refusal has to survive
+  // that or it protects nothing.
+  const dir = scratch()
+  const before = join(dir, 'before.png')
+  const after = join(dir, 'after.png')
+  png(before, 'white')
+  execFileSync('convert', [before, '-set', 'comment', 'a different stamp', after], {
+    encoding: 'utf-8',
+  })
+  assert.notEqual(readFileSync(before).equals(readFileSync(after)), true, 'fixture must differ in bytes')
+  const { status, stderr } = run(['--before', before, '--after', after, '--out', join(dir, 'f.png')])
+  assert.equal(status, 1)
+  assert.match(stderr, /same picture/i)
+})
+
+test('gives a wider panel a label band of its own width', () => {
+  // A change can legitimately resize what it renders, so mismatched panels
+  // are not an error — but a label band built at the OTHER panel's width
+  // crops the text, silently, in the half of the figure that is the point.
+  const dir = scratch()
+  const before = join(dir, 'before.png')
+  const after = join(dir, 'after.png')
+  png(before, 'white')
+  execFileSync('convert', ['-size', '400x40', 'xc:white', after], { encoding: 'utf-8' })
+  const out = join(dir, 'figure.png')
+  const { status } = run([
+    '--before',
+    before,
+    '--after',
+    after,
+    '--out',
+    out,
+    '--after-label',
+    'a much longer after label than the narrow panel can hold',
+  ])
+  assert.equal(status, 0)
+  // The after label band sits below [border][before label 30][before 40].
+  // Past the before panel's width it must carry ink, not white padding.
+  const mean = Number(
+    execFileSync(
+      'convert',
+      [out, '-crop', '320x30+60+71', '+repage', '-format', '%[mean]', 'info:'],
+      { encoding: 'utf-8' },
+    ).trim(),
+  )
+  const white = Number(
+    execFileSync('convert', ['-size', '10x10', 'xc:white', '-format', '%[mean]', 'info:'], {
+      encoding: 'utf-8',
+    }).trim(),
+  )
+  assert.equal(mean < white, true, `expected label text past x=60, got mean ${mean} vs white ${white}`)
 })
 
 test('refuses a missing input rather than composing half a figure', () => {

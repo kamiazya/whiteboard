@@ -47,10 +47,13 @@ const NOT_A_SURFACE = /\.(test|bench|spec|docs-snapshot)\.[cm]?[jt]sx?$/
 const HAS_FIGURE = /!\[[^\]]*\]\([^)]+\)|<img\s|https:\/\/github\.com\/user-attachments\//
 
 /**
- * The stated-absence escape. One sentence, and the reason is the point: an
- * unexplained skip and a deliberate one are indistinguishable without it.
+ * The stated-absence escape, and the REASON is the whole of it: a bare
+ * "none" is the same omission with a sentence in front of it, which is the
+ * shape this hook exists to stop one level up. Any of `—`, `–`, `-` or `:`
+ * separates it, because insisting on an em dash makes the escape hostile to
+ * type and the character is the first thing a keyboard drops.
  */
-const STATES_NO_FIGURE = /visual evidence:\s*none\b/i
+const STATES_NO_FIGURE = /visual evidence:\s*none\s*[—–:-]\s*\S{3}/i
 
 let input
 try {
@@ -60,7 +63,12 @@ try {
 }
 
 const command = input?.tool_input?.command ?? ''
-if (!/\bgh\s+pr\s+create\b/.test(command)) process.exit(0)
+// At a command POSITION — start of line, or after a separator. Matching the
+// bare text blocks `printf 'gh pr create …'`, which creates no PR, and a gate
+// that fires on something harmless is one people route around.
+if (!/(?:^|[\n;]|&&|\|\||\|)\s*(?:[A-Za-z_][\w]*=\S*\s+)*gh\s+pr\s+create\b/.test(command)) {
+  process.exit(0)
+}
 
 /** Reads --body '<text>' / --body="<text>" / --body-file <path>. */
 function readBody(cmd, cwd) {

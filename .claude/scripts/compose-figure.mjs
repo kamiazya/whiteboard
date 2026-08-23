@@ -60,13 +60,34 @@ const read = (path) => {
 const beforeBytes = read(beforePath)
 const afterBytes = read(afterPath)
 
-const digest = (bytes) => createHash('sha256').update(bytes).digest('hex').slice(0, 8)
-const beforeDigest = digest(beforeBytes)
-const afterDigest = digest(afterBytes)
+/**
+ * Identity by PIXELS, not by bytes. Two renders of the same picture can differ
+ * in a comment, a timestamp, or a compression choice, and a byte compare then
+ * reports them as a real before/after — which is precisely the case this
+ * script exists to refuse. `identify -format '%#'` is ImageMagick's signature
+ * over the decoded image, so it ignores everything that is not the picture.
+ * Falls back to bytes if ImageMagick cannot read the file; a fallback that
+ * catches less is better than a crash that catches nothing.
+ */
+const pixelSignature = (path) => {
+  try {
+    return execFileSync('identify', ['-format', '%#', path], {
+      encoding: 'utf8',
+      stdio: ['pipe', 'pipe', 'pipe'],
+    }).trim()
+  } catch {
+    return null
+  }
+}
+const digest = (bytes) => createHash('sha256').update(bytes).digest('hex')
+const beforeSignature = pixelSignature(beforePath) ?? digest(beforeBytes)
+const afterSignature = pixelSignature(afterPath) ?? digest(afterBytes)
+const beforeDigest = beforeSignature.slice(0, 8)
+const afterDigest = afterSignature.slice(0, 8)
 
-if (beforeDigest === afterDigest && beforeBytes.equals(afterBytes)) {
+if (beforeSignature === afterSignature) {
   fail(
-    `the two panels are identical (${beforeDigest}). Nothing was re-rendered, so a figure built ` +
+    `the two panels are the same picture (${beforeDigest}). Nothing was re-rendered, so a figure built ` +
       `from them would show one picture under both labels.\n` +
       `  Check that the "before" run actually had the change reverted — a \`git stash push\` on a ` +
       `path with nothing to stash succeeds silently, and a committed change needs ` +
@@ -88,14 +109,17 @@ const magick = (args) => {
 
 const scratch = mkdtempSync(join(tmpdir(), 'compose-figure-'))
 try {
-  const width = Number(
-    execFileSync('identify', ['-format', '%w', beforePath], { encoding: 'utf-8' }).trim(),
-  )
   const panels = []
   for (const [side, path, label, colour] of [
     ['before', beforePath, beforeLabel, BEFORE_COLOUR],
     ['after', afterPath, afterLabel, AFTER_COLOUR],
   ]) {
+    // Each band is built at ITS OWN panel's width. A change is allowed to
+    // resize what it renders, and a band sized from the other panel crops
+    // the label — silently, in the half of the figure that is the point.
+    const width = Number(
+      execFileSync('identify', ['-format', '%w', path], { encoding: 'utf-8' }).trim(),
+    )
     const lbl = join(scratch, `lbl-${side}.png`)
     const panel = join(scratch, `panel-${side}.png`)
     magick([

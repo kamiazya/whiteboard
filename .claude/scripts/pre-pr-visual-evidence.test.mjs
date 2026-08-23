@@ -86,6 +86,26 @@ test('allows a UI diff that states why there is no figure', () => {
   assert.equal(runHook(work, bodyArg(body)).status, 0)
 })
 
+test('a bare "none" with no reason is not a stated decision', () => {
+  // The escape exists to turn an omission into a decision. Without a reason
+  // it is the same omission with a sentence in front of it.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, bodyArg('Visual evidence: none')).status, 2)
+  assert.equal(runHook(work, bodyArg('Visual evidence: none.')).status, 2)
+})
+
+test('ignores the command text quoted inside an unrelated command', () => {
+  // `echo "gh pr create …"` creates no PR, and blocking it teaches people
+  // the hook is noise.
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, `printf 'gh pr create --body x'`).status, 0)
+})
+
+test('still fires when the command follows a cd or a chained separator', () => {
+  const work = makeRepoPair('apps/web/src/components/Thing.tsx')
+  assert.equal(runHook(work, `cd ${work} && ${bodyArg('## What')}`).status, 2)
+})
+
 test('a section header with no image is not evidence', () => {
   // The hollow shape this hook exists for: the heading satisfies a reader
   // skimming for it while the figure was never produced.
