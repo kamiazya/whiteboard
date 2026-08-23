@@ -193,9 +193,15 @@ export function createLocalFilesSource(
         })
       }
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
+      // Every hit here is a keyword hit — there is no embedder in the
+      // browser — so each carries its rank, and the panel highlights.
+      let rank = 0
       return fullTextSearch(searchable, query, { limit }).flatMap((hit) => {
         const document = byId.get(hit.documentId)
-        return document === undefined ? [] : [{ document, contexts: [...hit.contexts] }]
+        rank += 1
+        return document === undefined
+          ? []
+          : [{ document, contexts: [...hit.contexts], lexicalRank: rank }]
       })
     },
 

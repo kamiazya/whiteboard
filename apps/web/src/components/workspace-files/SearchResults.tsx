@@ -27,6 +27,12 @@ import type { WorkspaceDocumentEntry } from './document-entry.js'
 export interface SearchResultRow {
   readonly document: WorkspaceDocumentEntry
   readonly contexts?: readonly string[]
+  /**
+   * The keyword rank behind this row, absent when keywords did not produce
+   * it. Absent means the excerpt is the document's opening rather than a
+   * match window, so there is no word in it the query is responsible for.
+   */
+  readonly lexicalRank?: number
 }
 
 export interface SearchResultsProps {
@@ -156,7 +162,7 @@ export function SearchResults({
       </div>
       {layout === 'list' ? (
         <ul data-testid="search-results-list" className="space-y-1 p-0.5">
-          {results.map(({ document: entry, contexts }) => (
+          {results.map(({ document: entry, contexts, lexicalRank }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
@@ -200,7 +206,11 @@ export function SearchResults({
                       data-testid="result-excerpt"
                       className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
                     >
-                      <Highlighted text={contexts?.[0] ?? ''} query={query} />
+                      {lexicalRank === undefined ? (
+                        (contexts?.[0] ?? '')
+                      ) : (
+                        <Highlighted text={contexts?.[0] ?? ''} query={query} />
+                      )}
                     </span>
                   )}
                 </span>
@@ -213,7 +223,7 @@ export function SearchResults({
           data-testid="search-results-grid"
           className="grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3"
         >
-          {results.map(({ document: entry, contexts }) => (
+          {results.map(({ document: entry, contexts, lexicalRank }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
@@ -254,7 +264,11 @@ export function SearchResults({
                       data-testid="result-excerpt"
                       className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
                     >
-                      <Highlighted text={contexts?.[0] ?? ''} query={query} />
+                      {lexicalRank === undefined ? (
+                        (contexts?.[0] ?? '')
+                      ) : (
+                        <Highlighted text={contexts?.[0] ?? ''} query={query} />
+                      )}
                     </span>
                   )}
                 </span>

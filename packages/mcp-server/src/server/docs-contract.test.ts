@@ -1,8 +1,7 @@
 import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import { fileURLToPath } from 'node:url'
+import { fileURLToPath, pathToFileURL } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { readBrowserProjectNames } from '../shared/test-utils/vitest-browser-projects.js'
 
 // The user-facing docs/ tree is the contract surface for anything a real
 // operator needs to discover (env vars, escape hatches). R5 of the MCP-UI
@@ -11,6 +10,16 @@ import { readBrowserProjectNames } from '../shared/test-utils/vitest-browser-pro
 // ever documented again without the code behind it existing.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 const DOCS_ROOT = join(REPO_ROOT, 'docs')
+
+// vitest-projects.mjs (tools/checks) is the single source of truth for the
+// browser-project inventory, shared with ci-verify-coverage.test.ts and the
+// CI-invoked run-shared-layer-tests.mjs derivation. Dynamic import + cast
+// matches the established pattern in release-gate-matrix.test.ts.
+const { readBrowserProjectNames } = (await import(
+  pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
+)) as {
+  readBrowserProjectNames: (repoRoot: string) => string[]
+}
 
 function collectMarkdownFiles(dir: string): string[] {
   return readdirSync(dir, { withFileTypes: true }).flatMap((entry) => {

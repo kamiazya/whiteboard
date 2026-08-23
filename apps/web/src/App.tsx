@@ -407,7 +407,10 @@ export function App({ providerState }: AppProps) {
           <AppShellLazy daemon={settingsDaemon !== undefined} />
           <div className="min-h-0 flex-1">
             <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-              <SettingsPage daemon={settingsDaemon} />
+              <SettingsPage
+                daemon={settingsDaemon}
+                onDisconnected={() => setForcedBrowserLocal(true)}
+              />
             </Suspense>
           </div>
         </div>
