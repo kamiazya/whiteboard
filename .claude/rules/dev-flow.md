@@ -92,6 +92,11 @@ result, or a fix you are calling verified by hand.
 
 **Visual evidence for a change that moves pixels** is a repeatable procedure, not a screenshot of whatever was on screen: render the SAME canvas through the real pipeline before and after, side by side, chosen by the metric the change targets rather than by eye. Load the `visual-evidence` skill — its traps (a no-op `git stash` producing identical panels, unfilled rects rendering black) have each produced a misleading figure at least once.
 
+This rule was prose ONLY for a long time, and it hollowed out: the observed shape is a `## Visual repro` heading over a single "after" capture for a change that is a fix, which satisfies a reader skimming for the section while showing a reviewer nothing they could not have assumed. Two rungs now carry the parts a rule cannot.
+
+- **`node .claude/scripts/compose-figure.mjs --before <png> --after <png> --out <png>`** composes the labelled figure and **refuses two identical panels**, printing both digests for the PR body. Every way of getting the "before" wrong fails identically — a `git stash push` with nothing to stash, a revert that did not take, a second run overwriting the first — and the result is a figure showing one picture under both labels.
+- **A PreToolUse hook** (`hooks/pre-pr-visual-evidence.mjs`) blocks `gh pr create` when the diff touches a surface a human looks at and the body carries no figure. It cannot judge whether a figure is GOOD; it makes the ABSENCE a stated decision — `Visual evidence: none — <reason>` in the body passes, the same way `blastRadius: none:` does. Fail-open for a body it cannot read.
+
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 
 **Code placement and package boundaries** are governed by `.claude/rules/architecture-map.md` (always-on) and `.claude/rules/package-*.md` (path-scoped). Every PR that adds a package ships its path-scoped rule in the same increment.

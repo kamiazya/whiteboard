@@ -367,10 +367,10 @@ Workflow:
    gh image tmp/screenshots/before.png tmp/screenshots/after.png
    ```
    This prints `![file.png](https://github.com/user-attachments/...)` lines.
-3. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section. Show before/after when the change is a fix; show one annotated capture when adding a new affordance.
+3. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section. Show before/after when the change is a fix; show one annotated capture when adding a new affordance. Compose a before/after through `node .claude/scripts/compose-figure.mjs --before <png> --after <png> --out <png>` — it refuses two identical panels, which is what every failed attempt at producing a real "before" looks like.
 4. Keep the actual screenshot file in `tmp/screenshots/` until the PR merges; remove it afterward to keep the dir lean (the GitHub upload is the durable copy).
 
-Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `canvas-viewer-browser`/`web-browser` regressions.
+Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt; even a `pnpm test` output paste counts as visual evidence for `canvas-viewer-browser`/`web-browser` regressions. **Say so when you skip**: a PreToolUse hook blocks `gh pr create` when the diff touches a surface a human looks at and the body has no figure, and one line — `Visual evidence: none — <reason>` — passes it. The hook exists because this section was prose alone for a long time and the practice decayed into a heading over an after-only capture.
 
 ## Source Comment Discipline
 
