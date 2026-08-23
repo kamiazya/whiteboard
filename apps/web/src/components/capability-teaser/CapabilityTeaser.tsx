@@ -8,7 +8,7 @@ interface CapabilityTeaserProps {
 }
 
 // Daemon-only feature affordance shown while the capability is unavailable
-// (browser-local mode). Uses aria-disabled + a no-op handler instead of the
+// (browser mode). Uses aria-disabled + a no-op handler instead of the
 // native `disabled` attribute: native disabled removes the control from the
 // focus order and suppresses pointer/focus events entirely, which would also
 // hide a Radix tooltip attached to it and make the guidance unreachable by

@@ -13,7 +13,7 @@ You audit ONE dimension of codebase health across the repository (or a given sco
 
 ## Method
 
-1. **Ground every finding in evidence.** Cite `path:line`, a grep hit count, or a concrete file. "Could be better" is noise; "`apps/web/src/pages/BrowserLocalDocumentPage.tsx:80` renders `<div data-testid=\"canvas-editor\" />` — the real Excalidraw editor is never mounted, so the hosted app shows no canvas" is a finding.
+1. **Ground every finding in evidence.** Cite `path:line`, a grep hit count, or a concrete file. "Could be better" is noise; "`apps/web/src/pages/BrowserDocumentPage.tsx:80` renders `<div data-testid=\"canvas-editor\" />` — the real Excalidraw editor is never mounted, so the hosted app shows no canvas" is a finding.
 2. **Stay in your dimension** (you are given one). Mention cross-cutting issues only as a pointer.
 3. **Standing problems, not diff nits.** You are auditing the codebase as it exists, not a change. Look for things that are wrong/incomplete/risky right now and would justify a backlog item.
 4. **Severity honestly** — CRITICAL = broken/unwired user-facing capability or data-loss/security risk; HIGH = real bug, missing critical test, or architecture decision causing ongoing pain; MEDIUM = maintainability/clarity debt; LOW = minor. Do NOT inflate; a wall of LOWs buries the HIGHs. Precision over recall — a false HIGH wastes triage.

@@ -46,7 +46,7 @@ const storageSettingsSchema = z
     // discard an existing reader's whole settings payload, daemon connection
     // included. It moves with a migration, not with a sweep.
     preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
-    lastBrowserLocalCanvasId: z.string().optional(),
+    lastBrowserCanvasId: z.string().optional(),
     // Constrained to http/https because this value is rendered into an `href`
     // (the "Open the local app" escape hatch). Anything that can write
     // localStorage — a same-origin script, a browser extension — could
@@ -119,7 +119,7 @@ const storageSettingsSchema = z
 
 const migrationSettingsSchema = z
   .object({
-    browserLocalToDaemon: z
+    browserToDaemon: z
       .object({
         lastExportedAt: z.string().optional(),
         lastImportedAt: z.string().optional(),

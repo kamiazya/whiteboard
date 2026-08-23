@@ -215,7 +215,7 @@ export async function consumeGrantFragment({
  * this never redirects and carries no secret. A 403 (grant revoked, or a
  * restarted daemon that lost nothing but was never granted) and an
  * unreachable daemon both collapse to 'none' — the caller falls back to
- * browser-local exactly as if nothing had been stored, and the banner
+ * the browser exactly as if nothing had been stored, and the banner
  * remains the path back to a fresh consent.
  */
 export async function renewPairingToken({

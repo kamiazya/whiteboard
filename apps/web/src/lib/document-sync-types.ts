@@ -37,7 +37,7 @@ export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'excalidraw:wb_version_saved'
 
 // Daemon-only callback seam. Every member is read via optionsRef in
 // useDocumentSync (see there) so passing a fresh inline object on every render
-// never forces a backend reconnect. A browser-local backend never fires any
+// never forces a backend reconnect. A browser backend never fires any
 // of these events, so none of them are called and the hook behaves exactly
 // as before this seam was added.
 export interface UseDocumentSyncOptions {
@@ -61,7 +61,7 @@ export interface UseDocumentSyncOptions {
   // 'excalidraw:wb_version_saved' on a version_created broadcast. Read via
   // optionsRef (never in the connect effect's dep array) so passing a fresh
   // identity object every render never forces a reconnect. Only dispatched
-  // when both fields are present — a browser-local caller that never sets
+  // when both fields are present — a browser caller that never sets
   // this option (or a daemon caller whose identity is still resolving)
   // dispatches nothing, leaving its dirty-state behavior unchanged.
   identity?: { workspaceId: string; path: string }
@@ -69,7 +69,7 @@ export interface UseDocumentSyncOptions {
 
 // Dispatches a window event carrying { workspaceId, path } as detail, but only
 // when identity is fully resolved — a partial or absent identity means the
-// caller (browser-local, or a daemon page whose identity is still loading)
+// caller (the browser, or a daemon page whose identity is still loading)
 // never wired the dirty-state contract and must see no events at all.
 export function dispatchIdentityEvent(
   eventName: string,

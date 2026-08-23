@@ -1,14 +1,14 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import {
+  BROWSER_WORKSPACE_ID,
   type ContentClock,
   InMemoryDefaultDocumentPointer,
-  LOCAL_WORKSPACE_ID,
   listLocalDocuments,
   loadLocalDocument,
 } from '../lib/local-document-summary.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import type { LoroStoreLike } from '../pages/use-browser-local-document-controller.js'
+import type { LoroStoreLike } from '../pages/use-browser-document-controller.js'
 
 /**
  * Content bytes in a Map.
@@ -47,7 +47,7 @@ export interface SeededLocal {
 }
 
 /**
- * A browser-local backing store for a page test, seeded from the same
+ * A browser-kept backing store for a page test, seeded from the same
  * `DocumentSnapshot` fixtures the bespoke store used to take.
  *
  * Three pieces rather than one, because that is what the production wiring is
@@ -73,11 +73,11 @@ export function seedLocal(
   // `LocalStoreDouble` read before its first `save` would answer
   // `WorkspaceNotFoundError` where production answers an empty list, which is
   // the one case a test of the empty state most wants to reach.
-  void index.createWorkspace({ workspaceId: LOCAL_WORKSPACE_ID })
+  void index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
   const stamps = new Map<string, string>()
   for (const snapshot of snapshots) {
     index.seed({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       documentId: snapshot.documentId,
       path: snapshot.path,
       kind: snapshot.kind,
@@ -122,12 +122,12 @@ export class LocalStoreDouble {
     // See `seedLocal` above: an unseeded double must still LIST, not throw.
     // The in-memory index registers the workspace synchronously, so the
     // promise is complete before any caller can observe it.
-    void this.index.createWorkspace({ workspaceId: LOCAL_WORKSPACE_ID })
+    void this.index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
     this.index.seed({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       documentId: snapshot.documentId,
       path: snapshot.path,
       kind: snapshot.kind,
@@ -159,10 +159,10 @@ export class LocalStoreDouble {
 
   async removeDocument(documentId: string): Promise<void> {
     const entry = await this.index.resolveDocumentById({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       documentId,
     })
     if (entry === null) return
-    await this.index.deleteDocument({ workspaceId: LOCAL_WORKSPACE_ID, path: entry.path })
+    await this.index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: entry.path })
   }
 }

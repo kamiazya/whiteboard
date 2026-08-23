@@ -43,7 +43,7 @@ interface Props {
    */
   onNavigateBack?: () => void
   /**
-   * 'local' is for hosts with no daemon data layer (browser-local): the
+   * 'local' is for hosts with no daemon data layer (the browser keeper): the
    * `/names` fetch never fires and the page's title segment owns naming.
    * Defaults to 'daemon' so every existing caller keeps fetching `/names`.
    */

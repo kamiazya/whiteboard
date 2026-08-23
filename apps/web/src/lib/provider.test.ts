@@ -7,20 +7,20 @@ import {
 } from './provider.js'
 
 describe('resolveProviderState', () => {
-  it('returns browser-local when daemonBaseUrl is absent', () => {
+  it('returns "browser" when daemonBaseUrl is absent', () => {
     expect(resolveProviderState(EMPTY_RUNTIME_CONFIG).kind).toBe('browser')
   })
 
-  it('returns local-daemon only when daemonBaseUrl is present', () => {
+  it('returns "daemon" only when daemonBaseUrl is present', () => {
     expect(resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe('daemon')
   })
 
-  it('local-daemon state carries daemonBaseUrl', () => {
+  it('"daemon" state carries daemonBaseUrl', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser-local capabilities: workspaces and versions are false', () => {
+  it('browser capabilities: workspaces and versions are false', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
     expect(state).toMatchObject({
       kind: 'browser',
@@ -28,7 +28,7 @@ describe('resolveProviderState', () => {
     })
   })
 
-  it('local-daemon capabilities: workspaces and versions are true', () => {
+  it('daemon capabilities: workspaces and versions are true', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(state).toMatchObject({
       kind: 'daemon',
@@ -36,7 +36,7 @@ describe('resolveProviderState', () => {
     })
   })
 
-  it('browser-local capabilities: branches and merge are false', () => {
+  it('browser capabilities: branches and merge are false', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
     expect(state).toMatchObject({
       kind: 'browser',
@@ -44,7 +44,7 @@ describe('resolveProviderState', () => {
     })
   })
 
-  it('local-daemon capabilities: branches and merge are true', () => {
+  it('daemon capabilities: branches and merge are true', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
     expect(state).toMatchObject({
       kind: 'daemon',
@@ -63,11 +63,11 @@ describe('resolveProviderState', () => {
 })
 
 describe('resolveProviderStateFromRaw', () => {
-  it('empty object returns browser-local state', () => {
+  it('empty object returns "browser" state', () => {
     expect(resolveProviderStateFromRaw({}).kind).toBe('browser')
   })
 
-  it('valid daemonBaseUrl returns local-daemon state', () => {
+  it('valid daemonBaseUrl returns "daemon" state', () => {
     expect(resolveProviderStateFromRaw({ daemonBaseUrl: 'http://127.0.0.1:3099' }).kind).toBe(
       'daemon',
     )
@@ -115,11 +115,11 @@ describe('resolveProviderStateFromRaw', () => {
 })
 
 describe('resolveHostedProviderStateFromRaw', () => {
-  it('empty object returns browser-local state', () => {
+  it('empty object returns "browser" state', () => {
     expect(resolveHostedProviderStateFromRaw({}).kind).toBe('browser')
   })
 
-  it('production publicOrigin with no daemon returns browser-local', () => {
+  it('production publicOrigin with no daemon returns "browser"', () => {
     const state = resolveHostedProviderStateFromRaw({
       publicOrigin: 'https://kamiazya-whiteboard.pages.dev',
     })
@@ -150,9 +150,9 @@ describe('resolveHostedProviderStateFromRaw', () => {
   })
 
   // browserOrigin policy: preview deploys (latest.<project>.pages.dev, per-PR
-  // branch aliases, hash previews) run in browser-local mode — offline and
+  // branch aliases, hash previews) run in browser mode — offline and
   // origin-agnostic — but must never connect to a daemon from a preview origin.
-  it('preview browserOrigin with empty runtime config returns browser-local', () => {
+  it('preview browserOrigin with empty runtime config returns "browser"', () => {
     const state = resolveHostedProviderStateFromRaw(
       {},
       'https://abc123.kamiazya-whiteboard.pages.dev',
@@ -160,7 +160,7 @@ describe('resolveHostedProviderStateFromRaw', () => {
     expect(state.kind).toBe('browser')
   })
 
-  it('latest-alias browserOrigin with empty runtime config returns browser-local', () => {
+  it('latest-alias browserOrigin with empty runtime config returns "browser"', () => {
     const state = resolveHostedProviderStateFromRaw(
       {},
       'https://latest.kamiazya-whiteboard.pages.dev',
@@ -176,12 +176,12 @@ describe('resolveHostedProviderStateFromRaw', () => {
     expect(state.kind).toBe('invalid-config')
   })
 
-  it('production browserOrigin with empty runtime config returns browser-local', () => {
+  it('production browserOrigin with empty runtime config returns "browser"', () => {
     const state = resolveHostedProviderStateFromRaw({}, 'https://kamiazya-whiteboard.pages.dev')
     expect(state.kind).toBe('browser')
   })
 
-  it('localhost browserOrigin with empty runtime config returns browser-local (local dev)', () => {
+  it('localhost browserOrigin with empty runtime config returns "browser" (local dev)', () => {
     const state = resolveHostedProviderStateFromRaw({}, 'https://localhost:5173')
     expect(state.kind).toBe('browser')
   })

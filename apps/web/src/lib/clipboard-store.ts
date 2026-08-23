@@ -7,7 +7,7 @@
  * slot needs no permissions and cannot race an unmount.
  *
  * File-node references travel by reference, not inline bytes: in
- * browser-local mode the asset store is origin-global, so a same-tab
+ * browser mode the asset store is origin-global, so a same-tab
  * cross-canvas paste resolves them as-is. Inline `files` assets are the
  * OS-clipboard slice's concern.
  */

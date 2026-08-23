@@ -1,7 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import {
   applyFavicon,
-  browserLocalFaviconStatus,
+  browserFaviconStatus,
   daemonFaviconStatus,
   projectRectsToBoard,
   resolveRectColor,
@@ -108,10 +108,10 @@ describe('status mappings', () => {
     expect(daemonFaviconStatus({ ...base, authError: true })).toBe('offline')
   })
 
-  it('browser-local: persistence kinds map one-to-one', () => {
-    expect(browserLocalFaviconStatus('saved')).toBe('saved')
-    expect(browserLocalFaviconStatus('saving')).toBe('syncing')
-    expect(browserLocalFaviconStatus('pending')).toBe('unsaved')
-    expect(browserLocalFaviconStatus('degraded')).toBe('offline')
+  it('browser: persistence kinds map one-to-one', () => {
+    expect(browserFaviconStatus('saved')).toBe('saved')
+    expect(browserFaviconStatus('saving')).toBe('syncing')
+    expect(browserFaviconStatus('pending')).toBe('unsaved')
+    expect(browserFaviconStatus('degraded')).toBe('offline')
   })
 })

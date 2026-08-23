@@ -84,7 +84,7 @@ describe("a resolved reference's markdown body", () => {
   it('keeps the canvas seam quiet for a daemon-shaped markdown document', async () => {
     // Through the daemon a markdown document reads back as a canvas holding
     // its body in one text node, so the node-count guard that works
-    // browser-local does not fire — and the canvas seam would outrank the
+    // the browser does not fire — and the canvas seam would outrank the
     // markdown one, showing the same prose crushed to thumbnail size.
     const canvas = canvasWith('notes')
     const { result } = mount(

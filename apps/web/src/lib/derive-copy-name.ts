@@ -1,5 +1,5 @@
 // Deterministic "Duplicate" naming shared by both duplicate surfaces
-// (browser-local canvas controller, daemon index gallery): "Foo" -> "Foo
+// (canvas kept in this browser controller, daemon index gallery): "Foo" -> "Foo
 // (copy)" -> "Foo (copy 2)" -> ... Fills a gap left by a renamed/deleted
 // numbered copy instead of always advancing past the highest number seen, so
 // the sequence stays dense from the caller's point of view.

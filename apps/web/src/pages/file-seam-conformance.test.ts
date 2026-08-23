@@ -2,7 +2,7 @@
  * Both canvas pages must hand the editor the same file seams.
  *
  * This exists because they did not: the seams were written inline in
- * BrowserLocalDocumentPage, so DaemonDocumentPage shipped passing none of them and
+ * BrowserDocumentPage, so DaemonDocumentPage shipped passing none of them and
  * canvas embeds (J5a) and image nodes (J5b) silently did nothing in daemon
  * mode. Nothing failed — each page's own tests only ever exercised its own
  * mode, which is exactly why a per-page test cannot catch this class.
@@ -14,9 +14,9 @@
  */
 import { describe, expect, it } from 'vitest'
 
-const PAGES = ['./BrowserLocalDocumentPage.tsx', './DaemonDocumentPage.tsx'] as const
+const PAGES = ['./BrowserDocumentPage.tsx', './DaemonDocumentPage.tsx'] as const
 
-const sources = import.meta.glob('./{BrowserLocalDocumentPage,DaemonDocumentPage}.tsx', {
+const sources = import.meta.glob('./{BrowserDocumentPage,DaemonDocumentPage}.tsx', {
   query: '?raw',
   import: 'default',
 })

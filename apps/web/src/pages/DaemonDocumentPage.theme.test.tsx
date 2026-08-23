@@ -1,6 +1,6 @@
 /**
  * Confirms DaemonDocumentPage threads its resolved theme into `SpatialEditor`
- * — mirrors BrowserLocalDocumentPage.theme.test.tsx; each page gets its own
+ * — mirrors BrowserDocumentPage.theme.test.tsx; each page gets its own
  * wiring test so a regression in one page's prop threading is not masked by
  * the other.
  */

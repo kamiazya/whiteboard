@@ -13,7 +13,7 @@ import type { ComponentProps } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { BrowserLocalDocumentPage } from '../pages/BrowserLocalDocumentPage.js'
+import { BrowserDocumentPage } from '../pages/BrowserDocumentPage.js'
 import WorkspaceTopBar from './WorkspaceTopBar.js'
 import '../index.css'
 
@@ -90,7 +90,7 @@ describe('fullscreen ground', () => {
     render(
       <div style={{ height: '400px' }}>
         <MemoryRouter initialEntries={['/']}>
-          <BrowserLocalDocumentPage
+          <BrowserDocumentPage
             store={local.index}
             loro={local.loro}
             pointer={local.pointer}

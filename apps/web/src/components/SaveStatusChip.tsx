@@ -1,5 +1,5 @@
 /**
- * Browser-local autosave state as a colored DOT beside the canvas title
+ * The browser keeper's autosave state as a colored DOT beside the canvas title
  * (owner decision: routine save state should not spend words — color at a
  * glance, the label on hover, the sentence in a popover on click). The
  * accessible name always carries the label, so the dot is color-only for
@@ -9,30 +9,30 @@
  * browser's storage actually landed, including the degraded failure state
  * the version dot has no equivalent of.
  */
-import type { BrowserLocalPersistenceState } from '../pages/use-browser-local-document-controller.js'
+import type { BrowserPersistenceState } from '../pages/use-browser-document-controller.js'
 import { StateDot, type StateDotTone } from './StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from './ui/popover.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from './ui/tooltip.js'
 
 export interface SaveStatusChipProps {
-  readonly state: BrowserLocalPersistenceState
+  readonly state: BrowserPersistenceState
 }
 
-const LABEL: Record<Exclude<BrowserLocalPersistenceState['kind'], 'degraded'>, string> = {
+const LABEL: Record<Exclude<BrowserPersistenceState['kind'], 'degraded'>, string> = {
   saved: 'Saved',
   saving: 'Saving…',
   pending: 'Unsaved changes',
 }
 
 // Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
-const DOT_TONE: Record<BrowserLocalPersistenceState['kind'], StateDotTone> = {
+const DOT_TONE: Record<BrowserPersistenceState['kind'], StateDotTone> = {
   saved: 'safe',
   saving: 'attention',
   pending: 'attention',
   degraded: 'attention',
 }
 
-const EXPLANATION: Record<BrowserLocalPersistenceState['kind'], string> = {
+const EXPLANATION: Record<BrowserPersistenceState['kind'], string> = {
   saved: 'All changes are saved in this browser.',
   saving: 'Writing your latest changes to this browser now.',
   pending: 'Changes are waiting to be written to this browser.',

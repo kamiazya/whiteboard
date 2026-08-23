@@ -2,13 +2,21 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
-import { BrowserLocalIndexPage } from '../pages/BrowserLocalIndexPage.js'
+import { BrowserIndexPage } from '../pages/BrowserIndexPage.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { resolveDocAssetPath } from './_helpers.js'
 
-// Generates docs/assets/browser-local-list.png — the browser-local document
-// browser that '/' lands on, used by the getting-started tutorial.
+// Generates docs/assets/browser-local-list.png — the document browser that
+// '/' lands on for a workspace kept in this browser, used by the
+// getting-started tutorial.
+//
+// The asset path, and this file's name mirroring it, keep the retired keeper
+// spelling on purpose: ADR-0008 names `docs/assets/browser-local-list.png` in
+// its own prose, and a decision record reports what was decided at its point
+// in the log. Renaming the PNG would make that sentence false about a file
+// that no longer exists, and rewriting the ADR to match is exactly what
+// vocabulary.md forbids.
 
 const NOW = new Date('2026-05-02T12:00:00.000Z')
 
@@ -22,7 +30,7 @@ afterEach(() => {
   vi.useRealTimers()
 })
 
-describe('docs snapshot: browser-local canvas list', () => {
+describe('docs snapshot: browser document list', () => {
   it('captures the list with a markdown note and a spatial pair', async () => {
     const store = new LocalStoreDouble()
     // 1d, 2d, 5d ago relative to NOW so the labels stay stable.
@@ -54,7 +62,7 @@ describe('docs snapshot: browser-local canvas list', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <div style={{ height: '100vh', background: 'white' }}>
-          <BrowserLocalIndexPage
+          <BrowserIndexPage
             index={store.index}
             pointer={store.pointer}
             clock={store.clock}

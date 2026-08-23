@@ -11,7 +11,7 @@ interface UseDocumentNamesOptions {
   workspaceId: string
   /**
    * Local mode has no daemon to ask for `/names`, and nothing else to ask
-   * either: the browser-local page names its document through its own store
+   * either: the browser page names its document through its own store
    * and hands the header the result, so this hook simply stays empty there.
    */
   isLocalMode: boolean

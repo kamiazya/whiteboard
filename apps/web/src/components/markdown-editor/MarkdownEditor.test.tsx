@@ -189,9 +189,9 @@ describe('MarkdownEditor', () => {
     expect(onOpenDocument).toHaveBeenCalledTimes(1)
   })
 
-  it('intercepts browser-local UUID canvas ids too, not only daemon ULIDs', async () => {
+  it('intercepts browser UUID canvas ids too, not only daemon ULIDs', async () => {
     vi.useFakeTimers()
-    // Browser-local documents mint crypto.randomUUID() ids; the daemon mints
+    // Documents kept in the browser mint crypto.randomUUID() ids; the daemon mints
     // ULIDs. Both travel through the alias resolver into anchor hrefs.
     const UUID = '68f94ee9-80fe-4e7e-b1fc-dcf853e26da3'
     const onOpenDocument = vi.fn()
