@@ -174,7 +174,8 @@
     "smoke:all": "pnpm smoke:e2e && pnpm smoke:claude",
     "prepublishOnly": "test -x dist/cli/index.js",
     "prepack": "node scripts/verify-web-app-dist.mjs && node scripts/verify-widget-dist.mjs && node scripts/verify-export-font-dist.mjs",
-    "search:fetch-model": "node --import tsx/esm scripts/search/fetch-model.mjs"
+    "search:fetch-model": "node --import tsx/esm scripts/search/fetch-model.mjs",
+    "search:pipeline-check": "node --import tsx/esm scripts/measure/pipeline-check-jqara.mjs"
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",

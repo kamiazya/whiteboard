@@ -1,6 +1,7 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 // CodeMirror's own DOM/input handling, and real Canvas 2D text measurement,
@@ -19,27 +20,13 @@ describe('MarkdownEditor (real browser)', () => {
       <MarkdownEditor initialViewMode="split" value="" onChange={onChange} />,
     )
 
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    expect(editable).not.toBeNull()
-    if (!editable)
-      throw new Error('expected a contenteditable CodeMirror host')
-
-      // focus(), not click(). A click waits for the element to be "visible,
-      // enabled and stable", and the preview pane beside this one re-renders
-      // through real Canvas 2D text measurement — under a saturated run the
-      // layout keeps settling and that actionability check never passes. It is
-      // not slowness: this test costs 369ms idle and spends the entire 60s
-      // budget in CI, which is a wait for a condition, not a slow pass.
-      //
-      // What the test is about is that typing produces onChange, so focus is a
-      // precondition to establish rather than an interaction to perform. Exact
-      // contentDOM identity is what real keyboard delivery depends on —
-      // `BrowserLocalIndexPage.flow.browser.test.tsx` asserts the same thing for
-      // the same reason.
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    // Focus is a precondition to establish here, not an interaction to
+    // perform — what the test is about is that typing produces onChange. The
+    // helper carries the rest of the reasoning, including why the focus call
+    // has to be re-done on every attempt rather than once before the wait.
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
     await userEvent.keyboard('# Hello world')
 
     expect(onChange).toHaveBeenCalled()
@@ -53,12 +40,15 @@ describe('MarkdownEditor (real browser)', () => {
       <MarkdownEditor initialViewMode="split" value="make this bold" onChange={onChange} />,
     )
 
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-
-    // Select the word "this" (offsets 5..9) from the document start.
-    await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
-    await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}')
+    // Select the word "this" (offsets 5..9) from the document start. Ctrl+Home
+    // rather than Home: the click this replaces only ever reached the first
+    // line by hit-testing, and an absolute move says what the test means.
+    await focusEditable(() =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]'),
+    )
+    await userEvent.keyboard(
+      '{Control>}{Home}{/Control}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}',
+    )
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
 
     await userEvent.click(getByRole('button', { name: 'Editing actions' }))
