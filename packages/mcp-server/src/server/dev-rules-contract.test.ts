@@ -14,35 +14,29 @@ import { describe, expect, it } from 'vitest'
 // be pushed.
 const REPO_ROOT = join(dirname(fileURLToPath(import.meta.url)), '../../../..')
 
-function readDevFlow(): string {
-  return readFileSync(join(REPO_ROOT, '.claude/rules/dev-flow.md'), 'utf8')
-}
+const RULE_AND_SKILL_FILES = [
+  '.claude/rules/dev-flow.md',
+  '.claude/rules/architecture-map.md',
+  '.claude/rules/integrator-flow.md',
+  '.claude/rules/vocabulary.md',
+  '.claude/skills/test-layer-selection/SKILL.md',
+]
 
-function readTestLayerSkill(): string {
-  return readFileSync(join(REPO_ROOT, '.claude/skills/test-layer-selection/SKILL.md'), 'utf8')
-}
-
-function readAppsWebVitestConfig(): string {
-  return readFileSync(join(REPO_ROOT, 'apps/web/vitest.config.ts'), 'utf8')
+function read(relativePath: string): string {
+  return readFileSync(join(REPO_ROOT, relativePath), 'utf8')
 }
 
 describe('dev-flow.md agrees with reality about the web-jsdom project', () => {
-  it('no longer claims there is no root web-jsdom project', () => {
-    const devFlow = readDevFlow()
-    expect(devFlow).not.toContain('There is no `web-jsdom` project at the root')
-  })
-
   it('mentions web-jsdom and pnpm test:web-jsdom whenever the config declares the project named that', () => {
-    const devFlow = readDevFlow()
-    const config = readAppsWebVitestConfig()
-    if (config.includes("name: 'web-jsdom'")) {
+    const devFlow = read('.claude/rules/dev-flow.md')
+    if (read('apps/web/vitest.config.ts').includes("name: 'web-jsdom'")) {
       expect(devFlow).toContain('web-jsdom')
       expect(devFlow).toContain('pnpm test:web-jsdom')
     }
   })
 
   it('keeps the silent-unmatched-filter hazard: the paired-filter example, the CI command, the "twice in one session" consequence, and the web-node non-equivalence', () => {
-    const devFlow = readDevFlow()
+    const devFlow = read('.claude/rules/dev-flow.md')
     expect(devFlow, 'lost the --project web-jsdom --project web-browser example').toContain(
       '--project web-jsdom --project web-browser',
     )
@@ -58,30 +52,21 @@ describe('dev-flow.md agrees with reality about the web-jsdom project', () => {
     ).toContain('web-node')
   })
 
-  it('no other rule or skill file reintroduces the retired claim', () => {
-    const offenders: string[] = []
-    for (const path of [
-      join(REPO_ROOT, '.claude/rules/dev-flow.md'),
-      join(REPO_ROOT, '.claude/rules/architecture-map.md'),
-      join(REPO_ROOT, '.claude/rules/integrator-flow.md'),
-      join(REPO_ROOT, '.claude/rules/vocabulary.md'),
-      join(REPO_ROOT, '.claude/skills/test-layer-selection/SKILL.md'),
-    ]) {
-      const content = readFileSync(path, 'utf8')
-      if (
+  it('no rule or skill file reintroduces the retired claim', () => {
+    const offenders = RULE_AND_SKILL_FILES.filter((path) => {
+      const content = read(path)
+      return (
         content.includes('There is no `web-jsdom` project at the root') ||
         /is NOT a root vitest project/.test(content)
-      ) {
-        offenders.push(path)
-      }
-    }
+      )
+    })
     expect(offenders).toEqual([])
   })
 })
 
 describe('test-layer-selection SKILL.md agrees with reality about the web-jsdom project', () => {
   it('names the project web-jsdom and lists both the narrow and CI-matching commands, in agreement with its frontmatter description', () => {
-    const skill = readTestLayerSkill()
+    const skill = read('.claude/skills/test-layer-selection/SKILL.md')
     const frontmatterEnd = skill.indexOf('\n---', 4)
     const frontmatter = skill.slice(0, frontmatterEnd)
     const body = skill.slice(frontmatterEnd)
