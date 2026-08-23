@@ -281,6 +281,43 @@ somewhere to start — pooling from the systems under test is how test
 collections are normally grown, with the known caveat that a future third
 system did not contribute to the pool and is disadvantaged by it.
 
+### 3g. Mining the repository for queries — measured, and abandoned
+
+The corpus's weakest joint is that its questions are AUTHORED: written by
+someone who already knew the documents, which is exactly why it is thin in
+the categories worth measuring. An obvious-looking fix is to harvest
+questions from the repository's own history — pull request titles and
+bodies pair an information need with the documents that answer it, and the
+judgement would be mechanical rather than someone's opinion.
+
+It does not work, and the reason is structural rather than fixable.
+
+Of the 34 merged pull requests that touched exactly one document under
+`docs/`, **33 shared a search token with that document and none did not** —
+8 of 10 tokens, 10 of 11, 16 of 16. A second pass looking for bodies that
+merely NAME a document without editing it (no edit, so no contamination
+from the change itself) yielded 18 pairs, most pointing at README, which is
+a navigational hub rather than an answer.
+
+Anyone writing about this repository already speaks its vocabulary. Mining
+it therefore produces `lexical` queries — the one category already answered
+well (0.783) and the one needing no help. Text from someone who does NOT
+know the documents' words is by definition not in the repository.
+
+The same measurement rules out the other obvious source. Session
+transcripts hold 961 user turns, 814 of them Japanese, but the ones phrased
+as questions are design discussion rather than retrieval: only 48 use
+find-or-locate language at all, and reading those shows almost none is
+looking for a document. The reason is worth keeping: **in this product the
+user does not search — they ask the agent, and the agent reads files
+directly.** Absence of a behaviour under the presence of a better
+alternative is not evidence about the behaviour's value; it just means the
+transcripts are not where it lives.
+
+What follows is that a query worth judging exists only at the moment a
+search fails, and only for whoever is doing the searching — which in this
+product is increasingly the agent rather than the person.
+
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
