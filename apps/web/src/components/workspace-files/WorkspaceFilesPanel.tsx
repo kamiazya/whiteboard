@@ -814,7 +814,11 @@ export function WorkspaceFilesPanel({
                       // flight, the names and paths already in hand are a
                       // real answer rather than a blank pane.
                       searchDocuments(documents, query).map((document) => ({ document }))
-                    : hits.map((hit) => ({ document: hit.document, contexts: hit.contexts }))
+                    : hits.map((hit) => ({
+                        document: hit.document,
+                        contexts: hit.contexts,
+                        ...(hit.lexicalRank === undefined ? {} : { lexicalRank: hit.lexicalRank }),
+                      }))
                 }
                 query={query}
                 searchedContents={activeTag === null && hits !== null}

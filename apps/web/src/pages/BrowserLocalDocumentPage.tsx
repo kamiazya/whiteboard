@@ -44,14 +44,14 @@ import {
 } from '../lib/app-routes.js'
 import { BrowserLocalBackend } from '../lib/browser-local-backend.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
-import { BROWSER_LOCAL_FILE_ADAPTER } from '../lib/document-embed-content.js'
+import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserLocalFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
-import { BROWSER_LOCAL_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
@@ -123,7 +123,7 @@ function titleOf(name: string | null, path: string | null): string {
 export function BrowserLocalDocumentPage({
   store,
   loro,
-  capabilities = BROWSER_LOCAL_CAPABILITIES,
+  capabilities = BROWSER_CAPABILITIES,
   initialPath,
   pointer,
   clock,
@@ -154,7 +154,7 @@ export function BrowserLocalDocumentPage({
   // the data lives in this browser and nowhere else. Cleared on unmount so an
   // index page makes no claim of its own.
   useEffect(() => {
-    setShellConnection({ state: 'local' })
+    setShellConnection({ state: 'browser' })
     return () => setShellConnection(null)
   }, [])
 
@@ -511,7 +511,7 @@ export function BrowserLocalDocumentPage({
   // stamps that make an edit made elsewhere show up on the next refresh.
   const fileSeams = useDocumentFileSeams({
     canvas,
-    adapter: BROWSER_LOCAL_FILE_ADAPTER,
+    adapter: BROWSER_FILE_ADAPTER,
     stampOf: useMemo(
       () => new Map(documents.map((entry) => [entry.documentId, entry.updatedAt])),
       [documents],
@@ -519,7 +519,7 @@ export function BrowserLocalDocumentPage({
   })
 
   const commands = useWhiteboardCommands({
-    provider: { kind: 'browser-local', capabilities },
+    provider: { kind: 'browser', capabilities },
     canvas: documentId !== null ? { documentId, name: documentName ?? '' } : null,
   })
 

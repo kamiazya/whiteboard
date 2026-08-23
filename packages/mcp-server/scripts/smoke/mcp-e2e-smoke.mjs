@@ -546,6 +546,46 @@ async function main() {
   }
   console.log('[e2e] wb_canvas_snapshot → semantic nodes/edges with honest totals')
 
+  // wb_body_patch's inputSchema is a z.discriminatedUnion, and only a real
+  // MCP SDK client (not a hand-rolled unit test) can prove the registered
+  // schema actually accepts both arms — this is what tools/list validates
+  // arguments against. Exercise full mode then range mode on the seeded
+  // 'target' node, and read the result back through wb_canvas_snapshot
+  // rather than trusting the tool's own echo, so persistence is what is
+  // being checked.
+  const fullPatched = await callTool('wb_body_patch', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'full',
+    nodeId: 'target',
+    body: 'line0\nline1\nline2',
+  })
+  if (fullPatched.node?.text !== 'line0\nline1\nline2') {
+    throw new Error(`wb_body_patch(full) returned unexpected shape: ${JSON.stringify(fullPatched)}`)
+  }
+  const rangePatched = await callTool('wb_body_patch', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    mode: 'range',
+    nodeId: 'target',
+    range: { startLine: 1, endLine: 1, replacement: 'patched' },
+  })
+  if (rangePatched.node?.text !== 'line0\npatched\nline2') {
+    throw new Error(
+      `wb_body_patch(range) returned unexpected shape: ${JSON.stringify(rangePatched)}`,
+    )
+  }
+  const afterPatch = await callTool('wb_canvas_snapshot', { workspaceId: WORKSPACE_ID, documentId })
+  const patchedNode = Array.isArray(afterPatch.nodes)
+    ? afterPatch.nodes.find((node) => node.id === 'target')
+    : undefined
+  if (patchedNode?.text !== 'line0\npatched\nline2') {
+    throw new Error(
+      `wb_body_patch did not persist through the store: ${JSON.stringify(patchedNode)}`,
+    )
+  }
+  console.log('[e2e] wb_body_patch → both arms accepted, patched text persisted')
+
   // wb_canvas_edit is the whole spatial-mutation surface, so the smoke has
   // to reach the parts a unit test cannot: the batch's structuredContent vs
   // its outputSchema through the real MCP SDK, and — because this tool

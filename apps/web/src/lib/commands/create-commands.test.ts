@@ -1,11 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { BROWSER_LOCAL_CAPABILITIES } from '../provider.js'
+import { BROWSER_CAPABILITIES } from '../provider.js'
 import { createWhiteboardCommands } from './create-commands.js'
 import { CommandError, type WhiteboardCommandDeps } from './types.js'
 
 function baseDeps(overrides: Partial<WhiteboardCommandDeps> = {}): WhiteboardCommandDeps {
   return {
-    provider: { kind: 'browser-local', capabilities: BROWSER_LOCAL_CAPABILITIES },
+    provider: { kind: 'browser', capabilities: BROWSER_CAPABILITIES },
     canvas: { documentId: 'c1', name: 'Canvas 1' },
     ...overrides,
   }
@@ -23,8 +23,8 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const result = await commands.getAppContext()
 
     expect(result).toEqual({
-      provider: { mode: 'browser-local' },
-      canvas: { kind: 'browser-local', documentId: 'c1' },
+      provider: { mode: 'browser' },
+      canvas: { kind: 'browser', documentId: 'c1' },
     })
   })
 
@@ -32,9 +32,9 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const depsRef = refOf(
       baseDeps({
         provider: {
-          kind: 'local-daemon',
+          kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
-          capabilities: BROWSER_LOCAL_CAPABILITIES,
+          capabilities: BROWSER_CAPABILITIES,
         },
         canvas: { workspaceId: 'ws1', documentId: 'my-canvas', name: 'my-canvas' },
       }),
@@ -84,9 +84,9 @@ describe('createWhiteboardCommands.getAppContext', () => {
     const depsRef = refOf(
       baseDeps({
         provider: {
-          kind: 'local-daemon',
+          kind: 'daemon',
           daemonBaseUrl: 'http://127.0.0.1:9999',
-          capabilities: BROWSER_LOCAL_CAPABILITIES,
+          capabilities: BROWSER_CAPABILITIES,
         },
         canvas: { documentId: 'c1', name: 'Canvas 1' },
       }),
@@ -104,9 +104,9 @@ describe('createWhiteboardCommands.getAppContext', () => {
     // a future field added to ProviderState leaking through if the
     // projection were ever changed to a spread instead of field-by-field.
     const poisoned = {
-      kind: 'local-daemon',
+      kind: 'daemon',
       daemonBaseUrl: 'http://127.0.0.1:9999',
-      capabilities: BROWSER_LOCAL_CAPABILITIES,
+      capabilities: BROWSER_CAPABILITIES,
       token: 'shh',
       authorization: 'Bearer shh',
       secret: 'shh',

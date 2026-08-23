@@ -122,7 +122,7 @@ export interface CanvasCommands {
   readonly setLinkDialog: (state: LinkDialogState | null) => void
   readonly setDocumentPicker: (state: DocumentPickerState | null) => void
   /** Opens the node's full facet editor — the point knows no domain. */
-  readonly setFacetPanelNodeId: (nodeId: string | null) => void
+  readonly setFacetPanelOpen: (open: boolean) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -188,7 +188,7 @@ export function CanvasContextMenu({
     setSelectedEdgeId,
     setLinkDialog,
     setDocumentPicker,
-    setFacetPanelNodeId,
+    setFacetPanelOpen,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -643,30 +643,13 @@ export function CanvasContextMenu({
             })
           }),
         )
-        // Facet quick bands ride the contribution seam: this surface asks the
-        // registry what the point carries and looks widgets up by key — it
-        // never names a plugin or facet itself (facet-wiring-guard.test.ts
-        // keeps it that way). Bands apply to the whole selection, the same
-        // semantics as Color.
-        let facetItems: readonly ContextMenuItem[] = []
-        {
-          const applyToSelection = (
-            commandsFor: (targetIds: readonly string[]) => readonly EditorCommand[],
-          ) => {
-            const members = new Set(selectedId !== null ? [selectedId, ...extraIds] : [])
-            const nodeTargets = members.has(node.id) ? [...members] : [node.id]
-            applyResult({ state: { kind: 'idle' }, commands: [...commandsFor(nodeTargets)] })
-          }
-          // Pushed AFTER the core rows below, so the menu reads
-          // core-then-extensions with a visible fence between them. The
-          // doorway to the full panel comes back with the bands — this
-          // surface owns where the region goes, never what is in it.
-          facetItems = nodePropertyItems(facetRegistry, {
-            node,
-            applyToSelection,
-            openPanel: () => setFacetPanelNodeId(node.id),
-          })
-        }
+        // Facets reach this surface as ONE doorway. This menu never names a
+        // plugin or facet key (facet-wiring-guard.test.ts keeps it that way),
+        // and now it does not carry their values either — an action menu runs
+        // an entry and closes; a facet is state you adjust repeatedly.
+        const facetItems = nodePropertyItems(facetRegistry, {
+          openPanel: () => setFacetPanelOpen(true),
+        })
         // Z-order as one-tap options — the touch path to the [ / ]
         // keyboard shortcuts (see shortcuts.ts). Not a picker: no
         // option is ever "selected", each tap applies a move.

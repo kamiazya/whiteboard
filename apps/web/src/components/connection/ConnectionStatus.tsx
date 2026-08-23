@@ -5,7 +5,7 @@
  *
  * States:
  * - `synced`   — daemon-backed page with live sync running.
- * - `local`    — browser-local page; data exists only in this browser.
+ * - `browser`  — the workspace is kept in this browser and nowhere else.
  *                `children` hosts page-supplied extras (daemon detection,
  *                capability hint) inside the popover.
  * - `reconnecting` — live sync is not running: the transport has not come up
@@ -15,7 +15,7 @@
  *                whose socket is closed drops the delta it was handed.
  * - `sync-off` — daemon-backed page whose session was rejected. The chip
  *                turns attention-colored and the popover carries the two
- *                ways forward (re-pair / continue browser-local). A polite
+ *                ways forward (re-pair / work in the browser). A polite
  *                sr-only live region announces the transition so dropping
  *                the old role="alert" banner loses no assistive-tech signal.
  */
@@ -24,7 +24,14 @@ import { cn } from '@/lib/utils'
 import { StateDot, type StateDotTone } from '../StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
-export type ConnectionState = 'synced' | 'local' | 'reconnecting' | 'sync-off'
+/**
+ * Two different questions share this type, and only one of them survives
+ * navigation: `browser` names WHO KEEPS the workspace, while the other three
+ * report whether a live session is healthy. Splitting them is its own slice;
+ * this one only stops the keeper from being called "local", which a daemon
+ * running on the same machine is too.
+ */
+export type ConnectionState = 'synced' | 'browser' | 'reconnecting' | 'sync-off'
 
 export interface ConnectionStatusProps {
   readonly state: ConnectionState
@@ -32,9 +39,9 @@ export interface ConnectionStatusProps {
   readonly daemonBaseUrl?: string
   /** sync-off only: starts the pairing grant flow on the daemon's /pair page. */
   readonly onRepair?: () => void
-  /** sync-off only: switches this canvas to the browser-local flow. */
-  readonly onContinueBrowserLocal?: () => void
-  /** local only: page-supplied popover extras (daemon detection, capability hint). */
+  /** sync-off only: switches to the documents kept in this browser. */
+  readonly onWorkInBrowser?: () => void
+  /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
   /**
    * synced only: stop using this daemon in this browser. It does NOT unpair
@@ -46,7 +53,7 @@ export interface ConnectionStatusProps {
 
 const CHIP_LABEL: Record<ConnectionState, string> = {
   synced: 'Synced',
-  local: 'Local',
+  browser: 'Browser',
   reconnecting: 'Reconnecting',
   'sync-off': 'Sync off',
 }
@@ -54,7 +61,7 @@ const CHIP_LABEL: Record<ConnectionState, string> = {
 // Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
 const DOT_TONE: Record<ConnectionState, StateDotTone> = {
   synced: 'safe',
-  local: 'neutral',
+  browser: 'neutral',
   reconnecting: 'attention',
   'sync-off': 'attention',
 }
@@ -63,7 +70,7 @@ export function ConnectionStatus({
   state,
   daemonBaseUrl,
   onRepair,
-  onContinueBrowserLocal,
+  onWorkInBrowser,
   onDisconnect,
   children,
 }: ConnectionStatusProps) {
@@ -105,7 +112,7 @@ export function ConnectionStatus({
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>
             <p className="text-muted-foreground">
-              Changes are saved to your local daemon
+              Changes are saved to the daemon on this machine
               {daemonBaseUrl ? (
                 <>
                   {' at '}
@@ -138,15 +145,18 @@ export function ConnectionStatus({
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is not running</p>
             <p className="text-muted-foreground">
-              This canvas is not receiving changes from your local daemon right now. Your edits are
-              kept and sent when the connection returns. Reload the page if it does not recover.
+              This document is not receiving changes from the daemon right now. Your edits are kept
+              and sent when the connection returns. Reload the page if it does not recover.
             </p>
           </div>
         )}
-        {state === 'local' && (
+        {state === 'browser' && (
           <div className="flex flex-col gap-2 text-sm">
-            <p className="font-medium">Browser-local canvas</p>
-            <p className="text-muted-foreground">Your data is stored only in this browser.</p>
+            <p className="font-medium">Kept in this browser</p>
+            <p className="text-muted-foreground">
+              Your documents live in this browser's storage. Other browsers cannot see them, and
+              clearing site data removes them.
+            </p>
             {children}
           </div>
         )}
@@ -166,13 +176,13 @@ export function ConnectionStatus({
                   Re-pair with the daemon
                 </button>
               )}
-              {onContinueBrowserLocal && (
+              {onWorkInBrowser && (
                 <button
                   type="button"
-                  onClick={onContinueBrowserLocal}
+                  onClick={onWorkInBrowser}
                   className="rounded-md border px-3 py-1.5 text-xs font-medium transition-colors hover:bg-accent"
                 >
-                  Continue in browser-local
+                  Work in this browser instead
                 </button>
               )}
             </div>

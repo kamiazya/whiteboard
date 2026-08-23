@@ -1,5 +1,5 @@
-// visual.text/v0 reached the menu with NO apps/web change at all: it is a
-// facet definition carrying an editor spec, rendered by the tier-2 path.
+// visual.text/v0 reaches the inspector with NO apps/web change at all: it
+// is a facet definition carrying an editor spec, rendered by the tier-2 path.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
@@ -42,7 +42,13 @@ it('the Text row stores the facet and moves the drawn text', () => {
   const r = root.getBoundingClientRect()
   fireEvent.contextMenu(root, { clientX: r.left + 180, clientY: r.top + 130 })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
-  fireEvent.click(menu.querySelector('[aria-label="Middle"]') as HTMLElement)
+  fireEvent.click(
+    [...menu.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').startsWith('Facets'),
+    ) as HTMLElement,
+  )
+  const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
+  fireEvent.click(panel.querySelector('[aria-label="Middle"]') as HTMLElement)
 
   expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.text/v0']).toEqual({
     align: 'center',

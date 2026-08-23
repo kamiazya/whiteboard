@@ -20,17 +20,36 @@ import {
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
-import { useEffect, useRef, useState } from 'react'
+import { useState } from 'react'
 import { cn } from '@/lib/utils'
 import { glyphIcon } from './glyph.js'
+import { type FacetEditorWidget, NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {
-  readonly node: SpatialNode
+  /**
+   * The node whose stored values the panel SHOWS. Writes go to the whole
+   * selection (see `onWrite`) — the same split the context-menu bands had,
+   * where the row reflected the node you opened on and applied to every
+   * selected node.
+   */
+  /** `undefined` when nothing is selected: the inspector says so and stays open. */
+  readonly node: SpatialNode | undefined
+  /**
+   * Tier-3 editors by facet key. A facet with one registered renders it
+   * instead of the derived form — the picker the declared vocabulary
+   * cannot yet express (today: the icon-plus-emoji badge picker).
+   */
+  readonly editors?: Readonly<Record<string, FacetEditorWidget>>
   readonly registry: FacetRegistry
   /** `undefined` payload clears the facet, matching set-node-facet. */
   readonly onWrite: (key: string, payload: unknown) => void
   /** Present when mounted as an overlay; absent renders the bare body. */
   readonly onClose?: () => void
+  /**
+   * Where the inspector sits. Follows the context menu's breakpoint so the
+   * two agree about what a narrow editor is.
+   */
+  readonly variant?: 'dock' | 'sheet'
 }
 
 type Draft = Record<string, unknown>
@@ -335,82 +354,112 @@ function FacetEditor({
   )
 }
 
-export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPanelProps) {
-  const closeRef = useRef<HTMLButtonElement | null>(null)
-  // Focus on open: a dialog that never takes focus leaves Escape and Tab
-  // acting on the canvas behind it. The close button is the least
-  // surprising landing place — it is also the way out.
-  useEffect(() => {
-    closeRef.current?.focus()
-  }, [])
-  const groups = resolveFacetContributions(registry, 'contextMenu.node.properties')
-  const stored = storedFacets(node)
-  const body = (
-    <div className="flex flex-col gap-3">
-      {groups.map((group) => (
-        <div key={group.namespace} className="flex flex-col gap-2">
-          <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
-            {group.displayName}
-          </span>
-          {group.facets.map((facet) => (
-            <FacetEditor
-              // Keyed by NODE too: a draft belongs to the node it was typed
-              // against. Retargeting the panel without this reuses the
-              // instance, so an abandoned edit on one node would be shown —
-              // and saved — as another node's value.
-              key={`${node.id}:${facet.key}`}
-              facetKey={facet.key}
-              title={facet.definition.displayName}
-              form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
-              stored={stored[facet.key]}
-              registry={registry}
-              onWrite={onWrite}
-            />
-          ))}
-        </div>
-      ))}
-    </div>
-  )
+export function FacetFormPanel({
+  node,
+  registry,
+  onWrite,
+  onClose,
+  editors = NODE_FACET_EDITORS,
+  variant = 'dock',
+}: FacetFormPanelProps) {
+  const groups = node === undefined ? [] : resolveFacetContributions(registry, 'inspector.node')
+  const stored = node === undefined ? {} : storedFacets(node)
+  const body =
+    node === undefined ? (
+      <p className="text-xs text-muted-foreground">Select a node to edit its facets.</p>
+    ) : (
+      <div className="flex flex-col gap-3">
+        {groups.map((group) => (
+          <div key={group.namespace} className="flex flex-col gap-2">
+            <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
+              {group.displayName}
+            </span>
+            {group.facets.map((facet) =>
+              editors[facet.key] !== undefined ? (
+                <div key={`${node.id}:${facet.key}`} className="flex flex-col gap-1.5">
+                  <span className="text-xs font-medium">{facet.definition.displayName}</span>
+                  {editors[facet.key]?.({
+                    value: stored[facet.key],
+                    // Straight through the registry, exactly like the derived
+                    // form's own writer — a hand-written editor gets no shorter
+                    // path to storage than a declared one.
+                    write: (payload) => {
+                      if (payload === undefined) return onWrite(facet.key, undefined)
+                      const result = registry.validateFacetWrite(facet.key, payload)
+                      if (result.ok) onWrite(facet.key, result.value)
+                    },
+                  })}
+                </div>
+              ) : (
+                <FacetEditor
+                  // Keyed by NODE too: a draft belongs to the node it was typed
+                  // against. Retargeting the panel without this reuses the
+                  // instance, so an abandoned edit on one node would be shown —
+                  // and saved — as another node's value.
+                  key={`${node.id}:${facet.key}`}
+                  facetKey={facet.key}
+                  title={facet.definition.displayName}
+                  form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
+                  stored={stored[facet.key]}
+                  registry={registry}
+                  onWrite={onWrite}
+                />
+              ),
+            )}
+          </div>
+        ))}
+      </div>
+    )
   if (onClose === undefined) return <div data-testid="facet-form-panel">{body}</div>
   // Same vessel convention as the other canvas overlays: hand-rolled and
   // inline-positioned, so it behaves identically where the app stylesheet
   // is absent (browser-mode component tests), and marked
   // `data-editor-overlay` so canvas gesture handlers ignore presses inside.
   return (
-    <div
+    <aside
       data-editor-overlay
       data-testid="facet-form-panel"
-      role="dialog"
       aria-label="Facets"
-      className="rounded-md border bg-background p-3 shadow-lg"
-      style={{
-        position: 'absolute',
-        zIndex: 30,
-        left: '50%',
-        top: '35%',
-        transform: 'translate(-50%, -50%)',
-        maxHeight: '60%',
-        overflowY: 'auto',
-        width: 'max-content',
-        // max-content alone lets a long option row set a box wider than the
-        // phone it is opened on, and a centred box that does not fit spills
-        // off BOTH edges.
-        maxWidth: 'min(90%, 22rem)',
-        // max-content alone lets a long option row set a box wider than the
-        // phone it is opened on, and a centred box that does not fit spills
-        // off BOTH edges.
-      }}
       onKeyDown={(event) => {
-        if (event.key === 'Escape') {
-          event.stopPropagation()
-          onClose()
-        }
+        if (event.key !== 'Escape') return
+        event.stopPropagation()
+        const root = event.currentTarget.closest('[data-testid="spatial-editor"]')
+        if (root instanceof HTMLElement) root.focus()
       }}
+      className={cn(
+        'bg-background p-3 shadow-lg',
+        variant === 'sheet' ? 'rounded-t-xl border-t' : 'rounded-md border',
+      )}
+      // A centred box cannot be non-modal: it covers the canvas, and
+      // `data-editor-overlay` makes it swallow the press that would have
+      // selected the node underneath. Measured while trying to select a node
+      // the panel was sitting on top of — the click never reached it.
+      style={
+        variant === 'sheet'
+          ? {
+              position: 'absolute',
+              zIndex: 30,
+              left: 0,
+              right: 0,
+              bottom: 0,
+              maxHeight: '55%',
+              overflowY: 'auto',
+              paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
+            }
+          : {
+              position: 'absolute',
+              zIndex: 30,
+              right: 8,
+              top: 8,
+              width: 'min(22rem, calc(100% - 16px))',
+              maxHeight: 'calc(100% - 16px)',
+              overflowY: 'auto',
+            }
+      }
     >
       <div className="flex items-center justify-between gap-4 pb-2">
         <span className="text-xs font-medium">Facets</span>
         <button
-          ref={closeRef}
           type="button"
           aria-label="Close facets"
           className="rounded px-2 text-xs text-muted-foreground hover:bg-accent"
@@ -420,6 +469,6 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
         </button>
       </div>
       {body}
-    </div>
+    </aside>
   )
 }

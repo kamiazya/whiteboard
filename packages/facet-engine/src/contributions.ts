@@ -16,13 +16,20 @@ import type { FacetDefinition, FacetRegistry } from './registry.js'
  * increment, exactly like adding a widget kind — a plugin can neither mint
  * a point nor place itself outside its container. A point exists only once
  * its vessel does: `documentProperties` (the DocumentProperties disclosure)
- * joins together with the surface that consumes it, in the facet editor
- * increment.
+ * joins together with the surface that consumes it.
+ *
+ * Every point is a STATE surface, and that is the rule rather than a
+ * coincidence. An action menu's entries run once and close it; a facet is
+ * something you look at and adjust, often several times in a row. Facets
+ * were briefly carried by the node context menu and it went wrong in the
+ * predictable way: the menu grew a row per domain, and a value sat one tap
+ * from Delete. The menu keeps a doorway to the inspector, which is
+ * navigation, not a contribution.
  */
-export type ContributionPoint = 'contextMenu.node.properties' | 'canvasSettings'
+export type ContributionPoint = 'inspector.node' | 'canvasSettings'
 
 const POINT_TARGET = {
-  'contextMenu.node.properties': 'node',
+  'inspector.node': 'node',
   canvasSettings: 'canvas',
 } as const
 

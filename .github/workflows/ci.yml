@@ -98,6 +98,8 @@ jobs:
           --project=model-node
           --project=ports-node
           --project=codec-node
+          --project=facet-engine-node
+          --project=search-node
           --project=loro-adapter-node
           --project=server-core-node
           --project=canvas-render-node

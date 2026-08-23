@@ -8,7 +8,7 @@
       "additionalProperties": false,
       "required": ["mode"],
       "properties": {
-        "mode": { "type": "string", "enum": ["daemon", "browser-local"] }
+        "mode": { "type": "string", "enum": ["daemon", "browser"] }
       }
     },
     "canvas": {
@@ -28,7 +28,7 @@
           "additionalProperties": false,
           "required": ["kind", "documentId"],
           "properties": {
-            "kind": { "type": "string", "const": "browser-local" },
+            "kind": { "type": "string", "const": "browser" },
             "documentId": { "type": "string" }
           }
         },
