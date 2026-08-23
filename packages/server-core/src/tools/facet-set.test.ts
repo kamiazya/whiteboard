@@ -1,15 +1,11 @@
-import {
-  bundledPlugins,
-  createFacetRegistry,
-  defineFacet,
-  definePlugin,
-} from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import {
   readFacets,
   readSpatialCanvas,
   writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'

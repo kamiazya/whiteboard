@@ -1,3 +1,5 @@
+import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   type edgeRoutingSchema,
@@ -5,8 +7,6 @@ import {
   lineJumpsSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
-import type { FacetRegistry } from './registry.js'
-import { createFacetRegistry, defineFacet, definePlugin } from './registry.js'
 
 /**
  * `visual.edges/v0` — how this canvas's edges are drawn. The facet-shaped
@@ -173,6 +173,11 @@ export const bundledPlugins = [visualPlugin]
  * The registry every composition uses unless a deployment configures its
  * own plugin set. A shared instance, not a per-call construction: the
  * registry is immutable data.
+ *
+ * ponytail: the bundled SET is a composition answer, not this plugin's, and
+ * it lives here only because this plugin is currently the whole set. Give it
+ * its own home the moment a second bundled plugin exists — not before, since
+ * a package holding one array buys a reviewer nothing.
  */
 export const bundledFacetRegistry = createFacetRegistry(bundledPlugins)
 

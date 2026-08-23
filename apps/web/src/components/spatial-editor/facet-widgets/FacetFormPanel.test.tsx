@@ -1,13 +1,9 @@
 // Tier 1's vessel: every registered facet a node can carry is visible and
 // editable here, including the ones no quick band knows about — the gap an
 // agent's MCP write otherwise falls into.
-import {
-  bundledPlugins,
-  createFacetRegistry,
-  defineFacet,
-  definePlugin,
-} from '@kamiazya/whiteboard-facet-engine'
+import { createFacetRegistry, defineFacet, definePlugin } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
+import { bundledPlugins } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'

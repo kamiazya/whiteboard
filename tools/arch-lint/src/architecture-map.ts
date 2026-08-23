@@ -45,14 +45,22 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // codec: the mdast body parser this package DEFAULTS to. Every consumer
     // already bundles codec to pass it in, so the dependency adds nothing to
     // any bundle and removes the same line from seven call sites.
-    // facet-engine: resolveCanvasEdgeStyle is the DEFAULT read for edge
+    // plugin-visual: resolveCanvasEdgeStyle is the DEFAULT read for edge
     // style (facet first, legacy x-whiteboard.edgeRouting fallback) — the
     // lowlight lesson again: an opt-in resolution step at four call sites
     // is a step that gets missed, so the shared renderer owns the default.
+    // The same package owns the icon geometry, for the same reason: the
+    // renderer draws exactly the names `visual.symbol` enumerates.
+    //
+    // ponytail: this is a hard-coded dependency on one plugin. The backend
+    // already accepts caller-supplied glyph geometry, so the upgrade path
+    // is injection — the layout pass takes the resolvers the way it takes
+    // `highlightCode`. Worth doing when a SECOND plugin wants to change how
+    // a node is drawn; before that it is indirection with one implementation.
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
       '@kamiazya/whiteboard-codec',
-      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-plugin-visual',
     ],
     // css-line-break: deciding WHERE a line may break is this package's own
     // job, and the answer is a Unicode standard (UAX #14 + CSS `line-break`,
@@ -81,8 +89,12 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
   // plugin. Machinery, not schemas — which is why it is not in model (whose
   // rule excludes runtime behavior beyond validation). Pure zod over model
   // types, so it holds on Node, the browser and a worker alike.
+  // The engine, and nothing a plugin owns. Its dependency list is empty of
+  // workspace packages BY RESULT, not by rule: the model types it once held
+  // left with the `visual` plugin, which is the shape ADR-0013 asks for —
+  // the engine is generic over schemas it never names.
   '@kamiazya/whiteboard-facet-engine': {
-    allowedInternalDeps: ['@kamiazya/whiteboard-model'],
+    allowedInternalDeps: [],
     allowedThirdParty: ['zod'],
   },
   // Lexical search: a dictionary-free tokenizer (latin words, CJK bigrams),
@@ -117,25 +129,42 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-plugin-visual',
       '@kamiazya/whiteboard-search',
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
-  // The facet system's React half. `facet-engine` holds the same system's
-  // data half and cannot take React — it runs on Node, in a worker and in
-  // the browser. Both halves of the bundled `visual` plugin follow that
-  // split, which is the plugin shape a third party copies rather than a
-  // privilege of being bundled.
+  // The facet system's React half: a LIBRARY, and nothing more. It knows
+  // the engine and no plugin — `facet-engine` holds the same system's data
+  // half and cannot take React, since it runs on Node, in a worker and in
+  // the browser. A plugin's own components are the plugin's, which is why
+  // nothing here may depend on `plugin-visual` (and why that package
+  // depends on this one).
   '@kamiazya/whiteboard-facet-ui': {
-    allowedInternalDeps: [
-      '@kamiazya/whiteboard-canvas-render',
-      '@kamiazya/whiteboard-facet-engine',
-    ],
+    allowedInternalDeps: ['@kamiazya/whiteboard-facet-engine'],
     // lucide-react: the icon set the editor already draws from, pure SVG
     // components with no DOM or `node:*` reach — it holds wherever React
     // does. `react-dom` is deliberately absent: this package renders
     // elements and never mounts them.
     allowedThirdParty: ['lucide-react', 'react'],
+    exemptBoundaryViolationKinds: ['dom-global'],
+  },
+  // The bundled `visual` plugin, as an ORDINARY plugin package. The engine
+  // does not import it and nothing here is privileged; "bundled" means only
+  // that this repo ships it. Its data half runs wherever a document is read
+  // (default entry, react-free) and its React half behind `/ui` — the split
+  // is the plugin's, and it is the shape a third party copies.
+  //
+  // It owns the vendored icon geometry because `visual.symbol`'s schema is
+  // what enumerates those names; the renderer draws from the same table, so
+  // `canvas-render` depends on this package rather than the other way round.
+  '@kamiazya/whiteboard-plugin-visual': {
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-facet-engine',
+      '@kamiazya/whiteboard-facet-ui',
+      '@kamiazya/whiteboard-model',
+    ],
+    allowedThirdParty: ['lucide-react', 'react', 'zod'],
     exemptBoundaryViolationKinds: ['dom-global'],
   },
   '@kamiazya/whiteboard-canvas-viewer': {
@@ -178,6 +207,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-canvas-viewer',
       '@kamiazya/whiteboard-facet-ui',
+      '@kamiazya/whiteboard-plugin-visual',
       '@kamiazya/whiteboard-mcp',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',

@@ -3,7 +3,7 @@
   "private": true,
   "version": "0.0.0",
   "license": "Apache-2.0",
-  "description": "Spatial-canvas scene graph, pure layout, SVG backend, and sceneDigest \u2014 shared-layer, runs unchanged on Node/browser/Workers.",
+  "description": "Spatial-canvas scene graph, pure layout, SVG backend, and sceneDigest — shared-layer, runs unchanged on Node/browser/Workers.",
   "type": "module",
   "main": "./src/index.ts",
   "types": "./src/index.ts",
@@ -20,8 +20,8 @@
   },
   "dependencies": {
     "@kamiazya/whiteboard-codec": "workspace:*",
-    "@kamiazya/whiteboard-facet-engine": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
+    "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "css-line-break": "catalog:",
     "highlight.js": "catalog:",
     "lowlight": "catalog:",

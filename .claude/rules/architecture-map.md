@@ -6,16 +6,17 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 |---|---|---|
 | `packages/model` | Zod schemas for the whiteboard document model (single source of truth) | zod only |
 | `packages/codec` | OKF Markdown / JSON Canvas serialize+parse, remark pipeline | model, remark |
-| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, facet-engine, zod, css-line-break, lowlight |
+| `packages/canvas-render` | scene graph, layout, SVG backend, sceneDigest | model, codec, plugin-visual, zod, css-line-break, lowlight |
 | `packages/ports` | store/sync port contracts + Symbol `TOKENS` | model, zod |
-| `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution, bundled `visual` plugin | model, zod |
+| `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
 | `packages/loro-adapter` | LoroDoc<->model bridge | model, ports, loro-crdt |
-| `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, facet-engine, search, hono, zod, loro-crdt |
-| `packages/facet-ui` | the facet system's React half: primitives, the validated writer, plugin settings declarations, and the bundled `visual` plugin's UI half | canvas-render, facet-engine, react, lucide-react |
+| `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, facet-engine, plugin-visual, search, hono, zod, loro-crdt |
+| `packages/facet-ui` | the facet system's React half, as a LIBRARY: primitives, the validated writer, the derived form. Knows no plugin | facet-engine, react, lucide-react |
+| `packages/plugin-visual` | the bundled `visual` plugin as an ordinary plugin package — data half (schemas, resolvers, the icon geometry `visual.symbol` enumerates) at `.`, React half at `/ui` | facet-engine, facet-ui, model, react, lucide-react, zod |
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, search, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
 
 **A third-party dependency is judged by that criterion, not by a quota.** The
 `allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has
@@ -38,7 +39,7 @@ no DOM and no `node:*`, and met the criterion on sight.
 
 Absolute rules:
 
-1. Shared-layer packages (model / codec / render / ports / facet-engine / search / loro-adapter / server-core) must not import `node:*`, DOM globals, or `inversify`. `canvas-viewer` is a browser-runtime UI package, so DOM globals are its normal job — it is held only to the `node:*`/`inversify` half of this rule (plus one exempted build-time `Buffer` use in `widget/build-fonts-module.ts`; see its `exemptBoundaryViolationKinds` entry in `architecture-map.ts`).
+1. Shared-layer packages (model / codec / render / ports / facet-engine / search / loro-adapter / server-core) must not import `node:*`, DOM globals, or `inversify`. `plugin-visual` is held to the `node:*`/`inversify` half only: its `/ui` half is React by design, while its DEFAULT entry must stay react-free because `canvas-render` imports it — a split no scan can see, since the package legitimately lists `react`. `canvas-viewer` is a browser-runtime UI package, so DOM globals are its normal job — it is held only to the `node:*`/`inversify` half of this rule (plus one exempted build-time `Buffer` use in `widget/build-fonts-module.ts`; see its `exemptBoundaryViolationKinds` entry in `architecture-map.ts`).
 2. Dependencies flow only in the table's direction. Composition roots (`mcp-server`, `apps/web`) are never imported by shared packages or by `canvas-viewer` — BOTH are registered in `architecture-map.ts` specifically so `direction-check.ts` catches a reverse import, and both have their own manifest direction-checked via `repo-coverage.test.ts`'s `COMPOSITION_ROOTS` (their SOURCE stays unscanned — they are the packages allowed `node:*`/DOM/inversify). One composition root may consume the other's browser-safe client subpaths, which is why `apps/web`'s row lists `@kamiazya/whiteboard-mcp`: rule 2 is about a SHARED package importing a root, and the daemon's client contract belongs beside the daemon. `apps/web` was absent from the table until this guard was added, so a shared package taking a dependency on it would have passed.
 3. Unsure where code goes → load the `package-placement` skill (planned). DI wiring → `di-container` skill (planned).
 4. What to CALL the thing you are placing is `.claude/rules/vocabulary.md` (always-on): ADR-0009's Document model, plus the standing rule that a session fixes vocabulary violations in whatever it already touches, without preserving backward compatibility for internal names. The package names in the table above are themselves on its known-violations list.

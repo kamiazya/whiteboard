@@ -1,25 +1,22 @@
 /**
- * The bundled `visual` plugin's UI half.
+ * The `visual` plugin's React half, beside its data half in the same package.
  *
- * Its data half — schemas, resolvers, migrations — lives in `facet-engine`,
- * which must run on Node, in a worker and in the browser and therefore
- * cannot hold React. The split is the plugin's, not a privilege of being
- * bundled: a third-party plugin is shaped the same way, with its data half
- * wherever `canvas-render` can reach it and its UI half here.
+ * The split is within the plugin, not between the plugin and the core: the
+ * data half must run on Node, in a worker and in the browser and therefore
+ * cannot hold React, so it lives behind this package's default entry point
+ * and this one behind `/ui`. What the core supplies is a library
+ * (`facet-ui`), not the components.
  */
-import {
-  BUILT_IN_ICON_NAMES,
-  LUCIDE_ICONS,
-  LUCIDE_VIEWBOX,
-} from '@kamiazya/whiteboard-canvas-render'
-import { type VisualSymbolFacet, visualSymbolFacetSchema } from '@kamiazya/whiteboard-facet-engine'
+import { definePluginUi, type FacetEditor } from '@kamiazya/whiteboard-facet-ui'
 import { Ban } from 'lucide-react'
 import { createElement, type ReactNode } from 'react'
-import { definePluginUi, type FacetEditor } from './plugin-ui.js'
+import { type VisualSymbolFacet, visualSymbolFacetSchema } from './data.js'
+import { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './icons/icons.js'
 
 /**
- * The badge picker. Icons come from the RENDERER's vendored set, so the row
- * can never offer a name the canvas would silently drop; the emoji arm
+ * The badge picker. Icons come from this plugin's own vendored set — the same
+ * table `visual.symbol`'s schema enumerates and the renderer draws from, so
+ * the row can never offer a name the canvas would silently drop; the emoji arm
  * carries a small starter set — a free-entry field is the editor-spec tier's
  * job, not a quick band's.
  */

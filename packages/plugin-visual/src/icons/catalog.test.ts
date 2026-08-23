@@ -1,7 +1,7 @@
 // The badge picker offers exactly what the renderer can draw, so the name
 // set is a published surface — not something a UI re-lists by hand.
 import { describe, expect, it } from 'vitest'
-import { BUILT_IN_ICON_NAMES } from '../../index.js'
+import { BUILT_IN_ICON_NAMES } from '../index.js'
 import { LUCIDE_ICONS } from './icons.js'
 
 describe('BUILT_IN_ICON_NAMES', () => {

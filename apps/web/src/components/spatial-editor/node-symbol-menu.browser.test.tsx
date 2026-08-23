@@ -2,8 +2,9 @@
 // facet definition plus a widget registration. This locks the user flow:
 // a pick stores visual.symbol/v0 and the scene draws the badge; 'none'
 // removes it without a trace.
-import type { VisualSymbolFacet } from '@kamiazya/whiteboard-facet-engine'
+
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { VisualSymbolFacet } from '@kamiazya/whiteboard-plugin-visual'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it } from 'vitest'

@@ -23,6 +23,16 @@ const SHARED_LAYER_PACKAGES = [
   // `exemptBoundaryViolationKinds` entry in architecture-map.ts for why DOM
   // globals and one build-time `Buffer` use don't trip the scan.
   'packages/canvas-viewer',
+  // React packages, scanned for the same reason and with the same caveat as
+  // canvas-viewer. The scan's `.ts`-only default is load-bearing here rather
+  // than incidental: it covers `plugin-visual`'s react-free DATA half
+  // (`data.ts`, `icons/`), which `canvas-render` imports and which therefore
+  // must not reach for `node:*`, while leaving each package's `.tsx` alone.
+  // Registering a package in `architecture-map.ts` does NOT scan it —
+  // verified by a `node:fs` import in `plugin-visual` passing a full
+  // arch-lint run before both of these were listed here.
+  'packages/facet-ui',
+  'packages/plugin-visual',
 ]
 
 /**

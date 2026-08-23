@@ -106,5 +106,3 @@ export type { SpatialThemeMode, SpatialThemeOptions } from './theme/spatial-them
 export { createSpatialTheme } from './theme/spatial-theme.js'
 export type { TidyMove, TidyNode, TidyOptions } from './tidy.js'
 export { tidyNodes } from './tidy.js'
-export type { LucideIconElement } from './vendor/lucide/icons.js'
-export { BUILT_IN_ICON_NAMES, LUCIDE_ICONS, LUCIDE_VIEWBOX } from './vendor/lucide/icons.js'
