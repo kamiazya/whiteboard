@@ -188,15 +188,37 @@ export function createDocumentSearchTool(
       }
 
       const fused = fuseByRank([lexical.map((hit) => hit.documentId), semantic])
-      const ordered = [...fused.entries()]
-        .sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0]))
-        .map(([documentId]) => documentId)
       const contexts = new Map(lexical.map((hit) => [hit.documentId, hit.contexts]))
       // Ranks come from the COMPLETE rankings, not from the page returned:
       // "3rd of 45" and "3rd of 5" are different facts, and only the former
       // survives a change of `limit`.
       const lexicalRanks = ranksOf(lexical.map((hit) => hit.documentId))
       const semanticRanks = ranksOf(semantic)
+      /**
+       * Fused ties are the NORM, not an edge case: reciprocal-rank sums
+       * collide by construction, so a document at lexical 1 / semantic 2
+       * scores exactly what one at lexical 2 / semantic 1 does. Of the 400
+       * rank pairs inside the top 20, only 210 distinct scores exist and
+       * 190 are shared.
+       *
+       * Broken on evidence rather than on identity. The document whose
+       * keywords matched better wins, because those are the words the user
+       * actually typed; between two documents keywords never matched, the
+       * closer meaning wins. Ranks within a list are unique, so this is a
+       * total order with no appeal to a document id — which mattered, since
+       * an id is `encodeTime(Date.now()) + encodeRandom()` and ordering by
+       * it answered "which was written first", with chance deciding inside
+       * a millisecond.
+       */
+      const FAR = Number.MAX_SAFE_INTEGER
+      const ordered = [...fused.entries()]
+        .sort(
+          (a, b) =>
+            b[1] - a[1] ||
+            (lexicalRanks.get(a[0]) ?? FAR) - (lexicalRanks.get(b[0]) ?? FAR) ||
+            (semanticRanks.get(a[0]) ?? FAR) - (semanticRanks.get(b[0]) ?? FAR),
+        )
+        .map(([documentId]) => documentId)
       return {
         results: ordered
           .slice(0, parsed.limit)

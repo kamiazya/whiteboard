@@ -189,6 +189,48 @@ describe('semantic fusion', () => {
     expect(out.results[0]?.semanticRank).toBe(1)
   })
 
+  it('breaks a fused tie on evidence, not on which document was created first', async () => {
+    // RRF collides BY CONSTRUCTION: 1/(K+1) + 1/(K+2) is exactly
+    // 1/(K+2) + 1/(K+1). Of the 400 rank pairs up to 20th place, only 210
+    // distinct fused scores exist and 190 of them are shared — ties are the
+    // norm here, not an edge case.
+    //
+    // What broke them was `documentId.localeCompare`, and a document id is
+    // `encodeTime(Date.now()) + encodeRandom()`: creation order, with chance
+    // deciding inside a millisecond. So the answer to "which of these two
+    // equally-ranked documents comes first" was when they happened to be
+    // written, which is not a fact about the query.
+    const deps = makeDeps()
+    const set = createDocumentSetTool(deps)
+    const write = async (path: string, name: string, body: string) => {
+      const created = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path,
+        kind: 'markdown',
+        name,
+        createWorkspace: true,
+      })
+      await set.execute({
+        workspaceId: WS,
+        documentId: created.documentId,
+        markdown: `---\ntype: note\n---\n${body}`,
+      })
+    }
+    // `meaning` is written FIRST, so it holds the lower id and would win a
+    // tie decided by id. `keyword` matches the query's own word better, so
+    // it should win a tie decided by evidence.
+    await write('untitled-1', 'meaning', 'zzz onboarding') // lexical 2, semantic 1
+    await write('untitled-2', 'keyword', 'zzz zzz zzz') //    lexical 1, semantic 2
+
+    const out = await createDocumentSearchTool({ ...deps, embedder: fakeEmbedder() }).execute({
+      workspaceId: WS,
+      query: 'zzz 初回',
+      limit: 2,
+    })
+    expect(out.results.map((r) => r.name)).toEqual(['keyword', 'meaning'])
+    expect(out.results[0]?.score).toBeCloseTo(out.results[1]?.score ?? 0, 12)
+  })
+
   it('an embedder that throws degrades to lexical-only', async () => {
     const deps = makeDeps()
     const { storage } = await seed(deps)
