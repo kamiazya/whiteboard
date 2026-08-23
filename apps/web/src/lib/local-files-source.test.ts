@@ -1,12 +1,12 @@
 /**
- * The browser-local `WorkspaceFilesSource` — the adapter that lets the
+ * The browser's `WorkspaceFilesSource` — the adapter that lets the
  * three-pane browser serve local mode, which is the whole point of the seam.
  */
 import 'fake-indexeddb/auto'
 import { writeCoreFacets } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
-import { clearWhiteboardDb } from '../test-utils/browser-local-document.js'
+import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'

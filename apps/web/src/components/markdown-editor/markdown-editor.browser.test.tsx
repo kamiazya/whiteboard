@@ -34,7 +34,7 @@ describe('MarkdownEditor (real browser)', () => {
       // What the test is about is that typing produces onChange, so focus is a
       // precondition to establish rather than an interaction to perform. Exact
       // contentDOM identity is what real keyboard delivery depends on —
-      // `BrowserLocalIndexPage.flow.browser.test.tsx` asserts the same thing for
+      // `BrowserIndexPage.flow.browser.test.tsx` asserts the same thing for
       // the same reason.
     ;(editable as HTMLElement).focus()
     await vi.waitFor(() => {

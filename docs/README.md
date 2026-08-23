@@ -14,7 +14,7 @@ when you're ready. Pick where you are:
 
 | I want to… | Start with |
 |---|---|
-| **Just try it in my browser** — no install, no account; my data stays in my browser | [Open a browser canvas →](tutorials/) <sub>(zero-install · Browser-local)</sub> |
+| **Just try it in my browser** — no install, no account; my data stays in my browser | [Open a browser canvas →](tutorials/) <sub>(zero-install · kept in your browser)</sub> |
 | **Draw with my AI agent** (Claude Code, Codex, Gemini) | [Connect an AI agent →](tutorials/) <sub>(Local daemon + MCP)</sub> |
 | **Self-host for my team** | [Self-host with Docker →](how-to/) <sub>(Server mode)</sub> |
 
@@ -39,7 +39,7 @@ This documentation follows the [Diátaxis](https://diataxis.fr/) framework:
 
 Whiteboard has three runtimes (see [Explanation](explanation/) for detail):
 
-- **Browser-local** — the zero-install hosted browser app; your data stays in the browser.
+- **Browser** — the zero-install hosted browser app; your data stays in the browser.
 - **Local daemon** — a server you run on your own machine (loopback only) for MCP/agent work.
 - **Server mode** — the server run for a team beyond loopback, behind OAuth/JWT and your own TLS.
 

@@ -32,7 +32,7 @@ const sourceModules = import.meta.glob('./**/*.tsx', {
  * arrival of the real content is what these tell someone about, and that is
  * a DOM replacement they perceive either way.
  */
-const SKELETON_EXCEPTIONS = ['./pages/BrowserLocalIndexPage.tsx', './pages/DaemonIndexPage.tsx']
+const SKELETON_EXCEPTIONS = ['./pages/BrowserIndexPage.tsx', './pages/DaemonIndexPage.tsx']
 
 /**
  * `{cond && <el ... role="status"`, across the line breaks a formatter puts

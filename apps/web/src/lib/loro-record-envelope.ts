@@ -10,7 +10,7 @@ import { z } from 'zod'
  *    'corrupt-snapshot' and the caller is responsible for recovery.
  *
  * It lives apart from `loro-store.ts` because that module imports `loro-crdt`
- * at module scope, and `browser-local-store.ts` — which App.tsx constructs at
+ * at module scope, and `browser-backend.ts` — which App.tsx constructs at
  * startup — needs only this schema to read a record's `updatedAt`. Importing
  * it from there pulled the whole CRDT library onto the critical path: measured
  * at +24.3 KB gzip across two extra files, which is what the bundle-size gate

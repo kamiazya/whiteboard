@@ -1,12 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
-  browserLocalDocumentPath,
-  browserLocalIndexPath,
+  browserDocumentPath,
+  browserIndexPath,
   daemonRoutePath,
   documentPath,
   indexPath,
   isKnownAppPath,
-  parseBrowserLocalRoute,
+  parseBrowserRoute,
   parseDaemonRoute,
   parseSettingsRoute,
   settingsPath,
@@ -31,9 +31,9 @@ describe('app-routes', () => {
     expect(workspacePath('w/1')).toBe('/w/w%2F1')
   })
 
-  it('builds browser-local paths', () => {
-    expect(browserLocalIndexPath()).toBe('/local')
-    expect(browserLocalDocumentPath('abc-123')).toBe('/local/abc-123')
+  it('builds browser paths', () => {
+    expect(browserIndexPath()).toBe('/local')
+    expect(browserDocumentPath('abc-123')).toBe('/local/abc-123')
   })
 })
 
@@ -92,7 +92,7 @@ describe('parseDaemonRoute', () => {
     expect(parseDaemonRoute('/w/w1/canvas')).toBeNull()
   })
 
-  it('returns null for an unrelated path (e.g. the browser-local route space)', () => {
+  it('returns null for an unrelated path (e.g. the browser route space)', () => {
     expect(parseDaemonRoute('/local/abc')).toBeNull()
     expect(parseDaemonRoute('/something/else')).toBeNull()
     // The retired shape is not a route any more.
@@ -122,17 +122,17 @@ describe('daemonRoutePath', () => {
   })
 })
 
-describe('parseBrowserLocalRoute', () => {
-  it('parses a browser-local document route', () => {
-    expect(parseBrowserLocalRoute('/local/abc-123')).toEqual({ path: 'abc-123' })
+describe('parseBrowserRoute', () => {
+  it('parses a document kept in this browser route', () => {
+    expect(parseBrowserRoute('/local/abc-123')).toEqual({ path: 'abc-123' })
   })
 
   // The whole reason this changed: a local document has a real path now, and
   // a single-segment route cannot express one. Separators stay unencoded so
   // the hierarchy is visible in the URL, exactly as the daemon's is.
   it('parses a multi-segment path', () => {
-    expect(parseBrowserLocalRoute('/local/design/login')).toEqual({ path: 'design/login' })
-    expect(parseBrowserLocalRoute('/local/design/notes/kickoff')).toEqual({
+    expect(parseBrowserRoute('/local/design/login')).toEqual({ path: 'design/login' })
+    expect(parseBrowserRoute('/local/design/notes/kickoff')).toEqual({
       path: 'design/notes/kickoff',
     })
   })
@@ -141,9 +141,9 @@ describe('parseBrowserLocalRoute', () => {
   // and decoding it on the way back in agree with each other and produce a
   // URL that hides the hierarchy. Assert the STRING.
   it('leaves separators unencoded and encodes only the segments', () => {
-    expect(browserLocalDocumentPath('design/login')).toBe('/local/design/login')
-    expect(browserLocalDocumentPath('a b/c')).toBe('/local/a%20b/c')
-    expect(parseBrowserLocalRoute(browserLocalDocumentPath('design/login'))).toEqual({
+    expect(browserDocumentPath('design/login')).toBe('/local/design/login')
+    expect(browserDocumentPath('a b/c')).toBe('/local/a%20b/c')
+    expect(parseBrowserRoute(browserDocumentPath('design/login'))).toEqual({
       path: 'design/login',
     })
   })
@@ -151,13 +151,13 @@ describe('parseBrowserLocalRoute', () => {
   // An empty segment would name nothing, and joined segments are what stop
   // `..` being expressible.
   it('refuses an empty segment', () => {
-    expect(parseBrowserLocalRoute('/local//login')).toBeNull()
-    expect(parseBrowserLocalRoute('/local/design//login')).toBeNull()
+    expect(parseBrowserRoute('/local//login')).toBeNull()
+    expect(parseBrowserRoute('/local/design//login')).toBeNull()
   })
 
   it('returns null for the bare /local index and unrelated paths', () => {
-    expect(parseBrowserLocalRoute('/local')).toBeNull()
-    expect(parseBrowserLocalRoute('/w/w1/document/main')).toBeNull()
+    expect(parseBrowserRoute('/local')).toBeNull()
+    expect(parseBrowserRoute('/w/w1/document/main')).toBeNull()
   })
 })
 
@@ -169,7 +169,7 @@ describe('malformed percent-encoding', () => {
     expect(parseDaemonRoute('/w/w%1/document/main')).toBeNull()
     expect(parseDaemonRoute('/w/w1/document/ma%in')).toBeNull()
     expect(parseDaemonRoute('/w/%E0%A4%A')).toBeNull()
-    expect(parseBrowserLocalRoute('/local/%zz')).toBeNull()
+    expect(parseBrowserRoute('/local/%zz')).toBeNull()
   })
 })
 

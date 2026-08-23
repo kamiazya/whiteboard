@@ -1,6 +1,7 @@
 # Getting started
 
-whiteboard's canvas runs right in your browser. In **Browser-local** mode your
+whiteboard's canvas runs right in your browser. When the **browser** is the
+keeper, your
 drawings live in your own browser (IndexedDB) — no account, and nothing leaves
 your machine while you work.
 
@@ -40,7 +41,7 @@ The column layout is not in the link: that is a per-browser preference, so
 your choice is remembered here without being imposed on whoever you send it
 to.
 
-![Browser-local document browser](../assets/browser-local-list.png)
+![The document browser for a workspace kept in this browser](../assets/browser-local-list.png)
 
 A fresh canvas starts empty. Double-click empty canvas space to make a note
 and start typing immediately, or open the **+** menu in the bottom dock: tap

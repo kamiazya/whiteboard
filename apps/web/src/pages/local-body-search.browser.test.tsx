@@ -7,7 +7,7 @@ import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { ensureLocalWorkspace } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
-import { BrowserLocalIndexPage } from './BrowserLocalIndexPage.js'
+import { BrowserIndexPage } from './BrowserIndexPage.js'
 
 // The page, its source and the panel together — the seam the unit tests
 // each covered one side of, and where the preview found nothing.
@@ -32,7 +32,7 @@ describe('searching from the page', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <BrowserLocalIndexPage index={index} onOpenDocument={vi.fn()} />
+        <BrowserIndexPage index={index} onOpenDocument={vi.fn()} />
       </MemoryRouter>,
     )
     const box = await screen.findByLabelText('Search documents', undefined, { timeout: 10_000 })

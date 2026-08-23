@@ -16,7 +16,7 @@ function refOf(deps: WhiteboardCommandDeps): { current: WhiteboardCommandDeps } 
 }
 
 describe('createWhiteboardCommands.getAppContext', () => {
-  it('projects a browser-local provider and canvas without leaking capabilities', async () => {
+  it('projects a browser provider and canvas without leaking capabilities', async () => {
     const depsRef = refOf(baseDeps())
     const commands = createWhiteboardCommands(depsRef)
 
@@ -78,7 +78,7 @@ describe('createWhiteboardCommands.getAppContext', () => {
   it('throws an invalid-provider-state CommandError when canvas.kind would disagree with provider.mode', async () => {
     // canvas.kind is derived from the presence of workspaceId on the
     // identity, independently of provider.kind — a daemon-mode provider
-    // paired with a browser-local-shaped identity (no workspaceId) hits the
+    // paired with a browser-shaped identity (no workspaceId) hits the
     // getAppContextResultSchema cross-field refine instead of silently
     // returning an internally inconsistent result.
     const depsRef = refOf(

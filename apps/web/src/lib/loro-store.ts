@@ -49,7 +49,7 @@ export type LoroLoadResult =
   | { kind: 'unsupported-version' }
 
 /**
- * Where a browser-local snapshot is split for storage.
+ * Where a browser-kept snapshot is split for storage.
  *
  * Not the daemon's `SNAPSHOT_MAX_CHUNK_BYTES`, and not `COMPACT_DELTA_BYTES`
  * either: this is the size a stored value is broken at, which is a different

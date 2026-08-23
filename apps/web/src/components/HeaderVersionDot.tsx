@@ -9,7 +9,7 @@ import { cn } from '@/lib/utils'
  * NOT a save indicator, however much it once looked like one. What feeds it is
  * `useDirtyState`, which counts edits since the last NAMED VERSION; whether
  * content reached storage is a different question, answered by the save-state
- * chip in browser-local and by the connection chip on a daemon. Wearing the
+ * chip in the browser and by the connection chip on a daemon. Wearing the
  * same filled amber as the save dot is what made one shape mean two things
  * depending on which mode you were in, so this one is a RING: a state the
  * document is not in yet, rather than one it is in.

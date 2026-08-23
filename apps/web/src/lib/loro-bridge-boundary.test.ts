@@ -6,7 +6,7 @@
  * `doc.getMap('nodes'|'edges')` directly — see package-crdt.md's
  * "callers never manipulate the Loro layout directly" rule.
  *
- * The one documented exemption is `src/test-utils/` — browser-local-canvas.ts
+ * The one documented exemption is `src/test-utils/` — browser-document.ts
  * reads `doc.getMap('nodes')` to assert on the persisted doc from OUTSIDE the
  * production code path, which is a legitimate test-assertion use, not a
  * production call site.

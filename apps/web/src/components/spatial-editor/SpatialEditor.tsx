@@ -327,7 +327,7 @@ export interface SpatialEditorProps {
   readonly agentTouchedNodeIds?: ReadonlySet<string>
   /**
    * Canvas references the picker offers for file nodes. The reference is an
-   * OPAQUE string owned by the composition root (browser-local canvas id,
+   * OPAQUE string owned by the composition root (canvas id minted in the browser,
    * daemon alias path). Absent → the Document affordance hides.
    */
   readonly fileRefOptions?: readonly FileRefOption[]
@@ -732,7 +732,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [resolveReference, expandedFileIds],
     )
 
-    // Opaque file references (browser-local canvas ids) become readable
+    // Opaque file references (canvas ids minted in the browser) become readable
     // card labels through the host-supplied options list.
     const fileRefLabelMap = useMemo(
       () =>

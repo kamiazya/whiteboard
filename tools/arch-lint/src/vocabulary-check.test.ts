@@ -81,23 +81,33 @@ const BANNED = [
   // opposite things while sharing a word, which is as confusable as a pair
   // gets.
   //
-  // Scoped to the DISCRIMINANT VALUE (a quoted literal) rather than the word
-  // anywhere: file names and test ids still read `browser-local-backend`, and
-  // are their own mechanical increment. A guard that claimed them before they
-  // moved would be one nobody could make green.
+  // Every spelling at once — `browser-local`, `browserLocal`, `BrowserLocal`,
+  // `BROWSER_LOCAL` — because they are one word wearing four cases, and a
+  // guard that caught only the quoted value is what let file names, test ids
+  // and comment prose keep saying it while the symbols beside them did not.
   {
-    pattern: /(['"])browser-local\1/,
-    word: "'browser-local' (as a value)",
+    pattern: /browser[-_]?local/i,
+    word: 'browser-local (in any casing)',
     instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
-    dirs: ['apps/web/src'],
-    // PERSISTED value under a `.strict()` schema whose loader falls back to
-    // defaults on any parse failure: renaming it in place would discard an
-    // existing reader's whole settings payload. It moves with a migration.
+    dirs: ['apps/web/src', 'apps/web/scripts'],
     exempt: [
+      // PERSISTED value under a `.strict()` schema whose loader falls back to
+      // defaults on any parse failure: renaming it in place would discard an
+      // existing reader's whole settings payload. It moves with a migration.
       'apps/web/src/lib/user-settings-store.ts',
       'apps/web/src/lib/user-settings-store.test.ts',
+      // Generates `docs/assets/browser-local-list.png`, which ADR-0008 names
+      // in its own prose. Renaming the asset would make a decision record
+      // false about a file that no longer exists, and rewriting the ADR to
+      // match is what vocabulary.md forbids.
+      'apps/web/src/docs-snapshots/browser-local-list.docs-snapshot.test.tsx',
     ],
   },
+  // Deliberately NARROWER than its sibling above, and not an oversight: only
+  // the discriminant VALUE is claimed. `localDaemonBaseUrl` is a persisted
+  // settings key whose rename needs a settings migration, so the identifier
+  // casings stay legal until that increment lands. Widening this pattern
+  // before then produces a guard nobody can make green.
   {
     pattern: /(['"])local-daemon\1/,
     word: "'local-daemon' (as a value)",
@@ -109,9 +119,9 @@ const BANNED = [
     ],
   },
   {
-    pattern: /\b(?:BROWSER_LOCAL|LOCAL_DAEMON)_/,
-    word: 'BROWSER_LOCAL_ / LOCAL_DAEMON_ constants',
-    instead: 'BROWSER_ / DAEMON_',
+    pattern: /\bLOCAL_DAEMON_/,
+    word: 'LOCAL_DAEMON_ constants',
+    instead: 'DAEMON_',
     dirs: ['apps/web/src'],
   },
 ] as const

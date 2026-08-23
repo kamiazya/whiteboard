@@ -21,7 +21,7 @@ export interface FakeFilesSource extends WorkspaceFilesSource {
  * they are wrapped in `vi.fn` here so call assertions work either way.
  *
  * `setPinned` is the exception: it is optional on the seam, and its ABSENCE
- * is what hides the pin affordance (browser-local has nowhere to keep a
+ * is what hides the pin affordance (the browser has nowhere to keep a
  * pin). Defaulting it to a spy would make every test look like a daemon.
  */
 export function fakeFilesSource(overrides: Partial<WorkspaceFilesSource> = {}): FakeFilesSource {
