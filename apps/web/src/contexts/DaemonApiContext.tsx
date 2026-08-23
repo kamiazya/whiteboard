@@ -5,7 +5,7 @@ import { createContext, useContext } from 'react'
  * Carries the daemon-origin-aware fetch (createDaemonFetch(...)) down to any
  * component that needs to call the daemon's /api/... endpoints. `null` means
  * "no daemon provider mounted" — useDaemonApi() falls back to the default
- * same-origin apiFetch so browser-local pages and the same-origin
+ * same-origin apiFetch so browser pages and the same-origin
  * mcp-server app keep working unmodified.
  */
 export const DaemonApiContext = createContext<typeof globalThis.fetch | null>(null)

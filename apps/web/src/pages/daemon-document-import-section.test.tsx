@@ -3,8 +3,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 
 let capturedProps: Record<string, unknown> | null = null
 
-vi.mock('../components/migration/ImportBrowserLocalPanel.js', () => ({
-  ImportBrowserLocalPanel(props: Record<string, unknown>) {
+vi.mock('../components/migration/ImportFromBrowserPanel.js', () => ({
+  ImportFromBrowserPanel(props: Record<string, unknown>) {
     capturedProps = props
     return <div data-testid="import-panel" />
   },
@@ -32,17 +32,17 @@ afterEach(() => {
   vi.clearAllMocks()
 })
 
-const fakeBrowserLocalStore = { list: vi.fn(), load: vi.fn() } as never
+const fakeBrowserStore = { list: vi.fn(), load: vi.fn() } as never
 const fakeDaemonFetch = vi.fn() as unknown as typeof fetch
 
 describe('DaemonDocumentImportSection', () => {
-  it('passes props through to ImportBrowserLocalPanel', () => {
+  it('passes props through to ImportFromBrowserPanel', () => {
     render(
       <DaemonDocumentImportSection
         workspaceId="ws1"
         daemonFetch={fakeDaemonFetch}
         daemonBaseUrl="http://localhost:3099"
-        browserLocalStore={fakeBrowserLocalStore}
+        browserStore={fakeBrowserStore}
       />,
     )
 
@@ -50,7 +50,7 @@ describe('DaemonDocumentImportSection', () => {
     expect(capturedProps!.workspaceId).toBe('ws1')
     expect(capturedProps!.daemonFetch).toBe(fakeDaemonFetch)
     expect(capturedProps!.daemonBaseUrl).toBe('http://localhost:3099')
-    expect(capturedProps!.browserLocalStore).toBe(fakeBrowserLocalStore)
+    expect(capturedProps!.browserStore).toBe(fakeBrowserStore)
   })
 
   it('creates LoroStore and settingsStore exactly once per mount', () => {
@@ -58,7 +58,7 @@ describe('DaemonDocumentImportSection', () => {
       <DaemonDocumentImportSection
         workspaceId="ws1"
         daemonFetch={fakeDaemonFetch}
-        browserLocalStore={fakeBrowserLocalStore}
+        browserStore={fakeBrowserStore}
       />,
     )
 
@@ -69,7 +69,7 @@ describe('DaemonDocumentImportSection', () => {
       <DaemonDocumentImportSection
         workspaceId="ws2"
         daemonFetch={fakeDaemonFetch}
-        browserLocalStore={fakeBrowserLocalStore}
+        browserStore={fakeBrowserStore}
       />,
     )
 
@@ -77,12 +77,12 @@ describe('DaemonDocumentImportSection', () => {
     expect(createSettingsSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('injects the created stores into ImportBrowserLocalPanel', () => {
+  it('injects the created stores into ImportFromBrowserPanel', () => {
     render(
       <DaemonDocumentImportSection
         workspaceId="ws1"
         daemonFetch={fakeDaemonFetch}
-        browserLocalStore={fakeBrowserLocalStore}
+        browserStore={fakeBrowserStore}
       />,
     )
 

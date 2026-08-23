@@ -78,7 +78,7 @@ export function resolveProviderStateFromRaw(raw: unknown): ProviderState {
 // Hosted-production variant: rejects non-production publicOrigin values;
 // localhost is allowed for local dev. Cloudflare Pages preview browser origins
 // (latest.<project>.pages.dev, per-PR branch aliases, hash previews) run in
-// browser-local mode — it is offline and origin-agnostic — but a daemon
+// browser mode — it is offline and origin-agnostic — but a daemon
 // connection is refused there so a preview deploy can never reach a daemon.
 export function resolveHostedProviderStateFromRaw(
   raw: unknown,

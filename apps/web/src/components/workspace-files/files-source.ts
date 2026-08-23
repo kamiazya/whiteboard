@@ -40,7 +40,7 @@ export interface WorkspaceFilesSource {
   /**
    * Pin or unpin a document, which is what decides `pinOrder` on the next
    * list read. OPTIONAL: pinning is workspace state the daemon keeps, and a
-   * browser-local workspace has nowhere to keep it — the panel omits the
+   * browser workspace has nowhere to keep it — the panel omits the
    * affordance rather than offering one that cannot persist.
    */
   setPinned?(entry: Pick<WorkspaceDocumentEntry, 'path'>, pinned: boolean): Promise<void>

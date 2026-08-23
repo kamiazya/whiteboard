@@ -10,7 +10,7 @@ import { createUserSettingsStore } from '@/lib/user-settings-store'
 import HomeMark from '../brand/home-mark.svg?react'
 import { ConnectionStatus } from './connection/ConnectionStatus.js'
 
-// React.lazy for the same reason the browser-local page had it: the banner
+// React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
 // ever opens it.
 const DaemonDetectedBanner = lazy(() =>
@@ -22,8 +22,8 @@ const DaemonDetectedBanner = lazy(() =>
 export interface AppShellProps {
   readonly daemon: boolean
   /**
-   * Switches the app to the browser-local flow. The App branch owns this, so
-   * a branch without the escape (settings, browser-local itself) leaves it
+   * Switches the app to the browser flow. The App branch owns this, so
+   * a branch without the escape (settings, the browser flow itself) leaves it
    * unset and the chip drops the two actions that depend on it.
    */
   readonly onWorkInBrowser?: () => void

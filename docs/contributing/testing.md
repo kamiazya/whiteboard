@@ -68,7 +68,7 @@ Use PBT when the behavior is better described as an invariant over many inputs t
 - Process-boundary contracts: MCP tool schemas, HTTP response schemas, persisted JSON parsers
 - Security boundaries: auth routing, Origin/CORS policy, path confinement, token redaction
 - Migration and compatibility logic: old/new versions, malformed payloads, unknown fields
-- State machines: browser-local controller, daemon lifecycle, branch/head/version state
+- State machines: browser document controller, daemon lifecycle, branch/head/version state
 - Concurrency and race risks: save/export/import ordering, late failures, retry/reload behavior
 
 **File naming:**
@@ -196,7 +196,7 @@ Use E2E when the behavior depends on real app composition rather than an isolate
 **Prefer E2E for:**
 
 - Real routes, server middleware, websocket timing, daemon startup/shutdown, and persistence order
-- Browser-local to local-daemon migration journeys
+- Browser-to-daemon migration journeys
 - Packaged CLI, tarball, binary, and install-layout behavior
 - MCP protocol smoke flows that must validate the real server entrypoint
 - User journeys where mocks would hide routing, runtime config injection, or process-boundary behavior
@@ -290,8 +290,8 @@ Both `ERROR_PATH_ONLY_TOOLS` and `DEFERRED_TOOLS` are currently empty — every 
 | Gate | Command | What it enforces | Build / browser needed |
 |---|---|---|---|
 | Artifact smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:artifact` | `dist/index.html` + `dist/_headers` exist; CSP has no wildcard sources; no `unpkg.com` references anywhere in `dist/` (loro-crdt's WASM ships a `sourceMappingURL` custom section pointing at unpkg.com, stripped at build time — see `vite-plugin-strip-wasm-sourcemap.ts`); no Cloudflare secrets in any artifact; preview-origin rejection wired into the JS bundle | `pnpm build` first (reads `apps/web/dist/`) |
-| Preview-origin smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin` | Built `dist/` loaded in real Chromium with a preview `publicOrigin` renders `data-provider="invalid-config"`, not browser-local | Build + Playwright |
-| Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserLocalDocumentPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
+| Preview-origin smoke | `pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin` | Built `dist/` loaded in real Chromium with a preview `publicOrigin` renders `data-provider="invalid-config"`, not the browser keeper | Build + Playwright |
+| Browser-only regression | `pnpm test:browser` (`web-browser` project) | `BrowserDocumentPage.browser.test.tsx`: IndexedDB save / reload / cleanup / post-cleanup-reload, plus the network-negative gate (no `/api/*` or daemon fetch during editing) | Real browser (Playwright) |
 | Origin policy | `pnpm --filter @kamiazya/whiteboard-web test` (`pages-origin-policy.test.ts`, `headers-policy.test.ts`) | `classifyPagesOrigin` keeps preview origins a distinct rejected class — a preview origin is never `production`, so it never enters a trusted/local-daemon allowlist; `_headers` CSP shape | jsdom only |
 | Boundary + secrets drift | `pnpm test` (`web-app-boundary.test.ts`, `mcp-node`) | `apps/web` source imports no server/cli/daemon/Node-only modules; `wrangler.toml` lists no preview origins and no `account_id`; no `.github/workflows/` file deploys `apps/web` with Cloudflare secrets; `apps/` stays out of the npm tarball | none |
 

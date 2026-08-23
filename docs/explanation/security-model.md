@@ -1,7 +1,7 @@
 # Security Model
 
 Whiteboard runs in one of three runtimes, each with its own trust model:
-**browser-local** (canvas data never leaves the browser's IndexedDB),
+**browser** (canvas data never leaves the browser's IndexedDB),
 **local daemon** (loopback-only server for MCP/agent work, covered below),
 and **server mode** (a shared server behind your own Identity Provider and
 TLS, covered in its own section and in
@@ -18,7 +18,7 @@ This page describes the **local daemon** in detail first, then server mode.
 - The `/mcp` HTTP transport applies token checks and restricts the `Origin` header to loopback addresses (`127.0.0.1`, `::1`, or `localhost`).
 - The packaged `stdio` MCP path does not use OAuth. Trust comes from the local process that launches the server.
 
-## Loopback origin squatting (browser-local storage)
+## Loopback origin squatting (browser storage)
 
 A browser origin is defined by scheme + host + port, not by which process
 currently answers on that port. On `http://localhost:<port>` (Vite's dev
@@ -49,14 +49,14 @@ see [Connect to a local daemon → Pairing is required every
 session](../how-to/connect-to-local-daemon.md#pairing-is-required-every-session)
 for what this means day-to-day.
 
-**This does not extend to canvas data itself.** Browser-local mode's
+**This does not extend to canvas data itself.** A browser keeper's
 canvases, files, and CRDT history in IndexedDB remain readable by whatever
 later owns the origin — the same squatting scenario applies to your actual
 canvas content, not only to daemon credentials, and there is no equivalent
 fix available: the data has to live somewhere addressable by that origin
-for the browser-local runtime to work at all. Treat a shared or
+for the browser runtime to work at all. Treat a shared or
 frequently-reused development port accordingly, and prefer the local
-daemon (loopback-bound, its own token) over browser-local storage for
+daemon (loopback-bound, its own token) over browser storage for
 anything you would not want a future occupant of that port to read.
 
 ## Daemon impersonation (loopback port squatting, the other direction)
@@ -167,7 +167,7 @@ What is shipped today (Phase 0):
   `document.modelContext` exists. Turning the capability off unregisters the
   tool exactly as an absent `document.modelContext` would.
   - `whiteboard_get_app_context` — which provider mode (`daemon` or
-    `browser-local`) and which canvas identity is open. Never includes
+    `browser`) and which canvas identity is open. Never includes
     `daemonBaseUrl`, tokens, or any other connection detail.
 - **No write tools.** Nothing registered today can mutate a canvas.
 - The tool's result shape is pinned by an automated JSON Schema

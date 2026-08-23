@@ -4,7 +4,7 @@ The web app (`apps/web`) can run entirely in the browser with no daemon —
 canvases are stored in IndexedDB and never leave the device. This guide
 covers what happens once a local daemon (started via `whiteboard mcp` or an
 MCP client) is also running on the same machine, and how to move a
-browser-local canvas onto it.
+canvas kept in your browser onto it.
 
 The web app UI calls these "variations" and "combining changes," but the
 underlying MCP tools your AI agent calls (`create_branch`, `merge`, and so
@@ -78,7 +78,7 @@ The daemon no longer serves a full UI at its own origin (it serves only the
 `/pair` consent page), so the previous escape hatch — opening
 `http://127.0.0.1:3099` directly — no longer applies. Use a Chromium-based
 browser (Chrome, Edge, Brave, Arc) to connect the hosted app to a local
-daemon; on other engines the hosted app keeps working with browser-local
+daemon; on other engines the hosted app keeps working with browser
 storage only.
 
 ## How pairing works
@@ -179,7 +179,7 @@ link (or the one-click `DaemonDetectedBanner` reconnect below, which is a
 plain top-level navigation to the daemon's own origin — not a stored
 credential). See the [security model](../explanation/security-model.md) for
 the full trust-boundary discussion, including why this does not extend to
-canvas *data* itself in browser-local mode.
+canvas *data* itself when the browser is the keeper.
 
 A daemon upgraded from a version that had silent reconnect may still hold
 origin trust records from that era in `trusted-web-origins.json`. The daemon
@@ -192,9 +192,9 @@ upgrade and the file is gone, this is why.
 
 If you have canvases stored only in this browser (from before a daemon was
 paired, or from a device that never had one) and want them on a daemon
-workspace, use the browser-local canvas page's import panel:
+workspace, use the import panel on the canvas page kept in your browser:
 
-1. Open the browser-local canvas list.
+1. Open the canvas list kept in your browser.
 2. Select the canvases you want to move.
 3. Click **Import**.
 
@@ -206,6 +206,6 @@ canvas.
 
 This is deliberately **copy-first**: nothing is deleted from this browser's
 IndexedDB storage during or after import. If an import fails partway
-through, your original browser-local data is untouched and you can retry.
+through, your original data in the browser is untouched and you can retry.
 
 ← Back to [How-to guides](README.md)

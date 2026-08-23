@@ -63,7 +63,7 @@ import { useDaemonDocumentController } from './use-daemon-document-controller.js
 
 const log = getAppLogger('daemon-document-page')
 
-// Lazy so IndexedDB/Loro code (pulled in by ImportBrowserLocalPanel's store
+// Lazy so IndexedDB/Loro code (pulled in by ImportFromBrowserPanel's store
 // dependencies) only loads once a canvas is selected and this migration-time
 // disclosure is actually mounted, not on every daemon-page load.
 const LazyImportSection = lazy(() =>
@@ -88,10 +88,10 @@ export interface DaemonDocumentPageProps {
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
   // Optional: when provided (the real App.tsx wiring always provides it),
   // renders a collapsed "Import from this browser" disclosure so a user who
-  // previously worked browser-local can copy those documents onto this
+  // previously worked in the browser can copy those documents onto this
   // daemon workspace. Absent in tests/embedders that don't need the flow.
-  browserLocalStore?: DocumentIndex
-  browserLocalClock?: ContentClock
+  browserStore?: DocumentIndex
+  browserClock?: ContentClock
   // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
@@ -105,8 +105,8 @@ export function DaemonDocumentPage({
   token,
   capabilities = DAEMON_CAPABILITIES,
   createBackend,
-  browserLocalStore,
-  browserLocalClock,
+  browserStore,
+  browserClock,
   onNavigateBack,
 }: DaemonDocumentPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
@@ -164,7 +164,7 @@ export function DaemonDocumentPage({
 
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
-  // Stable across the page's lifetime, mirroring BrowserLocalDocumentPage's
+  // Stable across the page's lifetime, mirroring BrowserDocumentPage's
   // own settingsStore — read fresh (not cached in state) wherever the
   // current capabilities.webMcpEnabled value is needed.
   const [settingsStore] = useState(() => createUserSettingsStore())
@@ -202,7 +202,7 @@ export function DaemonDocumentPage({
 
   // Backend identity is keyed on (workspaceId, path, daemonFetch) — a change
   // to any of these tears down the old connection and opens a new one via
-  // useDocumentSync's own effect cleanup (see BrowserLocalDocumentPage for the
+  // useDocumentSync's own effect cleanup (see BrowserDocumentPage for the
   // same ownership split: this hook only decides WHEN to swap identity, not
   // how disconnect/connect ordering happens).
   const backend = useMemo(() => {
@@ -298,7 +298,7 @@ export function DaemonDocumentPage({
 
   // Canvas embeds (J5a) and image nodes (J5b), over the daemon's own file and
   // snapshot routes. The staleness stamp is the referenced canvas's
-  // updatedAt, exactly as in browser-local mode.
+  // updatedAt, exactly as in browser mode.
   const fileSeams = useDocumentFileSeams({
     canvas: canvasValue,
     adapter: fileAdapter,
@@ -460,7 +460,7 @@ export function DaemonDocumentPage({
   const getThumbnailBlob = useCallback(() => exportScene('png'), [exportScene])
 
   // The document's own verbs live on the document's ⋯, the same as on the
-  // browser-local page — one object, one action menu (ADR-0006).
+  // browser page — one object, one action menu (ADR-0006).
   const { exportError, handleExport } = useSceneExport({
     onExport: exportScene,
     filenameBase: sanitizeExportFilenameBase(canvas?.path ?? 'canvas'),
@@ -579,7 +579,7 @@ export function DaemonDocumentPage({
           {canvas && (
             <WorkspaceTopBar
               // Document identity in the merged header row, mirroring the
-              // browser-local page. The NAME is the workspace's — the top bar
+              // browser page. The NAME is the workspace's — the top bar
               // hands it down from `/names`, the same surface the canvas
               // dropdown renames through — never a `title` read out of the
               // content, which ADR-0009 decision 2 forbids and
@@ -694,7 +694,7 @@ export function DaemonDocumentPage({
               {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
             </div>
           )}
-          {canvas && browserLocalStore && (
+          {canvas && browserStore && (
             <details
               className="border-b bg-background px-4 py-2 text-sm"
               onToggle={(event) => setImportSectionOpen(event.currentTarget.open)}
@@ -722,8 +722,8 @@ export function DaemonDocumentPage({
                         workspaceId={canvas.workspaceId}
                         daemonFetch={daemonFetch}
                         daemonBaseUrl={daemonBaseUrl}
-                        browserLocalStore={browserLocalStore}
-                        browserLocalClock={browserLocalClock}
+                        browserStore={browserStore}
+                        browserClock={browserClock}
                       />
                     </Suspense>
                   </ErrorBoundary>

@@ -22,14 +22,14 @@ export function documentPath(workspaceId: string, path: string): string {
   return `${workspacePath(workspaceId)}/document/${tail}`
 }
 
-export function browserLocalIndexPath(): string {
+export function browserIndexPath(): string {
   return '/local'
 }
 
 // Per-segment encoding, separators left alone — the same rule `documentPath`
 // follows for the daemon. Encoding the separators would collapse a hierarchy
 // the browser shows into one opaque URL segment.
-export function browserLocalDocumentPath(path: string): string {
+export function browserDocumentPath(path: string): string {
   return `/local/${path.split('/').map(encodeURIComponent).join('/')}`
 }
 
@@ -85,7 +85,7 @@ export function daemonRoutePath(route: DaemonRoute): string {
   return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
 }
 
-export function parseBrowserLocalRoute(pathname: string): { path: string } | null {
+export function parseBrowserRoute(pathname: string): { path: string } | null {
   const match = pathname.match(/^\/local\/(.+?)\/?$/)
   if (!match) return null
   const segments = (match[1] as string).split('/').map(decodeSegment)
@@ -122,8 +122,8 @@ export function parseSettingsRoute(pathname: string): { section: SettingsSection
 export function isKnownAppPath(pathname: string): boolean {
   return (
     pathname === '/pair' ||
-    pathname === browserLocalIndexPath() ||
-    parseBrowserLocalRoute(pathname) !== null ||
+    pathname === browserIndexPath() ||
+    parseBrowserRoute(pathname) !== null ||
     parseSettingsRoute(pathname) !== null ||
     parseDaemonRoute(pathname) !== null
   )

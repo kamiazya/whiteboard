@@ -5,8 +5,8 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 // Hoisted mock in a dedicated file: NotFoundPage must never enter the ESM
 // cache here, so App's lazy() import genuinely REJECTS — the scenario a
 // failed chunk fetch produces in production.
-vi.mock('./pages/BrowserLocalDocumentPage.js', () => ({
-  BrowserLocalDocumentPage: () => null,
+vi.mock('./pages/BrowserDocumentPage.js', () => ({
+  BrowserDocumentPage: () => null,
 }))
 vi.mock('./components/status/NotFoundPage.js', () => {
   throw new Error('chunk load failed')

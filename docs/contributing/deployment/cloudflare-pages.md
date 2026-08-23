@@ -2,7 +2,7 @@
 
 ## What this is
 
-`apps/web` is a zero-install browser app deployed to Cloudflare Pages. In the MVP configuration it runs in **browser-local mode**: all canvas data is stored in the user's own IndexedDB, with no server or account required.
+`apps/web` is a zero-install browser app deployed to Cloudflare Pages. In the MVP configuration the **browser** is the keeper: all canvas data is stored in the user's own IndexedDB, with no server or account required.
 
 ## Guarantees in place
 
@@ -11,7 +11,7 @@
 | Build output goes to `apps/web/dist/` | `wrangler.toml` `pages_build_output_dir` |
 | Security headers (CSP, X-Frame-Options, …) are served on every route | `apps/web/public/_headers` → copied into `dist/` at build time |
 | CSP has no wildcard sources; `script-src` and `default-src` are `'self'` | `headers-policy.test.ts` + `smoke-artifact.mjs` |
-| Cloudflare Pages preview deploys (`*.kamiazya-whiteboard.pages.dev`) enter `invalid-config`, not browser-local | `App.tsx` passes `window.location.origin` to `resolveHostedProviderStateFromRaw`; preview origins are rejected at bootstrap |
+| Cloudflare Pages preview deploys (`*.kamiazya-whiteboard.pages.dev`) enter `invalid-config`, not the browser keeper | `App.tsx` passes `window.location.origin` to `resolveHostedProviderStateFromRaw`; preview origins are rejected at bootstrap |
 | No Cloudflare API tokens or account IDs in the repo | `web-app-boundary.test.ts` CF secrets drift guard |
 
 ## What is NOT decided yet
@@ -43,4 +43,4 @@ cd apps/web
 pnpm dev    # Vite dev server on http://localhost:5173
 ```
 
-`localhost` and `127.0.0.1` origins are allowed to enter browser-local mode for local development.
+`localhost` and `127.0.0.1` origins are allowed to enter browser mode for local development.

@@ -3,7 +3,7 @@ import type { DocumentKind } from '@kamiazya/whiteboard-model'
  * Canvas picker — the reference-entry surface for file nodes, used by the
  * palette's Document entry (create) and the context menu's "Change target"
  * (retarget). The host page supplies the options: the editor treats a
- * file reference as an opaque string whose meaning (browser-local canvas
+ * file reference as an opaque string whose meaning (canvas kept in this browser
  * id, daemon alias path) the composition root owns.
  *
  * Marked `data-editor-overlay` so canvas gestures ignore presses inside

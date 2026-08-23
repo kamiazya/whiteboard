@@ -14,7 +14,7 @@ const LEGACY_RECONNECT_SECRET_STORAGE_KEY = 'whiteboard.reconnect-secret.v1'
  *
  * Deliberately NOT gated on the IndexedDB open (browser-idb.ts's own
  * schema-version cleanup): a user who never triggers that open (e.g. a
- * tab that never mounts the browser-local store) would otherwise keep a
+ * tab that never mounts the browser store) would otherwise keep a
  * live plaintext secret indefinitely. Called unconditionally at boot
  * instead.
  *

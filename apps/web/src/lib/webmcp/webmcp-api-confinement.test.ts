@@ -21,7 +21,7 @@ const ALLOWED_FILES = new Set([
   'lib/webmcp/webmcp-api-confinement.test.ts',
 ])
 
-// Page-level wiring regression tests (e.g. BrowserLocalDocumentPage.webmcp.test.tsx,
+// Page-level wiring regression tests (e.g. BrowserDocumentPage.webmcp.test.tsx,
 // DaemonDocumentPage.webmcp.test.tsx) legitimately inject a fake
 // `document.modelContext` to prove the hook is actually mounted — allow
 // that whole naming convention rather than listing every page test file.

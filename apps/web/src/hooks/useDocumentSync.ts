@@ -124,7 +124,7 @@ function isEditingText(target: EventTarget | null): boolean {
 }
 
 /**
- * useDocumentSync — canonical sync hook for both the browser-local backend and
+ * useDocumentSync — canonical sync hook for both the browser backend and
  * a daemon-backed connection.
  *
  * This hook is React glue only: state, the connect/teardown effect, and the
@@ -137,19 +137,19 @@ function isEditingText(target: EventTarget | null): boolean {
  * forwards `onChange(next, command)` — structurally the same signature as
  * `SpatialEditorProps['onChange']` — straight through to the session.
  *
- * Accepts a DocumentBackend (e.g. BrowserLocalBackend) or null when no backend
+ * Accepts a DocumentBackend (e.g. BrowserBackend) or null when no backend
  * is available yet (e.g. the initial snapshot is still loading). A null
  * backend never connects: syncStatus stays 'idle', canvas stays the empty
  * canvas, and onChange is a no-op. When the backend identity changes —
  * including null-to-backend and backend-to-backend — the previous session
  * is fully disposed before the new one connects. This is the mechanism a
- * browser-local -> daemon in-place migration rides on: swapping the
+ * browser -> daemon in-place migration rides on: swapping the
  * DocumentBackend prop is the whole contract.
  *
  * `options` wires the daemon-only capability receptors (onVersionCreated,
  * onHeadChanged) plus the restore-overlay state and
  * onViewportRequest/onExportRequest/onAuthError handling that a daemon
- * backend can drive. A browser-local backend never fires any of these
+ * backend can drive. A browser backend never fires any of these
  * events, so passing no `options` behaves exactly as before this seam was
  * added.
  *

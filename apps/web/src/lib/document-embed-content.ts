@@ -1,6 +1,6 @@
 /**
- * Content loading for inline canvas embeds (embed spec J5a-2), browser-local
- * flavor: a file node's reference is a browser-local canvas id, and the
+ * Content loading for inline canvas embeds (embed spec J5a-2), browser
+ * flavor: a file node's reference is a canvas id minted in the browser, and the
  * editor's `resolveReference` seam is SYNCHRONOUS by contract — so the page
  * pre-fetches referenced documents here and hands the editor a cache lookup.
  *
@@ -21,7 +21,7 @@ import type { DocumentFileAdapter, LoadedFileDocument } from '../hooks/use-docum
 import { getAppLogger } from './app-logger.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { LOCAL_WORKSPACE_ID } from './local-document-summary.js'
+import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
 const log = getAppLogger('document-embed-content')
@@ -38,7 +38,7 @@ const log = getAppLogger('document-embed-content')
 async function loadDocumentName(documentId: string): Promise<string | undefined> {
   try {
     const entry = await new IdbDocumentIndex().resolveDocumentById({
-      workspaceId: LOCAL_WORKSPACE_ID,
+      workspaceId: BROWSER_WORKSPACE_ID,
       documentId,
     })
     // A document with no name of its own reports one as ABSENT rather than as
@@ -130,7 +130,7 @@ async function loadImageAssetUrl(ref: string): Promise<string | undefined> {
 }
 
 /**
- * The browser-local binding of the editor's file seams. Declared here beside
+ * The browser binding of the editor's file seams. Declared here beside
  * the four functions it wires so the page is left with no backend knowledge
  * of its own — the daemon page supplies its own adapter over the daemon's
  * `/api/w/:workspaceId/document/:path/file/:fileId` endpoints.
