@@ -148,17 +148,28 @@ describe('0011-import-fs-blobs', () => {
     await db.destroy()
   })
 
-  it('chunks a blob larger than IMPORT_MAX_CHUNK_BYTES into more than one chunk row', async () => {
+  it('chunks a blob larger than the chunk size into more than one chunk row', async () => {
+    // The threshold is injected rather than the blob inflated past the real
+    // one. What is under test is "over the size, so it splits" — and saying
+    // that with 1.3MB pushed through SQLite made this the slowest test in
+    // the suite and the first to blow the 10s per-test budget whenever the
+    // whole project ran in parallel. Isolated it passed, which is exactly
+    // what made it look like a flake.
     const db = await memoryDb()
-    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+    expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
     await seedWorkspace(db, 'ws-1')
 
-    const bigText = highEntropyText(650_000)
-    const bytes = snapshotBytes(bigText)
-    expect(bytes.byteLength).toBeGreaterThan(1_000_000)
+    const bytes = snapshotBytes(highEntropyText(4_000))
+    const maxChunkBytes = 1_000
+    expect(bytes.byteLength).toBeGreaterThan(maxChunkBytes)
     await writeBlob(dataDir, 'ws-1', 'doc-big', bytes)
 
-    expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
+    await importFsBlobs(
+      db as unknown as Parameters<typeof importFsBlobs>[0],
+      dataDir,
+      'canvas:',
+      maxChunkBytes,
+    )
 
     const header = await db
       .selectFrom('documentSnapshots')

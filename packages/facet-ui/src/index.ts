@@ -1,3 +1,4 @@
+export { DerivedFacetForm, type DerivedFacetFormProps } from './derived-form.js'
 export { glyphIcon } from './glyph.js'
 export {
   createFacetWriter,

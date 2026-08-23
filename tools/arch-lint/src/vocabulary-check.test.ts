@@ -51,8 +51,13 @@ const SCAN_DIRS = [
  * A migration is HISTORY: its log key is recorded in the database and every
  * table and column it names is the name as it stood at that point in the
  * log, so it is the one place an old word must survive verbatim.
+ *
+ * An ADR is history for the same reason: it reports what was decided at its
+ * point in the log, so rewriting its words would misreport the decision.
+ * `vocabulary.md` says so outright, which is why this is an exclusion rather
+ * than a per-file exemption — there is no future ADR that should be caught.
  */
-const EXCLUDED_SEGMENTS = ['migrations']
+const EXCLUDED_SEGMENTS = ['migrations', 'adr']
 
 /**
  * Files outside `migrations/` that are nonetheless writing history, with the
@@ -89,7 +94,12 @@ const BANNED = [
     pattern: /browser[-_]?local/i,
     word: 'browser-local (in any casing)',
     instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
-    dirs: ['apps/web/src', 'apps/web/scripts'],
+    // `docs` is here because prose is where this word decayed TWICE: the
+    // increment that rewrote the app's copy left the tutorial teaching the
+    // retired word in bold, and the sweep after it missed a camel-cased
+    // `BrowserLocalDocumentPage` in a table because the grep looked for a
+    // hyphen. A reader cannot be relied on to spell the search four ways.
+    dirs: ['apps/web/src', 'apps/web/scripts', 'docs'],
     exempt: [
       // PERSISTED value under a `.strict()` schema whose loader falls back to
       // defaults on any parse failure: renaming it in place would discard an
@@ -101,6 +111,8 @@ const BANNED = [
       // false about a file that no longer exists, and rewriting the ADR to
       // match is what vocabulary.md forbids.
       'apps/web/src/docs-snapshots/browser-local-list.docs-snapshot.test.tsx',
+      // Renders that same ADR-pinned asset.
+      'docs/tutorials/getting-started.md',
     ],
   },
   // Deliberately NARROWER than its sibling above, and not an oversight: only
@@ -141,7 +153,7 @@ function listSourceFiles(dir: string): string[] {
       files.push(...listSourceFiles(full))
       continue
     }
-    if (/\.(ts|tsx|mts|js|mjs|cjs|json)$/.test(entry.name)) files.push(full)
+    if (/\.(ts|tsx|mts|js|mjs|cjs|json|md)$/.test(entry.name)) files.push(full)
   }
   return files
 }

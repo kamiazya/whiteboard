@@ -413,15 +413,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     })
     render(<BrowserDocumentPage store={store} />)
 
-    const editable = await waitFor(
-      () => {
-        const el = document.querySelector('[contenteditable="true"]')
-        expect(el).not.toBeNull()
-        return el as HTMLElement
-      },
-      { timeout: 10_000 },
-    )
-    editable.focus()
+    // focusEditable rather than focus() on the node resolved a moment ago:
+    // under load the contentDOM can arrive late or be swapped, and focus()
+    // on a detached element is a spec'd no-op that no wait here would
+    // recover from — the keystrokes simply go nowhere. It also answers the
+    // reason a click is wrong on this page: there are TWO role=textbox
+    // elements (the title input and CodeMirror's content), so a click
+    // locator on the contenteditable is ambiguous under strict mode.
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
 
     await userEvent.click(await screen.findByRole('button', { name: 'Editing actions' }))
     await userEvent.click(await screen.findByRole('menuitem', { name: 'Link' }))
@@ -456,18 +455,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       </>,
     )
 
-    const editable = await waitFor(
-      () => {
-        const el = document.querySelector('[contenteditable="true"]')
-        expect(el).not.toBeNull()
-        return el as HTMLElement
-      },
-      { timeout: 10_000 },
-    )
-    // focus() instead of click(): the page has TWO role=textbox elements
-    // (the title input and CodeMirror's content), so a click locator on the
-    // contenteditable is ambiguous under playwright's strict mode.
-    editable.focus()
+    // focusEditable rather than focus() on the node resolved a moment ago:
+    // under load the contentDOM can arrive late or be swapped, and focus()
+    // on a detached element is a spec'd no-op that no wait here would
+    // recover from — the keystrokes simply go nowhere. It also answers the
+    // reason a click is wrong on this page: there are TWO role=textbox
+    // elements (the title input and CodeMirror's content), so a click
+    // locator on the contenteditable is ambiguous under strict mode.
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     // `[[` doubled: userEvent.keyboard's escape for a literal `[`.
     await userEvent.keyboard('See [[[[Target note]] here.')
 
@@ -513,15 +508,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     await new LoroStore().save(TARGET_ID, targetDoc.export({ mode: 'snapshot' }))
     render(<BrowserDocumentPage store={store} />)
 
-    const editable = await waitFor(
-      () => {
-        const el = document.querySelector('[contenteditable="true"]')
-        expect(el).not.toBeNull()
-        return el as HTMLElement
-      },
-      { timeout: 10_000 },
-    )
-    editable.focus()
+    // focusEditable rather than focus() on the node resolved a moment ago:
+    // under load the contentDOM can arrive late or be swapped, and focus()
+    // on a detached element is a spec'd no-op that no wait here would
+    // recover from — the keystrokes simply go nowhere. It also answers the
+    // reason a click is wrong on this page: there are TWO role=textbox
+    // elements (the title input and CodeMirror's content), so a click
+    // locator on the contenteditable is ambiguous under strict mode.
+    await focusEditable(() => document.querySelector('[contenteditable="true"]'))
     // Trailing keystrokes AFTER the reference completes are the regression
     // surface: each one re-runs the embed-content effect while the load is
     // in flight, and a per-effect cancellation dropped the result with
@@ -596,15 +590,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       await seedLegacyNote(store, 'Legacy note')
       const first = render(<BrowserDocumentPage store={store} />)
 
-      const editable = await waitFor(
-        () => {
-          const el = document.querySelector('.cm-content')
-          expect(el).not.toBeNull()
-          return el as HTMLElement
-        },
-        { timeout: 10_000 },
-      )
-      editable.focus()
+      // focusEditable rather than focus() on the node resolved a moment ago:
+      // under load the contentDOM can arrive late or be swapped, and focus()
+      // on a detached element is a spec'd no-op that no wait here would
+      // recover from — the keystrokes simply go nowhere. It also answers the
+      // reason a click is wrong on this page: there are TWO role=textbox
+      // elements (the title input and CodeMirror's content), so a click
+      // locator on the contenteditable is ambiguous under strict mode.
+      await focusEditable(() => document.querySelector('[contenteditable="true"]'))
       await userEvent.keyboard('{Control>}{End}{/Control}{Enter}and an appended line')
       await waitFor(() => {
         expect(document.querySelector('.cm-content')?.textContent).toContain('and an appended line')
@@ -635,15 +628,14 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       })
       render(<BrowserDocumentPage store={store} />)
 
-      const editable = await waitFor(
-        () => {
-          const el = document.querySelector('[contenteditable="true"]')
-          expect(el).not.toBeNull()
-          return el as HTMLElement
-        },
-        { timeout: 10_000 },
-      )
-      editable.focus()
+      // focusEditable rather than focus() on the node resolved a moment ago:
+      // under load the contentDOM can arrive late or be swapped, and focus()
+      // on a detached element is a spec'd no-op that no wait here would
+      // recover from — the keystrokes simply go nowhere. It also answers the
+      // reason a click is wrong on this page: there are TWO role=textbox
+      // elements (the title input and CodeMirror's content), so a click
+      // locator on the contenteditable is ambiguous under strict mode.
+      await focusEditable(() => document.querySelector('[contenteditable="true"]'))
       await userEvent.keyboard(`![[[[${LEGACY_ID}]]{Enter}{Enter}trailing`)
 
       await waitFor(

@@ -1,5 +1,6 @@
 import { cleanup, render } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 
 afterEach(() => {
@@ -17,12 +18,12 @@ describe('empty-document caret', () => {
     const { getByTestId } = render(
       <MarkdownEditor initialViewMode="write" value="" onChange={() => {}} />,
     )
-    const editable = getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
-    if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-    ;(editable as HTMLElement).focus()
-    await vi.waitFor(() => {
-      expect(document.activeElement).toBe(editable)
-    })
+    const resolveEditable = () =>
+      getByTestId('markdown-source-pane').querySelector('[contenteditable="true"]')
+    await focusEditable(resolveEditable)
+    // Read AFTER the helper settled, not from a node captured before it: the
+    // contentDOM it focused is the one this test means.
+    const editable = resolveEditable() as HTMLElement
 
     const placeholder = editable.querySelector('.cm-placeholder')
     expect(placeholder).not.toBeNull()

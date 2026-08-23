@@ -76,10 +76,12 @@ describe('SourcePane external value reconciliation (real browser)', () => {
       <MarkdownEditor initialViewMode="write" value={'keep me\ntail'} onChange={onChange} />,
     )
 
-    // Click the FIRST LINE, not the content element: the content column has
-    // vertical padding, so its center point can map to a different line.
-    await userEvent.click(editableOf().querySelector('.cm-line') as HTMLElement)
-    await userEvent.keyboard('{Home}')
+    // Ctrl+Home rather than a click on the first line: the click had to reach
+    // that line by hit-testing (the content column's vertical padding could
+    // map its center to another line), and an absolute move states the intent
+    // without depending on layout at all.
+    await focusEditable(editableOf)
+    await userEvent.keyboard('{Control>}{Home}{/Control}')
     // Select "keep" on the first line.
     await userEvent.keyboard('{Shift>}{ArrowRight}{ArrowRight}{ArrowRight}{ArrowRight}{/Shift}')
 
