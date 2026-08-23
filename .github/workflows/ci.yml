@@ -38,6 +38,13 @@ jobs:
       - name: Secret scan (secretlint)
         run: pnpm secretlint
 
+      # compose-figure.mjs shells out to ImageMagick, which the runner image no
+      # longer ships. Installed rather than skipped-when-absent: a guard that
+      # quietly does not run in CI is the exact failure the script it covers
+      # exists to prevent.
+      - name: Install ImageMagick (compose-figure tests)
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends imagemagick
+
       # cleanup-worktrees.mjs can force-remove worktrees and delete local
       # branches; keep its regression test enforced in the same gate as the
       # other repo-hygiene tooling checks.

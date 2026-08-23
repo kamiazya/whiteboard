@@ -18,6 +18,19 @@ import assert from 'node:assert/strict'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const scriptPath = resolve(__dirname, 'compose-figure.mjs')
 
+// Not skipped when ImageMagick is absent, on purpose: these cover a guard
+// whose whole point is that a check which quietly does not run is worse than
+// no check. CI installs it; a developer without it gets told what to install.
+try {
+  execFileSync('convert', ['-version'], { stdio: 'ignore' })
+} catch {
+  console.error(
+    'compose-figure.test.mjs needs ImageMagick (`convert`, `identify`) — the same tool ' +
+      'compose-figure.mjs shells out to. Install it (apt: imagemagick, brew: imagemagick) and re-run.',
+  )
+  process.exit(1)
+}
+
 const scratchDirs = []
 after(() => {
   for (const dir of scratchDirs) rmSync(dir, { recursive: true, force: true })
