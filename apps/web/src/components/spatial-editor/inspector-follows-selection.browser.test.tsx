@@ -68,12 +68,6 @@ it('stays open across a selection change and edits the newly selected node', asy
   expect(panelOf(container)).not.toBeNull()
 
   fireEvent.click(panelOf(container)?.querySelector('[aria-label="Diamond"]') as HTMLElement)
-  console.log(
-    'PROBE a=',
-    JSON.stringify(shapeOf(latest.canvas, 'a')),
-    'b=',
-    JSON.stringify(shapeOf(latest.canvas, 'b')),
-  )
   expect(shapeOf(latest.canvas, 'b')).toEqual({ kind: 'diamond' })
   // ...and it edited B, not the node the menu was opened on.
   expect(shapeOf(latest.canvas, 'a')).toBeUndefined()
@@ -85,4 +79,21 @@ it('leaves focus on the canvas, so typing and shortcuts still reach it', async (
   await openInspector(container, 120, 85)
   const panel = panelOf(container) as HTMLElement
   expect(panel.contains(document.activeElement)).toBe(false)
+})
+
+it('stays dismissible when the selection empties, instead of vanishing', async () => {
+  const { Host } = makeHost()
+  const { container } = render(<Host />)
+  const root = await openInspector(container, 120, 85)
+
+  // Click empty canvas: nothing selected.
+  await userEvent.click(root, { position: { x: 650, y: 400 } })
+  const panel = panelOf(container)
+  // It must still be on screen WITH its Done control — returning null here
+  // left `facetPanelOpen` true with nothing to press.
+  expect(panel).not.toBeNull()
+  const done = panel?.querySelector('[aria-label="Close facets"]') as HTMLElement
+  expect(done).not.toBeNull()
+  fireEvent.click(done)
+  expect(panelOf(container)).toBeNull()
 })

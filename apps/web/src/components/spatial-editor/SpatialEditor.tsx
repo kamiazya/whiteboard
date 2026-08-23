@@ -3326,10 +3326,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {facetPanelOpen &&
           (() => {
             const target = canvas.nodes.find((entry) => entry.id === selectedId)
-            // Nothing selected: the inspector has nothing to show, but it
-            // stays OPEN — selecting the next node brings it straight back
-            // rather than making the doorway a two-tap trip again.
-            if (target === undefined) return null
+            // Nothing selected: the inspector stays open and says so, rather
+            // than vanishing. Returning null here left `facetPanelOpen` true
+            // with nothing on screen and no Done to press — a state only a
+            // new selection could get out of.
+            if (target === undefined) {
+              return (
+                <FacetFormPanel
+                  node={undefined}
+                  registry={bundledFacetRegistry}
+                  onClose={() => setFacetPanelOpen(false)}
+                  variant={rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'dock'}
+                  onWrite={() => {}}
+                />
+              )
+            }
             return (
               <FacetFormPanel
                 node={target}
