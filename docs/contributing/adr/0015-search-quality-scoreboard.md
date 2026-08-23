@@ -306,7 +306,7 @@ Cost: 286 embeddings instead of 45, **6.4x**, up to 21 chunks for the
 longest document.
 
 **Declined for now.** Every interval crosses zero and no p-value comes
-near significance, so 6.3x the embedding work buys something this corpus
+near significance, so 6.4x the embedding work buys something this corpus
 cannot distinguish from which fifty questions were asked. That is the same
 verdict the edge-routing instrument returned for per-blocker detours and a
 placement cache: obviously right on argument, not worth paying for on the
