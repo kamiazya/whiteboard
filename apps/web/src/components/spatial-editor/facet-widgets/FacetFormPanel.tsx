@@ -23,9 +23,22 @@ import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { useEffect, useRef, useState } from 'react'
 import { cn } from '@/lib/utils'
 import { glyphIcon } from './glyph.js'
+import { type FacetEditorWidget, NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {
+  /**
+   * The node whose stored values the panel SHOWS. Writes go to the whole
+   * selection (see `onWrite`) — the same split the context-menu bands had,
+   * where the row reflected the node you opened on and applied to every
+   * selected node.
+   */
   readonly node: SpatialNode
+  /**
+   * Tier-3 editors by facet key. A facet with one registered renders it
+   * instead of the derived form — the picker the declared vocabulary
+   * cannot yet express (today: the icon-plus-emoji badge picker).
+   */
+  readonly editors?: Readonly<Record<string, FacetEditorWidget>>
   readonly registry: FacetRegistry
   /** `undefined` payload clears the facet, matching set-node-facet. */
   readonly onWrite: (key: string, payload: unknown) => void
@@ -335,7 +348,13 @@ function FacetEditor({
   )
 }
 
-export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPanelProps) {
+export function FacetFormPanel({
+  node,
+  registry,
+  onWrite,
+  onClose,
+  editors = NODE_FACET_EDITORS,
+}: FacetFormPanelProps) {
   const closeRef = useRef<HTMLButtonElement | null>(null)
   // Focus on open: a dialog that never takes focus leaves Escape and Tab
   // acting on the canvas behind it. The close button is the least
@@ -343,7 +362,7 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
   useEffect(() => {
     closeRef.current?.focus()
   }, [])
-  const groups = resolveFacetContributions(registry, 'contextMenu.node.properties')
+  const groups = resolveFacetContributions(registry, 'inspector.node')
   const stored = storedFacets(node)
   const body = (
     <div className="flex flex-col gap-3">
@@ -352,21 +371,38 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
           <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
             {group.displayName}
           </span>
-          {group.facets.map((facet) => (
-            <FacetEditor
-              // Keyed by NODE too: a draft belongs to the node it was typed
-              // against. Retargeting the panel without this reuses the
-              // instance, so an abandoned edit on one node would be shown —
-              // and saved — as another node's value.
-              key={`${node.id}:${facet.key}`}
-              facetKey={facet.key}
-              title={facet.definition.displayName}
-              form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
-              stored={stored[facet.key]}
-              registry={registry}
-              onWrite={onWrite}
-            />
-          ))}
+          {group.facets.map((facet) =>
+            editors[facet.key] !== undefined ? (
+              <div key={`${node.id}:${facet.key}`} className="flex flex-col gap-1.5">
+                <span className="text-xs font-medium">{facet.definition.displayName}</span>
+                {editors[facet.key]?.({
+                  value: stored[facet.key],
+                  // Straight through the registry, exactly like the derived
+                  // form's own writer — a hand-written editor gets no shorter
+                  // path to storage than a declared one.
+                  write: (payload) => {
+                    if (payload === undefined) return onWrite(facet.key, undefined)
+                    const result = registry.validateFacetWrite(facet.key, payload)
+                    if (result.ok) onWrite(facet.key, result.value)
+                  },
+                })}
+              </div>
+            ) : (
+              <FacetEditor
+                // Keyed by NODE too: a draft belongs to the node it was typed
+                // against. Retargeting the panel without this reuses the
+                // instance, so an abandoned edit on one node would be shown —
+                // and saved — as another node's value.
+                key={`${node.id}:${facet.key}`}
+                facetKey={facet.key}
+                title={facet.definition.displayName}
+                form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
+                stored={stored[facet.key]}
+                registry={registry}
+                onWrite={onWrite}
+              />
+            ),
+          )}
         </div>
       ))}
     </div>

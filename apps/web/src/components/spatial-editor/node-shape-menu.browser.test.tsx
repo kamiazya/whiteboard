@@ -1,4 +1,4 @@
-// The node context menu's Shape row: a pick must not just record the
+// The inspector's Shape row: a pick must not just record the
 // visual.shape/v0 facet on the node, it must change the silhouette the
 // scene DRAWS — and `rect` must remove the facet without a trace.
 import type { VisualShapeFacet } from '@kamiazya/whiteboard-facet-engine'
@@ -47,12 +47,25 @@ function openNodeMenu(container: HTMLElement): HTMLElement {
   return menu
 }
 
+/** Opens the node menu, then the inspector behind its one facet entry. */
+function openInspector(container: HTMLElement): HTMLElement {
+  const menu = openNodeMenu(container)
+  const entry = [...menu.querySelectorAll('button')].find((b) =>
+    (b.textContent ?? '').startsWith('Facets'),
+  )
+  expect(entry).toBeDefined()
+  fireEvent.click(entry as HTMLElement)
+  const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
+  expect(panel).not.toBeNull()
+  return panel
+}
+
 it('the Shape row stores the facet and the scene draws the silhouette', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  const menu = openNodeMenu(container)
-  fireEvent.click(menu.querySelector('[aria-label="Hexagon"]') as HTMLElement)
+  const panel = openInspector(container)
+  fireEvent.click(panel.querySelector('[aria-label="Hexagon"]') as HTMLElement)
 
   expect(shapeFacetOf(latest.canvas)).toEqual({ kind: 'hexagon' })
   // The node's chrome is no longer a plain rect: a hexagon draws as a
@@ -94,8 +107,14 @@ it('a shape pick from a multi-selection reshapes every selected node', async () 
   fireEvent.contextMenu(root, { clientX: r.left + 160, clientY: r.top + 125 })
   const menu = container.querySelector('[data-testid="context-menu"]') as HTMLElement
   expect(menu).not.toBeNull()
+  fireEvent.click(
+    [...menu.querySelectorAll('button')].find((b) =>
+      (b.textContent ?? '').startsWith('Facets'),
+    ) as HTMLElement,
+  )
+  const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
 
-  fireEvent.click(menu.querySelector('[aria-label="Diamond"]') as HTMLElement)
+  fireEvent.click(panel.querySelector('[aria-label="Diamond"]') as HTMLElement)
   await vi.waitFor(() => {
     for (const id of ['a', 'b']) {
       expect(
@@ -109,7 +128,7 @@ it('Rectangle removes the facet without a trace', () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
 
-  const first = openNodeMenu(container)
+  const first = openInspector(container)
   fireEvent.click(first.querySelector('[aria-label="Cylinder"]') as HTMLElement)
   expect(shapeFacetOf(latest.canvas)).toEqual({ kind: 'cylinder' })
 
