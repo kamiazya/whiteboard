@@ -10,6 +10,21 @@ paths:
 - Plain-TS scene graph types (`scene-graph.ts`): resolved bounding boxes,
   shape kind, text runs, list/heading/table structure, the SVG-fragment
   (math/diagram) seam node, resolved edges.
+- `layout/edge-geometry.ts`: the geometry VOCABULARY the edge layer is
+  written in — rectangles, points, sides, polylines — with no opinion about
+  routing or side choice. It exists because that vocabulary had no home:
+  `spatial-edges.ts` held the side-choice search, the router and these
+  primitives in one file, and the search reached into the router's half for
+  `rectOf`/`centerOf`/`pathLength`/`tangentCoordinate` only because that is
+  where the words lived. Judgement stays out: which side to prefer and what
+  makes one route better are `edge-rules.ts` and `spatial-edges.ts`. Keeping
+  this layer opinion-free is what lets both share it without either
+  importing the other — and it is the piece a later router/search split
+  would need first. That split is NOT proposed: the dependency is
+  one-directional (the router calls nothing search-side), but the seam is
+  eight entry points rather than the one `routeEdge` a reading suggests,
+  so it is a three-module decomposition with no measurable payoff, on the
+  file most likely to change next.
 - Pure layout functions: spatial-canvas edge routing (`layout/spatial-edges.ts`),
   embed recursion over a resolved doc bundle (`layout/embed-recursion.ts`),
   and mdast block layout (`layout/mdast-blocks.ts`) — the single mdast ->
