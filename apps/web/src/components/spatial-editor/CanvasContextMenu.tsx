@@ -43,7 +43,6 @@ import {
   Pencil,
   Scissors,
   SendToBack,
-  SlidersHorizontal,
   Sparkles,
   SquareDashed,
   StickyNote,
@@ -649,6 +648,7 @@ export function CanvasContextMenu({
         // never names a plugin or facet itself (facet-wiring-guard.test.ts
         // keeps it that way). Bands apply to the whole selection, the same
         // semantics as Color.
+        let facetItems: readonly ContextMenuItem[] = []
         {
           const applyToSelection = (
             commandsFor: (targetIds: readonly string[]) => readonly EditorCommand[],
@@ -657,13 +657,14 @@ export function CanvasContextMenu({
             const nodeTargets = members.has(node.id) ? [...members] : [node.id]
             applyResult({ state: { kind: 'idle' }, commands: [...commandsFor(nodeTargets)] })
           }
-          properties.push(...nodePropertyItems(facetRegistry, { node, applyToSelection }))
-          // The quick bands are one tier; everything a facet declares —
-          // including facets no band knows about — is reachable here.
-          properties.push({
-            label: 'Facets…',
-            icon: <SlidersHorizontal />,
-            onSelect: () => setFacetPanelNodeId(node.id),
+          // Pushed AFTER the core rows below, so the menu reads
+          // core-then-extensions with a visible fence between them. The
+          // doorway to the full panel comes back with the bands — this
+          // surface owns where the region goes, never what is in it.
+          facetItems = nodePropertyItems(facetRegistry, {
+            node,
+            applyToSelection,
+            openPanel: () => setFacetPanelNodeId(node.id),
           })
         }
         // Z-order as one-tap options — the touch path to the [ / ]
@@ -773,6 +774,8 @@ export function CanvasContextMenu({
         }
         return [
           ...properties,
+          // Extensions come after every core row, behind their own fence.
+          ...facetItems,
           { kind: 'separator' as const },
           ...verbs,
           { kind: 'separator' as const },
