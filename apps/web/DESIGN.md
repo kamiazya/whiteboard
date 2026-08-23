@@ -90,6 +90,14 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 - **Sentence-length copy never sits in chrome.** Explanations live in
   popovers/tooltips/dialogs (see `ConnectionStatus`); chrome carries words
   only as short labels ("Saved", "Browser").
+- **Never offer what the keeper cannot honour.** An affordance is a promise
+  about what the app can do, and the keeper decides how far that reaches: a
+  document kept in this browser is reachable from no other browser, so a
+  "Copy link" there hands out an address nobody else can open. The same
+  control was building its link from the document's PATH, so renaming also
+  broke every link already handed out — it was removed rather than narrowed,
+  because sharing has to be designed against the keeper that has to honour
+  it. Before adding a control, ask which keepers can actually deliver it.
 - **Status reports; Settings manages.** A surface that reports a state carries
   only what you cannot go looking for — a dropped sync is not something anyone
   seeks out, so its recovery (re-pair, work in the browser instead) stays on
