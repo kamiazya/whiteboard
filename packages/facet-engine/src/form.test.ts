@@ -23,6 +23,7 @@ describe('deriveFacetForm', () => {
         { name: 'title', label: 'title', control: { kind: 'text' }, required: true, quick: false },
         {
           name: 'count',
+          displayName: 'Count',
           label: 'count',
           control: { kind: 'number' },
           required: true,
@@ -50,6 +51,7 @@ describe('deriveFacetForm', () => {
     if (form.kind !== 'fields') throw new Error('unreachable')
     expect(form.fields[0]).toEqual({
       name: 'note',
+      displayName: 'Note',
       label: 'note',
       control: { kind: 'text' },
       required: false,
@@ -166,6 +168,7 @@ describe('an editor spec refines the derived form', () => {
     const [first, second] = form.fields
     expect(first).toEqual({
       name: 'kind',
+      displayName: 'Kind',
       label: 'Shape',
       quick: true,
       control: {
@@ -205,6 +208,7 @@ describe('an editor spec refines the derived form', () => {
     expect(() =>
       defineFacet({
         name: 'sample',
+        displayName: 'Sample',
         version: 'v0',
         targets: ['node'],
         schema,
@@ -217,6 +221,7 @@ describe('an editor spec refines the derived form', () => {
     expect(() =>
       defineFacet({
         name: 'sample',
+        displayName: 'Sample',
         version: 'v0',
         targets: ['node'],
         schema: z.string(),

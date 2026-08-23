@@ -26,6 +26,15 @@ export interface FacetCompatEntry {
 
 export interface FacetDefinition<S extends z.ZodTypeAny = z.ZodTypeAny> {
   readonly name: string
+  /**
+   * The facet's human-facing name, on the same footing as a plugin's.
+   * `name` stays machine-only (key grammar, storage, ordering).
+   *
+   * Without it every reader has to invent a title, and the one that
+   * existed concatenated the plugin's name with this identifier —
+   * "Visual style shape" under a heading already reading "Visual style".
+   */
+  readonly displayName: string
   readonly version: `v${number}`
   readonly targets: readonly FacetTarget[]
   readonly schema: S
@@ -65,6 +74,9 @@ export function defineFacet<S extends z.ZodTypeAny>(
   }
   if (!VERSION_PATTERN.test(definition.version)) {
     throw new Error(`facet version "${definition.version}" must match ${VERSION_PATTERN}`)
+  }
+  if (definition.displayName.trim() === '') {
+    throw new Error(`facet "${definition.name}" needs a non-blank displayName`)
   }
   if (definition.targets.length === 0) {
     throw new Error(`facet "${definition.name}" declares no targets`)

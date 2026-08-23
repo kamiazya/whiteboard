@@ -14,6 +14,7 @@ const registry = createFacetRegistry([
     facets: [
       defineFacet({
         name: 'thing',
+        displayName: 'Thing',
         version: 'v2',
         targets: ['document'],
         schema: z.object({ c: z.string() }),

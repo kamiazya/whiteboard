@@ -69,7 +69,9 @@ function FieldInput({
   // accessible NAME is qualified for the same reason — a dialog with two
   // controls both called "kind" tells a screen-reader user nothing.
   const id = `facet-field-${facetKey}-${field.name}`
-  const name = `${title} ${field.label}`
+  // A single-field facet often labels its field the way the facet is named
+  // ("Shape" / "Shape"); saying it twice tells a reader nothing.
+  const name = field.label === title ? title : `${title} ${field.label}`
   const common = 'rounded border border-border bg-background px-2 py-1 text-xs'
   if (field.control.kind === 'toggle') {
     return (
@@ -197,11 +199,11 @@ function FacetEditor({
       : undefined
   const fields = form.kind === 'fields' ? form.fields : (activeVariant?.fields ?? [])
 
-  const save = () => {
+  const commit = (next: Draft) => {
     const payload =
       form.kind === 'variants' && activeVariant !== undefined
-        ? { ...prune(draft), [form.discriminant]: activeVariant.label }
-        : prune(draft)
+        ? { ...prune(next), [form.discriminant]: activeVariant.label }
+        : prune(next)
     const result = registry.validateFacetWrite(facetKey, payload)
     if (!result.ok) {
       setError(result.message)
@@ -209,6 +211,21 @@ function FacetEditor({
     }
     setError(undefined)
     onWrite(facetKey, result.value)
+  }
+
+  /**
+   * A CHOICE applies on pick, the way the same facet's quick band does.
+   * Staging it behind Save gave one facet two behaviours depending on which
+   * surface you reached it from. Free entry has no moment mid-typing that
+   * means "done", so a facet carrying one keeps its Save button.
+   */
+  const applies = (field: FacetFormField) =>
+    field.control.kind !== 'text' && field.control.kind !== 'number'
+  const needsSave = fields.some((field) => !applies(field))
+  const change = (field: FacetFormField, value: unknown) => {
+    const next = { ...draft, [field.name]: value }
+    setDraft(next)
+    if (applies(field)) commit(next)
   }
 
   return (
@@ -249,7 +266,7 @@ function FacetEditor({
             title={title}
             field={field}
             value={draft[field.name]}
-            onChange={(next) => set(field.name, next)}
+            onChange={(next) => change(field, next)}
             onClear={() => onWrite(facetKey, undefined)}
           />
         </label>
@@ -260,20 +277,27 @@ function FacetEditor({
         </span>
       )}
       <span className="flex items-center gap-1">
-        <button
-          type="button"
-          className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
-          onClick={save}
-        >
-          Save {title}
-        </button>
+        {/* The visible words say what the button does; WHICH facet is the
+            heading's job on screen and the accessible name's for a reader
+            who has no heading in view. */}
+        {needsSave && (
+          <button
+            type="button"
+            aria-label={`Save ${title}`}
+            className="rounded border border-border px-2 py-0.5 text-xs hover:bg-accent"
+            onClick={() => commit(draft)}
+          >
+            Save
+          </button>
+        )}
         {stored !== undefined && (
           <button
             type="button"
+            aria-label={`Clear ${title}`}
             className="rounded px-2 py-0.5 text-xs text-muted-foreground hover:bg-accent"
             onClick={() => onWrite(facetKey, undefined)}
           >
-            Clear {title}
+            Clear
           </button>
         )}
       </span>
@@ -306,7 +330,7 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
               // and saved — as another node's value.
               key={`${node.id}:${facet.key}`}
               facetKey={facet.key}
-              title={`${group.displayName} ${facet.definition.name}`}
+              title={facet.definition.displayName}
               form={deriveFacetForm(facet.definition.schema, facet.definition.editor)}
               stored={stored[facet.key]}
               registry={registry}
@@ -338,6 +362,13 @@ export function FacetFormPanel({ node, registry, onWrite, onClose }: FacetFormPa
         maxHeight: '60%',
         overflowY: 'auto',
         width: 'max-content',
+        // max-content alone lets a long option row set a box wider than the
+        // phone it is opened on, and a centred box that does not fit spills
+        // off BOTH edges.
+        maxWidth: 'min(90%, 22rem)',
+        // max-content alone lets a long option row set a box wider than the
+        // phone it is opened on, and a centred box that does not fit spills
+        // off BOTH edges.
       }}
       onKeyDown={(event) => {
         if (event.key === 'Escape') {
