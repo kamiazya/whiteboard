@@ -49,6 +49,7 @@ describe('docs/ contract', () => {
       'packages/model': 'model',
       'packages/ports': 'ports',
       'packages/facet-engine': 'facet-engine',
+      'packages/facet-ui': 'facet-ui',
       'packages/codec': 'codec',
       'packages/canvas-render': 'canvas-render',
       'packages/loro-adapter': 'workspace',

@@ -19,11 +19,11 @@ import {
   type FacetRegistry,
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
+import { type FacetEditor, glyphIcon } from '@kamiazya/whiteboard-facet-ui'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { glyphIcon } from './glyph.js'
-import { type FacetEditorWidget, NODE_FACET_EDITORS } from './index.js'
+import { NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {
   /**
@@ -39,7 +39,7 @@ export interface FacetFormPanelProps {
    * instead of the derived form — the picker the declared vocabulary
    * cannot yet express (today: the icon-plus-emoji badge picker).
    */
-  readonly editors?: Readonly<Record<string, FacetEditorWidget>>
+  readonly editors?: Readonly<Record<string, FacetEditor>>
   readonly registry: FacetRegistry
   /** `undefined` payload clears the facet, matching set-node-facet. */
   readonly onWrite: (key: string, payload: unknown) => void
@@ -192,7 +192,7 @@ function prune(draft: Draft): Draft {
   )
 }
 
-function FacetEditor({
+function DerivedFacetForm({
   facetKey,
   title,
   form,
@@ -391,7 +391,7 @@ export function FacetFormPanel({
                   })}
                 </div>
               ) : (
-                <FacetEditor
+                <DerivedFacetForm
                   // Keyed by NODE too: a draft belongs to the node it was typed
                   // against. Retargeting the panel without this reuses the
                   // instance, so an abandoned edit on one node would be shown —

@@ -121,6 +121,23 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     ],
     allowedThirdParty: ['hono', 'zod', 'loro-crdt'],
   },
+  // The facet system's React half. `facet-engine` holds the same system's
+  // data half and cannot take React — it runs on Node, in a worker and in
+  // the browser. Both halves of the bundled `visual` plugin follow that
+  // split, which is the plugin shape a third party copies rather than a
+  // privilege of being bundled.
+  '@kamiazya/whiteboard-facet-ui': {
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-canvas-render',
+      '@kamiazya/whiteboard-facet-engine',
+    ],
+    // lucide-react: the icon set the editor already draws from, pure SVG
+    // components with no DOM or `node:*` reach — it holds wherever React
+    // does. `react-dom` is deliberately absent: this package renders
+    // elements and never mounts them.
+    allowedThirdParty: ['lucide-react', 'react'],
+    exemptBoundaryViolationKinds: ['dom-global'],
+  },
   '@kamiazya/whiteboard-canvas-viewer': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
@@ -160,6 +177,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-canvas-render',
       '@kamiazya/whiteboard-loro-adapter',
       '@kamiazya/whiteboard-canvas-viewer',
+      '@kamiazya/whiteboard-facet-ui',
       '@kamiazya/whiteboard-mcp',
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',
