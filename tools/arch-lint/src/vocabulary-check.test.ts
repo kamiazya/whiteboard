@@ -90,12 +90,23 @@ const BANNED = [
     word: "'browser-local' (as a value)",
     instead: "'browser' — the keeper is named by WHO holds the workspace (Browser / Daemon)",
     dirs: ['apps/web/src'],
+    // PERSISTED value under a `.strict()` schema whose loader falls back to
+    // defaults on any parse failure: renaming it in place would discard an
+    // existing reader's whole settings payload. It moves with a migration.
+    exempt: [
+      'apps/web/src/lib/user-settings-store.ts',
+      'apps/web/src/lib/user-settings-store.test.ts',
+    ],
   },
   {
     pattern: /(['"])local-daemon\1/,
     word: "'local-daemon' (as a value)",
     instead: "'daemon'",
     dirs: ['apps/web/src'],
+    exempt: [
+      'apps/web/src/lib/user-settings-store.ts',
+      'apps/web/src/lib/user-settings-store.test.ts',
+    ],
   },
   {
     pattern: /\b(?:BROWSER_LOCAL|LOCAL_DAEMON)_/,
@@ -131,12 +142,15 @@ describe('retired vocabulary', () => {
     // A word retired only within one package scans only that package, so the
     // guard never claims coverage it does not have.
     const dirs: readonly string[] = 'dirs' in entry ? entry.dirs : SCAN_DIRS
+    // Per-word, never per-file: exempting a file for one retired word must
+    // not quietly stop another word being checked in it.
+    const exempt: readonly string[] = 'exempt' in entry ? entry.exempt : []
     it(`no source file says "${word}" — use ${instead}`, () => {
       const hits: string[] = []
       for (const dir of dirs) {
         for (const file of listSourceFiles(join(REPO_ROOT, dir))) {
           const relativePath = relative(REPO_ROOT, file).split(sep).join('/')
-          if (relativePath in EXEMPT_FILES) continue
+          if (relativePath in EXEMPT_FILES || exempt.includes(relativePath)) continue
           const lines = readFileSync(file, 'utf-8').split('\n')
           for (const [index, line] of lines.entries()) {
             if (pattern.test(line)) hits.push(`${relativePath}:${index + 1}: ${line.trim()}`)

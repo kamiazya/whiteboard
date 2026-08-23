@@ -40,7 +40,12 @@ function safeRemoveItem(key: string): void {
 // safeParse fail, and callers fall back to defaults rather than persisting it.
 const storageSettingsSchema = z
   .object({
-    preferredProvider: z.enum(['browser', 'daemon']).optional(),
+    // Spelled with the retired keeper words on purpose: this value is
+    // PERSISTED, the schema is `.strict()`, and `load()` falls back to
+    // defaults on any parse failure — so renaming it here would silently
+    // discard an existing reader's whole settings payload, daemon connection
+    // included. It moves with a migration, not with a sweep.
+    preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
     lastBrowserLocalCanvasId: z.string().optional(),
     // Constrained to http/https because this value is rendered into an `href`
     // (the "Open the local app" escape hatch). Anything that can write
