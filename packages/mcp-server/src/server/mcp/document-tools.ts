@@ -306,7 +306,7 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
     'wb_document_create',
     {
       description: WB_DOCUMENT_CREATE_DESCRIPTION,
-      inputSchema: wbDocumentCreateInputSchema.shape,
+      inputSchema: wbDocumentCreateInputSchema,
       outputSchema: wbDocumentCreateOutputSchema,
     },
     async (args) => {

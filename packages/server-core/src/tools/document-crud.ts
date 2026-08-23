@@ -5,7 +5,6 @@ import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { WorkspaceDocumentNotFoundError, WorkspaceNotFoundError } from './document-crud.errors.js'
 import type {
-  wbDocumentCreateInputSchema,
   wbDocumentCreateOutputSchema,
   wbDocumentDeleteInputSchema,
   wbDocumentDeleteOutputSchema,
@@ -14,7 +13,9 @@ import type {
   wbDocumentResolveInputSchema,
   wbDocumentResolveOutputSchema,
 } from './document-crud.schemas.js'
+import { wbDocumentCreateInputSchema } from './document-crud.schemas.js'
 import { saveDocumentSnapshot } from './document-io.js'
+import { createDocumentSetTool } from './document-set.js'
 
 /**
  * The index refuses an unknown workspace in its own words; the tool surface
@@ -38,8 +39,14 @@ async function rethrowWorkspaceNotFound<T>(
 
 export async function wbDocumentCreate(
   deps: ServerDeps,
-  input: z.infer<typeof wbDocumentCreateInputSchema>,
+  rawInput: z.infer<typeof wbDocumentCreateInputSchema>,
 ): Promise<z.infer<typeof wbDocumentCreateOutputSchema>> {
+  // Parsed here as well as at the MCP boundary. The union is what stops a
+  // body being handed to a spatial document, and a caller reaching this
+  // function directly — every test in this repo, and `createServer`'s own
+  // routes — would otherwise skip that and have the content silently
+  // dropped. A schema only guarantees what something actually runs.
+  const input = wbDocumentCreateInputSchema.parse(rawInput)
   // Workspaces never materialize implicitly: a typo'd or hallucinated
   // workspaceId must fail loudly rather than silently writing data into a
   // workspace nobody asked for. `createWorkspace: true` is the explicit
@@ -64,6 +71,20 @@ export async function wbDocumentCreate(
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
   await saveDocumentSnapshot(deps, entry.documentId, doc)
+
+  // A body is written by DELEGATING to `wb_document_set` rather than by
+  // repeating what it does. Its write is not a one-liner — it parses OKF,
+  // decides what the document's kind may become, and projects frontmatter
+  // into the model — and a second copy of that reasoning here would be a
+  // second answer to the same question, drifting from the first the moment
+  // either changes.
+  if (input.kind === 'markdown' && input.markdown !== undefined) {
+    await createDocumentSetTool(deps).execute({
+      workspaceId: input.workspaceId,
+      documentId: entry.documentId,
+      markdown: input.markdown,
+    })
+  }
 
   return { documentId: entry.documentId, path: entry.path }
 }

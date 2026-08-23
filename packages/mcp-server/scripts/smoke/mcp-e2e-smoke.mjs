@@ -211,6 +211,40 @@ async function main() {
     kind: 'markdown',
     name: 'リリース計画 2026 / v2',
   })
+  // A markdown document arrives with its body in ONE call. The MCP SDK
+  // validates structuredContent against outputSchema at runtime, so this is
+  // also where a discriminated-union input schema proves it survives the
+  // wire: the shape a client sends is not the shape a test constructs.
+  const withBody = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    path: 'e2e-with-body',
+    kind: 'markdown',
+    name: 'created with its body',
+    markdown: '---\ntype: note\ntags:\n  - e2e\n---\nWritten at creation time.',
+  })
+  const readBack = await callTool('wb_document_get', {
+    workspaceId: WORKSPACE_ID,
+    documentId: withBody.documentId,
+  })
+  if (!readBack.content.includes('Written at creation time.')) {
+    throw new Error(`wb_document_create did not persist its body: ${readBack.content}`)
+  }
+  console.log('[e2e] wb_document_create → body written in one call')
+
+  // The union's other side: a spatial document takes no markdown, and the
+  // refusal must reach the client rather than the content being dropped.
+  await expectToolError(
+    'wb_document_create',
+    {
+      workspaceId: WORKSPACE_ID,
+      path: 'e2e-spatial-body',
+      kind: 'spatial',
+      markdown: '# nope',
+    },
+    'with markdown on a spatial document',
+    'markdown',
+  )
+
   const namedList = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
   const namedRow = namedList.documents.find((c) => c.documentId === named.documentId)
   if (namedRow?.name !== 'リリース計画 2026 / v2') {
