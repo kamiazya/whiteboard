@@ -37,15 +37,26 @@ export type ToolHandlerReturn<O extends z.ZodTypeAny | undefined> = O extends z.
       isError?: boolean
     }
 
-// Thin wrapper around McpServer.registerTool that injects annotations. Keeping
-// inputSchema generic preserves handler argument inference. outputSchema stays
-// unknown because the SDK accepts multiple overload shapes.
+// A tool's inputSchema is either a raw shape (`{ field: z.string() }`,
+// auto-wrapped by the SDK's z.object()) or a whole Zod schema — the latter
+// is required for a tool like wb_body_patch whose input is a
+// z.discriminatedUnion, which has no raw shape to give. Discriminate on the
+// Zod brand first: a raw shape is a plain record with no `_zod`, so it
+// never matches the `z.ZodTypeAny` branch.
+type InferToolArgs<I> = I extends z.ZodTypeAny
+  ? z.infer<I>
+  : { [K in keyof I]: I[K] extends z.ZodTypeAny ? z.infer<I[K]> : never }
+
+// Thin wrapper around McpServer.registerTool that injects annotations.
+// inputSchema accepts either a raw shape or a whole schema so handler
+// argument inference keeps working for both; outputSchema stays unknown
+// because the SDK accepts multiple overload shapes.
 //
 // It also converts handler throws into MCP `{ isError: true, content: [...] }`
 // responses. The MCP spec recommends tool errors use isError responses rather
 // than JSON-RPC errors so the LLM can react on the next call.
 export function registerToolWithAnnotations<
-  I extends z.ZodRawShape,
+  I extends z.ZodRawShape | z.ZodTypeAny,
   O extends z.ZodTypeAny | undefined = undefined,
 >(
   server: McpServer,
@@ -62,7 +73,7 @@ export function registerToolWithAnnotations<
     _meta?: Record<string, unknown>
   },
   handler: (
-    args: { [K in keyof I]: z.infer<I[K]> },
+    args: InferToolArgs<I>,
     extra: Parameters<Parameters<McpServer['registerTool']>[2]>[1],
   ) => Promise<ToolHandlerReturn<O>> | ToolHandlerReturn<O>,
 ): unknown {
@@ -90,7 +101,7 @@ export function registerToolWithAnnotations<
   // Wrap the handler so thrown errors become isError responses, and so
   // every tool call is observable as a single MCP-semconv span.
   const tracedHandler = async (
-    args: { [K in keyof I]: z.infer<I[K]> },
+    args: InferToolArgs<I>,
     extra: Parameters<typeof handler>[1],
   ): Promise<unknown> => {
     const rawRequestId = (extra as { requestId?: unknown })?.requestId
@@ -129,7 +140,7 @@ export function registerToolWithAnnotations<
   // structured response — otherwise the error would still mark the span
   // ERROR but the user would see a "successful" tool call.
   const outerHandler = async (
-    args: { [K in keyof I]: z.infer<I[K]> },
+    args: InferToolArgs<I>,
     extra: Parameters<typeof handler>[1],
   ): Promise<unknown> => {
     try {
