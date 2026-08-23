@@ -68,7 +68,7 @@ function readCiWorkflowWithoutComments(): string {
  */
 function readCiJob(jobName: string): string {
   const lines = readCiWorkflowWithoutComments().split('\n')
-  const start = lines.findIndex((line) => line === `  ${jobName}:`)
+  const start = lines.indexOf(`  ${jobName}:`)
   if (start === -1) throw new Error(`ci.yml declares no job named ${jobName}`)
   const rest = lines.slice(start + 1)
   const end = rest.findIndex((line) => /^ {2}[a-z][\w-]*:$/.test(line))

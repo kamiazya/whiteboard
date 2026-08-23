@@ -30,6 +30,7 @@
     "@vitejs/plugin-react": "^6.0.5",
     "react-dom": "catalog:",
     "typescript": "catalog:",
-    "vitest": "catalog:"
+    "vitest": "catalog:",
+    "zod": "catalog:"
   }
 }
