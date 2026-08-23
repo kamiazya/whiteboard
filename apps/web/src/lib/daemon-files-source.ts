@@ -13,6 +13,7 @@ import {
   getWorkspaceNames,
   listDocuments,
   renameDocumentPath,
+  searchWorkspaceDocuments,
   setDocumentDisplayName,
   setDocumentPinned,
 } from './daemon-api-client.js'
@@ -75,6 +76,26 @@ export function createDaemonFilesSource(
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {
       await renameDocumentPath(daemonFetch, daemonBaseUrl, workspaceId, path, newPath)
+    },
+
+    async searchDocuments(query, limit = 20) {
+      if (query.trim() === '') return []
+      const res = await searchWorkspaceDocuments(
+        daemonFetch,
+        daemonBaseUrl,
+        workspaceId,
+        query,
+        limit,
+      )
+      return res.results.map((hit) => ({
+        document: {
+          documentId: hit.documentId,
+          path: hit.path,
+          ...(hit.name === undefined ? {} : { name: hit.name }),
+          ...(hit.kind === undefined ? {} : { kind: hit.kind }),
+        },
+        contexts: hit.contexts,
+      }))
     },
 
     async setDocumentName(entry, name): Promise<void> {

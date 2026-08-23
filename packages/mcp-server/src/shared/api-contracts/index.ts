@@ -16,6 +16,7 @@
 // depend on directly (see .claude/rules/architecture-map.md).
 export {
   backlinksOutputSchema as documentBacklinksResponseSchema,
+  documentSearchOutputSchema as documentSearchResponseSchema,
   documentTagsOutputSchema as workspaceDocumentTagsResponseSchema,
   exportOkfOutputSchema as documentOkfV1ResponseSchema,
   linkifyMentionsOutputSchema as linkifyMentionsResponseSchema,
@@ -41,6 +42,7 @@ export { daemonPingResponseSchema, runtimeVerifyResponseSchema } from './runtime
 import type {
   exportOkfOutputSchema as _canvasOkfV1ResponseSchema,
   backlinksOutputSchema as _documentBacklinksResponseSchema,
+  documentSearchOutputSchema as _documentSearchResponseSchema,
   linkifyMentionsOutputSchema as _linkifyMentionsResponseSchema,
   wbDocumentListOutputSchema as _listDocumentsV1ResponseSchema,
   documentTagsOutputSchema as _workspaceDocumentTagsResponseSchema,
@@ -51,3 +53,4 @@ export type WorkspaceDocumentTagsResponse = _z.infer<typeof _workspaceDocumentTa
 export type LinkifyMentionsResponse = _z.infer<typeof _linkifyMentionsResponseSchema>
 export type DocumentOkfV1Response = _z.infer<typeof _canvasOkfV1ResponseSchema>
 export type ListDocumentsV1Response = _z.infer<typeof _listDocumentsV1ResponseSchema>
+export type DocumentSearchResponse = _z.infer<typeof _documentSearchResponseSchema>

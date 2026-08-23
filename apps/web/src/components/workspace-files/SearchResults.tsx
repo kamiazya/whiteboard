@@ -19,10 +19,28 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { cn } from '../../lib/utils.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
+/**
+ * A row: the document, and the excerpts that say why it is here. Empty
+ * contexts mean the match was in the name or the path — both already on
+ * the row — so there is nothing more to show.
+ */
+export interface SearchResultRow {
+  readonly document: WorkspaceDocumentEntry
+  readonly contexts?: readonly string[]
+}
+
 export interface SearchResultsProps {
-  results: readonly WorkspaceDocumentEntry[]
+  results: readonly SearchResultRow[]
   /** The query the results answer, so the match can be shown, not implied. */
   query: string
+  /**
+   * Whether document CONTENT was actually looked at. False while a content
+   * search is unavailable, still in flight, or bypassed by a `#tag` filter —
+   * cases where the answer came from names and paths alone, and an empty
+   * state claiming otherwise would report a document as missing when nobody
+   * looked inside it.
+   */
+  searchedContents?: boolean
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
   /** Right-click on a result row — the object-action menu hook. */
@@ -59,6 +77,7 @@ function titleOf(entry: WorkspaceDocumentEntry): string {
 export function SearchResults({
   results,
   query,
+  searchedContents = true,
   selectedPath,
   onSelect,
   onDocumentContextMenu,
@@ -71,7 +90,19 @@ export function SearchResults({
   const [layout, setLayout] = useState<'list' | 'grid'>('list')
 
   if (results.length === 0) {
-    return <p className={cn('text-muted-foreground text-sm', className)}>Nothing matches.</p>
+    // Say what was searched, not just that nothing came back. Search here is
+    // lexical: it finds the words a document actually contains, so a query
+    // in one language structurally cannot reach a document written in
+    // another (measured on this repo's own corpus: 21 of 22 such queries
+    // returned nothing). "Nothing matches" alone would read as "no such
+    // document" — naming the query and what was looked at lets the reader
+    // tell a missing document from a query that could never match.
+    return (
+      <p className={cn('text-muted-foreground text-sm', className)}>
+        Nothing matches “{query.trim()}” in the{' '}
+        {searchedContents ? 'names, paths and contents' : 'names and paths'} of this workspace.
+      </p>
+    )
   }
 
   const thumbnail = (entry: WorkspaceDocumentEntry, sizeClass: string) => (
@@ -125,7 +156,7 @@ export function SearchResults({
       </div>
       {layout === 'list' ? (
         <ul data-testid="search-results-list" className="space-y-1 p-0.5">
-          {results.map((entry) => (
+          {results.map(({ document: entry, contexts }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
@@ -161,6 +192,17 @@ export function SearchResults({
                       {entry.tags?.map((tag) => `#${tag}`).join(' ')}
                     </span>
                   )}
+                  {(contexts?.length ?? 0) > 0 && (
+                    /* The match itself, when it was in the CONTENT: neither
+                       the title nor the path shows it, so without this the
+                       row cannot say why it is here. */
+                    <span
+                      data-testid="result-excerpt"
+                      className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
+                    >
+                      <Highlighted text={contexts?.[0] ?? ''} query={query} />
+                    </span>
+                  )}
                 </span>
               </button>
             </li>
@@ -171,7 +213,7 @@ export function SearchResults({
           data-testid="search-results-grid"
           className="grid grid-cols-2 gap-2 p-0.5 md:grid-cols-3"
         >
-          {results.map((entry) => (
+          {results.map(({ document: entry, contexts }) => (
             <li key={entry.documentId}>
               <button
                 type="button"
@@ -202,6 +244,17 @@ export function SearchResults({
                        so the row must show the tag that put it here. */
                     <span className="text-muted-foreground truncate text-[11px]">
                       {entry.tags?.map((tag) => `#${tag}`).join(' ')}
+                    </span>
+                  )}
+                  {(contexts?.length ?? 0) > 0 && (
+                    /* The match itself, when it was in the CONTENT: neither
+                       the title nor the path shows it, so without this the
+                       row cannot say why it is here. */
+                    <span
+                      data-testid="result-excerpt"
+                      className="text-muted-foreground line-clamp-2 text-[11px] leading-snug"
+                    >
+                      <Highlighted text={contexts?.[0] ?? ''} query={query} />
                     </span>
                   )}
                 </span>

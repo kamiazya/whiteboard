@@ -35,6 +35,7 @@ it('renders a spatial document from its snapshot bytes through the pool', async 
       listDocuments: async () => [],
       createDocument: async () => {},
       renameDocumentPath: async () => {},
+      searchDocuments: async () => [],
       setDocumentName: async () => {},
       loadSpatialSnapshot: async () => bytes,
       loadMarkdown: async () => {
