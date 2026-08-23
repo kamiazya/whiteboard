@@ -8,7 +8,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { readBrowserProjectNames } from '../../shared/test-utils/vitest-browser-projects.js'
+import {
+  readBrowserProjectNames,
+  readVitestProjects,
+} from '../../shared/test-utils/vitest-browser-projects.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -24,6 +27,18 @@ function readTestBrowserScript(): string {
   const script = packageJson.scripts?.['test:browser']
   expect(script, 'root package.json must declare a test:browser script').toBeDefined()
   return script!
+}
+
+// Config paths whose vitest project is exercised by CI through a mechanism
+// other than a `--project=<name>` flag, keyed by the CONFIG PATH (not the
+// project name) so a later rename of the project's `test.name` cannot
+// silently invalidate the exemption.
+const RUN_WITHOUT_PROJECT_FLAG: Record<string, string> = {
+  // test-jsdom job: `pnpm --filter @kamiazya/whiteboard-web test` is
+  // `vitest run && vitest run --config vitest.node.config.ts` — it runs both
+  // of these by config path, never by --project flag.
+  'apps/web/vitest.config.ts': 'test-jsdom',
+  'apps/web/vitest.node.config.ts': 'test-jsdom',
 }
 
 describe('ci.yml verify coverage of removed publish-gate correctness projects', () => {
@@ -76,5 +91,79 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
     const doc = readFileSync(join(ROOT, 'docs/contributing/development.md'), 'utf-8')
     expect(doc).toContain(chromePin![1])
     expect(doc).not.toContain('CI and the release workflow assume Playwright-managed Chromium')
+  })
+})
+
+// The analogue of the describe block above, but for the node-mode side: a
+// whole vitest project registered in root vitest.config.ts and never run by
+// any CI step goes red on main with nothing noticing (facet-engine-node ran
+// on nobody's CI for days before this guard existed). This asserts EVERY
+// node project derived from the root config is covered by ci.yml, by
+// whichever real mechanism covers it — a --project= flag, or an explicit,
+// job-named exemption for the ones that run through a package.json filter
+// script instead.
+describe('ci.yml runs every node vitest project registered in root vitest.config.ts', () => {
+  const projectConfigs = readVitestProjects(ROOT)
+
+  it('derives a non-empty project list containing known anchors (not a vacuous scan)', () => {
+    expect(projectConfigs.length).toBeGreaterThan(0)
+    const names = projectConfigs.map((p) => p.name)
+    expect(names).toEqual(expect.arrayContaining(['mcp-node', 'model-node', 'facet-engine-node']))
+  })
+
+  it('agrees with readBrowserProjectNames on which projects are browser-mode', () => {
+    const derivedBrowserNames = projectConfigs
+      .filter((p) => p.isBrowser)
+      .map((p) => {
+        if (!p.name) {
+          throw new Error(`${p.configPath} enables browser mode but declares no test.name`)
+        }
+        return p.name
+      })
+      .sort()
+    expect(derivedBrowserNames).toEqual([...readBrowserProjectNames(ROOT)].sort())
+  })
+
+  it('every RUN_WITHOUT_PROJECT_FLAG exemption still names a real root-config path', () => {
+    // Guards the allowlist from the other side: an exemption that outlives
+    // the project it names (renamed away, or removed from vitest.config.ts)
+    // must fail loudly rather than sit as silent dead config.
+    const knownPaths = new Set(projectConfigs.map((p) => p.configPath))
+    for (const exemptedPath of Object.keys(RUN_WITHOUT_PROJECT_FLAG)) {
+      expect(
+        knownPaths.has(exemptedPath),
+        `${exemptedPath} is exempted in RUN_WITHOUT_PROJECT_FLAG but is not registered in root vitest.config.ts`,
+      ).toBe(true)
+    }
+  })
+
+  it('every non-browser, non-exempted project appears as --project=<name> in a ci.yml step', () => {
+    const ciText = readCiWorkflow()
+    // Strip full-line comments so a flag that was commented out (e.g.
+    // `# --project=facet-engine-node`) cannot be counted as coverage.
+    const withoutComments = ciText
+      .split('\n')
+      .filter((line) => !/^\s*#/.test(line))
+      .join('\n')
+
+    const nodeProjectsRequiringFlag = projectConfigs.filter(
+      (p) => !p.isBrowser && !(p.configPath in RUN_WITHOUT_PROJECT_FLAG),
+    )
+
+    const missing: string[] = []
+    for (const project of nodeProjectsRequiringFlag) {
+      if (!project.name) {
+        throw new Error(
+          `${project.configPath} declares no test.name and is not exempted from --project coverage`,
+        )
+      }
+      const flagPattern = new RegExp(`--project[=\\s]${project.name}(?![\\w-])`)
+      if (!flagPattern.test(withoutComments)) missing.push(project.name)
+    }
+
+    expect(
+      missing,
+      `project(s) registered in vitest.config.ts but not run by any ci.yml step: ${missing.join(', ')}`,
+    ).toEqual([])
   })
 })
