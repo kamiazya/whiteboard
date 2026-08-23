@@ -8,7 +8,10 @@ import { readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { readBrowserProjectNames } from '../../shared/test-utils/vitest-browser-projects.js'
+import {
+  readBrowserProjectNames,
+  readVitestProjects,
+} from '../../shared/test-utils/vitest-browser-projects.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -36,27 +39,6 @@ const RUN_WITHOUT_PROJECT_FLAG: Record<string, string> = {
   // of these by config path, never by --project flag.
   'apps/web/vitest.config.ts': 'test-jsdom',
   'apps/web/vitest.node.config.ts': 'test-jsdom',
-}
-
-interface DerivedVitestProject {
-  configPath: string
-  name: string | undefined
-  isBrowser: boolean
-}
-
-// Every vitest project root vitest.config.ts wires up, derived the same way
-// readBrowserProjectNames does but over a path regex broad enough to include
-// tools/ (readBrowserProjectNames's packages|apps regex would silently drop
-// tools/arch-lint).
-function deriveVitestProjects(): DerivedVitestProject[] {
-  const rootConfig = readFileSync(join(ROOT, 'vitest.config.ts'), 'utf-8')
-  const configPaths = [...rootConfig.matchAll(/'([^']+\.config\.ts)'/g)].map((match) => match[1])
-  return configPaths.map((configPath) => {
-    const configContent = readFileSync(join(ROOT, configPath), 'utf-8')
-    const nameMatch = configContent.match(/name:\s*'([^']+)'/)
-    const isBrowser = /browser:\s*\{\s*\n?\s*enabled:\s*true/.test(configContent)
-    return { configPath, name: nameMatch?.[1], isBrowser }
-  })
 }
 
 describe('ci.yml verify coverage of removed publish-gate correctness projects', () => {
@@ -121,7 +103,7 @@ describe('ci.yml verify coverage of removed publish-gate correctness projects', 
 // job-named exemption for the ones that run through a package.json filter
 // script instead.
 describe('ci.yml runs every node vitest project registered in root vitest.config.ts', () => {
-  const projectConfigs = deriveVitestProjects()
+  const projectConfigs = readVitestProjects(ROOT)
 
   it('derives a non-empty project list containing known anchors (not a vacuous scan)', () => {
     expect(projectConfigs.length).toBeGreaterThan(0)
