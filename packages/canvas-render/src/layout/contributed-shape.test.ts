@@ -12,6 +12,7 @@ import { describe, expect, it } from 'vitest'
 import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
+import { outlineContains } from './nodes/node-outline.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
 const APPEARANCE = { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) }
@@ -121,8 +122,12 @@ describe('a contributed shape', () => {
     )
 
     expect(shapeOf(scene.nodes)?.shape).toBe('demo.visual.diamond')
-    // Composed, but nothing answers to it — so nothing is drawn.
-    expect(renderSceneToSvg(scene)).not.toContain('polygon')
+    // Composed, but nothing answers to it — so the node keeps its RECT.
+    // Asserting only "no polygon" passes when the node is absent entirely,
+    // which is exactly what the unresolved id used to produce.
+    const svg = renderSceneToSvg(scene)
+    expect(svg).not.toContain('polygon')
+    expect(svg).toContain('<rect')
   })
 
   it('leaves the shapes visual ships working, under their composed ids', () => {
@@ -168,5 +173,40 @@ describe('a contributed shape', () => {
     const svg = renderSceneToSvg(scene, { shapes: { 'visual.diamond': TRIANGLE } })
     // The triangle's own vertices, not the diamond's.
     expect(svg).toContain('200,0')
+  })
+
+  it('keeps its rect when the contributed id resolves to nothing', () => {
+    // A plugin that is declared but whose table is absent (a build without
+    // it, a version that dropped the shape) must leave the node LOOKING like
+    // a plain node. Before this it vanished from the output: `renderShape`
+    // read a null outline as "draw nothing" — correct for a non-finite box,
+    // which was the only way to reach it while shape ids came from a closed
+    // union.
+    const scene = layoutSpatialCanvas(
+      canvasWith('demo.shape/v0', 'triangle'),
+      baseOptions({ shapeFacets: ['demo.shape/v0'] }),
+    )
+    expect(renderSceneToSvg(scene)).toContain('<rect')
+  })
+
+  it('hit-tests a counter-clockwise contribution, not only a clockwise one', () => {
+    // Winding is not something a contributor thinks about, and both are
+    // valid. A polygon wound the other way drew correctly while
+    // `convexPolygonContains` rejected every interior point, so the node
+    // could not be hit and its edges terminated on the bbox border instead
+    // of the rim.
+    const box = { x: 0, y: 0, w: 200, h: 120 }
+    const clockwise = TRIANGLE.outline(box)
+    const counter = {
+      ...clockwise,
+      points: [...clockwise.points].reverse(),
+    }
+    const inside = { x: 150, y: 100 }
+    expect(
+      outlineContains('demo.cw', box, inside, { 'demo.cw': { outline: () => clockwise } }),
+    ).toBe(true)
+    expect(
+      outlineContains('demo.ccw', box, inside, { 'demo.ccw': { outline: () => counter } }),
+    ).toBe(true)
   })
 })

@@ -254,7 +254,12 @@ function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   // `shape` stays the historic rect byte-for-byte.
   if (node.shape !== undefined) {
     const outline = nodeOutline(node.shape, node.bbox, tables?.shapes)
-    if (outline === null) return []
+    // A null outline here can only mean the id resolves to nothing — the
+    // non-finite box is already handled above — so the node falls back to
+    // its rect. Drawing NOTHING was correct while ids came from a closed
+    // union and null meant a degenerate box; once a document can name a
+    // shape this build does not carry, it made the node disappear.
+    if (outline === null) return renderChromeRect(node)
     switch (outline.kind) {
       case 'ellipse':
         return el('ellipse', {
@@ -300,6 +305,12 @@ function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
       }
     }
   }
+  return renderChromeRect(node)
+}
+
+/** The historic rect, byte-for-byte — also what a node falls back to when its
+ *  shape id resolves to nothing. */
+function renderChromeRect(node: ShapeSceneNode): SvgChild {
   return el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,

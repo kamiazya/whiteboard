@@ -355,11 +355,22 @@ function convexPolygonContains(
     maxY = Math.max(maxY, p.y)
   }
   if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) return false
+  // Either WINDING, not just the clockwise one every built-in happens to
+  // use: the point is inside when it sits on the same side of every edge,
+  // whichever side that is. A contributor does not think about winding and
+  // both orders are valid, so requiring one made a correct polygon draw
+  // normally while failing every hit test — and put its edge terminals back
+  // on the bbox border. Zero crosses (a point ON an edge, or a degenerate
+  // vertex pair) fix no sign, so the boundary keeps counting as inside.
+  let sign = 0
   for (let i = 0; i < points.length; i++) {
     const a = points[i]
     const b = points[(i + 1) % points.length]
     const cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
-    if (cross < 0) return false
+    if (cross === 0) continue
+    const current = cross > 0 ? 1 : -1
+    if (sign === 0) sign = current
+    else if (sign !== current) return false
   }
   return true
 }

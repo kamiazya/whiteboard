@@ -31,7 +31,7 @@ an open union would buy dispatch flexibility nobody has asked for at the
 cost of the exhaustiveness checking the SVG backend relies on. That has not
 changed and should not.
 
-What DID change (2026-08-24, human gate) is the claim this paragraph used to
+What DID change (human gate; see `git log` for when) is the claim this paragraph used to
 open with: that a plugin seam was not needed here because "a new rendering
 behaviour is a plugin declaration plus a small composer change". The second
 half was the problem — a plugin could not add a silhouette without someone
