@@ -2,9 +2,13 @@
 // compiler-API traversal rather than a new dependency (madge et al.) — the
 // repo's own simplicity ladder: reuse the AST walk that already exists.
 //
-// Scope, deliberately: only relative (`./`, `../`) specifiers participate.
-// Bare/workspace specifiers are direction-check.ts's job (cross-package
-// direction), and every cycle this check exists to catch is intra-package.
+// Scope, deliberately: relative (`./`, `../`) specifiers, plus any bare
+// prefix a caller declares as a path ALIAS for an intra-package directory.
+// Cross-package/workspace specifiers stay direction-check.ts's job, and
+// every cycle this check exists to catch is intra-package — an alias is
+// intra-package too, which is exactly why it has to participate: `apps/web`
+// writes a fifth of its own imports as `@/...`, and a resolver blind to
+// them answers "no cycles" from a graph missing a fifth of its edges.
 // Filesystem-free by design (pure functions over supplied file contents) so
 // unit tests can feed fixture graphs directly.
 
@@ -18,11 +22,39 @@ export interface ImportEdge {
   readonly line: number
 }
 
+/**
+ * A bare import prefix that stands for a directory inside the scanned tree,
+ * mapped to that directory as a repo-relative path — e.g. `{'@/':
+ * 'apps/web/src/'}` for `apps/web`'s tsconfig `paths` entry. Both sides keep
+ * their trailing slash so the rewrite is a plain prefix swap.
+ */
+export type PathAliases = Readonly<Record<string, string>>
+
+function isRelative(specifier: string): boolean {
+  return specifier.startsWith('./') || specifier.startsWith('../')
+}
+
 /** Relative-specifier subset of scanner.ts's module-specifier walk. */
 export function collectRelativeImportEdges(fileName: string, sourceText: string): ImportEdge[] {
   const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
+  return collectModuleSpecifiers(sourceFile).filter(({ specifier }) => isRelative(specifier))
+}
+
+/**
+ * As {@link collectRelativeImportEdges}, but also keeping every specifier
+ * that starts with a declared alias prefix. The alias is left UNEXPANDED
+ * here; resolution turns it into a path, so this stays a pure filter.
+ */
+function collectResolvableImportEdges(
+  fileName: string,
+  sourceText: string,
+  aliases: PathAliases,
+): ImportEdge[] {
+  const prefixes = Object.keys(aliases)
+  const sourceFile = ts.createSourceFile(fileName, sourceText, ts.ScriptTarget.Latest, true)
   return collectModuleSpecifiers(sourceFile).filter(
-    ({ specifier }) => specifier.startsWith('./') || specifier.startsWith('../'),
+    ({ specifier }) =>
+      isRelative(specifier) || prefixes.some((prefix) => specifier.startsWith(prefix)),
   )
 }
 
@@ -34,12 +66,19 @@ function candidatePaths(resolved: string): string[] {
   return [`${resolved}.ts`, `${resolved}.tsx`, `${resolved}/index.ts`, `${resolved}/index.tsx`]
 }
 
-function resolveRelativeSpecifier(
+function resolveSpecifier(
   fromPath: string,
   specifier: string,
   fileSet: ReadonlySet<string>,
+  aliases: PathAliases,
 ): string | null {
-  const resolved = posix.normalize(posix.join(posix.dirname(fromPath), specifier))
+  // An alias is already repo-relative once swapped, so it must NOT be joined
+  // against the importing file's directory the way a `./` specifier is.
+  const aliasPrefix = Object.keys(aliases).find((prefix) => specifier.startsWith(prefix))
+  const resolved =
+    aliasPrefix === undefined
+      ? posix.normalize(posix.join(posix.dirname(fromPath), specifier))
+      : posix.normalize(aliases[aliasPrefix] + specifier.slice(aliasPrefix.length))
   for (const candidate of candidatePaths(resolved)) {
     if (fileSet.has(candidate)) return candidate
   }
@@ -54,14 +93,15 @@ function resolveRelativeSpecifier(
  */
 export function buildValueImportGraph(
   files: readonly { path: string; text: string }[],
+  aliases: PathAliases = {},
 ): Map<string, string[]> {
   const fileSet = new Set(files.map((f) => f.path))
   const graph = new Map<string, string[]>()
   for (const file of files) {
     const targets: string[] = []
-    for (const edge of collectRelativeImportEdges(file.path, file.text)) {
+    for (const edge of collectResolvableImportEdges(file.path, file.text, aliases)) {
       if (edge.typeOnly) continue
-      const resolved = resolveRelativeSpecifier(file.path, edge.specifier, fileSet)
+      const resolved = resolveSpecifier(file.path, edge.specifier, fileSet, aliases)
       if (resolved !== null) targets.push(resolved)
     }
     graph.set(file.path, targets)

@@ -66,17 +66,29 @@ function listTsFiles(dir: string, extensions: readonly string[] = ['.ts']): stri
 }
 
 /**
- * Scope of the circular-value-import check, deliberately narrower than
- * "the whole repo": `packages/mcp-server/src` + the six shared-layer
- * packages + `canvas-viewer/src`. `apps/web/src` is excluded — a concurrent
- * session owns files under it, and a value cycle it introduces mid-flight
- * would turn this check red for a reason outside this lane's scope. It is
- * a safe exclusion today (verified cycle-free), and the follow-up is a
- * pure inclusion, not a cleanup.
+ * Scope of the circular-value-import check: every scanned package's `src`,
+ * both composition roots included. `apps/web/src` was excluded while a
+ * concurrent session owned files under it; it is in now, and was verified
+ * cycle-free when added.
+ *
+ * Including it is not the pure one-line inclusion it looks like, which is
+ * the part worth knowing. `apps/web` writes 115 of its 554 intra-package
+ * value edges as `@/...` — a fifth — and the resolver followed only `./`
+ * and `../`. Adding the directory alone would have scanned it through a
+ * graph missing those edges and reported a clean result from a picture it
+ * could not see. `CYCLE_SCAN_ALIASES` is what closes that, and
+ * `cycle-check.test.ts` pins a cycle that exists ONLY through an alias so
+ * the capability cannot be dropped silently.
  */
-const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server'].map((packageDir) =>
-  join(REPO_ROOT, packageDir, 'src'),
+const CYCLE_SCAN_DIRS = [...SHARED_LAYER_PACKAGES, 'packages/mcp-server', 'apps/web'].map(
+  (packageDir) => join(REPO_ROOT, packageDir, 'src'),
 )
+
+/**
+ * `apps/web/tsconfig.json`'s `paths` entry, as a repo-relative prefix swap.
+ * The only alias any scanned package uses; the rest import relatively.
+ */
+const CYCLE_SCAN_ALIASES = { '@/': 'apps/web/src/' } as const
 
 describe('composition-root dependency direction', () => {
   for (const packageDir of COMPOSITION_ROOTS) {
@@ -152,7 +164,7 @@ describe('circular value-import check (real source coverage)', () => {
       text: readFileSync(path, 'utf-8'),
     })),
   )
-  const cycles = findImportCycles(buildValueImportGraph(files))
+  const cycles = findImportCycles(buildValueImportGraph(files, CYCLE_SCAN_ALIASES))
   const knownKeys = new Set(KNOWN_IMPORT_CYCLES.map((group) => [...group].sort().join('|')))
   const foundKeys = new Set(cycles.map((group) => group.join('|')))
 
