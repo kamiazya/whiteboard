@@ -834,7 +834,19 @@ async function main() {
   if (!(searched.results[0].contexts[0] ?? '').includes('Imported body')) {
     throw new Error(`wb_document_search snippet mismatch: ${JSON.stringify(searched.results[0])}`)
   }
-  console.log('[e2e] wb_document_search → found the imported body with a snippet')
+  // The rank a caller uses to decide whether `contexts` is a match to
+  // highlight or just an opening excerpt. This daemon has no embedder, so
+  // every hit is lexical and none carries a semantic rank — the shape a
+  // client sees by default, and the one that must survive schema drift.
+  if (searched.results[0].lexicalRank !== 1) {
+    throw new Error(
+      `wb_document_search lexicalRank mismatch: ${JSON.stringify(searched.results[0])}`,
+    )
+  }
+  if (searched.results.some((r) => r.semanticRank !== undefined)) {
+    throw new Error(`wb_document_search reported a semantic rank with no embedder configured`)
+  }
+  console.log('[e2e] wb_document_search → found the imported body, snippet and lexical rank')
 
   const exported = await callTool('wb_document_get', {
     workspaceId: WORKSPACE_ID,
