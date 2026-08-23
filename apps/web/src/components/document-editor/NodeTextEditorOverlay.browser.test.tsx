@@ -5,6 +5,7 @@
 import { cleanup, render, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { focusEditable } from '../../test-utils/focus-editable.js'
 import { NodeTextEditorOverlay } from './NodeTextEditorOverlay.js'
 
 afterEach(cleanup)
@@ -35,9 +36,9 @@ function renderOverlay(
 }
 
 async function typeInto(container: HTMLElement, text: string): Promise<void> {
-  const editable = container.querySelector('[contenteditable="true"]')
-  if (!editable) throw new Error('expected a contenteditable CodeMirror host')
-  await userEvent.click(editable.querySelector('.cm-line') as HTMLElement)
+  // The click this replaces contributed nothing but its own wait: Ctrl+End
+  // discards whatever caret it produced.
+  await focusEditable(() => container.querySelector('[contenteditable="true"]'))
   await userEvent.keyboard('{Control>}{End}{/Control}')
   await userEvent.keyboard(text)
 }
