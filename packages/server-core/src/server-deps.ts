@@ -100,4 +100,41 @@ export interface ServerDeps {
    * root overrides it only when a deployment configures its own plugin set.
    */
   facetRegistry?: FacetRegistry
+  /**
+   * How a composition root disposes of everything about a document that is
+   * NOT its index row or its stored bytes — thumbnail and blob files on
+   * disk, a cached doc instance, anything else it alone knows about.
+   *
+   * It exists because those two are all server-core can name, and deleting
+   * only them left an agent-deleted document half-deleted: stale files and
+   * a stale cache entry that a document deleted through the composition
+   * root's own path would not have left behind. Two teardown paths that
+   * disagree is worse than one that is incomplete.
+   *
+   * Optional like `measure` and `clientNotifier`: a composition with nothing
+   * outside the index and the store is a valid server, and every existing
+   * test is one. `resolveServerDeps` supplies it, and container.test.ts
+   * pins that — optional must not become a synonym for unwired.
+   */
+  documentTeardown?: DocumentTeardown
 }
+
+/**
+ * Split in two because the information the cleanup needs stops existing
+ * partway through the delete: a version's thumbnail is filed under the
+ * version id, and version rows cascade away with the document. `begin` runs
+ * while the document is still whole and returns what to run once it is gone.
+ *
+ * The finalizer runs only if the delete actually happened — the index
+ * refuses while documents sit below this one, and a refused delete must
+ * destroy nothing.
+ */
+export interface DocumentTeardown {
+  begin(input: {
+    workspaceId: string
+    documentId: string
+    path: string
+  }): Promise<FinalizeDocumentTeardown>
+}
+
+export type FinalizeDocumentTeardown = () => Promise<void>

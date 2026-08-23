@@ -13,16 +13,15 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 import {
   compareDocumentPaths,
-  DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
-  findDescendantPath,
   isSelfOrDescendant,
   planSubtreeMove,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import { getLogger } from '../log.js'
+import { deleteDocumentRow } from './db/delete-document-row.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -225,24 +224,6 @@ export class SqliteDocumentIndex implements DocumentIndex {
   }
 
   async deleteDocument({ workspaceId, path }: DeleteDocumentInput): Promise<void> {
-    await withWorkspaceWriteLock(workspaceId, async () => {
-      const rows = await this.db
-        .selectFrom('documents')
-        .select(['id', 'path'])
-        .where('workspaceId', '=', workspaceId)
-        .execute()
-      const descendant = findDescendantPath(rows, path)
-      if (descendant !== undefined) {
-        throw new DocumentHasDescendantsError(
-          path,
-          `Delete "${descendant}" and any others below it first.`,
-        )
-      }
-      await this.db
-        .deleteFrom('documents')
-        .where('workspaceId', '=', workspaceId)
-        .where('path', '=', path)
-        .execute()
-    })
+    await withWorkspaceWriteLock(workspaceId, () => deleteDocumentRow(this.db, workspaceId, path))
   }
 }

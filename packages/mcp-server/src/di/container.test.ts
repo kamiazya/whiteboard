@@ -3,6 +3,7 @@ import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container, ContainerModule } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { EXPORT_FONT_FAMILY } from '../server/export/export-font.js'
+import { documentTeardown } from '../server/store/document-store.js'
 import { InMemoryBlobStore } from '../server/store/inmemory/in-memory-blob-store.js'
 import { InMemoryDocumentStore } from '../server/store/inmemory/in-memory-document-store.js'
 import { createContainer, resolveServerDeps } from './container.js'
@@ -79,5 +80,25 @@ describe('ports TOKENS identity', () => {
     expect(reimported.TOKENS.DocumentStore).toBe(TOKENS.DocumentStore)
     expect(typeof TOKENS.DocumentStore).toBe('symbol')
     expect(Symbol.for('whiteboard.ports.DocumentStore')).toBe(TOKENS.DocumentStore)
+  })
+})
+
+describe('resolveServerDeps document teardown', () => {
+  // documentTeardown is optional on ServerDeps so every existing composition
+  // and every test stays a valid server. Optional is one keystroke from
+  // unwired, and unwired here means wb_document_delete goes back to leaving
+  // thumbnails, blobs and a cached doc behind — silently, with the tool
+  // still answering { deleted: true }. This is the assertion that stops it.
+  it('supplies a documentTeardown, so an agent delete cleans up like an HTTP delete', () => {
+    const deps = resolveServerDeps(createContainer())
+
+    expect(deps.documentTeardown).toBeDefined()
+    expect(typeof deps.documentTeardown?.begin).toBe('function')
+  })
+
+  it("supplies the composition root's own teardown, not an inert stub", () => {
+    const deps = resolveServerDeps(createContainer())
+
+    expect(deps.documentTeardown).toBe(documentTeardown)
   })
 })
