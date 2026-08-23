@@ -2,7 +2,7 @@
 import { existsSync, readFileSync } from 'node:fs'
 // Behavioral artifact smoke: loads the built dist/ in a real Chromium browser with
 // __WHITEBOARD_RUNTIME_CONFIG__.publicOrigin set to a preview URL and asserts that
-// App renders data-provider="invalid-config" rather than entering browser-local mode.
+// App renders data-provider="invalid-config" rather than entering browser mode.
 //
 // In production Cloudflare Pages deploys the publicOrigin config value is the primary
 // mechanism used to reject preview deploys. This test verifies that the built artifact

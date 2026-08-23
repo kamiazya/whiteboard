@@ -14,6 +14,7 @@ import {
   registerDocumentInWorkspace,
   seedDoc,
 } from '../test-utils/fake-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createDocumentSetTool } from './document-set.js'
 import { DocumentContentLossError, DocumentKindMismatchError } from './errors.js'
 import { exportOkf } from './export-okf.js'
@@ -22,7 +23,12 @@ const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 const WORKSPACE_ID = 'ws-1'
 
 function makeDeps(documentStore: FakeDocumentStore) {
-  return { documentStore, blobStore: {} as never, documentIndex: documentStore.documentIndex }
+  return {
+    documentStore,
+    blobStore: {} as never,
+    documentIndex: documentStore.documentIndex,
+    documentTeardown: unusedDocumentTeardown(),
+  }
 }
 
 async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {

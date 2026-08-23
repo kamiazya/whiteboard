@@ -185,7 +185,7 @@ describe('DaemonDocumentPage markdown documents', () => {
 
   // Facets ARE OKF frontmatter, so a markdown document gets the disclosure
   // and a spatial one does not — ADR-0009 decision 3, the same split the
-  // browser-local page makes. `readCoreFacets` answering `undefined` for a
+  // browser page makes. `readCoreFacets` answering `undefined` for a
   // spatial document is what makes the second case fall out rather than
   // needing a flag.
   it('offers the facets disclosure for a markdown document', async () => {

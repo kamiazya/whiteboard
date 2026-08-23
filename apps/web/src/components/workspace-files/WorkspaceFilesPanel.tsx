@@ -33,7 +33,7 @@ const SEARCH_DEBOUNCE_MS = 150
 export interface WorkspaceFilesPanelProps {
   /**
    * Where the documents live. The panel itself no longer knows which mode it
-   * is in — the daemon and the browser-local store each supply one of these,
+   * is in — the daemon and the browser store each supply one of these,
    * which is what lets one browser serve both.
    */
   source: WorkspaceFilesSource

@@ -25,7 +25,7 @@ import {
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import type { LoroStoreLike } from './use-browser-local-document-controller.js'
+import type { LoroStoreLike } from './use-browser-document-controller.js'
 
 const pendingFlushes = new Map<string, Promise<unknown>>()
 

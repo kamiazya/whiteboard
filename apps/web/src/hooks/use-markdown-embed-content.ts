@@ -59,7 +59,7 @@ export function useMarkdownEmbedContent({
 }: {
   body: string
   resolveAlias?: AliasResolver
-  /** Injection seam for tests; defaults to the browser-local Loro loader. */
+  /** Injection seam for tests; defaults to the browser's Loro loader. */
   load?: MarkdownEmbedLoader
 }): (documentId: string) => MarkdownEmbedEntry | undefined {
   /**

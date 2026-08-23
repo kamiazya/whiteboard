@@ -191,7 +191,7 @@ function countWords(value: string): number {
 /**
  * Whether an anchor href is a bare canvas id rather than a URL. Two id
  * grammars coexist by construction: the daemon mints ULIDs
- * (`documentIdSchema`), the browser-local store mints `crypto.randomUUID()`
+ * (`documentIdSchema`), the browser store mints `crypto.randomUUID()`
  * v4 UUIDs — both reach the preview through the alias resolver.
  */
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i

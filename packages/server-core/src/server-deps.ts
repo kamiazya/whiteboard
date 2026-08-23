@@ -100,4 +100,48 @@ export interface ServerDeps {
    * root overrides it only when a deployment configures its own plugin set.
    */
   facetRegistry?: FacetRegistry
+  /**
+   * How a composition root disposes of everything about a document that is
+   * NOT its index row or its stored bytes — thumbnail and blob files on
+   * disk, a cached doc instance, anything else it alone knows about.
+   *
+   * It exists because those two are all server-core can name, and deleting
+   * only them left an agent-deleted document half-deleted: stale files and
+   * a stale cache entry that a document deleted through the composition
+   * root's own path would not have left behind. Two teardown paths that
+   * disagree is worse than one that is incomplete.
+   *
+   * REQUIRED, unlike `measure` and `clientNotifier`, and that is the whole
+   * defence: a composition root that forgets it is a compile error rather
+   * than a server that silently half-deletes. Optional is what let the
+   * original defect exist, and a hand-written "is it wired?" assertion only
+   * ever covers the dependencies somebody remembered to write one for.
+   *
+   * A test whose subject is elsewhere passes `unusedDocumentTeardown()`,
+   * whose `begin` throws — the same idiom as `unusedDocumentIndex`, and for
+   * the same reason: a no-op double would let a delete test pass while
+   * asserting nothing about the cleanup, which is the state this repo was
+   * in before the seam existed.
+   */
+  documentTeardown: DocumentTeardown
 }
+
+/**
+ * Split in two because the information the cleanup needs stops existing
+ * partway through the delete: a version's thumbnail is filed under the
+ * version id, and version rows cascade away with the document. `begin` runs
+ * while the document is still whole and returns what to run once it is gone.
+ *
+ * The finalizer runs only if the delete actually happened — the index
+ * refuses while documents sit below this one, and a refused delete must
+ * destroy nothing.
+ */
+export interface DocumentTeardown {
+  begin(input: {
+    workspaceId: string
+    documentId: string
+    path: string
+  }): Promise<FinalizeDocumentTeardown>
+}
+
+export type FinalizeDocumentTeardown = () => Promise<void>

@@ -15,10 +15,11 @@ const DOCS_ROOT = join(REPO_ROOT, 'docs')
 // browser-project inventory, shared with ci-verify-coverage.test.ts and the
 // CI-invoked run-shared-layer-tests.mjs derivation. Dynamic import + cast
 // matches the established pattern in release-gate-matrix.test.ts.
-const { readBrowserProjectNames } = (await import(
+const { readBrowserProjectNames, readVitestProjects } = (await import(
   pathToFileURL(join(REPO_ROOT, 'tools/checks/src/vitest-projects.mjs')).href
 )) as {
   readBrowserProjectNames: (repoRoot: string) => string[]
+  readVitestProjects: (repoRoot: string) => { name: string | undefined }[]
 }
 
 function collectMarkdownFiles(dir: string): string[] {
@@ -62,7 +63,7 @@ describe('docs/ contract', () => {
       'packages/plugin-visual': 'plugin-visual',
       'packages/codec': 'codec',
       'packages/canvas-render': 'canvas-render',
-      'packages/loro-adapter': 'workspace',
+      'packages/loro-adapter': 'loro-adapter',
       'packages/search': 'search node',
       'packages/server-core': 'server-core',
       'packages/canvas-viewer': 'canvas-viewer',
@@ -115,6 +116,87 @@ describe('docs/ contract', () => {
     for (const projectName of browserProjectNames) {
       expect(content).toContain(projectName)
     }
+  })
+
+  // The repo-local dev-override table names the exact config key a
+  // contributor is told to edit. Both rows had drifted to a key that does not
+  // exist: `.claude/settings.json` has no `mcpServers` field in its schema (a
+  // definition there is silently ignored), and Codex's dev entry is
+  // `whiteboard_dev` — plain `whiteboard` is the DISABLED published mirror, so
+  // following the table would switch the published server back on.
+  it('names dev-override config keys that actually exist', () => {
+    const content = readFileSync(join(DOCS_ROOT, 'contributing/development.md'), 'utf8')
+    const claudeSettings = JSON.parse(
+      readFileSync(join(REPO_ROOT, '.claude/settings.json'), 'utf8'),
+    ) as Record<string, unknown>
+    const codexConfig = readFileSync(join(REPO_ROOT, '.codex/config.toml'), 'utf8')
+
+    if (!('mcpServers' in claudeSettings)) {
+      // Scoped to the table rows, which are what NAME a key to go edit. Prose
+      // is allowed — required, in fact — to mention the pairing in order to
+      // warn that it does not work.
+      const prescribing = content
+        .split('\n')
+        .filter(
+          (line) =>
+            line.startsWith('|') &&
+            line.includes('.claude/settings.json') &&
+            line.includes('mcpServers'),
+        )
+      expect(
+        prescribing,
+        '.claude/settings.json carries no mcpServers key; the doc must not table it as a config to edit',
+      ).toEqual([])
+      expect(content).toContain('silently ignored')
+    }
+    // The mechanism that does work, documented earlier in the same file.
+    expect(content).toContain('claude mcp add --scope local')
+
+    // Every `[mcp_servers.X]` the doc presents as the Codex dev override must
+    // be an entry that carries a `url` (the hot-reload HTTP endpoint) rather
+    // than the disabled published `command`/`args` mirror.
+    const codexUrlEntries = [
+      ...codexConfig.matchAll(/\[mcp_servers\.([\w-]+)\]\n(?:(?!\[)[\s\S])*?^url = /gm),
+    ].map((match) => match[1])
+    expect(codexUrlEntries.length).toBeGreaterThan(0)
+    for (const line of content.split('\n')) {
+      const named = line.match(/\[mcp_servers\.([\w-]+)\]/)
+      if (!named || !/dev override/i.test(line)) continue
+      expect(
+        codexUrlEntries,
+        `development.md calls [mcp_servers.${named[1]}] the Codex dev override, but .codex/config.toml gives no url to that entry`,
+      ).toContain(named[1])
+    }
+  })
+
+  // A count spelled out in prose is the kind of claim nobody re-reads: it read
+  // "seventeen" for at least two added projects, next to an enumeration that
+  // still named a `workspace node` project the repo no longer has.
+  it('spells the root vitest project count as the number of projects there are', () => {
+    const spelled = [
+      'ten',
+      'eleven',
+      'twelve',
+      'thirteen',
+      'fourteen',
+      'fifteen',
+      'sixteen',
+      'seventeen',
+      'eighteen',
+      'nineteen',
+      'twenty',
+    ]
+    const projectCount = readVitestProjects(REPO_ROOT).length
+    const correct = spelled[projectCount - 10]
+    expect(correct, `extend the spelled-number list past ${projectCount}`).toBeDefined()
+
+    const content = readFileSync(join(DOCS_ROOT, 'contributing/development.md'), 'utf8')
+    const claim = content.match(/out of the (\w+) configured/)
+    expect(
+      claim,
+      'development.md no longer states a project count in the expected form',
+    ).not.toBeNull()
+    expect(claim?.[1]).toBe(correct)
   })
 
   it('describes `pnpm test --project mcp-node` as a narrow, not a broad non-browser, pass', () => {

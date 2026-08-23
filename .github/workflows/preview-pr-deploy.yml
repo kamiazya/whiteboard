@@ -87,7 +87,7 @@ jobs:
         run: |
           set -euo pipefail
           MARKER='<!-- cf-pages-preview -->'
-          BODY=$(printf '%s\n🔎 **Cloudflare Pages preview**: %s\n\nBuilt from this PR without exposing deploy secrets to PR code. Browser-local mode works on preview URLs; daemon mode is origin-locked to production.' "$MARKER" "$URL")
+          BODY=$(printf '%s\n🔎 **Cloudflare Pages preview**: %s\n\nBuilt from this PR without exposing deploy secrets to PR code. Browser mode works on preview URLs; daemon mode is origin-locked to production.' "$MARKER" "$URL")
           CID=$(gh api "repos/$REPO/issues/$PR/comments" --jq "[.[] | select(.body | contains(\"$MARKER\"))][0].id // empty")
           if [ -n "$CID" ]; then
             gh api --method PATCH "repos/$REPO/issues/comments/$CID" -f body="$BODY" >/dev/null

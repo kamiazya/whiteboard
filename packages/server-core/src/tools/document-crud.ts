@@ -137,12 +137,22 @@ export async function wbDocumentDelete(
   if (entry === null) {
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.documentId)
   }
+  // Before either delete: what the composition root has to clean up is only
+  // discoverable while the document is still whole (see DocumentTeardown).
+  const finalizeTeardown = await deps.documentTeardown.begin({
+    workspaceId: input.workspaceId,
+    documentId: entry.documentId,
+    path: entry.path,
+  })
   // Placement first: the index refuses while documents sit below this one, so
   // the bytes are only discarded once nothing can still be orphaned by it.
+  // That refusal throws past the finalizer, which is what keeps a refused
+  // delete from destroying anything.
   await deps.documentIndex.deleteDocument({
     workspaceId: input.workspaceId,
     path: entry.path,
   })
   await deps.documentStore.deleteDoc({ docRef: { kind: 'document', documentId: entry.documentId } })
+  await finalizeTeardown()
   return { deleted: true }
 }

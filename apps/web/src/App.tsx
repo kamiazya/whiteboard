@@ -34,11 +34,11 @@ const SettingsPage = lazy(() =>
 )
 
 import {
-  browserLocalDocumentPath,
+  browserDocumentPath,
   type DaemonRoute,
   daemonRoutePath,
   isKnownAppPath,
-  parseBrowserLocalRoute,
+  parseBrowserRoute,
   parseDaemonRoute,
   parseSettingsRoute,
 } from './lib/app-routes.js'
@@ -52,27 +52,27 @@ import { createUserSettingsStore } from './lib/user-settings-store.js'
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
 // of the entry chunk — sessions arriving via a #wb= pairing fragment AND
-// sessions with a runtime-config local-daemon provider state pay for it;
-// pure browser-local sessions never import it, keeping that entry under the
+// sessions with a runtime-config daemon provider state pay for it;
+// pure browser sessions never import it, keeping that entry under the
 // bundle-size budget.
 const DaemonDocumentPage = lazy(() =>
   import('./pages/DaemonDocumentPage.js').then((m) => ({ default: m.DaemonDocumentPage })),
 )
 
-// Lazy for the same reason: BrowserLocalDocumentPage statically imports
+// Lazy for the same reason: BrowserDocumentPage statically imports
 // useDocumentSync (which imports loro-crdt), and it is the default render
 // path (no daemon, no pairing fragment) — so it was the one making
 // loro-crdt part of every session's initial paint even though
 // DaemonDocumentPage above was already lazy.
-const BrowserLocalDocumentPage = lazy(() =>
-  import('./pages/BrowserLocalDocumentPage.js').then((m) => ({
-    default: m.BrowserLocalDocumentPage,
+const BrowserDocumentPage = lazy(() =>
+  import('./pages/BrowserDocumentPage.js').then((m) => ({
+    default: m.BrowserDocumentPage,
   })),
 )
 
 // Lazy so the list stays outside the loro-crdt chunk the editor drags in.
-const BrowserLocalIndexPage = lazy(() =>
-  import('./pages/BrowserLocalIndexPage.js').then((m) => ({ default: m.BrowserLocalIndexPage })),
+const BrowserIndexPage = lazy(() =>
+  import('./pages/BrowserIndexPage.js').then((m) => ({ default: m.BrowserIndexPage })),
 )
 
 // Same lazy-chunk rationale as DaemonDocumentPage above — the gallery only
@@ -82,7 +82,7 @@ const DaemonIndexPage = lazy(() =>
 )
 
 // Which daemon-mode view is showing: the canvas gallery, or a specific open
-// canvas. A #wb= fragment with a path skips straight to 'canvas'; local-daemon
+// canvas. A #wb= fragment with a path skips straight to 'canvas'; a daemon
 // and path-less pairing start on 'index'. `key` on the DaemonDocumentPage mount
 // forces a clean remount (fresh controller/backend) on every index -> canvas
 // transition instead of reusing a previous canvas's identity. Reuses
@@ -95,7 +95,7 @@ interface AppProps {
 }
 
 // Suspense fallback shared by every lazy page chunk (DaemonDocumentPage and
-// BrowserLocalDocumentPage). Reuses the structural DocumentPageSkeleton so the
+// BrowserDocumentPage). Reuses the structural DocumentPageSkeleton so the
 // chunk-load state and the page's own connecting state are one continuous
 // pulse instead of a text line snapping to a skeleton. The height class
 // differs by mount site (root fills the viewport; the in-banner branches
@@ -117,7 +117,7 @@ export function LazyPageFallback({
 }
 
 export function App({ providerState }: AppProps) {
-  const [browserLocalStore] = useState(() => new IdbDocumentIndex())
+  const [browserStore] = useState(() => new IdbDocumentIndex())
   const [userSettingsStore] = useState(() => createUserSettingsStore())
   const [defaultProviderState] = useState<ProviderState>(() =>
     resolveHostedProviderStateFromRaw(
@@ -128,10 +128,10 @@ export function App({ providerState }: AppProps) {
 
   // Routed BEFORE providerState resolution: a #wb= pairing fragment always
   // wins over the runtime-config-driven provider state (which governs the
-  // separate same-origin local-daemon / browser-local split). 'none' (no
+  // separate same-origin daemon / browser split). 'none' (no
   // fragment) falls through to that existing resolution unchanged.
   const daemonConnection = useDaemonConnection()
-  const [forcedBrowserLocal, setForcedBrowserLocal] = useState(false)
+  const [forcedBrowser, setForcedBrowser] = useState(false)
   // Lazy initializer: readDaemonTokenOnce() consumes (deletes) the injected
   // global, so it must run exactly once per mount — calling it in the render
   // body would let StrictMode's double-render read-then-lose the token.
@@ -180,7 +180,7 @@ export function App({ providerState }: AppProps) {
   // credential (POST /api/pairing/token, grantType 'origin'). Gated to the
   // no-fragment cold load: an in-flight #wb=/#wb-grant flow always wins,
   // and a 403/unreachable daemon collapses to 'none' so the app falls back
-  // to browser-local exactly as before, with the banner as the path back.
+  // to the browser exactly as before, with the banner as the path back.
   const attemptedRenewalRef = useRef(false)
   useEffect(() => {
     if (attemptedRenewalRef.current) return
@@ -211,7 +211,7 @@ export function App({ providerState }: AppProps) {
   // still a valid target (see daemon-connection-payload.ts's refine) and
   // starts on the gallery pre-scoped to that workspace rather than
   // whichever workspace the daemon happens to list first. Absent a fragment
-  // (local-daemon's runtime-config path, or a same-origin cold load of a
+  // (the daemon's runtime-config path, or a same-origin cold load of a
   // `/w/:workspaceId/document/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
   // a shared link, or R3's "Open the local app" deep link), the URL itself
   // seeds the view. Lazy initializer: both the payload and the pathname at
@@ -231,7 +231,7 @@ export function App({ providerState }: AppProps) {
   // initialDocumentId a single time), so App re-routes only when the URL
   // crosses the list/editor boundary — including browser Back from the
   // editor to the list.
-  const browserLocalPath = parseBrowserLocalRoute(location.pathname)?.path
+  const browserPath = parseBrowserRoute(location.pathname)?.path
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -250,10 +250,10 @@ export function App({ providerState }: AppProps) {
   const lastNavigatedPathRef = useRef<string | null>(null)
   useEffect(() => {
     if (isPairRoute) return
-    // /local/:documentId belongs to the browser-local world, not daemonView —
-    // rewriting it to the daemon path would yank an open browser-local
+    // /local/:documentId belongs to the browser world, not daemonView —
+    // rewriting it to the daemon path would yank an open browser-kept
     // editor back to the list.
-    if (parseBrowserLocalRoute(location.pathname) !== null) return
+    if (parseBrowserRoute(location.pathname) !== null) return
     // /settings is its own top-level surface, not a daemonView — without
     // this the sync effect below would immediately rewrite it to '/'.
     if (parseSettingsRoute(location.pathname) !== null) return
@@ -313,7 +313,7 @@ export function App({ providerState }: AppProps) {
   // bootstrapToken — the token stays in-memory via readDaemonTokenOnce's
   // existing semantics. This lets a later hosted-app load (a fresh tab with
   // no #wb= fragment) offer a one-click reconnect via DaemonDetectedBanner
-  // instead of silently landing on browser-local with no path back.
+  // instead of silently landing on the browser with no path back.
   useEffect(() => {
     if (daemonConnection.status !== 'paired') return
     const { baseUrl, workspaceId, path } = daemonConnection.payload
@@ -352,12 +352,12 @@ export function App({ providerState }: AppProps) {
   }, [grantConnection?.status])
 
   // /settings renders on its own route ahead of (and independent from) the
-  // daemon/browser-local branch below, so its daemon connection needs
+  // daemon/browser branch below, so its daemon connection needs
   // resolving here rather than reusing a `payload`/`effectiveState` local
   // that only exists inside one of those branches' own scope.
   const grantPairedForSettings = grantConnection?.status === 'paired' ? grantConnection : null
   const providerStateForSettings = providerState ?? defaultProviderState
-  const settingsDaemon: { baseUrl: string; token: string | null } | undefined = forcedBrowserLocal
+  const settingsDaemon: { baseUrl: string; token: string | null } | undefined = forcedBrowser
     ? undefined
     : daemonConnection.status === 'paired'
       ? {
@@ -407,10 +407,7 @@ export function App({ providerState }: AppProps) {
           <AppShellLazy daemon={settingsDaemon !== undefined} />
           <div className="min-h-0 flex-1">
             <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-              <SettingsPage
-                daemon={settingsDaemon}
-                onDisconnected={() => setForcedBrowserLocal(true)}
-              />
+              <SettingsPage daemon={settingsDaemon} onDisconnected={() => setForcedBrowser(true)} />
             </Suspense>
           </div>
         </div>
@@ -420,7 +417,7 @@ export function App({ providerState }: AppProps) {
 
   // The 'Work in this browser instead' escape hatch opts out of the pairing
   // fragment entirely, so once it's set both daemon branches are skipped.
-  if (!forcedBrowserLocal) {
+  if (!forcedBrowser) {
     // Both pairing paths converge here: the legacy #wb= fragment carries
     // its token inline; the grant flow resolved its token via the POST
     // exchange above. Either way the daemon pages just get baseUrl+token.
@@ -446,7 +443,7 @@ export function App({ providerState }: AppProps) {
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <div className="flex h-dvh flex-col">
-            <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowserLocal(true)} />
+            <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowser(true)} />
             <div className="min-h-0 flex-1">
               <Suspense
                 fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -467,7 +464,7 @@ export function App({ providerState }: AppProps) {
                     workspaceId={daemonView.workspaceId}
                     path={daemonView.path}
                     token={pairedToken}
-                    browserLocalStore={browserLocalStore}
+                    browserStore={browserStore}
                     onNavigateBack={() =>
                       setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
                     }
@@ -494,7 +491,7 @@ export function App({ providerState }: AppProps) {
             </p>
             <button
               type="button"
-              onClick={() => setForcedBrowserLocal(true)}
+              onClick={() => setForcedBrowser(true)}
               className="rounded-md border bg-background px-4 py-2 text-sm font-medium shadow-sm transition-colors hover:bg-accent"
             >
               Work in this browser instead
@@ -508,13 +505,13 @@ export function App({ providerState }: AppProps) {
   const state = providerState ?? defaultProviderState
 
   // The 'Work in this browser instead' escape hatch collapses a daemon OR
-  // invalid-config state to browser-local capabilities, so every downstream
+  // invalid-config state to browser capabilities, so every downstream
   // consumer (chip, banner, canvas page) reads this effective state rather
   // than the raw one — otherwise the escape could leave daemon capabilities
   // or copy leaking into a mode the user explicitly opted out of, or bounce
   // a failed-pairing escape onto the invalid-config error page.
   const effectiveState =
-    forcedBrowserLocal && (state.kind === 'daemon' || state.kind === 'invalid-config')
+    forcedBrowser && (state.kind === 'daemon' || state.kind === 'invalid-config')
       ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
       : state
 
@@ -532,7 +529,7 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowserLocal(true)} />
+          <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowser(true)} />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -554,7 +551,7 @@ export function App({ providerState }: AppProps) {
                   path={daemonView.path}
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
-                  browserLocalStore={browserLocalStore}
+                  browserStore={browserStore}
                   onNavigateBack={() =>
                     setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
                   }
@@ -602,7 +599,7 @@ export function App({ providerState }: AppProps) {
         )}
         {grantConnection?.status === 'error' && !grantErrorDismissed && (
           // The user just clicked Approve on the daemon's consent page —
-          // landing back here on browser-local with no explanation was a
+          // landing back here on the browser with no explanation was a
           // silent dead end. The likeliest cause on a hosted origin is the
           // browser's local-network permission still being closed.
           <div
@@ -626,20 +623,20 @@ export function App({ providerState }: AppProps) {
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-            {browserLocalPath === undefined ? (
+            {browserPath === undefined ? (
               // '/' (and any non-/local path) lands on the canvas list. The
               // editor mounts only for /local/:path, whose in-editor
               // canvas switching it keeps owning — App re-routes solely when
               // the URL crosses the list/editor boundary.
-              <BrowserLocalIndexPage
-                index={browserLocalStore}
-                onOpenDocument={(path) => navigate(browserLocalDocumentPath(path))}
+              <BrowserIndexPage
+                index={browserStore}
+                onOpenDocument={(path) => navigate(browserDocumentPath(path))}
               />
             ) : (
-              <BrowserLocalDocumentPage
-                store={browserLocalStore}
+              <BrowserDocumentPage
+                store={browserStore}
                 capabilities={effectiveState.capabilities}
-                initialPath={browserLocalPath}
+                initialPath={browserPath}
               />
             )}
           </Suspense>

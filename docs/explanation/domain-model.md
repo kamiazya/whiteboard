@@ -12,8 +12,8 @@ backed by more than one representation today. Read
   The kind is chosen at creation and does not change afterwards — except
   that restoring a version also restores that version's kind.
 - **Workspace** — a named collection of canvases. Only daemon mode has
-  real, multiple workspaces; browser-local mode has exactly one, and it is
-  stored rather than implied — every browser-local canvas carries the
+  real, multiple workspaces; a browser keeper has exactly one, and it is
+  stored rather than implied — every canvas kept in the browser carries the
   workspace it belongs to, the same field a daemon canvas carries. The
   constraint is "a single workspace that is always present", not the absence
   of the concept.
@@ -41,7 +41,7 @@ backed by more than one representation today. Read
 
 | mode | identity of a canvas | shown to the user |
 |---|---|---|
-| Browser-local | a ULID `documentId` plus the pair `(workspaceId, path)` | display name, plus the path |
+| Browser | a ULID `documentId` plus the pair `(workspaceId, path)` | display name, plus the path |
 | Daemon (gallery, editing, sync) | the pair `(workspaceId, path)` | display name, plus the path |
 | Daemon (agent/MCP tree) | a ULID `documentId` plus a `segment` path | alias path derived from segments |
 
@@ -54,7 +54,7 @@ is deliberately an open question (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
 which predates the rename and calls this a *slug* throughout).
 
-Browser-local canvases are addressed the same way. A path is stored, not
+Canvases kept in the browser are addressed the same way. A path is stored, not
 derived: it is assigned at creation (`untitled`, `untitled-2`, …) exactly as
 in daemon mode, it is what `/local/:path` names, and it is unique within the
 browser — the store refuses a second canvas at a path another one holds,
@@ -102,7 +102,7 @@ That split is **gone**, in three steps recorded in the migration log:
 - A document whose `kind` was never recorded reports **no** kind rather than
   claiming `spatial`; a surface that must render something (the gallery's
   kind badge, the editor choice) decides locally.
-- Browser-local documents still cross into daemon mode only by an explicit,
+- Documents kept in the browser still cross into daemon mode only by an explicit,
   user-initiated copy, which re-creates the document under a new path — no
   identifier carries over. That half of ADR-0007 is unchanged.
 

@@ -19,6 +19,7 @@ import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -211,6 +212,7 @@ describe('reference semantics under command sequences', () => {
         documentStore: createInMemoryDocumentStore(),
         blobStore: {} as never,
         documentIndex: new InMemoryDocumentIndex(),
+        documentTeardown: unusedDocumentTeardown(),
       }
       const setTool = createDocumentSetTool(deps)
       const editTool = createCanvasEditTool(deps)

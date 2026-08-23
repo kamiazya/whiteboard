@@ -68,8 +68,8 @@ export function daemonFaviconStatus({
   return isDirty ? 'unsaved' : 'saved'
 }
 
-/** Status for the browser-local page: persistence kinds map one-to-one. */
-export function browserLocalFaviconStatus(
+/** Status for the browser page: persistence kinds map one-to-one. */
+export function browserFaviconStatus(
   kind: 'saved' | 'saving' | 'pending' | 'degraded',
 ): FaviconStatus {
   return kind === 'saved'

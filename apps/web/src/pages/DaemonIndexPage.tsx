@@ -227,7 +227,7 @@ export function DaemonIndexPage({
 
   // Client-side copy through EXISTING daemon HTTP endpoints only (read
   // snapshot -> create canvas -> write snapshot -> rename), matching the
-  // browser-local controller's read-then-write duplicate flow rather than
+  // browser controller's read-then-write duplicate flow rather than
   // requiring a dedicated server-side "duplicate" endpoint.
   const handleDuplicate = useCallback(
     async (sourcePath: string) => {

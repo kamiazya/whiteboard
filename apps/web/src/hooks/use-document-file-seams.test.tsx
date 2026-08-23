@@ -1,6 +1,6 @@
 /**
  * The backend-agnostic half of the editor's file seams. This logic used to
- * live inline in BrowserLocalDocumentPage, which is why the daemon page shipped
+ * live inline in BrowserDocumentPage, which is why the daemon page shipped
  * without any of it; the caching rules below (staleness stamps, the
  * same-instance guard, URL revocation) are subtle enough that a second
  * hand-written copy is exactly what should not happen.

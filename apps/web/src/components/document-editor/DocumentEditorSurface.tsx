@@ -1,6 +1,6 @@
 /**
  * The one kind switch between a document and its editor. Every canvas page
- * (browser-local, daemon) routes through this component instead of choosing
+ * (browser, daemon) routes through this component instead of choosing
  * an editor itself, because the pages choosing independently is exactly how
  * a markdown document opened in the spatial editor on one backend after
  * being wired correctly on the other — and drawing on that view corrupts
@@ -22,7 +22,7 @@ import { MarkdownEditor, type MarkdownEditorProps } from '../markdown-editor/Mar
 
 /**
  * What a backend must supply to edit a markdown document, independent of
- * how it stores the body (browser-local: the `body` text container via a
+ * how it stores the body (browser: the `body` text container via a
  * CRDT binding; daemon: the `okf-body` node through the sync session's
  * command path). Editor-facing options are picked from the editor's own
  * props so this never becomes a second, drifting copy of that contract.

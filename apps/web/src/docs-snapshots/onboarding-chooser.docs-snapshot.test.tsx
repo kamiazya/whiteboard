@@ -2,7 +2,7 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, it } from 'vitest'
 import { page } from 'vitest/browser'
-import { BrowserLocalIndexPage } from '../pages/BrowserLocalIndexPage.js'
+import { BrowserIndexPage } from '../pages/BrowserIndexPage.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 import { resolveDocAssetPath } from './_helpers.js'
@@ -19,7 +19,7 @@ describe('docs snapshot: onboarding chooser', () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <div style={{ height: '100vh', background: 'white' }}>
-          <BrowserLocalIndexPage
+          <BrowserIndexPage
             index={store.index}
             pointer={store.pointer}
             clock={store.clock}

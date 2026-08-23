@@ -52,7 +52,7 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
     open: `browser` names the KEEPER (and survives navigation), while
     `synced`/`reconnecting`/`sync-off` report a live session (and do not).
   - **save-state chip** (`SaveStatusChip`) — did the last write to this
-    browser's storage land? Filled dot. Browser-local only; on a daemon the
+    browser's storage land? Filled dot. Browser keeper only; on a daemon the
     connection chip is what answers "is my work safe", and a second dot
     saying so would be the same fact twice.
   - **version dot** (`HeaderVersionDot`) — are there edits no named version

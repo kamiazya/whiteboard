@@ -1,6 +1,6 @@
 /**
  * Single opener for the shared 'whiteboard' IndexedDB, used by both
- * browser-local-store.ts (JSON 'documents' metadata) and loro-store.ts
+ * browser-backend.ts (JSON 'documents' metadata) and loro-store.ts
  * (canonical 'loroDocuments' CRDT records). Both stores live in the same
  * database, so a version bump or upgrade change to one that isn't mirrored in
  * the other produces a VersionError the next time the stale opener runs.
@@ -93,7 +93,7 @@ export function whiteboardDbName(): string {
  * implementation — `workspaces` (keyed by workspaceId) and `documentIndex`
  * (keyed by the pair `[workspaceId, path]`, with a unique `byId` index on
  * `[workspaceId, documentId]`). Purely additive; the bespoke `documents`
- * store keeps serving `browser-local-store.ts` until its call sites move.
+ * store keeps serving `browser-backend.ts` until its call sites move.
  *
  * The compound keys are the schema doing the work rather than the code: the
  * primary key IS the uniqueness rule `createDocument` has to enforce, so
@@ -277,8 +277,8 @@ function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
  * The workspace rows come from the documents themselves rather than from a
  * hardcoded `'local'`: this store never held more than one workspace, but
  * reading it from the data is the version that stays correct if it ever did.
- * `LOCAL_WORKSPACE_ID` is still written unconditionally, because that is the
- * one the browser-local UI opens.
+ * `BROWSER_WORKSPACE_ID` is still written unconditionally, because that is the
+ * one the browser UI opens.
  */
 /**
  * Moves every Loro content record into the `DocumentStore` port's store, and
