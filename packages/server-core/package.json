@@ -25,6 +25,7 @@
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-model": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
+    "@kamiazya/whiteboard-search": "workspace:*",
     "hono": "^4.12.34",
     "loro-crdt": "catalog:",
     "zod": "catalog:"

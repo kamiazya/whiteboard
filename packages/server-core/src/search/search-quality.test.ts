@@ -20,6 +20,7 @@
 //     evidence, not a hunch. If the debt is small, the 120MB is not worth
 //     paying and stage 0 is the whole feature.
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { tokenize } from '@kamiazya/whiteboard-search'
 import { beforeAll, describe, expect, it } from 'vitest'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
@@ -27,7 +28,6 @@ import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { ndcgAt, recallAt } from './eval.js'
-import { tokenize } from './full-text.js'
 import { CORPUS_DOCUMENTS, JUDGED_QUERIES, type QueryCategory } from './search-corpus.js'
 
 const WS = 'quality'

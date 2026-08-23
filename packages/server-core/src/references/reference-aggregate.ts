@@ -5,8 +5,8 @@ import {
   documentPathSchema,
 } from '@kamiazya/whiteboard-model'
 import { compareDocumentPaths } from '@kamiazya/whiteboard-ports'
+import { snippetAround } from '@kamiazya/whiteboard-search'
 import { z } from 'zod'
-import { snippetAround } from '../search/snippet.js'
 
 /**
  * The reference aggregation layer, designed around the Loro document

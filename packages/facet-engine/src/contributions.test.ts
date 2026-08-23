@@ -34,7 +34,11 @@ describe('resolveFacetContributions', () => {
     expect(groups.map((g) => g.namespace)).toEqual(['planning', 'visual'])
     expect(groups.map((g) => g.displayName)).toEqual(['Planning', 'Visual style'])
     expect(groups[0]?.facets.map((f) => f.key)).toEqual(['planning.assignee/v0', 'planning.due/v0'])
-    expect(groups[1]?.facets.map((f) => f.key)).toEqual(['visual.shape/v0', 'visual.symbol/v0'])
+    expect(groups[1]?.facets.map((f) => f.key)).toEqual([
+      'visual.shape/v0',
+      'visual.symbol/v0',
+      'visual.text/v0',
+    ])
   })
 
   it('a point only carries facets whose targets include its object', () => {
