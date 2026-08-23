@@ -185,13 +185,15 @@ describe('docs/ contract', () => {
       'eighteen',
       'nineteen',
       'twenty',
+      'twenty-one',
+      'twenty-two',
     ]
     const projectCount = readVitestProjects(REPO_ROOT).length
     const correct = spelled[projectCount - 10]
     expect(correct, `extend the spelled-number list past ${projectCount}`).toBeDefined()
 
     const content = readFileSync(join(DOCS_ROOT, 'contributing/development.md'), 'utf8')
-    const claim = content.match(/out of the (\w+) configured/)
+    const claim = content.match(/out of the ([\w-]+) configured/)
     expect(
       claim,
       'development.md no longer states a project count in the expected form',

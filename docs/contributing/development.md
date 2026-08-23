@@ -164,7 +164,7 @@ pnpm typecheck   # tsc --noEmit (~10s)
 pnpm smoke:e2e   # stdio MCP subprocess: wb_document_create -> wb_canvas_edit -> version save/list/restore -> wb_document_set -> wb_document_get
 ```
 
-For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the nineteen configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, model node, ports node, facet-engine node, codec node, loro-adapter node, search node, server-core node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all three browser projects (canvas-render-browser, canvas-viewer-browser, web-browser)):
+For a fast, narrow pass while iterating on `packages/mcp-server` (selects only the `mcp-node` project out of the twenty-one configured in root `vitest.config.ts`, so it also skips `mcp-smoke`, model node, ports node, facet-engine node, facet-ui jsdom, plugin-visual node/jsdom, codec node, loro-adapter node, search node, server-core node, arch-lint-node, canvas-render node, canvas-viewer node/jsdom, apps/web node/jsdom, and all three browser projects (canvas-render-browser, canvas-viewer-browser, web-browser)):
 
 ```bash
 pnpm test --project mcp-node
