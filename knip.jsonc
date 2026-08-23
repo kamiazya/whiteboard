@@ -20,7 +20,16 @@
         "src/ci-workflow-steps.mjs",
         "src/env-scope-scanner.mjs",
         "src/verify-pack-contents.mjs",
-        "src/release-gate-matrix-schema.mjs"
+        "src/release-gate-matrix-schema.mjs",
+        // run-shared-layer-tests.mjs itself is NOT listed here: knip's
+        // GitHub Actions plugin already detects it as an entry from ci.yml's
+        // `run: node tools/checks/src/run-shared-layer-tests.mjs` step, and
+        // listing it again trips knip's "redundant entry pattern" hint.
+        // vitest-projects.mjs, its dependency, still needs a listing of its
+        // own: it is also reached by a dynamically-built path
+        // (`join(ROOT, 'tools/checks/src/...')`) from mcp-server's release
+        // tests, which the GitHub Actions plugin has no way to see.
+        "src/vitest-projects.mjs"
       ],
       "project": ["src/**/*.mjs"]
     },
