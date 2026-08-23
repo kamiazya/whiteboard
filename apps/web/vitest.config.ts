@@ -40,6 +40,7 @@ export default defineConfig({
     },
   },
   test: {
+    name: 'web-jsdom',
     environment: 'jsdom',
     setupFiles: ['./vitest.setup.ts'],
     // Safety net behind vitest.setup.ts's scheduler drain: React's scheduler
