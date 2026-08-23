@@ -1,13 +1,20 @@
+import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
 import { corpusDigest, DOCS_JUDGED_QUERIES, loadDocsCorpus, queryDigest } from './docs-corpus.js'
 
-const repoRoot = new URL('../../../../../', import.meta.url).pathname
+// `.pathname` keeps percent-encoding, so a checkout under a directory with
+// a space in its name would resolve to a path that does not exist.
+const repoRoot = fileURLToPath(new URL('../../../../../', import.meta.url))
 
 describe('loadDocsCorpus', () => {
   it('reads the real docs tree, sorted, with the h1 as the name', () => {
     const docs = loadDocsCorpus(repoRoot)
     expect(docs.length).toBeGreaterThan(20)
-    expect([...docs].sort((a, b) => a.path.localeCompare(b.path))).toEqual(docs)
+    // By CODE POINT, matching the loader. `localeCompare` is what the loader
+    // deliberately does not use — it reads the runtime's locale and ICU
+    // data, so the same tree could order differently on another machine and
+    // digest differently with it.
+    expect([...docs].sort((a, b) => (a.path < b.path ? -1 : 1))).toEqual(docs)
     const readme = docs.find((d) => d.path === 'README')
     expect(readme?.name).toBe('Whiteboard documentation')
   })

@@ -17,6 +17,7 @@
  * distinguish a real improvement from which questions happened to be
  * asked, and reporting one alone is how a small corpus over-claims.
  */
+import { fileURLToPath } from 'node:url'
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import {
   bootstrapCi,
@@ -59,7 +60,7 @@ const K = 10
  */
 const TARGET_EFFECTS = [0.1, 0.05, 0.02]
 
-const repoRoot = new URL('../../../../', import.meta.url).pathname
+const repoRoot = fileURLToPath(new URL('../../../../', import.meta.url))
 const CORPUS = loadDocsCorpus(repoRoot)
 
 async function seed() {

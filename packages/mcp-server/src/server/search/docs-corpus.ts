@@ -38,20 +38,34 @@ export function loadDocsCorpus(repoRoot: string): DocsCorpusDocument[] {
   const root = resolve(repoRoot, 'docs')
   const files: string[] = []
   const walk = (dir: string): void => {
-    for (const entry of readdirSync(dir, { withFileTypes: true }).sort((a, b) =>
-      a.name.localeCompare(b.name),
-    )) {
+    for (const entry of readdirSync(dir, { withFileTypes: true })) {
       const full = join(dir, entry.name)
       if (entry.isDirectory()) walk(full)
       else if (entry.name.endsWith('.md')) files.push(full)
     }
   }
   walk(root)
+  // Sorted GLOBALLY by relative path, by code point, after the walk — and
+  // both halves of that matter to `corpusDigest`, which hashes documents in
+  // array order and so makes the order part of the experiment identifier.
+  //
+  // `localeCompare` would read the runtime's default locale and ICU data,
+  // so the same tree could digest differently on another machine. And
+  // sorting per directory during a depth-first walk is not a path sort: a
+  // directory `guide/` beside a file `guide.md` comes out in the opposite
+  // order, which would also quietly falsify the "sorted" invariant the
+  // test asserts.
+  files.sort((a, b) => (relativePath(root, a) < relativePath(root, b) ? -1 : 1))
   return files.map((file) => {
     const body = readFileSync(file, 'utf8')
-    const path = relative(root, file).replace(/\.md$/, '')
+    const path = relativePath(root, file)
     return { path, name: firstHeading(body) ?? path, body }
   })
+}
+
+/** Extension-stripped path relative to the docs root, the corpus's id. */
+function relativePath(root: string, file: string): string {
+  return relative(root, file).replace(/\.md$/, '')
 }
 
 function firstHeading(markdown: string): string | undefined {

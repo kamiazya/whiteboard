@@ -221,9 +221,16 @@ below it, which the six-document result never did.
 #### The finding that changes what to build next
 
 **37 of the 45 documents exceed the model's 512-token input limit.** Mean
-length is 2288 tokens, longest 7800; the embedder therefore reads about
-22% of the corpus text and silently ignores the rest. Every number above
-is achieved WITHOUT three quarters of the documents.
+length is around 2300 tokens, longest 7800; the embedder therefore reads
+about a fifth of the corpus TEXT and silently ignores the rest. Note the
+unit: it is not a fifth of the documents — every document is present, most
+of them cut short. Every number above is achieved WITHOUT roughly four
+fifths of the text.
+
+Stated as a fraction rather than a decimal on purpose. The exact figure
+moves whenever `docs/` changes, this ADR included, so a number carried in
+prose goes stale by the next commit; the script prints the current value on
+every run and that is the copy to trust.
 
 That is not a defect in the measurement, it is the measurement doing its
 job — the synthetic corpus had short documents, so nothing there could
