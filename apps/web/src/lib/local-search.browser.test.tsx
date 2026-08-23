@@ -92,4 +92,20 @@ describe('local body search', () => {
       'draft',
     ])
   })
+
+  it('finds a renamed document under its new path, not its old one', async () => {
+    // The corpus caches on the CONTENT stamp, and a rename does not move it.
+    // Caching the path alongside the text would leave the search matching a
+    // name the workspace no longer uses.
+    const index = new IdbDocumentIndex()
+    await ensureLocalWorkspace(index)
+    await seedMarkdown(index, 'drafts/first', 'A body with no distinctive words.')
+    const source = createLocalFilesSource({ index })
+
+    expect((await source.searchDocuments('first', 20)).length).toBe(1)
+    await source.renameDocumentPath('drafts/first', 'drafts/renamed')
+
+    expect((await source.searchDocuments('renamed', 20))[0]?.document.path).toBe('drafts/renamed')
+    expect(await source.searchDocuments('first', 20)).toEqual([])
+  })
 })

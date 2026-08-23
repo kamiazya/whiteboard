@@ -64,7 +64,9 @@ describe('body search', () => {
     // Not a bare "nothing matches": lexical search cannot cross languages,
     // so the empty state must not read as "this document does not exist".
     expect(results.textContent).toContain('存在しない語')
-    expect(results.textContent).toMatch(/names, paths and contents/i)
+    // Only once the content answer is in: until then the panel is honestly
+    // reporting the narrower scope it has actually searched.
+    await waitFor(() => expect(results.textContent).toMatch(/names, paths and contents/i))
   })
 
   it('never lets a slower answer for an older query win', async () => {
@@ -79,6 +81,9 @@ describe('body search', () => {
     render(<WorkspaceFilesPanel source={source} onOpenDocument={() => {}} />)
 
     await search('slow')
+    // Without this the debounce timer for 'slow' is cleared by the next
+    // keystroke, `release` is never assigned, and the test asserts nothing.
+    await waitFor(() => expect(source.searchDocuments).toHaveBeenCalledWith('slow', 20))
     fireEvent.change(screen.getByLabelText('Search documents'), { target: { value: 'fast' } })
     await waitFor(() =>
       expect(screen.getByTestId('search-results').textContent).toContain('fast answer'),
@@ -88,5 +93,38 @@ describe('body search', () => {
     // The stale empty answer must not replace the newer one.
     await new Promise((resolve) => setTimeout(resolve, 20))
     expect(screen.getByTestId('search-results').textContent).toContain('fast answer')
+  })
+
+  it('says it searched names and paths only when content search is unavailable', async () => {
+    renderPanel({
+      searchDocuments: async () => {
+        throw new Error('no content search here')
+      },
+    })
+    await search('nothingmatchesthis')
+
+    const results = await screen.findByTestId('search-results')
+    // The fallback answers from names and paths alone. Claiming contents were
+    // searched would tell the reader a document does not exist when all that
+    // is true is that nobody looked inside it.
+    await waitFor(() => expect(results.textContent).toMatch(/names and paths of this workspace/i))
+    expect(results.textContent).not.toMatch(/contents/i)
+  })
+
+  it('re-runs an active search when the documents change underneath it', async () => {
+    const source = fakeFilesSource({
+      listDocuments: async () => entries,
+      searchDocuments: async () => [],
+    })
+    const { rerender } = render(
+      <WorkspaceFilesPanel source={source} onOpenDocument={() => {}} revision={1} />,
+    )
+    await search('quota')
+    await waitFor(() => expect(source.searchDocuments).toHaveBeenCalledTimes(1))
+
+    // A document changed while the query was live: results computed against
+    // the old list can name a document that no longer exists.
+    rerender(<WorkspaceFilesPanel source={source} onOpenDocument={() => {}} revision={2} />)
+    await waitFor(() => expect(source.searchDocuments).toHaveBeenCalledTimes(2))
   })
 })

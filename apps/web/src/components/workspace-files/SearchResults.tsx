@@ -33,6 +33,14 @@ export interface SearchResultsProps {
   results: readonly SearchResultRow[]
   /** The query the results answer, so the match can be shown, not implied. */
   query: string
+  /**
+   * Whether document CONTENT was actually looked at. False while a content
+   * search is unavailable, still in flight, or bypassed by a `#tag` filter —
+   * cases where the answer came from names and paths alone, and an empty
+   * state claiming otherwise would report a document as missing when nobody
+   * looked inside it.
+   */
+  searchedContents?: boolean
   selectedPath?: string
   onSelect: (document: WorkspaceDocumentEntry) => void
   /** Right-click on a result row — the object-action menu hook. */
@@ -69,6 +77,7 @@ function titleOf(entry: WorkspaceDocumentEntry): string {
 export function SearchResults({
   results,
   query,
+  searchedContents = true,
   selectedPath,
   onSelect,
   onDocumentContextMenu,
@@ -90,7 +99,8 @@ export function SearchResults({
     // tell a missing document from a query that could never match.
     return (
       <p className={cn('text-muted-foreground text-sm', className)}>
-        Nothing matches “{query.trim()}” in the names, paths and contents of this workspace.
+        Nothing matches “{query.trim()}” in the{' '}
+        {searchedContents ? 'names, paths and contents' : 'names and paths'} of this workspace.
       </p>
     )
   }

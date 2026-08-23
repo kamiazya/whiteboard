@@ -276,7 +276,10 @@ export function WorkspaceFilesPanel({
       stale = true
       clearTimeout(timer)
     }
-  }, [query, source])
+    // `revision` too: results computed against the old content can name a
+    // document that has since been renamed or deleted, and a row that opens
+    // nothing is worse than a slower answer.
+  }, [query, source, revision])
 
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
@@ -814,6 +817,7 @@ export function WorkspaceFilesPanel({
                     : hits.map((hit) => ({ document: hit.document, contexts: hit.contexts }))
                 }
                 query={query}
+                searchedContents={activeTag === null && hits !== null}
                 selectedPath={selected?.path}
                 onSelect={setSelected}
                 onDocumentContextMenu={openCardMenu}

@@ -64,7 +64,7 @@ export function createLocalFilesSource(
    * ponytail: full scan behind a stamp cache; persist an index when a
    * measured workspace makes the first search slow.
    */
-  const corpus = new Map<string, { stamp: string; document: SearchableDocument }>()
+  const corpus = new Map<string, { stamp: string; texts: string[] }>()
 
   async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
     const loaded = await loro.load(entry.documentId)
@@ -161,38 +161,36 @@ export function createLocalFilesSource(
       const entries = await this.listDocuments()
       const searchable: SearchableDocument[] = []
       for (const entry of entries) {
-        // The stamp IS the cache key: a document whose content moved gets
-        // re-read, and one that did not is free.
+        // Only the TEXT is cached, and only against the content stamp. Path
+        // and name are placement, which a rename moves without touching the
+        // content — caching them here would keep matching a name the
+        // workspace has stopped using.
         const stamp = entry.updatedAt ?? ''
         const cached = corpus.get(entry.documentId)
+        let texts: string[]
         if (cached !== undefined && cached.stamp === stamp) {
-          searchable.push(cached.document)
-          continue
-        }
-        try {
-          const doc = await loadCurrentDoc(entry)
-          const texts =
-            entry.kind === 'spatial'
-              ? searchableTexts({ kind: 'spatial', canvas: readSpatialCanvas(doc) })
-              : searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
-          const document: SearchableDocument = {
-            documentId: entry.documentId,
-            path: entry.path,
-            ...(entry.name === undefined ? {} : { name: entry.name }),
-            texts,
+          texts = cached.texts
+        } else {
+          try {
+            const doc = await loadCurrentDoc(entry)
+            texts =
+              entry.kind === 'spatial'
+                ? searchableTexts({ kind: 'spatial', canvas: readSpatialCanvas(doc) })
+                : searchableTexts({ kind: 'markdown', body: readMarkdownBody(doc) })
+            corpus.set(entry.documentId, { stamp, texts })
+          } catch {
+            // Unreadable documents are searched as their name and path alone
+            // rather than dropping out of results entirely. Not cached: the
+            // next search should try the document again.
+            texts = []
           }
-          corpus.set(entry.documentId, { stamp, document })
-          searchable.push(document)
-        } catch {
-          // Unreadable documents are searched as their name and path alone
-          // rather than dropping out of results entirely.
-          searchable.push({
-            documentId: entry.documentId,
-            path: entry.path,
-            ...(entry.name === undefined ? {} : { name: entry.name }),
-            texts: [],
-          })
         }
+        searchable.push({
+          documentId: entry.documentId,
+          path: entry.path,
+          ...(entry.name === undefined ? {} : { name: entry.name }),
+          texts,
+        })
       }
       const byId = new Map(entries.map((entry) => [entry.documentId, entry]))
       return fullTextSearch(searchable, query, { limit }).flatMap((hit) => {
