@@ -281,6 +281,57 @@ somewhere to start — pooling from the systems under test is how test
 collections are normally grown, with the known caveat that a future third
 system did not contribute to the pool and is disadvantaged by it.
 
+### 3e. Chunking, priced and declined (2026-08-23)
+
+3d's biggest finding was that 37 of 45 documents exceed the model's
+512-token input, so the embedder reads about a fifth of the corpus text.
+Chunking is the obvious answer and a large change: the `Embedder` port
+becomes multi-vector, the cache stores a vector per passage, and ranking
+max-pools over them.
+
+It was priced BEFORE being built, with no production code touched. The
+spike (`scripts/measure/chunking-spike.mjs`) splits each document into
+markdown blocks packed to 480 tokens, embeds every chunk, scores a
+document by its best chunk, and compares against the truncated baseline on
+the SEMANTIC ranking alone — fusion would dilute the effect and would have
+required the very change the spike exists to avoid.
+
+| metric (semantic only) | truncated | chunked | delta | 95% CI | p |
+|---|---|---|---|---|---|
+| nDCG@10 | 0.680 | 0.705 | +0.025 | [-0.030, +0.089] | 0.45 |
+| recall@10 | 0.850 | 0.890 | +0.040 | [+0.000, +0.100] | 0.50 |
+| MRR | 0.639 | 0.653 | +0.014 | [-0.058, +0.092] | 0.72 |
+
+Cost: 284 embeddings instead of 45, **6.3x**, up to 21 chunks for the
+longest document.
+
+**Declined for now.** Every interval crosses zero and no p-value comes
+near significance, so 6.3x the embedding work buys something this corpus
+cannot distinguish from which fifty questions were asked. That is the same
+verdict the edge-routing instrument returned for per-blocker detours and a
+placement cache: obviously right on argument, not worth paying for on the
+numbers.
+
+Read the result precisely, because "not distinguishable" is not "no
+effect". All three point estimates are positive and the direction is
+consistent, and the largest single movement — paraphrase recall, +0.083 —
+is exactly where chunking should help. The instrument is not saying
+chunking fails. It is saying THIS CORPUS cannot referee it: resolving a
+0.05 difference needs 124-239 queries and there are 50.
+
+#### What that reorders
+
+The blocker is the corpus, not the idea, and it is not specific to
+chunking. Everything else on the search roadmap — a different model, a
+fusion weight, a rescoring pass — is a change of roughly this size, so all
+of them are currently below resolution. **Growing the judged corpus comes
+before building any of them**, or the next change will be argued rather
+than measured.
+
+The spike stays in the tree rather than being deleted with its result: it
+is the instrument that answers this question again once the corpus is big
+enough to answer it.
+
 ### 4. The decision rule
 
 - A `lexical` or `bigram` miss is a **defect in stage 0** — fix
