@@ -128,11 +128,39 @@ const BANNED = [
       '.claude/rules/vocabulary.md',
     ],
   },
-  // Deliberately NARROWER than its sibling above, and not an oversight: only
-  // the discriminant VALUE is claimed. `localDaemonBaseUrl` is a persisted
-  // settings key whose rename needs a settings migration, so the identifier
-  // casings stay legal until that increment lands. Widening this pattern
-  // before then produces a guard nobody can make green.
+  // The HYPHENATED spelling is deliberately absent from this pattern, and
+  // that is the whole point of splitting the daemon half from the browser
+  // one. `local-daemon` is still CORRECT in its network sense — mcp-server's
+  // `authMode: 'local-daemon'` opposite `'server-mode'`, the
+  // `connect-to-local-daemon` how-to, the `config-file-local-daemon` anchor
+  // — because a daemon on this machine really is local. Only the identifier
+  // casings (`localDaemonBaseUrl`, `LOCAL_DAEMON_*`) ever named the KEEPER,
+  // and those are what this claims.
+  {
+    pattern: /local_?daemon/i,
+    word: 'localDaemon / LOCAL_DAEMON (as an identifier)',
+    instead: "'daemonBaseUrl' / 'DAEMON_' — the keeper is named by WHO holds the workspace",
+    dirs: [
+      'apps/web/src',
+      'apps/web/scripts',
+      'docs',
+      '.github',
+      '.claude',
+      'README.md',
+      'apps/web/DESIGN.md',
+    ],
+    exempt: [
+      // The v1->v2 settings migration and its tests. They spell the old key
+      // because reading a payload written under it is their entire job —
+      // the same reason a database migration names the columns as they stood
+      // at its point in the log.
+      'apps/web/src/lib/user-settings-store.ts',
+      'apps/web/src/lib/user-settings-store.test.ts',
+      '.claude/rules/vocabulary.md',
+    ],
+  },
+  // The discriminant VALUE, still apps/web-only: in `packages/mcp-server` the
+  // same quoted string is the network-sense auth mode and is correct there.
   {
     pattern: /(['"])local-daemon\1/,
     word: "'local-daemon' (as a value)",
@@ -142,12 +170,6 @@ const BANNED = [
       'apps/web/src/lib/user-settings-store.ts',
       'apps/web/src/lib/user-settings-store.test.ts',
     ],
-  },
-  {
-    pattern: /\bLOCAL_DAEMON_/,
-    word: 'LOCAL_DAEMON_ constants',
-    instead: 'DAEMON_',
-    dirs: ['apps/web/src'],
   },
 ] as const
 

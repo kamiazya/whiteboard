@@ -189,7 +189,7 @@ export function App({ providerState }: AppProps) {
     if (daemonConnection.status !== 'none') return
     if (grantConnection !== null) return
     if ((providerState ?? defaultProviderState).kind !== 'browser') return
-    const storedBaseUrl = userSettingsStore.load().storage.localDaemonBaseUrl
+    const storedBaseUrl = userSettingsStore.load().storage.daemonBaseUrl
     if (storedBaseUrl === undefined) return
     void renewPairingToken({
       daemonBaseUrl: storedBaseUrl,
@@ -321,7 +321,7 @@ export function App({ providerState }: AppProps) {
     // when the stored target already matches what we would write.
     const stored = userSettingsStore.load().storage
     if (
-      stored.localDaemonBaseUrl === baseUrl &&
+      stored.daemonBaseUrl === baseUrl &&
       stored.lastConnectedWorkspaceId === workspaceId &&
       stored.lastConnectedPath === path
     ) {
@@ -331,7 +331,7 @@ export function App({ providerState }: AppProps) {
       ...current,
       storage: {
         ...current.storage,
-        localDaemonBaseUrl: baseUrl,
+        daemonBaseUrl: baseUrl,
         lastConnectedWorkspaceId: workspaceId,
         lastConnectedPath: path,
       },
@@ -346,7 +346,7 @@ export function App({ providerState }: AppProps) {
     if (grantConnection?.status !== 'paired') return
     userSettingsStore.update((current) => ({
       ...current,
-      storage: { ...current.storage, localDaemonBaseUrl: grantConnection.daemonBaseUrl },
+      storage: { ...current.storage, daemonBaseUrl: grantConnection.daemonBaseUrl },
     }))
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [grantConnection?.status])
