@@ -86,8 +86,12 @@ it('stays dismissible when the selection empties, instead of vanishing', async (
   const { container } = render(<Host />)
   const root = await openInspector(container, 120, 85)
 
-  // Click empty canvas: nothing selected.
-  await userEvent.click(root, { position: { x: 650, y: 400 } })
+  // Click empty canvas: nothing selected. Measured off the LIVE root, which
+  // the open dock has narrowed — a fixed coordinate wide enough for the whole
+  // editor lands outside it, and the click never resolves (60s timeout).
+  await userEvent.click(root, {
+    position: { x: Math.round(root.clientWidth / 2), y: 400 },
+  })
   const panel = panelOf(container)
   // It must still be on screen WITH its Done control — returning null here
   // left `facetPanelOpen` true with nothing to press.

@@ -43,8 +43,10 @@ export interface FacetFormPanelProps {
   /** Present when mounted as an overlay; absent renders the bare body. */
   readonly onClose?: () => void
   /**
-   * Where the inspector sits. Follows the context menu's breakpoint so the
-   * two agree about what a narrow editor is.
+   * Where the inspector sits: a column beside the canvas, or a sheet under
+   * it. Decided from the EDITOR SHELL's width — the panel's own column comes
+   * out of the canvas, so a breakpoint read off the canvas re-decides itself
+   * every time it opens.
    */
   readonly variant?: 'dock' | 'sheet'
 }
@@ -126,33 +128,22 @@ export function FacetFormPanel({
         const root = event.currentTarget.closest('[data-testid="spatial-editor"]')
         if (root instanceof HTMLElement) root.focus()
       }}
-      className={cn(
-        'bg-background p-3 shadow-lg',
-        variant === 'sheet' ? 'rounded-t-xl border-t' : 'rounded-md border',
-      )}
-      // A centred box cannot be non-modal: it covers the canvas, and
-      // `data-editor-overlay` makes it swallow the press that would have
-      // selected the node underneath. Measured while trying to select a node
-      // the panel was sitting on top of — the click never reached it.
+      className={cn('bg-background p-3 shadow-lg', variant === 'sheet' ? 'border-t' : 'border-l')}
+      // A SIBLING of the canvas, not an overlay on it: the editor root is the
+      // pointer surface, so a panel drawn over it swallows the press that
+      // would have selected what is underneath. Measured at 540..892 of a
+      // 900px editor before this — about 18% of the canvas unreachable.
       style={
         variant === 'sheet'
           ? {
-              position: 'absolute',
-              zIndex: 30,
-              left: 0,
-              right: 0,
-              bottom: 0,
-              maxHeight: '55%',
+              flex: '0 0 auto',
+              maxHeight: '45%',
               overflowY: 'auto',
               paddingBottom: 'max(0.75rem, env(safe-area-inset-bottom))',
             }
           : {
-              position: 'absolute',
-              zIndex: 30,
-              right: 8,
-              top: 8,
-              width: 'min(22rem, calc(100% - 16px))',
-              maxHeight: 'calc(100% - 16px)',
+              flex: '0 0 auto',
+              width: 'min(22rem, 40%)',
               overflowY: 'auto',
             }
       }
