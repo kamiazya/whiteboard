@@ -43,9 +43,9 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
 
   const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
   expect(panel).not.toBeNull()
-  // The dialog takes focus, so Escape reaches its handler rather than the
-  // canvas behind it.
-  expect(panel.contains(document.activeElement)).toBe(true)
+  // NOT a dialog: it leaves focus on the canvas, so typing and shortcuts
+  // keep working while it is open.
+  expect(panel.contains(document.activeElement)).toBe(false)
 
   // visual.shape DECLARES its editor, so the panel shows the segmented
   // control the spec names — including Rectangle, which is the facet's
@@ -68,6 +68,8 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()
 
-  fireEvent.keyDown(panel, { key: 'Escape' })
+  // Done is the way out. Escape belongs to the canvas (deselect) — an
+  // inspector that never holds focus could not receive it anyway.
+  fireEvent.click(panel.querySelector('[aria-label="Close facets"]') as HTMLElement)
   expect(container.querySelector('[data-testid="facet-form-panel"]')).toBeNull()
 })

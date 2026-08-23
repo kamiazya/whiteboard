@@ -859,7 +859,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
     const [linkDialog, setLinkDialog] = useState<LinkDialogState | null>(null)
     const [canvasPicker, setDocumentPicker] = useState<DocumentPickerState | null>(null)
-    const [facetPanelNodeId, setFacetPanelNodeId] = useState<string | null>(null)
+    // The inspector is open or shut; WHICH node it edits follows the
+    // selection. Pinning it to the node the menu was opened on made it a
+    // dialog you had to close before you could look at anything else.
+    const [facetPanelOpen, setFacetPanelOpen] = useState(false)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
@@ -3272,7 +3275,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               setSelectedEdgeId,
               setLinkDialog,
               setDocumentPicker,
-              setFacetPanelNodeId,
+              setFacetPanelOpen,
             }}
             contextMenu={contextMenu}
             setContextMenu={setContextMenu}
@@ -3320,15 +3323,30 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             onCancel={() => setDocumentPicker(null)}
           />
         )}
-        {facetPanelNodeId !== null &&
+        {facetPanelOpen &&
           (() => {
-            const target = canvas.nodes.find((entry) => entry.id === facetPanelNodeId)
-            if (target === undefined) return null
+            const target = canvas.nodes.find((entry) => entry.id === selectedId)
+            // Nothing selected: the inspector stays open and says so, rather
+            // than vanishing. Returning null here left `facetPanelOpen` true
+            // with nothing on screen and no Done to press — a state only a
+            // new selection could get out of.
+            if (target === undefined) {
+              return (
+                <FacetFormPanel
+                  node={undefined}
+                  registry={bundledFacetRegistry}
+                  onClose={() => setFacetPanelOpen(false)}
+                  variant={rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'dock'}
+                  onWrite={() => {}}
+                />
+              )
+            }
             return (
               <FacetFormPanel
                 node={target}
                 registry={bundledFacetRegistry}
-                onClose={() => setFacetPanelNodeId(null)}
+                onClose={() => setFacetPanelOpen(false)}
+                variant={rootSize.width < MINIMAP_MIN_ROOT_WIDTH_PX ? 'sheet' : 'dock'}
                 onWrite={(key, payload) => {
                   // Applies to the whole selection, the semantics the menu
                   // bands had: reshaping five selected nodes must not become
