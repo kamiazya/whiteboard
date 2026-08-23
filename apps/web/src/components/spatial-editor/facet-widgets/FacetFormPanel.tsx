@@ -19,11 +19,11 @@ import {
   type FacetRegistry,
   resolveFacetContributions,
 } from '@kamiazya/whiteboard-facet-engine'
+import { type FacetEditor, glyphIcon } from '@kamiazya/whiteboard-facet-ui'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { useState } from 'react'
 import { cn } from '@/lib/utils'
-import { glyphIcon } from './glyph.js'
-import { type FacetEditorWidget, NODE_FACET_EDITORS } from './index.js'
+import { NODE_FACET_EDITORS } from './index.js'
 
 export interface FacetFormPanelProps {
   /**
@@ -39,7 +39,7 @@ export interface FacetFormPanelProps {
    * instead of the derived form — the picker the declared vocabulary
    * cannot yet express (today: the icon-plus-emoji badge picker).
    */
-  readonly editors?: Readonly<Record<string, FacetEditorWidget>>
+  readonly editors?: Readonly<Record<string, FacetEditor>>
   readonly registry: FacetRegistry
   /** `undefined` payload clears the facet, matching set-node-facet. */
   readonly onWrite: (key: string, payload: unknown) => void
@@ -192,7 +192,7 @@ function prune(draft: Draft): Draft {
   )
 }
 
-function FacetEditor({
+function DerivedFacetForm({
   facetKey,
   title,
   form,
@@ -374,24 +374,30 @@ export function FacetFormPanel({
             <span className="text-[0.65rem] font-medium tracking-wide text-muted-foreground">
               {group.displayName}
             </span>
-            {group.facets.map((facet) =>
-              editors[facet.key] !== undefined ? (
+            {group.facets.map((facet) => {
+              const Editor = editors[facet.key]
+              return Editor !== undefined ? (
                 <div key={`${node.id}:${facet.key}`} className="flex flex-col gap-1.5">
                   <span className="text-xs font-medium">{facet.definition.displayName}</span>
-                  {editors[facet.key]?.({
-                    value: stored[facet.key],
+                  {/* RENDERED, not called. Calling it would splice a plugin's
+                      hooks into this panel's own sequence, so two editors in
+                      the same position share a hook slot — measured: swapping
+                      one editor for another left the second reading the
+                      first's state. */}
+                  <Editor
+                    value={stored[facet.key]}
                     // Straight through the registry, exactly like the derived
                     // form's own writer — a hand-written editor gets no shorter
                     // path to storage than a declared one.
-                    write: (payload) => {
+                    write={(payload) => {
                       if (payload === undefined) return onWrite(facet.key, undefined)
                       const result = registry.validateFacetWrite(facet.key, payload)
                       if (result.ok) onWrite(facet.key, result.value)
-                    },
-                  })}
+                    }}
+                  />
                 </div>
               ) : (
-                <FacetEditor
+                <DerivedFacetForm
                   // Keyed by NODE too: a draft belongs to the node it was typed
                   // against. Retargeting the panel without this reuses the
                   // instance, so an abandoned edit on one node would be shown —
@@ -404,8 +410,8 @@ export function FacetFormPanel({
                   registry={registry}
                   onWrite={onWrite}
                 />
-              ),
-            )}
+              )
+            })}
           </div>
         ))}
       </div>

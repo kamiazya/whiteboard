@@ -9,6 +9,7 @@ import {
 } from '@kamiazya/whiteboard-facet-engine'
 import type { SpatialNode } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { useState } from 'react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { z } from 'zod'
 import { FacetFormPanel } from './FacetFormPanel.js'
@@ -185,7 +186,7 @@ describe('a draft never outlives what it was seeded from', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: 'Clear Due' }))
     // The host applies the clear and re-renders with the facet gone.
-    rerender(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
+    rerender(<FacetFormPanel node={node()} registry={registry} onWrite={() => {}} editors={{}} />)
     expect((screen.getByLabelText('Due Date') as HTMLInputElement).value).toBe('')
     onWrite.mockClear()
     fireEvent.click(screen.getByRole('button', { name: 'Save Due' }))
@@ -320,5 +321,42 @@ describe('a registered editor replaces the derived form', () => {
     // `char` is a single grapheme. A hand-written editor gets no shorter
     // path to storage than a declared one.
     expect(onWrite).not.toHaveBeenCalled()
+  })
+})
+
+describe('a registered editor is a COMPONENT, not a function the panel calls', () => {
+  const Counter = (label: string) =>
+    function Editor({ write }: { readonly write: (p: unknown) => void }) {
+      const [count, setCount] = useState(0)
+      return (
+        <button
+          type="button"
+          onClick={() => {
+            setCount(count + 1)
+            write(undefined)
+          }}
+        >
+          {label} {count}
+        </button>
+      )
+    }
+
+  it("keeps each editor's state its own, so swapping one does not inherit the other's", () => {
+    // Called as a plain function, an editor's hooks belong to the PANEL — so
+    // a different editor rendered in the same position reads the previous
+    // one's state out of the same hook slot. As components they are separate
+    // fibers and the second starts fresh.
+    const first = { 'visual.symbol/v0': Counter('first') }
+    const second = { 'visual.symbol/v0': Counter('second') }
+    const { rerender } = render(
+      <FacetFormPanel node={node()} registry={registry} onWrite={() => {}} editors={first} />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: 'first 0' }))
+    expect(screen.getByRole('button', { name: 'first 1' })).not.toBeNull()
+
+    rerender(
+      <FacetFormPanel node={node()} registry={registry} onWrite={() => {}} editors={second} />,
+    )
+    expect(screen.getByRole('button', { name: 'second 0' })).not.toBeNull()
   })
 })
