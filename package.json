@@ -20,6 +20,7 @@
     "test:coverage": "pnpm --filter @kamiazya/whiteboard-mcp test:coverage",
     "test:node": "vitest run --project mcp-node",
     "test:mcp-node": "vitest run --project mcp-node",
+    "test:web-jsdom": "vitest run --project web-jsdom",
     "test:distribution": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution",
     "test:browser": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser",
     "test:browser:trace": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser --browser.trace=on",

@@ -32,6 +32,7 @@ describe('body search', () => {
         {
           document: entries[1] as (typeof entries)[number],
           contexts: ['…the quota exceeded error shows up on save…'],
+          lexicalRank: 1,
         },
       ],
     })
@@ -126,5 +127,33 @@ describe('body search', () => {
     // the old list can name a document that no longer exists.
     rerender(<WorkspaceFilesPanel source={source} onOpenDocument={() => {}} revision={2} />)
     await waitFor(() => expect(source.searchDocuments).toHaveBeenCalledTimes(2))
+  })
+
+  it('marks nothing in an excerpt that no keyword produced', async () => {
+    renderPanel({
+      searchDocuments: async () => [
+        {
+          document: entries[1] as (typeof entries)[number],
+          // A hit the daemon's semantic search put here: the excerpt is the
+          // document's opening, not a match window. Marking the query inside
+          // it would point at a word that had nothing to do with the hit.
+          contexts: ['An opening line that happens to contain quota.'],
+        },
+        {
+          document: entries[0] as (typeof entries)[number],
+          contexts: ['…the quota exceeded error…'],
+          lexicalRank: 1,
+        },
+      ],
+    })
+    await search('quota')
+
+    const excerpts = await screen.findAllByTestId('result-excerpt')
+    expect(within(excerpts[0] as HTMLElement).queryAllByTestId('search-match')).toEqual([])
+    expect(excerpts[0]?.textContent).toContain('opening line')
+    // The lexical hit still gets its match marked.
+    expect(
+      within(excerpts[1] as HTMLElement).getAllByTestId('search-match').length,
+    ).toBeGreaterThan(0)
   })
 })

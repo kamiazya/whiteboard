@@ -14,13 +14,13 @@ vi.mock('./components/status/NotFoundPage.js', () => {
 
 import { App } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
-import { BROWSER_LOCAL_CAPABILITIES, type ProviderState } from './lib/provider.js'
+import { BROWSER_CAPABILITIES, type ProviderState } from './lib/provider.js'
 
 afterEach(cleanup)
 
-const BROWSER_LOCAL_STATE: ProviderState = {
-  kind: 'browser-local',
-  capabilities: BROWSER_LOCAL_CAPABILITIES,
+const BROWSER_STATE: ProviderState = {
+  kind: 'browser',
+  capabilities: BROWSER_CAPABILITIES,
 }
 
 describe('App not-found chunk failure', () => {
@@ -28,7 +28,7 @@ describe('App not-found chunk failure', () => {
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
       <MemoryRouter initialEntries={['/definitely/not/a/route']}>
-        <App providerState={BROWSER_LOCAL_STATE} />
+        <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
     expect(await screen.findByRole('alert')).toBeTruthy()

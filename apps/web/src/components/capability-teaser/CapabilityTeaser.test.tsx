@@ -13,7 +13,7 @@ describe('CapabilityTeaser', () => {
     const describedById = control.getAttribute('aria-describedby')
     expect(describedById).toBeTruthy()
     const description = document.getElementById(describedById as string)
-    expect(description?.textContent).toBe('Connect a local daemon (MCP) to enable Version history')
+    expect(description?.textContent).toBe('Connect a daemon (MCP) to enable Version history')
   })
 
   it('does not use native disabled (which would block focus and hide the tooltip)', () => {
@@ -50,7 +50,7 @@ describe('CapabilityTeaser', () => {
     const control = screen.getByRole('button', { name: 'Merge' })
     expect(control.getAttribute('aria-disabled')).toBeNull()
     expect(control.getAttribute('aria-describedby')).toBeNull()
-    expect(screen.queryByText('Connect a local daemon (MCP) to enable Merge')).toBeNull()
+    expect(screen.queryByText('Connect a daemon (MCP) to enable Merge')).toBeNull()
   })
 
   it('stays aria-disabled with a tooltip when enabled but no onAction is wired', () => {

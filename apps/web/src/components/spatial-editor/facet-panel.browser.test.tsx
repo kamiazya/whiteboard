@@ -43,9 +43,9 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
 
   const panel = container.querySelector('[data-testid="facet-form-panel"]') as HTMLElement
   expect(panel).not.toBeNull()
-  // The dialog takes focus, so Escape reaches its handler rather than the
-  // canvas behind it.
-  expect(panel.contains(document.activeElement)).toBe(true)
+  // NOT a dialog: it leaves focus on the canvas, so typing and shortcuts
+  // keep working while it is open.
+  expect(panel.contains(document.activeElement)).toBe(false)
 
   // visual.shape DECLARES its editor, so the panel shows the segmented
   // control the spec names — including Rectangle, which is the facet's
@@ -55,16 +55,21 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   // A CHOICE applies on pick, the way the same facet's quick band does —
   // there is no Save to press, and a facet made only of choices has none.
   fireEvent.click(hexagon)
-  // Scoped by accessible name: Symbol keeps a Save because it carries a
-  // free-entry field, so a panel-wide check would pass for the wrong reason.
-  expect(panel.querySelector('button[aria-label="Save Shape"]')).toBeNull()
-  expect(panel.querySelector('button[aria-label="Save Symbol"]')).not.toBeNull()
+  // Nothing in the bundled plugin needs a Save any more: shape and text are
+  // declared choices, and symbol renders its registered picker. A Save
+  // survives only for a facet with free entry — covered in the jsdom suite,
+  // where a fixture facet can have one.
+  expect(panel.querySelector('button[aria-label^="Save"]')).toBeNull()
+  // The picker that used to be a context-menu band is here instead.
+  expect(panel.querySelector('[aria-label="Emoji ⭐"]')).not.toBeNull()
 
   expect(latest.canvas.nodes[0]?.['x-whiteboard']?.facets?.['visual.shape/v0']).toEqual({
     kind: 'hexagon',
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()
 
-  fireEvent.keyDown(panel, { key: 'Escape' })
+  // Done is the way out. Escape belongs to the canvas (deselect) — an
+  // inspector that never holds focus could not receive it anyway.
+  fireEvent.click(panel.querySelector('[aria-label="Close facets"]') as HTMLElement)
   expect(container.querySelector('[data-testid="facet-form-panel"]')).toBeNull()
 })

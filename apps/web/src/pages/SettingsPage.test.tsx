@@ -3,7 +3,7 @@ import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-d
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { celebrate } from '@/lib/celebrate'
 import { initInstallPromptCapture, resetInstallPromptForTests } from '@/lib/install-prompt-store'
-import { STORAGE_KEY } from '@/lib/user-settings-store'
+import { createUserSettingsStore, STORAGE_KEY } from '@/lib/user-settings-store'
 import {
   bindApplyUpdate,
   bindCheckForUpdates,
@@ -389,5 +389,68 @@ describe('SettingsPage — Connections', () => {
     expect(
       await within(mobile).findByRole('button', { name: /refresh storage usage/i }),
     ).toBeTruthy()
+  })
+})
+
+// Disconnecting is a management action: it has an intent behind it, so the
+// user can go looking for it. That is what makes Settings the right home —
+// unlike a dropped sync, which nobody goes looking for and which therefore
+// has to stay on the chip that reports it.
+describe('SettingsPage — disconnecting from a daemon', () => {
+  const DAEMON = 'http://127.0.0.1:3099'
+
+  function renderConnections(onDisconnected = vi.fn()) {
+    render(
+      <MemoryRouter initialEntries={['/settings/connections']}>
+        <SettingsPage daemon={{ baseUrl: DAEMON, token: null }} onDisconnected={onDisconnected} />
+      </MemoryRouter>,
+    )
+    return onDisconnected
+  }
+
+  it('offers the action, and says what it does NOT do', async () => {
+    renderConnections()
+    const desktop = screen.getByTestId('settings-desktop')
+    const button = await within(desktop).findByTestId('settings-disconnect')
+    expect(button).toBeTruthy()
+    // "Disconnect" reads like a destructive word, so the copy has to deny the
+    // destruction it implies.
+    const section = button.closest('section')
+    expect(section?.textContent).toMatch(/stays on the daemon|not deleted/i)
+    expect(section?.textContent).toMatch(/not.*(unpair|revoke)|pairing is not revoked/i)
+  })
+
+  it('records the dismissal so discovery does not bring it straight back', async () => {
+    // The default port range is rescanned on every visit, so forgetting alone
+    // would return this daemon and make the action read as a no-op.
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: { ...current.storage, localDaemonBaseUrl: DAEMON, knownDaemonBaseUrls: [DAEMON] },
+    }))
+    // Asserted rather than assumed: a seed that failed the store's own
+    // validation would make every assertion below pass vacuously.
+    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(DAEMON)
+
+    const onDisconnected = renderConnections()
+    const desktop = screen.getByTestId('settings-desktop')
+    fireEvent.click(await within(desktop).findByTestId('settings-disconnect'))
+
+    const storage = createUserSettingsStore().load().storage
+    expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON)
+    expect(storage.knownDaemonBaseUrls ?? []).not.toContain(DAEMON)
+    // App.tsx reads localDaemonBaseUrl to decide a load is daemon-backed, so
+    // leaving it set reconnects on the next visit and "this browser stops
+    // using it" becomes false the moment the user reloads.
+    expect(storage.localDaemonBaseUrl).toBeUndefined()
+    expect(onDisconnected).toHaveBeenCalledTimes(1)
+  })
+
+  it('shows nothing to disconnect from when no daemon is connected', () => {
+    render(
+      <MemoryRouter initialEntries={['/settings/connections']}>
+        <SettingsPage />
+      </MemoryRouter>,
+    )
+    expect(screen.queryByTestId('settings-disconnect')).toBeNull()
   })
 })

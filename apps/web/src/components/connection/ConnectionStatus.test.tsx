@@ -2,33 +2,37 @@
 // connection story collapses from standing banners into ONE header chip.
 // The chip is the always-visible state signal; everything sentence-shaped
 // (explanation, data location, recovery actions) lives in its popover.
-import { cleanup, fireEvent, render, screen } from '@testing-library/react'
+import { cleanup, fireEvent, render as rtlRender, screen } from '@testing-library/react'
+import type { ReactElement } from 'react'
+import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { ConnectionStatus } from './ConnectionStatus.js'
+
+// The synced popover links into Settings, so the chip needs the router it
+// has in production.
+function render(ui: ReactElement, options?: Parameters<typeof rtlRender>[1]) {
+  return rtlRender(<MemoryRouter>{ui}</MemoryRouter>, options)
+}
 
 afterEach(cleanup)
 
 describe('ConnectionStatus chip', () => {
-  it('offers a way out while sync is on, and says what it does not do', () => {
-    // Connected was the one state with no exit: every other state offers a
-    // next step, so a user who picked the wrong daemon had to clear storage.
-    const onDisconnect = vi.fn()
-    render(
-      <ConnectionStatus
-        state="synced"
-        daemonBaseUrl="http://127.0.0.1:3099"
-        onDisconnect={onDisconnect}
-      />,
-      { container: document.body },
-    )
+  // Management belongs in Settings, recovery belongs here. Disconnecting is
+  // something you go looking for with an intent; sync dropping is not, and
+  // sending someone to Settings mid-failure adds a step at the worst moment.
+  it('carries no management action while sync is on — that lives in Settings', () => {
+    render(<ConnectionStatus state="synced" daemonBaseUrl="http://127.0.0.1:3099" />, {
+      container: document.body,
+    })
     fireEvent.click(screen.getByTestId('connection-chip'))
 
     const popover = screen.getByTestId('connection-popover')
-    // Disconnecting stops using this daemon here; it neither unpairs nor
-    // deletes anything on the daemon, and the copy has to say so.
-    expect(popover.textContent).toMatch(/stays on the daemon|not deleted/i)
-    fireEvent.click(screen.getByTestId('connection-disconnect'))
-    expect(onDisconnect).toHaveBeenCalledTimes(1)
+    expect(screen.queryByTestId('connection-disconnect')).toBeNull()
+    // It still says where the data is, and points at where the action lives.
+    expect(popover.textContent).toMatch(/127\.0\.0\.1:3099/)
+    expect(screen.getByRole('link', { name: /settings/i }).getAttribute('href')).toBe(
+      '/settings/connections',
+    )
   })
 
   it('explains the reconnecting state instead of opening an empty popover', () => {
@@ -52,7 +56,7 @@ describe('ConnectionStatus chip', () => {
     expect(chip).toBeTruthy()
     // No standing sentence copy outside the popover: the actual popover
     // explanation must not be rendered until the chip is opened.
-    expect(screen.queryByText(/changes are saved to your local daemon/i)).toBeNull()
+    expect(screen.queryByText(/changes are saved to the daemon on this machine/i)).toBeNull()
     expect(screen.queryByText(/live sync is on/i)).toBeNull()
 
     fireEvent.click(chip)
@@ -60,28 +64,24 @@ describe('ConnectionStatus chip', () => {
     expect(screen.getByText(/127\.0\.0\.1:3099/)).toBeTruthy()
   })
 
-  it('local state explains browser-only storage and hosts extra content (daemon detection)', async () => {
+  it('browser state explains browser-only storage and hosts extra content (daemon detection)', async () => {
     render(
-      <ConnectionStatus state="local">
+      <ConnectionStatus state="browser">
         <button type="button">Use here</button>
       </ConnectionStatus>,
     )
 
-    fireEvent.click(screen.getByRole('button', { name: /local/i }))
-    expect(await screen.findByText(/only in this browser/i)).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: /browser/i }))
+    expect(await screen.findByText(/other browsers cannot see them/i)).toBeTruthy()
     // The slot for daemon-detection / capability content renders inside.
     expect(screen.getByRole('button', { name: 'Use here' })).toBeTruthy()
   })
 
   it('sync-off state carries attention styling and BOTH recovery actions', async () => {
     const onRepair = vi.fn()
-    const onContinueBrowserLocal = vi.fn()
+    const onWorkInBrowser = vi.fn()
     render(
-      <ConnectionStatus
-        state="sync-off"
-        onRepair={onRepair}
-        onContinueBrowserLocal={onContinueBrowserLocal}
-      />,
+      <ConnectionStatus state="sync-off" onRepair={onRepair} onWorkInBrowser={onWorkInBrowser} />,
     )
 
     const chip = screen.getByRole('button', { name: /sync off/i })
@@ -92,8 +92,8 @@ describe('ConnectionStatus chip', () => {
     // ...and offers both ways forward.
     fireEvent.click(screen.getByRole('button', { name: /re-pair/i }))
     expect(onRepair).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('button', { name: /continue in browser-local/i }))
-    expect(onContinueBrowserLocal).toHaveBeenCalledTimes(1)
+    fireEvent.click(screen.getByRole('button', { name: /work in this browser instead/i }))
+    expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
 
   it('sync-off announces itself to assistive tech without a visual banner', () => {

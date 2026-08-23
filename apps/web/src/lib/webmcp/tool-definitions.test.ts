@@ -137,7 +137,7 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
   it('get-app-context: rejects a canvas.kind that does not match its const, in both directions', () => {
     const wrongConst = {
       provider: { mode: 'daemon' },
-      canvas: { kind: 'browser-local', workspaceId: 'ws1', path: 'c1' },
+      canvas: { kind: 'browser', workspaceId: 'ws1', path: 'c1' },
     }
 
     expect(getAppContextResultSchema.safeParse(wrongConst).success).toBe(false)
@@ -156,7 +156,7 @@ describe('WebMCP result JSON-Schema literals agree with the Zod schemas', () => 
 // zod-to-json-schema dependency.
 const daemonCanvasArb = fc.record(
   {
-    kind: fc.constantFrom('daemon', 'browser-local', 'other'),
+    kind: fc.constantFrom('daemon', 'browser', 'other'),
     workspaceId: fc.oneof(fc.string(), fc.constant(undefined)),
     path: fc.oneof(fc.string(), fc.constant(undefined)),
     documentId: fc.oneof(fc.string(), fc.constant(undefined)),
@@ -167,7 +167,7 @@ const daemonCanvasArb = fc.record(
 const appContextPayloadArb = fc.record(
   {
     provider: fc.record(
-      { mode: fc.constantFrom('daemon', 'browser-local', 'other') },
+      { mode: fc.constantFrom('daemon', 'browser', 'other') },
       { requiredKeys: [] },
     ),
     canvas: fc.oneof(fc.constant(null), daemonCanvasArb),

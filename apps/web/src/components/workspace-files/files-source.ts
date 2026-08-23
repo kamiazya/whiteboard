@@ -86,6 +86,26 @@ export interface WorkspaceFilesSource {
 export interface DocumentSearchHit {
   readonly document: WorkspaceDocumentEntry
   readonly contexts: readonly string[]
+  /**
+   * Where this document sat in the KEYWORD ranking, 1-based, or absent when
+   * keywords never matched it.
+   *
+   * Absent is the case worth having: it says there is nothing in `contexts`
+   * to highlight, which no reader can infer from the excerpt's shape. Local
+   * mode has no embedder, so every hit it produces carries one.
+   *
+   * 1-based deliberately — a rank of 0 is falsy, and `if (hit.lexicalRank)`
+   * would read the top hit as no hit.
+   */
+  readonly lexicalRank?: number
+  /**
+   * Where this document sat in the semantic ranking, 1-based, or absent when
+   * no embedder was configured. Reported rather than folded into a "matched
+   * by meaning" label: every embedded document appears in that ranking, so
+   * presence alone says nothing, and the threshold that would make it mean
+   * something belongs to whoever displays the results.
+   */
+  readonly semanticRank?: number
 }
 
 export class WorkspaceMissingError extends Error {

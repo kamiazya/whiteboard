@@ -30,6 +30,18 @@ const plain = definePlugin({
         weight: z.number().optional(),
       }),
     }),
+    // A discriminated union with no registered editor and no declared spec:
+    // the derived variants form is what this must fall back to.
+    defineFacet({
+      name: 'mark',
+      displayName: 'Mark',
+      version: 'v0',
+      targets: ['node'],
+      schema: z.union([
+        z.object({ kind: z.literal('icon'), name: z.string() }),
+        z.object({ kind: z.literal('emoji'), char: z.string() }),
+      ]),
+    }),
   ],
 })
 const registry = createFacetRegistry([...bundledPlugins, plain])
@@ -101,19 +113,19 @@ describe('control kinds the derived form emits', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'visual.symbol/v0': { kind: 'icon', name: 'star' } })}
+        node={node({ 'planning.mark/v0': { kind: 'icon', name: 'star' } })}
         registry={registry}
         onWrite={onWrite}
       />,
     )
     // Switching arms must not carry the previous arm's field into the
     // payload — `name` belongs to icon, `char` to emoji.
-    fireEvent.change(screen.getByLabelText('Symbol Kind'), {
+    fireEvent.change(screen.getByLabelText('Mark Kind'), {
       target: { value: 'emoji' },
     })
-    fireEvent.change(screen.getByLabelText('Symbol Char'), { target: { value: '⭐' } })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Symbol' }))
-    expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'emoji', char: '⭐' })
+    fireEvent.change(screen.getByLabelText('Mark Char'), { target: { value: '⭐' } })
+    fireEvent.click(screen.getByRole('button', { name: 'Save Mark' }))
+    expect(onWrite).toHaveBeenCalledWith('planning.mark/v0', { kind: 'emoji', char: '⭐' })
   })
 
   it('a toggle writes a boolean and a number control writes a number', () => {
@@ -184,18 +196,18 @@ describe('a draft never outlives what it was seeded from', () => {
     const onWrite = vi.fn()
     render(
       <FacetFormPanel
-        node={node({ 'visual.symbol/v0': { kind: 'icon', name: 'star' } })}
+        node={node({ 'planning.mark/v0': { kind: 'icon', name: 'star' } })}
         registry={registry}
         onWrite={onWrite}
       />,
     )
-    fireEvent.change(screen.getByLabelText('Symbol Kind'), {
+    fireEvent.change(screen.getByLabelText('Mark Kind'), {
       target: { value: 'emoji' },
     })
-    fireEvent.change(screen.getByLabelText('Symbol Char'), {
+    fireEvent.change(screen.getByLabelText('Mark Char'), {
       target: { value: '⭐' },
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Save Symbol' }))
+    fireEvent.click(screen.getByRole('button', { name: 'Save Mark' }))
     // `name` belonged to the icon arm and must not ride along: a schema
     // that passes unknown keys through would otherwise store it.
     const [, payload] = onWrite.mock.calls[0] as [string, Record<string, unknown>]
@@ -280,4 +292,33 @@ it('does not print a field label that repeats the facet name', () => {
   expect(screen.getAllByText('Shape')).toHaveLength(1)
   // The control still answers to that name.
   expect(screen.getByLabelText('Shape')).not.toBeNull()
+})
+
+describe('a registered editor replaces the derived form', () => {
+  it('renders the badge picker for visual.symbol, and writes through the registry', () => {
+    const onWrite = vi.fn()
+    render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} />)
+    // The picker that used to live in the context menu now lives here, so
+    // the facet has one face instead of two.
+    fireEvent.click(screen.getByLabelText('Emoji ⭐'))
+    expect(onWrite).toHaveBeenCalledWith('visual.symbol/v0', { kind: 'emoji', char: '⭐' })
+    // And the derived variants form is NOT what got rendered.
+    expect(screen.queryByLabelText('Symbol Kind')).toBeNull()
+  })
+
+  it('cannot store what the facet would refuse', () => {
+    const onWrite = vi.fn()
+    const editors = {
+      'visual.symbol/v0': ({ write }: { write: (p: unknown) => void }) => (
+        <button type="button" onClick={() => write({ kind: 'emoji', char: 'too many' })}>
+          bad
+        </button>
+      ),
+    }
+    render(<FacetFormPanel node={node()} registry={registry} onWrite={onWrite} editors={editors} />)
+    fireEvent.click(screen.getByRole('button', { name: 'bad' }))
+    // `char` is a single grapheme. A hand-written editor gets no shorter
+    // path to storage than a declared one.
+    expect(onWrite).not.toHaveBeenCalled()
+  })
 })
