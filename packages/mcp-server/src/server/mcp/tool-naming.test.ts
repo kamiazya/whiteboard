@@ -30,6 +30,14 @@ const ENTITIES = [
   // this one talks to the daemon's own WebSocket clients.
   'viewport',
   'version',
+  // ADR-0009's own table stops at the nouns a document is made of, because
+  // every tool it renamed acted on ONE document. The workspace was already
+  // the entity that owns placement and naming (`vocabulary.md`), it simply
+  // had no tool of its own until a batch needed a subject: `wb_workspace_edit`
+  // applies an ordered list of operations to the tree, not to any one
+  // document in it, so `document` would be the wrong noun rather than a
+  // shorter one.
+  'workspace',
 ] as const
 
 /**

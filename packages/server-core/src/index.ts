@@ -144,3 +144,10 @@ export {
   versionSaveInputSchema,
   versionSaveOutputSchema,
 } from './tools/version-save.js'
+export type { WorkspaceEditInput, WorkspaceEditOutput } from './tools/workspace-edit.js'
+export {
+  createWorkspaceEditTool,
+  WorkspaceEditError,
+  workspaceEditInputSchema,
+  workspaceEditOutputSchema,
+} from './tools/workspace-edit.js'
