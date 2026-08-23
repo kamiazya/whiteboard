@@ -21,6 +21,34 @@ gives it one.
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+## OKF frontmatter this server does not model
+
+OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))
+requires exactly one frontmatter field, `type`, and leaves producers free to add
+any others. This server gives meaning to four root keys — `type`, `title`,
+`tags`, `view` — plus its own `facets` extension bucket.
+
+**Every other root key is preserved verbatim.** Write a document through
+`wb_document_set` and read it back with `wb_document_get`, and keys this server
+has no model for come back at the root they were written at, unchanged. That
+covers OKF v0.2's trust, provenance and lifecycle families — `sources`,
+`usage_window`, `generated`, `verified`, `status`, `stale_after` — and the
+Attested Computation keys `runtime`, `parameters`, `computation`, `executor`
+and `attester`, none of which this server interprets.
+
+Two consequences worth knowing:
+
+- Preserved keys are emitted in lexicographic order, not authoring order. The
+  same normalisation already applies to `facets`.
+- A preserved value must be representable in YAML. `NaN`, `Infinity` and
+  `undefined` are refused with a typed error rather than written as a corrupt
+  document.
+
+Values are not validated against the OKF spec: a malformed `verified` block is
+carried through as faithfully as a well-formed one, because a consumer that
+rejects a document for an unrecognized field is exactly what OKF's conformance
+section forbids.
+
 ## The `x-whiteboard` extension contract
 
 Extended JSON Canvas output is standard JSON Canvas 1.0 plus **exactly one**

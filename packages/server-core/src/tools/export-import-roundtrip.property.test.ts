@@ -2,6 +2,7 @@ import { serializeOkf } from '@kamiazya/whiteboard-codec'
 import {
   coreFacetsArbitrary,
   extensionFacetsArbitrary,
+  facetsRawArbitrary,
 } from '@kamiazya/whiteboard-model/test-utils'
 import { describe, expect } from 'vitest'
 import {
@@ -57,6 +58,13 @@ function containsProtoKey(value: unknown): boolean {
 // yaml-safe.ts) — jsonValue() already excludes undefined/NaN/bigint/
 // function/symbol, so extensionFacetsArbitrary is already a yaml-safe
 // generator; no separate "yaml-safe" arbitrary is needed here.
+//
+// `facetsRaw` holds the root frontmatter keys this codebase does not model —
+// the OKF v0.2 families (`sources`, `generated`, `verified`, `status`,
+// `stale_after`) among them. Preserving them end to end is what makes a
+// document written elsewhere survive a whiteboard read-edit-write, so the
+// property covers the whole chain (parse -> Loro store -> read -> serialize)
+// rather than only codec's own round trip.
 const okfDocumentArbitrary = fc
   .tuple(
     coreFacetsArbitrary,
@@ -67,9 +75,16 @@ const okfDocumentArbitrary = fc
           facets === undefined || (!containsNegativeZero(facets) && !containsProtoKey(facets)),
       ),
     fc.string({ maxLength: 200 }),
+    fc
+      .option(facetsRawArbitrary, { nil: undefined })
+      .filter((raw) => raw === undefined || !containsNegativeZero(raw)),
   )
-  .map(([core, facets, body]) => ({
-    frontmatter: facets === undefined ? core : { ...core, facets },
+  .map(([core, facets, body, facetsRaw]) => ({
+    frontmatter: {
+      ...core,
+      ...(facets === undefined ? {} : { facets }),
+      ...(facetsRaw === undefined ? {} : { facetsRaw }),
+    },
     body,
   }))
 
@@ -113,6 +128,14 @@ describe('wb_document_set -> the OKF exporter round-trip property', () => {
       expect(result.frontmatter.view).toBe(doc.frontmatter.view)
       const expectedFacets = 'facets' in doc.frontmatter ? doc.frontmatter.facets : {}
       expect(result.frontmatter.facets).toEqual(expectedFacets)
+      // An empty bucket contributes no root keys, so nothing distinguishes it
+      // on the way back from having had none.
+      const submittedRaw = doc.frontmatter.facetsRaw
+      const expectedRaw =
+        submittedRaw === undefined || Object.keys(submittedRaw).length === 0
+          ? undefined
+          : submittedRaw
+      expect(result.frontmatter.facetsRaw).toEqual(expectedRaw)
       expect(result.markdown).toContain(doc.body)
     },
   )

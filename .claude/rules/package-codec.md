@@ -57,6 +57,16 @@ guard applies to composition roots), so this note is the boundary's only documen
   order is not preserved. Facet values are validated against `yamlSafeValueSchema` before emission;
   a non-yaml-safe value (undefined/NaN/Infinity/bigint/function/symbol/cyclic) is a typed error,
   not a corrupt YAML file.
+- Root frontmatter keys this codebase does not model are PRESERVED, not dropped (OKF §4.1). `parseOkf`
+  routes every non-reserved root key into `facetsRaw` and `serializeOkf` spreads them back at the
+  root, in the same canonical key order as `facets` — the bucket itself is never emitted as a
+  `facetsRaw:` key, which OKF gives no meaning to. This is what carries OKF v0.2's `sources` /
+  `generated` / `verified` / `status` / `stale_after` / computation families through a whiteboard
+  read-edit-write without modelling any of them. `RESERVED_ROOT_KEYS` (model) is the single
+  definition of what is not free to preserve; `facetsRaw` is deliberately absent from it, so a
+  document carrying a literal root `facetsRaw:` round-trips like any other unknown key.
+  A plain `z.object` parse silently strips unknown keys, so the routing step is load-bearing and
+  both halves are mutation-checked by the round-trip properties in codec and server-core.
 - Strict JSON Canvas degradation is ONE uniform rule: drop the entire `x-whiteboard` key from every
   node. No per-kind special casing. Extended mode is lossless (round-trip property).
 - The extension contract — `x-whiteboard` is the only non-standard key ever emitted, foreign keys

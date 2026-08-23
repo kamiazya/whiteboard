@@ -872,6 +872,11 @@ async function main() {
     'This edits a JSON Canvas',
   )
 
+  // `description`, `status` and `generated` are OKF root keys this server does
+  // not model. They ride along so the round trip below proves the preservation
+  // rule at runtime: the MCP SDK validates structuredContent against
+  // outputSchema, so a bucket the schema does not admit fails here and only
+  // here.
   const importMarkdown = [
     '---',
     'type: issue',
@@ -879,6 +884,9 @@ async function main() {
     'tags:',
     '  - smoke',
     '  - e2e',
+    'description: An issue written by the e2e smoke.',
+    'status: stable',
+    'generated: { by: "process:mcp-e2e-smoke", at: 2026-06-20T22:53:05Z }',
     'facets:',
     '  example.sample/v1:',
     '    status: open',
@@ -943,6 +951,22 @@ async function main() {
       `canvas_export_okf core facets mismatch after import: ${JSON.stringify(exported.frontmatter)}`,
     )
   }
+  const preserved = exported.frontmatter.facetsRaw
+  if (
+    preserved?.description !== 'An issue written by the e2e smoke.' ||
+    preserved?.status !== 'stable' ||
+    preserved?.generated?.by !== 'process:mcp-e2e-smoke'
+  ) {
+    throw new Error(
+      `unmodelled OKF root keys were not preserved: ${JSON.stringify(exported.frontmatter)}`,
+    )
+  }
+  if (!exported.content.includes('\nstatus: stable\n') || exported.content.includes('facetsRaw:')) {
+    throw new Error(
+      `preserved OKF keys were not re-emitted at the frontmatter root: ${exported.content}`,
+    )
+  }
+  console.log('[e2e] wb_document_get → unmodelled OKF root keys preserved at the root')
   console.log('[e2e] wb_document_get → round-trip verified (core facets + extension facets)')
 
   console.log('\n[e2e] ALL OK')
