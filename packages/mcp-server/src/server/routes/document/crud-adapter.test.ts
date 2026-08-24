@@ -179,6 +179,97 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 })
 
+describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
+  async function depsRecordingMove(): Promise<{
+    deps: Awaited<ReturnType<typeof resolveServerDeps>>
+    moved: string[]
+  }> {
+    await prepareDataDir(tmp.dir)
+    const db = await getDb(tmp.dir)
+    const deps = resolveServerDeps(
+      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
+    )
+    const moved: string[] = []
+    const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
+    index.moveDocument = async (input) => {
+      moved.push(`${input.from}->${input.to}`)
+      await Object.getPrototypeOf(index).moveDocument.call(index, input)
+    }
+    return { deps: { ...deps, documentIndex: index }, moved }
+  }
+
+  it('renames through the injected operation rather than its own sequence', async () => {
+    const { deps, moved } = await depsRecordingMove()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'plan', kind: 'spatial' })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents/plan/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'archive' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ path: 'archive' })
+    expect(moved).toEqual(['plan->archive'])
+  })
+
+  it('answers 404 for a path that names nothing', async () => {
+    const { deps, moved } = await depsRecordingMove()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents/absent/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'elsewhere' }),
+    })
+
+    expect(res.status).toBe(404)
+    expect(moved).toEqual(['absent->elsewhere'])
+  })
+
+  // The collision is on a PRODUCED path, not the one the caller named: moving
+  // `plan` to `archive` collides because `archive/child` is taken, while
+  // `archive` itself is free. Naming `archive` in the error would send the
+  // caller to retry the one thing that was never the problem, so the message
+  // the operation raised is forwarded rather than rebuilt.
+  it('forwards the produced colliding path in the 409, not the requested one', async () => {
+    const { deps } = await depsRecordingMove()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    for (const path of ['plan', 'plan/child', 'archive/child']) {
+      await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path, kind: 'spatial' })
+    }
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents/plan/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'archive' }),
+    })
+
+    expect(res.status).toBe(409)
+    const body = (await res.json()) as { title?: string }
+    expect(body.title).toContain('archive/child')
+  })
+
+  it('answers 400 for a move into the document own subtree', async () => {
+    const { deps } = await depsRecordingMove()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'plan', kind: 'spatial' })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents/plan/path', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'plan/inside' }),
+    })
+
+    expect(res.status).toBe(400)
+  })
+})
+
 describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   beforeEach(async () => {
     await saveDocument('ws-1', 'doomed', new LoroDoc())
