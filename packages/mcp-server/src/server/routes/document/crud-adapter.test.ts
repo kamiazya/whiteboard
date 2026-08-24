@@ -60,7 +60,7 @@ async function depsRecordingTeardown(): Promise<{
   return { deps, entered, cleaned }
 }
 
-async function depsRecordingCreate(): Promise<{
+async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   deps: Awaited<ReturnType<typeof resolveServerDeps>>
   created: string[]
 }> {
@@ -69,7 +69,7 @@ async function depsRecordingCreate(): Promise<{
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
-  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+  if (bootstrapWorkspace) await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
   const created: string[] = []
   const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
   index.createDocument = async (input) => {
@@ -97,6 +97,41 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     expect(res.status).toBe(200)
     expect(await res.json()).toEqual({ path: 'fresh' })
     expect(created).toEqual(['ws-1:fresh'])
+
+    // Reaching the injected index is necessary but not sufficient: a route
+    // calling `documentIndex.createDocument` directly would satisfy the line
+    // above and leave a placement with no document under it. Only the
+    // operation persists the bytes, so the snapshot is what says the whole
+    // operation ran rather than its first step.
+    const entry = await deps.documentIndex.resolveDocument({
+      workspaceId: 'ws-1',
+      path: 'fresh',
+    })
+    const snapshot = await deps.documentStore.loadSnapshot({
+      docRef: { kind: 'document', documentId: entry?.documentId ?? 'missing' },
+    })
+    expect(snapshot).not.toBeNull()
+  })
+
+  // The workspace bootstrap is this surface's own long-standing behaviour:
+  // `saveDocument` upserted the workspace row on the way past, so posting
+  // into one that does not exist yet has always worked here. The operation
+  // makes it an explicit flag, and a flag nothing exercises is a flag that
+  // gets dropped — removing `createWorkspace: true` left every other case in
+  // this file green.
+  it('creates the workspace on the way past, as this surface always has', async () => {
+    const { deps } = await depsRecordingCreate(false)
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'first-ever', kind: 'spatial' }),
+    })
+
+    expect(res.status).toBe(200)
+    const entries = await deps.documentIndex.listDocuments({ workspaceId: 'ws-1' })
+    expect(entries.map((e) => e.path)).toEqual(['first-ever'])
   })
 
   it('answers 409 for a path already taken', async () => {
