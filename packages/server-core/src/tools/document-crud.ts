@@ -153,22 +153,29 @@ export async function wbDocumentDelete(
   if (entry === null) {
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.documentId)
   }
-  // Before either delete: what the composition root has to clean up is only
-  // discoverable while the document is still whole (see DocumentTeardown).
-  const finalizeTeardown = await deps.documentTeardown.begin({
-    workspaceId: input.workspaceId,
-    documentId: entry.documentId,
-    path: entry.path,
-  })
-  // Placement first: the index refuses while documents sit below this one, so
-  // the bytes are only discarded once nothing can still be orphaned by it.
-  // That refusal throws past the finalizer, which is what keeps a refused
-  // delete from destroying anything.
-  await deps.documentIndex.deleteDocument({
-    workspaceId: input.workspaceId,
-    path: entry.path,
-  })
-  await deps.documentStore.deleteDoc({ docRef: { kind: 'document', documentId: entry.documentId } })
-  await finalizeTeardown()
-  return { deleted: true }
+  // Both deletes run inside the composition root's bracket: what it has to
+  // clean up is only discoverable while the document is still whole, and
+  // whatever it holds around the delete (the daemon holds its per-workspace
+  // write lock) has to cover both steps. See DocumentTeardown.
+  return await deps.documentTeardown.around(
+    {
+      workspaceId: input.workspaceId,
+      documentId: entry.documentId,
+      path: entry.path,
+    },
+    async () => {
+      // Placement first: the index refuses while documents sit below this
+      // one, so the bytes are only discarded once nothing can still be
+      // orphaned by it. That refusal throws past the bracket's cleanup,
+      // which is what keeps a refused delete from destroying anything.
+      await deps.documentIndex.deleteDocument({
+        workspaceId: input.workspaceId,
+        path: entry.path,
+      })
+      await deps.documentStore.deleteDoc({
+        docRef: { kind: 'document', documentId: entry.documentId },
+      })
+      return { deleted: true }
+    },
+  )
 }

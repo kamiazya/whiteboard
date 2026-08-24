@@ -356,17 +356,20 @@ describe('wbDocumentDelete document teardown seam', () => {
     return {
       events,
       teardown: {
-        async begin(input: { workspaceId: string; documentId: string; path: string }) {
-          events.push(`begin:${input.workspaceId}:${input.path}:${input.documentId}`)
-          return async () => {
-            events.push('finalize')
-          }
+        async around<T>(
+          input: { workspaceId: string; documentId: string; path: string },
+          deleteDocument: () => Promise<T>,
+        ) {
+          events.push(`enter:${input.workspaceId}:${input.path}:${input.documentId}`)
+          const result = await deleteDocument()
+          events.push('cleanup')
+          return result
         },
       },
     }
   }
 
-  it('begins teardown while the document still exists and finalizes after it is gone', async () => {
+  it('enters teardown while the document still exists and cleans up after it is gone', async () => {
     const deps = makeDeps()
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
@@ -379,37 +382,37 @@ describe('wbDocumentDelete document teardown seam', () => {
     const docRef = { kind: 'document', documentId: created.documentId } as const
 
     // Recorded from inside the seam, not asserted afterwards: whether the
-    // row was still there AT begin is the whole point — a version's
+    // row was still there ON ENTRY is the whole point — a version's
     // thumbnail is filed under a version id that cascades away with it.
     const index = deps.documentIndex
     const store = deps.documentStore
     deps.documentTeardown = {
-      async begin(input) {
+      async around(input, deleteDocument) {
         const stillIndexed = await index.resolveDocumentById({
           workspaceId: input.workspaceId,
           documentId: input.documentId,
         })
-        events.push(`begin:indexed=${stillIndexed !== null}`)
-        return async () => {
-          events.push(
-            `finalize:indexed=${
-              (await index.resolveDocumentById({
-                workspaceId: input.workspaceId,
-                documentId: input.documentId,
-              })) !== null
-            }`,
-          )
-          events.push(`finalize:snapshot=${(await store.loadSnapshot({ docRef })) !== null}`)
-        }
+        events.push(`enter:indexed=${stillIndexed !== null}`)
+        const result = await deleteDocument()
+        events.push(
+          `cleanup:indexed=${
+            (await index.resolveDocumentById({
+              workspaceId: input.workspaceId,
+              documentId: input.documentId,
+            })) !== null
+          }`,
+        )
+        events.push(`cleanup:snapshot=${(await store.loadSnapshot({ docRef })) !== null}`)
+        return result
       },
     }
 
     await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
 
     expect(events).toEqual([
-      'begin:indexed=true',
-      'finalize:indexed=false',
-      'finalize:snapshot=false',
+      'enter:indexed=true',
+      'cleanup:indexed=false',
+      'cleanup:snapshot=false',
     ])
   })
 
@@ -426,12 +429,13 @@ describe('wbDocumentDelete document teardown seam', () => {
 
     await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
 
-    expect(events).toEqual([`begin:ws-1:nested/doc-a:${created.documentId}`, 'finalize'])
+    expect(events).toEqual([`enter:ws-1:nested/doc-a:${created.documentId}`, 'cleanup'])
   })
 
   // A refused delete must not destroy anything. The index refuses while
-  // documents sit below this one, and that refusal happens AFTER begin.
-  it('does not finalize when the index refuses the delete', async () => {
+  // documents sit below this one, and that refusal happens INSIDE the
+  // bracket — it throws past the cleanup rather than being caught by it.
+  it('does not clean up when the index refuses the delete', async () => {
     const deps = makeDeps()
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
@@ -447,10 +451,10 @@ describe('wbDocumentDelete document teardown seam', () => {
       wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: parent.documentId }),
     ).rejects.toThrow(DocumentHasDescendantsError)
 
-    expect(events).not.toContain('finalize')
+    expect(events).not.toContain('cleanup')
   })
 
-  it('never begins teardown for a documentId that does not exist', async () => {
+  it('never enters teardown for a documentId that does not exist', async () => {
     const deps = makeDeps()
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
