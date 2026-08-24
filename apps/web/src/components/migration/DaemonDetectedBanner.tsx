@@ -147,19 +147,19 @@ export function DaemonDetectedBanner({
   // to be recomputed explicitly when we write to it — a useMemo keyed on the
   // store would keep serving pre-Forget values until a reload.
   const [storedTarget, setStoredTarget] = useState(() => {
-    const { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath } =
+    const { daemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath } =
       settingsStore.load().storage
-    return { localDaemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath }
+    return { daemonBaseUrl, lastConnectedWorkspaceId, lastConnectedPath }
   })
 
   // Trailing slashes would otherwise produce `http://host:3099//document/...`.
-  const baseUrl = (storedTarget.localDaemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL).replace(/\/+$/, '')
+  const baseUrl = (storedTarget.daemonBaseUrl ?? DEFAULT_DAEMON_BASE_URL).replace(/\/+$/, '')
 
   // Whether a reconnect target was ever actually persisted (as opposed to
   // baseUrl above, which always resolves to DEFAULT_DAEMON_BASE_URL even with
   // nothing stored) — this gates whether "Forget this daemon" has anything
   // to forget.
-  const hasStoredTarget = storedTarget.localDaemonBaseUrl !== undefined
+  const hasStoredTarget = storedTarget.daemonBaseUrl !== undefined
 
   // Since R3 the daemon serves the canonical apps/web build at its own
   // origin with no pairing needed at all, so the primary CTA is a plain
@@ -177,7 +177,7 @@ export function DaemonDetectedBanner({
   // that daemon's own consent page — earns the app's trust label. Everything
   // else is labelled unverified. This is presentation-level honesty, not a
   // security boundary: the durable fix is daemon->browser mutual auth.
-  const isPairedTarget = detectedBaseUrl === storedTarget.localDaemonBaseUrl
+  const isPairedTarget = detectedBaseUrl === storedTarget.daemonBaseUrl
 
   const detectedCount = found?.length ?? 0
   useEffect(() => {
@@ -355,13 +355,13 @@ export function DaemonDetectedBanner({
       ...current,
       storage: {
         ...current.storage,
-        localDaemonBaseUrl: undefined,
+        daemonBaseUrl: undefined,
         lastConnectedWorkspaceId: undefined,
         lastConnectedPath: undefined,
       },
     }))
     setStoredTarget({
-      localDaemonBaseUrl: undefined,
+      daemonBaseUrl: undefined,
       lastConnectedWorkspaceId: undefined,
       lastConnectedPath: undefined,
     })

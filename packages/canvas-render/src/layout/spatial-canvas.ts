@@ -38,7 +38,12 @@ import {
   resolveNodeShape,
   resolveNodeSymbol,
   resolveNodeTextAlign,
+  VISUAL_SHAPE_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
+
+/** The namespace `visual.shape/v0` composes its ids under. */
+const VISUAL_NAMESPACE = VISUAL_SHAPE_KEY.slice(0, VISUAL_SHAPE_KEY.indexOf('.'))
+
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
@@ -66,7 +71,7 @@ import {
   layoutMdastBlocks,
   type MdastLayoutOptions,
 } from './nodes/mdast-blocks.js'
-import { type NodeOutlineKind, outlineContentBox, outlineEntryPoint } from './nodes/node-outline.js'
+import { outlineContentBox, outlineEntryPoint, type ShapeTable } from './nodes/node-outline.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { fitToWidth } from './nodes/truncate.js'
 import { scaleScene } from './scale-scene.js'
@@ -145,7 +150,18 @@ export interface SpatialLayoutOptions {
    * reason as `ResolvedReference`: it must cross `postMessage` so worker
    * layout keeps working when outlines are wired.
    */
-  readonly nodeOutlines?: Readonly<Record<string, NodeOutlineKind>>
+  readonly nodeOutlines?: Readonly<Record<string, string>>
+  /**
+   * Silhouettes by namespaced id, merged OVER the built-in table — the same
+   * shape as `SvgDocumentOptions.icons`. The backend must be handed the same
+   * table, or a contributed shape lays out correctly and paints as a rect.
+   */
+  readonly shapes?: ShapeTable
+  /**
+   * Facet keys, besides the bundled `visual.shape/v0`, that declare a node's
+   * shape. Each key's namespace plus its payload's `kind` composes the id.
+   */
+  readonly shapeFacets?: readonly string[]
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
@@ -380,7 +396,7 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
 function nodeContentBounds(node: SpatialNode, options: ResolvedLayoutOptions): BoundingBox {
   const box = { x: node.x, y: node.y, w: node.width, h: node.height }
   if (!options.fitToBox) return box
-  return outlineContentBox(options.nodeOutlines?.[node.id], box)
+  return outlineContentBox(options.nodeOutlines?.[node.id], box, options.shapes)
 }
 
 function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number {
@@ -642,7 +658,7 @@ function composeFileEmbed(
     // spreading the parent's map both drops the child's facets and leaks a
     // same-id root node's shape into the embedded canvas. Explicit per-node
     // overrides are root-keyed by contract, so they do not descend.
-    nodeOutlines: resolveNodeOutlines(child, undefined),
+    nodeOutlines: resolveNodeOutlines(child, undefined, options.shapeFacets),
     embedPath: new Set([...options.embedPath, node.file]),
     embedDepth: options.embedDepth + 1,
   })
@@ -991,6 +1007,7 @@ function composeEdge(
     canvas,
     edge,
     options.nodeOutlines,
+    options.shapes,
   )
   const appearance = options.appearance.resolveEdge(edge)
   return appearance === undefined ? routed : { ...routed, appearance }
@@ -1009,7 +1026,8 @@ function pullEdgeOntoOutlines(
   routed: ResolvedEdgeNode,
   canvas: SpatialCanvas,
   edge: CanvasEdge,
-  nodeOutlines: Readonly<Record<string, NodeOutlineKind>> | undefined,
+  nodeOutlines: Readonly<Record<string, string>> | undefined,
+  shapes: ShapeTable | undefined,
 ): ResolvedEdgeNode {
   if (nodeOutlines === undefined || routed.path.length < 2) return routed
   const boxOf = (id: string): BoundingBox | undefined => {
@@ -1031,7 +1049,7 @@ function pullEdgeOntoOutlines(
     const last = path[path.length - 1]
     const inward = path[path.length - 2]
     if (last !== undefined && inward !== undefined) {
-      const pulled = outlineEntryPoint(toKind, toBox, inward, last)
+      const pulled = outlineEntryPoint(toKind, toBox, inward, last, shapes)
       if (moved(pulled, last)) path = [...path.slice(0, -1), pulled]
     }
   }
@@ -1041,7 +1059,7 @@ function pullEdgeOntoOutlines(
     const first = path[0]
     const inward = path[1]
     if (first !== undefined && inward !== undefined) {
-      const pulled = outlineEntryPoint(fromKind, fromBox, inward, first)
+      const pulled = outlineEntryPoint(fromKind, fromBox, inward, first, shapes)
       if (moved(pulled, first)) path = [pulled, ...path.slice(1)]
     }
   }
@@ -1111,7 +1129,7 @@ export function layoutSpatialCanvasWithAnchors(
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
-    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines),
+    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, options.shapeFacets),
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
@@ -1283,25 +1301,53 @@ export function layoutSpatialEdges(
 }
 
 /**
- * The effective silhouette per node: the visual.shape/v0 facet is the
- * DEFAULT source (same rule as edge style — resolution lives in the shared
- * renderer so every surface draws the same picture), and an explicit
- * `nodeOutlines` entry overrides the facet for that node. The facet enum
- * and NodeOutlineKind are the same vocabulary; the assignment below is the
- * compile-time check, and a test pins it.
+ * The effective silhouette per node, as a NAMESPACED shape id.
+ *
+ * The id is composed, never stored: a facet key supplies the namespace and
+ * its payload the bare kind, so `visual.shape/v0` holding `diamond` resolves
+ * `visual.diamond`. A document therefore cannot name another plugin's
+ * geometry by writing an id into a payload — the payload never carries one.
+ *
+ * An explicit `nodeOutlines` entry still overrides the facet for that node,
+ * and is already a full id.
+ *
+ * ponytail: the bundled facet goes through `resolveNodeShape`, which applies
+ * the engine's compat chain and schema before yielding a kind, while a
+ * caller-declared facet is read raw and gated only by whether its composed id
+ * is in the shape table. Both readers accept the same set today. The
+ * asymmetry disappears when a plugin supplies its own validated reader
+ * alongside its shapes, which is the increment that also lets this package
+ * stop importing `plugin-visual`.
  */
 function resolveNodeOutlines(
   canvas: SpatialCanvas,
-  explicit: Readonly<Record<string, NodeOutlineKind>> | undefined,
-): Readonly<Record<string, NodeOutlineKind>> | undefined {
-  let fromFacets: Record<string, NodeOutlineKind> | undefined
+  explicit: Readonly<Record<string, string>> | undefined,
+  shapeFacets: readonly string[] | undefined,
+): Readonly<Record<string, string>> | undefined {
+  let fromFacets: Record<string, string> | undefined
   for (const node of canvas.nodes) {
-    const kind: NodeOutlineKind | undefined = resolveNodeShape(node)
+    const kind = resolveNodeShape(node)
     if (kind !== undefined) {
       fromFacets ??= {}
-      fromFacets[node.id] = kind
+      fromFacets[node.id] = `${VISUAL_NAMESPACE}.${kind}`
+    }
+    for (const facetKey of shapeFacets ?? []) {
+      const composed = composeShapeId(node, facetKey)
+      if (composed === undefined) continue
+      fromFacets ??= {}
+      fromFacets[node.id] = composed
     }
   }
   if (fromFacets === undefined) return explicit
   return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }
+}
+
+/** The namespace of a facet key is everything before its first dot. */
+function composeShapeId(node: SpatialNode, facetKey: string): string | undefined {
+  const stored = node['x-whiteboard']?.facets?.[facetKey]
+  if (stored === null || typeof stored !== 'object') return undefined
+  const kind = (stored as { readonly kind?: unknown }).kind
+  if (typeof kind !== 'string' || kind === '') return undefined
+  const namespace = facetKey.slice(0, facetKey.indexOf('.'))
+  return namespace === '' ? undefined : `${namespace}.${kind}`
 }

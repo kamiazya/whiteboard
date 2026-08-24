@@ -179,7 +179,7 @@ describe('layoutSpatialCanvas', () => {
     const chrome = scene.nodes.find(
       (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
     )
-    expect(chrome?.shape).toBe('hexagon')
+    expect(chrome?.shape).toBe('visual.hexagon')
   })
 
   it('a shaped node lays its text inside the silhouette, never across the outline', () => {
@@ -187,7 +187,10 @@ describe('layoutSpatialCanvas', () => {
     // so rect-based placement puts the first line straight through an
     // ellipse's rim and a cylinder's lid. Every content corner must satisfy
     // the same containment the outline itself is drawn and hit-tested by.
+    // The loop value is the facet PAYLOAD, which is a bare kind; the id the
+    // outline is looked up by composes the namespace onto it.
     for (const kind of ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const) {
+      const shapeId = `visual.${kind}`
       const bbox = { x: 0, y: 0, w: 200, h: 100 }
       const shaped = {
         ...textNode({ id: 'a', x: 0, y: 0, width: 200, height: 100, text: 'inset me' }),
@@ -195,7 +198,7 @@ describe('layoutSpatialCanvas', () => {
       }
       const scene = layoutSpatialCanvas(canvas([shaped]), baseOptions())
       const content = scene.nodes.filter((n) => n.kind !== 'shape' && 'bbox' in n)
-      expect(content.length, kind).toBeGreaterThan(0)
+      expect(content.length, shapeId).toBeGreaterThan(0)
       for (const n of content) {
         if (!('bbox' in n)) continue
         const { x, y, w, h } = n.bbox
@@ -207,8 +210,8 @@ describe('layoutSpatialCanvas', () => {
         ]
         for (const corner of corners) {
           expect(
-            outlineContains(kind, bbox, corner),
-            `${kind} content corner ${JSON.stringify(corner)}`,
+            outlineContains(shapeId, bbox, corner),
+            `${shapeId} content corner ${JSON.stringify(corner)}`,
           ).toBe(true)
         }
       }
@@ -282,7 +285,7 @@ describe('layoutSpatialCanvas', () => {
       { x: badge.bbox.x + badge.bbox.w, y: badge.bbox.y + badge.bbox.h },
     ]
     for (const corner of corners) {
-      expect(outlineContains('ellipse', { x: 0, y: 0, w: 200, h: 100 }, corner)).toBe(true)
+      expect(outlineContains('visual.ellipse', { x: 0, y: 0, w: 200, h: 100 }, corner)).toBe(true)
     }
   })
 
@@ -341,12 +344,12 @@ describe('layoutSpatialCanvas', () => {
     }
     const scene = layoutSpatialCanvas(
       canvas([shaped]),
-      baseOptions({ nodeOutlines: { a: 'ellipse' } }),
+      baseOptions({ nodeOutlines: { a: 'visual.ellipse' } }),
     )
     const chrome = scene.nodes.find(
       (n): n is import('../scene-graph.js').ShapeSceneNode => n.kind === 'shape' && n.id === 'a',
     )
-    expect(chrome?.shape).toBe('ellipse')
+    expect(chrome?.shape).toBe('visual.ellipse')
   })
 
   it('routes by the visual.edges facet when the canvas carries one', () => {

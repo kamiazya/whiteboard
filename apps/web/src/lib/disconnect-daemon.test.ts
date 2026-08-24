@@ -11,9 +11,9 @@ beforeEach(() => localStorage.clear())
 describe('disconnectFromDaemon', () => {
   it('clears the stored target so the next load is not daemon-backed', () => {
     const store = createUserSettingsStore()
-    store.update((c) => ({ ...c, storage: { ...c.storage, localDaemonBaseUrl: A } }))
+    store.update((c) => ({ ...c, storage: { ...c.storage, daemonBaseUrl: A } }))
     disconnectFromDaemon(store, A)
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBeUndefined()
+    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBeUndefined()
   })
 
   // Forgetting alone is not enough: the default port range is rescanned on
@@ -30,9 +30,9 @@ describe('disconnectFromDaemon', () => {
   // Another daemon's stored target is none of this call's business.
   it('leaves a different daemon connected', () => {
     const store = createUserSettingsStore()
-    store.update((c) => ({ ...c, storage: { ...c.storage, localDaemonBaseUrl: B } }))
+    store.update((c) => ({ ...c, storage: { ...c.storage, daemonBaseUrl: B } }))
     disconnectFromDaemon(store, A)
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(B)
+    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe(B)
   })
 
   it('is a skip-list, not an archive — bounded at five', () => {

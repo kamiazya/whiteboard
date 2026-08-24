@@ -36,7 +36,7 @@ hosted app as a PWA while online to keep an offline-capable editor.
 ## How detection works
 
 The web app probes `GET /api/runtime/ping` on the daemon's default loopback
-origin (`http://127.0.0.1:3099`, or a custom `localDaemonBaseUrl` from your
+origin (`http://127.0.0.1:3099`, or a custom `daemonBaseUrl` from your
 settings). That endpoint is unauthenticated and only confirms a daemon is
 listening — it does not grant access to any workspace or canvas data.
 

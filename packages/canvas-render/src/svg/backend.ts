@@ -7,7 +7,7 @@ import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
 import { roundedEdgeCorners } from '../layout/edges/edge-rounding.js'
-import { nodeOutline } from '../layout/nodes/node-outline.js'
+import { nodeOutline, type ShapeTable } from '../layout/nodes/node-outline.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
   Appearance,
@@ -236,14 +236,30 @@ function renderTextRun(run: TextRunNode): SvgChild {
  * layout bug this package must not crash on — it renders as nothing rather
  * than reaching `formatCoord`, which throws by contract.
  */
-function renderShape(node: ShapeSceneNode): SvgChild {
+/**
+ * The resolution inputs a render pass carries: tables merged over this
+ * package's built-in ones. One object rather than a positional argument each,
+ * because every one of them threads through the same eight recursive call
+ * sites and a second positional parameter is how the third gets forgotten.
+ */
+interface ResolveTables {
+  readonly icons?: IconTable
+  readonly shapes?: ShapeTable
+}
+
+function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
   if (!isFiniteBox(node.bbox)) return []
   // Non-rect silhouettes come from the shared decomposition (one producer
   // for drawing and hit-testing — layout/nodes/node-outline.ts); an absent
   // `shape` stays the historic rect byte-for-byte.
   if (node.shape !== undefined) {
-    const outline = nodeOutline(node.shape, node.bbox)
-    if (outline === null) return []
+    const outline = nodeOutline(node.shape, node.bbox, tables?.shapes)
+    // A null outline here can only mean the id resolves to nothing — the
+    // non-finite box is already handled above — so the node falls back to
+    // its rect. Drawing NOTHING was correct while ids came from a closed
+    // union and null meant a degenerate box; once a document can name a
+    // shape this build does not carry, it made the node disappear.
+    if (outline === null) return renderChromeRect(node)
     switch (outline.kind) {
       case 'ellipse':
         return el('ellipse', {
@@ -289,6 +305,12 @@ function renderShape(node: ShapeSceneNode): SvgChild {
       }
     }
   }
+  return renderChromeRect(node)
+}
+
+/** The historic rect, byte-for-byte — also what a node falls back to when its
+ *  shape id resolves to nothing. */
+function renderChromeRect(node: ShapeSceneNode): SvgChild {
   return el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,
@@ -296,12 +318,12 @@ function renderShape(node: ShapeSceneNode): SvgChild {
   })
 }
 
-function renderListItem(item: ListItemNode, icons?: IconTable): SvgChild {
+function renderListItem(item: ListItemNode, tables?: ResolveTables): SvgChild {
   const tx = item.bbox.x
   return el(
     'g',
     tx !== 0 ? { transform: `translate(${formatCoord(tx)},0)` } : undefined,
-    item.children.map((child) => renderNode(child, icons)),
+    item.children.map((child) => renderNode(child, tables)),
   )
 }
 
@@ -517,7 +539,7 @@ function lookupIcon(
   return Array.isArray(geometry) ? geometry : undefined
 }
 
-function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
+function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
   switch (node.kind) {
     case 'textRun':
       return renderTextRun(node)
@@ -529,7 +551,7 @@ function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
       return el(
         'g',
         undefined,
-        node.items.map((item) => renderListItem(item, icons)),
+        node.items.map((item) => renderListItem(item, tables)),
       )
     case 'codeBlock':
       return renderCodeBlock(node)
@@ -542,13 +564,13 @@ function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
       return el(
         'g',
         { ...appearanceAttrs(node.appearance), role: PRESENTATION },
-        node.children.map((child) => renderNode(child, icons)),
+        node.children.map((child) => renderNode(child, tables)),
       )
     case 'group':
       return el(
         'g',
         { role: PRESENTATION },
-        node.children.map((child) => renderNode(child, icons)),
+        node.children.map((child) => renderNode(child, tables)),
       )
     case 'thematicBreak':
       return el('rect', {
@@ -598,7 +620,7 @@ function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
       return el(
         'g',
         undefined,
-        node.children.map((child) => renderNode(child, icons)),
+        node.children.map((child) => renderNode(child, tables)),
       )
     case 'edge': {
       const appearance = appearanceAttrs(node.appearance)
@@ -663,10 +685,10 @@ function renderNode(node: SceneNode, icons?: IconTable): SvgChild {
       return defs.length > 0 ? withDefs(polyline, defs) : polyline
     }
     case 'shape':
-      return renderShape(node)
+      return renderShape(node, tables)
     case 'icon': {
       if (!isFiniteBox(node.bbox)) return []
-      const geometry = lookupIcon(node.icon, icons)
+      const geometry = lookupIcon(node.icon, tables?.icons)
       if (geometry === undefined) return []
       const id = `wb-icon-${idToken(node.icon)}`
       const def: SvgDef = {
@@ -768,6 +790,11 @@ export interface SvgDocumentOptions {
    *  vendored set (see `IconTable`). A resolution input, not document
    *  chrome — it does NOT activate the envelope. */
   readonly icons?: IconTable
+  /** Silhouettes by namespaced id, merged over the built-in table. The same
+   *  table layout was handed: layout uses it for the content box and edge
+   *  anchoring, this backend to draw. A resolution input, not document
+   *  chrome — it does NOT activate the envelope. */
+  readonly shapes?: ShapeTable
 }
 
 function hasEnvelopeOptions(
@@ -861,7 +888,7 @@ export function buildSvgDocumentParts(
   // load-bearing. Applied per top-level node: passes are group-local by
   // construction (see transform.ts).
   const body = scene.nodes
-    .map((node) => renderNode(node, options?.icons))
+    .map((node) => renderNode(node, { icons: options?.icons, shapes: options?.shapes }))
     .map((node) => applyOptimizationPasses(node))
   // Presence-only, exactly like an absent appearance attribute: a scene
   // declaring no definitions emits the same bytes it always has.

@@ -166,8 +166,8 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 1,
-        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        version: 2,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
       }),
@@ -195,8 +195,8 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 1,
-        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        version: 2,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
       }),
@@ -218,8 +218,8 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 1,
-        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        version: 2,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
       }),
@@ -520,7 +520,7 @@ describe('App reconnect-target persistence', () => {
     await screen.findByTestId('daemon-document-page')
 
     const saved = createUserSettingsStore().load()
-    expect(saved.storage.localDaemonBaseUrl).toBe('http://127.0.0.1:3099')
+    expect(saved.storage.daemonBaseUrl).toBe('http://127.0.0.1:3099')
     expect(saved.storage.lastConnectedWorkspaceId).toBe('w1')
     expect(saved.storage.lastConnectedPath).toBe('main')
   })
@@ -553,7 +553,7 @@ describe('App reconnect-target persistence', () => {
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBeUndefined()
+    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBeUndefined()
   })
 })
 
@@ -1107,15 +1107,15 @@ describe('App /settings routing', () => {
 
   it('passes the daemon from a session grant established via the silent-renewal seam', async () => {
     // Same mechanism as the "silent renewal" suite above: a stored
-    // localDaemonBaseUrl plus a 'paired' renewPairingToken result lands in
+    // daemonBaseUrl plus a 'paired' renewPairingToken result lands in
     // grantConnection, which /settings must resolve exactly like a #wb-grant
     // fragment consumed directly on this route would.
     localStorage.clear()
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 1,
-        storage: { localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+        version: 2,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
       }),

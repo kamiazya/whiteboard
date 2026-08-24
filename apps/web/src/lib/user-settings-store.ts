@@ -5,8 +5,21 @@ import { z } from 'zod'
 // safeParse-fail on it only transiently), so it does NOT bump the key/version —
 // bumping would discard every existing user's stored settings. Bump BOTH this
 // suffix and the `version` literal only for a BREAKING change (removing a
-// field, changing a type, or making a field required).
-export const STORAGE_KEY = 'whiteboard:user-settings:v1'
+// field, changing a type, or making a field required), AND ship a migration
+// in the same increment: bumping alone is the discard this comment warns
+// about, just spelled differently.
+export const STORAGE_KEY = 'whiteboard:user-settings:v2'
+
+/**
+ * The key v2 migrates FROM, read once and then removed.
+ *
+ * Two keys rather than a version discriminator inside one, because that is
+ * what makes a concurrently-open OLD tab harmless: it keeps reading and
+ * writing v1, which this build no longer looks at once v2 exists, instead of
+ * safeParse-failing on the bumped `version` and overwriting v2 with its
+ * defaults.
+ */
+export const LEGACY_V1_STORAGE_KEY = 'whiteboard:user-settings:v1'
 
 // localStorage access itself can throw (SecurityError when the browser blocks
 // storage via privacy settings or embedded contexts). The store's contract is
@@ -35,37 +48,33 @@ function safeRemoveItem(key: string): void {
   }
 }
 
+/**
+ * Constrained to http/https because these values are rendered into an `href`
+ * and fetched. Anything that can write localStorage — a same-origin script, a
+ * browser extension — could otherwise store `javascript:…` and turn a link
+ * click into script execution. Rejecting it at the schema protects every
+ * consumer, not just the one that renders it today.
+ */
+const httpUrl = z.string().refine((value) => {
+  try {
+    const { protocol } = new URL(value)
+    return protocol === 'http:' || protocol === 'https:'
+  } catch {
+    return false
+  }
+}, 'must be an http(s) URL')
+
 // `.strict()` at every level is the enforcement point for "no daemon/cloud
 // token in UserSettings": an unknown key (e.g. a token-shaped field) makes
 // safeParse fail, and callers fall back to defaults rather than persisting it.
 const storageSettingsSchema = z
   .object({
-    // Spelled with the retired keeper words on purpose: this value is
-    // PERSISTED, the schema is `.strict()`, and `load()` falls back to
-    // defaults on any parse failure — so renaming it here would silently
-    // discard an existing reader's whole settings payload, daemon connection
-    // included. It moves with a migration, not with a sweep.
-    preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
-    lastBrowserCanvasId: z.string().optional(),
-    // Constrained to http/https because this value is rendered into an `href`
-    // (the "Open the local app" escape hatch). Anything that can write
-    // localStorage — a same-origin script, a browser extension — could
-    // otherwise store `javascript:…` here and turn a link click into script
-    // execution. Rejecting it at the schema protects every consumer, not just
-    // the one that renders it today.
-    localDaemonBaseUrl: z
-      .string()
-      .refine((value) => {
-        try {
-          const { protocol } = new URL(value)
-          return protocol === 'http:' || protocol === 'https:'
-        } catch {
-          return false
-        }
-      }, 'must be an http(s) URL')
-      .optional(),
+    // Which daemon this browser uses. `local` is gone from the name because
+    // it never named this axis: a daemon runs on this machine too, so the
+    // word said nothing that distinguished it from the browser keeper.
+    daemonBaseUrl: httpUrl.optional(),
     // The (workspaceId, path) last reached via a #wb= pairing, alongside
-    // localDaemonBaseUrl above — together they let a later hosted-app load
+    // daemonBaseUrl above — together they let a later hosted-app load
     // offer a one-click reconnect to the same daemon and canvas instead of
     // just the daemon's root. path is meaningless without workspaceId, but
     // this is UI-hint state (not an access boundary), so it is not enforced
@@ -73,20 +82,9 @@ const storageSettingsSchema = z
     lastConnectedWorkspaceId: z.string().optional(),
     lastConnectedPath: z.string().optional(),
     // Every daemon baseUrl a probe has actually confirmed, most recent
-    // first (see daemon-discovery.ts's MRU helper). Same http(s)-only
-    // constraint as localDaemonBaseUrl above and for the same reason:
-    // these values are rendered into hrefs and fetched.
+    // first (see daemon-discovery.ts's MRU helper).
     knownDaemonBaseUrls: z
-      .array(
-        z.string().refine((value) => {
-          try {
-            const { protocol } = new URL(value)
-            return protocol === 'http:' || protocol === 'https:'
-          } catch {
-            return false
-          }
-        }, 'must be an http(s) URL'),
-      )
+      .array(httpUrl)
       // The writer keeps this MRU-capped (daemon-discovery's helper), and
       // every stored entry is re-probed on the next check — an oversized
       // tampered array must not turn discovery into an unbounded fan-out.
@@ -95,19 +93,10 @@ const storageSettingsSchema = z
     // Daemons the user explicitly disconnected from. Discovery skips these
     // even inside its scanned port range, which is what makes a disconnect
     // outlive the page — without it the default-port daemon reappears on the
-    // next load and the action reads as a no-op. Same http(s) constraint and
-    // same cap as the known list, for the same reasons.
+    // next load and the action reads as a no-op. Same cap as the known list,
+    // for the same reason.
     dismissedDaemonBaseUrls: z
-      .array(
-        z.string().refine((value) => {
-          try {
-            const { protocol } = new URL(value)
-            return protocol === 'http:' || protocol === 'https:'
-          } catch {
-            return false
-          }
-        }, 'must be an http(s) URL'),
-      )
+      .array(httpUrl)
       .max(5, 'must contain at most 5 daemon URLs')
       .optional(),
     dismissedPersistenceWarningAt: z.string().optional(),
@@ -149,7 +138,7 @@ const appearanceSettingsSchema = z
 
 const userSettingsSchema = z
   .object({
-    version: z.literal(1),
+    version: z.literal(2),
     storage: storageSettingsSchema,
     migration: migrationSettingsSchema,
     capabilities: capabilitySettingsSchema,
@@ -159,11 +148,69 @@ const userSettingsSchema = z
   })
   .strict()
 
+/**
+ * The shape v2 migrates FROM, kept parse-only.
+ *
+ * It spells the retired keeper words on purpose, for the same reason a
+ * database migration names the columns as they stood at its point in the log:
+ * this schema's whole job is to read a payload that was written under those
+ * names. Correcting them here would make it parse nothing.
+ *
+ * Not derived from `storageSettingsSchema` by `.extend()`/`.omit()`, because
+ * the two shapes are only coincidentally similar — v2 is free to move without
+ * silently changing what a v1 payload is allowed to contain.
+ */
+const legacyV1SettingsSchema = z
+  .object({
+    version: z.literal(1),
+    storage: z
+      .object({
+        // Dead on arrival: nothing in the app ever read or wrote either of
+        // these. They are dropped rather than renamed — a field nobody reads
+        // does not need a better name.
+        preferredProvider: z.enum(['browser-local', 'local-daemon']).optional(),
+        lastBrowserCanvasId: z.string().optional(),
+        localDaemonBaseUrl: httpUrl.optional(),
+        lastConnectedWorkspaceId: z.string().optional(),
+        lastConnectedPath: z.string().optional(),
+        knownDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
+        dismissedDaemonBaseUrls: z.array(httpUrl).max(5).optional(),
+        dismissedPersistenceWarningAt: z.string().optional(),
+        dismissedBetaBannerAt: z.string().optional(),
+        dismissedDaemonCtaAt: z.string().optional(),
+        dismissedDaemonCtaInstanceId: z.string().optional(),
+      })
+      // `.strict()` here for the same reason v2 has it: the migration must not
+      // become the hole a token-shaped key travels through.
+      .strict(),
+    migration: migrationSettingsSchema,
+    capabilities: capabilitySettingsSchema,
+    appearance: appearanceSettingsSchema.optional(),
+  })
+  .strict()
+
 export type UserSettings = z.infer<typeof userSettingsSchema>
+
+function migrateV1(legacy: z.infer<typeof legacyV1SettingsSchema>): UserSettings {
+  const { preferredProvider, lastBrowserCanvasId, localDaemonBaseUrl, ...carried } = legacy.storage
+  return {
+    version: 2,
+    storage: {
+      ...carried,
+      // Spread conditionally rather than assigning `undefined`: the value is
+      // JSON.stringify-ed straight back out, and an explicit `undefined` and
+      // an absent key are the same there but not to `toHaveProperty`.
+      ...(localDaemonBaseUrl === undefined ? {} : { daemonBaseUrl: localDaemonBaseUrl }),
+    },
+    migration: legacy.migration,
+    capabilities: legacy.capabilities,
+    ...(legacy.appearance === undefined ? {} : { appearance: legacy.appearance }),
+  }
+}
 
 export function defaultUserSettings(): UserSettings {
   return {
-    version: 1,
+    version: 2,
     storage: {},
     migration: {},
     capabilities: {},
@@ -179,18 +226,34 @@ export interface UserSettingsStore {
 }
 
 export function createUserSettingsStore(): UserSettingsStore {
-  function load(): UserSettings {
-    const raw = safeGetItem(STORAGE_KEY)
-    if (raw === null) return defaultUserSettings()
-
-    let parsedJson: unknown
+  function readJson(key: string): unknown {
+    const raw = safeGetItem(key)
+    if (raw === null) return undefined
     try {
-      parsedJson = JSON.parse(raw)
+      return JSON.parse(raw)
     } catch {
-      return defaultUserSettings()
+      return undefined
     }
+  }
 
-    const result = userSettingsSchema.safeParse(parsedJson)
+  /**
+   * Migrates only when the v2 key is ABSENT, never when it is merely invalid.
+   * A corrupt or tampered v2 payload keeps the store's existing
+   * invalid-means-defaults contract instead of quietly resurrecting settings
+   * the user may have since changed.
+   */
+  function migrateFromV1(): UserSettings | null {
+    const result = legacyV1SettingsSchema.safeParse(readJson(LEGACY_V1_STORAGE_KEY))
+    if (!result.success) return null
+    const migrated = migrateV1(result.data)
+    save(migrated)
+    safeRemoveItem(LEGACY_V1_STORAGE_KEY)
+    return migrated
+  }
+
+  function load(): UserSettings {
+    if (safeGetItem(STORAGE_KEY) === null) return migrateFromV1() ?? defaultUserSettings()
+    const result = userSettingsSchema.safeParse(readJson(STORAGE_KEY))
     return result.success ? result.data : defaultUserSettings()
   }
 
@@ -206,6 +269,10 @@ export function createUserSettingsStore(): UserSettingsStore {
 
   function reset(): void {
     safeRemoveItem(STORAGE_KEY)
+    // Both keys, or a reset on a browser that has not migrated yet clears
+    // nothing that lasts: load() would find v2 absent, migrate v1 again, and
+    // hand back the settings the user just reset.
+    safeRemoveItem(LEGACY_V1_STORAGE_KEY)
   }
 
   return { load, save, update, reset }

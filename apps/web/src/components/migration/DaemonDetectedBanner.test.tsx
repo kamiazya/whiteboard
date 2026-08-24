@@ -223,7 +223,7 @@ describe('DaemonDetectedBanner', () => {
       ...current,
       storage: {
         ...current.storage,
-        localDaemonBaseUrl: 'http://127.0.0.1:3099',
+        daemonBaseUrl: 'http://127.0.0.1:3099',
         lastConnectedWorkspaceId: 'w1',
         lastConnectedPath: 'main',
       },
@@ -245,7 +245,7 @@ describe('DaemonDetectedBanner', () => {
       ),
     ).toBeNull()
     const saved = store.load()
-    expect(saved.storage.localDaemonBaseUrl).toBeUndefined()
+    expect(saved.storage.daemonBaseUrl).toBeUndefined()
     expect(saved.storage.lastConnectedWorkspaceId).toBeUndefined()
     expect(saved.storage.lastConnectedPath).toBeUndefined()
   })
@@ -408,7 +408,7 @@ describe('DaemonDetectedBanner', () => {
     const store = makeStore()
     store.update((current) => ({
       ...current,
-      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
     }))
     const challengeFn = vi.fn(async () => 'verified' as const)
     render(
@@ -430,7 +430,7 @@ describe('DaemonDetectedBanner', () => {
     const store = makeStore()
     store.update((current) => ({
       ...current,
-      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
     }))
     const challengeFn = vi.fn(async () => 'failed' as const)
     render(
@@ -474,7 +474,7 @@ describe('DaemonDetectedBanner', () => {
     const store = makeStore()
     store.update((current) => ({
       ...current,
-      storage: { ...current.storage, localDaemonBaseUrl: 'http://127.0.0.1:3099' },
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
     }))
     const probeFn = vi.fn().mockResolvedValue(DETECTED)
     render(
