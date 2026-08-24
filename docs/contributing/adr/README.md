@@ -48,3 +48,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0013](0013-facet-system.md) | The facet system — plugins, versioned facet keys, and the meaning/display split | Accepted — key grammar landed; supersedes ADR-0009 decision 3 |
 | [ADR-0014](0014-reference-index.md) | Cross-document references are a derived projection with an event-fed aggregate | Accepted |
 | [ADR-0015](0015-search-quality-scoreboard.md) | A judged corpus decides whether search needs embeddings | Accepted |
+| [ADR-0016](0016-operation-vs-mechanic.md) | An operation is a use case; the composition root holds only mechanics | Proposed |
