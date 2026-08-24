@@ -514,15 +514,22 @@ async function unlinkIfExists(path: string): Promise<void> {
  * have to be captured while the document is still whole.
  */
 export const documentTeardown: DocumentTeardown = {
-  async begin({ workspaceId, documentId, path }) {
-    const db = await dbReady()
-    const versionRows = await db
-      .selectFrom('versions')
-      .select(['id'])
-      .where('documentId', '=', documentId)
-      .execute()
+  around({ workspaceId, documentId, path }, deleteDocument) {
+    // The whole delete runs under this workspace's write barrier, capture
+    // included. A version saved between the capture and the row delete
+    // would otherwise have its row cascaded away while its thumbnail was
+    // never in the captured set — an orphaned file, from the one seam that
+    // exists to prevent them.
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await dbReady()
+      const versionRows = await db
+        .selectFrom('versions')
+        .select(['id'])
+        .where('documentId', '=', documentId)
+        .execute()
 
-    return async () => {
+      const result = await deleteDocument()
+
       const blobPath = documentBlobPath(workspaceId, documentId)
       await unlinkIfExists(blobPath)
       await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
@@ -534,7 +541,9 @@ export const documentTeardown: DocumentTeardown = {
       // reload from — a fresh create should not inherit a doc instance that
       // still holds the deleted canvas's history).
       evictDoc(workspaceId, path)
-    }
+
+      return result
+    })
   },
 }
 
@@ -546,22 +555,20 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     const documentId = await getDocumentIdByPath(db, workspaceId, path)
     if (!documentId) return false
 
-    // Same three steps, in the same order, as wb_document_delete
-    // (server-core's document-crud.ts) — deliberately, because the two used
-    // to be separate implementations and only one of them cleaned up. Each
-    // step is now one shared piece rather than a copy: `deleteDocumentRow`
-    // holds the descendant refusal, `documentTeardown` holds the files.
-    const finalizeTeardown = await documentTeardown.begin({ workspaceId, documentId, path })
+    // Same steps, in the same order, as wb_document_delete (server-core's
+    // document-crud.ts) — deliberately, because the two used to be separate
+    // implementations and only one of them cleaned up. Each step is now one
+    // shared piece rather than a copy: `deleteDocumentRow` holds the
+    // descendant refusal, `documentTeardown` holds the lock and the files.
+    await documentTeardown.around({ workspaceId, documentId, path }, async () => {
+      await deleteDocumentRow(db, workspaceId, path)
 
-    await deleteDocumentRow(db, workspaceId, path)
-
-    // The identity row goes first, then the Libsql snapshot/delta/frontier
-    // rows, so a crash between the two leaves an orphaned-but-unreachable
-    // snapshot rather than a listed canvas with no content.
-    const documentStore = await documentStoreReady()
-    await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
-
-    await finalizeTeardown()
+      // The identity row goes first, then the Libsql snapshot/delta/frontier
+      // rows, so a crash between the two leaves an orphaned-but-unreachable
+      // snapshot rather than a listed canvas with no content.
+      const documentStore = await documentStoreReady()
+      await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
+    })
 
     return true
   })

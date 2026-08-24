@@ -20,7 +20,6 @@ export type {
   CanvasClientNotifier,
   DocumentTeardown,
   DocumentWritten,
-  FinalizeDocumentTeardown,
   ServerDeps,
   ViewportRequest,
 } from './server-deps.js'
