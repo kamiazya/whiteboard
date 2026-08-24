@@ -47,6 +47,20 @@ returned `NodeOutline`'s kind and `outlineEntryPoint` bisects against that.
 Only the geometry and the content box are per-shape — which is the whole of
 `ShapeContribution`.
 
+**Decorations are the second contribution point, and the cheap one.** A
+`NodeDecoration` is handed a node plus its CONTENT box and the resolved label
+appearance, and returns scene nodes drawn after the node's own content. They
+COMPOSE — several plugins marking one node is a stack, not a competition — so
+order answers by contribution order and no conflict rule is needed, unlike a
+silhouette. `visual.symbol`'s badge is one of these and now lives in
+`plugin-visual`, taking its size, margin and corner with it; this package no
+longer knows what a badge is.
+
+The default is the bundled plugin's set, NOT an opt-in, for the lowlight
+reason recorded in `architecture-map.md`: a resolution step four call sites
+have to remember is one a call site forgets, and the surface that forgets does
+not fall back to the same picture — it silently draws less.
+
 Ids are COMPOSED from the declaring facet's key plus its bare payload kind,
 never stored whole, so nothing migrates and a plugin cannot name another
 plugin's geometry. The remaining asymmetry is recorded at
