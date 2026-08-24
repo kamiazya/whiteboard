@@ -65,7 +65,7 @@ describe('caller-supplied icon table (SvgDocumentOptions.icons)', () => {
   it('a caller-supplied icon renders through the same symbol/use mechanism', () => {
     const svg = renderSceneToSvg(
       { nodes: [icon('rocket')] },
-      { icons: { rocket: [{ tag: 'circle', cx: 12, cy: 12, r: 8 }] } },
+      { icons: { rocket: { geometry: [{ tag: 'circle', cx: 12, cy: 12, r: 8 }] } } },
     )
     expect(svg).toContain('<symbol id="wb-icon-rocket" viewBox="0 0 24 24">')
     expect(svg).toContain('<circle cx="12" cy="12" r="8"/>')
@@ -75,7 +75,7 @@ describe('caller-supplied icon table (SvgDocumentOptions.icons)', () => {
   it('a caller entry overrides the vendored geometry under the same name', () => {
     const svg = renderSceneToSvg(
       { nodes: [icon('lock')] },
-      { icons: { lock: [{ tag: 'circle', cx: 12, cy: 12, r: 8 }] } },
+      { icons: { lock: { geometry: [{ tag: 'circle', cx: 12, cy: 12, r: 8 }] } } },
     )
     expect(svg).toContain('<circle cx="12" cy="12" r="8"/>')
     // The vendored lock body must be gone — the caller's table won.
@@ -85,7 +85,7 @@ describe('caller-supplied icon table (SvgDocumentOptions.icons)', () => {
   it('vendored names keep resolving when the caller table lacks them', () => {
     const svg = renderSceneToSvg(
       { nodes: [icon('lock')] },
-      { icons: { rocket: [{ tag: 'circle', cx: 12, cy: 12, r: 8 }] } },
+      { icons: { rocket: { geometry: [{ tag: 'circle', cx: 12, cy: 12, r: 8 }] } } },
     )
     expect(svg).toContain('<rect x="3" y="11" width="18" height="11" rx="2"/>')
   })
