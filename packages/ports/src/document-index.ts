@@ -203,6 +203,19 @@ export interface DocumentIndex {
    */
   createWorkspace(input: CreateWorkspaceInput): Promise<void>
   /**
+   * Every workspace this index holds, INCLUDING the ones with no documents in
+   * them: a workspace is a real, addressable place before anything is put in
+   * it, and hiding the empty ones would make a freshly created one look like
+   * it failed.
+   *
+   * Answers rather than throwing when there are no documents yet — unlike
+   * `listDocuments`, there is no id here that could have been a typo, so
+   * "none" is an answer rather than an ambiguity. Note this does NOT promise
+   * the list is empty on a fresh index: apps/web's writes `local` when its
+   * store is created, because that is the one the browser UI opens.
+   */
+  listWorkspaces(): Promise<{ workspaceId: string }[]>
+  /**
    * Fails `WorkspaceNotFoundError` if the workspace does not exist. Fails if
    * the path is taken. Creating never silently adopts an existing
    * document, because the caller that wanted a new one would otherwise

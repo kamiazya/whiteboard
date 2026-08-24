@@ -25,7 +25,6 @@ import {
 } from '../../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
-import { listWorkspaces } from '../../store/document-store.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -57,7 +56,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
 
   app.get('/api/workspaces', async (c) => {
     try {
-      const workspaces = await listWorkspaces()
+      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      // Straight to the PORT, for the same reason the rename is (ADR-0018):
+      // listing workspaces is the port call and nothing else, so a use case
+      // here would forward no arguments and add a name.
+      const workspaces = await deps.documentIndex.listWorkspaces()
       const response: ListWorkspacesResponse = {
         workspaces: workspaces.map(({ workspaceId }) => ({ workspaceId })),
       }

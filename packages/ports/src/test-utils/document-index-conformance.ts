@@ -387,4 +387,43 @@ export function describeDocumentIndexConformance(
       })
     })
   })
+
+  describe('listWorkspaces', () => {
+    // The shared fixture creates two, so a listing that reported only the one
+    // a test had just touched would pass a weaker assertion.
+    it('reports every workspace the index holds, whether or not it has documents', async () => {
+      await withIndex(async (index) => {
+        await index.createDocument({ workspaceId: WS, path: 'p', kind: 'spatial' })
+
+        const ids = (await index.listWorkspaces()).map((w) => w.workspaceId).sort()
+
+        expect(ids).toContain(WS)
+        // `ws-other` holds nothing. A workspace is a real, addressable place
+        // before anything is put in it — a listing that hid the empty ones
+        // would make a freshly created workspace look like it failed.
+        expect(ids).toContain('ws-other')
+      })
+    })
+
+    // Deliberately NOT `toEqual([])`. An implementation may legitimately hold
+    // a workspace of its own from the moment its store exists: apps/web's
+    // IndexedDB index writes `local` during its upgrade, because that is the
+    // one the browser UI opens. Pinning emptiness here forbade that, and the
+    // browser conformance run said so.
+    //
+    // What the contract does require is an ANSWER rather than a throw. Unlike
+    // `listDocuments`, there is no id here that could have been a typo, so
+    // "none" is a result and not an ambiguity — and a caller listing
+    // workspaces before any document exists must not meet an error.
+    it('answers rather than throwing on an index with no documents in it', async () => {
+      const { index, dispose } = await makeIndex()
+      try {
+        const workspaces = await index.listWorkspaces()
+        expect(Array.isArray(workspaces)).toBe(true)
+        expect(workspaces.every((w) => typeof w.workspaceId === 'string')).toBe(true)
+      } finally {
+        await dispose()
+      }
+    })
+  })
 }

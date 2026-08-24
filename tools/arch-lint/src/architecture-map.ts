@@ -279,7 +279,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
-  'routes/document/workspaces.ts -> document-store',
   'routes/export.ts -> document-store',
   'routes/files.ts -> file-gc',
   'routes/files.ts -> version-store',
