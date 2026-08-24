@@ -46,7 +46,27 @@ export const okfTimestampSchema = z
     'an OKF timestamp is an ISO 8601 datetime with an explicit UTC offset',
   )
 
-export const okfTrustEventSchema = z.object({ by: okfActorSchema, at: okfTimestampSchema }).strict()
+/**
+ * `by` and `at` are required; anything else a producer wrote is KEPT.
+ *
+ * Loose rather than strict because §4.1 asks a consumer to preserve unknown
+ * frontmatter keys, and a strict object does the opposite at the worst
+ * moment: it rejects, and `parseOkf` then fails the WHOLE document rather
+ * than the one key — so a valid v0.2 file from another producer does not
+ * open at all. Dropping would be bad; refusing to read is worse.
+ *
+ * That the family grows is not speculation. `sources` already carries
+ * `usage_count` and `last_modified` purely as credibility signals, and §5.1's
+ * own example writes an actor form outside §7's three bullets — which is why
+ * `okfActorSchema` above is validated loosely. The same reasoning applies to
+ * the shape around the actor, and had not been carried across.
+ *
+ * The family's own root (`trustFacetsSchema`) stays strict: that one is this
+ * codebase's storage bucket rather than a frontmatter surface, so a stray key
+ * there means a caller wrote to the wrong bucket, not that a producer knew
+ * something extra.
+ */
+export const okfTrustEventSchema = z.object({ by: okfActorSchema, at: okfTimestampSchema }).loose()
 export type OkfTrustEvent = z.infer<typeof okfTrustEventSchema>
 
 /**

@@ -109,3 +109,48 @@ describe('trustFacetsSchema', () => {
     ).toBe(false)
   })
 })
+
+describe('a trust event keeps keys it does not model (OKF §4.1)', () => {
+  // §4.1 asks a consumer to PRESERVE unknown frontmatter keys. A strict
+  // object does the opposite of preserving at the worst possible moment:
+  // it rejects, and `parseOkf` fails the WHOLE document rather than the one
+  // key — so a valid v0.2 file from another producer does not open at all.
+  //
+  // That the family will grow is not speculation: `sources` already carries
+  // `usage_count` and `last_modified` as credibility signals, and §5.1's own
+  // example writes an actor form outside §7's three bullets. `okfActorSchema`
+  // is loose for exactly that reason; the same reasoning applies to the shape
+  // around it and had not been carried across.
+  it('accepts and keeps an extra key on a verified event', () => {
+    const parsed = trustFacetsSchema.safeParse({
+      verified: [{ by: 'human:a@b.c', at: '2026-08-24T02:00:00Z', note: 'checked the query' }],
+    })
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.verified?.[0]).toMatchObject({
+      by: 'human:a@b.c',
+      note: 'checked the query',
+    })
+  })
+
+  it('accepts and keeps an extra key on generated', () => {
+    const parsed = trustFacetsSchema.safeParse({
+      generated: { by: 'reference_agent/x', at: '2026-08-24T02:00:00Z', model_params: { temp: 0 } },
+    })
+    expect(parsed.success).toBe(true)
+    expect(parsed.success && parsed.data.generated).toMatchObject({ model_params: { temp: 0 } })
+  })
+
+  it('still rejects an event missing a required key, so looseness is not absence of validation', () => {
+    expect(trustFacetsSchema.safeParse({ verified: [{ by: 'human:a@b.c' }] }).success).toBe(false)
+    expect(trustFacetsSchema.safeParse({ generated: { at: '2026-08-24T02:00:00Z' } }).success).toBe(
+      false,
+    )
+  })
+
+  it("still rejects an unknown key at the trust family's own root", () => {
+    // The family itself stays closed: `trustFacetsSchema` is this codebase's
+    // storage bucket, not a frontmatter surface, and a stray key here means a
+    // caller wrote to the wrong bucket rather than a producer knowing more.
+    expect(trustFacetsSchema.safeParse({ endorsed: [] }).success).toBe(false)
+  })
+})
