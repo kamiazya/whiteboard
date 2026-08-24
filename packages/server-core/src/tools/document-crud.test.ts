@@ -25,6 +25,31 @@ function makeDeps(): ServerDeps {
 }
 
 describe('wbDocumentCreate', () => {
+  // `DocumentEntry.name` is `z.string().min(1).optional()`, and its own
+  // comment says why: absent is the meaningful "no name" state, where a
+  // reader falls back to the path segment. An empty string is neither — a
+  // name that reads as nothing, which the port says cannot exist.
+  //
+  // Normalised rather than rejected, because ADR-0006 point 3 is the older
+  // rule and outranks tidiness here: naming must never gate creation. A
+  // caller that sends a blank name gets a document, not an error.
+  it('treats a blank name as no name rather than storing one the port forbids', async () => {
+    const deps = makeDeps()
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'blank',
+      kind: 'spatial',
+      name: '   ',
+      createWorkspace: true,
+    })
+
+    const entry = await deps.documentIndex.resolveDocumentById({
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    })
+    expect(entry?.name).toBeUndefined()
+  })
+
   it('creates a document and returns documentId + path', async () => {
     const deps = makeDeps()
     const result = await wbDocumentCreate(deps, {
