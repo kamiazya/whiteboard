@@ -334,6 +334,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
       'documentIndex',
       'meta',
       'syncDocuments',
+      'syncSnapshotChunks',
       'workspaces',
     ])
 
@@ -386,6 +387,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
       'documentIndex',
       'meta',
       'syncDocuments',
+      'syncSnapshotChunks',
       'workspaces',
     ])
     db.close()
@@ -463,6 +465,7 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
       'documentIndex',
       'meta',
       'syncDocuments',
+      'syncSnapshotChunks',
       'workspaces',
     ])
     db.close()

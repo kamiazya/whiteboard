@@ -1,5 +1,6 @@
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { openWhiteboardDb, SYNC_DOCUMENTS_STORE } from '../lib/browser-idb.js'
+import { IdbDocumentStore } from '../lib/idb-document-store.js'
 
 /**
  * Write a `DocumentStore` record straight into IndexedDB, bypassing the store.
@@ -18,18 +19,33 @@ export async function seedSyncDocument(
   content: { snapshot: Uint8Array; deltas?: Uint8Array[] } | { raw: unknown },
   dbName?: string,
 ): Promise<void> {
-  const value =
-    'raw' in content
-      ? content.raw
-      : {
-          v: 1,
-          snapshot: (() => {
-            const { manifest, chunks } = chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)
-            return { manifest, chunks }
-          })(),
-          frontier: new Uint8Array(),
-          deltas: (content.deltas ?? []).map((delta) => new Uint8Array(delta)),
-        }
+  // Only the `raw` path bypasses the store. A snapshot of arbitrary bytes is
+  // a perfectly valid record — what makes it a fixture is that Loro cannot
+  // import it, which is the store's caller's problem and not the store's — so
+  // writing it through `IdbDocumentStore` keeps this helper from carrying its
+  // own copy of a storage layout that has already changed once underneath it.
+  if (!('raw' in content)) {
+    const docRef = { kind: 'document', documentId } as const
+    const store = new IdbDocumentStore(dbName)
+    const { manifest, chunks } = chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)
+    // Empty, matching what `LoroStore` writes: nothing in the browser reads a
+    // frontier, and a fixture inventing one would be a value the first real
+    // reader has to unpick.
+    await store.saveSnapshot({ docRef, manifest, chunks, frontier: new Uint8Array() })
+    const deltas = content.deltas ?? []
+    if (deltas.length > 0) {
+      await store.appendDeltas({
+        docRef,
+        deltaBatch: {
+          updates: deltas.map((delta) => new Uint8Array(delta)),
+          newFrontier: new Uint8Array(),
+        },
+      })
+    }
+    return
+  }
+
+  const value = content.raw
   const db = await openWhiteboardDb(dbName)
   try {
     await new Promise<void>((resolve, reject) => {
