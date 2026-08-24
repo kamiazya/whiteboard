@@ -128,6 +128,12 @@ export async function wbDocumentResolve(
     documentId: entry.documentId,
     path: entry.path,
     ...(entry.name === undefined ? {} : { name: entry.name }),
+    // Same pass-through as the list below. These share `documentDetailSchema`,
+    // so omitting them here would leave resolve DECLARING two fields it never
+    // emits — a schema saying more than the runtime does, which is the drift
+    // this repo keeps a single source of truth to prevent.
+    ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+    ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
   }
 }
 

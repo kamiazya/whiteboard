@@ -136,6 +136,33 @@ describe('wbDocumentCreate', () => {
 })
 
 describe('wbDocumentResolve', () => {
+  // `documentDetailSchema` is shared with the list, so resolve must EMIT what
+  // that schema declares. Omitting these left the schema saying more than the
+  // runtime did.
+  it('carries kind and updatedAt through, like the list does', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    ;(deps.documentIndex as InMemoryDocumentIndex).seed({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+
+    const out = await wbDocumentResolve(deps, {
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    })
+
+    expect(out).toEqual({
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+  })
+
   it('returns the document with its path', async () => {
     const deps = makeDeps()
     const created = await wbDocumentCreate(deps, {
@@ -148,7 +175,14 @@ describe('wbDocumentResolve', () => {
       workspaceId: 'ws-1',
       documentId: created.documentId,
     })
-    expect(got).toEqual({ documentId: created.documentId, path: 'parent/child' })
+    // `kind` is reported now that resolve emits what its schema declares. The
+    // in-memory index records no timestamp, which is why `updatedAt` is absent
+    // here and present in the case below that seeds one.
+    expect(got).toEqual({
+      documentId: created.documentId,
+      path: 'parent/child',
+      kind: 'spatial',
+    })
   })
 
   it('throws WorkspaceDocumentNotFoundError for a documentId that does not exist', async () => {
