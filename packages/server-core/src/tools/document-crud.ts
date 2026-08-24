@@ -70,12 +70,20 @@ export async function wbDocumentCreate(
     }
   }
 
+  // Blank means no name, and that is a NORMALISATION rather than a rejection.
+  // `DocumentEntry.name` is `z.string().min(1).optional()` — absent is the
+  // meaningful "no name" state, where a reader falls back to the path
+  // segment, and an empty string is neither: a name that reads as nothing,
+  // which the port says cannot exist. But ADR-0006 point 3 is the older rule
+  // and outranks tidiness here — naming must never gate creation — so a
+  // caller sending a blank one gets a document, not an error.
+  const name = input.name?.trim()
   const entry = await rethrowWorkspaceNotFound(input.workspaceId, () =>
     deps.documentIndex.createDocument({
       workspaceId: input.workspaceId,
       path: input.path,
       kind: input.kind,
-      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(name === undefined || name === '' ? {} : { name }),
     }),
   )
 
