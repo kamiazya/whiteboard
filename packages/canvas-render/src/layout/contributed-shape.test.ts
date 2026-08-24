@@ -8,12 +8,18 @@
 // cannot reach another plugin's geometry by writing its id into a payload,
 // because the payload never holds a namespace.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import { describe, expect, it } from 'vitest'
 import type { SceneNode } from '../scene-graph.js'
 import { renderSceneToSvg } from '../svg/backend.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { outlineContains } from './nodes/node-outline.js'
-import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
+import {
+  layoutSpatialCanvas,
+  type RenderContribution,
+  resolveShapeTable,
+  type SpatialLayoutOptions,
+} from './spatial-canvas.js'
 
 const APPEARANCE = { resolveNode: () => ({}), resolveEdge: () => ({}), resolveLabel: () => ({}) }
 
@@ -68,6 +74,22 @@ function canvasWith(facetKey: string, kind: string): SpatialCanvas {
   }
 }
 
+/** `demo`'s whole contribution, replacing the `shapeFacets` + `shapes` pair
+ *  those options used to be. Shapes are keyed BARE; the namespace composes. */
+const DEMO: RenderContribution = {
+  namespace: 'demo',
+  shapes: { triangle: TRIANGLE },
+  readShape: (node) => {
+    const stored = node['x-whiteboard']?.facets?.['demo.shape/v0']
+    if (stored === null || typeof stored !== 'object') return undefined
+    const kind = (stored as { readonly kind?: unknown }).kind
+    return typeof kind === 'string' && kind !== '' ? kind : undefined
+  },
+}
+
+/** What the backend needs — the same shapes, ids already composed. */
+const DEMO_TABLE = resolveShapeTable([DEMO])
+
 const shapeOf = (nodes: readonly SceneNode[]) =>
   nodes.find((n): n is Extract<SceneNode, { kind: 'shape' }> => n.kind === 'shape')
 
@@ -76,8 +98,7 @@ describe('a contributed shape', () => {
     const scene = layoutSpatialCanvas(
       canvasWith('demo.shape/v0', 'triangle'),
       baseOptions({
-        shapeFacets: ['demo.shape/v0'],
-        shapes: { 'demo.triangle': TRIANGLE },
+        renderContributions: [DEMO],
       }),
     )
 
@@ -90,8 +111,7 @@ describe('a contributed shape', () => {
     const scene = layoutSpatialCanvas(
       canvasWith('demo.shape/v0', 'triangle'),
       baseOptions({
-        shapeFacets: ['demo.shape/v0'],
-        shapes: { 'demo.triangle': TRIANGLE },
+        renderContributions: [DEMO],
       }),
     )
 
@@ -118,7 +138,7 @@ describe('a contributed shape', () => {
     // removing composition from the bundled branch leaves this green.
     const scene = layoutSpatialCanvas(
       canvasWith('demo.shape/v0', 'visual.diamond'),
-      baseOptions({ shapeFacets: ['demo.shape/v0'] }),
+      baseOptions({ renderContributions: [DEMO] }),
     )
 
     expect(shapeOf(scene.nodes)?.shape).toBe('demo.visual.diamond')
@@ -139,15 +159,14 @@ describe('a contributed shape', () => {
     const scene = layoutSpatialCanvas(
       canvasWith('demo.shape/v0', 'triangle'),
       baseOptions({
-        shapeFacets: ['demo.shape/v0'],
-        shapes: { 'demo.triangle': TRIANGLE },
+        renderContributions: [DEMO],
       }),
     )
 
     // The registry travels to BOTH ends, like `icons` already does: layout
     // uses it for the content box and edge anchoring, the backend to draw.
     // Without it here the node would paint as a plain rect.
-    const svg = renderSceneToSvg(scene, { shapes: { 'demo.triangle': TRIANGLE } })
+    const svg = renderSceneToSvg(scene, { shapes: DEMO_TABLE })
     expect(svg).toContain('200,0')
   })
 
@@ -158,17 +177,22 @@ describe('a contributed shape', () => {
     // built-ins looked correct from both sides.
     const scene = layoutSpatialCanvas(
       canvasWith('visual.shape/v0', 'diamond'),
-      baseOptions({ shapes: { 'demo.triangle': TRIANGLE } }),
+      baseOptions({ renderContributions: [visualRenderContribution, DEMO] }),
     )
 
     expect(shapeOf(scene.nodes)?.shape).toBe('visual.diamond')
-    expect(renderSceneToSvg(scene, { shapes: { 'demo.triangle': TRIANGLE } })).toContain('polygon')
+    expect(renderSceneToSvg(scene, { shapes: DEMO_TABLE })).toContain('polygon')
   })
 
   it('lets a caller override a built-in under its own id', () => {
     const scene = layoutSpatialCanvas(
       canvasWith('visual.shape/v0', 'diamond'),
-      baseOptions({ shapes: { 'visual.diamond': TRIANGLE } }),
+      baseOptions({
+        renderContributions: [
+          visualRenderContribution,
+          { namespace: 'visual', shapes: { diamond: TRIANGLE } },
+        ],
+      }),
     )
     const svg = renderSceneToSvg(scene, { shapes: { 'visual.diamond': TRIANGLE } })
     // The triangle's own vertices, not the diamond's.
@@ -184,7 +208,7 @@ describe('a contributed shape', () => {
     // union.
     const scene = layoutSpatialCanvas(
       canvasWith('demo.shape/v0', 'triangle'),
-      baseOptions({ shapeFacets: ['demo.shape/v0'] }),
+      baseOptions({ renderContributions: [DEMO] }),
     )
     expect(renderSceneToSvg(scene)).toContain('<rect')
   })

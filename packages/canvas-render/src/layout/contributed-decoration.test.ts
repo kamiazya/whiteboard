@@ -7,6 +7,7 @@
 // conflict, so the only question is order and it answers by contribution
 // order. That is what makes this seam cheaper than the silhouette one.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 import { describe, expect, it } from 'vitest'
 import type { BoundingBox, SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
@@ -56,8 +57,13 @@ describe('a contributed decoration', () => {
     const scene = layoutSpatialCanvas(
       canvasOf(),
       baseOptions({
-        decorations: [
-          (_node, ctx) => [{ kind: 'glyph', bbox: { ...ctx.bounds, w: 8, h: 8 }, glyph: '★' }],
+        renderContributions: [
+          {
+            namespace: 'demo',
+            decorations: [
+              (_node, ctx) => [{ kind: 'glyph', bbox: { ...ctx.bounds, w: 8, h: 8 }, glyph: '★' }],
+            ],
+          },
         ],
       }),
     )
@@ -76,10 +82,19 @@ describe('a contributed decoration', () => {
     layoutSpatialCanvas(
       canvasOf({ 'visual.shape/v0': { kind: 'diamond' } }),
       baseOptions({
-        decorations: [
-          (_node, ctx) => {
-            seen.push(ctx.bounds)
-            return []
+        // BOTH, because a passed list is the whole set — unlike the merging
+        // `shapes` option this replaced, naming contributions is a deliberate
+        // act and `visual` is only implied when the option is ABSENT.
+        renderContributions: [
+          visualRenderContribution,
+          {
+            namespace: 'demo',
+            decorations: [
+              (_node, ctx) => {
+                seen.push(ctx.bounds)
+                return []
+              },
+            ],
           },
         ],
       }),
@@ -96,10 +111,15 @@ describe('a contributed decoration', () => {
     layoutSpatialCanvas(
       canvasOf(),
       baseOptions({
-        decorations: [
-          (_node, ctx) => {
-            seen.push(String(ctx.label.fill))
-            return []
+        renderContributions: [
+          {
+            namespace: 'demo',
+            decorations: [
+              (_node, ctx) => {
+                seen.push(String(ctx.label.fill))
+                return []
+              },
+            ],
           },
         ],
       }),
@@ -111,9 +131,14 @@ describe('a contributed decoration', () => {
     const scene = layoutSpatialCanvas(
       canvasOf(),
       baseOptions({
-        decorations: [
-          () => [{ kind: 'glyph', bbox: { x: 0, y: 0, w: 8, h: 8 }, glyph: 'A' }],
-          () => [{ kind: 'glyph', bbox: { x: 0, y: 0, w: 8, h: 8 }, glyph: 'B' }],
+        renderContributions: [
+          {
+            namespace: 'demo',
+            decorations: [
+              () => [{ kind: 'glyph', bbox: { x: 0, y: 0, w: 8, h: 8 }, glyph: 'A' }],
+              () => [{ kind: 'glyph', bbox: { x: 0, y: 0, w: 8, h: 8 }, glyph: 'B' }],
+            ],
+          },
         ],
       }),
     )
