@@ -23,6 +23,7 @@ import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { getDb } from './store/db/index.js'
+import { prepareDataDir } from './store/db/prepare.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { validationErrorBody } from './validators.js'
 
@@ -197,6 +198,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // (getDb memoizes per dataDir, so this container shares the connection
   // with the per-session MCP containers rather than opening a second one).
   const dataDir = getDataDir()
+  // Migrate BEFORE handing the ports a handle. `getDb` opens the file and
+  // nothing more; migrations have only ever run through `document-store.ts`'s
+  // `dbReady`, which is `prepareDataDir` then `getDb`. Anything reaching the
+  // injected ports instead of the legacy store therefore met an empty schema
+  // on a data dir nothing had touched yet — `/api/v1` answered
+  // `no such table: workspaces` from the day it was mounted. Both are
+  // memoized per data dir, so on an already-prepared dir this costs nothing.
+  await prepareDataDir(dataDir)
   const serverDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
   )
