@@ -338,6 +338,12 @@ Before closing a change:
 - Complete manual verification of the real behavior.
 - Preserve the verified user scenario in `canvas-viewer-browser`/`web-browser` or E2E coverage.
 - Run `pnpm test`.
+- Run `pnpm check:local`, which is every gate CI's `check` job runs plus `pnpm knip`.
+  It is derived from `.github/workflows/ci.yml` rather than remembered:
+  `local-gate-command.test.ts` fails when the job gains a step the script does not
+  run, because a local pass that reports green while CI would fail is worse than no
+  local pass — it gets trusted. A remembered five-command list had already drifted
+  three steps behind the job.
 - Resolve any `pnpm knip` finding one of three ways before closing: delete the dead code, drop the unused `export`, or register it in `knip.jsonc` as an intentional public surface with a reason comment.
 - If the change can affect typing or packaging, also run:
 
