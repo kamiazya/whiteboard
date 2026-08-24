@@ -33,6 +33,16 @@ paths:
 - A preference meant to be overridable at a finer scope later (an edge overriding the canvas's routing style) declares its schema ONCE — `edgeRoutingSchema` — and the override reuses it rather than restating the shape.
 - **`x-whiteboard` is the ONLY extension key** an emitted document may carry — never add a second non-standard field at any level. The contract is published as a generated JSON Schema (`json-schema.ts` → `docs/reference/x-whiteboard.schema.json`, a vitest file snapshot held in sync by `json-schema.test.ts`; regenerate with `pnpm vitest run --project model-node json-schema -u`) and enforced by codec's `extension-contract.property.test.ts` (foreign keys stripped on parse, emission stays within JSON Canvas 1.0 + `x-whiteboard`). Extending what lives INSIDE `x-whiteboard` means regenerating the artifact in the same increment.
 
+- **OKF's own vocabulary is modelled in `trust.ts`**, and it is deliberately looser than the spec's
+  prose reads. `okfActorSchema` validates a non-blank single-line string, NOT §7's three bullets —
+  the list is not exhaustive and §5.1's own example writes `author: team:ga4-docs`, so enforcing the
+  bullets would reject the specification's own sample data. The one shape that carries meaning is
+  the `human:` prefix (§5.3 keys trust tiers off it), and `isHumanActor` is the single place that
+  check lives. `trustTier` is DERIVED on read and never stored — OKF's whole position is that a
+  stored verdict is subjective, unportable and goes stale.
+- A key joins `RESERVED_ROOT_KEYS` the moment something INTERPRETS it, and not before. Until then
+  `facetsRaw` is the right home: preserved verbatim, never half-understood.
+
 ## Tests
 
 - Vitest project: `model-node` (registered in root `vitest.config.ts`).

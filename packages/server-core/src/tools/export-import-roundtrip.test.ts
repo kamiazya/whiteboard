@@ -285,6 +285,81 @@ describe('error paths do not silently produce corrupt output', () => {
     ).rejects.toThrow(/yaml-safe/)
   })
 
+  /**
+   * The concrete shape the preservation rule exists for: an OKF v0.2 document
+   * written by some other producer. A read-edit-write through the whiteboard
+   * must hand every family back (§4.1, §5, §10.2) — the trust pair as typed
+   * fields it models (ADR-0016), everything else carried verbatim.
+   */
+  test('preserves an OKF v0.2 document: the trust family as typed fields, the rest carried verbatim', async () => {
+    const { documentSet, deps } = await setupTools()
+
+    const markdown = [
+      '---',
+      'type: Attested Computation',
+      'description: Recognized revenue for a fiscal year, per Finance definition.',
+      'status: stable',
+      'runtime: bigquery',
+      'parameters:',
+      '  - { name: year, type: integer, required: true }',
+      'executor:',
+      '  resource: references/skills/run-on-bq.md',
+      '  receipt: [job_id, executed_sql, result]',
+      'attester:',
+      '  resource: references/attesters/revenue.py',
+      'generated: { by: reference_agent/gemini-2.5-pro, at: 2026-06-20T22:53:05Z }',
+      'verified: { by: "human:ahormati", at: 2026-06-25T09:00:00Z }',
+      'stale_after: 2026-09-23T00:00:00Z',
+      'sources:',
+      '  - id: rev-policy',
+      '    resource: https://wiki.acme/finance/revenue-recognition',
+      '    usage_count: 5000',
+      'usage_window: { from: 2026-06-01T00:00:00Z, to: 2026-06-30T00:00:00Z }',
+      '---',
+      '# Computation',
+      '',
+      '    SELECT SUM(amount) AS revenue',
+    ].join('\n')
+
+    await documentSet.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, markdown })
+    const result = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+
+    expect(result.frontmatter.type).toBe('Attested Computation')
+    expect(result.frontmatter.description).toBe(
+      'Recognized revenue for a fiscal year, per Finance definition.',
+    )
+    expect(result.frontmatter.generated).toEqual({
+      by: 'reference_agent/gemini-2.5-pro',
+      at: '2026-06-20T22:53:05Z',
+    })
+    expect(result.frontmatter.verified).toEqual([
+      { by: 'human:ahormati', at: '2026-06-25T09:00:00Z' },
+    ])
+    expect(result.frontmatter.facetsRaw).toEqual({
+      status: 'stable',
+      runtime: 'bigquery',
+      parameters: [{ name: 'year', type: 'integer', required: true }],
+      executor: {
+        resource: 'references/skills/run-on-bq.md',
+        receipt: ['job_id', 'executed_sql', 'result'],
+      },
+      attester: { resource: 'references/attesters/revenue.py' },
+      stale_after: '2026-09-23T00:00:00Z',
+      sources: [
+        {
+          id: 'rev-policy',
+          resource: 'https://wiki.acme/finance/revenue-recognition',
+          usage_count: 5000,
+        },
+      ],
+      usage_window: { from: '2026-06-01T00:00:00Z', to: '2026-06-30T00:00:00Z' },
+    })
+    // Emitted at the root they came from, never as a `facetsRaw:` key of
+    // this codebase's own invention.
+    expect(result.markdown).toContain('\nstatus: stable\n')
+    expect(result.markdown).not.toContain('facetsRaw:')
+  })
+
   test('export_okf on a canvas with no stored snapshot surfaces a clean error', async () => {
     const deps = makeDeps(new FakeDocumentStore())
 

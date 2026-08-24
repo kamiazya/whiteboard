@@ -3,6 +3,24 @@ import { z } from 'zod'
 export const coreFacetsSchema = z.object({
   type: z.string().min(1),
   title: z.string().optional(),
+  /**
+   * OKF §4.1: "A single sentence summarizing the concept. Used by `index.md`
+   * generators, search snippets, and previews." One sentence is guidance to
+   * the author, not a constraint to enforce — a schema that policed it would
+   * reject a two-sentence summary that reads perfectly well.
+   */
+  description: z.string().optional(),
+  /**
+   * OKF §4.1: "A URI that uniquely identifies the underlying asset the
+   * concept describes. Absent for concepts that describe abstract ideas
+   * rather than physical resources."
+   *
+   * Not validated as a URL. §6.2 makes every path-valued field accept an
+   * absolute URL, a bundle-relative path beginning with `/`, or an ordinary
+   * relative path, so `../computations/revenue.md` is as conformant as
+   * `https://…` and a URL check would reject it.
+   */
+  resource: z.string().optional(),
   tags: z.array(z.string()).optional(),
   // Explicit default-View override, used when multiple extension facets
   // apply to the same canvas and the reader must pick one deterministically.
@@ -46,12 +64,27 @@ export type ExtensionFacets = z.infer<typeof extensionFacetsSchema>
 
 /**
  * Root-level frontmatter keys that are NOT free for `facetsRaw` to preserve:
- * the core facet fields plus the `facets` extension bucket itself. Keeping
- * this list exported means both `coreFacetsSchema` consumers and
- * `facetsRawSchema` share one definition of "reserved", so a key can never
- * legally live in two buckets at once.
+ * the core facet fields, the `facets` extension bucket itself, and the OKF
+ * v0.2 trust family (`trust.ts`), which this codebase models rather than
+ * merely carrying. Keeping this list exported means both `coreFacetsSchema`
+ * consumers and `facetsRawSchema` share one definition of "reserved", so a
+ * key can never legally live in two buckets at once.
+ *
+ * A key joins this list the moment something INTERPRETS it. Until then
+ * `facetsRaw` is the right home: preserved verbatim, and never
+ * half-understood.
  */
-export const RESERVED_ROOT_KEYS = ['type', 'title', 'tags', 'view', 'facets'] as const
+export const RESERVED_ROOT_KEYS = [
+  'type',
+  'title',
+  'description',
+  'resource',
+  'tags',
+  'view',
+  'facets',
+  'generated',
+  'verified',
+] as const
 
 /**
  * Unknown root-level frontmatter keys are preserved verbatim as future
