@@ -1,5 +1,6 @@
 import {
   documentIdSchema,
+  documentKindSchema,
   documentPathSchema,
   okfActorSchema,
   workspaceIdSchema,
@@ -99,6 +100,12 @@ const documentDetailSchema = z
     // wants that fallback can choose it, and a listing that invents one reads
     // as if somebody typed the path as the title.
     name: z.string().optional(),
+    // Both carried straight from `DocumentEntry`, and both absent rather than
+    // guessed. Dropping them here is what kept the HTTP list route reaching
+    // the store directly — an adapter cannot report what the operation
+    // refuses to carry.
+    kind: documentKindSchema.optional(),
+    updatedAt: z.string().optional(),
   })
   .strict()
 

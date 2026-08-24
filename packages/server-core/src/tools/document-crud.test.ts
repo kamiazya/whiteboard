@@ -187,6 +187,35 @@ describe('wbDocumentResolve', () => {
 })
 
 describe('wbDocumentList', () => {
+  // The HTTP list surface reports both, and it used to reach the store
+  // directly because this operation dropped them — an adapter cannot report
+  // what the operation refuses to carry. `updatedAt` is OPTIONAL on
+  // `DocumentEntry` because the browser's index genuinely does not own it
+  // (apps/web reads timestamps from a separate store), so this asserts the
+  // pass-through, not that every index supplies one.
+  it('carries kind and updatedAt through rather than dropping them', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    ;(deps.documentIndex as InMemoryDocumentIndex).seed({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+
+    const out = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+
+    expect(out.documents).toEqual([
+      {
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        path: 'a',
+        kind: 'markdown',
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      },
+    ])
+  })
+
   it('throws WorkspaceNotFoundError for a workspace that was never created', async () => {
     const deps = makeDeps()
     await expect(wbDocumentList(deps, { workspaceId: 'ghost' })).rejects.toThrow(

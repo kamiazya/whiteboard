@@ -23,6 +23,18 @@ export const documentEntrySchema = z
      * though somebody typed the path in as a title.
      */
     name: z.string().min(1).optional(),
+    /**
+     * When the placement last changed, ISO 8601.
+     *
+     * OPTIONAL because an index may genuinely not own it: the daemon's SQL
+     * twin has the column, while apps/web's IndexedDB index does not — that
+     * app reads timestamps from a separate store keyed by documentId. A
+     * required field would have forced one of them to invent a value, and an
+     * invented timestamp is worse than an absent one because it reads as
+     * fact. Every UI site that renders it already treats absence as "no age
+     * to show".
+     */
+    updatedAt: z.string().optional(),
   })
   .strict()
 export type DocumentEntry = z.infer<typeof documentEntrySchema>

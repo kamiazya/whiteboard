@@ -370,8 +370,17 @@ describe('documentSummarySchema', () => {
     expect(result).toEqual(valid)
   })
 
-  it('rejects missing updatedAt', () => {
-    expect(documentSummarySchema.safeParse({ path: 'canvas-1' }).success).toBe(false)
+  // Was `rejects missing updatedAt`. Required stopped being true when the
+  // list route became an adapter over `wbDocumentList`: `DocumentEntry`
+  // leaves the field optional because an index may genuinely not own a
+  // timestamp — apps/web's IndexedDB index reads them from a separate store —
+  // and a response type cannot promise more than the port it reads from.
+  //
+  // Absent is still not the same as arbitrary: a value that IS present must
+  // be a string, which is the half worth keeping.
+  it('leaves updatedAt ABSENT rather than requiring one the port cannot promise', () => {
+    expect(documentSummarySchema.safeParse({ path: 'canvas-1' }).success).toBe(true)
+    expect(documentSummarySchema.safeParse({ path: 'canvas-1', updatedAt: 7 }).success).toBe(false)
   })
 
   it('accepts an explicit kind: markdown', () => {

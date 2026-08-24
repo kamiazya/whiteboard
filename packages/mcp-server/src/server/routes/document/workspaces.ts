@@ -6,8 +6,10 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import {
   type ServerDeps,
+  WorkspaceNotFoundError,
   wbDocumentCreate,
   wbDocumentDelete,
+  wbDocumentList,
 } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { z } from 'zod'
@@ -23,7 +25,7 @@ import {
 } from '../../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
-import { listDocuments, listWorkspaces, workspaceExists } from '../../store/document-store.js'
+import { listWorkspaces } from '../../store/document-store.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -77,16 +79,31 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       throw err
     }
     try {
-      // "Empty" and "never registered" are different answers, and conflating
-      // them is what let a stale pairing render as an empty workspace with a
-      // Create button. Same problem-details shape as live-doc's snapshot 404.
-      if (!(await workspaceExists(workspaceId))) {
-        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
+      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const { documents } = await wbDocumentList(deps, { workspaceId })
+      // The port names a document by the id the index assigned and calls what
+      // a human reads its `name`; this surface has always said `id` and
+      // `displayName`. Renaming either would be a published break for a
+      // translation an adapter is there to do.
+      const response: ListDocumentsResponse = {
+        documents: documents.map((entry) => ({
+          path: entry.path,
+          id: entry.documentId,
+          ...(entry.name === undefined ? {} : { displayName: entry.name }),
+          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+        })),
       }
-      const documents = await listDocuments(workspaceId)
-      const response: ListDocumentsResponse = { documents }
       return c.json(response)
     } catch (err) {
+      // "Empty" and "never registered" are different answers, and conflating
+      // them is what let a stale pairing render as an empty workspace with a
+      // Create button. The operation refuses an unknown workspace rather than
+      // answering with an empty list, which is what makes this translation
+      // possible without a second existence query.
+      if (err instanceof WorkspaceNotFoundError) {
+        return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
+      }
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err

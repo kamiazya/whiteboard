@@ -146,6 +146,8 @@ export async function wbDocumentList(
       documentId: entry.documentId,
       path: entry.path,
       ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+      ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
     })),
   }
 }
