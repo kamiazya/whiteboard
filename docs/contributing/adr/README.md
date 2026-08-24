@@ -50,3 +50,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0015](0015-search-quality-scoreboard.md) | A judged corpus decides whether search needs embeddings | Accepted |
 | [ADR-0016](0016-okf-trust-family.md) | OKF v0.2 trust family: a declared actor, a server-stamped time, and a bucket of its own | Accepted — daemon write path only |
 | [ADR-0017](0017-okf-bundle-mapping.md) | Mapping a workspace onto an OKF bundle | Proposed — design only |
+| [ADR-0018](0018-operation-vs-mechanic.md) | An operation is a use case; the composition root holds only mechanics | Proposed |
