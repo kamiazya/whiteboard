@@ -159,7 +159,13 @@ export const documentSummarySchema = z.object({
   // `[[Name]]` reference reads the name from the same response it renders
   // the list from — the split is what let the two disagree.
   displayName: z.string().min(1).optional(),
-  updatedAt: z.string(),
+  // Optional, matching `DocumentEntry`, which is optional because an index
+  // may genuinely not own a timestamp — apps/web's IndexedDB index reads them
+  // from a separate store. The daemon's SQL index always has one, so this
+  // surface still reports it in practice; what changed is that the TYPE no
+  // longer claims a guarantee the port cannot make. Every UI site that
+  // renders it already treated absence as "no age to show".
+  updatedAt: z.string().optional(),
   // ABSENT when the row records no kind. Defaulting it to 'spatial' used to
   // hide that state: a caller could not tell a stored spatial document from
   // one whose kind was never recorded, and the guess escaped into new rows

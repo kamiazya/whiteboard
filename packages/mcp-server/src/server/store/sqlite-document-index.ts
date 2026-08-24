@@ -37,12 +37,17 @@ function toEntry(row: {
   path: string
   kind: string | null
   displayName: string | null
+  updatedAt: number
 }): DocumentEntry {
   return {
     documentId: row.id,
     path: row.path,
     ...(row.kind === null ? {} : { kind: row.kind as DocumentEntry['kind'] }),
     ...(row.displayName === null ? {} : { name: row.displayName }),
+    // The column is epoch millis; the port publishes ISO 8601, which is what
+    // every reader of it compares and formats. Converted here rather than at
+    // each caller, so the storage representation stops at this boundary.
+    updatedAt: new Date(row.updatedAt).toISOString(),
   }
 }
 
@@ -111,7 +116,16 @@ export class SqliteDocumentIndex implements DocumentIndex {
       if ((inserted.numInsertedOrUpdatedRows ?? 0n) === 0n) {
         throw new DocumentPathTakenError(workspaceId, path)
       }
-      return { documentId, path, kind, ...(name === undefined ? {} : { name }) }
+      // `now` rather than a re-read: it is the value just written, and a
+      // create whose returned entry disagrees with a later `resolveDocument`
+      // is what the conformance suite exists to catch.
+      return {
+        documentId,
+        path,
+        kind,
+        ...(name === undefined ? {} : { name }),
+        updatedAt: new Date(now).toISOString(),
+      }
     })
   }
 
@@ -121,7 +135,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
   }: ResolveDocumentInput): Promise<DocumentEntry | null> {
     const row = await this.db
       .selectFrom('documents')
-      .select(['id', 'path', 'kind', 'displayName'])
+      .select(['id', 'path', 'kind', 'displayName', 'updatedAt'])
       .where('workspaceId', '=', workspaceId)
       .where('path', '=', path)
       .executeTakeFirst()
@@ -135,7 +149,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
   }: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     const row = await this.db
       .selectFrom('documents')
-      .select(['id', 'path', 'kind', 'displayName'])
+      .select(['id', 'path', 'kind', 'displayName', 'updatedAt'])
       .where('workspaceId', '=', workspaceId)
       .where('id', '=', documentId)
       .executeTakeFirst()
@@ -166,7 +180,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
     }
     const rows = await this.db
       .selectFrom('documents')
-      .select(['id', 'path', 'kind', 'displayName'])
+      .select(['id', 'path', 'kind', 'displayName', 'updatedAt'])
       .where('workspaceId', '=', workspaceId)
       .execute()
     // Sorted here rather than in SQL: segment-wise order is not what any

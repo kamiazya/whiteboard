@@ -44,7 +44,7 @@ export interface DaemonIndexPageProps {
 interface DocumentRow {
   path: string
   displayName: string
-  updatedAt: string
+  updatedAt: string | undefined
   // Absent when the daemon records no kind for the row (pre-kind documents):
   // the list says nothing rather than claiming spatial.
   kind?: DocumentKind
@@ -56,7 +56,13 @@ function sortRows(rows: DocumentRow[]): DocumentRow[] {
   return [...rows].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
     if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
-    if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1
+    // Newest first, and a document with no recorded timestamp sorts last
+    // rather than winning by accident: `undefined` fails every `<`
+    // comparison, so a bare `a.updatedAt < b.updatedAt` would have quietly
+    // ordered it as if it were the newest.
+    const left = a.updatedAt ?? ''
+    const right = b.updatedAt ?? ''
+    if (left !== right) return left < right ? 1 : -1
     return 0
   })
 }

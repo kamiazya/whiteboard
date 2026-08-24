@@ -63,6 +63,7 @@ async function depsRecordingTeardown(): Promise<{
 async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   deps: Awaited<ReturnType<typeof resolveServerDeps>>
   created: string[]
+  listed: string[]
 }> {
   // The delete cases reach a migrated schema through `saveDocument`'s own
   // `dbReady`; these create nothing first, so they have to migrate here.
@@ -71,13 +72,53 @@ async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
   if (bootstrapWorkspace) await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
   const created: string[] = []
+  const listed: string[] = []
   const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
   index.createDocument = async (input) => {
     created.push(`${input.workspaceId}:${input.path}`)
     return await Object.getPrototypeOf(index).createDocument.call(index, input)
   }
-  return { deps: { ...deps, documentIndex: index }, created }
+  index.listDocuments = async (input) => {
+    listed.push(input.workspaceId)
+    return await Object.getPrototypeOf(index).listDocuments.call(index, input)
+  }
+  return { deps: { ...deps, documentIndex: index }, created, listed }
 }
+
+describe('GET /api/workspaces/:workspaceId/documents', () => {
+  it('lists through the injected operation, carrying kind and updatedAt', async () => {
+    const { deps, listed } = await depsRecordingCreate()
+    await deps.documentIndex.createDocument({ workspaceId: 'ws-1', path: 'a', kind: 'markdown' })
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    expect(res.status).toBe(200)
+    // Reaching the same database is not the same as reaching the injected
+    // index: the module-level store reads these very rows, so without this the
+    // case passes either way.
+    expect(listed).toEqual(['ws-1'])
+    const body = (await res.json()) as { documents: Record<string, unknown>[] }
+    expect(body.documents).toHaveLength(1)
+    expect(body.documents[0]).toMatchObject({ path: 'a', kind: 'markdown' })
+    // The daemon's index owns a timestamp, so this surface must still report
+    // one — the field is optional on the port for the browser's sake, not
+    // because the daemon may omit it.
+    expect(typeof body.documents[0]?.updatedAt).toBe('string')
+  })
+
+  // "Empty" and "never registered" are different answers, and conflating them
+  // is what let a stale pairing render as an empty workspace with a Create
+  // button. The operation raises it; this surface translates it.
+  it('answers 404 for a workspace that was never registered', async () => {
+    const { deps } = await depsRecordingCreate()
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/never-made/documents')
+
+    expect(res.status).toBe(404)
+  })
+})
 
 describe('POST /api/workspaces/:workspaceId/documents', () => {
   // Same reasoning as the delete below: creating a document twice over — once
