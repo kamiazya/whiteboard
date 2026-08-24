@@ -134,6 +134,25 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
   }
 
+  // The /api/v1 document surface (server-core's createServer, mounted when
+  // the daemon is given ServerDeps). Same resources as /api/workspaces above
+  // and deliberately the SAME decision, because what differs between the two
+  // is how a document is ADDRESSED — by path there, by the id the index
+  // assigned here — not what a caller may do to it. Splitting them would mean
+  // one grant that reaches a document by id and a different one that reaches
+  // the same document by path.
+  //
+  // This rule is why the prefix is spelled out rather than folded into the
+  // one above: `startsWith('/api/workspaces')` does not match
+  // `/api/v1/workspaces`, so before this every v1 path resolved to null. That
+  // is fail-closed (server-mode answers 500 auth.route-undeclared), so nothing
+  // was ever under-protected — but it made the surface unusable in server mode
+  // for a reason no one had decided, and the registry-wide guard could not see
+  // it because the apps it walked were built without ServerDeps.
+  if (path.startsWith('/api/v1/workspaces')) {
+    return { kind: 'scoped', scopes: [isWrite ? 'workspace:write' : 'workspace:read'] }
+  }
+
   // touch/shutdown/logs-prune all mutate daemon-managed process state
   // (liveness timer, process lifecycle, on-disk log files) and require the
   // admin tier even though the HTTP verb for prune is POST like any other

@@ -9,6 +9,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { createContainer, resolveServerDeps } from '../../di/container.js'
 // Imported STATICALLY, though nothing here mocks it. As `await import()`
 // inside the test body, the cost of transforming and loading app.ts's whole
 // module graph was charged to the 10s per-test budget — fine on an idle
@@ -61,6 +62,11 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
         clients: { connected: 0, ready: 0 },
       }),
       shutdown: () => Promise.resolve(),
+      // Without this /api/v1 is not mounted, so the walk below never sees a
+      // single v1 route and the whole surface is exempt from the guard by
+      // accident. The in-memory container is enough: this test inspects
+      // `app.routes` and never issues a request.
+      serverDeps: resolveServerDeps(createContainer()),
     })
 
     // `app.routes` conflates middleware mounts (`app.use('/api/*', ...)`,
@@ -74,6 +80,12 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
       (route) => route.path.startsWith('/api/') && !route.path.endsWith('*'),
     )
     expect(apiRoutes.length).toBeGreaterThan(0)
+    // The walk is only as wide as what got mounted. /api/v1 mounts only when
+    // ServerDeps are supplied, and for a long time this test supplied none —
+    // so nine v1 routes were exempt from the guard by accident rather than by
+    // decision. Assert the surface is present, not merely that what is
+    // present is declared.
+    expect(apiRoutes.some((route) => route.path.startsWith('/api/v1/'))).toBe(true)
 
     const undeclared = apiRoutes
       .map((route) => ({ ...route, decision: resolveApiRouteScope(route.method, route.path) }))
@@ -112,6 +124,11 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
         clients: { connected: 0, ready: 0 },
       }),
       shutdown: () => Promise.resolve(),
+      // Without this /api/v1 is not mounted, so the walk below never sees a
+      // single v1 route and the whole surface is exempt from the guard by
+      // accident. The in-memory container is enough: this test inspects
+      // `app.routes` and never issues a request.
+      serverDeps: resolveServerDeps(createContainer()),
     })
 
     const apiRoutes = app.routes.filter(
@@ -141,6 +158,28 @@ describe('resolveApiRouteScope — registry-wide coverage of mounted /api/* rout
   // The reconnect surface that used to occupy these paths is gone. Removing
   // its registry entries must move the paths from a decision to null
   // (fail closed), never silently to a default-allow.
+  // Pinned separately from the walk above: the walk proves every mounted
+  // route HAS a decision, not that the decision is the right one.
+  it('v1 document routes carry the same workspace scopes as their path-addressed twins', () => {
+    const read = { kind: 'scoped', scopes: ['workspace:read'] }
+    const write = { kind: 'scoped', scopes: ['workspace:write'] }
+    const doc = '/api/v1/workspaces/default/documents/01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/documents')).toEqual(read)
+    expect(resolveApiRouteScope('POST', '/api/v1/workspaces/default/documents')).toEqual(write)
+    expect(resolveApiRouteScope('GET', doc)).toEqual(read)
+    expect(resolveApiRouteScope('DELETE', doc)).toEqual(write)
+    expect(resolveApiRouteScope('GET', `${doc}/backlinks`)).toEqual(read)
+    expect(resolveApiRouteScope('GET', `${doc}/okf`)).toEqual(read)
+    expect(resolveApiRouteScope('POST', `${doc}/linkify-mentions`)).toEqual(write)
+    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/search')).toEqual(read)
+    expect(resolveApiRouteScope('GET', '/api/v1/workspaces/default/document-tags')).toEqual(read)
+
+    // The same document reached by path gets the same answer — the point of
+    // giving v1 the workspace scopes rather than scopes of its own.
+    expect(resolveApiRouteScope('GET', '/api/workspaces/default/documents')).toEqual(read)
+  })
+
   it('the removed reconnect routes now resolve to null, not a stale decision', () => {
     expect(resolveApiRouteScope('POST', '/api/reconnect-credential')).toBeNull()
     expect(resolveApiRouteScope('POST', '/api/reconnect-challenge')).toBeNull()
