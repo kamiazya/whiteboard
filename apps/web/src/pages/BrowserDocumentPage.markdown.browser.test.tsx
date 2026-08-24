@@ -167,6 +167,47 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
     expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
   })
 
+  /**
+   * The OKF core facets a person edits, through real IndexedDB. jsdom already
+   * covers which value the component emits; what only a browser can answer is
+   * whether the emitted value reaches the Loro `core` bucket and comes back
+   * after the page is torn down and rebuilt.
+   */
+  it('the OKF summary and describes fields survive a remount', async () => {
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'note', kind: 'markdown', makeDefault: true })
+    const first = render(<BrowserDocumentPage store={store} />)
+    await findMarkdownTitleInput()
+
+    await userEvent.click(screen.getByRole('button', { name: /properties/i }))
+    // Queried inside each step rather than held: the properties bar remounts
+    // with the page, and a held input reports the value it had when detached.
+    await userEvent.fill(
+      screen.getByRole('textbox', { name: /summary/i }),
+      'Completed orders across all channels.',
+    )
+    await userEvent.fill(
+      screen.getByRole('textbox', { name: /describes/i }),
+      'https://example.com/orders',
+    )
+
+    await waitForSaved()
+    first.unmount()
+
+    render(<BrowserDocumentPage store={store} />)
+    await findMarkdownTitleInput()
+    await userEvent.click(screen.getByRole('button', { name: /properties/i }))
+    await waitFor(
+      () => {
+        const summary = screen.getByRole('textbox', { name: /summary/i }) as HTMLInputElement
+        const describes = screen.getByRole('textbox', { name: /describes/i }) as HTMLInputElement
+        expect(summary.value).toBe('Completed orders across all channels.')
+        expect(describes.value).toBe('https://example.com/orders')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
   it('a markdown canvas has no display-settings gear — edge routing is spatial-only', async () => {
     const spatialStore = new IdbDocumentIndex()
     const spatial = render(<BrowserDocumentPage store={spatialStore} />)

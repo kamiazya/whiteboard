@@ -1,4 +1,4 @@
-# ADR-0016: An operation is a use case; the composition root holds only mechanics
+# ADR-0018: An operation is a use case; the composition root holds only mechanics
 
 **Status:** Proposed
 

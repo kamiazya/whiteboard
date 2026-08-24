@@ -45,3 +45,36 @@ describe('serializeOkf', () => {
     ).toThrow(/yaml-safe/)
   })
 })
+
+describe('serializeOkf spreads facetsRaw back at the root (OKF §4.1)', () => {
+  it('emits preserved keys as root frontmatter, never as a nested `facetsRaw:` key', () => {
+    const text = serializeOkf({
+      frontmatter: {
+        type: 'Metric',
+        title: 'Revenue',
+        facetsRaw: { status: 'stable', description: 'one line' },
+      },
+      body: 'body',
+    })
+
+    expect(text).toContain('\nstatus: stable\n')
+    expect(text).toContain('\ndescription: one line\n')
+    expect(text).not.toContain('facetsRaw:')
+  })
+
+  it('emits preserved keys in canonical lexicographic order', () => {
+    const text = serializeOkf({
+      frontmatter: { type: 'note', facetsRaw: { zeta: 1, alpha: 2, mu: 3 } },
+      body: '',
+    })
+
+    expect(text.indexOf('alpha:')).toBeLessThan(text.indexOf('mu:'))
+    expect(text.indexOf('mu:')).toBeLessThan(text.indexOf('zeta:'))
+  })
+
+  it('rejects a preserved value that is not yaml-safe, like any other frontmatter value', () => {
+    expect(() =>
+      serializeOkf({ frontmatter: { type: 'note', facetsRaw: { bad: Number.NaN } }, body: '' }),
+    ).toThrow(/yaml-safe/)
+  })
+})

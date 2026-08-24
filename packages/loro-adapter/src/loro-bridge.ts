@@ -11,6 +11,8 @@ import {
   type StoredCoreFacets,
   spatialNodeSchema,
   storedCoreFacetsSchema,
+  type TrustFacets,
+  trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
@@ -47,6 +49,13 @@ function dropLockInto(doc: LoroDoc, mapKey: string, id: string): void {
   if (locksMap.keys().includes(id)) locksMap.delete(id)
 }
 const CORE_KEY = 'core'
+/**
+ * OKF v0.2's trust family gets a bucket of its own rather than joining
+ * `core`, because `writeCoreFacets` replaces the whole core bucket and
+ * deletes anything the caller omitted — a server-written stamp living there
+ * would be erased by any client that rewrote its own tags (ADR-0016).
+ */
+const TRUST_KEY = 'trust'
 
 /**
  * Document-level envelope: what the document IS, above any one format's
@@ -443,6 +452,53 @@ const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
  */
 export function writeCoreFacets(doc: LoroDoc, meta: StoredCoreFacets): void {
   replaceBucket(doc, CORE_KEY, { ...meta })
+}
+
+/** Prototype-less for the same reason `CORE_FACET_FIELD_SCHEMAS` is. */
+const TRUST_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
+  Object.create(null),
+  trustFacetsSchema.shape,
+)
+
+/**
+ * The OKF v0.2 trust family (§5.2), stored per-key like every other bucket
+ * here so two peers writing `generated` and `verified` converge on both.
+ * Replace-on-rewrite, matching `writeCoreFacets`/`writeFacets`: a write
+ * states the whole family rather than merging with whatever was there.
+ */
+export function writeTrustFacets(doc: LoroDoc, trust: TrustFacets): void {
+  const entries: Fields = {}
+  if (trust.generated !== undefined) entries.generated = { ...trust.generated }
+  if (trust.verified !== undefined) entries.verified = trust.verified.map((event) => ({ ...event }))
+  replaceBucket(doc, TRUST_KEY, entries)
+}
+
+/**
+ * A SPATIAL document answers `undefined` whatever its `trust` map holds, for
+ * the same reason `readCoreFacets` does: the trust family are OKF root
+ * frontmatter keys, and a JSON Canvas document has no frontmatter to project
+ * them into (ADR-0016 decision 5).
+ *
+ * A corrupt field is dropped rather than failing the whole read, matching
+ * `readCoreFacets`. Unlike it, there is no required field here — a document
+ * with a `verified` list and no `generated` is a perfectly good OKF concept —
+ * so an all-dropped read answers `undefined` rather than an empty object.
+ */
+export function readTrustFacets(doc: LoroDoc): TrustFacets | undefined {
+  if (readDocumentKind(doc) === 'spatial') return undefined
+
+  const trustMap = doc.getMap(TRUST_KEY)
+  if (trustMap.keys().length === 0) return undefined
+
+  const candidate: Record<string, unknown> = {}
+  for (const key of trustMap.keys()) {
+    const fieldSchema = TRUST_FACET_FIELD_SCHEMAS[key]
+    if (!fieldSchema) continue
+    const parsed = fieldSchema.safeParse(trustMap.get(key))
+    if (parsed.success) candidate[key] = parsed.data
+  }
+  if (Object.keys(candidate).length === 0) return undefined
+  return trustFacetsSchema.parse(candidate)
 }
 
 /**

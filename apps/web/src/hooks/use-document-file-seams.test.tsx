@@ -180,14 +180,32 @@ describe('toFacetCard', () => {
     ])
   })
 
+  it('renders the OKF description as the summary row, between type and tags', () => {
+    // An embed card is a preview, which §4.1 names as one of `description`'s
+    // three consumers.
+    expect(
+      toFacetCard('spec-a1b2c3', {
+        type: 'note',
+        description: 'What this document is for.',
+        tags: ['a'],
+      })?.rows,
+    ).toEqual([
+      { label: 'type', value: 'note' },
+      { label: 'summary', value: 'What this document is for.' },
+      { label: 'tags', value: 'a' },
+    ])
+  })
+
   it('renders no row for facets the card deliberately does not show', () => {
-    // `view` selects a template; it is not content. Unknown root keys are
-    // preserved by the model but have no agreed presentation.
+    // `view` selects a template; it is not content. `resource` names what the
+    // document describes rather than saying anything about it. Unknown root
+    // keys are preserved by the model but have no agreed presentation.
     // `readCoreFacets` returns core facets PLUS `facetsRaw`, so the extra key
     // really does arrive at runtime even though the parameter narrows it away.
     const facets = {
       type: 'note',
       view: 'example.kanban/v1',
+      resource: 'https://example.com',
       facetsRaw: { owner: 'x' },
     } as CoreFacets
     const card = toFacetCard('spec-a1b2c3', facets)

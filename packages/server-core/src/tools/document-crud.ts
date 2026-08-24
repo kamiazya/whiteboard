@@ -98,6 +98,7 @@ export async function wbDocumentCreate(
       workspaceId: input.workspaceId,
       documentId: entry.documentId,
       markdown: input.markdown,
+      ...(input.actor === undefined ? {} : { actor: input.actor }),
     })
   }
 

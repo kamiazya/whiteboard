@@ -150,6 +150,69 @@ describe('DocumentProperties', () => {
     expect(onChange).not.toHaveBeenCalled()
   })
 
+  // Queried by the VISIBLE label, which is also the accessible name — neither
+  // field carries an `aria-label`, so what a voice-control user says matches.
+  it('edits the OKF description, and clears it to absent rather than to an empty string', () => {
+    const onChange = vi.fn()
+    render(
+      <DocumentProperties
+        {...titleProps()}
+        facets={meta({ description: 'One row per order.' })}
+        onFacetsChange={onChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }))
+
+    const box = screen.getByRole('textbox', { name: /summary/i })
+    expect((box as HTMLInputElement).value).toBe('One row per order.')
+
+    fireEvent.change(box, { target: { value: 'Completed orders, all channels.' } })
+    expect(onChange).toHaveBeenLastCalledWith({
+      type: 'markdown',
+      description: 'Completed orders, all channels.',
+    })
+
+    // A blank summary is no summary. Storing `description: ""` would emit an
+    // empty key into the exported OKF for a reader to skip past.
+    fireEvent.change(box, { target: { value: '   ' } })
+    expect(onChange).toHaveBeenLastCalledWith({ type: 'markdown' })
+  })
+
+  it('edits the OKF resource, which §6.2 lets be a URL or a path', () => {
+    const onChange = vi.fn()
+    render(<DocumentProperties {...titleProps()} facets={meta()} onFacetsChange={onChange} />)
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }))
+
+    const box = screen.getByRole('textbox', { name: /describes/i })
+    fireEvent.change(box, { target: { value: '../computations/revenue.md' } })
+    expect(onChange).toHaveBeenLastCalledWith({
+      type: 'markdown',
+      resource: '../computations/revenue.md',
+    })
+  })
+
+  it('preserves description and resource across an edit to another field', () => {
+    const onChange = vi.fn()
+    render(
+      <DocumentProperties
+        {...titleProps()}
+        facets={meta({ description: 'A summary.', resource: 'https://example.com' })}
+        onFacetsChange={onChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }))
+
+    const tagInput = screen.getByRole('textbox', { name: /add tag/i })
+    fireEvent.change(tagInput, { target: { value: 'ops' } })
+    fireEvent.keyDown(tagInput, { key: 'Enter' })
+    expect(onChange).toHaveBeenCalledWith({
+      type: 'markdown',
+      description: 'A summary.',
+      resource: 'https://example.com',
+      tags: ['ops'],
+    })
+  })
+
   it('refuses to emit an empty type, the one field the schema requires', () => {
     const onChange = vi.fn()
     render(<DocumentProperties {...titleProps()} facets={meta()} onFacetsChange={onChange} />)

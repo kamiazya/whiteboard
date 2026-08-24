@@ -21,6 +21,59 @@ gives it one.
 A `file` node renders as a labeled box when exported to SVG; its referenced image
 is not embedded in the output.
 
+## OKF frontmatter this server does not model
+
+OKF ([Open Knowledge Format](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md))
+requires exactly one frontmatter field, `type`, and leaves producers free to add
+any others. This server gives meaning to OKF's required `type`, its recommended
+`title`, `description`, `resource` and `tags`, v0.2's trust pair `generated`
+and `verified`, and its own `view` and `facets` extension keys.
+
+**Every other root key is preserved verbatim.** Write a document through
+`wb_document_set` and read it back with `wb_document_get`, and keys this server
+has no model for come back at the root they were written at, unchanged. That
+covers OKF v0.2's provenance and lifecycle families — `sources`,
+`usage_window`, `status`, `stale_after` — and the Attested Computation keys
+`runtime`, `parameters`, `computation`, `executor` and `attester`, none of
+which this server interprets.
+
+## Who wrote a document
+
+`wb_document_set` and `wb_document_create` take an optional `actor`, and record
+it as OKF `generated.by` alongside the server's clock as `generated.at`. Use
+[OKF's actor convention](https://github.com/GoogleCloudPlatform/knowledge-catalog/blob/main/okf/SPEC.md):
+`<producer>/<version>` for an agent or tool, `human:<id>` for a person,
+`process:<id>` for an automated process.
+
+- Identify yourself. A write with no `actor` is recorded as
+  `process:whiteboard-server`, which is true but tells a later reader nothing
+  about what produced the content.
+- **A document that already declares `generated` keeps it.** Importing a
+  document does not make this server its author, so an incoming stamp is
+  honoured rather than replaced.
+- `verified` is carried through as written, including the single bare mapping
+  the spec allows, which is normalised to a one-element list. Nothing in this
+  server adds a verification on your behalf: `generated` says who wrote the
+  content, `verified` says who confirmed it, and they are different claims.
+- The actor is a **self-report**, exactly as it is in OKF. Trust tiers derived
+  from it are advisory signals, not access control.
+
+Documents edited in the browser app do not yet carry `generated`; only writes
+through the daemon's tools do.
+
+Two consequences worth knowing:
+
+- Preserved keys are emitted in lexicographic order, not authoring order. The
+  same normalisation already applies to `facets`.
+- A preserved value must be representable in YAML. `NaN`, `Infinity` and
+  `undefined` are refused with a typed error rather than written as a corrupt
+  document.
+
+Values are not validated against the OKF spec: a malformed `verified` block is
+carried through as faithfully as a well-formed one, because a consumer that
+rejects a document for an unrecognized field is exactly what OKF's conformance
+section forbids.
+
 ## The `x-whiteboard` extension contract
 
 Extended JSON Canvas output is standard JSON Canvas 1.0 plus **exactly one**
