@@ -80,6 +80,33 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 **Measure before you change what you cannot see in the diff.** A heuristic, a cost model, a search or an optimisation is correct-looking code whose worth is entirely in numbers nobody has taken — so the INSTRUMENT lands first, in its own commit, and the change is judged by it. Two exist: `edge-routing-quality.test.ts` (quality: a corpus plus aggregate counts pinned EXACTLY, so an improvement is as loud as a regression, with debt metrics separated from price metrics) and `pnpm bench` (performance: `vitest bench`, compared across INTERLEAVED paired runs because machine drift between separate runs exceeds the effect). For a behaviour-preserving optimisation the scoreboard NOT moving is the proof. This is not ceremony: the instruments rejected three changes that were obviously right on argument — per-blocker detours, a placement cache, and an excess-length penalty tier — and one cheap reachability probe (67 of 68 remaining defects had a clean path available) retired a planned task and redirected the work. They also **rescued** one: an aligned re-score was rejected in its first two shapes on cost (13x, then 4.5x layout time) and shipped in a third that reused machinery already in the file, at 2x — the measurement did not veto the idea, it priced each shape until one was worth paying for. Load the `measured-change` skill. When a change buys one metric with another, `PENALTY_RULES`' declared tier order decides it; when the currencies are genuinely different, that is a human decision worth interrupting for.
 
+**A guard that never reaches its subject passes, and reads exactly like a
+guard that checked.** Distinct from a vacuous PROPERTY (a generator too sparse
+to reach the interesting inputs) and from an empty `--project` filter: here the
+assertion is right, the subject is simply absent from the fixture, so nothing
+is wrong for it to find. Three instances in one session, each costing a real
+defect:
+
+- `route-scope-registry.test.ts` walked apps built WITHOUT `ServerDeps`, and
+  `/api/v1` mounts only when they are supplied — so nine routes were exempt
+  from the registry-wide guard by accident. Every `/api/v1/*` path resolved to
+  `null`, which server mode answers 500 to.
+- Nothing migrated the data dir before `http-server.ts` handed its ports a
+  handle. `/api/v1` had answered `no such table: workspaces` on a fresh dir
+  since the day it was mounted; no test saw it because every one of them
+  migrated through some legacy call first.
+- A route test's own helper pre-created the workspace, so `createWorkspace:
+  true` was pinned by nothing — removing it left every case green, on
+  behaviour the PR body claimed to preserve.
+
+The mutation check catches this ONLY if the mutation is on the production
+side; mutating a rule the fixture never exercises is green either way. So
+assert the subject is PRESENT, not merely that what is present passes —
+`expect(routes.some(r => r.path.startsWith('/api/v1/'))).toBe(true)` beside the
+walk, `expect(edges.length).toBeGreaterThan(20)` beside the allowlist. A count
+far below what the real surface holds is evidence the fixture missed, never
+good news.
+
 **The same scepticism applies one step earlier, to a DIAGNOSIS.** A failure message, a "not a
 regression", a mutation check, a hand-verified fix — each arrives looking like evidence while
 saying nothing about what was actually exercised. In one session that produced three published
