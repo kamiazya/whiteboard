@@ -141,9 +141,15 @@ WHERE A WORKSPACE IS KEPT is retired.
 (`/browser[-_]?local/i` — so `browser-local`, `browserLocal`, `BrowserLocal`,
 `BROWSER_LOCAL` and `browserlocal` alike), across `apps/web/src`,
 `apps/web/scripts`, `docs`, `.github`, `.claude`, and the root `README.md`
-and `apps/web/DESIGN.md`. The daemon half is deliberately narrower — only the
-discriminant value (a quoted `'local-daemon'`) and `LOCAL_DAEMON_` constants
-— because `localDaemonBaseUrl` is still legal until its migration lands.
+and `apps/web/DESIGN.md`. The daemon half is pinned over the same surface,
+but only in its IDENTIFIER casings (`/local_?daemon/i` — `localDaemonBaseUrl`,
+`LOCAL_DAEMON_*`), because the hyphenated `local-daemon` is still CORRECT in
+its network sense and always will be: `packages/mcp-server`'s
+`authMode: 'local-daemon'` opposite `'server-mode'`, the
+`connect-to-local-daemon` how-to, the `config-file-local-daemon` anchor. A
+daemon on this machine really is local. The quoted VALUE `'local-daemon'`
+stays banned in `apps/web/src` alone, since in mcp-server that same string is
+the auth mode.
 
 The scan is that wide because a hand grep kept missing places, three times in
 one increment: `claimIsolatedWhiteboardDb('browserlocaldocumentpage-…')` had
@@ -155,16 +161,27 @@ word decays, so prose is what the guard reads.
 `migrations` and `adr` are excluded as history, and THIS FILE is exempt — it
 is the one place that has to spell the retired words in order to retire them.
 
-One thing it deliberately does not yet claim, its own increment:
+Nothing is left unclaimed. The last increment was the persisted settings key
+`localDaemonBaseUrl`, which became `daemonBaseUrl` under a real migration
+rather than a sweep — the store reads `whiteboard:user-settings:v2` and falls
+back to migrating the `:v1` key exactly once when v2 is absent.
 
-- **`localDaemonBaseUrl`**, the persisted settings key
-  (`lib/user-settings-store.ts`), and `preferredProvider`'s enum beside it.
-  A stored shape under a `.strict()` schema whose loader falls back to
-  defaults on ANY parse failure — so renaming it in place discards an
-  existing reader's WHOLE settings payload (daemon URL, known and dismissed
-  daemons, theme, fonts), not merely the daemon connection. Measured, not
-  assumed: a sweep did exactly that and the loss was invisible because
-  nothing reads `preferredProvider`. It needs a settings migration.
+Why it could not be a sweep, measured rather than argued: the schema is
+`.strict()` and the loader falls back to defaults on ANY parse failure, so
+renaming the key in place discards an existing reader's WHOLE payload —
+daemon URL, known and dismissed daemons, theme, fonts — not merely the daemon
+connection. A sweep did exactly that earlier in this work, and the loss was
+invisible because nothing reads `preferredProvider`.
+
+Two fields went in that migration rather than through it. `preferredProvider`
+and `lastBrowserCanvasId` were read and written by nothing, so they are
+dropped: a field nobody reads does not need a better name. `lastBrowserCanvasId`
+was also the last `canvas`-as-container-noun in a stored shape, retired by
+deletion instead of a rename.
+
+`user-settings-store.ts` and its test are therefore exempt from the daemon
+guard, for the reason a migration always is: spelling the old key is how they
+read a payload written under it.
 
 `slug` is the one word retired outright, and `vocabulary-check.test.ts` in
 `tools/arch-lint` keeps it retired — the only part of this rule that is not

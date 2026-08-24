@@ -3,7 +3,7 @@ import { z } from 'zod'
 
 // Default loopback origin for the local daemon (matches
 // packages/mcp-server's default runtime port). Callers that know a
-// non-default port (settings.storage.localDaemonBaseUrl) pass it explicitly.
+// non-default port (settings.storage.daemonBaseUrl) pass it explicitly.
 export const DEFAULT_DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 const DEFAULT_TIMEOUT_MS = 2000

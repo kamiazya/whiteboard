@@ -142,7 +142,7 @@ describe('SettingsPage — General', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 1,
+        version: 2,
         storage: {},
         migration: {},
         capabilities: {},
@@ -425,11 +425,11 @@ describe('SettingsPage — disconnecting from a daemon', () => {
     // would return this daemon and make the action read as a no-op.
     createUserSettingsStore().update((current) => ({
       ...current,
-      storage: { ...current.storage, localDaemonBaseUrl: DAEMON, knownDaemonBaseUrls: [DAEMON] },
+      storage: { ...current.storage, daemonBaseUrl: DAEMON, knownDaemonBaseUrls: [DAEMON] },
     }))
     // Asserted rather than assumed: a seed that failed the store's own
     // validation would make every assertion below pass vacuously.
-    expect(createUserSettingsStore().load().storage.localDaemonBaseUrl).toBe(DAEMON)
+    expect(createUserSettingsStore().load().storage.daemonBaseUrl).toBe(DAEMON)
 
     const onDisconnected = renderConnections()
     const desktop = screen.getByTestId('settings-desktop')
@@ -438,10 +438,10 @@ describe('SettingsPage — disconnecting from a daemon', () => {
     const storage = createUserSettingsStore().load().storage
     expect(storage.dismissedDaemonBaseUrls).toContain(DAEMON)
     expect(storage.knownDaemonBaseUrls ?? []).not.toContain(DAEMON)
-    // App.tsx reads localDaemonBaseUrl to decide a load is daemon-backed, so
+    // App.tsx reads daemonBaseUrl to decide a load is daemon-backed, so
     // leaving it set reconnects on the next visit and "this browser stops
     // using it" becomes false the moment the user reloads.
-    expect(storage.localDaemonBaseUrl).toBeUndefined()
+    expect(storage.daemonBaseUrl).toBeUndefined()
     expect(onDisconnected).toHaveBeenCalledTimes(1)
   })
 
