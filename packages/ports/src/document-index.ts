@@ -208,9 +208,11 @@ export interface DocumentIndex {
    * it, and hiding the empty ones would make a freshly created one look like
    * it failed.
    *
-   * An empty index answers with an empty list rather than throwing — unlike
+   * Answers rather than throwing when there are no documents yet — unlike
    * `listDocuments`, there is no id here that could have been a typo, so
-   * "none" is an answer rather than an ambiguity.
+   * "none" is an answer rather than an ambiguity. Note this does NOT promise
+   * the list is empty on a fresh index: apps/web's writes `local` when its
+   * store is created, because that is the one the browser UI opens.
    */
   listWorkspaces(): Promise<{ workspaceId: string }[]>
   /**

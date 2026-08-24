@@ -405,10 +405,22 @@ export function describeDocumentIndexConformance(
       })
     })
 
-    it('answers with an empty list rather than throwing when there are none', async () => {
+    // Deliberately NOT `toEqual([])`. An implementation may legitimately hold
+    // a workspace of its own from the moment its store exists: apps/web's
+    // IndexedDB index writes `local` during its upgrade, because that is the
+    // one the browser UI opens. Pinning emptiness here forbade that, and the
+    // browser conformance run said so.
+    //
+    // What the contract does require is an ANSWER rather than a throw. Unlike
+    // `listDocuments`, there is no id here that could have been a typo, so
+    // "none" is a result and not an ambiguity — and a caller listing
+    // workspaces before any document exists must not meet an error.
+    it('answers rather than throwing on an index with no documents in it', async () => {
       const { index, dispose } = await makeIndex()
       try {
-        expect(await index.listWorkspaces()).toEqual([])
+        const workspaces = await index.listWorkspaces()
+        expect(Array.isArray(workspaces)).toBe(true)
+        expect(workspaces.every((w) => typeof w.workspaceId === 'string')).toBe(true)
       } finally {
         await dispose()
       }
