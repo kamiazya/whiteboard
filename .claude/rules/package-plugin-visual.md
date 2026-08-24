@@ -22,6 +22,7 @@ that want the shipped set, not a privileged registry.
 | entry | holds | may not hold |
 |---|---|---|
 | `.` (`src/index.ts`) | schemas, the plugin definition, resolvers, the icon geometry `visual.symbol` enumerates | React, `node:*`, DOM globals |
+| `./decorations` (`src/decorations.ts`) | what this plugin draws ON a node — today `visual.symbol`'s badge, with its size, margin and corner | React; anything that cannot run where a document is read |
 | `./ui` (`src/ui.tsx`) | the settings declaration and the one hand-written editor | anything the renderer needs |
 
 The default entry is react-free because it runs wherever a document is read —
@@ -34,7 +35,17 @@ prevent, and nothing mechanical catches it (the package legitimately lists
 
 ```
 facet-engine ← facet-ui ← plugin-visual ← canvas-render
+                              └───(types only)───┘
 ```
+
+**The edge back into `canvas-render` must stay type-only.** `/decorations`
+returns scene nodes — `canvas-render`'s vocabulary — while `canvas-render`
+imports those decorations as its default, so a value import back closes a
+runtime cycle. `canvas-render` therefore sits in this package's
+**devDependencies**, and `canvas-render-type-only.test.ts` enforces it:
+nothing else does, verified by mutation (a value import left all 102 arch-lint
+tests green — the cycle check is intra-package and the direction check reads
+`dependencies` only).
 
 Two edges are easy to get backwards:
 

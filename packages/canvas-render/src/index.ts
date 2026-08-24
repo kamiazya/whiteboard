@@ -36,7 +36,9 @@ export type {
 export { scaleScene } from './layout/scale-scene.js'
 export { createStyleRandom, seedFromId } from './layout/seed.js'
 export type {
+  DecorationContext,
   FacetCardData,
+  NodeDecoration,
   ResolvedReference,
   SpatialContentCache,
   SpatialLayoutDegradation,

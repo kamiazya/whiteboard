@@ -36,10 +36,10 @@ import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mda
 import {
   resolveCanvasEdgeStyle,
   resolveNodeShape,
-  resolveNodeSymbol,
   resolveNodeTextAlign,
   VISUAL_SHAPE_KEY,
 } from '@kamiazya/whiteboard-plugin-visual'
+import { visualDecorations } from '@kamiazya/whiteboard-plugin-visual/decorations'
 
 /** The namespace `visual.shape/v0` composes its ids under. */
 const VISUAL_NAMESPACE = VISUAL_SHAPE_KEY.slice(0, VISUAL_SHAPE_KEY.indexOf('.'))
@@ -48,6 +48,7 @@ import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
 import { sceneBounds } from '../scene-bounds.js'
 import type {
+  Appearance,
   BoundingBox,
   ResolvedEdgeNode,
   Scene,
@@ -162,6 +163,18 @@ export interface SpatialLayoutOptions {
    * shape. Each key's namespace plus its payload's `kind` composes the id.
    */
   readonly shapeFacets?: readonly string[]
+  /**
+   * What plugins draw ON a node, after its own content. Defaults to the
+   * bundled `visual` plugin's — a DEFAULT rather than an opt-in, for the
+   * lowlight reason: a resolution step four call sites have to remember is
+   * a step one of them forgets, and the surface that forgets does not fall
+   * back to the same picture, it silently draws less.
+   *
+   * Decorations COMPOSE, so several contributions on one node stack in
+   * contribution order rather than competing. That is why this needs no
+   * conflict rule, unlike a silhouette.
+   */
+  readonly decorations?: readonly NodeDecoration[]
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
@@ -1188,43 +1201,31 @@ function layoutSpatialCanvasInternalScene(
 }
 
 /** Badge geometry: a small corner mark, not content — fixed, not themed. */
-const SYMBOL_BADGE_SIZE_PX = 16
-const SYMBOL_BADGE_MARGIN_PX = 4
-
 /**
- * The node's `visual.symbol/v0` badge: an icon (stroke assigned from the
- * label appearance — layout assigns, never invents) or an emoji glyph, at
- * the top-right of the node's content bounds so a shaped node keeps its
- * badge inside the silhouette. Emitted AFTER the node's own content, so it
- * draws on top. An icon name the renderer's vendored set does not carry
- * degrades to nothing at draw time (the backend's own rule).
+ * The context a decoration is given. `bounds` is the node's CONTENT box, so a
+ * silhouette insets a decoration exactly as it insets text; `label` is the
+ * resolved label appearance, so ink that should match the node's text can.
  */
-function composeNodeBadge(node: SpatialNode, options: ResolvedLayoutOptions): readonly SceneNode[] {
-  const symbol = resolveNodeSymbol(node)
-  if (symbol === undefined) return []
-  const bounds = nodeContentBounds(node, options)
-  const size = SYMBOL_BADGE_SIZE_PX
-  const margin = SYMBOL_BADGE_MARGIN_PX
-  // The badge plus its margin must FIT: pricing the glyph alone let an
-  // 18px-wide node place a 16px badge at x = -2, painting it outside the
-  // node the badge is supposed to mark.
-  if (bounds.w < size + margin || bounds.h < size + margin) return []
-  const bbox = {
-    x: bounds.x + bounds.w - margin - size,
-    y: bounds.y + margin,
-    w: size,
-    h: size,
+export interface DecorationContext {
+  readonly bounds: BoundingBox
+  readonly label: Appearance
+}
+
+/** A plugin's mark on a node. Returns scene nodes in this package's own
+ *  vocabulary — the union stays closed, contributions build from it. */
+export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
+
+function composeDecorations(
+  node: SpatialNode,
+  options: ResolvedLayoutOptions,
+): readonly SceneNode[] {
+  const decorations = options.decorations ?? visualDecorations
+  if (decorations.length === 0) return []
+  const context: DecorationContext = {
+    bounds: nodeContentBounds(node, options),
+    label: options.appearance.resolveLabel(),
   }
-  if (symbol.kind === 'emoji') return [{ kind: 'glyph', bbox, glyph: symbol.char }]
-  const label = options.appearance.resolveLabel()
-  return [
-    {
-      kind: 'icon',
-      bbox,
-      icon: symbol.name,
-      ...(label.fill === undefined ? {} : { appearance: { stroke: label.fill } }),
-    },
-  ]
+  return decorations.flatMap((decorate) => decorate(node, context))
 }
 
 function layoutSpatialCanvasInternal(
@@ -1233,7 +1234,7 @@ function layoutSpatialCanvasInternal(
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
   const nodeContent = canvas.nodes.flatMap((node) => [
     ...composeNode(node, resolved),
-    ...composeNodeBadge(node, resolved),
+    ...composeDecorations(node, resolved),
   ])
   const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
   return { scene: { nodes: [...nodeContent, ...content] }, anchors }
