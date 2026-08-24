@@ -24,7 +24,6 @@ const {
   listDocuments,
   listWorkspaces,
   compactDocument,
-  deleteDocument,
   renameDocumentPath,
   ConflictError,
   getDocumentKind,
@@ -38,6 +37,8 @@ const {
   _isDisposingAutoCompactForTests,
 } = await import('./auto-compact.js')
 const { captureLogsForTests } = await import('../log.js')
+const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
+const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -1267,7 +1268,27 @@ describe('compactDocument', () => {
   })
 })
 
-describe('deleteDocument', () => {
+// `document-store.deleteDocument` is gone: it was a second implementation of
+// `wb_document_delete`, and the HTTP route that called it is now an adapter
+// over the operation (ADR-0018). These cases are storage-level — blobs,
+// thumbnails, rows, the descendant refusal — so they stay at this layer and
+// drive the surviving implementation instead.
+//
+// The local helper is the ROUTE's translation, written once here rather than
+// at each call below: this surface addresses a document by path and answers
+// `false` for one that does not exist, where the operation addresses it by
+// the id the index assigned and throws. Everything else the cases assert is
+// unchanged, which is the point — the implementation moved, the behaviour
+// did not.
+async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
+  const deps = await getDefaultServerDeps()
+  const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+  if (entry === null) return false
+  await wbDocumentDelete(deps, { workspaceId, documentId: entry.documentId })
+  return true
+}
+
+describe('deleting a document', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-delete-test-'))
     await setupIsolatedDb()

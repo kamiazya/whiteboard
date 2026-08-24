@@ -9,11 +9,11 @@
  * survives only as an identity label for corrupt-data error messages and as
  * the legacy-migration backup path. Any blob file still on disk is swept
  * away by `sweep-imported-fs-blobs.ts` once its bytes are proven to live in
- * Libsql, so `deleteDocument`'s unlink below is a straggler cleanup, not the
+ * Libsql, so `documentTeardown`'s unlink below is a straggler cleanup, not the
  * primary deletion path.
  *
- * `listDocuments`/`deleteDocument` here are NOT `DocumentIndex`'s methods of
- * the same names — that is the agent-facing side of the same split, reached
+ * `listDocuments` here is NOT `DocumentIndex`'s method of the same name —
+ * that is the agent-facing side of the same split, reached
  * as `deps.documentIndex.*` and addressing documents by ULID rather than by
  * `(workspaceId, path)`. The names match because the concept does; the two
  * stores are what do not see each other. Both now write the same
@@ -43,7 +43,6 @@ import {
   isCorruptStoredDataError,
   isMissingFileError,
 } from './corrupt-stored-data.js'
-import { deleteDocumentRow } from './db/delete-document-row.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
@@ -547,33 +546,6 @@ export const documentTeardown: DocumentTeardown = {
   },
 }
 
-export async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
-  validateWorkspaceId(workspaceId)
-  validateDocumentPath(path)
-  return withWorkspaceWriteLock(workspaceId, async () => {
-    const db = await dbReady()
-    const documentId = await getDocumentIdByPath(db, workspaceId, path)
-    if (!documentId) return false
-
-    // Same steps, in the same order, as wb_document_delete (server-core's
-    // document-crud.ts) — deliberately, because the two used to be separate
-    // implementations and only one of them cleaned up. Each step is now one
-    // shared piece rather than a copy: `deleteDocumentRow` holds the
-    // descendant refusal, `documentTeardown` holds the lock and the files.
-    await documentTeardown.around({ workspaceId, documentId, path }, async () => {
-      await deleteDocumentRow(db, workspaceId, path)
-
-      // The identity row goes first, then the Libsql snapshot/delta/frontier
-      // rows, so a crash between the two leaves an orphaned-but-unreachable
-      // snapshot rather than a listed canvas with no content.
-      const documentStore = await documentStoreReady()
-      await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
-    })
-
-    return true
-  })
-}
-
 // Null for both "no such canvas" and "the canvas records no kind" — its
 // callers want the same thing from either, which is to stamp nothing.
 //
@@ -722,8 +694,8 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
 // ── rename a canvas's path ──
 // Updates only documents.path. branches/versions FK on documentId and the blob
 // path also uses documentId, so none of that moves. Returns null (never
-// throws) for a missing source canvas, matching deleteDocument's boolean-
-// shaped "already gone" handling; a rename onto an already-taken path
+// throws) for a missing source canvas — the same "already gone" shape the
+// delete route translates into a 404; a rename onto an already-taken path
 // throws ConflictError instead of a raw unique-constraint error.
 export async function renameDocumentPath(
   workspaceId: string,

@@ -3,12 +3,15 @@ import { DocumentHasDescendantsError, findDescendantPath } from '@kamiazya/white
 import type { Database } from './index.js'
 
 /**
- * The one implementation of "remove a document's row", shared by the two
- * callers that used to each hold a copy: `SqliteDocumentIndex.deleteDocument`
- * (the agent-facing path, reached as `deps.documentIndex`) and
- * `document-store.ts`'s `deleteDocument` (the HTTP path). Two copies of a
- * refusal rule is two chances for them to stop agreeing about what a delete
- * refuses.
+ * The one implementation of "remove a document's row", reached through
+ * `SqliteDocumentIndex.deleteDocument` (`deps.documentIndex`).
+ *
+ * It was extracted when the HTTP delete and `wb_document_delete` were two
+ * sequences that each held a copy of this refusal rule — two chances for
+ * them to stop agreeing about what a delete refuses. The HTTP route is now
+ * an adapter over the operation, so there is one caller again; the rule
+ * stays here rather than back inside the index because that is where the
+ * index's own contract says it belongs.
  *
  * Refusing on descendants rather than cascading is the DocumentIndex
  * contract: a cascade is reachable from one call naming one path, and
