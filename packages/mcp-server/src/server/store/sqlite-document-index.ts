@@ -77,6 +77,11 @@ export class SqliteDocumentIndex implements DocumentIndex {
     })
   }
 
+  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+    const rows = await this.db.selectFrom('workspaces').select(['id']).execute()
+    return rows.map((row) => ({ workspaceId: row.id }))
+  }
+
   async createDocument({
     workspaceId,
     path,

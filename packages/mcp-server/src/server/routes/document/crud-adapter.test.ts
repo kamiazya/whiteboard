@@ -85,6 +85,29 @@ async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   return { deps: { ...deps, documentIndex: index }, created, listed }
 }
 
+describe('GET /api/workspaces', () => {
+  it('lists through the injected index rather than the module store', async () => {
+    const { deps } = await depsRecordingCreate()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-2' })
+    const listed: string[] = []
+    const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
+    index.listWorkspaces = async () => {
+      listed.push('called')
+      return await Object.getPrototypeOf(index).listWorkspaces.call(index)
+    }
+    const app = createWorkspacesRouter({ serverDeps: { ...deps, documentIndex: index } })
+
+    const res = await app.request('/api/workspaces')
+
+    expect(res.status).toBe(200)
+    // Both indexes read the same database, so the response alone cannot tell
+    // the injected one from the module-level store.
+    expect(listed).toEqual(['called'])
+    const body = (await res.json()) as { workspaces: { workspaceId: string }[] }
+    expect(body.workspaces.map((w) => w.workspaceId).sort()).toEqual(['ws-1', 'ws-2'])
+  })
+})
+
 describe('GET /api/workspaces/:workspaceId/documents', () => {
   it('lists through the injected operation, carrying kind and updatedAt', async () => {
     const { deps, listed } = await depsRecordingCreate()

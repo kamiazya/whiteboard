@@ -387,4 +387,31 @@ export function describeDocumentIndexConformance(
       })
     })
   })
+
+  describe('listWorkspaces', () => {
+    // The shared fixture creates two, so a listing that reported only the one
+    // a test had just touched would pass a weaker assertion.
+    it('reports every workspace the index holds, whether or not it has documents', async () => {
+      await withIndex(async (index) => {
+        await index.createDocument({ workspaceId: WS, path: 'p', kind: 'spatial' })
+
+        const ids = (await index.listWorkspaces()).map((w) => w.workspaceId).sort()
+
+        expect(ids).toContain(WS)
+        // `ws-other` holds nothing. A workspace is a real, addressable place
+        // before anything is put in it — a listing that hid the empty ones
+        // would make a freshly created workspace look like it failed.
+        expect(ids).toContain('ws-other')
+      })
+    })
+
+    it('answers with an empty list rather than throwing when there are none', async () => {
+      const { index, dispose } = await makeIndex()
+      try {
+        expect(await index.listWorkspaces()).toEqual([])
+      } finally {
+        await dispose()
+      }
+    })
+  })
 }

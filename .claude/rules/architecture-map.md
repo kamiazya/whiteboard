@@ -50,7 +50,7 @@ tool registration under `server/mcp/**`) may not import a MECHANIC (anything
 under `server/store/`). The composition root's own wiring — `di/`, `app.ts`,
 `http-server.ts` — is deliberately out of scope, since knowing the mechanics
 is its job. `ADAPTERS_REACHING_MECHANICS` in `architecture-map.ts` records
-the 36 edges that exist today and may only SHRINK: an unlisted edge fails
+the 35 edges that exist today and may only SHRINK: an unlisted edge fails
 the build, and a listed edge that no longer exists fails it too, so an entry
 cannot outlive the debt it names. `corrupt-stored-data` is excluded and says
 why — an error taxonomy an adapter reads to pick a status code is
