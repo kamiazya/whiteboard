@@ -36,6 +36,35 @@ async function write(markdown: string, actor?: string) {
   return exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 }
 
+/**
+ * Two writes against ONE document, which `write` above cannot express — it
+ * builds a fresh store per call, so every case it covers is a first write.
+ * The read-modify-write loop is only visible across two.
+ */
+async function writeTwice(
+  first: { markdown: string; actor?: string; at: string },
+  second: (previous: string) => { markdown: string; actor?: string; at: string },
+) {
+  const { deps, documentSet } = await setup()
+  vi.setSystemTime(new Date(first.at))
+  await documentSet.execute({
+    workspaceId: WORKSPACE_ID,
+    documentId: DOCUMENT_ID,
+    markdown: first.markdown,
+    ...(first.actor === undefined ? {} : { actor: first.actor }),
+  })
+  const after = await exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+  const next = second(after.markdown)
+  vi.setSystemTime(new Date(next.at))
+  await documentSet.execute({
+    workspaceId: WORKSPACE_ID,
+    documentId: DOCUMENT_ID,
+    markdown: next.markdown,
+    ...(next.actor === undefined ? {} : { actor: next.actor }),
+  })
+  return exportOkf(deps, { workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
+}
+
 describe('wb_document_set stamps the OKF trust family (ADR-0016)', () => {
   beforeEach(() => {
     vi.useFakeTimers()
@@ -124,5 +153,84 @@ describe('wb_document_set stamps the OKF trust family (ADR-0016)', () => {
     for (const actor of ['', ' human:a', 'human:a ', 'human:a\nhuman:b']) {
       expect(documentSetInputSchema.safeParse({ ...base, actor }).success).toBe(false)
     }
+  })
+})
+
+describe('an edit that round-trips our own stamp advances it (ADR-0016 decision 2)', () => {
+  const FIRST = '2026-01-01T00:00:00.000Z'
+  const LATER = '2026-06-01T00:00:00.000Z'
+
+  beforeEach(() => {
+    vi.useFakeTimers()
+  })
+  afterEach(() => {
+    vi.useRealTimers()
+  })
+
+  /**
+   * `wb_document_set` replaces the ENTIRE content, so an agent changing one
+   * paragraph must read the document first — and the read hands back the
+   * `generated` block this server just wrote. Honouring a declared
+   * `generated` unconditionally therefore freezes the stamp at the first
+   * write and every later edit, by any actor, keeps it. Measured before this
+   * rule existed: body `first body` -> `SECOND body`, actor
+   * `reference_agent/a` -> `human:someone-else`, five months apart, and
+   * `generated` unchanged.
+   *
+   * That is not a lost signal but a false one, and it defeats the reason
+   * decision 2 gives for the server owning the clock: `generated.at` is what
+   * a consumer uses to tell a recent edit from a stale fact.
+   */
+  it('restamps when the declared generated is the one already stored and the content changed', async () => {
+    const result = await writeTwice(
+      { markdown: '---\ntype: note\n---\nfirst body\n', actor: 'reference_agent/a', at: FIRST },
+      (previous) => ({
+        markdown: previous.replace('first body', 'SECOND body'),
+        actor: 'human:someone-else',
+        at: LATER,
+      }),
+    )
+
+    expect(result.frontmatter.generated).toEqual({ by: 'human:someone-else', at: LATER })
+  })
+
+  /**
+   * The import case decision 2 protects, unchanged: a stamp this server did
+   * not write is foreign provenance and survives, however different the
+   * content is from what was there.
+   */
+  it('still honours a generated this server did not write', async () => {
+    const result = await writeTwice(
+      { markdown: '---\ntype: note\n---\nours\n', actor: 'reference_agent/a', at: FIRST },
+      () => ({
+        markdown: [
+          '---',
+          'type: note',
+          'generated: { by: someone_else/1.0, at: 2020-01-01T00:00:00Z }',
+          '---',
+          'imported over the top',
+        ].join('\n'),
+        actor: 'reference_agent/a',
+        at: LATER,
+      }),
+    )
+
+    expect(result.frontmatter.generated).toEqual({
+      by: 'someone_else/1.0',
+      at: '2020-01-01T00:00:00Z',
+    })
+  })
+
+  /**
+   * A rewrite that changes nothing is not an origin event, so re-importing
+   * the same bundle twice does not lose its provenance to the second import.
+   */
+  it('does not restamp a rewrite that changes nothing', async () => {
+    const result = await writeTwice(
+      { markdown: '---\ntype: note\n---\nsame body\n', actor: 'reference_agent/a', at: FIRST },
+      (previous) => ({ markdown: previous, actor: 'human:someone-else', at: LATER }),
+    )
+
+    expect(result.frontmatter.generated).toEqual({ by: 'reference_agent/a', at: FIRST })
   })
 })

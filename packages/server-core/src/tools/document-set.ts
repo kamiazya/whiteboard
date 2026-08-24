@@ -1,7 +1,9 @@
 import { parseOkf } from '@kamiazya/whiteboard-codec'
 import {
   readDocumentKind,
+  readMarkdownBody,
   readSpatialCanvas,
+  readTrustFacets,
   MARKDOWN_BODY_NODE_ID as TEXT_NODE_ID,
   writeCoreFacets,
   writeDocumentKind,
@@ -82,6 +84,46 @@ export class OkfParseError extends Error {
   }
 }
 
+/**
+ * Whether a `generated` the caller sent is foreign provenance to preserve,
+ * rather than this server's own stamp echoed back by an edit.
+ *
+ * The distinction is needed because `wb_document_set` replaces the ENTIRE
+ * content, so an agent changing one paragraph must read the document first —
+ * and the read hands back the `generated` block this server wrote. Honouring
+ * a declared `generated` unconditionally therefore freezes the stamp at the
+ * first write, and every later edit by any actor keeps it. That is not a lost
+ * signal but a false one, and it defeats the reason decision 2 gives for the
+ * server owning the clock: `generated.at` is what a consumer uses to tell a
+ * recent edit from a stale fact.
+ *
+ * Two conditions, and both are load-bearing:
+ *
+ * - The declared stamp must differ from the stored one. A stamp this server
+ *   did not write is someone else's account of how the content was produced,
+ *   and the import case decision 2 protects depends on it surviving.
+ * - The body must have changed. A rewrite that changes nothing is not an
+ *   origin event, so re-importing the same bundle twice does not lose its
+ *   provenance to the second import.
+ *
+ * The BODY is the comparison, not the frontmatter: §5.2 says `generated`
+ * records how the current CONTENT was produced, and for a markdown document
+ * that is the body — a metadata-only edit must not claim the content was
+ * regenerated.
+ */
+function keepsDeclaredGenerated(
+  declared: { by: string; at: string } | undefined,
+  stored: { by: string; at: string } | undefined,
+  storedBody: string | undefined,
+  nextBody: string,
+): boolean {
+  if (declared === undefined) return false
+  const echoesOurStamp =
+    stored !== undefined && stored.by === declared.by && stored.at === declared.at
+  if (!echoesOurStamp) return true
+  return storedBody === nextBody
+}
+
 export function createDocumentSetTool(deps: ServerDeps) {
   return {
     name: 'wb_document_set' as const,
@@ -99,6 +141,10 @@ export function createDocumentSetTool(deps: ServerDeps) {
 
       const { frontmatter, body } = parsed.value
       const doc = await loadOrCreateDocument(deps, input.documentId)
+      // Captured before anything below writes, because both are what the
+      // document said a moment ago rather than what it is about to say.
+      const storedTrust = readTrustFacets(doc)
+      const storedBody = readMarkdownBody(doc)
 
       // The write below replaces the whole spatial canvas, so on a spatial
       // document it is a destruction rather than an edit. A document with no
@@ -155,12 +201,14 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // A `generated` the document already declares is the truth about how
       // that content was produced (§5.2) — importing it did not author it —
       // so it is honoured rather than restamped. Only content this write is
-      // the origin of gets the server's clock.
+      // the origin of gets the server's clock (ADR-0016 decision 2).
       writeTrustFacets(doc, {
-        generated: generated ?? {
-          by: input.actor ?? UNATTRIBUTED_ACTOR,
-          at: new Date().toISOString(),
-        },
+        generated: keepsDeclaredGenerated(generated, storedTrust?.generated, storedBody, body)
+          ? (generated as NonNullable<typeof generated>)
+          : {
+              by: input.actor ?? UNATTRIBUTED_ACTOR,
+              at: new Date().toISOString(),
+            },
         ...(verified === undefined ? {} : { verified }),
       })
 

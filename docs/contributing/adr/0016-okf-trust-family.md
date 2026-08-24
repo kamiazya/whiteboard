@@ -105,6 +105,35 @@ from a stale fact.
 no actor declared it names `process:whiteboard-server` — the honest answer is
 the server the write came through, not a guess at which agent was driving.
 
+**Amended: "already carries" means a stamp this server did not write.**
+
+The rule as first stated honoured any declared `generated`, and that is wrong
+on the ordinary editing path rather than an exotic one. `wb_document_set`
+replaces the ENTIRE content, so an agent changing one paragraph must read the
+document first — and the read hands back the `generated` block this server
+wrote. Honouring it unconditionally freezes the stamp at the first write, and
+every later edit, by any actor, keeps it.
+
+Measured on the branch before the amendment: body `first body` -> `SECOND
+body`, actor `reference_agent/a` -> `human:someone-else`, five months apart,
+and `generated` unchanged at `reference_agent/a` / `2026-01-01`. That is not a
+lost signal but a false one, and it defeats the reason this decision gives for
+the server owning the clock.
+
+So a declared `generated` is honoured unless it is BOTH identical to the one
+already stored AND accompanied by a changed body. Each half carries weight:
+
+- Differing from the stored stamp is what makes the import case work — a stamp
+  this server did not write is someone else's account of how the content was
+  produced, and it survives however different the incoming content is.
+- Requiring a changed body is what stops a rewrite that changes nothing from
+  counting as an origin event, so re-importing the same bundle twice does not
+  lose its provenance to the second import.
+
+The comparison is the BODY, not the frontmatter: §5.2 says `generated` records
+how the current CONTENT was produced, and for a markdown document that is the
+body. A metadata-only edit must not claim the content was regenerated.
+
 ### 3. `verified` is never a side effect of a write
 
 Confirming a document is a deliberate act and gets its own tool. Writing
