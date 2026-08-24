@@ -1,8 +1,10 @@
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentHasDescendantsError, DocumentMoveIntoSelfError } from '@kamiazya/whiteboard-ports'
+import { type ServerDeps, wbDocumentDelete } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { LoroDoc as LoroDocCtor } from 'loro-crdt'
 import type { z } from 'zod'
+import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import {
   type CreateDocumentResponse,
   createDocumentRequestSchema,
@@ -16,7 +18,6 @@ import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
 import {
   ConflictError,
-  deleteDocument,
   listDocuments,
   listWorkspaces,
   renameDocumentPath,
@@ -40,10 +41,17 @@ function createDocumentRequestErrorTitle(error: z.ZodError): string {
   return issue?.message ?? 'invalid request body'
 }
 
+export interface WorkspacesRouterOptions {
+  /** The operations this router adapts onto. Omitted by callers that have
+   *  not been given a container — see `getDefaultServerDeps`, which is the
+   *  same wiring production passes in, not a stand-in for it. */
+  serverDeps?: ServerDeps
+}
+
 // GET /api/workspaces
 // GET /api/workspaces/:workspaceId/documents
 // POST /api/workspaces/:workspaceId/documents  body: { path: string }
-export function createWorkspacesRouter() {
+export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   const app = new Hono()
 
   app.get('/api/workspaces', async (c) => {
@@ -155,16 +163,26 @@ export function createWorkspacesRouter() {
   // Delete a canvas: row (branches/versions cascade via FK), .loro blob,
   // version thumbnails, and doc-cache entry. Idempotent-shaped 404 for a
   // missing canvas rather than a throw.
+  //
+  // An ADAPTER over `wb_document_delete` (ADR-0018), not a second
+  // implementation of it. The two were separate sequences performing the
+  // same delete, and only one of them cleaned up; sharing the pieces closed
+  // that gap once, and sharing the operation is what stops the next piece
+  // from drifting. All this translates is the ADDRESS — this surface names a
+  // document by path, the operation by the id the index assigned — and the
+  // absent case, which is a 404 here and a throw there.
   onDocumentsRoute(
     app,
     'delete',
     [],
     async (c, workspaceId, path) => {
       try {
-        const deleted = await deleteDocument(workspaceId, path)
-        if (!deleted) {
+        const deps = options.serverDeps ?? (await getDefaultServerDeps())
+        const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+        if (entry === null) {
           return c.json({ title: `Canvas "${path}" not found` }, 404)
         }
+        await wbDocumentDelete(deps, { workspaceId, documentId: entry.documentId })
         const response: DeleteDocumentResponse = { ok: true }
         return c.json(response)
       } catch (err) {
@@ -174,7 +192,7 @@ export function createWorkspacesRouter() {
         }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('document').error({ err: err as Error }, 'deleteDocument failed unexpectedly')
+        getLogger('document').error({ err: err as Error }, 'wb_document_delete failed unexpectedly')
         return c.json({ title: 'Failed to delete canvas.' } satisfies ApiErrorBody, 500)
       }
     },

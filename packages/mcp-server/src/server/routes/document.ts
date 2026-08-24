@@ -1,3 +1,4 @@
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
@@ -22,6 +23,10 @@ export interface DocumentRouterOptions {
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
   getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
+  // The operations the routes below adapt onto (ADR-0018). Production wires
+  // this from app.ts; see `getDefaultServerDeps` for what a caller that
+  // omits it gets, which is the same wiring rather than a stand-in.
+  serverDeps?: ServerDeps
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -52,7 +57,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   // compact path calls `uninstallAutoCompact()`.
   installAutoCompact(versionStore)
 
-  app.route('/', createWorkspacesRouter())
+  app.route('/', createWorkspacesRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
   app.route('/', createLiveDocRouter({ triggerAutoVersion }))
   app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
