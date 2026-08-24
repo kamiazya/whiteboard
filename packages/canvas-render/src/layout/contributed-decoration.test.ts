@@ -8,7 +8,7 @@
 // order. That is what makes this seam cheaper than the silhouette one.
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import type { SceneNode } from '../scene-graph.js'
+import type { BoundingBox, SceneNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { layoutSpatialCanvas, type SpatialLayoutOptions } from './spatial-canvas.js'
 
@@ -21,7 +21,13 @@ const APPEARANCE = {
 function baseOptions(over?: Partial<SpatialLayoutOptions>): SpatialLayoutOptions {
   return {
     measure: createFakeMeasure(),
-    parseBody: () => ({ type: 'root', children: [] }),
+    // A real body: with an empty one there is no content node to order the
+    // decoration against, so "after the node's own content" would be
+    // asserted by nothing.
+    parseBody: () => ({
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: 'body' }] }],
+    }),
     appearance: APPEARANCE,
     ...over,
   }
@@ -58,27 +64,31 @@ describe('a contributed decoration', () => {
 
     const kinds = kindsOf(scene.nodes)
     expect(kinds).toContain('glyph')
-    // The chrome comes first, the decoration last — a mark ON a node has to
-    // paint over what it marks.
+    expect(kinds).toContain('paragraph')
+    // A mark ON a node paints over what it marks — so after the chrome AND
+    // after the node's own content, not merely after the chrome.
     expect(kinds.indexOf('glyph')).toBeGreaterThan(kinds.indexOf('shape'))
+    expect(kinds.indexOf('glyph')).toBeGreaterThan(kinds.indexOf('paragraph'))
   })
 
   it('is handed the node’s CONTENT box, so a silhouette insets it too', () => {
-    const seen: Array<{ x: number; y: number }> = []
+    const seen: BoundingBox[] = []
     layoutSpatialCanvas(
       canvasOf({ 'visual.shape/v0': { kind: 'diamond' } }),
       baseOptions({
         decorations: [
           (_node, ctx) => {
-            seen.push({ x: ctx.bounds.x, y: ctx.bounds.y })
+            seen.push(ctx.bounds)
             return []
           },
         ],
       }),
     )
 
-    // A diamond's content box is the middle quarter (50,30), not the bbox.
-    expect(seen).toEqual([{ x: 50, y: 30 }])
+    // A diamond's content box is the middle quarter — all four fields, since
+    // an oversized box has the right origin and lets a decoration paint
+    // outside the silhouette.
+    expect(seen).toEqual([{ x: 50, y: 30, w: 100, h: 60 }])
   })
 
   it('is handed the resolved label appearance, so its ink can match the text', () => {
