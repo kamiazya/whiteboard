@@ -12,9 +12,53 @@
  * `null`/`false` instead of throwing, per the package's never-throw rule.
  */
 
-import type { BoundingBox, NodeOutlineKind } from '../../scene-graph.js'
+import type { BoundingBox } from '../../scene-graph.js'
 
-export type { NodeOutlineKind }
+/**
+ * A silhouette a plugin registers, under a NAMESPACED id.
+ *
+ * `outline` is the whole contract for painting, hit-testing and edge
+ * anchoring, because `outlineContains` switches on the returned VALUE's kind
+ * and `outlineEntryPoint` bisects against that — one implementation serves
+ * every shape, and nothing a contributor supplies can make the drawn and the
+ * hit geometry disagree.
+ *
+ * `contentBox` is the exception, and is optional for a reason: it is a
+ * per-shape judgement (how much of the box may text use) that no formula
+ * derives from a polygon. A shape that omits it gets the bbox — content may
+ * then cross the silhouette, exactly the degradation an unknown id gets.
+ *
+ * ponytail: a returned polygon must be CONVEX. `outlineContains` answers
+ * through `convexPolygonContains` and `outlineEntryPoint` bisects assuming
+ * the outline is convex along the probed ray — true of every built-in, and
+ * now a contract a contributor can break. A concave shape still DRAWS
+ * correctly; what degrades is hit-testing and where an edge terminates,
+ * both falling back to the convex hull. Lifting it means a general
+ * point-in-polygon test plus a ray intersection that does not assume a
+ * single crossing, and is worth doing when a contributed concave shape is
+ * real rather than a demo.
+ */
+export interface ShapeContribution {
+  readonly outline: (box: BoundingBox) => NodeOutline | null
+  readonly contentBox?: (box: BoundingBox) => BoundingBox
+}
+
+/**
+ * Shapes by namespaced id (`visual.diamond`). The namespace is COMPOSED by
+ * the caller from the declaring facet's key, never read out of a payload —
+ * so a document cannot name another plugin's geometry.
+ */
+export type ShapeTable = Readonly<Record<string, ShapeContribution>>
+
+/**
+ * A caller's table is MERGED OVER the built-ins, never a replacement — an id
+ * it does not carry still resolves, and an id it does overrides. Done as a
+ * fallback lookup rather than an object spread because this runs per node
+ * per layout, and because it keeps the merge correct for a direct caller
+ * (hit-testing, a test) that never went through the layout entry point.
+ */
+const lookup = (shapes: ShapeTable, shapeId: string): ShapeContribution | undefined =>
+  shapes[shapeId] ?? BUILT_IN_SHAPES[shapeId]
 
 export type NodeOutline =
   | {
@@ -45,16 +89,35 @@ const isFiniteBox = (box: BoundingBox): boolean =>
   Number.isFinite(box.w) &&
   Number.isFinite(box.h)
 
-export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutline | null {
-  if (!isFiniteBox(box)) return null
-  const cx = box.x + box.w / 2
-  const cy = box.y + box.h / 2
-  switch (kind) {
-    case 'ellipse':
-      return { kind: 'ellipse', cx, cy, rx: box.w / 2, ry: box.h / 2 }
-    case 'diamond':
-      // Edge-midpoint polygon, clockwise from the top vertex — the corner
-      // order is fixed for deterministic serialization.
+/**
+ * The shapes the bundled `visual` plugin declares. They live here only until
+ * the plugin owns them; nothing about them is privileged, and a third-party
+ * table is merged over this one by exactly the same rule.
+ */
+export const BUILT_IN_SHAPES: ShapeTable = {
+  'visual.ellipse': {
+    outline: (box) => ({
+      kind: 'ellipse',
+      cx: box.x + box.w / 2,
+      cy: box.y + box.h / 2,
+      rx: box.w / 2,
+      ry: box.h / 2,
+    }),
+    // 0.15 rather than the exact (1 - 1/√2)/2 ≈ 0.1464: the exact value puts
+    // corners ON the rim, where float error flips containment, and content
+    // should not kiss the stroke anyway.
+    contentBox: (box) => {
+      const dx = box.w * 0.15
+      const dy = box.h * 0.15
+      return { x: box.x + dx, y: box.y + dy, w: box.w - 2 * dx, h: box.h - 2 * dy }
+    },
+  },
+  'visual.diamond': {
+    // Edge-midpoint polygon, clockwise from the top vertex — the corner
+    // order is fixed for deterministic serialization.
+    outline: (box) => {
+      const cx = box.x + box.w / 2
+      const cy = box.y + box.h / 2
       return {
         kind: 'polygon',
         points: [
@@ -64,10 +127,20 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
           { x: box.x, y: cy },
         ],
       }
-    case 'hexagon': {
-      // Pointy-left-right six-gon, clockwise from the top-left corner. The
-      // corner inset is a quarter of the width, capped at half the height
-      // so degenerate proportions stay a valid convex polygon.
+    },
+    contentBox: (box) => ({
+      x: box.x + box.w / 4,
+      y: box.y + box.h / 4,
+      w: box.w / 2,
+      h: box.h / 2,
+    }),
+  },
+  'visual.hexagon': {
+    // Pointy-left-right six-gon, clockwise from the top-left corner. The
+    // corner inset is a quarter of the width, capped at half the height so
+    // degenerate proportions stay a valid convex polygon.
+    outline: (box) => {
+      const cy = box.y + box.h / 2
       const inset = Math.min(box.w / 4, box.h / 2)
       return {
         kind: 'polygon',
@@ -80,10 +153,13 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
           { x: box.x, y: cy },
         ],
       }
-    }
-    case 'parallelogram': {
-      // Right-leaning skew, clockwise from the top-left vertex; same
-      // capped proportion as the hexagon inset.
+    },
+    contentBox: (box) => insetHorizontally(box),
+  },
+  'visual.parallelogram': {
+    // Right-leaning skew, clockwise from the top-left vertex; same capped
+    // proportion as the hexagon inset.
+    outline: (box) => {
       const skew = Math.min(box.w / 4, box.h / 2)
       return {
         kind: 'polygon',
@@ -94,22 +170,45 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
           { x: box.x, y: box.y + box.h },
         ],
       }
-    }
-    case 'cylinder':
-      return {
-        kind: 'cylinder',
-        x: box.x,
-        y: box.y,
-        w: box.w,
-        h: box.h,
-        ry: Math.min(box.w * 0.1, box.h / 4),
-      }
-    default:
-      // The type is a closed union, but the VALUE will eventually arrive
-      // from stored facet payloads — an unsupported runtime string must
-      // degrade like any other malformed input, never throw downstream.
-      return null
-  }
+    },
+    contentBox: (box) => insetHorizontally(box),
+  },
+  'visual.cylinder': {
+    outline: (box) => ({
+      kind: 'cylinder',
+      x: box.x,
+      y: box.y,
+      w: box.w,
+      h: box.h,
+      ry: Math.min(box.w * 0.1, box.h / 4),
+    }),
+    // Gives up the lid (its drawn front rim dips to 2·ry) and the bottom
+    // bulge.
+    contentBox: (box) => {
+      const ry = Math.min(box.w * 0.1, box.h / 4)
+      return { x: box.x, y: box.y + 2 * ry, w: box.w, h: box.h - 3 * ry }
+    },
+  },
+}
+
+/** Hexagon and parallelogram give up only their slanted horizontal margins. */
+function insetHorizontally(box: BoundingBox): BoundingBox {
+  const inset = Math.min(box.w / 4, box.h / 2)
+  return { x: box.x + inset, y: box.y, w: box.w - 2 * inset, h: box.h }
+}
+
+/**
+ * An unknown id degrades to `null` — a plain rect — like any other malformed
+ * input, because the VALUE arrives from a stored facet payload and a document
+ * naming a shape this build does not carry is ordinary, not exceptional.
+ */
+export function nodeOutline(
+  shapeId: string,
+  box: BoundingBox,
+  shapes: ShapeTable = BUILT_IN_SHAPES,
+): NodeOutline | null {
+  if (!isFiniteBox(box)) return null
+  return lookup(shapes, shapeId)?.outline(box) ?? null
 }
 
 /**
@@ -125,33 +224,12 @@ export function nodeOutline(kind: NodeOutlineKind, box: BoundingBox): NodeOutlin
  * `outlineContains` — the geometry test pins that per kind.
  */
 export function outlineContentBox(
-  kind: NodeOutlineKind | undefined,
+  shapeId: string | undefined,
   box: BoundingBox,
+  shapes: ShapeTable = BUILT_IN_SHAPES,
 ): BoundingBox {
-  if (kind === undefined || !isFiniteBox(box)) return box
-  switch (kind) {
-    case 'ellipse': {
-      // 0.15 rather than the exact (1 - 1/√2)/2 ≈ 0.1464: the exact value
-      // puts corners ON the rim, where float error flips containment, and
-      // content should not kiss the stroke anyway.
-      const dx = box.w * 0.15
-      const dy = box.h * 0.15
-      return { x: box.x + dx, y: box.y + dy, w: box.w - 2 * dx, h: box.h - 2 * dy }
-    }
-    case 'diamond':
-      return { x: box.x + box.w / 4, y: box.y + box.h / 4, w: box.w / 2, h: box.h / 2 }
-    case 'hexagon':
-    case 'parallelogram': {
-      const inset = Math.min(box.w / 4, box.h / 2)
-      return { x: box.x + inset, y: box.y, w: box.w - 2 * inset, h: box.h }
-    }
-    case 'cylinder': {
-      const ry = Math.min(box.w * 0.1, box.h / 4)
-      return { x: box.x, y: box.y + 2 * ry, w: box.w, h: box.h - 3 * ry }
-    }
-    default:
-      return box
-  }
+  if (shapeId === undefined || !isFiniteBox(box)) return box
+  return lookup(shapes, shapeId)?.contentBox?.(box) ?? box
 }
 
 /**
@@ -159,12 +237,13 @@ export function outlineContentBox(
  * hit-test half of the producer. Total: any non-finite input answers false.
  */
 export function outlineContains(
-  kind: NodeOutlineKind,
+  shapeId: string,
   box: BoundingBox,
   point: { readonly x: number; readonly y: number },
+  shapes: ShapeTable = BUILT_IN_SHAPES,
 ): boolean {
   if (!Number.isFinite(point.x) || !Number.isFinite(point.y)) return false
-  const outline = nodeOutline(kind, box)
+  const outline = nodeOutline(shapeId, box, shapes)
   if (outline === null) return false
   switch (outline.kind) {
     case 'ellipse': {
@@ -214,14 +293,15 @@ const ENTRY_SEARCH_ITERATIONS = 32
  * returned unchanged.
  */
 export function outlineEntryPoint(
-  kind: NodeOutlineKind,
+  shapeId: string,
   box: BoundingBox,
   from: { readonly x: number; readonly y: number },
   to: { readonly x: number; readonly y: number },
+  shapes: ShapeTable = BUILT_IN_SHAPES,
 ): { readonly x: number; readonly y: number } {
   if (!isFiniteBox(box)) return to
   if (![from.x, from.y, to.x, to.y].every(Number.isFinite)) return to
-  if (outlineContains(kind, box, to)) return to
+  if (outlineContains(shapeId, box, to, shapes)) return to
   // Probe from `to` toward the box center — the deepest point the
   // continuation of the approach can meaningfully reach inside a convex
   // outline that contains the center.
@@ -238,13 +318,13 @@ export function outlineEntryPoint(
   const dirLength = Math.hypot(dirX, dirY)
   if (!(dirLength > 0) || !Number.isFinite(span)) return to
   const far = { x: to.x + (dirX / dirLength) * span, y: to.y + (dirY / dirLength) * span }
-  if (!outlineContains(kind, box, far)) return to
+  if (!outlineContains(shapeId, box, far, shapes)) return to
   let lo = 0 // outside
   let hi = 1 // inside
   for (let i = 0; i < ENTRY_SEARCH_ITERATIONS; i++) {
     const mid = (lo + hi) / 2
     const point = { x: to.x + (far.x - to.x) * mid, y: to.y + (far.y - to.y) * mid }
-    if (outlineContains(kind, box, point)) hi = mid
+    if (outlineContains(shapeId, box, point, shapes)) hi = mid
     else lo = mid
   }
   return { x: to.x + (far.x - to.x) * hi, y: to.y + (far.y - to.y) * hi }
@@ -275,11 +355,22 @@ function convexPolygonContains(
     maxY = Math.max(maxY, p.y)
   }
   if (point.x < minX || point.x > maxX || point.y < minY || point.y > maxY) return false
+  // Either WINDING, not just the clockwise one every built-in happens to
+  // use: the point is inside when it sits on the same side of every edge,
+  // whichever side that is. A contributor does not think about winding and
+  // both orders are valid, so requiring one made a correct polygon draw
+  // normally while failing every hit test — and put its edge terminals back
+  // on the bbox border. Zero crosses (a point ON an edge, or a degenerate
+  // vertex pair) fix no sign, so the boundary keeps counting as inside.
+  let sign = 0
   for (let i = 0; i < points.length; i++) {
     const a = points[i]
     const b = points[(i + 1) % points.length]
     const cross = (b.x - a.x) * (point.y - a.y) - (b.y - a.y) * (point.x - a.x)
-    if (cross < 0) return false
+    if (cross === 0) continue
+    const current = cross > 0 ? 1 : -1
+    if (sign === 0) sign = current
+    else if (sign !== current) return false
   }
   return true
 }

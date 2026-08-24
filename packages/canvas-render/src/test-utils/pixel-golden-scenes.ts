@@ -166,7 +166,13 @@ export function buildRoundedRectScene(): Scene {
  * so a proportion regression in any outline is equally loud. */
 export function buildNodeOutlinesScene(): Scene {
   const appearance = { fill: '#e0e7ff', stroke: '#1f2933', strokeWidth: 2 }
-  const shapes = ['ellipse', 'diamond', 'hexagon', 'parallelogram', 'cylinder'] as const
+  const shapes = [
+    'visual.ellipse',
+    'visual.diamond',
+    'visual.hexagon',
+    'visual.parallelogram',
+    'visual.cylinder',
+  ] as const
   return {
     nodes: shapes.map((shape, index) => ({
       kind: 'shape',

@@ -2,7 +2,7 @@ import type { CanvasEdge, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboar
 import { describe, expect, it } from 'vitest'
 import { layoutSpatialCanvas } from './layout/spatial-canvas.js'
 import { sceneEntryKeys } from './scene-entry-keys.js'
-import type { NodeOutlineKind, Scene } from './scene-graph.js'
+import type { Scene, ShapeId } from './scene-graph.js'
 import { createFakeMeasure } from './test-utils/fake-measure.js'
 import { createSpatialTheme } from './theme/spatial-theme.js'
 
@@ -161,7 +161,7 @@ describe('scene-diff scoreboard (single edit → fraction of the scene that chan
 describe('decorated-scene column (outline decorations vs group reuse)', () => {
   const layoutWith = (
     canvas: SpatialCanvas,
-    nodeOutlines: Readonly<Record<string, NodeOutlineKind>>,
+    nodeOutlines: Readonly<Record<string, ShapeId>>,
   ): Scene =>
     layoutSpatialCanvas(canvas, {
       measure: createFakeMeasure(),
@@ -178,14 +178,14 @@ describe('decorated-scene column (outline decorations vs group reuse)', () => {
     // would add its edge's group to the count, which is the number to
     // re-pin if the corpus ever gains one.
     const { canvas } = buildCanvas()
-    const decorated = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
+    const decorated = layoutWith(canvas, { n5: 'visual.ellipse', n12: 'visual.hexagon' })
     expect(diffCount(layout(canvas), decorated)).toEqual({ changed: 6, total: 178 })
   })
 
   it("swapping one node's outline kind replaces that node's chrome and repositions its content", () => {
     const { canvas } = buildCanvas()
-    const before = layoutWith(canvas, { n5: 'ellipse', n12: 'hexagon' })
-    const after = layoutWith(canvas, { n5: 'diamond', n12: 'hexagon' })
+    const before = layoutWith(canvas, { n5: 'visual.ellipse', n12: 'visual.hexagon' })
+    const after = layoutWith(canvas, { n5: 'visual.diamond', n12: 'visual.hexagon' })
     // Total is one below the decorate case: the diamond's inscribed box is
     // smaller than the ellipse's, so n5 fits one block fewer.
     expect(diffCount(before, after)).toEqual({ changed: 3, total: 177 })
