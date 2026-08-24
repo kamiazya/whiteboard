@@ -78,7 +78,18 @@ split is the test-level form of the dependency rule above.
 
 ## Vendored icons
 
-`src/icons/` carries lucide geometry with its LICENSE and provenance README.
+`src/icons/` carries lucide geometry with its LICENSE and provenance README,
+and `VISUAL_ICONS` is that geometry plus the two things geometry is
+meaningless without: the **coordinate space** it is drawn in and the **paint**
+it is authored for. Both are declared HERE rather than defaulted in the
+renderer, because they are properties of this icon set and not of drawing
+icons in general — a contributed set in a different space, or one that fills
+rather than strokes, is equally valid and says so the same way.
+
+They were hard-coded in `canvas-render` until measured: a contributed 100x100
+icon rendered into lucide's 24x24 box, and a fill-authored one rendered as
+nothing at all.
+
 Geometry rather than the `lucide-react` package because the renderer has no
 React: lucide-react ships components, and only the badge picker can use them.
 Follow the README's recipe when adding one, and keep the table alphabetical.
