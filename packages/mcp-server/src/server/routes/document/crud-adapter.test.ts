@@ -1,6 +1,6 @@
 /**
- * ADR-0018: the HTTP DELETE is an ADAPTER over `wb_document_delete`, not a
- * second implementation of it.
+ * ADR-0018: the HTTP document routes are ADAPTERS over the `wb_document_*`
+ * operations, not second implementations of them.
  *
  * The two used to be separate code paths performing the same delete, and
  * only one of them cleaned up (#1035). Sharing the pieces closed that gap
@@ -29,6 +29,7 @@ vi.mock('../../config.js', () => ({
 
 const { saveDocument } = await import('../../store/document-store.js')
 const { getDb } = await import('../../store/db/index.js')
+const { prepareDataDir } = await import('../../store/db/prepare.js')
 const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
 const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
@@ -58,6 +59,90 @@ async function depsRecordingTeardown(): Promise<{
   }
   return { deps, entered, cleaned }
 }
+
+async function depsRecordingCreate(): Promise<{
+  deps: Awaited<ReturnType<typeof resolveServerDeps>>
+  created: string[]
+}> {
+  // The delete cases reach a migrated schema through `saveDocument`'s own
+  // `dbReady`; these create nothing first, so they have to migrate here.
+  await prepareDataDir(tmp.dir)
+  const db = await getDb(tmp.dir)
+  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+  const created: string[] = []
+  const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
+  index.createDocument = async (input) => {
+    created.push(`${input.workspaceId}:${input.path}`)
+    return await Object.getPrototypeOf(index).createDocument.call(index, input)
+  }
+  return { deps: { ...deps, documentIndex: index }, created }
+}
+
+describe('POST /api/workspaces/:workspaceId/documents', () => {
+  // Same reasoning as the delete below: creating a document twice over — once
+  // in the route, once in `wb_document_create` — is how the two drifted the
+  // first time. Asserted through the index the operation writes through,
+  // because the resulting row looks identical either way.
+  it('creates through the injected operation rather than its own sequence', async () => {
+    const { deps, created } = await depsRecordingCreate()
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'fresh', kind: 'spatial' }),
+    })
+
+    expect(res.status).toBe(200)
+    expect(await res.json()).toEqual({ path: 'fresh' })
+    expect(created).toEqual(['ws-1:fresh'])
+  })
+
+  it('answers 409 for a path already taken', async () => {
+    const { deps } = await depsRecordingCreate()
+    const app = createWorkspacesRouter({ serverDeps: deps })
+    const body = JSON.stringify({ path: 'twice', kind: 'spatial' })
+    const headers = { 'Content-Type': 'application/json' }
+
+    const first = await app.request('/api/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers,
+      body,
+    })
+    expect(first.status).toBe(200)
+
+    const second = await app.request('/api/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers,
+      body,
+    })
+    expect(second.status).toBe(409)
+  })
+
+  // A blank name means "no name" — the rule `setDocumentDisplayName` held
+  // before the route delegated. Measured rather than assumed: passing a blank
+  // through does not fail, it STORES an empty name, which `DocumentEntry.name`
+  // declares as `z.string().min(1)` and so is a value the port says cannot
+  // exist. The adapter has to trim and omit.
+  it('creates an unnamed document for a blank name instead of storing an empty one', async () => {
+    const { deps } = await depsRecordingCreate()
+    const app = createWorkspacesRouter({ serverDeps: deps })
+
+    const res = await app.request('/api/workspaces/ws-1/documents', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'blank-name', kind: 'spatial', name: '   ' }),
+    })
+
+    expect(res.status).toBe(200)
+    const entry = await deps.documentIndex.resolveDocument({
+      workspaceId: 'ws-1',
+      path: 'blank-name',
+    })
+    expect(entry?.name).toBeUndefined()
+  })
+})
 
 describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   beforeEach(async () => {
