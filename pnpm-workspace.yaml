@@ -24,7 +24,7 @@ catalog:
   loro-crdt: "1.13.6"
   # shared build/test tooling
   typescript: "^6.0.3"
-  vite: "^8.2.0"
+  vite: "^8.2.1"
   vitest: "^4.1.10"
   "@vitest/browser-playwright": "^4.1.10"
   # codec: OKF-Markdown remark/unified pipeline + YAML frontmatter
