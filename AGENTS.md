@@ -66,7 +66,7 @@ After the targeted test passes, run the broader suite that covers the touched ar
 - Prefer Chrome DevTools MCP or Playwright MCP when available to inspect DOM, console, network, and visible behavior.
 - If the changed flow is represented by a project skill under `./skills/*`, read the relevant `SKILL.md` and dogfood the real MCP/skill flow instead of verifying only through mocks.
 - While dogfooding, collect friction, awkward prompts, missing affordances, and ideas for follow-up improvements.
-- Record every still-open dogfooding finding as a whiteboard canvas issue (see the `ticketing` skill). Delete the canvas once the issue is fixed.
+- Record every still-open dogfooding finding as a whiteboard document issue (see the `ticketing` skill). When it is fixed, change it to `type: note` with a `RESOLVED — ` name and say what fixed it — do not delete it. What the document accumulated is the measurements, and those are what stop it being investigated again.
 - If runtime behavior disagrees with the test, treat runtime as the source of truth and fix the test or implementation.
 
 Passing tests alone are not sufficient.

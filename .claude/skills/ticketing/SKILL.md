@@ -54,26 +54,78 @@ wb_document_set   → { workspaceId: "default", canvasId, markdown: "<updated OK
 wb_facet_set → { workspaceId: "default", canvasId, facets: { "<namespace>.<name>/v0": { … } }  # key grammar per ADR-0013 }
 ```
 
-### Resolving / deleting
+### Resolving
+
+**Resolution is `type: issue` -> `type: note`, not deletion.** Re-import the
+document with the type changed, the name prefixed `RESOLVED — `, and a line
+in the body saying what resolved it.
 
 ```
-wb_document_delete → { workspaceId: "default", canvasId }
+wb_document_set → { workspaceId: "default", documentId,
+  markdown: "---\ntype: note\ntitle: RESOLVED — <original title>\n---\n\nClosed by #1234: <what changed>.\n\n<the original body, kept>" }
 ```
+
+Both halves earn their place, and neither invents a schema:
+
+- `type` is core OKF and already means this. A resolved issue stopped being a
+  work item and became a record, which is what a note is. `type: issue` stays
+  the query for "what is open" — the same thing that identified an issue
+  before.
+- The `RESOLVED — ` name prefix is what a reader sees. `wb_document_list`
+  returns `documentId`, `path` and `name` and no frontmatter, so without it
+  telling an open issue from a closed one costs one `wb_document_get` per
+  document. Someone reached for this prefix by hand before it was written
+  down, which is how it got here. If `wb_document_list` ever reports `type`,
+  the prefix becomes redundant.
+
+### Deleting
+
+Deletion is for a document that was never worth keeping — a scratch probe, a
+duplicate, a mistake. It is **not** how work is closed.
+
+```
+wb_document_delete → { workspaceId: "default", documentId }
+```
+
+Resolution used to be deletion, and that was carried over from when issues
+were markdown files under `tmp/` — where deleting the file was the only move
+available. It was never a decision about this store, and it cost real work:
+what an issue accumulates is measurements and refuted hypotheses, and deleting
+it throws exactly those away while leaving nothing to stop the same issue
+being filed and investigated again. Observed: one flake was investigated,
+filed, deleted as resolved, and re-filed by another session within minutes,
+its analysis redone from scratch.
 
 ### No structured status
 
 The `issue/1` facet domain was retired: it was implemented by an earlier pass
 without an agreed schema, and a typed companion nobody called made it look
-more settled than it was. Nothing replaced it yet.
+more settled than it was. Nothing has replaced it, and nothing needs to for
+open-vs-closed — that is what `type` above carries, using a core OKF field
+rather than a domain of our own.
 
-So an issue document carries `type: issue`, a `title`, and a body — and no
-machine-readable status, priority or assignee. **Resolution is deletion**,
-which is what this skill already did; the retired facet only ever offered an
-alternative to that.
+So an issue document carries `type`, a `title`, and a body — and no
+machine-readable priority or assignee. There is no evidence either is needed:
+one person works this backlog, and the Task list already carries in-flight
+state.
 
 Do not invent a replacement domain in passing. Extension facets round-trip
 unvalidated through the generic bucket, so anything you write will persist and
 quietly become the convention. Agree the schema first.
+
+### The other axis: is the write-up still true?
+
+Open-vs-closed is about the WORK. Whether the document's own account is still
+accurate is a separate question, and the two move independently — a closed
+issue can hold a standing fact worth reading, and an open one can be built on
+reasoning since disproved. Both happened in one session.
+
+That axis is OKF v0.2's `status` (`draft` / `stable` / `deprecated`, absent
+meaning `stable`), which this codebase preserves on documents that carry it.
+Nothing produces or reads it yet, and it should stay that way until something
+does — a signal nobody reads is inventory. Do NOT reach for `deprecated` to
+mean "resolved": it says the account no longer holds, which would misreport
+every closed issue whose write-up is still exactly right.
 
 ## tmp/ workspace buckets
 
@@ -92,7 +144,7 @@ Delete artifacts from `tmp/` when they're no longer useful.
 - **Session start**: `TaskList` to see live state; for open issues you intend to work this session, `TaskCreate` a task with `metadata.canvasSegment = "<segment>"`.
 - **In flight**: `TaskUpdate` status/owner/blockedBy as work moves.
 - **New finding** (from review / dogfood-triage / reconcile): create a canvas via `wb_document_create` + `wb_document_set`; `TaskCreate` only if you're acting on it now.
-- **Resolve**: `TaskUpdate status=completed`, then `wb_document_delete` the document.
+- **Resolve**: `TaskUpdate status=completed`, then `wb_document_set` the document to `type: note` with a `RESOLVED — ` name and what closed it. Do not delete it.
 - Workflows can't call the Task tools or AskUserQuestion; they RETURN findings/openQuestions and the main session records them as tickets/tasks and asks the human.
 
 ## When to use which
