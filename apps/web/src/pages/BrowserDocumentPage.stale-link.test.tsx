@@ -178,9 +178,11 @@ describe('stale /local/:path deep link', () => {
     })
 
     // Held open so the navigation below lands inside the enumeration window.
-    // The FIRST call is the controller resolving `initialPath` — letting that
-    // through is what gets a document loaded at all; the page's own list
-    // effect is the second, and that is the one this test suspends.
+    // The page's own list effect is the FIRST call — holding it still lets the
+    // document load, because the controller resolves `initialPath` without
+    // going through here. An earlier version held the second call on the
+    // belief that the first was the controller's; nothing was suspended that
+    // mattered, and the test spent months exercising the fast path twice.
     let releaseList: (() => void) | undefined
     const held = new Promise<void>((resolve) => {
       releaseList = resolve
@@ -193,7 +195,7 @@ describe('stale /local/:path deep link', () => {
     let calls = 0
     store.index.listDocuments = async (input) => {
       calls += 1
-      if (calls === 2) await held
+      if (calls === 1) await held
       return listDocuments(input)
     }
 
@@ -225,6 +227,13 @@ describe('stale /local/:path deep link', () => {
       await router.navigate('/local/other-canvas')
     })
     expect(router.state.location.pathname).toBe('/local/other-canvas')
+    // The scaffold is IN the window, asserted rather than assumed. The page
+    // still shows the document it loaded, which is what "the list has not
+    // arrived" looks like from here — `switcherOptions` holds that document
+    // alone, so `other-canvas` resolves to nothing and the branch under test
+    // is the one that must not repair. Without this line the test passed for
+    // months while never entering the window at all.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
 
     releaseList?.()
     await act(async () => {
