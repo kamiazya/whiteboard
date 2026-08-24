@@ -33,16 +33,8 @@ import type {
   SpatialNode,
 } from '@kamiazya/whiteboard-model'
 import type { MdastFlowContent, MdastRoot } from '@kamiazya/whiteboard-model/mdast'
-import {
-  resolveCanvasEdgeStyle,
-  resolveNodeShape,
-  resolveNodeTextAlign,
-  VISUAL_SHAPE_KEY,
-} from '@kamiazya/whiteboard-plugin-visual'
-import { visualDecorations } from '@kamiazya/whiteboard-plugin-visual/decorations'
-
-/** The namespace `visual.shape/v0` composes its ids under. */
-const VISUAL_NAMESPACE = VISUAL_SHAPE_KEY.slice(0, VISUAL_SHAPE_KEY.indexOf('.'))
+import { resolveCanvasEdgeStyle } from '@kamiazya/whiteboard-plugin-visual'
+import { visualRenderContribution } from '@kamiazya/whiteboard-plugin-visual/render'
 
 import { highlightCode } from '../highlight/lowlight.js'
 import type { MeasureText } from '../measure.js'
@@ -72,7 +64,12 @@ import {
   layoutMdastBlocks,
   type MdastLayoutOptions,
 } from './nodes/mdast-blocks.js'
-import { outlineContentBox, outlineEntryPoint, type ShapeTable } from './nodes/node-outline.js'
+import {
+  outlineContentBox,
+  outlineEntryPoint,
+  type ShapeContribution,
+  type ShapeTable,
+} from './nodes/node-outline.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import { fitToWidth } from './nodes/truncate.js'
 import { scaleScene } from './scale-scene.js'
@@ -157,24 +154,22 @@ export interface SpatialLayoutOptions {
    * shape as `SvgDocumentOptions.icons`. The backend must be handed the same
    * table, or a contributed shape lays out correctly and paints as a rect.
    */
-  readonly shapes?: ShapeTable
   /**
-   * Facet keys, besides the bundled `visual.shape/v0`, that declare a node's
-   * shape. Each key's namespace plus its payload's `kind` composes the id.
-   */
-  readonly shapeFacets?: readonly string[]
-  /**
-   * What plugins draw ON a node, after its own content. Defaults to the
-   * bundled `visual` plugin's — a DEFAULT rather than an opt-in, for the
-   * lowlight reason: a resolution step four call sites have to remember is
-   * a step one of them forgets, and the surface that forgets does not fall
-   * back to the same picture, it silently draws less.
+   * What plugins contribute to rendering: silhouettes, how they read the
+   * facets that select them, where they want a node's text, and what they
+   * draw on top. Defaults to the bundled `visual` plugin's.
    *
-   * Decorations COMPOSE, so several contributions on one node stack in
-   * contribution order rather than competing. That is why this needs no
-   * conflict rule, unlike a silhouette.
+   * A DEFAULT rather than an opt-in, for the lowlight reason: measured, this
+   * function has nine call sites and `renderSceneToSvg` nine more, and a
+   * resolution step that many have to remember is one a call site forgets —
+   * silently drawing a plain node rather than failing.
+   *
+   * One object rather than an option each: `shapes`, `shapeFacets` and
+   * `decorations` accumulated one per increment, none ever had a caller
+   * outside this package, and a reader plus text placement would have made
+   * five.
    */
-  readonly decorations?: readonly NodeDecoration[]
+  readonly renderContributions?: readonly RenderContribution[]
   readonly onDegrade?: (event: SpatialLayoutDegradation) => void
   /**
    * The mdast CONTENT seams, forwarded verbatim to every `layoutMdastBlocks`
@@ -323,6 +318,11 @@ export interface ResolvedReference {
 
 /** Internal: options with geometry resolved exactly once per layout call. */
 interface ResolvedLayoutOptions extends SpatialLayoutOptions {
+  /** The contribution set actually in force, defaulted once at the entry
+   *  point so no inner function repeats the `?? [visual]`. */
+  readonly contributions: readonly RenderContribution[]
+  /** Their shapes, composed to namespaced ids. */
+  readonly shapeTable: ShapeTable
   /** File references on the CURRENT recursion path, plus its depth. */
   readonly embedPath: ReadonlySet<string>
   readonly embedDepth: number
@@ -409,7 +409,7 @@ function mdastOptionsFor(maxWidth: number, options: ResolvedLayoutOptions): Mdas
 function nodeContentBounds(node: SpatialNode, options: ResolvedLayoutOptions): BoundingBox {
   const box = { x: node.x, y: node.y, w: node.width, h: node.height }
   if (!options.fitToBox) return box
-  return outlineContentBox(options.nodeOutlines?.[node.id], box, options.shapes)
+  return outlineContentBox(options.nodeOutlines?.[node.id], box, options.shapeTable)
 }
 
 function contentWidth(node: SpatialNode, options: ResolvedLayoutOptions): number {
@@ -505,7 +505,10 @@ function placeInNode(
   // `visual.text/v0` OVERRIDES that default in either direction: a rect may
   // ask to centre, a shaped node to start at the top. Absent, the default
   // above is what happens — which is why the facet has no third value.
-  const align = resolveNodeTextAlign(node)
+  const align = options.contributions.reduce<'start' | 'center' | undefined>(
+    (found, contribution) => contribution.readTextPlacement?.(node) ?? found,
+    undefined,
+  )
   const centres =
     align === undefined ? options.nodeOutlines?.[node.id] !== undefined : align === 'center'
   let dy = 0
@@ -671,7 +674,7 @@ function composeFileEmbed(
     // spreading the parent's map both drops the child's facets and leaks a
     // same-id root node's shape into the embedded canvas. Explicit per-node
     // overrides are root-keyed by contract, so they do not descend.
-    nodeOutlines: resolveNodeOutlines(child, undefined, options.shapeFacets),
+    nodeOutlines: resolveNodeOutlines(child, undefined, options.contributions),
     embedPath: new Set([...options.embedPath, node.file]),
     embedDepth: options.embedDepth + 1,
   })
@@ -1020,7 +1023,7 @@ function composeEdge(
     canvas,
     edge,
     options.nodeOutlines,
-    options.shapes,
+    options.shapeTable,
   )
   const appearance = options.appearance.resolveEdge(edge)
   return appearance === undefined ? routed : { ...routed, appearance }
@@ -1137,12 +1140,14 @@ export function layoutSpatialCanvasWithAnchors(
   canvas: SpatialCanvas,
   options: SpatialLayoutOptions,
 ): { scene: Scene; anchors: ReadonlyMap<string, EdgeAnchorPair> } {
+  const resolved = resolveContributions(options)
   return layoutSpatialCanvasInternal(canvas, {
     ...options,
+    ...resolved,
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
-    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, options.shapeFacets),
+    nodeOutlines: resolveNodeOutlines(canvas, options.nodeOutlines, resolved.contributions),
     embedPath: new Set(),
     embedDepth: 0,
     fitToBox: true,
@@ -1171,6 +1176,7 @@ export function naturalNodeContentSize(
 ): { readonly w: number; readonly h: number } {
   const content = composeNode(node, {
     ...options,
+    ...resolveContributions(options),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1211,6 +1217,51 @@ export interface DecorationContext {
   readonly label: Appearance
 }
 
+/**
+ * Everything one plugin contributes to rendering.
+ *
+ * `shapes` are keyed by BARE name and `readShape` answers a bare kind: this
+ * package composes `${namespace}.${kind}` at both ends, so a payload never
+ * carries a namespace and a document cannot name another plugin's geometry
+ * however it is written.
+ *
+ * A reader rather than a facet KEY, because reading a facet is the plugin's
+ * job: the bundled one resolves through the engine's compat chain and schema,
+ * which a raw `stored.kind` read of a declared key never did.
+ */
+export interface RenderContribution {
+  readonly namespace: string
+  readonly shapes?: Readonly<Record<string, ShapeContribution>>
+  readonly readShape?: (node: SpatialNode) => string | undefined
+  readonly readTextPlacement?: (node: SpatialNode) => 'start' | 'center' | undefined
+  readonly decorations?: readonly NodeDecoration[]
+}
+
+/**
+ * The contribution set in force, plus its composed shape table — resolved in
+ * ONE function because three entry points build resolved options and a fourth
+ * would otherwise be a silent omission rather than a type error.
+ */
+function resolveContributions(options: SpatialLayoutOptions): {
+  contributions: readonly RenderContribution[]
+  shapeTable: ShapeTable
+} {
+  const contributions = options.renderContributions ?? [visualRenderContribution]
+  return { contributions, shapeTable: resolveShapeTable(contributions) }
+}
+
+/** The composed shape table a contribution set resolves to — what the SVG
+ *  backend must be handed alongside the scene. */
+export function resolveShapeTable(contributions: readonly RenderContribution[]): ShapeTable {
+  const table: Record<string, ShapeContribution> = {}
+  for (const contribution of contributions) {
+    for (const [name, shape] of Object.entries(contribution.shapes ?? {})) {
+      table[`${contribution.namespace}.${name}`] = shape
+    }
+  }
+  return table
+}
+
 /** A plugin's mark on a node. Returns scene nodes in this package's own
  *  vocabulary — the union stays closed, contributions build from it. */
 export type NodeDecoration = (node: SpatialNode, context: DecorationContext) => readonly SceneNode[]
@@ -1219,7 +1270,7 @@ function composeDecorations(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const decorations = options.decorations ?? visualDecorations
+  const decorations = options.contributions.flatMap((c) => c.decorations ?? [])
   if (decorations.length === 0) return []
   const context: DecorationContext = {
     bounds: nodeContentBounds(node, options),
@@ -1292,6 +1343,7 @@ export function layoutSpatialEdges(
 ): SceneNode[] {
   return composeEdgesAndLabels(canvas, {
     ...options,
+    ...resolveContributions(options),
     geometry: resolveGeometry(options.geometry),
     parseBody: options.parseBody ?? parseMarkdownBody,
     highlightCode: options.highlightCode ?? highlightCode,
@@ -1304,51 +1356,31 @@ export function layoutSpatialEdges(
 /**
  * The effective silhouette per node, as a NAMESPACED shape id.
  *
- * The id is composed, never stored: a facet key supplies the namespace and
- * its payload the bare kind, so `visual.shape/v0` holding `diamond` resolves
- * `visual.diamond`. A document therefore cannot name another plugin's
- * geometry by writing an id into a payload — the payload never carries one.
+ * The id is composed, never stored: a contribution's reader answers a BARE
+ * kind and its namespace prefixes it, so `visual`'s reader returning `diamond`
+ * resolves `visual.diamond`. A document therefore cannot name another
+ * plugin's geometry — no payload it can hold carries a namespace.
  *
- * An explicit `nodeOutlines` entry still overrides the facet for that node,
- * and is already a full id.
+ * An explicit `nodeOutlines` entry still overrides for that node, and is
+ * already a full id.
  *
- * ponytail: the bundled facet goes through `resolveNodeShape`, which applies
- * the engine's compat chain and schema before yielding a kind, while a
- * caller-declared facet is read raw and gated only by whether its composed id
- * is in the shape table. Both readers accept the same set today. The
- * asymmetry disappears when a plugin supplies its own validated reader
- * alongside its shapes, which is the increment that also lets this package
- * stop importing `plugin-visual`.
+ * Later contributions win a contested node, which is the only ordering rule
+ * this needs: a silhouette is one answer where a decoration is a stack.
  */
 function resolveNodeOutlines(
   canvas: SpatialCanvas,
   explicit: Readonly<Record<string, string>> | undefined,
-  shapeFacets: readonly string[] | undefined,
+  contributions: readonly RenderContribution[],
 ): Readonly<Record<string, string>> | undefined {
   let fromFacets: Record<string, string> | undefined
   for (const node of canvas.nodes) {
-    const kind = resolveNodeShape(node)
-    if (kind !== undefined) {
+    for (const contribution of contributions) {
+      const kind = contribution.readShape?.(node)
+      if (kind === undefined) continue
       fromFacets ??= {}
-      fromFacets[node.id] = `${VISUAL_NAMESPACE}.${kind}`
-    }
-    for (const facetKey of shapeFacets ?? []) {
-      const composed = composeShapeId(node, facetKey)
-      if (composed === undefined) continue
-      fromFacets ??= {}
-      fromFacets[node.id] = composed
+      fromFacets[node.id] = `${contribution.namespace}.${kind}`
     }
   }
   if (fromFacets === undefined) return explicit
   return explicit === undefined ? fromFacets : { ...fromFacets, ...explicit }
-}
-
-/** The namespace of a facet key is everything before its first dot. */
-function composeShapeId(node: SpatialNode, facetKey: string): string | undefined {
-  const stored = node['x-whiteboard']?.facets?.[facetKey]
-  if (stored === null || typeof stored !== 'object') return undefined
-  const kind = (stored as { readonly kind?: unknown }).kind
-  if (typeof kind !== 'string' || kind === '') return undefined
-  const namespace = facetKey.slice(0, facetKey.indexOf('.'))
-  return namespace === '' ? undefined : `${namespace}.${kind}`
 }

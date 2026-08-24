@@ -12,11 +12,11 @@
       "types": "./src/index.ts",
       "import": "./src/index.ts"
     },
-    "./decorations": {
-      "types": "./src/decorations.ts",
-      "import": "./src/decorations.ts"
-    },
     "./package.json": "./package.json",
+    "./render": {
+      "types": "./src/render.ts",
+      "import": "./src/render.ts"
+    },
     "./ui": {
       "types": "./src/ui.tsx",
       "import": "./src/ui.tsx"
