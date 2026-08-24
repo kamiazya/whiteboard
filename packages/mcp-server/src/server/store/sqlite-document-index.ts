@@ -24,6 +24,7 @@ import { getLogger } from '../log.js'
 import { deleteDocumentRow } from './db/delete-document-row.js'
 import type { Database } from './db/index.js'
 import { upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { evictDoc } from './doc-cache.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 /**
@@ -197,6 +198,7 @@ export class SqliteDocumentIndex implements DocumentIndex {
       throw new DocumentMoveIntoSelfError(from, to)
     }
     await withWorkspaceWriteLock(workspaceId, async () => {
+      let moved: readonly { readonly from: string; readonly path: string }[] = []
       await this.db.transaction().execute(async (trx) => {
         const rows = await trx
           .selectFrom('documents')
@@ -219,7 +221,26 @@ export class SqliteDocumentIndex implements DocumentIndex {
             .where('id', '=', move.id)
             .execute()
         }
+        moved = plan.moves
       })
+
+      // After the commit, and still under the workspace lock: the cache is
+      // keyed by (workspaceId, path), so every path this move touched now
+      // holds a doc filed under a name that no longer means what it did.
+      //
+      // Both halves matter, and the destination half is the one that
+      // corrupts rather than merely staling. A source path: a reader still
+      // going through it must lazily create a fresh document rather than
+      // resurrect the moved one. A destination path: `getDoc` creates an
+      // empty doc for any path with no row yet, so a read that arrived
+      // before this move left a phantom cached there — leaving it would
+      // shadow the moved document's real content, and the next write through
+      // it would persist the phantom over the top. Both apply to every
+      // descendant, not only the two paths the caller named.
+      for (const move of moved) {
+        evictDoc(workspaceId, move.from)
+        evictDoc(workspaceId, move.path)
+      }
     })
   }
 

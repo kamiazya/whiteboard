@@ -1,8 +1,15 @@
-import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
-import { DocumentHasDescendantsError, DocumentMoveIntoSelfError } from '@kamiazya/whiteboard-ports'
-import { type ServerDeps, wbDocumentDelete } from '@kamiazya/whiteboard-server-core'
+import {
+  DocumentHasDescendantsError,
+  DocumentMoveIntoSelfError,
+  DocumentNotFoundError,
+  DocumentPathTakenError,
+} from '@kamiazya/whiteboard-ports'
+import {
+  type ServerDeps,
+  wbDocumentCreate,
+  wbDocumentDelete,
+} from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
-import { LoroDoc as LoroDocCtor } from 'loro-crdt'
 import type { z } from 'zod'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import {
@@ -16,15 +23,7 @@ import {
 } from '../../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
-import {
-  ConflictError,
-  listDocuments,
-  listWorkspaces,
-  renameDocumentPath,
-  saveDocument,
-  workspaceExists,
-} from '../../store/document-store.js'
-import { setDocumentDisplayName } from '../../store/names-store.js'
+import { listDocuments, listWorkspaces, workspaceExists } from '../../store/document-store.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
@@ -125,37 +124,28 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       throw err
     }
     try {
-      const doc = new LoroDocCtor()
-      // The doc's own bytes must be self-describing exactly like an
-      // MCP-created (wb_document_create) doc — kind lives on the SQL row
-      // AND on the doc, so a reader of the blob alone (an editor opening it,
-      // a snapshot export) doesn't need the row to know what it's looking at.
-      writeDocumentKind(doc, parsed.data.kind)
-      await saveDocument(workspaceId, path, doc, { overwrite: false, kind: parsed.data.kind })
-      // What a blank name means is `setDocumentDisplayName`'s rule, not a
-      // second copy of it here: it trims and stores null. Either way a name
-      // is never why the document fails to exist — the one field a person
-      // can correct afterwards must not gate creation.
-      const { name } = parsed.data
-      if (name !== undefined) {
-        // Best-effort, deliberately. The document is already saved, so a
-        // failure here cannot be reported as a failed create — a client that
-        // read 500 would retry and make a SECOND document. An unnamed
-        // document is recoverable by rename; a duplicated one is not.
-        await setDocumentDisplayName(workspaceId, path, name).catch((err: unknown) => {
-          getLogger('document').warning(
-            { err: err as Error, workspaceId, path },
-            'document created but its name could not be stored',
-          )
-        })
-      }
+      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      await wbDocumentCreate(deps, {
+        workspaceId,
+        path,
+        kind: parsed.data.kind,
+        // `saveDocument` used to upsert the workspace row on the way past, so
+        // posting into a workspace that does not exist yet has always worked
+        // on this surface. The operation makes that an explicit flag rather
+        // than a side effect, and this preserves the behaviour.
+        createWorkspace: true,
+        // Passed through as given. A blank name meaning "no name" is the
+        // OPERATION's rule now, not a second copy of it here — two places
+        // normalising the same field is two places that can stop agreeing.
+        ...(parsed.data.name === undefined ? {} : { name: parsed.data.name }),
+      })
       const response: CreateDocumentResponse = { path }
       return c.json(response)
     } catch (err) {
-      if (err instanceof ConflictError) {
+      if (err instanceof DocumentPathTakenError) {
         return c.json({ title: `Canvas "${path}" already exists` }, 409)
       }
-      getLogger('document').error({ err: err as Error }, 'saveDocument failed unexpectedly')
+      getLogger('document').error({ err: err as Error }, 'wb_document_create failed unexpectedly')
       return c.json({ title: 'Failed to create canvas.' } satisfies ApiErrorBody, 500)
     }
   })
@@ -203,9 +193,16 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   // just a new path column. Old URLs carrying the old path 404 by design — no
   // redirect, no alias history (0.0.x).
   //
-  // Server-side foundation only: no MCP tool, CLI command, or apps/web
-  // affordance calls this route yet. The apps/web path-edit UI is a planned
-  // follow-up, not dead code.
+  // An ADAPTER over `documentIndex.moveDocument` (ADR-0018). Straight to the
+  // port rather than through a `wb_document_*` operation, because there is no
+  // operation to write: a move is the port call and nothing else, so a use
+  // case here would forward one argument set and add a name. The delete and
+  // create differ — each composes several steps that a second surface would
+  // otherwise repeat.
+  //
+  // The web app's move/rename UI reaches exactly this route
+  // (`WorkspaceFilesPanel` -> `daemon-files-source` -> `PUT …/documents/:path/path`),
+  // so a stale comment here claiming nothing called it has been removed.
   onDocumentsRoute(
     app,
     'put',
@@ -228,28 +225,31 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         throw err
       }
       try {
-        const result = await renameDocumentPath(workspaceId, path, newPath)
-        if (!result) {
-          return c.json({ title: `Canvas "${path}" not found` }, 404)
-        }
+        const deps = options.serverDeps ?? (await getDefaultServerDeps())
+        await deps.documentIndex.moveDocument({ workspaceId, from: path, to: newPath })
         const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {
+        // Absent is a 404 here and a throw there — the same translation the
+        // delete makes, in the opposite direction.
+        if (err instanceof DocumentNotFoundError) {
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
+        }
         // A move into the document's own subtree is an unusable target, not
         // a race with another document — 400, not 409.
         if (err instanceof DocumentMoveIntoSelfError) {
           return c.json({ title: err.message } satisfies ApiErrorBody, 400)
         }
-        // Forward the store's message rather than rebuilding one from
+        // Forward the raised message rather than rebuilding one from
         // newPath: a subtree move collides on a PRODUCED path, so the path
         // the caller asked for is often free and naming it sends them to
         // retry the one thing that was never the problem.
-        if (err instanceof ConflictError) {
+        if (err instanceof DocumentPathTakenError) {
           return c.json({ title: err.message } satisfies ApiErrorBody, 409)
         }
         const issue = handleCorruptStoredData(err)
         if (issue) return c.json(issue.body, issue.status)
-        getLogger('document').error({ err: err as Error }, 'renameDocumentPath failed unexpectedly')
+        getLogger('document').error({ err: err as Error }, 'moveDocument failed unexpectedly')
         return c.json({ title: 'Failed to rename canvas.' } satisfies ApiErrorBody, 500)
       }
     },
