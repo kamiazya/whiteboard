@@ -238,6 +238,71 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
  */
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
 
+/**
+ * Mechanics an ADAPTER still reaches directly, pending ADR-0018's migration.
+ *
+ * Each entry is one `<adapter file> -> <mechanic module>` edge, relative to
+ * `packages/mcp-server/src/server`. This list may only SHRINK: an edge that
+ * is not here fails the build, and an entry that is no longer a real edge
+ * fails it too, so an entry cannot outlive the debt it names. Same shape,
+ * and the same reason, as {@link KNOWN_IMPORT_CYCLES}.
+ *
+ * The rule could not land without it. Every one of these exists today, and
+ * enforcing the invariant on an empty list would simply have failed the
+ * build — so the debt is recorded rather than the guard postponed until
+ * after the migration it is meant to verify.
+ */
+export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
+  'mcp/document-tools.ts -> workspace-lock',
+  'routes/branches.ts -> branch-merge',
+  'routes/branches.ts -> branches-store',
+  'routes/debug.ts -> count-alive-nodes',
+  'routes/debug.ts -> doc-cache',
+  'routes/debug.ts -> document-store',
+  'routes/document.ts -> auto-compact',
+  'routes/document.ts -> version-store',
+  'routes/document/auto-version.ts -> version-store',
+  'routes/document/export-svg.ts -> document-store',
+  'routes/document/live-doc.ts -> doc-cache',
+  'routes/document/live-doc.ts -> document-store',
+  'routes/document/live-doc.ts -> version-store',
+  'routes/document/live-doc.ts -> workspace-lock',
+  'routes/document/maintenance.ts -> doc-cache',
+  'routes/document/maintenance.ts -> document-store',
+  'routes/document/maintenance.ts -> version-store',
+  'routes/document/metadata.ts -> names-store',
+  'routes/document/restore.ts -> count-alive-nodes',
+  'routes/document/restore.ts -> doc-cache',
+  'routes/document/restore.ts -> document-store',
+  'routes/document/restore.ts -> version-store',
+  'routes/document/restore.ts -> workspace-lock',
+  'routes/document/thumbnails.ts -> version-store',
+  'routes/document/versions.ts -> document-store',
+  'routes/document/versions.ts -> version-store',
+  'routes/document/workspaces.ts -> document-store',
+  'routes/document/workspaces.ts -> names-store',
+  'routes/export.ts -> document-store',
+  'routes/files.ts -> file-gc',
+  'routes/files.ts -> version-store',
+  'routes/files.ts -> workspace-lock',
+  'routes/runtime.ts -> document-store',
+  'routes/ws.ts -> doc-cache',
+  'routes/ws.ts -> document-store',
+  'routes/ws.ts -> version-store',
+  'routes/ws.ts -> workspace-lock',
+]
+
+/**
+ * Modules under `store/` the adapter rule does NOT count.
+ *
+ * `corrupt-stored-data` is an error taxonomy, not a mechanic: an adapter
+ * calling `isCorruptStoredDataError` to choose a status code is doing
+ * translation, which is exactly an adapter's job. Listing it would put five
+ * entries in the allowlist above that could never legitimately shrink,
+ * breaking the one property that makes that list trustworthy.
+ */
+export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
+
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []
 }
