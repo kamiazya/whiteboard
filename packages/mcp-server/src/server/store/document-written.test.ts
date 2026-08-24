@@ -46,7 +46,14 @@ describe('documentWritten', () => {
       .where('path', '=', 'agent-written')
       .executeTakeFirstOrThrow()
 
-    const before = _autoCompactTimerCountForTests()
+    // Asserted, not merely captured: `toBe(1)` below only proves the observer
+    // scheduled something if nothing was scheduled already. Creating the
+    // document IS a write, and a second schedule for the same document
+    // replaces the timer rather than adding one, so a count of 1 going in
+    // would make the assertion say nothing. Measured as 0 here — this line
+    // is what keeps it that way.
+    expect(_autoCompactTimerCountForTests()).toBe(0)
+
     await documentWritten({ documentId })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)
