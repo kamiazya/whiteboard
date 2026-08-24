@@ -1,8 +1,4 @@
-import {
-  LUCIDE_ICONS,
-  LUCIDE_VIEWBOX,
-  type LucideIconElement,
-} from '@kamiazya/whiteboard-plugin-visual'
+import { type LucideIconElement, VISUAL_ICONS } from '@kamiazya/whiteboard-plugin-visual'
 import { ARROW_MARKER, edgeArrowEnds } from '../edge-arrows.js'
 import { hopEndpoints, jumpsWithinSpan } from '../layout/edges/edge-flatten.js'
 import { EDGE_JUMP_RADIUS_PX } from '../layout/edges/edge-jumps.js'
@@ -523,20 +519,50 @@ const GLYPH_BASELINE_FACTOR = 0.35
  * (a full lucide dependency, a facet distribution's own glyphs) without
  * this package depending on one, and the table survives `postMessage`.
  */
-export type IconTable = Readonly<Record<string, ReadonlyArray<LucideIconElement>>>
+/**
+ * An icon set's paint, applied to the whole `<symbol>` definition so one def
+ * serves every referencing node. Only the stroke COLOR is left to inherit
+ * from each `<use>`.
+ */
+export type IconPaint = Readonly<Record<string, string | number>>
+
+/**
+ * One icon: its geometry plus the two things geometry is meaningless without.
+ *
+ * `viewBox` is the coordinate space the geometry is drawn in, and `paint` the
+ * convention it is authored for. Both were hard-coded to the bundled set's
+ * before this, so a contributed icon in any other space came out the wrong
+ * size and clipped, and one wanting a fill came out invisible.
+ */
+export interface IconContribution {
+  readonly geometry: ReadonlyArray<LucideIconElement>
+  readonly viewBox?: string
+  readonly paint?: IconPaint
+}
+
+export type IconTable = Readonly<Record<string, IconContribution>>
+
+/**
+ * What a set that declares neither gets. 24x24 stroke-only is what every icon
+ * in this repo is authored for, so a table saying nothing still draws.
+ */
+const FALLBACK_ICON_VIEWBOX = '0 0 24 24'
+const FALLBACK_ICON_PAINT: IconPaint = {
+  fill: 'none',
+  'stroke-width': 2,
+  'stroke-linecap': 'round',
+  'stroke-linejoin': 'round',
+}
 
 /**
  * `Array.isArray` and not a bare `!== undefined`: both tables are plain
  * objects, so a prototype-inherited name (`toString`) answers a function,
  * which must degrade like any unknown name rather than throw downstream.
  */
-function lookupIcon(
-  name: string,
-  icons: IconTable | undefined,
-): ReadonlyArray<LucideIconElement> | undefined {
+function lookupIcon(name: string, icons: IconTable | undefined): IconContribution | undefined {
   const fromCaller = icons === undefined ? undefined : icons[name]
-  const geometry = fromCaller ?? LUCIDE_ICONS[name]
-  return Array.isArray(geometry) ? geometry : undefined
+  const found = fromCaller ?? VISUAL_ICONS[name]
+  return Array.isArray(found?.geometry) ? found : undefined
 }
 
 function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
@@ -688,25 +714,19 @@ function renderNode(node: SceneNode, tables?: ResolveTables): SvgChild {
       return renderShape(node, tables)
     case 'icon': {
       if (!isFiniteBox(node.bbox)) return []
-      const geometry = lookupIcon(node.icon, tables?.icons)
-      if (geometry === undefined) return []
+      const contribution = lookupIcon(node.icon, tables?.icons)
+      if (contribution === undefined) return []
       const id = `wb-icon-${idToken(node.icon)}`
       const def: SvgDef = {
         id,
-        node: el('symbol', { id, viewBox: LUCIDE_VIEWBOX }, [
-          // Lucide's stroke styling lives ON the definition (fill none,
-          // stroke-width 2, round caps/joins); only the stroke COLOR
+        node: el('symbol', { id, viewBox: contribution.viewBox ?? FALLBACK_ICON_VIEWBOX }, [
+          // The set's paint lives ON the definition; only the stroke COLOR
           // inherits from each referencing <use>, so one def serves every
           // color-assigned node.
           el(
             'g',
-            {
-              fill: 'none',
-              'stroke-width': 2,
-              'stroke-linecap': 'round',
-              'stroke-linejoin': 'round',
-            },
-            geometry.map(renderIconElement),
+            contribution.paint ?? FALLBACK_ICON_PAINT,
+            contribution.geometry.map(renderIconElement),
           ),
         ]),
       }

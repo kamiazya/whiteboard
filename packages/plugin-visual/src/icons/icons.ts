@@ -67,3 +67,39 @@ export const LUCIDE_ICONS: Readonly<Record<string, ReadonlyArray<LucideIconEleme
  * never lists a name the backend would silently drop.
  */
 export const BUILT_IN_ICON_NAMES: readonly string[] = Object.keys(LUCIDE_ICONS).sort()
+
+/**
+ * This set as the renderer consumes it: the geometry above, plus the
+ * coordinate space it is drawn in and the paint it is authored for.
+ *
+ * Declared HERE rather than defaulted in the renderer, because they are
+ * properties of this icon set and not of drawing icons in general — a
+ * contributed set in a different space, or one that fills rather than
+ * strokes, is equally valid and says so the same way.
+ */
+export const VISUAL_ICONS: Readonly<
+  Record<
+    string,
+    {
+      readonly geometry: ReadonlyArray<LucideIconElement>
+      readonly viewBox: string
+      readonly paint: Readonly<Record<string, string | number>>
+    }
+  >
+> = Object.fromEntries(
+  Object.entries(LUCIDE_ICONS).map(([name, geometry]) => [
+    name,
+    {
+      geometry,
+      viewBox: LUCIDE_VIEWBOX,
+      // Lucide's own convention: outline only, so the stroke COLOR is the
+      // single thing a referencing `<use>` assigns.
+      paint: {
+        fill: 'none',
+        'stroke-width': 2,
+        'stroke-linecap': 'round',
+        'stroke-linejoin': 'round',
+      },
+    },
+  ]),
+)

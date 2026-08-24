@@ -56,6 +56,14 @@ silhouette. `visual.symbol`'s badge is one of these and now lives in
 `plugin-visual`, taking its size, margin and corner with it; this package no
 longer knows what a badge is.
 
+**An icon contribution carries its coordinate space and paint**, not geometry
+alone (`IconContribution`, `svg/backend.ts`). Geometry means nothing without
+the box it is drawn in and the convention it is authored for; holding both as
+constants here made a contributed icon in any other space render wrong-sized
+and a fill-authored one render invisible. The bundled set declares its own, so
+the renderer's fallback (24x24, stroke-only) is only for a table that says
+neither.
+
 The default is the bundled plugin's set, NOT an opt-in, for the lowlight
 reason recorded in `architecture-map.md`: a resolution step four call sites
 have to remember is one a call site forgets, and the surface that forgets does
