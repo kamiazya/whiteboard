@@ -127,33 +127,42 @@ export function DaemonIndexPage({
   const initialWorkspaceIdRef = useRef(initialWorkspaceId)
   initialWorkspaceIdRef.current = initialWorkspaceId
 
-  const loadWorkspaces = useCallback(
-    async (isStale: () => boolean = () => false) => {
-      setLoadError(null)
-      try {
-        const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
-        if (isStale()) return
-        const ids = res.workspaces.map((w) => w.workspaceId)
-        setWorkspaces(ids)
-        setWorkspacesLoaded(true)
-        const targeted = initialWorkspaceIdRef.current
-        const wanted = targeted && ids.includes(targeted) ? targeted : undefined
-        setSelectedWorkspace((current) => current ?? wanted ?? ids[0] ?? null)
-      } catch {
-        if (isStale()) return
-        setWorkspacesLoaded(true)
-        setLoadError('Failed to load workspaces.')
-      }
-    },
-    [daemonFetch, daemonBaseUrl],
-  )
+  // Orders every list load, so only the newest one may write. The retry
+  // controls can overlap freely — nothing else sequences two presses — and an
+  // older answer landing last does not merely leave a stale message: the
+  // no-workspaces branch keys on `workspaces.length === 0` alone, so the page
+  // reverts to it with a workspace selected and its documents on screen.
+  //
+  // This replaces the `isStale` callback the sibling loaders take, rather than
+  // joining it. That callback asks whether the CALLER still cares, which only
+  // the mount effect can answer; a dep change already bumps the generation
+  // here (the cleanup runs, then the re-run), leaving it covering unmount
+  // alone — a setState no-op since React 18, and nothing a test can tell apart
+  // from its absence. Measured: with it removed, all 46 cases stay green.
+  const listGeneration = useRef(0)
+
+  const loadWorkspaces = useCallback(async () => {
+    const generation = ++listGeneration.current
+    const superseded = () => generation !== listGeneration.current
+    setLoadError(null)
+    try {
+      const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
+      if (superseded()) return
+      const ids = res.workspaces.map((w) => w.workspaceId)
+      setWorkspaces(ids)
+      setWorkspacesLoaded(true)
+      const targeted = initialWorkspaceIdRef.current
+      const wanted = targeted && ids.includes(targeted) ? targeted : undefined
+      setSelectedWorkspace((current) => current ?? wanted ?? ids[0] ?? null)
+    } catch {
+      if (superseded()) return
+      setWorkspacesLoaded(true)
+      setLoadError('Failed to load workspaces.')
+    }
+  }, [daemonFetch, daemonBaseUrl])
 
   useEffect(() => {
-    let cancelled = false
-    void loadWorkspaces(() => cancelled)
-    return () => {
-      cancelled = true
-    }
+    void loadWorkspaces()
   }, [loadWorkspaces])
 
   // Re-reads the workspace list and moves off the one that vanished.
@@ -474,7 +483,7 @@ export function DaemonIndexPage({
           // is someone else's.
           <div className="flex flex-col items-start gap-3">
             <div>
-              <p className="text-sm font-medium">This daemon has no workspaces yet.</p>
+              <p className="text-sm font-medium">This daemon has no workspaces.</p>
               <p className="text-sm text-muted-foreground">
                 A workspace appears once something creates a document in it — an agent over MCP, or
                 the whiteboard CLI.

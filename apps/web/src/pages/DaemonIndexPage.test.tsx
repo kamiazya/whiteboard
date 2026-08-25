@@ -1340,6 +1340,54 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('alpha')).toBeTruthy()
   })
 
+  it('a slower earlier retry cannot undo the newer one that found a workspace', async () => {
+    // Both retry controls call loadWorkspaces() with its default isStale,
+    // which is only ever false — nothing there orders two overlapping manual
+    // retries. Pressing "Check again" twice is enough: if the FIRST response
+    // lands last it writes its empty list over the second's, and the
+    // no-workspaces branch keys on `workspaces.length === 0` alone, so the
+    // page flips back to "no workspaces" while a workspace is selected and
+    // its documents are on screen.
+    const pending: Array<(workspaces: Array<{ workspaceId: string }>) => void> = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
+        return new Promise<Response>((resolve) => {
+          pending.push((workspaces) => resolve(jsonResponse({ workspaces })))
+        })
+      }
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(
+          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}, 404))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    // The mount load settles empty, putting the page in the no-workspaces state.
+    await waitFor(() => expect(pending).toHaveLength(1))
+    await act(async () => pending[0]([]))
+    await screen.findByText(/no workspaces/i)
+
+    // Two overlapping retries, resolved in reverse order: the LATER one finds
+    // ws-a, then the EARLIER one answers with the list as it was.
+    fireEvent.click(screen.getByRole('button', { name: /check again/i }))
+    await waitFor(() => expect(pending).toHaveLength(2))
+    fireEvent.click(screen.getByRole('button', { name: /check again/i }))
+    await waitFor(() => expect(pending).toHaveLength(3))
+
+    await act(async () => pending[2]([{ workspaceId: 'ws-a' }]))
+    await screen.findByText('alpha')
+
+    await act(async () => pending[1]([]))
+
+    expect(screen.queryByText(/no workspaces/i)).toBeNull()
+    expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
   it('a failed workspace list offers a retry rather than a create button with nowhere to create', async () => {
     // The create control this branch renders is a real recovery path when the
     // DOCUMENTS list failed — the POST needs no rows. When the WORKSPACE list
