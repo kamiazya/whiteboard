@@ -31,20 +31,35 @@ function walk(dir: string, acc: string[] = []): string[] {
  * Every `<adapter file> -> <mechanic module>` edge that exists today, as the
  * strings the allowlist is written in.
  *
+ * A mechanic is named by its path UNDER `store/`, so the database layer
+ * appears as `db/<module>` and cannot be confused with a same-named module at
+ * the top level. That nesting used to be invisible: the matcher read a single
+ * path segment, so every `store/db/**` import passed the guard silently — a
+ * blind spot, not a decision, and the kind that reads as coverage until
+ * someone measures it.
+ *
+ * `exemptFiles` are files inside an adapter tree that are NOT adapters (see
+ * `ADAPTER_SCAN_EXEMPT_FILES`); they are skipped whole rather than having
+ * their edges allowlisted, because a composition root's edges are not debt
+ * that can ever shrink.
+ *
  * `serverDir` is `packages/mcp-server/src/server`.
  */
 export function findAdapterMechanicEdges(
   serverDir: string,
   excludedMechanics: readonly string[],
+  exemptFiles: readonly string[] = [],
 ): string[] {
   const excluded = new Set(excludedMechanics)
+  const exempt = new Set(exemptFiles)
   const edges = new Set<string>()
   for (const base of ADAPTER_DIRS) {
     const dir = join(serverDir, base)
     for (const file of walk(dir)) {
       const from = relative(serverDir, file).split('\\').join('/')
+      if (exempt.has(from)) continue
       for (const match of readFileSync(file, 'utf8').matchAll(
-        /from '[^']*store\/([a-z0-9-]+)\.js'/g,
+        /from '[^']*store\/((?:db\/)?[a-z0-9-]+)\.js'/g,
       )) {
         const mechanic = match[1] as string
         if (excluded.has(mechanic)) continue
