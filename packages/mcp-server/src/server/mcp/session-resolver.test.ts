@@ -2,6 +2,7 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { getDb } from '../store/db/index.js'
 import { clearWorkspaceIdCache, ensureWorkspaceId } from './session-resolver.js'
 
 describe('ensureWorkspaceId', () => {
@@ -45,6 +46,19 @@ describe('ensureWorkspaceId', () => {
     } finally {
       await rm(otherDir, { recursive: true, force: true })
     }
+  })
+
+  it('materializes the current workspace as a row, not only as a runtime marker', async () => {
+    // The daemon commits to HAVING a current workspace the moment it resolves
+    // one, but the workspaces table only ever learned about it as a side
+    // effect of the first document write. Until then the daemon answered two
+    // of its own questions inconsistently: it had a workspace id, and
+    // `GET /api/workspaces` listed nothing — which is what left a browser
+    // connected to a fresh daemon with no workspace to select.
+    const id = await ensureWorkspaceId(dataDir)
+    const db = await getDb(dataDir)
+    const rows = await db.selectFrom('workspaces').select(['id']).execute()
+    expect(rows.map((r) => r.id)).toEqual([id])
   })
 
   it('drops a failed promise from the cache so a subsequent call can retry', async () => {
