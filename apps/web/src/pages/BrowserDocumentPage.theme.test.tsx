@@ -25,27 +25,10 @@ vi.mock('../components/spatial-editor/index.js', async (importOriginal) => {
   return { ...actual, SpatialEditor: CapturingSpatialEditor }
 })
 
-vi.mock('../lib/browser-backend.js', () => ({
-  BrowserBackend: class {
-    connect(handlers: { onConnected: () => void; onSnapshot: (b: Uint8Array) => void }) {
-      handlers.onConnected()
-      const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-      handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-    }
-    disconnect() {}
-    pushLocalUpdate() {
-      return Promise.resolve()
-    }
-    getFile() {
-      return Promise.resolve(null)
-    }
-    putFile() {
-      return Promise.resolve()
-    }
-    sendClientReady() {}
-    sendExportResponse() {}
-  },
-}))
+vi.mock('../lib/browser-backend.js', async () => {
+  const { FakeBrowserBackend } = await import('../test-utils/fake-browser-backend.js')
+  return { BrowserBackend: FakeBrowserBackend }
+})
 
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 const { THEME_STORAGE_KEY } = await import('../hooks/useThemeMode.js')

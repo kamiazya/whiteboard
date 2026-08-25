@@ -447,8 +447,19 @@ export function BrowserDocumentPage({
   // wins — the sync layer's body-less doc would clobber the markdown body
   // written by use-markdown-body.
   const backend = useMemo(
-    () =>
-      documentId != null && documentKind !== 'markdown' ? new BrowserBackend(documentId) : null,
+    () => {
+      if (pageState.kind !== 'editing' || pageState.snapshot.kind === 'markdown') return null
+      const snap = pageState.snapshot
+      // path/kind/name ride along so connect() can place the document in the
+      // workspace tree when it is not there yet — a fresh document, or a
+      // record the startup fold could not classify on its own.
+      return new BrowserBackend({
+        documentId: snap.documentId,
+        path: snap.path,
+        kind: snap.kind,
+        ...(snap.name === snap.path ? {} : { name: snap.name }),
+      })
+    },
     // Re-create backend only when documentId/kind changes; a null id means not-yet-loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [documentId, documentKind],
@@ -472,7 +483,11 @@ export function BrowserDocumentPage({
     lockedEdgeIds,
     setEdgeLock,
     backendError,
-  } = useDocumentSync(backend)
+  } = useDocumentSync(backend, {
+    // The backend delivers the WORKSPACE document; this scopes the session's
+    // reads and writes to the tree node carrying this document's content.
+    ...(documentId === null ? {} : { contentDocumentId: documentId }),
+  })
 
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only

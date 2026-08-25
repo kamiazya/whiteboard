@@ -7,6 +7,7 @@ import {
   readMarkdownBody,
   readNodeLocks,
   readSpatialCanvas,
+  resolveWorkspaceDocumentById,
   type SpatialBatchWriter,
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
@@ -616,6 +617,19 @@ export function createDocumentSyncSession(
         // doc + import() is the only reconstruction that works for both.
         const newDoc = new LoroDoc()
         newDoc.import(bytes)
+        // A scoped session's contract with its backend: the workspace bytes
+        // hold this document's tree node. Bytes that do not are unreadable
+        // FOR THIS DOCUMENT — reported like any other unreadable content,
+        // never thrown into the accessors (which would take React down with
+        // a doc the session cannot serve anyway).
+        if (
+          deps.contentDocumentId !== undefined &&
+          resolveWorkspaceDocumentById(newDoc, deps.contentDocumentId) === null
+        ) {
+          deps.onBackendError('corrupt-snapshot')
+          deps.onStatusChange('error')
+          return
+        }
         doc = newDoc
         undoManager = new UndoManager(newDoc, {
           mergeInterval: 500,

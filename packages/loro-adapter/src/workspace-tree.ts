@@ -26,7 +26,7 @@ import { documentIdSchema, documentKindSchema } from '@kamiazya/whiteboard-model
 import type { LoroTreeNode, TreeID } from 'loro-crdt'
 import { LoroDoc, LoroMap, LoroText } from 'loro-crdt'
 import { z } from 'zod'
-import type { DocumentContainers } from './loro-bridge.js'
+import { CONTENT_CONTAINER_KEYS, type DocumentContainers } from './loro-bridge.js'
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'
@@ -92,6 +92,25 @@ export interface CreateWorkspaceDocumentInput extends WorkspaceNodeMeta {
 
 function tree(doc: LoroDoc) {
   return doc.getTree(WORKSPACE_TREE_KEY)
+}
+
+/**
+ * Pre-attaches every content container the bridge knows on a DOCUMENT node.
+ *
+ * On a tree node, attaching a container is an op (a doc's roots are
+ * implicit). Left lazy, the first read of a missing container would attach
+ * it — and a read that mutates clears the UndoManager's redo stack, which is
+ * how "create → undo → read → redo" lost the redone edit. Attaching at
+ * creation makes every later `getOrCreateContainer` a pure lookup.
+ *
+ * Document nodes only: a folder's meta is `.strict()`, so an extra key would
+ * make the folder unreadable.
+ */
+function attachContentContainers(node: LoroTreeNode): void {
+  for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
+    if (kind === 'map') node.data.getOrCreateContainer(key, new LoroMap())
+    else node.data.getOrCreateContainer(key, new LoroText())
+  }
 }
 
 type Read =
@@ -228,6 +247,7 @@ export function createWorkspaceDocument(
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind satisfies DocumentKind)
   if (meta.name !== undefined) node.data.set('name', meta.name)
+  attachContentContainers(node)
   doc.commit()
   return { ...meta, path: resolveWorkspaceDocumentById(doc, meta.documentId)?.path ?? meta.segment }
 }
@@ -355,6 +375,7 @@ export function createWorkspaceDocumentAtPath(
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind)
   if (meta.name !== undefined) node.data.set('name', meta.name)
+  attachContentContainers(node)
   doc.commit()
   return { ...meta, path: input.path }
 }
@@ -467,6 +488,10 @@ function copyNodeData(source: LoroTreeNode, target: LoroTreeNode): void {
     // writes one today; when something does, this is where it has to be
     // taught, and a wrong copy would be worse than a visible gap.
   }
+  // A restored document must satisfy the same pre-attached-containers
+  // invariant a created one does (see attachContentContainers) — a source
+  // written before the invariant existed may lack some keys.
+  if (source.data.get('documentId') !== undefined) attachContentContainers(target)
 }
 
 /**
@@ -615,6 +640,43 @@ export function deleteWorkspaceNodeAtPath(doc: LoroDoc, path: string): boolean {
  * everything the first one put there. Measured — `setContainer` on an
  * occupied key leaves `{}`.
  */
+/**
+ * The inverse of `adoptWorkspaceDocument`: one document's containers, copied
+ * out of its tree node into a standalone Loro document with root containers —
+ * the shape every pre-workspace consumer (the daemon import, a duplicate
+ * seed) still speaks.
+ *
+ * A VALUE copy with a fresh oplog, like the adopt direction: the caller gets
+ * the current state, never the workspace document's history. Scalar meta keys
+ * (segment, kind, name, documentId) are tree bookkeeping and stay behind —
+ * only containers are content.
+ */
+export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): LoroDoc | null {
+  const node = nodeById(doc, documentId)
+  if (node === null) return null
+  const out = new LoroDoc()
+  for (const key of node.data.keys()) {
+    const value = node.data.get(key) as unknown
+    const kind =
+      typeof value === 'object' && value !== null && 'kind' in value
+        ? (value as { kind: () => string }).kind()
+        : null
+    if (kind === 'Map') {
+      const map = out.getMap(key)
+      for (const [entryKey, entryValue] of Object.entries(
+        (value as LoroMap).toJSON() as Record<string, unknown>,
+      )) {
+        map.set(entryKey, entryValue)
+      }
+    } else if (kind === 'Text') {
+      out.getText(key).insert(0, (value as LoroText).toString())
+    }
+    // Scalars are node meta, not content — see the doc comment.
+  }
+  out.commit()
+  return out
+}
+
 export function documentContainers(doc: LoroDoc, documentId: string): DocumentContainers {
   const node = nodeById(doc, documentId)
   if (node === null) throw new Error(`No document "${documentId}" in this workspace`)

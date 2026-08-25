@@ -55,29 +55,13 @@ class FakeLoroStore implements LoroStoreLike {
   }
 }
 
-// BrowserBackend uses LoroDoc; mock it to avoid WASM in jsdom.
-vi.mock('../lib/browser-backend.js', () => ({
-  BrowserBackend: class {
-    connect(handlers: { onConnected: () => void; onSnapshot: (b: Uint8Array) => void }) {
-      handlers.onConnected()
-      // Deliver a minimal empty snapshot so useDocumentSync has a doc.
-      const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-      handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-    }
-    disconnect() {}
-    pushLocalUpdate() {
-      return Promise.resolve()
-    }
-    getFile() {
-      return Promise.resolve(null)
-    }
-    putFile() {
-      return Promise.resolve()
-    }
-    sendClientReady() {}
-    sendExportResponse() {}
-  },
-}))
+// The real backend does IndexedDB + the startup fold; the double delivers
+// the same workspace-shaped snapshot (the page's session is scoped to the
+// target's tree node) without any storage.
+vi.mock('../lib/browser-backend.js', async () => {
+  const { FakeBrowserBackend } = await import('../test-utils/fake-browser-backend.js')
+  return { BrowserBackend: FakeBrowserBackend }
+})
 
 // loro-crdt is WASM; mock at module level so BrowserBackend mock above can require it.
 // The actual LoroDoc is used via the real loro-crdt installed in the workspace.

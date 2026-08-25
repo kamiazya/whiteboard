@@ -1,7 +1,9 @@
+import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeToSnapshot } from '../components/migration/import-from-browser.js'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
+import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import {
   BROWSER_WORKSPACE_ID,
@@ -529,11 +531,24 @@ export function useBrowserDocumentController(
     const source = snapshotRef.current
     if (source === null) throw new Error('No canvas is open to duplicate.')
 
-    const loroResult = await loroRef.current.load(source.documentId)
-    if (loroResult.kind !== 'ok') {
-      throw new Error('The canvas data could not be read for duplication.')
+    // The workspace document is where an edited document's current state
+    // lives; the per-document record is the pre-fold copy and goes stale the
+    // moment the editor commits. Projection first, old record as the fallback
+    // for a document nothing has folded yet (and for jsdom tests, whose
+    // injected store is the only storage there is).
+    const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID).catch(() => null)
+    const projected =
+      workspace === null ? null : projectWorkspaceDocument(workspace, source.documentId)
+    let mergedSnapshot: Uint8Array
+    if (projected !== null) {
+      mergedSnapshot = new Uint8Array(projected.export({ mode: 'snapshot' }))
+    } else {
+      const loroResult = await loroRef.current.load(source.documentId)
+      if (loroResult.kind !== 'ok') {
+        throw new Error('The canvas data could not be read for duplication.')
+      }
+      mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
     }
-    const mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
 
     const existingNames = new Set(
       (await listLocalDocuments(indexRef.current, clockRef.current)).map((row) => row.name),

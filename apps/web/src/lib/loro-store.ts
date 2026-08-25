@@ -96,6 +96,26 @@ function foldDeltas(snapshot: Uint8Array, deltas: readonly Uint8Array[]): Uint8A
   }
 }
 
+/**
+ * Record when a document's content was last written — the browser listing's
+ * `updatedAt` source. Standalone because more than one writer stamps it: this
+ * store's own save paths, and the workspace-document write path, which does
+ * not go through this store at all. Best-effort: a listing that shows the
+ * epoch is worse than one that shows the truth, but neither is worth failing
+ * a save the user's document depends on.
+ */
+export async function touchContentTimestamp(documentId: string, dbName?: string): Promise<void> {
+  try {
+    await inTransaction(dbName, [CONTENT_TIMESTAMPS_STORE], 'readwrite', async (tx) => {
+      await request(
+        tx.objectStore(CONTENT_TIMESTAMPS_STORE).put(new Date().toISOString(), documentId),
+      )
+    })
+  } catch {
+    // Intentionally swallowed; see above.
+  }
+}
+
 export class LoroStore {
   readonly #store: IdbDocumentStore
 
@@ -305,15 +325,7 @@ export class LoroStore {
    * save the user's document depends on.
    */
   async #touch(documentId: string): Promise<void> {
-    try {
-      await inTransaction(this.dbName, [CONTENT_TIMESTAMPS_STORE], 'readwrite', async (tx) => {
-        await request(
-          tx.objectStore(CONTENT_TIMESTAMPS_STORE).put(new Date().toISOString(), documentId),
-        )
-      })
-    } catch {
-      // Intentionally swallowed; see above.
-    }
+    await touchContentTimestamp(documentId, this.dbName)
   }
 
   /** Drop everything stored for a document — snapshot, log and timestamp. */

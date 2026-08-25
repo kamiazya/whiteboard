@@ -14,9 +14,11 @@ import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import {
   adoptWorkspaceDocument,
   createWorkspaceDocument,
+  createWorkspaceDocumentAtPath,
   deleteWorkspaceDocument,
   documentContainers,
   moveWorkspaceDocument,
+  projectWorkspaceDocument,
   readWorkspaceDocuments,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
@@ -121,6 +123,74 @@ describe('workspace tree', () => {
     expect(entry?.name).toBe('Design System')
     // The address does not move when the label does.
     expect(entry?.path).toBe('design')
+  })
+
+  describe('undo/redo on a tree-hosted document', () => {
+    it('a READ between undo and redo does not clear the redo stack', async () => {
+      // On a tree node, attaching a container is an op. Before containers
+      // were pre-attached at creation, undoing a node-create detached the
+      // `nodes` map, the next READ re-attached it via getOrCreateContainer —
+      // a local op — and that op cleared the redo stack: create → undo →
+      // read → redo left the document empty. This is the page's exact flow
+      // (undo publishes a canvas read before redo can be clicked).
+      const { UndoManager } = await import('loro-crdt')
+      const ws = workspace()
+      createWorkspaceDocumentAtPath(ws, { path: 'design', documentId: ID_A, kind: 'spatial' })
+      ws.commit()
+
+      const doc = new LoroDoc()
+      doc.import(ws.export({ mode: 'snapshot' }))
+      const undoManager = new UndoManager(doc, { mergeInterval: 500 })
+
+      writeSpatialCanvas(documentContainers(doc, ID_A), {
+        nodes: [{ id: 'n-1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'probe' }],
+        edges: [],
+      })
+      expect(undoManager.canUndo()).toBe(true)
+      undoManager.undo()
+      // The read that used to consume the redo.
+      expect(readSpatialCanvas(documentContainers(doc, ID_A)).nodes).toHaveLength(0)
+
+      expect(undoManager.canRedo()).toBe(true)
+      undoManager.redo()
+      expect(readSpatialCanvas(documentContainers(doc, ID_A)).nodes).toHaveLength(1)
+    })
+  })
+
+  describe('projecting a document back out as a standalone Loro document', () => {
+    it('adopt → project round-trips the content, and node meta scalars stay out of the roots', () => {
+      const standalone = new LoroDoc()
+      standalone.setPeerId(9n)
+      writeSpatialCanvas(standalone, {
+        nodes: [{ id: 'n1', type: 'text', x: 1, y: 2, width: 80, height: 40, text: 'carry me' }],
+        edges: [],
+      })
+
+      const doc = workspace()
+      adoptWorkspaceDocument(
+        doc,
+        { path: 'design', documentId: ID_A, kind: 'spatial', name: 'Design' },
+        standalone,
+      )
+
+      const projected = projectWorkspaceDocument(doc, ID_A)
+      expect(projected).not.toBeNull()
+      if (projected === null) return
+      expect(readSpatialCanvas(projected).nodes).toEqual([
+        { id: 'n1', type: 'text', x: 1, y: 2, width: 80, height: 40, text: 'carry me' },
+      ])
+      // Node meta (segment, kind, name, documentId) is tree bookkeeping, not
+      // document content — a projection carrying it would invent root
+      // containers no standalone document ever had.
+      const roots = projected.toJSON() as Record<string, unknown>
+      expect(Object.keys(roots)).not.toContain('segment')
+      expect(Object.keys(roots)).not.toContain('kind')
+      expect(Object.keys(roots)).not.toContain('documentId')
+    })
+
+    it('answers null for an id the tree does not hold', () => {
+      expect(projectWorkspaceDocument(workspace(), ID_A)).toBeNull()
+    })
   })
 
   describe('adopting a standalone document (the migration step)', () => {

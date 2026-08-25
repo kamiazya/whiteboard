@@ -693,3 +693,30 @@ export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefi
   const parsed = documentKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
   return parsed.success ? parsed.data : undefined
 }
+
+/**
+ * Every container this bridge reads or writes, by key and kind.
+ *
+ * Exists for hosts that place a document's containers somewhere attachment is
+ * an OP — a workspace tree node's meta map, unlike a doc's roots, which are
+ * implicit. Such a host must pre-attach these when the document node is
+ * created: otherwise the first READ of a missing container attaches it via
+ * `getOrCreateContainer`, and that stray local op clears the UndoManager's
+ * redo stack. Measured: create → undo → read → redo left the document empty,
+ * while the same sequence without the read redid fine.
+ *
+ * A container added to this bridge without an entry here reopens exactly that
+ * bug for documents hosted on a tree node — extend the list with the key.
+ */
+export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 'text' }> = [
+  { key: NODES_KEY, kind: 'map' },
+  { key: EDGES_KEY, kind: 'map' },
+  { key: CANVAS_KEY, kind: 'map' },
+  { key: FACETS_KEY, kind: 'map' },
+  { key: NODE_LOCKS_KEY, kind: 'map' },
+  { key: EDGE_LOCKS_KEY, kind: 'map' },
+  { key: CORE_KEY, kind: 'map' },
+  { key: TRUST_KEY, kind: 'map' },
+  { key: DOCUMENT_KEY, kind: 'map' },
+  { key: MARKDOWN_BODY_KEY, kind: 'text' },
+]

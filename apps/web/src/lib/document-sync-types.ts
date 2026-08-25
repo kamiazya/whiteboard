@@ -65,6 +65,15 @@ export interface UseDocumentSyncOptions {
   // this option (or a daemon caller whose identity is still resolving)
   // dispatches nothing, leaving its dirty-state behavior unchanged.
   identity?: { workspaceId: string; path: string }
+  /**
+   * When the backend delivers a WORKSPACE document (one Loro doc holding
+   * every document as a tree node), this names the document whose content
+   * this session edits — see SessionDeps.contentDocumentId. Captured when
+   * the session is constructed (a backend identity change), never re-read
+   * live: a different document is a different backend, so the two always
+   * travel together.
+   */
+  contentDocumentId?: string
 }
 
 // Dispatches a window event carrying { workspaceId, path } as detail, but only

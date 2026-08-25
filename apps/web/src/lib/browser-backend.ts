@@ -1,62 +1,98 @@
+import {
+  adoptWorkspaceDocument,
+  createWorkspaceDocumentAtPath,
+  resolveWorkspaceDocumentById,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type {
   BinaryFileDataLike,
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import { Loro } from 'loro-crdt'
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { Loro, type LoroDoc } from 'loro-crdt'
+import { getAppLogger } from './app-logger.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
-import { LoroStore } from './loro-store.js'
+import { foldWorkspaceDocuments } from './fold-workspace.js'
+import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
+import { LoroStore, touchContentTimestamp } from './loro-store.js'
 
 /**
- * BrowserBackend: DocumentBackend implementation for fully offline,
- * browser use. Persists Loro CRDT snapshots and incremental deltas
- * in IndexedDB via LoroStore (DB v2 'loroDocuments' store), and uploaded
- * image files via DocumentFileStore (DB v4 'documentFiles' store).
+ * The document a BrowserBackend serves. `path`/`kind`/`name` are what connect
+ * needs to place the document in the workspace tree when it is not there yet
+ * (a fresh document, or a record the startup fold could not classify) — the
+ * page already holds all three from the index row it loaded.
+ */
+export interface BrowserBackendTarget {
+  documentId: string
+  path: string
+  kind: DocumentKind
+  name?: string
+}
+
+/**
+ * BrowserBackend: DocumentBackend implementation for fully offline, browser
+ * use — backed by the WORKSPACE document.
  *
- * getFile/putFile: images are persisted to IndexedDB (not OPFS — see the
- * class-level design note in document-file-store.ts for the rationale).
- * putFile stores each entry keyed by its tuple fileId (never
- * BinaryFileDataLike.id, which callers must not rely on for keying) and
- * calls onFileSuccess once per successfully stored entry; it rejects on a
- * storage failure so the caller never observes a false "success". getFile
- * returns null (without signaling onError) for both unknown ids and
- * corrupt/unknown-version records, so a damaged store degrades to a missing
- * image instead of spamming onError on every render.
+ * The bytes this backend delivers and persists are one Loro document holding
+ * every document the browser keeps, each as a workspace-tree node
+ * (`docRefKey({kind:'workspace-tree'})` in the same IndexedDB stores). The
+ * sync session edits it through its content scope
+ * (`SessionDeps.contentDocumentId`), so a local update's ops land on this
+ * document's tree node. Persistence is the shared incremental shape
+ * (`DocumentStoreWorkspaceDocs.save`): append a delta per push, fold when the
+ * log passes the budget, never write when nothing changed.
  *
- * sendClientReady/sendExportResponse: no WebSocket in browser mode;
- * both are no-ops.
+ * connect() runs the startup fold first, so per-document records written by
+ * older builds (or seeded by tests through the old stores) are in the tree
+ * before the snapshot is delivered. A record the fold deliberately left
+ * behind is handled here, where the page's own knowledge fills the gap:
+ * a pre-kind row is adopted under the kind the page opened it as, and an
+ * unreadable record surfaces its load failure instead of being shadowed by
+ * an empty tree node — the old record stays the damaged document's home.
  *
- * Error signaling: failures route to handlers.onError (optional, defaults
- * to a no-op) with a typed reason string. No unhandled rejections.
+ * getFile/putFile: images are persisted to IndexedDB via DocumentFileStore,
+ * unchanged by the workspace-document move.
+ *
+ * sendClientReady/sendExportResponse: no WebSocket in browser mode; no-ops.
  *
  * TOCTOU safety: all writes are serialized through a per-instance promise
- * chain (_writeQueue) so concurrent pushLocalUpdate calls cannot interleave
- * the read-then-write logic at the BrowserBackend level. LoroStore
- * further serializes the read-modify-write inside a single IDB readwrite
- * transaction for appendDelta.
+ * chain (_writeQueue) so concurrent pushLocalUpdate calls import and save in
+ * order.
  */
 export class BrowserBackend implements DocumentBackend {
-  private readonly documentId: string
-  private readonly store: LoroStore
+  private readonly target: BrowserBackendTarget
+  private readonly docs: WorkspaceDocs
+  private readonly legacy: LoroStore
   private readonly fileStore: DocumentFileStore
   private handlers: DocumentBackendHandlers | null = null
   private disconnected = false
+  /** The live workspace document — set once connect() has delivered it. */
+  private workspaceDoc: LoroDoc | null = null
   /** Serializes all write operations (pushLocalUpdate) to prevent TOCTOU races. */
   private _writeQueue: Promise<void> = Promise.resolve()
 
-  constructor(documentId: string, store?: LoroStore, fileStore?: DocumentFileStore) {
-    this.documentId = documentId
-    this.store = store ?? new LoroStore()
+  constructor(
+    target: BrowserBackendTarget,
+    docs?: WorkspaceDocs,
+    fileStore?: DocumentFileStore,
+    legacy?: LoroStore,
+  ) {
+    this.target = target
+    this.docs = docs ?? new BrowserWorkspaceDocs()
+    this.legacy = legacy ?? new LoroStore()
     this.fileStore = fileStore ?? new DocumentFileStore()
   }
 
   connect(handlers: DocumentBackendHandlers): void {
     this.disconnected = false
     this.handlers = handlers
+    this.workspaceDoc = null
     // Fire synchronously so the caller can observe onConnected immediately.
     handlers.onConnected()
-    this.loadAndDeliver().catch(() => {
-      if (this.disconnected || this.handlers !== handlers) return
+    this.loadAndDeliver(handlers).catch(() => {
+      if (this.isStale(handlers)) return
       handlers.onError?.('storage-failure')
     })
   }
@@ -64,15 +100,15 @@ export class BrowserBackend implements DocumentBackend {
   disconnect(): void {
     this.disconnected = true
     this.handlers = null
+    this.workspaceDoc = null
   }
 
   /**
-   * Accept a local Loro update. The first call after connect() is treated
-   * as the canonical snapshot (full export); subsequent calls are deltas.
-   * Both are persisted so a reload can replay snapshot then deltas in order.
-   *
-   * Writes are chained onto _writeQueue so two concurrent calls apply in
-   * order with no lost update.
+   * Accept a local Loro update — ops against the WORKSPACE document. Imported
+   * into this backend's own instance (idempotent, so the reconnect full-state
+   * re-send merges as a no-op) and persisted through the shared incremental
+   * save. Writes are chained onto _writeQueue so two concurrent calls apply
+   * in order with no lost update.
    */
   pushLocalUpdate(bytes: Uint8Array): Promise<void> {
     if (bytes.length === 0) return Promise.resolve()
@@ -81,19 +117,17 @@ export class BrowserBackend implements DocumentBackend {
   }
 
   private async _doWrite(bytes: Uint8Array): Promise<void> {
+    const workspaceDoc = this.workspaceDoc
+    // A push before the snapshot was delivered has nothing to land on; the
+    // session cannot produce one (its doc exists only after onSnapshot), so
+    // this only guards a disconnected straggler.
+    if (workspaceDoc === null) return
     try {
-      const existing = await this.store.load(this.documentId)
-      if (existing.kind === 'not-found') {
-        // First write: save as snapshot.
-        await this.store.save(this.documentId, bytes)
-      } else if (existing.kind === 'ok') {
-        // Subsequent writes: append as delta.
-        await this.store.appendDelta(this.documentId, bytes)
-      } else {
-        // Existing record is corrupt or version-mismatch; appending would
-        // silently discard the delta. Surface the failure.
-        this.handlers?.onError?.('storage-failure')
-      }
+      workspaceDoc.import(bytes)
+      await this.docs.save(BROWSER_WORKSPACE_ID, workspaceDoc)
+      // The listing's updatedAt: stamped per push, keyed by the document this
+      // backend serves — the workspace document itself has no row to stamp.
+      await touchContentTimestamp(this.target.documentId)
     } catch {
       this.handlers?.onError?.('storage-failure')
     }
@@ -155,52 +189,89 @@ export class BrowserBackend implements DocumentBackend {
     return this.disconnected || this.handlers !== handlers
   }
 
-  private async loadAndDeliver(): Promise<void> {
-    const handlers = this.handlers
-    if (!handlers) return
-
-    let result: Awaited<ReturnType<LoroStore['load']>>
+  private async loadAndDeliver(handlers: DocumentBackendHandlers): Promise<void> {
+    // Any per-document records first fold into the tree, so a document
+    // created by an older build is served from the same place as everything
+    // else. Derived work list — a second connect finds nothing pending.
+    // Non-fatal on failure: the fold retries at the next connect, and the
+    // placeMissingDocument path below still classifies this backend's own
+    // document — degrading the open over a fold hiccup would take the whole
+    // editor down for a step that is only migration.
     try {
-      result = await this.store.load(this.documentId)
-    } catch {
-      if (this.isStale(handlers)) return
-      handlers.onError?.('storage-failure')
-      return
+      await foldWorkspaceDocuments()
+    } catch (err) {
+      getAppLogger('browser-backend').warn('startup fold failed; continuing without it', err)
     }
-
     if (this.isStale(handlers)) return
 
-    if (result.kind === 'not-found') {
-      // No persisted data: deliver an empty snapshot so the hook can initialise.
-      const emptyDoc = new Loro()
-      handlers.onSnapshot(emptyDoc.export({ mode: 'snapshot' }))
+    let workspaceDoc: LoroDoc
+    try {
+      workspaceDoc = await this.docs.create(BROWSER_WORKSPACE_ID)
+    } catch {
+      // The workspace record would not read back. Every document is in it,
+      // so this is the browser twin of a corrupt per-document snapshot.
+      if (!this.isStale(handlers)) handlers.onError?.('corrupt-snapshot')
       return
     }
+    if (this.isStale(handlers)) return
 
-    if (result.kind === 'corrupt-snapshot') {
-      handlers.onError?.('corrupt-snapshot')
-      return
+    if (resolveWorkspaceDocumentById(workspaceDoc, this.target.documentId) === null) {
+      const settled = await this.placeMissingDocument(workspaceDoc, handlers)
+      if (!settled) return
     }
+    if (this.isStale(handlers)) return
 
-    if (result.kind === 'corrupt-delta') {
-      handlers.onError?.('corrupt-delta')
-      return
+    this.workspaceDoc = workspaceDoc
+    handlers.onSnapshot(workspaceDoc.export({ mode: 'snapshot' }))
+  }
+
+  /**
+   * The document is not in the tree after the fold. Three explanations, three
+   * answers:
+   *
+   * - its old record is UNREADABLE → surface that record's own failure and
+   *   deliver nothing. Creating an empty node here would shadow a document
+   *   that still exists, which reads as "your work is gone" over data that is
+   *   sitting on disk.
+   * - its old record reads but the fold could not classify it (a pre-kind
+   *   row) → adopt it under the kind the page opened it as; the page's row is
+   *   the same knowledge the fold lacked.
+   * - there is no old record → a fresh document; place an empty node.
+   *
+   * Returns false when delivery must stop (the unreadable case).
+   */
+  private async placeMissingDocument(
+    workspaceDoc: LoroDoc,
+    handlers: DocumentBackendHandlers,
+  ): Promise<boolean> {
+    const { documentId, path, kind, name } = this.target
+    const legacy = await this.legacy.load(documentId)
+    if (
+      legacy.kind === 'corrupt-snapshot' ||
+      legacy.kind === 'corrupt-delta' ||
+      legacy.kind === 'unsupported-version'
+    ) {
+      if (!this.isStale(handlers)) handlers.onError?.(legacy.kind)
+      return false
     }
-
-    if (result.kind === 'unsupported-version') {
-      handlers.onError?.('unsupported-version')
-      return
+    if (legacy.kind === 'ok') {
+      const source = new Loro()
+      source.import(legacy.snapshot)
+      for (const delta of legacy.deltas ?? []) source.import(delta)
+      adoptWorkspaceDocument(
+        workspaceDoc,
+        { path, documentId, kind, ...(name === undefined ? {} : { name }) },
+        source,
+      )
+    } else {
+      createWorkspaceDocumentAtPath(workspaceDoc, {
+        path,
+        documentId,
+        kind,
+        ...(name === undefined ? {} : { name }),
+      })
     }
-
-    // Deliver the persisted snapshot. Bytes were deep-validated in LoroStore.load()
-    // so doc.import() in the hook will not throw for valid records.
-    handlers.onSnapshot(result.snapshot)
-
-    // Replay incremental deltas as onRemoteUpdate. Each delta was deep-validated
-    // in LoroStore.load() so the hook's doc.import() will not throw.
-    for (const delta of result.deltas ?? []) {
-      if (this.disconnected || this.handlers !== handlers) return
-      handlers.onRemoteUpdate(delta)
-    }
+    await this.docs.save(BROWSER_WORKSPACE_ID, workspaceDoc)
+    return true
   }
 }

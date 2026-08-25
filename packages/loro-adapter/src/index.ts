@@ -1,5 +1,6 @@
 export type { DocumentContainers } from './loro-bridge.js'
 export {
+  CONTENT_CONTAINER_KEYS,
   deleteSpatialEdge,
   deleteSpatialNode,
   MARKDOWN_BODY_KEY,
@@ -39,6 +40,7 @@ export {
   importWorkspaceSubtree,
   moveWorkspaceDocument,
   moveWorkspaceNodeToPath,
+  projectWorkspaceDocument,
   pruneEmptyFolders,
   readTrashEntries,
   readWorkspaceDocuments,
