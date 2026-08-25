@@ -1,5 +1,4 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -263,8 +262,10 @@ export function BrowserDocumentPage({
     () =>
       markdownDoc.doc === null
         ? undefined
-        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText(MARKDOWN_BODY_KEY))],
-    [markdownDoc.doc],
+        : // bodyTextOf, not a root getText: in workspace mode the doc is the
+          // WORKSPACE document and this document's body sits on its tree node.
+          [LoroSyncPlugin(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
+    [markdownDoc.doc, markdownDoc.bodyTextOf],
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 

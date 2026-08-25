@@ -42,7 +42,7 @@ import {
   parseDaemonRoute,
   parseSettingsRoute,
 } from './lib/app-routes.js'
-import { IdbDocumentIndex } from './lib/idb-document-index.js'
+import { FoldingBrowserIndex } from './lib/folding-browser-index.js'
 import {
   BROWSER_CAPABILITIES,
   type ProviderState,
@@ -117,7 +117,10 @@ export function LazyPageFallback({
 }
 
 export function App({ providerState }: AppProps) {
-  const [browserStore] = useState(() => new IdbDocumentIndex())
+  // The browser workspace lives in ONE Loro document; the index is the tree
+  // view over it, gated behind the startup fold so an existing browser's
+  // per-document records are in the tree before the first listing.
+  const [browserStore] = useState(() => new FoldingBrowserIndex())
   const [userSettingsStore] = useState(() => createUserSettingsStore())
   const [defaultProviderState] = useState<ProviderState>(() =>
     resolveHostedProviderStateFromRaw(

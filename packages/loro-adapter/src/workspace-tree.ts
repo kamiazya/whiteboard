@@ -432,13 +432,29 @@ export function adoptWorkspaceDocument(
   if (resolveWorkspaceDocumentById(doc, input.documentId) !== null) return null
   const created = createWorkspaceDocumentAtPath(doc, input)
   if (created === null) return null
-  const node = nodeById(doc, input.documentId)
-  if (node === null) return null
-  // Root containers, enumerated from the JSON projection: a string is a
-  // Text container and an object is a Map, which is the whole vocabulary the
-  // bridge writes (container VALUES are plain objects by convention — see
-  // package-loro-adapter.md). Meta keys the node already carries (segment,
-  // kind, ...) are scalars set above and not in the source, so no collision.
+  if (!writeWorkspaceDocumentContent(doc, input.documentId, source)) return null
+  return resolveWorkspaceDocumentById(doc, input.documentId)
+}
+
+/**
+ * Replaces an EXISTING tree document's content with a standalone document's —
+ * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
+ * already exists (seeding a freshly created document, a duplicate's copy).
+ *
+ * Root containers are enumerated from the JSON projection: a string is a
+ * Text container and an object is a Map, which is the whole vocabulary the
+ * bridge writes (container VALUES are plain objects by convention — see
+ * package-loro-adapter.md). Meta keys the node carries (segment, kind, ...)
+ * are scalars and never in the source, so no collision. `setContainer`
+ * REPLACES what is at each key, which here is the point.
+ */
+export function writeWorkspaceDocumentContent(
+  doc: LoroDoc,
+  documentId: string,
+  source: LoroDoc,
+): boolean {
+  const node = nodeById(doc, documentId)
+  if (node === null) return false
   const projected = source.toJSON() as Record<string, unknown>
   for (const [key, value] of Object.entries(projected)) {
     if (typeof value === 'string') {
@@ -451,7 +467,7 @@ export function adoptWorkspaceDocument(
     }
   }
   doc.commit()
-  return resolveWorkspaceDocumentById(doc, input.documentId)
+  return true
 }
 
 /** Where a deleted document's evacuated bytes are recorded. */

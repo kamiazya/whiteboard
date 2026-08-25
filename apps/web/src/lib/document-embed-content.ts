@@ -13,16 +13,17 @@ import {
   readCoreFacets,
   readMarkdownBody,
   readSpatialCanvas,
+  resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
-import { Loro } from 'loro-crdt'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
-import { LoroStore } from './loro-store.js'
+import { loadDocumentContent } from './workspace-content.js'
 
 const log = getAppLogger('document-embed-content')
 
@@ -37,6 +38,12 @@ const log = getAppLogger('document-embed-content')
  */
 async function loadDocumentName(documentId: string): Promise<string | undefined> {
   try {
+    // The workspace tree owns naming now; the legacy index row remains the
+    // answer for a document nothing has folded yet.
+    const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID).catch(() => null)
+    const treeEntry =
+      workspace === null ? null : resolveWorkspaceDocumentById(workspace, documentId)
+    if (treeEntry !== null) return treeEntry.name
     const entry = await new IdbDocumentIndex().resolveDocumentById({
       workspaceId: BROWSER_WORKSPACE_ID,
       documentId,
@@ -54,11 +61,8 @@ async function loadDocumentName(documentId: string): Promise<string | undefined>
 /** Loads one referenced canvas's spatial content from IndexedDB. */
 async function loadEmbeddedDocument(documentId: string): Promise<LoadedFileDocument | undefined> {
   try {
-    const result = await new LoroStore().load(documentId)
-    if (result.kind !== 'ok') return undefined
-    const doc = new Loro()
-    doc.import(result.snapshot)
-    for (const delta of result.deltas ?? []) doc.import(delta)
+    const doc = await loadDocumentContent(documentId)
+    if (doc === null) return undefined
     // One load, every read — the doc used to be discarded after the canvas
     // read, which is why neither facets nor the body need a second store
     // round-trip.
@@ -85,11 +89,8 @@ export async function loadMarkdownEmbedSource(
   documentId: string,
 ): Promise<{ body: string; title?: string } | undefined> {
   try {
-    const result = await new LoroStore().load(documentId)
-    if (result.kind !== 'ok') return undefined
-    const doc = new Loro()
-    doc.import(result.snapshot)
-    for (const delta of result.deltas ?? []) doc.import(delta)
+    const doc = await loadDocumentContent(documentId)
+    if (doc === null) return undefined
     const title = await loadDocumentName(documentId)
     return { body: readMarkdownBody(doc), ...(title !== undefined ? { title } : {}) }
   } catch (err) {

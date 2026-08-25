@@ -17,6 +17,7 @@ import {
 } from '../lib/local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 
 // Re-exported so the many page-side consumers keep their import path; the
 // type itself lives beside the concrete store.
@@ -93,7 +94,18 @@ export async function createSeededDocument(
     ...(trimmed ? { name: trimmed } : {}),
   })
   try {
-    await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
+    // Tree-backed index: the node the create just made IS the content record
+    // (its containers are the empty document), so a seed with content copies
+    // into it and an empty create only stamps the clock. The legacy branch
+    // keeps the per-document record for an index without a workspace
+    // document behind it — injected test doubles included.
+    const seededInTree =
+      content !== undefined
+        ? await seedWorkspaceDocumentContent(entry.documentId, content)
+        : await touchIfWorkspaceBacked(entry.documentId)
+    if (!seededInTree) {
+      await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
+    }
   } catch (err) {
     try {
       await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: entry.path })

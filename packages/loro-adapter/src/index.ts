@@ -58,4 +58,5 @@ export {
   type WorkspaceNodeMeta,
   workspaceFolderMetaSchema,
   workspaceNodeMetaSchema,
+  writeWorkspaceDocumentContent,
 } from './workspace-tree.js'

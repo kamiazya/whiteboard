@@ -24,6 +24,7 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
+import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 
 /**
  * `WorkspaceFilesSource` over the browser stores — the adapter that
@@ -67,6 +68,11 @@ export function createLocalFilesSource(
   const corpus = new Map<string, { stamp: string; texts: string[] }>()
 
   async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
+    // The workspace document first — that is where the editor persists — and
+    // the injected per-document store as the fallback, which is also what an
+    // injected test double exercises.
+    const projected = await loadWorkspaceDocumentProjection(entry.documentId)
+    if (projected !== null) return projected
     const loaded = await loro.load(entry.documentId)
     if (loaded.kind !== 'ok') {
       throw new Error(`document ${entry.documentId} is not readable: ${loaded.kind}`)
