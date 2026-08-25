@@ -42,7 +42,7 @@ vi.mock('./store/document-store.js', async () => {
 
 const { createApp } = await import('./app.js')
 const { clearCache } = await import('./store/doc-cache.js')
-const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
+const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 const { getDoc, saveDocument } = await import('./store/document-store.js')
 const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')

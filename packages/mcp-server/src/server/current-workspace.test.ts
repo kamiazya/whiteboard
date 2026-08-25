@@ -2,8 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { getDb } from '../store/db/index.js'
-import { clearWorkspaceIdCache, ensureWorkspaceId } from './session-resolver.js'
+import { clearWorkspaceIdCache, ensureWorkspaceId } from './current-workspace.js'
+import { getDb } from './store/db/index.js'
 
 describe('ensureWorkspaceId', () => {
   let dataDir: string

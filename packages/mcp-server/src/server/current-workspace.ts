@@ -1,7 +1,7 @@
 import { nanoid } from 'nanoid'
-import { getDb } from '../store/db/index.js'
-import { prepareDataDir } from '../store/db/prepare.js'
-import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'
+import { getDb } from './store/db/index.js'
+import { prepareDataDir } from './store/db/prepare.js'
+import { upsertWorkspaceRow } from './store/db/upsert-workspace.js'
 
 // The current workspace id is the live source of truth in the `runtime`
 // table. ensureWorkspaceId memoizes the lookup per dataDir; the first caller
