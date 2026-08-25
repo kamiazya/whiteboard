@@ -152,6 +152,13 @@ export function DaemonIndexPage({
         if (isStale()) return
         const ids = res.workspaces.map((w) => w.workspaceId)
         setWorkspaces(ids)
+        // A replacement re-enters the selection effect, which owns `loaded`
+        // from there. Nothing replacing it leaves the page exactly where a
+        // daemon that lists no workspaces at all already leaves it — measured:
+        // the loading state, no create control. That end state is a
+        // pre-existing dead end and deliberately not redesigned here; what
+        // matters is that a vanished workspace does not get a state of its
+        // own that the same emptiness reached any other way would not.
         setSelectedWorkspace(ids.find((id) => id !== staleWorkspaceId) ?? null)
       } catch {
         if (isStale()) return
@@ -189,7 +196,6 @@ export function DaemonIndexPage({
       } catch (err) {
         if (isStale()) return
         setRows([])
-        setLoaded(true)
         // A 404 means the workspace is GONE, not empty. An existing workspace
         // with no documents answers 200 with an empty array; only an absent
         // one 404s. And `selectedWorkspace` is only ever set from
@@ -203,9 +209,17 @@ export function DaemonIndexPage({
         // exists would silently make a DIFFERENT one (the route passes
         // `createWorkspace: true`).
         if (err instanceof DaemonApiError && err.status === 404) {
+          // Deliberately NOT `setLoaded(true)` here. The load is not over —
+          // the page is still deciding what it is showing. Marking it
+          // complete renders the onboarding empty state for the workspace
+          // that just vanished, with a live Create button that passes
+          // `createWorkspace: true`, so a click inside this window would
+          // silently make a DIFFERENT workspace. `reselectAfterStale` sets it
+          // only once there is nothing left to choose.
           void reselectAfterStale(workspaceId, isStale)
           return
         }
+        setLoaded(true)
         setLoadError('Failed to load documents for this workspace.')
       }
     },

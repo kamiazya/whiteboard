@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   type RenderOptions,
@@ -48,6 +49,9 @@ interface MockRoutes {
   onSetCanvasName?: (workspaceId: string, path: string, name: string) => void
   /** When set, the documents fetch resolves only after this promise settles. */
   delayCanvases?: Promise<void>
+  /** Same, for the workspaces list. Consulted per call, so a test can leave
+   *  it unset for the initial load and set it before the re-list. */
+  delayWorkspaces?: Promise<void>
   /** Override the documents GET. Return undefined to fall through to the
    *  default. Consulted per call, so a test can answer 404 once and then
    *  behave normally — a workspace deleted out from under the page. */
@@ -58,7 +62,11 @@ function installFetchMock(routes: MockRoutes) {
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
-      return Promise.resolve(jsonResponse({ workspaces: routes.workspaces }))
+      const respond = () => jsonResponse({ workspaces: routes.workspaces })
+      // Held open so a test can inspect what renders WHILE the re-list is in
+      // flight — the window in which a deleted workspace is still selected.
+      if (routes.delayWorkspaces) return routes.delayWorkspaces.then(respond)
+      return Promise.resolve(respond())
     }
     const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents$/)
     if (documentsMatch && (!init || init.method === undefined)) {
@@ -299,6 +307,53 @@ describe('DaemonIndexPage', () => {
     // would still reach ws-b eventually in some orderings, and the defect
     // this pins is the repetition, not the destination.
     expect(staleFetches).toBe(1)
+  })
+
+  // The window between "this workspace is gone" and "here is another one".
+  // Marking the load COMPLETE during it renders the onboarding empty state for
+  // a workspace that does not exist, Create button live — and that button
+  // passes `createWorkspace: true`, so a fast click would silently make a
+  // different workspace. The page must stay in its loading state until the
+  // re-list has actually chosen something.
+  it('does not offer the empty-workspace create state while re-listing', async () => {
+    let staleFetches = 0
+    let releaseRelist!: () => void
+    const relistGate = new Promise<void>((resolve) => {
+      releaseRelist = resolve
+    })
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+      onListDocuments: (workspaceId) => {
+        if (workspaceId !== 'ws-a') return undefined
+        staleFetches += 1
+        // Only the re-list is held open; the first workspaces GET already ran.
+        routes.delayWorkspaces = relistGate
+        routes.workspaces = [{ workspaceId: 'ws-b' }]
+        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    // Land INSIDE the window deliberately: wait until the 404 has actually
+    // been served, then flush the render it causes. Sampling earlier would
+    // catch the initial load's skeleton and pass whatever the 404 path does —
+    // the assertion has to be about the state AFTER the failure.
+    await waitFor(() => {
+      expect(staleFetches).toBe(1)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('status', { name: 'Loading documents' })).toBeTruthy()
+
+    releaseRelist()
+    expect(await screen.findByText('beta')).toBeTruthy()
   })
 
   it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
