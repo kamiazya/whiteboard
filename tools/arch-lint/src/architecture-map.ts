@@ -299,6 +299,29 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * entries in the allowlist above that could never legitimately shrink,
  * breaking the one property that makes that list trustworthy.
  */
+/**
+ * Files inside an adapter tree that are NOT adapters, and why.
+ *
+ * ADR-0018 already exempts the composition root's own wiring — `di/`,
+ * `app.ts`, `http-server.ts` — because knowing the mechanics is exactly its
+ * job. That exemption was written as a directory list, which misses a
+ * composition root that happens to live under `mcp/`.
+ *
+ * These are skipped WHOLE rather than having their edges listed in
+ * ADAPTERS_REACHING_MECHANICS, because that list's whole value is that it can
+ * only shrink: a composition root's imports are not debt anyone will ever pay
+ * off, and five permanently-stuck entries teach a reader to stop reading it.
+ * The same reasoning already excludes `corrupt-stored-data` below.
+ */
+export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
+  // The McpServer FACTORY and the stdio entry point: it calls
+  // `createContainer(createStoreLocalModule(...))` and `resolveServerDeps`,
+  // the same three calls `http-server.ts` makes. It registers tools; it is
+  // not itself a tool registration. The tool registrations it calls
+  // (`mcp/document-tools.ts` and friends) stay scanned.
+  'mcp/index.ts',
+]
+
 export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
 
 export function allowedDependencies(packageName: string): readonly string[] {

@@ -10,7 +10,7 @@ import { describe, expect, it, vi } from 'vitest'
 vi.mock('./logging.js', () => ({
   wireMcpLogging: vi.fn(() => ({ restore: vi.fn() })),
 }))
-vi.mock('./session-resolver.js', () => ({
+vi.mock('../current-workspace.js', () => ({
   ensureWorkspaceId: vi.fn(async () => 'ws_test'),
 }))
 vi.mock('./standalone-help.js', () => ({

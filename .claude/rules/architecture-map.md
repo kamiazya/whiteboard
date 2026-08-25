@@ -58,6 +58,31 @@ translation, which is an adapter's job, and listing it would put five
 permanently-unshrinkable entries in a list whose whole value is that it
 shrinks.
 
+A mechanic is named by its FULL path under `store/`, at whatever depth, so
+the database layer reads as `db/<module>`. It used to be invisible: the
+matcher read a single path segment, so every `store/db/**` import from an
+adapter passed the guard silently. That was a blind spot rather than a
+decision, and it read as coverage until someone measured it — four such
+edges existed when the regex was widened, all under `mcp/`. The depth is
+unbounded on purpose: `store/db/` is how deep the tree happens to go today,
+not a property of it, and a matcher enumerating the depths it has seen is
+the same blind spot one directory further down.
+
+The wiring exemption above is a DIRECTORY list, which misses a composition
+root that happens to live inside an adapter tree. `ADAPTER_SCAN_EXEMPT_FILES`
+carries those by file, with the reason each is not an adapter — today
+`mcp/index.ts`, the McpServer factory and stdio entry point, which makes the
+same `createContainer` / `resolveServerDeps` calls `http-server.ts` does. It
+is a separate list from `ADAPTERS_REACHING_MECHANICS` on purpose: an
+exemption is a CLASSIFICATION, not debt, and a composition root's edges will
+never shrink. Guarded from both sides like the allowlist — an entry that
+suppresses nothing fails the build, so it cannot decay into decoration.
+
+The other file that reached `store/db` from under `mcp/` was moved instead
+of exempted. `mcp/session-resolver.ts` had stopped being an MCP concern the
+moment `http-server.ts` called it, so it is now `server/current-workspace.ts`
+— which also retires a name that said `session` about a workspace.
+
 `tools/arch-lint` also hosts the one part of `.claude/rules/vocabulary.md` that can be mechanical rather than prose: `vocabulary-check.test.ts` fails on a retired word appearing anywhere under `apps/web/src` or `packages/*/src`. Only words with no legitimate meaning left qualify (today: `slug`) — `canvas` never will, because it is correct for the spatial surface and wrong only as the container noun, and telling those apart needs a reader. `migrations/` is excluded as history, and `EXEMPT_FILES` carries the one other file writing history, with its reason. Extend the package list as later shared-layer packages land. Per-package details live in `.claude/rules/package-<name>.md` (path-scoped). Note: `./skills/` (product MCP skills) is unrelated to `.claude/skills/` (dev workflow skills).
 
 **A cross-package cycle is caught by nothing, so the one that exists is

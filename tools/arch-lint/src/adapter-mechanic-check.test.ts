@@ -1,14 +1,24 @@
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 
 import { findAdapterMechanicEdges } from './adapter-mechanic-check.js'
-import { ADAPTERS_REACHING_MECHANICS, MECHANICS_NOT_SCANNED } from './architecture-map.js'
+import {
+  ADAPTER_SCAN_EXEMPT_FILES,
+  ADAPTERS_REACHING_MECHANICS,
+  MECHANICS_NOT_SCANNED,
+} from './architecture-map.js'
 
 const REPO_ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '../../..')
 const SERVER_DIR = join(REPO_ROOT, 'packages/mcp-server/src/server')
 
-const actual = findAdapterMechanicEdges(SERVER_DIR, MECHANICS_NOT_SCANNED)
+const actual = findAdapterMechanicEdges(
+  SERVER_DIR,
+  MECHANICS_NOT_SCANNED,
+  ADAPTER_SCAN_EXEMPT_FILES,
+)
 
 describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
   // A route or an MCP tool registration that imports a mechanic has nowhere
@@ -48,6 +58,56 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
   // more than once.
   it('the scan actually reaches the adapter tree', () => {
     expect(actual.length).toBeGreaterThan(20)
+  })
+
+  // Asserted against a FIXTURE rather than the real tree, because the real
+  // tree is meant to hold no such edge: a guard whose only evidence is a
+  // violation that exists today stops proving anything the day it is fixed.
+  describe('the matcher sees a mechanic at any depth under store/', () => {
+    const fixture = mkdtempSync(join(tmpdir(), 'arch-lint-adapter-'))
+    afterAll(() => rmSync(fixture, { recursive: true, force: true }))
+
+    mkdirSync(join(fixture, 'routes'), { recursive: true })
+    mkdirSync(join(fixture, 'mcp'), { recursive: true })
+    writeFileSync(
+      join(fixture, 'routes', 'thing.ts'),
+      [
+        "import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'",
+        "import { getDocCache } from '../store/doc-cache.js'",
+        // Depth is not a property of today's tree: `store/db/` is simply how
+        // deep it happens to go. A matcher that hard-codes the depths it has
+        // seen is the same blind spot one level down.
+        "import { deep } from '../store/db/workspaces/upsert-row.js'",
+        'export const thing = [upsertWorkspaceRow, getDocCache, deep]',
+      ].join('\n'),
+    )
+    writeFileSync(join(fixture, 'mcp', 'noop.ts'), 'export const noop = 1\n')
+
+    it('names it by its path under store/, so db/x cannot be read as x', () => {
+      expect(findAdapterMechanicEdges(fixture, [])).toEqual([
+        'routes/thing.ts -> db/upsert-workspace',
+        'routes/thing.ts -> db/workspaces/upsert-row',
+        'routes/thing.ts -> doc-cache',
+      ])
+    })
+  })
+
+  // Guarded from both sides too. An exemption is a CLASSIFICATION — "this
+  // file is not an adapter" — so it has to keep being true of a file that
+  // still exists and still has edges to suppress. One that suppresses nothing
+  // is decoration, and reads to the next person as though something was
+  // decided.
+  it('every exempt file exists and actually has edges the exemption suppresses', () => {
+    const unexempted = findAdapterMechanicEdges(SERVER_DIR, MECHANICS_NOT_SCANNED)
+    const suppressing = ADAPTER_SCAN_EXEMPT_FILES.filter((file) =>
+      unexempted.some((edge) => edge.startsWith(`${file} -> `)),
+    )
+
+    expect(
+      suppressing,
+      'an entry in ADAPTER_SCAN_EXEMPT_FILES suppresses nothing — the file was ' +
+        'moved, renamed, or no longer reaches a mechanic. Delete it.',
+    ).toEqual([...ADAPTER_SCAN_EXEMPT_FILES])
   })
 
   it('excludes the error taxonomy, which an adapter is entitled to read', () => {

@@ -25,7 +25,7 @@ vi.mock('../config.js', () => ({
 }))
 
 const { createMcpServer } = await import('./index.js')
-const { clearWorkspaceIdCache } = await import('./session-resolver.js')
+const { clearWorkspaceIdCache } = await import('../current-workspace.js')
 
 afterEach(() => {
   clearWorkspaceIdCache()

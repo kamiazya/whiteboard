@@ -28,7 +28,7 @@ vi.mock('./config.js', async () => {
 
 const { findAvailablePort } = await import('../cli/daemon-run.js')
 const { startHttpServer } = await import('./http-server.js')
-const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
+const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 
 describe('startHttpServer on a data dir nothing has ever written to', () => {
   beforeEach(async () => {
@@ -52,7 +52,7 @@ describe('startHttpServer on a data dir nothing has ever written to', () => {
       // And the one it lists is the one its MCP tools would write into — a
       // second, differently-named workspace would split the same daemon's
       // browser view from its agent view.
-      const { ensureWorkspaceId } = await import('./mcp/session-resolver.js')
+      const { ensureWorkspaceId } = await import('./current-workspace.js')
       expect(body.workspaces[0].workspaceId).toBe(await ensureWorkspaceId(tempDir))
     } finally {
       await running.close()
