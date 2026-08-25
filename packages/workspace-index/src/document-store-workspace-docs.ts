@@ -48,8 +48,14 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
    * The incremental shape both keepers converged on: append the delta since
    * the stored frontier, fold into a fresh snapshot once the log passes the
    * shared budget, and never write when nothing changed.
+   *
+   * Answers the update bytes it persisted — what a sync fan-out hands to the
+   * workspace's other subscribers — and `null` when nothing was written.
+   * Returned here rather than re-derived by the caller because only this
+   * method knows the frontier the store held BEFORE the write; exporting
+   * "since the stored frontier" afterwards yields an empty envelope.
    */
-  async save(workspaceId: string, doc: LoroDoc): Promise<void> {
+  async save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
     const docRef = refOf(workspaceId)
     const manifest = await this.store.readSnapshotManifest({ docRef })
     if (manifest === null) {
@@ -61,17 +67,20 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
         chunks,
         frontier: new Uint8Array(doc.oplogVersion().encode()),
       })
-      return
+      // The whole history as one update: what an empty peer needs.
+      return new Uint8Array(doc.export({ mode: 'update' }))
     }
 
     const stored = await this.store.readFrontier({ docRef })
-    if (stored === null) return
+    if (stored === null) return null
     // A VERSION comparison, not a byte count: an update carrying no ops is
     // still 22 bytes of envelope, so an idle save would grow the log forever.
     const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
-    if (comparison === 0) return
+    if (comparison === 0) return null
 
-    const update = doc.export({ mode: 'update', from: VersionVector.decode(stored.frontier) })
+    const update = new Uint8Array(
+      doc.export({ mode: 'update', from: VersionVector.decode(stored.frontier) }),
+    )
     const { updates: existing } = await this.store.loadDeltas({
       docRef,
       sinceFrontier: new Uint8Array(),
@@ -86,14 +95,15 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
         frontier: new Uint8Array(doc.oplogVersion().encode()),
         supersededDeltaCount: existing.length,
       })
-      return
+      return update
     }
     await this.store.appendDeltas({
       docRef,
       deltaBatch: {
-        updates: [new Uint8Array(update)],
+        updates: [update],
         newFrontier: new Uint8Array(doc.oplogVersion().encode()),
       },
     })
+    return update
   }
 }

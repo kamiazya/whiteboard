@@ -24,6 +24,11 @@ vi.mock('../lib/user-settings-store.js', () => ({
   createUserSettingsStore: createSettingsSpy,
 }))
 
+const mockLoadProjection = vi.fn()
+vi.mock('../lib/workspace-content.js', () => ({
+  loadWorkspaceDocumentProjection: mockLoadProjection,
+}))
+
 const { DaemonDocumentImportSection } = await import('./daemon-document-import-section.js')
 
 afterEach(() => {
@@ -77,7 +82,14 @@ describe('DaemonDocumentImportSection', () => {
     expect(createSettingsSpy).toHaveBeenCalledTimes(1)
   })
 
-  it('injects the created stores into ImportFromBrowserPanel', () => {
+  // The loroStore prop is deliberately NOT the raw LoroStore: the panel must
+  // read a document's CURRENT bytes from the workspace document's tree node
+  // first, and only fall back to the legacy per-document record for anything
+  // unfolded — a raw LoroStore would ship the pre-fold copy of every document
+  // edited since the workspace-document cutover.
+  it('injects a workspace-first reader that falls back to the legacy store', async () => {
+    mockLoadProjection.mockResolvedValue(null)
+    mockLoroStoreInstance.load.mockResolvedValue({ kind: 'missing' })
     render(
       <DaemonDocumentImportSection
         workspaceId="ws1"
@@ -86,7 +98,29 @@ describe('DaemonDocumentImportSection', () => {
       />,
     )
 
-    expect(capturedProps!.loroStore).toBe(mockLoroStoreInstance)
     expect(capturedProps!.settingsStore).toBe(mockSettingsStoreInstance)
+    const loroStore = capturedProps!.loroStore as { load(id: string): Promise<unknown> }
+    await loroStore.load('doc-1')
+    expect(mockLoadProjection).toHaveBeenCalledWith('doc-1')
+    expect(mockLoroStoreInstance.load).toHaveBeenCalledWith('doc-1')
+  })
+
+  it('serves the workspace projection without consulting the legacy record when one exists', async () => {
+    mockLoadProjection.mockResolvedValue({ export: () => new Uint8Array([1, 2, 3]) })
+    render(
+      <DaemonDocumentImportSection
+        workspaceId="ws1"
+        daemonFetch={fakeDaemonFetch}
+        browserStore={fakeBrowserStore}
+      />,
+    )
+
+    const loroStore = capturedProps!.loroStore as {
+      load(id: string): Promise<{ kind: string; snapshot?: Uint8Array }>
+    }
+    const result = await loroStore.load('doc-1')
+    expect(result.kind).toBe('ok')
+    expect(result.snapshot).toEqual(new Uint8Array([1, 2, 3]))
+    expect(mockLoroStoreInstance.load).not.toHaveBeenCalled()
   })
 })

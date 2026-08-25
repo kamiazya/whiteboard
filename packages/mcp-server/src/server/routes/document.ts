@@ -10,6 +10,7 @@ import { createDocumentMetadataRouter } from './document/metadata.js'
 import { createRestoreRouter } from './document/restore.js'
 import { createThumbnailsRouter } from './document/thumbnails.js'
 import { createVersionsRouter } from './document/versions.js'
+import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 
 export { createAutoVersionTrigger, setBroadcastFn }
@@ -55,6 +56,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   app.route('/', createWorkspacesRouter())
   app.route('/', createDocumentMetadataRouter())
   app.route('/', createLiveDocRouter({ triggerAutoVersion }))
+  app.route('/', createWorkspaceDocumentRouter({ triggerAutoVersion }))
   app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())

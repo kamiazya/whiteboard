@@ -63,7 +63,9 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & { peek: (id: string) => LoroDo
       docs.set(workspaceId, doc)
       return doc
     },
-    async save() {},
+    async save() {
+      return null
+    },
     peek: (id) => docs.get(id) as LoroDoc,
   }
 }

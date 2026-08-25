@@ -293,6 +293,13 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
+  // The workspace-granularity twin of live-doc.ts, carrying the same four
+  // edges for the same reasons — it retires WITH live-doc's when the sync
+  // surface gets its server-core home.
+  'routes/document/workspace-document.ts -> doc-cache',
+  'routes/document/workspace-document.ts -> document-store',
+  'routes/document/workspace-document.ts -> version-store',
+  'routes/document/workspace-document.ts -> workspace-lock',
   'routes/document/workspaces.ts -> document-store',
   'routes/document/workspaces.ts -> names-store',
   'routes/export.ts -> document-store',

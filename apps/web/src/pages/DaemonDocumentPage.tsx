@@ -127,40 +127,6 @@ export function DaemonDocumentPage({
   // never left. Only values that define the connection belong in those deps.
   const createBackendRef = useRef(createBackend)
   createBackendRef.current = createBackend
-  const resolvedCreateBackend = useCallback(
-    (workspaceId: string, path: string, daemonFetch: typeof fetch): DocumentBackend => {
-      const injected = createBackendRef.current?.(workspaceId, path, daemonFetch)
-      if (injected) return injected
-      // A secure page cannot open a ws:// socket to an http daemon at all, so
-      // the transport is decided up front rather than attempted and retried.
-      //
-      // The override in front is development-only and compiles away entirely
-      // in a production build. It exists because the rule below is correct AND
-      // makes the SSE path — and the SharedWorker behind it — unreachable from
-      // `pnpm dev`, which serves plain http.
-      const transport =
-        devTransportOverride() ??
-        selectDocumentTransport({
-          pageOrigin: window.location.origin,
-          daemonBaseUrl,
-        })
-      if (transport !== 'sse') {
-        // wsToken carries the pairing session token into the WS upgrade —
-        // without it a pairing-grant session authenticates HTTP but opens
-        // the socket credential-less and is rejected 401 (edits then stay
-        // browser-only while the page looks connected).
-        return new DaemonBackend(workspaceId, path, daemonBaseUrl, {
-          fetch: daemonFetch,
-          wsToken: () => token,
-        })
-      }
-      // Null where SharedWorker is unavailable; SseBackend then opens its own
-      // stream, which is correct but not shared across tabs.
-      const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
-      return new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared)
-    },
-    [daemonBaseUrl, token],
-  )
 
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
@@ -200,16 +166,96 @@ export function DaemonDocumentPage({
   } | null>(null)
   const [importSectionOpen, setImportSectionOpen] = useState(false)
 
-  // Backend identity is keyed on (workspaceId, path, daemonFetch) — a change
-  // to any of these tears down the old connection and opens a new one via
-  // useDocumentSync's own effect cleanup (see BrowserDocumentPage for the
-  // same ownership split: this hook only decides WHEN to swap identity, not
-  // how disconnect/connect ordering happens).
-  const backend = useMemo(() => {
+  // A tree-served document (the summary carries both an id and a kind) syncs
+  // at workspace-document granularity; a kindless legacy document stays on
+  // the per-document contract. Derived as a plain string so a summary
+  // refresh that changes only updatedAt cannot flip the backend identity.
+  const workspaceSyncDocumentId = useMemo(() => {
+    const entry = controller.documents.find((d) => d.path === controller.path)
+    return entry?.id !== undefined && entry.kind != null ? entry.id : undefined
+  }, [controller.documents, controller.path])
+
+  // Backend identity is keyed on (workspaceId, path, daemonFetch, sync
+  // granularity) — a change to any of these tears down the old connection and
+  // opens a new one via useDocumentSync's own effect cleanup (see
+  // BrowserDocumentPage for the same ownership split: this hook only decides
+  // WHEN to swap identity, not how disconnect/connect ordering happens).
+  // `contentDocumentId` travels WITH the backend because they only make sense
+  // together: an injected backend (tests, embedders) keeps the per-document
+  // contract, so scoping the session against its snapshot would misread it.
+  const backendState = useMemo((): {
+    backend: DocumentBackend
+    contentDocumentId: string | undefined
+  } | null => {
     if (controller.workspaceId === null || controller.path === null) return null
-    return resolvedCreateBackend(controller.workspaceId, controller.path, daemonFetch)
+    // No backend until the initial documents list is in: the page renders a
+    // skeleton anyway, and the list is what decides the sync granularity —
+    // connecting before it loads would open a per-document socket only to
+    // tear it down and reconnect at workspace scope a moment later.
+    if (controller.loading) return null
+    const injected = createBackendRef.current?.(
+      controller.workspaceId,
+      controller.path,
+      daemonFetch,
+    )
+    if (injected) return { backend: injected, contentDocumentId: undefined }
+    // A secure page cannot open a ws:// socket to an http daemon at all, so
+    // the transport is decided up front rather than attempted and retried.
+    //
+    // The override in front is development-only and compiles away entirely
+    // in a production build. It exists because the rule below is correct AND
+    // makes the SSE path — and the SharedWorker behind it — unreachable from
+    // `pnpm dev`, which serves plain http.
+    const transport =
+      devTransportOverride() ??
+      selectDocumentTransport({
+        pageOrigin: window.location.origin,
+        daemonBaseUrl,
+      })
+    if (transport !== 'sse') {
+      // wsToken carries the pairing session token into the WS upgrade —
+      // without it a pairing-grant session authenticates HTTP but opens
+      // the socket credential-less and is rejected 401 (edits then stay
+      // browser-only while the page looks connected).
+      return {
+        backend: new DaemonBackend(
+          controller.workspaceId,
+          controller.path,
+          daemonBaseUrl,
+          {
+            fetch: daemonFetch,
+            wsToken: () => token,
+          },
+          workspaceSyncDocumentId === undefined ? undefined : { workspaceScope: true },
+        ),
+        contentDocumentId: workspaceSyncDocumentId,
+      }
+    }
+    // Null where SharedWorker is unavailable; SseBackend then opens its own
+    // stream, which is correct but not shared across tabs. The SSE transport
+    // stays per-document — the widget/hosted surface has not moved yet.
+    const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
+    return {
+      backend: new SseBackend(
+        controller.workspaceId,
+        controller.path,
+        daemonBaseUrl,
+        { fetch: daemonFetch },
+        shared,
+      ),
+      contentDocumentId: undefined,
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedCreateBackend, controller.workspaceId, controller.path, daemonFetch])
+  }, [
+    controller.workspaceId,
+    controller.path,
+    controller.loading,
+    daemonFetch,
+    daemonBaseUrl,
+    token,
+    workspaceSyncDocumentId,
+  ])
+  const backend = backendState?.backend ?? null
 
   // A rejected session belongs to one backend identity — switching to a new
   // canvas opens a fresh connection, so a stale banner must not outlive the
@@ -249,6 +295,9 @@ export function DaemonDocumentPage({
     setEdgeLock,
     syncStatus,
   } = useDocumentSync(backend, {
+    ...(backendState?.contentDocumentId === undefined
+      ? {}
+      : { contentDocumentId: backendState.contentDocumentId }),
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),

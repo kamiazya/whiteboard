@@ -24,6 +24,7 @@ describe('parseWsTargetFromRequestUrl', () => {
     expect(parseWsTargetFromRequestUrl('/ws/ws-1/notes/2026/plan', '127.0.0.1:3099')).toEqual({
       workspaceId: 'ws-1',
       path: 'notes/2026/plan',
+      scope: 'document',
     })
   })
 
@@ -31,7 +32,17 @@ describe('parseWsTargetFromRequestUrl', () => {
     expect(parseWsTargetFromRequestUrl('/ws/sess-1/nested%2Fpath', '127.0.0.1:3099')).toEqual({
       workspaceId: 'sess-1',
       path: 'nested/path',
+      scope: 'document',
     })
+  })
+
+  it('reads ?scope=workspace as workspace granularity, anything else as per-document', () => {
+    expect(
+      parseWsTargetFromRequestUrl('/ws/ws-1/notes?scope=workspace', '127.0.0.1:3099').scope,
+    ).toBe('workspace')
+    expect(parseWsTargetFromRequestUrl('/ws/ws-1/notes?scope=other', '127.0.0.1:3099').scope).toBe(
+      'document',
+    )
   })
 
   it('rejects invalid session ids before websocket upgrade', () => {

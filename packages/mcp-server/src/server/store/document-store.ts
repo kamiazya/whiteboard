@@ -194,6 +194,16 @@ export function _clearWorkspaceDocCacheForTests(): void {
   workspaceDocCache.clear()
 }
 
+/**
+ * Drop the cached live workspace document so the next access reloads from
+ * stored bytes. For the failure path where an import mutated the cached doc
+ * but persisting it failed — keeping it would serve unpersisted state as
+ * though it were durable.
+ */
+export function evictWorkspaceDocCache(workspaceId: string): void {
+  workspaceDocCache.delete(workspaceDocCacheKey(workspaceId))
+}
+
 export async function getWorkspaceDoc(workspaceId: string): Promise<LoroDoc> {
   const key = workspaceDocCacheKey(workspaceId)
   const cached = workspaceDocCache.get(key)
@@ -215,9 +225,42 @@ export async function openWorkspaceDocIfStored(workspaceId: string): Promise<Lor
   return doc
 }
 
-export async function saveWorkspaceDoc(workspaceId: string, doc: LoroDoc): Promise<void> {
+type WorkspaceDocUpdatedListener = (workspaceId: string, update: Uint8Array) => void
+const workspaceDocUpdatedListeners = new Set<WorkspaceDocUpdatedListener>()
+
+/**
+ * Subscribe to persisted workspace-document updates. Every mutation path —
+ * per-document saves, delete/rename, restore, workspace-granularity imports —
+ * funnels through `saveWorkspaceDoc`, so one subscription here is the whole
+ * sync fan-out surface. Listeners get the exact bytes the store persisted;
+ * importing them into a replica of the workspace document converges it.
+ */
+export function onWorkspaceDocUpdated(listener: WorkspaceDocUpdatedListener): () => void {
+  workspaceDocUpdatedListeners.add(listener)
+  return () => workspaceDocUpdatedListeners.delete(listener)
+}
+
+export async function saveWorkspaceDoc(
+  workspaceId: string,
+  doc: LoroDoc,
+): Promise<Uint8Array | null> {
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  await docs.save(workspaceId, doc)
+  const update = await docs.save(workspaceId, doc)
+  if (update !== null) {
+    for (const listener of workspaceDocUpdatedListeners) {
+      try {
+        listener(workspaceId, update)
+      } catch (err) {
+        // A subscriber failing to fan out must never turn a completed save
+        // into a failed one.
+        getLogger('document-store').warning(
+          { workspaceId, err },
+          'workspace-doc update listener threw; ignoring',
+        )
+      }
+    }
+  }
+  return update
 }
 
 /**
@@ -229,7 +272,7 @@ export async function saveWorkspaceDoc(workspaceId: string, doc: LoroDoc): Promi
 export function cacheBackedWorkspaceDocs(): {
   open(workspaceId: string): Promise<LoroDoc | null>
   create(workspaceId: string): Promise<LoroDoc>
-  save(workspaceId: string, doc: LoroDoc): Promise<void>
+  save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null>
 } {
   return {
     open: (workspaceId) => openWorkspaceDocIfStored(workspaceId),

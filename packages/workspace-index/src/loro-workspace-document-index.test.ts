@@ -38,7 +38,9 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs {
       docs.set(workspaceId, doc)
       return doc
     },
-    async save() {},
+    async save() {
+      return null
+    },
   }
 }
 

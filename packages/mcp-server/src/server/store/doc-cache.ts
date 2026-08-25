@@ -65,6 +65,18 @@ export function evictDoc(workspaceId: string, path: string): void {
   cache.delete(`${workspaceId}/${path}`)
 }
 
+// Evict every cached doc of one workspace. Needed after a workspace-
+// granularity import: it rewrites document content underneath every cached
+// per-document projection at once, and a stale projection is worse than a
+// stale doc — the next per-document save would diff the OLD content against
+// the tree and silently revert the imported edit.
+export function evictWorkspaceDocs(workspaceId: string): void {
+  const prefix = `${workspaceId}/`
+  for (const key of Array.from(cache.keys())) {
+    if (key.startsWith(prefix)) cache.delete(key)
+  }
+}
+
 // /debug helper: list cached canvas keys ("workspaceId/path").
 export function getCacheKeys(): string[] {
   return Array.from(cache.keys())

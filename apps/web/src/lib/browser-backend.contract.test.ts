@@ -41,8 +41,9 @@ class InMemoryWorkspaceDocs implements WorkspaceDocs {
     return doc
   }
 
-  async save(_workspaceId: string, doc: LoroDoc): Promise<void> {
+  async save(_workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
     this.stored = new Uint8Array(doc.export({ mode: 'snapshot' }))
+    return this.stored
   }
 }
 

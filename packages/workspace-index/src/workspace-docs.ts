@@ -28,6 +28,12 @@ export interface WorkspaceDocs {
    * to be there is served either way.
    */
   create(workspaceId: string): Promise<LoroDoc>
-  /** Persists whatever the index just changed. */
-  save(workspaceId: string, doc: LoroDoc): Promise<void>
+  /**
+   * Persists whatever the index just changed, answering the update bytes it
+   * wrote — what a sync fan-out hands to the workspace's other subscribers —
+   * or `null` when nothing changed. Returned from here rather than derived by
+   * the caller because only the save knows the frontier the store held BEFORE
+   * the write.
+   */
+  save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null>
 }

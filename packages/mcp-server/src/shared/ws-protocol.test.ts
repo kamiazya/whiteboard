@@ -47,4 +47,10 @@ describe('buildWhiteboardWsUrl', () => {
       'wss://example.com/ws/ws1/my%20path',
     )
   })
+
+  it('carries ?scope=workspace when asked for workspace granularity', () => {
+    expect(
+      buildWhiteboardWsUrl('https://example.com/app', 'ws1', 'main', { scope: 'workspace' }),
+    ).toBe('wss://example.com/ws/ws1/main?scope=workspace')
+  })
 })
