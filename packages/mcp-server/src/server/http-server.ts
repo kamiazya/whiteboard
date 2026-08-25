@@ -14,6 +14,7 @@ import { createApp } from './app.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
+import { ensureWorkspaceId } from './mcp/session-resolver.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
@@ -206,6 +207,13 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // `no such table: workspaces` from the day it was mounted. Both are
   // memoized per data dir, so on an already-prepared dir this costs nothing.
   await prepareDataDir(dataDir)
+  // And give the daemon its current workspace before anything reads the list.
+  // `ensureWorkspaceId` had only ever run per `/mcp` request, so a daemon a
+  // browser reached first held no workspace at all: `GET /api/workspaces`
+  // answered `{"workspaces":[]}` (measured on a fresh data dir), which is not
+  // a state the document browser can select out of. Memoized per data dir, so
+  // the per-request MCP callers below share this one resolve.
+  await ensureWorkspaceId(dataDir)
   const serverDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
   )
