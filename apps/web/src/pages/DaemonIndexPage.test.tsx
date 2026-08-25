@@ -48,6 +48,10 @@ interface MockRoutes {
   onSetCanvasName?: (workspaceId: string, path: string, name: string) => void
   /** When set, the documents fetch resolves only after this promise settles. */
   delayCanvases?: Promise<void>
+  /** Override the documents GET. Return undefined to fall through to the
+   *  default. Consulted per call, so a test can answer 404 once and then
+   *  behave normally — a workspace deleted out from under the page. */
+  onListDocuments?: (workspaceId: string) => Response | undefined
 }
 
 function installFetchMock(routes: MockRoutes) {
@@ -59,6 +63,8 @@ function installFetchMock(routes: MockRoutes) {
     const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents$/)
     if (documentsMatch && (!init || init.method === undefined)) {
       const workspaceId = decodeURIComponent(documentsMatch[1])
+      const override = routes.onListDocuments?.(workspaceId)
+      if (override) return Promise.resolve(override)
       const documents = routes.documentsByWorkspace[workspaceId]
       if (!documents) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
       const respond = () => jsonResponse({ documents })
@@ -222,6 +228,77 @@ describe('DaemonIndexPage', () => {
     const wrapper = panel.closest('.animate-in') as HTMLElement | null
     expect(wrapper).not.toBeNull()
     expect(wrapper?.className).toMatch(/\bfade-in-0\b/)
+  })
+
+  // A 404 from the documents list means the workspace is GONE, not empty: an
+  // existing workspace with no documents answers 200 with an empty array
+  // (measured against the real route). And `selectedWorkspace` is only ever
+  // set from `GET /api/workspaces`, so the only way to reach this is that the
+  // workspace was deleted after that list was taken — by an agent, another
+  // tab, or the CLI.
+  //
+  // Re-listing is the repair: the selection is what went stale, so replacing
+  // it is what fixes the page. Showing an empty create-into-it state instead
+  // would hide a real anomaly, and creating into a workspace that no longer
+  // exists would silently make a DIFFERENT one.
+  it('re-lists and selects another workspace when the selected one has been deleted', async () => {
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+      onListDocuments: (workspaceId) => {
+        if (workspaceId !== 'ws-a') return undefined
+        // ws-a is gone; the workspace list the page already holds is stale.
+        routes.workspaces = [{ workspaceId: 'ws-b' }]
+        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    // Lands on ws-b's documents rather than an empty state for a workspace
+    // that is not there.
+    expect(await screen.findByText('beta')).toBeTruthy()
+    await waitFor(() => {
+      expect(
+        (screen.queryByRole('combobox', { name: 'Workspace' }) as HTMLSelectElement | null)
+          ?.value ?? 'ws-b',
+      ).toBe('ws-b')
+    })
+  })
+
+  // The loop guard, which the case above does NOT exercise: there the server
+  // stops listing the deleted workspace, so `ids[0]` happens to be the right
+  // answer and picking "any other" is indistinguishable from picking "first".
+  // Here the list and the documents disagree — the workspace is still listed
+  // but 404s — and selecting it again would send the page back through the
+  // same path forever.
+  it('does not re-select the stale workspace when the list still reports it', async () => {
+    let staleFetches = 0
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      // ws-a is never removed from the listing, on purpose.
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+      onListDocuments: (workspaceId) => {
+        if (workspaceId !== 'ws-a') return undefined
+        staleFetches += 1
+        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect(await screen.findByText('beta')).toBeTruthy()
+    // Counted rather than merely landing on ws-b: re-selecting the stale one
+    // would still reach ws-b eventually in some orderings, and the defect
+    // this pins is the repetition, not the destination.
+    expect(staleFetches).toBe(1)
   })
 
   it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
