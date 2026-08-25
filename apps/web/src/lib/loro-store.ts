@@ -236,8 +236,12 @@ export class LoroStore {
   async appendDelta(documentId: string, delta: Uint8Array): Promise<void> {
     return this.#serialise(documentId, async () => {
       const docRef = refOf(documentId)
-      const stored = await this.#store.loadSnapshot({ docRef })
-      if (stored === null) return
+      // The MANIFEST, not the snapshot. All this branch needs to know is
+      // whether there is a base to append to, and pulling the base to find
+      // out is what made appending cost as much as the document was big:
+      // measured at 9 / 23 / 85 ms against snapshots of 0.5 / 2 / 8 MB, for
+      // an operation that writes 88 bytes.
+      if ((await this.#store.readSnapshotManifest({ docRef })) === null) return
 
       const existing = (await this.#store.loadDeltas({ docRef, sinceFrontier: EMPTY_FRONTIER }))
         .updates
@@ -247,9 +251,23 @@ export class LoroStore {
       // knows the whole log, and a fresh open never pays for a log someone
       // else's session grew. Measured at the budget, the fold costs about
       // 10ms of synchronous replay and happens once per 64KB written.
-      const folded = shouldCompact(deltas)
-        ? foldDeltas(reassembleSnapshot(stored.manifest, stored.chunks), deltas)
-        : null
+      //
+      // The snapshot is loaded INSIDE this branch for the same reason the
+      // check above reads only the manifest: the fold is the one caller that
+      // genuinely needs the bytes, and it runs once per 64KB rather than once
+      // per edit.
+      const compacting = shouldCompact(deltas)
+      const stored = compacting ? await this.#store.loadSnapshot({ docRef }) : null
+      // The base was there a moment ago and is not now — another tab deleted
+      // the document between the two reads. Same answer as the check above:
+      // no base, so there is nothing to append to. Without this the append
+      // branch below would rebuild a delta log for a document that no longer
+      // has a snapshot, which is the one state that guard exists to prevent.
+      if (compacting && stored === null) return
+      const folded =
+        stored === null
+          ? null
+          : foldDeltas(reassembleSnapshot(stored.manifest, stored.chunks), deltas)
 
       if (folded === null) {
         await this.#store.appendDeltas({

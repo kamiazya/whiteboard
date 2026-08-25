@@ -101,6 +101,88 @@ export function describeDocumentStoreConformance(
       })
     })
 
+    /**
+     * `readSnapshotManifest` exists so a caller that only needs to know
+     * whether there is a base to append to does not have to pull the base
+     * itself. Its whole worth is that it is CHEAP, and the only thing that
+     * can quietly take that away is an implementation that answers it by
+     * calling `loadSnapshot` and discarding the chunks.
+     *
+     * That cannot be asserted from out here — a shared suite sees answers,
+     * not the work behind them. What IS asserted is the part a caller relies
+     * on: it agrees with `loadSnapshot` about whether a snapshot is there,
+     * in every state this suite can put a store in, and it refuses the same
+     * records rather than reporting them absent.
+     */
+    it('answers null for a snapshot that is not there', async () => {
+      await withStore(async (store) => {
+        expect(await store.readSnapshotManifest({ docRef: DOC })).toBeNull()
+        // A document with a delta log but no snapshot is still a document
+        // with no base: appending is legal without one, and the manifest is
+        // what says so.
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(1)], newFrontier: bytes(7) },
+        })
+        expect(await store.readSnapshotManifest({ docRef: DOC })).toBeNull()
+        expect(await store.loadSnapshot({ docRef: DOC })).toBeNull()
+      })
+    })
+
+    it('answers the manifest of the stored snapshot, matching loadSnapshot', async () => {
+      await withStore(async (store) => {
+        const payload = chunked([bytes(1, 2, 3, 4), bytes(5, 6), bytes(7)])
+        await store.saveSnapshot({ docRef: DOC, ...payload, frontier: bytes(9, 9) })
+
+        expect(await store.readSnapshotManifest({ docRef: DOC })).toEqual(payload.manifest)
+        // The same value `loadSnapshot` reports, not merely a plausible one.
+        expect(await store.readSnapshotManifest({ docRef: DOC })).toEqual(
+          (await store.loadSnapshot({ docRef: DOC }))?.manifest,
+        )
+        // Scoped like every other operation: another document's snapshot is
+        // not this one's.
+        expect(await store.readSnapshotManifest({ docRef: OTHER })).toBeNull()
+        expect(await store.readSnapshotManifest({ docRef: TREE })).toBeNull()
+      })
+    })
+
+    it('follows the snapshot through a delete and a compaction', async () => {
+      await withStore(async (store) => {
+        await store.saveSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1, 2, 3, 4), bytes(5)]),
+          frontier: bytes(1),
+        })
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(8)], newFrontier: bytes(2) },
+        })
+        const compacted = chunked([bytes(9, 9, 9)])
+        await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...compacted,
+          frontier: bytes(3),
+          supersededDeltaCount: 1,
+        })
+        expect(await store.readSnapshotManifest({ docRef: DOC })).toEqual(compacted.manifest)
+
+        await store.deleteDoc({ docRef: DOC })
+        expect(await store.readSnapshotManifest({ docRef: DOC })).toBeNull()
+      })
+    })
+
+    it('refuses an unreadable record rather than reporting it absent', async () => {
+      await withStore(async (store, writeUnreadableRecord) => {
+        await writeUnreadableRecord(DOC)
+        // The same refusal `loadSnapshot` gives. Answering `null` here would
+        // tell a caller "there is no base, start fresh" about a document
+        // whose bytes are sitting right there.
+        await expect(store.readSnapshotManifest({ docRef: DOC })).rejects.toSatisfy(
+          isStoredDocumentUnreadableError,
+        )
+      })
+    })
+
     it('answers an empty delta log for a document it has never seen', async () => {
       await withStore(async (store) => {
         const result = await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })

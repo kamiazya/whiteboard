@@ -37,6 +37,8 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
@@ -196,6 +198,21 @@ export class IdbDocumentStore implements DocumentStore {
       const raw = await request(tx.objectStore(SYNC_DOCUMENTS_STORE).get(key))
       await body(raw === undefined ? EMPTY_RECORD : parseRecord(key, raw), tx)
     })
+  }
+
+  async readSnapshotManifest(
+    input: ReadSnapshotManifestInput,
+  ): Promise<ReadSnapshotManifestResult> {
+    let result: ReadSnapshotManifestResult = null
+    // The record store ALONE. Naming the chunk store here would re-open the
+    // cost this method exists to avoid, and it would do so invisibly — the
+    // answer would be identical, only slower with every byte the document
+    // grows.
+    await this.#read('readonly', docRefKey(input.docRef), [SYNC_DOCUMENTS_STORE], (record) => {
+      if (record.snapshot === null || record.frontier === null) return
+      result = record.snapshot.manifest
+    })
+    return result
   }
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {

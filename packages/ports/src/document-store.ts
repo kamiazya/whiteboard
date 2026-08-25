@@ -96,6 +96,12 @@ export type ReadFrontierInput = z.infer<typeof readFrontierInputSchema>
 export const readFrontierResultSchema = z.object({ frontier: frontierSchema }).strict().nullable()
 export type ReadFrontierResult = z.infer<typeof readFrontierResultSchema>
 
+export const readSnapshotManifestInputSchema = z.object({ docRef: docRefSchema }).strict()
+export type ReadSnapshotManifestInput = z.infer<typeof readSnapshotManifestInputSchema>
+
+export const readSnapshotManifestResultSchema = snapshotManifestSchema.nullable()
+export type ReadSnapshotManifestResult = z.infer<typeof readSnapshotManifestResultSchema>
+
 export const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type DeleteDocInput = z.infer<typeof deleteDocInputSchema>
 
@@ -114,6 +120,27 @@ export interface DocumentStore {
    * things to tell a user about their own data.
    */
   loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult>
+  /**
+   * The stored snapshot's manifest, WITHOUT its bytes.
+   *
+   * Exists because "is there a base to append to?" is a different question
+   * from "give me the base", and answering the first with the second is what
+   * makes an append cost as much as the document is big. Every caller that
+   * folds a delta log has to ask both, but only when it folds — and folding
+   * is rare by design.
+   *
+   * Answers `null` in exactly the states `loadSnapshot` answers `null`, and
+   * throws `StoredDocumentUnreadableError` in exactly the states it throws.
+   * A caller uses this to decide whether to call that one, so the two
+   * disagreeing about whether a document exists would be worse than not
+   * having this at all.
+   *
+   * An implementation is expected to answer it without reading the chunks.
+   * That cannot be checked from the contract — a caller sees answers, not the
+   * work behind them — so it is stated here and belongs in each store's own
+   * test.
+   */
+  readSnapshotManifest(input: ReadSnapshotManifestInput): Promise<ReadSnapshotManifestResult>
   saveSnapshot(input: SaveSnapshotInput): Promise<void>
   /**
    * Save a snapshot that already contains everything in the delta log, and
