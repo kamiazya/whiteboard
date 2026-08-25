@@ -22,8 +22,16 @@
  */
 import { access, mkdir, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import {
+  createWorkspaceDocumentAtPath,
+  moveWorkspaceNodeToPath,
+  projectWorkspaceDocument,
+  readDocumentKind,
+  resolveWorkspaceDocumentById,
+  writeWorkspaceDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
+import { documentKindSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
   DocumentMoveIntoSelfError,
@@ -33,6 +41,10 @@ import {
   shouldCompact,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
+import {
+  DocumentStoreWorkspaceDocs,
+  LoroWorkspaceDocumentIndex,
+} from '@kamiazya/whiteboard-workspace-index'
 import type { Value } from 'loro-crdt'
 import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
@@ -49,6 +61,7 @@ import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
+import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
@@ -109,6 +122,88 @@ async function dbReady() {
 // from the same one-db-per-dataDir Kysely handle, so both sides read/write
 // the same `document:<documentId>` rows. The class is a stateless wrapper
 // around that handle, so a fresh instance per call is equivalent.
+/**
+ * The live WORKSPACE documents this process serves and writes through, one
+ * per workspace. This is the daemon's twin of the browser backend holding
+ * its workspace doc across a session: `DocumentStoreWorkspaceDocs.open`
+ * reads the whole stored record, so opening per save would cost
+ * O(workspace) on every keystroke burst, while the incremental `save`
+ * exports only what moved.
+ *
+ * Keyed by data dir AS WELL as workspace id because tests point
+ * `getDataDir()` at a fresh directory per test; a cache keyed by workspace
+ * alone would carry one test's document tree into the next test's empty
+ * database. In production there is one data dir for the process lifetime.
+ *
+ * Coherence rule: every content write flows through the cached instance
+ * (saveDocument diffs the caller's doc against it), so it can only go stale
+ * when a path WRITES THE STORED RECORD directly — the tree index used by
+ * delete/rename below does — and those paths drop the entry so the next
+ * operation reopens the merged state.
+ */
+const workspaceDocCache = new Map<string, LoroDoc>()
+
+function workspaceDocCacheKey(workspaceId: string): string {
+  return `${getDataDir()}::${workspaceId}`
+}
+
+export async function getWorkspaceDoc(workspaceId: string): Promise<LoroDoc> {
+  const key = workspaceDocCacheKey(workspaceId)
+  const cached = workspaceDocCache.get(key)
+  if (cached !== undefined) return cached
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const doc = await docs.create(workspaceId)
+  workspaceDocCache.set(key, doc)
+  return doc
+}
+
+/** The workspace doc when one is STORED (or cached); null otherwise — a read path must not mint one. */
+export async function openWorkspaceDocIfStored(workspaceId: string): Promise<LoroDoc | null> {
+  const key = workspaceDocCacheKey(workspaceId)
+  const cached = workspaceDocCache.get(key)
+  if (cached !== undefined) return cached
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const doc = await docs.open(workspaceId)
+  if (doc !== null) workspaceDocCache.set(key, doc)
+  return doc
+}
+
+export async function saveWorkspaceDoc(workspaceId: string, doc: LoroDoc): Promise<void> {
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  await docs.save(workspaceId, doc)
+}
+
+/**
+ * `WorkspaceDocs` over THIS module's live cache — every consumer that
+ * operates on a workspace document through it (the tree index used by
+ * delete/rename, the dual-plane index) shares the same instance the save
+ * path diffs against, so no path can leave another holding a stale doc.
+ */
+export function cacheBackedWorkspaceDocs(): {
+  open(workspaceId: string): Promise<LoroDoc | null>
+  create(workspaceId: string): Promise<LoroDoc>
+  save(workspaceId: string, doc: LoroDoc): Promise<void>
+} {
+  return {
+    open: (workspaceId) => openWorkspaceDocIfStored(workspaceId),
+    create: (workspaceId) => getWorkspaceDoc(workspaceId),
+    save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc),
+  }
+}
+
+/**
+ * The documents `loadDocument` served from the workspace tree. `getDoc`'s
+ * cache-refresh must NOT replay legacy per-document deltas into these: a
+ * projection has its own fresh oplog, and importing the old lineage's ops
+ * on top of it resurrects pre-fold state over current content.
+ */
+const treeServedDocs = new WeakSet<LoroDoc>()
+
+/** The tree index delete/rename go through, so a daemon delete evacuates the same way a port delete does. */
+async function workspaceTreeIndex(): Promise<LoroWorkspaceDocumentIndex> {
+  return new LoroWorkspaceDocumentIndex(cacheBackedWorkspaceDocs(), new FsBlobStore(getDataDir()))
+}
+
 async function documentStoreReady(): Promise<LibsqlDocumentStore> {
   return new LibsqlDocumentStore(await dbReady())
 }
@@ -377,7 +472,38 @@ export async function saveDocument(
     // has to skip. One table, one id space.
     const documentId = existingDocumentId ?? generateDocumentId()
     const documentStore = await documentStoreReady()
-    const savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
+    // Which plane this document persists on. A save with a KNOWN kind lands
+    // on the workspace tree (the node's containers are the content record);
+    // a kindless save of a document the tree does not hold stays on the
+    // legacy per-document plane — recording it in the tree would mean
+    // inventing the format, the same guess the startup fold refuses.
+    let existingKind: DocumentKind | null = null
+    if (existingDocumentId !== undefined && existingDocumentId !== null) {
+      const row = await db
+        .selectFrom('documents')
+        .select(['kind'])
+        .where('id', '=', documentId)
+        .executeTakeFirst()
+      const parsed = documentKindSchema.safeParse(row?.kind)
+      existingKind = parsed.success ? parsed.data : null
+    }
+    const kindForTree = options.kind ?? existingKind ?? readDocumentKind(doc) ?? null
+    let savedBytes = 0
+    let savedToTree = false
+    if (kindForTree !== null) {
+      const workspaceDoc = await getWorkspaceDoc(workspaceId)
+      if (resolveWorkspaceDocumentById(workspaceDoc, documentId) === null) {
+        createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
+      }
+      // The create can answer null on a path the tree already gave to
+      // another document; the content write then finds no node and the save
+      // falls back to the legacy plane rather than being lost.
+      savedToTree = writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)
+      if (savedToTree) await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    }
+    if (!savedToTree) {
+      savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
+    }
     await upsertWorkspaceRow(db, workspaceId)
     if (existingDocumentId) {
       // A plain re-save (WS updates, live-doc writes, compactDocument) omits
@@ -442,6 +568,17 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
   const db = await dbReady()
   const documentId = await getDocumentIdByPath(db, workspaceId, path)
   if (!documentId) return new LoroDoc()
+  // The workspace tree answers first: that is where a kind-carrying save
+  // persists. The projection is a VALUE copy with its own oplog — see
+  // treeServedDocs for why the legacy delta log must never replay into it.
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const projected = projectWorkspaceDocument(workspaceDoc, documentId)
+    if (projected !== null) {
+      treeServedDocs.add(projected)
+      return projected
+    }
+  }
   // Purely a stable identity label for corrupt-data error messages and the
   // legacy-migration backup file below — no longer an FS path this function
   // reads from.
@@ -531,10 +668,16 @@ export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc
   const cached = peekDoc(workspaceId, path)
   if (cached !== undefined) {
     try {
-      const db = await dbReady()
-      const documentId = await getDocumentIdByPath(db, workspaceId, path)
-      if (documentId) {
-        await importStoredIfBehind(await documentStoreReady(), documentId, cached)
+      // A tree-served projection is refreshed by every write flowing through
+      // it (saveDocument diffs against the live workspace doc), and the
+      // legacy delta log belongs to a DIFFERENT oplog — importing it here
+      // would resurrect pre-fold state over current content.
+      if (!treeServedDocs.has(cached)) {
+        const db = await dbReady()
+        const documentId = await getDocumentIdByPath(db, workspaceId, path)
+        if (documentId) {
+          await importStoredIfBehind(await documentStoreReady(), documentId, cached)
+        }
       }
     } catch (err) {
       // Serving the cached document is the honest fallback: it is what this
@@ -670,6 +813,18 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     // step is now one shared piece rather than a copy: `deleteDocumentRow`
     // holds the descendant refusal, `documentTeardown` holds the files.
     const finalizeTeardown = await documentTeardown.begin({ workspaceId, documentId, path })
+
+    // The tree node goes through the index's delete, which EVACUATES the
+    // content into the trash before removing anything — the daemon's delete
+    // keeps the same recoverability promise the agent-facing port makes. A
+    // document the tree does not hold (legacy plane) skips this cleanly.
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null && resolveWorkspaceDocumentById(workspaceDoc, documentId) !== null) {
+      // Cache-backed, so the index deletes on the same live instance every
+      // other path writes through.
+      const index = await workspaceTreeIndex()
+      await index.deleteDocument({ workspaceId, path })
+    }
 
     await deleteDocumentRow(db, workspaceId, path)
 
@@ -904,6 +1059,15 @@ export async function renameDocumentPath(
           .execute()
       }
     })
+
+    // The tree mirrors the move: a document the tree holds is re-parented
+    // (descendants ride along in the tree for free — the row plan above is
+    // the table's spelling of the same subtree move).
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null && resolveWorkspaceDocumentById(workspaceDoc, documentId) !== null) {
+      moveWorkspaceNodeToPath(workspaceDoc, oldPath, newPath)
+      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    }
 
     // Force the next getDoc() to reload under every key the move touched.
     // A source path: a caller still reading through it should lazily create

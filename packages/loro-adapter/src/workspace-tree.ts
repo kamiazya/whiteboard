@@ -24,7 +24,7 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentIdSchema, documentKindSchema } from '@kamiazya/whiteboard-model'
 import type { LoroTreeNode, TreeID } from 'loro-crdt'
-import { LoroDoc, LoroMap, LoroText } from 'loro-crdt'
+import { LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { z } from 'zod'
 import { CONTENT_CONTAINER_KEYS, type DocumentContainers } from './loro-bridge.js'
 
@@ -436,17 +436,39 @@ export function adoptWorkspaceDocument(
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
+/** Structural equality for the plain-JSON values the bridge stores in map entries. */
+function jsonEqual(a: unknown, b: unknown): boolean {
+  if (Object.is(a, b)) return true
+  if (typeof a !== 'object' || typeof b !== 'object' || a === null || b === null) return false
+  if (Array.isArray(a) !== Array.isArray(b)) return false
+  const aRec = a as Record<string, unknown>
+  const bRec = b as Record<string, unknown>
+  const aKeys = Object.keys(aRec)
+  if (aKeys.length !== Object.keys(bRec).length) return false
+  return aKeys.every((key) => key in bRec && jsonEqual(aRec[key], bRec[key]))
+}
+
 /**
- * Replaces an EXISTING tree document's content with a standalone document's —
+ * Makes an EXISTING tree document's content equal a standalone document's —
  * the write half of `adoptWorkspaceDocument`, exposed for callers whose node
- * already exists (seeding a freshly created document, a duplicate's copy).
+ * already exists (seeding a freshly created document, a duplicate's copy,
+ * the daemon's per-save write-through).
+ *
+ * A DIFF, not a rewrite, and that is load-bearing twice over: the daemon
+ * calls this on every save, so a wholesale rewrite would append a
+ * full-document delta per save and grow the workspace log with copies of
+ * unchanged state — and rewriting an untouched map entry would clobber a
+ * concurrent peer's edit to it, discarding exactly the node-level merge the
+ * workspace document exists to keep. Map containers sync per entry (set
+ * changed, delete missing), text containers replace only on inequality, and
+ * an identical source commits no ops at all.
  *
  * Root containers are enumerated from the JSON projection: a string is a
  * Text container and an object is a Map, which is the whole vocabulary the
  * bridge writes (container VALUES are plain objects by convention — see
- * package-loro-adapter.md). Meta keys the node carries (segment, kind, ...)
- * are scalars and never in the source, so no collision. `setContainer`
- * REPLACES what is at each key, which here is the point.
+ * package-loro-adapter.md). A bridge container the source doc never attached
+ * is cleared, because "content equals the source" includes what the source
+ * does not have.
  */
 export function writeWorkspaceDocumentContent(
   doc: LoroDoc,
@@ -458,12 +480,43 @@ export function writeWorkspaceDocumentContent(
   const projected = source.toJSON() as Record<string, unknown>
   for (const [key, value] of Object.entries(projected)) {
     if (typeof value === 'string') {
-      node.data.setContainer(key, new LoroText()).insert(0, value)
-    } else if (typeof value === 'object' && value !== null) {
-      const map = node.data.setContainer(key, new LoroMap())
-      for (const [entryKey, entryValue] of Object.entries(value as Record<string, unknown>)) {
-        map.set(entryKey, entryValue)
+      const text = node.data.getOrCreateContainer(key, new LoroText())
+      if (text.toString() !== value) {
+        text.delete(0, text.length)
+        if (value.length > 0) text.insert(0, value)
       }
+    } else if (Array.isArray(value)) {
+      // A legacy List/MovableList root (old clients' `elements`). Carried as
+      // a VALUE copy — dropping a container kind the bridge does not favour
+      // would turn a save into content loss. Rewritten wholesale on change:
+      // this shape has no per-entry key to diff by.
+      const list = node.data.getOrCreateContainer(key, new LoroMovableList())
+      if (!jsonEqual(list.toJSON(), value)) {
+        for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
+        for (const entry of value) list.push(entry as Parameters<typeof list.push>[0])
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      const map = node.data.getOrCreateContainer(key, new LoroMap())
+      const existing = map.toJSON() as Record<string, unknown>
+      const wanted = value as Record<string, unknown>
+      for (const [entryKey, entryValue] of Object.entries(wanted)) {
+        if (!jsonEqual(existing[entryKey], entryValue)) map.set(entryKey, entryValue)
+      }
+      for (const entryKey of Object.keys(existing)) {
+        if (!(entryKey in wanted)) map.delete(entryKey)
+      }
+    }
+  }
+  for (const { key, kind } of CONTENT_CONTAINER_KEYS) {
+    if (key in projected) continue
+    if (kind === 'map') {
+      const map = node.data.getOrCreateContainer(key, new LoroMap())
+      for (const entryKey of Object.keys(map.toJSON() as Record<string, unknown>)) {
+        map.delete(entryKey)
+      }
+    } else {
+      const text = node.data.getOrCreateContainer(key, new LoroText())
+      if (text.length > 0) text.delete(0, text.length)
     }
   }
   doc.commit()
@@ -497,6 +550,11 @@ function copyNodeData(source: LoroTreeNode, target: LoroTreeNode): void {
       }
     } else if (kind === 'Text') {
       target.data.setContainer(key, new LoroText()).insert(0, (value as LoroText).toString())
+    } else if (kind === 'MovableList' || kind === 'List') {
+      const list = target.data.setContainer(key, new LoroMovableList())
+      for (const entry of (value as LoroMovableList).toJSON() as unknown[]) {
+        list.push(entry as Parameters<typeof list.push>[0])
+      }
     } else if (kind === null) {
       target.data.set(key, value)
     }
@@ -686,6 +744,13 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
       }
     } else if (kind === 'Text') {
       out.getText(key).insert(0, (value as LoroText).toString())
+    } else if (kind === 'MovableList' || kind === 'List') {
+      // A legacy list root, carried as a value copy — see
+      // writeWorkspaceDocumentContent's array branch.
+      const list = out.getMovableList(key)
+      for (const entry of (value as LoroMovableList).toJSON() as unknown[]) {
+        list.push(entry as Parameters<typeof list.push>[0])
+      }
     }
     // Scalars are node meta, not content — see the doc comment.
   }

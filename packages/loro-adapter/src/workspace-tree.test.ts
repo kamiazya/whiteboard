@@ -8,7 +8,7 @@
  * where the answers are written down so a later change cannot quietly pick
  * different ones.
  */
-import { LoroDoc } from 'loro-crdt'
+import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import {
@@ -23,6 +23,7 @@ import {
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
 
 const ID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
@@ -126,14 +127,13 @@ describe('workspace tree', () => {
   })
 
   describe('undo/redo on a tree-hosted document', () => {
-    it('a READ between undo and redo does not clear the redo stack', async () => {
+    it('a READ between undo and redo does not clear the redo stack', () => {
       // On a tree node, attaching a container is an op. Before containers
       // were pre-attached at creation, undoing a node-create detached the
       // `nodes` map, the next READ re-attached it via getOrCreateContainer —
       // a local op — and that op cleared the redo stack: create → undo →
       // read → redo left the document empty. This is the page's exact flow
       // (undo publishes a canvas read before redo can be clicked).
-      const { UndoManager } = await import('loro-crdt')
       const ws = workspace()
       createWorkspaceDocumentAtPath(ws, { path: 'design', documentId: ID_A, kind: 'spatial' })
       ws.commit()
@@ -154,6 +154,131 @@ describe('workspace tree', () => {
       expect(undoManager.canRedo()).toBe(true)
       undoManager.redo()
       expect(readSpatialCanvas(documentContainers(doc, ID_A)).nodes).toHaveLength(1)
+    })
+  })
+
+  describe('writing standalone content onto an existing node', () => {
+    it('an unchanged document produces NO new ops, and a one-node change touches only that entry', async () => {
+      // The daemon write-through calls this on every save; a wholesale
+      // rewrite would append a full-document delta per keystroke burst and
+      // grow the workspace log with copies of unchanged state.
+      const standalone = new LoroDoc()
+      standalone.setPeerId(9n)
+      writeSpatialCanvas(standalone, {
+        nodes: [
+          { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' },
+          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'bb' },
+        ],
+        edges: [],
+      })
+      const doc = workspace()
+      adoptWorkspaceDocument(doc, { path: 'design', documentId: ID_A, kind: 'spatial' }, standalone)
+
+      // Same content again: nothing may change.
+      const before = doc.oplogVersion()
+      writeWorkspaceDocumentContent(doc, ID_A, standalone)
+      expect(doc.oplogVersion().compare(before)).toBe(0)
+
+      // One node moves: the OTHER node's entry must not be rewritten — a
+      // peer edit to it merged over this update has to survive.
+      const moved = new LoroDoc()
+      moved.setPeerId(9n)
+      writeSpatialCanvas(moved, {
+        nodes: [
+          { id: 'n-a', type: 'text', x: 5, y: 5, width: 80, height: 40, text: 'aa' },
+          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'bb' },
+        ],
+        edges: [],
+      })
+      const peer = new LoroDoc()
+      peer.import(doc.export({ mode: 'snapshot' }))
+      const from = doc.version()
+      writeWorkspaceDocumentContent(doc, ID_A, moved)
+      writeSpatialCanvas(documentContainers(peer, ID_A), {
+        nodes: [
+          { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' },
+          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'peer-renamed' },
+        ],
+        edges: [],
+      })
+      peer.import(doc.export({ mode: 'update', from }))
+      const mergedRead = readSpatialCanvas(documentContainers(peer, ID_A))
+      expect(mergedRead.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 5, y: 5 })
+      expect(mergedRead.nodes.find((n) => n.id === 'n-b')).toMatchObject({
+        text: 'peer-renamed',
+      })
+    })
+
+    it('an entry removed from the source is deleted from the node', () => {
+      const standalone = new LoroDoc()
+      writeSpatialCanvas(standalone, {
+        nodes: [
+          { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' },
+          { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'bb' },
+        ],
+        edges: [],
+      })
+      const doc = workspace()
+      adoptWorkspaceDocument(doc, { path: 'design', documentId: ID_A, kind: 'spatial' }, standalone)
+
+      const shrunk = new LoroDoc()
+      writeSpatialCanvas(shrunk, {
+        nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' }],
+        edges: [],
+      })
+      writeWorkspaceDocumentContent(doc, ID_A, shrunk)
+      expect(readSpatialCanvas(documentContainers(doc, ID_A)).nodes.map((n) => n.id)).toEqual([
+        'n-a',
+      ])
+    })
+
+    it('a legacy movable-list container (`elements`) survives write and projection as a value copy', () => {
+      // Old clients still push `elements` MovableList docs through the
+      // daemon's update route. The tree cannot silently drop a container
+      // kind it does not favour — that turns a rename into content loss.
+      const standalone = new LoroDoc()
+      const list = standalone.getMovableList('elements')
+      list.push({ id: 'old-element' })
+      standalone.commit()
+
+      const doc = workspace()
+      adoptWorkspaceDocument(doc, { path: 'legacy', documentId: ID_A, kind: 'spatial' }, standalone)
+
+      const projected = projectWorkspaceDocument(doc, ID_A)
+      expect(projected).not.toBeNull()
+      if (projected === null) return
+      expect(projected.getMovableList('elements').toJSON()).toEqual([{ id: 'old-element' }])
+
+      // And the diff write keeps it in step.
+      const changed = new LoroDoc()
+      const changedList = changed.getMovableList('elements')
+      changedList.push({ id: 'old-element' })
+      changedList.push({ id: 'second' })
+      changed.commit()
+      writeWorkspaceDocumentContent(doc, ID_A, changed)
+      const reprojected = projectWorkspaceDocument(doc, ID_A)
+      expect(reprojected?.getMovableList('elements').toJSON()).toEqual([
+        { id: 'old-element' },
+        { id: 'second' },
+      ])
+    })
+
+    it('a text container is replaced only when its content differs', () => {
+      const standalone = new LoroDoc()
+      standalone.getText('body').insert(0, '# hello')
+      standalone.commit()
+      const doc = workspace()
+      adoptWorkspaceDocument(doc, { path: 'notes', documentId: ID_A, kind: 'markdown' }, standalone)
+
+      const before = doc.oplogVersion()
+      writeWorkspaceDocumentContent(doc, ID_A, standalone)
+      expect(doc.oplogVersion().compare(before)).toBe(0)
+
+      const changed = new LoroDoc()
+      changed.getText('body').insert(0, '# hello, changed')
+      changed.commit()
+      writeWorkspaceDocumentContent(doc, ID_A, changed)
+      expect(documentContainers(doc, ID_A).getText('body').toString()).toBe('# hello, changed')
     })
   })
 

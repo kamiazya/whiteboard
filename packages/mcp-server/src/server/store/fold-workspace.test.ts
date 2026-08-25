@@ -38,11 +38,22 @@ afterEach(async () => {
   await rm(tempDir, { recursive: true, force: true })
 })
 
+// Seeded the way an OLD build left documents — a `documents` row plus a
+// per-document Loro record — written directly, because `saveDocument` with a
+// kind now lands on the workspace tree and would leave this fold nothing to
+// do.
 async function seedCanvas(workspaceId: string, path: string, text: string): Promise<void> {
   const doc = new LoroDoc()
   doc.getMap('nodes').set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text })
   doc.commit()
-  await saveDocument(workspaceId, path, doc, { kind: 'spatial' })
+  await saveDocument(workspaceId, path, doc)
+  const db = await getDb(tempDir)
+  await db
+    .updateTable('documents')
+    .set({ kind: 'spatial' })
+    .where('workspaceId', '=', workspaceId)
+    .where('path', '=', path)
+    .execute()
 }
 
 async function openWorkspace(workspaceId: string) {
