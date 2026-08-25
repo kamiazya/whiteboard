@@ -179,7 +179,6 @@
   },
   "dependencies": {
     "@hono/node-server": "^2.0.12",
-    "@kamiazya/whiteboard-workspace-index": "workspace:*",
     "@libsql/client": "^0.17.3",
     "@libsql/kysely-libsql": "^0.4.1",
     "@modelcontextprotocol/client": "^2.0.0",
@@ -228,6 +227,7 @@
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
+    "@kamiazya/whiteboard-workspace-index": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^24",
