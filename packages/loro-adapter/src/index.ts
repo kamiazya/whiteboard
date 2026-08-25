@@ -45,6 +45,7 @@ export {
   readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceNodes,
+  reconcileDocContent,
   recordTrashEntry,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,

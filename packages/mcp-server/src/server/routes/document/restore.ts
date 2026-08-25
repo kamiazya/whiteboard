@@ -1,3 +1,8 @@
+import {
+  projectWorkspaceDocument,
+  readWorkspaceNodes,
+  reconcileDocContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
@@ -6,9 +11,12 @@ import { countAliveNodes } from '../../store/count-alive-nodes.js'
 import { evictDoc } from '../../store/doc-cache.js'
 import {
   ConflictError,
+  deleteDocument,
   documentExists,
   getDoc,
   getDocumentKind,
+  listDocuments,
+  renameDocumentPath,
   saveDocument,
 } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
@@ -40,8 +48,15 @@ async function reconcileCommitSaveBroadcast(
   try {
     const prevVV = doc.version()
     try {
-      doc.import(past.export({ mode: 'snapshot' }))
-      doc.commit()
+      // A DIFF, not an import: nothing rewinds in a CRDT, so restore is a
+      // NEW edit whose result equals the past state. The old
+      // `doc.import(past.export())` looked like that but was a measured
+      // no-op — a same-lineage checkout clone exports its full history, so
+      // the live doc already had every op — and a cross-lineage import
+      // (workspace-scoped versions project the past into a fresh doc) would
+      // lose to the live doc's later ops. reconcileDocContent makes the
+      // comment above this route true.
+      reconcileDocContent(doc, past)
       await saveDocument(workspaceId, targetPath, doc, {
         overwrite: true,
         ...(kind !== null ? { kind } : {}),
@@ -105,6 +120,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
       const rawText = await c.req.text()
       let targetPath: string | undefined
       let overwrite = false
+      let subtree = false
       if (rawText.length > 0) {
         let parsedJson: unknown
         try {
@@ -118,6 +134,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         }
         targetPath = parsed.data.targetPath
         overwrite = parsed.data.overwrite === true
+        subtree = parsed.data.subtree === true
       }
       try {
         // Every doc read + save below runs inside one workspace-lock hold.
@@ -218,6 +235,82 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
               documentId: `${workspaceId}/${targetPath}`,
               elementCount: countAliveNodes(past),
             })
+          }
+
+          // Subtree rollback: the document and every descendant go back to
+          // this version's state — reverts, resurrections and deletions
+          // alike, each as ordinary new edits (nothing rewinds in a CRDT).
+          if (subtree) {
+            if (targetPath !== undefined && targetPath !== path) {
+              return c.json(
+                { error: 'invalid_body', message: 'subtree rollback cannot take a targetPath' },
+                400,
+              )
+            }
+            const pastWorkspace = await versionStore.loadWorkspaceAt(workspaceId, id)
+            if (pastWorkspace === null) {
+              return c.json(
+                {
+                  error: 'unsupported',
+                  message: 'subtree rollback needs a workspace-scoped version',
+                },
+                409,
+              )
+            }
+            const inSubtree = (p: string) => p === path || p.startsWith(`${path}/`)
+            const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
+              node.type === 'document' && inSubtree(node.path) ? [node] : [],
+            )
+            const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
+            // The summary type leaves `id` optional; a row without one cannot
+            // be correlated to the version and is left alone.
+            const rows = (await listDocuments(workspaceId)).flatMap((row) =>
+              row.id === undefined ? [] : [{ id: row.id, path: row.path }],
+            )
+            const rowsById = new Map(rows.map((row) => [row.id, row]))
+            const { sendRestoreEvent } = await import('../ws.js')
+            const all = await versionStore.list(workspaceId, path)
+            sendRestoreEvent(workspaceId, path, 'started', all.find((v) => v.id === id)?.label)
+            try {
+              // Deletions first, so a past document whose path a later-born
+              // one occupies can land after the squatter is gone. The tree
+              // delete EVACUATES, so nothing here is unrecoverable.
+              for (const row of rows) {
+                if (inSubtree(row.path) && !pastIds.has(row.id)) {
+                  await deleteDocument(workspaceId, row.path)
+                }
+              }
+              for (const node of pastDocs) {
+                const past = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
+                if (past === null) continue
+                const live = rowsById.get(node.meta.documentId)
+                if (live !== undefined) {
+                  if (live.path !== node.path) {
+                    await renameDocumentPath(workspaceId, live.path, node.path)
+                  }
+                  const liveDoc = await getDoc(workspaceId, node.path)
+                  const prevVV = liveDoc.version()
+                  reconcileDocContent(liveDoc, past)
+                  await saveDocument(workspaceId, node.path, liveDoc, {
+                    overwrite: true,
+                    kind: node.meta.kind,
+                  })
+                  const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+                  if (update.byteLength > 0) {
+                    getBroadcastFn()(workspaceId, node.path, update)
+                  }
+                } else {
+                  // Deleted since the version: recreated under the SAME
+                  // documentId's row lineage as far as the tree is concerned
+                  // (the write-through places it by path + kind).
+                  await saveDocument(workspaceId, node.path, past, { kind: node.meta.kind })
+                  evictDoc(workspaceId, node.path)
+                }
+              }
+            } finally {
+              sendRestoreEvent(workspaceId, path, 'complete')
+            }
+            return c.json({ ok: true, restoredCount: pastDocs.length })
           }
 
           // In-place reconcile branch (default).

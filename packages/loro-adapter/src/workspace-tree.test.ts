@@ -20,6 +20,7 @@ import {
   moveWorkspaceDocument,
   projectWorkspaceDocument,
   readWorkspaceDocuments,
+  reconcileDocContent,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
@@ -405,5 +406,78 @@ describe('workspace tree', () => {
       expect(readWorkspaceDocuments(a)).toEqual([])
       expect(readWorkspaceDocuments(b)).toEqual([])
     })
+  })
+})
+
+describe('projection at a checkout', () => {
+  it('projects the PAST state out of a detached workspace clone', () => {
+    const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    const ws = new LoroDoc()
+    createWorkspaceDocumentAtPath(ws, { path: 'design', documentId: ID, kind: 'spatial' })
+    writeSpatialCanvas(documentContainers(ws, ID), {
+      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'v1' }],
+      edges: [],
+    })
+    const pastFrontiers = ws.frontiers()
+    writeSpatialCanvas(documentContainers(ws, ID), {
+      nodes: [
+        { id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'v2' },
+        { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'later' },
+      ],
+      edges: [],
+    })
+
+    const clone = LoroDoc.fromSnapshot(ws.export({ mode: 'snapshot' }))
+    clone.checkout(pastFrontiers)
+    const past = projectWorkspaceDocument(clone, ID)
+    expect(past).not.toBeNull()
+    if (past === null) return
+    const nodes = readSpatialCanvas(past).nodes
+    expect(nodes.map((n) => n.id)).toEqual(['n-a'])
+    expect(nodes[0]?.type === 'text' ? nodes[0].text : null).toBe('v1')
+  })
+})
+
+describe('reconcileDocContent (restore = a new edit equal to the past)', () => {
+  it('makes the target equal the past: later additions tombstone, changed fields revert', () => {
+    const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+    void ID
+    const live = new LoroDoc()
+    writeSpatialCanvas(live, {
+      nodes: [
+        { id: 'n-a', type: 'text', x: 9, y: 9, width: 80, height: 40, text: 'edited' },
+        { id: 'n-b', type: 'text', x: 100, y: 0, width: 80, height: 40, text: 'later' },
+      ],
+      edges: [],
+    })
+    const past = new LoroDoc()
+    writeSpatialCanvas(past, {
+      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'v1' }],
+      edges: [],
+    })
+
+    reconcileDocContent(live, past)
+    const nodes = readSpatialCanvas(live).nodes
+    expect(nodes.map((n) => n.id)).toEqual(['n-a'])
+    expect(nodes[0]).toMatchObject({ x: 0, y: 0, text: 'v1' })
+  })
+
+  it('an equal past commits no ops, and a movable-list root reconciles too', () => {
+    const live = new LoroDoc()
+    const list = live.getMovableList('elements')
+    list.push({ id: 'a' })
+    list.push({ id: 'b' })
+    live.commit()
+
+    const same = LoroDoc.fromSnapshot(live.export({ mode: 'snapshot' }))
+    const before = live.oplogVersion()
+    reconcileDocContent(live, same)
+    expect(live.oplogVersion().compare(before)).toBe(0)
+
+    const past = new LoroDoc()
+    past.getMovableList('elements').push({ id: 'a' })
+    past.commit()
+    reconcileDocContent(live, past)
+    expect(live.getMovableList('elements').toJSON()).toEqual([{ id: 'a' }])
   })
 })

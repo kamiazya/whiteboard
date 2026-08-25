@@ -758,6 +758,65 @@ export function projectWorkspaceDocument(doc: LoroDoc, documentId: string): Loro
   return out
 }
 
+/**
+ * Makes a LIVE standalone document's content equal `past` — the standalone
+ * twin of `writeWorkspaceDocumentContent`, and the actual mechanism behind
+ * "restore a version": in a CRDT nothing rewinds, so a restore is a NEW
+ * edit whose result equals the past state. A cross-lineage import cannot do
+ * this (the live doc's own later ops win the merge, so the "restore" is a
+ * silent no-op — measured against the real restore route); a diff of plain
+ * values can, whatever lineage the past doc carries.
+ *
+ * Same diff rules as the tree write: maps sync per entry, text replaces on
+ * inequality, list roots rewrite on inequality, an equal past commits no
+ * ops, and a container the past doc does not have is cleared.
+ */
+export function reconcileDocContent(target: LoroDoc, past: LoroDoc): void {
+  const wanted = past.toJSON() as Record<string, unknown>
+  const current = target.toJSON() as Record<string, unknown>
+  for (const [key, value] of Object.entries(wanted)) {
+    if (typeof value === 'string') {
+      const text = target.getText(key)
+      if (text.toString() !== value) {
+        text.delete(0, text.length)
+        if (value.length > 0) text.insert(0, value)
+      }
+    } else if (Array.isArray(value)) {
+      const list = target.getMovableList(key)
+      if (!jsonEqual(list.toJSON(), value)) {
+        for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
+        for (const entry of value) list.push(entry as Parameters<typeof list.push>[0])
+      }
+    } else if (typeof value === 'object' && value !== null) {
+      const map = target.getMap(key)
+      const existing = map.toJSON() as Record<string, unknown>
+      const entries = value as Record<string, unknown>
+      for (const [entryKey, entryValue] of Object.entries(entries)) {
+        if (!jsonEqual(existing[entryKey], entryValue)) map.set(entryKey, entryValue)
+      }
+      for (const entryKey of Object.keys(existing)) {
+        if (!(entryKey in entries)) map.delete(entryKey)
+      }
+    }
+  }
+  for (const [key, value] of Object.entries(current)) {
+    if (key in wanted) continue
+    if (typeof value === 'string') {
+      const text = target.getText(key)
+      if (text.length > 0) text.delete(0, text.length)
+    } else if (Array.isArray(value)) {
+      const list = target.getMovableList(key)
+      for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
+    } else if (typeof value === 'object' && value !== null) {
+      const map = target.getMap(key)
+      for (const entryKey of Object.keys(map.toJSON() as Record<string, unknown>)) {
+        map.delete(entryKey)
+      }
+    }
+  }
+  target.commit()
+}
+
 export function documentContainers(doc: LoroDoc, documentId: string): DocumentContainers {
   const node = nodeById(doc, documentId)
   if (node === null) throw new Error(`No document "${documentId}" in this workspace`)

@@ -147,6 +147,11 @@ function workspaceDocCacheKey(workspaceId: string): string {
   return `${getDataDir()}::${workspaceId}`
 }
 
+/** Test-only: drops every cached live workspace document, simulating a restart. */
+export function _clearWorkspaceDocCacheForTests(): void {
+  workspaceDocCache.clear()
+}
+
 export async function getWorkspaceDoc(workspaceId: string): Promise<LoroDoc> {
   const key = workspaceDocCacheKey(workspaceId)
   const cached = workspaceDocCache.get(key)

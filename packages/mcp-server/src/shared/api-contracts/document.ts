@@ -65,6 +65,13 @@ export const saveVersionRequestSchema = z.object({
 export const restoreVersionRequestSchema = z.object({
   targetPath: z.string().trim().min(1).optional(),
   overwrite: z.boolean().optional(),
+  /**
+   * In-place mode only: roll the document AND its descendants back to this
+   * version — descendants revert, documents deleted since come back, and
+   * documents created since are deleted (evacuated through the trash).
+   * Requires a workspace-scoped version; incompatible with `targetPath`.
+   */
+  subtree: z.boolean().optional(),
 })
 
 export const exportDocumentJsonRequestSchema = z.object({

@@ -59,6 +59,8 @@ interface VersionsTable {
   frontiers: string
   hasThumbnail: Bool
   createdAt: Timestamp
+  /** 1: frontiers point into the WORKSPACE document's oplog; 0: the legacy per-document oplog. */
+  workspaceScoped: Bool
 }
 
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,

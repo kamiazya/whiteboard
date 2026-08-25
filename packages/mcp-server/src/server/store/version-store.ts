@@ -1,5 +1,10 @@
 import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import {
+  projectWorkspaceDocument,
+  resolveWorkspaceDocumentById,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { nanoid } from 'nanoid'
@@ -16,6 +21,7 @@ import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertDocumentRow } from './db/upsert-workspace.js'
+import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -63,6 +69,12 @@ export interface VersionStore {
   // liveDoc is passed in so checkout can happen on a clone without affecting
   // the live document. Returns an independent past-state doc.
   load(workspaceId: string, id: string, liveDoc: LoroDoc): Promise<LoroDoc | null>
+  /**
+   * The whole WORKSPACE document checked out at this version — the input a
+   * subtree rollback walks. Null for a missing version and for a legacy
+   * (per-document-scoped) one, whose checkpoint holds a single document.
+   */
+  loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
   saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void>
   loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null>
@@ -202,12 +214,25 @@ export class FileVersionStore implements VersionStore {
         }
       })()
 
-      const frontiers = bytesToBase64(encodeFrontiers(doc.frontiers()))
       const createdAt = Date.now()
       const operator = opts.operator
 
       const db = await dbReady()
       const documentId = await upsertDocumentRow(db, workspaceId, path)
+      // A tree-served document's checkpoint lives in the WORKSPACE document's
+      // oplog: that lineage is durable across restarts, while a projection's
+      // is reborn per process — frontiers recorded against it would break on
+      // the first daemon restart. The stored record (not a cache) is read,
+      // because a checkpoint must point at persisted ops.
+      const storedWorkspace = await new DocumentStoreWorkspaceDocs(
+        new LibsqlDocumentStore(db),
+      ).open(workspaceId)
+      const workspaceScoped =
+        storedWorkspace !== null &&
+        resolveWorkspaceDocumentById(storedWorkspace, documentId) !== null
+      const frontiers = bytesToBase64(
+        encodeFrontiers(workspaceScoped ? storedWorkspace.frontiers() : doc.frontiers()),
+      )
       await db
         .insertInto('versions')
         .values({
@@ -225,6 +250,7 @@ export class FileVersionStore implements VersionStore {
           frontiers,
           hasThumbnail: 0,
           createdAt,
+          workspaceScoped: workspaceScoped ? 1 : 0,
         })
         .execute()
 
@@ -251,11 +277,37 @@ export class FileVersionStore implements VersionStore {
     const row = await db
       .selectFrom('versions')
       .innerJoin('documents', 'documents.id', 'versions.documentId')
-      .select(['versions.frontiers'])
+      .select(['versions.frontiers', 'versions.workspaceScoped', 'versions.documentId'])
       .where('documents.workspaceId', '=', workspaceId)
       .where('versions.id', '=', id)
       .executeTakeFirst()
     if (!row) return null
+    if (row.workspaceScoped === 1) {
+      // Checked out against the STORED workspace document, whose oplog the
+      // frontiers were recorded in — never against the live per-document
+      // projection, whose fresh lineage does not contain them. The past
+      // state is then projected back out as a standalone doc, which is the
+      // shape every caller expects.
+      const storedWorkspace = await new DocumentStoreWorkspaceDocs(
+        new LibsqlDocumentStore(db),
+      ).open(workspaceId)
+      if (storedWorkspace === null) {
+        throw corruptStoredData(
+          `versions/${id}`,
+          'workspace-scoped version has no stored workspace document to check out against',
+        )
+      }
+      const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
+      try {
+        clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
+      } catch (error) {
+        throw corruptStoredData(
+          `versions/${id}`,
+          `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
+        )
+      }
+      return projectWorkspaceDocument(clone, row.documentId)
+    }
     // Fork the live doc through a snapshot so checkout does not affect the
     // live attached document. The clone stays in detached mode after checkout;
     // toJSON reflects the past state but commit/insert are blocked, which is
@@ -268,6 +320,34 @@ export class FileVersionStore implements VersionStore {
       throw corruptStoredData(
         `versions/${id}`,
         `frontiers could not be checked out against the live document (${errorMessage(error)})`,
+      )
+    }
+    return clone
+  }
+
+  async loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null> {
+    validateWorkspaceId(workspaceId)
+    validateVersionId(id)
+    const db = await dbReady()
+    const row = await db
+      .selectFrom('versions')
+      .innerJoin('documents', 'documents.id', 'versions.documentId')
+      .select(['versions.frontiers', 'versions.workspaceScoped'])
+      .where('documents.workspaceId', '=', workspaceId)
+      .where('versions.id', '=', id)
+      .executeTakeFirst()
+    if (!row || row.workspaceScoped !== 1) return null
+    const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
+      workspaceId,
+    )
+    if (storedWorkspace === null) return null
+    const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
+    try {
+      clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
+    } catch (error) {
+      throw corruptStoredData(
+        `versions/${id}`,
+        `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
       )
     }
     return clone
@@ -439,6 +519,10 @@ export class FileVersionStore implements VersionStore {
       .selectFrom('versions')
       .select(['frontiers'])
       .where('documentId', '=', documentId)
+      // Workspace-scoped rows point into the workspace document's oplog,
+      // which per-document compaction cannot truncate — only legacy rows
+      // constrain it.
+      .where('workspaceScoped', '=', 0)
       .orderBy('createdAt', 'asc')
       .orderBy('id', 'asc')
       .limit(1)
