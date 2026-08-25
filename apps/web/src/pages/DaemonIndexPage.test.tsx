@@ -1302,6 +1302,75 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('status', { name: /loading documents/i })).toBeNull()
   })
 
+  it('a daemon holding no workspaces says so, instead of spinning on the skeleton forever', async () => {
+    // The list resolving EMPTY is not the same event as it failing, and it is
+    // not "still loading" either: there is simply nothing to select, so the
+    // documents fetch that would end the skeleton never runs. Measured before
+    // this test existed: `{ skeleton: true, createButtons: 0 }`, permanently.
+    const routes = {
+      workspaces: [] as Array<{ workspaceId: string }>,
+      documentsByWorkspace: {} as Record<string, never[]>,
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect(await screen.findByText(/no workspaces/i)).toBeTruthy()
+    expect(screen.queryByRole('status', { name: /loading documents/i })).toBeNull()
+    // And no control that cannot work: every create path needs a workspace to
+    // create INTO, and there is none.
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+  })
+
+  it('the no-workspaces state re-lists on demand, landing on a workspace that appeared since', async () => {
+    // The recovery here is someone else's write — an agent over MCP, the CLI —
+    // so the one action the page can honestly offer is to look again.
+    const routes = {
+      workspaces: [] as Array<{ workspaceId: string }>,
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await screen.findByText(/no workspaces/i)
+
+    routes.workspaces = [{ workspaceId: 'ws-a' }]
+    fireEvent.click(screen.getByRole('button', { name: /check again/i }))
+
+    expect(await screen.findByText('alpha')).toBeTruthy()
+  })
+
+  it('a failed workspace list offers a retry rather than a create button with nowhere to create', async () => {
+    // The create control this branch renders is a real recovery path when the
+    // DOCUMENTS list failed — the POST needs no rows. When the WORKSPACE list
+    // is what failed there is no selection behind it, so `handleCreate`
+    // returns at its first line and the button does nothing at all.
+    let listAttempts = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        listAttempts += 1
+        if (listAttempts === 1) return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(
+          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}, 404))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Failed to load workspaces.')
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(await screen.findByText('alpha')).toBeTruthy()
+  })
+
   it('empty workspace shows one clear next action that creates and opens a canvas', async () => {
     const created: Array<[string, string]> = []
     installFetchMock({
