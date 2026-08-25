@@ -8,6 +8,7 @@
  * suite says so rather than a comment claiming it does.
  */
 
+import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
@@ -41,9 +42,36 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs {
   }
 }
 
+/** Enough of a `BlobStore` for the evacuation a delete performs. */
+function inMemoryBlobStore(): BlobStore {
+  const blobs = new Map<string, Uint8Array>()
+  const key = (ref: BlobRef) => `${ref.algorithm}:${ref.digestHex}`
+  let next = 0
+  return {
+    async put({ bytes }) {
+      // A counter, not a real digest: nothing here reads the ref back for its
+      // content-addressing, and a fake keeps this double synchronous in spirit.
+      next += 1
+      const ref = { algorithm: 'sha-256', digestHex: String(next).padStart(64, '0') } as const
+      blobs.set(key(ref), new Uint8Array(bytes))
+      return { ref }
+    },
+    async get({ ref }) {
+      const bytes = blobs.get(key(ref))
+      return bytes === undefined ? null : { bytes: new Uint8Array(bytes) }
+    },
+    async has({ ref }) {
+      return { exists: blobs.has(key(ref)) }
+    },
+    async delete({ ref }) {
+      blobs.delete(key(ref))
+    },
+  }
+}
+
 describe('LoroWorkspaceDocumentIndex', () => {
   describeDocumentIndexConformance(async () => ({
-    index: new LoroWorkspaceDocumentIndex(inMemoryWorkspaceDocs()),
+    index: new LoroWorkspaceDocumentIndex(inMemoryWorkspaceDocs(), inMemoryBlobStore()),
     dispose: async () => {},
   }))
 })

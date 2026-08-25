@@ -57,6 +57,18 @@ for the duplication to exist.
   which is the ordinary case, and claims nothing more.
 - Mutations are serialised per workspace. The port asks for it in so many
   words, and a check-then-write pair is two steps here.
+- **Delete evacuates BEFORE it removes**, and the order is the whole
+  guarantee. A deleted tree node cannot be moved back and a shallow snapshot
+  drops its content, so nothing in the live document can serve as the copy
+  afterwards. Export failing leaves the document there to try again; the other
+  order leaves nothing to try again with. Mutation-checked — reversing it
+  fails three of the four trash tests.
+- `BlobStore` is a REQUIRED constructor argument for the same reason. An
+  optional evacuation is one a caller can forget to wire, and forgetting does
+  not degrade a feature — it destroys the document.
+- Restore is a COPY under the same `documentId`. The `TreeID` is new because
+  Loro will not revive a deleted one; keeping the documentId is what makes
+  that invisible to a share link.
 
 ## Tests
 

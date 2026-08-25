@@ -10,19 +10,32 @@
  * ordering promise, the error taxonomy, and the collision rules a CRDT does
  * not enforce on its own.
  */
+
+import type {
+  DocumentContainers,
+  TrashEntry,
+  WorkspaceDocumentEntry,
+} from '@kamiazya/whiteboard-loro-adapter'
 import {
   createWorkspaceDocumentAtPath,
   deleteWorkspaceNodeAtPath,
+  documentContainers,
+  exportWorkspaceSubtree,
+  forgetTrashEntry,
+  importWorkspaceSubtree,
   moveWorkspaceNodeToPath,
   pruneEmptyFolders,
+  readTrashEntries,
   readWorkspaceDocuments,
   readWorkspaceNodes,
+  recordTrashEntry,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import type {
+  BlobStore,
   CreateDocumentInput,
   CreateWorkspaceInput,
   DeleteDocumentInput,
@@ -52,7 +65,68 @@ function rewritten(path: string, from: string, to: string): string {
 }
 
 export class LoroWorkspaceDocumentIndex implements DocumentIndex {
-  constructor(private readonly docs: WorkspaceDocs) {}
+  /**
+   * `blobs` is required, not optional.
+   *
+   * An optional evacuation is one a caller can forget to wire, and the cost of
+   * forgetting is not a degraded feature — it is a delete that destroys the
+   * document with no way back, because a deleted tree node cannot be revived
+   * and a shallow snapshot drops its content. The constructor is where that
+   * is made impossible.
+   */
+  constructor(
+    private readonly docs: WorkspaceDocs,
+    private readonly blobs: BlobStore,
+  ) {}
+
+  /** A document's containers, for the content bridge. */
+  documentContainers(doc: LoroDoc, documentId: string): DocumentContainers {
+    return documentContainers(doc, documentId)
+  }
+
+  /** What this workspace could still bring back, newest first. */
+  async listTrash(input: { workspaceId: string }): Promise<TrashEntry[]> {
+    const doc = await this.#open(input.workspaceId)
+    return readTrashEntries(doc)
+  }
+
+  /**
+   * Brings a deleted document back, under the `documentId` it had.
+   *
+   * A COPY rather than an undelete — Loro refuses to move a deleted node back
+   * — so the restored document has a new `TreeID`. Keeping the documentId is
+   * what makes that invisible to anything that named the document: a share
+   * link resolves to the same document it always did.
+   *
+   * Not part of the `DocumentIndex` port. The port is about placement, and
+   * this reaches into content and blob storage; a caller that wants it holds
+   * this class.
+   */
+  async restoreDocument(input: {
+    workspaceId: string
+    documentId: string
+  }): Promise<WorkspaceDocumentEntry | null> {
+    return this.#serialise(input.workspaceId, async () => {
+      const doc = await this.#open(input.workspaceId)
+      const entry = readTrashEntries(doc).find((row) => row.documentId === input.documentId)
+      if (entry === undefined) return null
+      const stored = await this.blobs.get({ ref: entry.blob })
+      // The row survives a missing blob rather than being swept: it is the
+      // only record that the document existed, and a listing that dropped it
+      // would answer "there was never anything to restore".
+      if (stored === null) return null
+      const segments = entry.path.split('/')
+      const restored = importWorkspaceSubtree(
+        doc,
+        stored.bytes,
+        segments.length > 1 ? segments.slice(0, -1).join('/') : undefined,
+      )
+      if (restored === null) return null
+      forgetTrashEntry(doc, input.documentId)
+      await this.docs.save(input.workspaceId, doc)
+      return restored
+    })
+  }
 
   /**
    * Serialised per workspace, which is what the port asks for in so many
@@ -223,6 +297,31 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
           input.path,
           `Delete or move its ${descendants.length} descendant(s) first.`,
         )
+      }
+      // EVACUATE FIRST. The order is the whole guarantee: if the export or the
+      // blob write fails, the document is still there and the caller can try
+      // again. The other order leaves nothing to try again with — a deleted
+      // node cannot be moved back, and the next compaction drops its content.
+      //
+      // Only a DOCUMENT is evacuated. A folder holds no content of its own,
+      // so there is nothing to bring back and a trash row for one would offer
+      // a restore that restores nothing.
+      if (target.type === 'document') {
+        const bytes = exportWorkspaceSubtree(doc, input.path)
+        if (bytes !== null) {
+          const { ref } = await this.blobs.put({
+            // Copied so the DTO's narrow buffer type is satisfied without a
+            // cast: Loro's export is `Uint8Array<ArrayBufferLike>`.
+            bytes: new Uint8Array(bytes),
+            contentType: 'application/octet-stream',
+          })
+          recordTrashEntry(doc, {
+            documentId: target.meta.documentId,
+            path: input.path,
+            deletedAt: Date.now(),
+            blob: ref,
+          })
+        }
       }
       deleteWorkspaceNodeAtPath(doc, input.path)
       pruneEmptyFolders(doc)
