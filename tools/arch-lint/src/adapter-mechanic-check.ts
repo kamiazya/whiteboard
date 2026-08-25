@@ -31,12 +31,17 @@ function walk(dir: string, acc: string[] = []): string[] {
  * Every `<adapter file> -> <mechanic module>` edge that exists today, as the
  * strings the allowlist is written in.
  *
- * A mechanic is named by its path UNDER `store/`, so the database layer
- * appears as `db/<module>` and cannot be confused with a same-named module at
- * the top level. That nesting used to be invisible: the matcher read a single
- * path segment, so every `store/db/**` import passed the guard silently — a
- * blind spot, not a decision, and the kind that reads as coverage until
- * someone measures it.
+ * A mechanic is named by its FULL path under `store/`, at whatever depth, so
+ * the database layer appears as `db/<module>` and cannot be confused with a
+ * same-named module at the top level. That nesting used to be invisible: the
+ * matcher read a single path segment, so every `store/db/**` import passed the
+ * guard silently — a blind spot, not a decision, and the kind that reads as
+ * coverage until someone measures it.
+ *
+ * The depth is deliberately unbounded rather than spelling out the one level
+ * that exists today. `store/db/` is how deep the tree happens to go, not a
+ * property of it, and a matcher that enumerates the depths it has seen is the
+ * same blind spot waiting one directory further down.
  *
  * `exemptFiles` are files inside an adapter tree that are NOT adapters (see
  * `ADAPTER_SCAN_EXEMPT_FILES`); they are skipped whole rather than having
@@ -59,7 +64,7 @@ export function findAdapterMechanicEdges(
       const from = relative(serverDir, file).split('\\').join('/')
       if (exempt.has(from)) continue
       for (const match of readFileSync(file, 'utf8').matchAll(
-        /from '[^']*store\/((?:db\/)?[a-z0-9-]+)\.js'/g,
+        /from '[^']*store\/([a-z0-9-]+(?:\/[a-z0-9-]+)*)\.js'/g,
       )) {
         const mechanic = match[1] as string
         if (excluded.has(mechanic)) continue

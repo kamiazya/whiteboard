@@ -63,7 +63,7 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
   // Asserted against a FIXTURE rather than the real tree, because the real
   // tree is meant to hold no such edge: a guard whose only evidence is a
   // violation that exists today stops proving anything the day it is fixed.
-  describe('the matcher sees a mechanic nested under store/db', () => {
+  describe('the matcher sees a mechanic at any depth under store/', () => {
     const fixture = mkdtempSync(join(tmpdir(), 'arch-lint-adapter-'))
     afterAll(() => rmSync(fixture, { recursive: true, force: true }))
 
@@ -74,7 +74,11 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
       [
         "import { upsertWorkspaceRow } from '../store/db/upsert-workspace.js'",
         "import { getDocCache } from '../store/doc-cache.js'",
-        'export const thing = [upsertWorkspaceRow, getDocCache]',
+        // Depth is not a property of today's tree: `store/db/` is simply how
+        // deep it happens to go. A matcher that hard-codes the depths it has
+        // seen is the same blind spot one level down.
+        "import { deep } from '../store/db/workspaces/upsert-row.js'",
+        'export const thing = [upsertWorkspaceRow, getDocCache, deep]',
       ].join('\n'),
     )
     writeFileSync(join(fixture, 'mcp', 'noop.ts'), 'export const noop = 1\n')
@@ -82,6 +86,7 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
     it('names it by its path under store/, so db/x cannot be read as x', () => {
       expect(findAdapterMechanicEdges(fixture, [])).toEqual([
         'routes/thing.ts -> db/upsert-workspace',
+        'routes/thing.ts -> db/workspaces/upsert-row',
         'routes/thing.ts -> doc-cache',
       ])
     })

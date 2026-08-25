@@ -1,4 +1,4 @@
-import { mkdtemp, rm } from 'node:fs/promises'
+import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -61,13 +61,25 @@ describe('ensureWorkspaceId', () => {
     expect(rows.map((r) => r.id)).toEqual([id])
   })
 
-  it('drops a failed promise from the cache so a subsequent call can retry', async () => {
-    // /dev/null cannot host a directory, so libsql will fail to open the .db
-    // file under it and prepareDataDir rejects. Treating that rejection as
-    // sticky would make every later call against a writable dir share the
-    // failed promise; the cache must therefore be cleared on rejection.
-    const bogus = '/dev/null/cannot-write-here'
-    await expect(ensureWorkspaceId(bogus)).rejects.toBeDefined()
-    await expect(ensureWorkspaceId(dataDir)).resolves.toMatch(/^[A-Za-z0-9_-]{21}$/)
+  it('drops a failed promise from the cache so a subsequent call on THAT path can retry', async () => {
+    // Treating a rejection as sticky would make every later call against the
+    // same dataDir share the failed promise, so a data dir that becomes usable
+    // could never be reached again in this process.
+    //
+    // Both halves must use the SAME path, because `ensureCache` is keyed by
+    // dataDir: retrying a DIFFERENT path exercises a key that never had an
+    // entry, and passes whether or not the cache is cleared. Measured — with
+    // the eviction deleted, the earlier form of this test stayed green.
+    //
+    // A plain file standing where the directory should be is what makes the
+    // first call fail, and it is reversible in-process. Permissions are not
+    // usable here: the suite also runs as root, where `chmod 000` denies
+    // nothing and the rejection never happens.
+    const blocked = join(dataDir, 'occupied')
+    await writeFile(blocked, 'not a directory')
+    await expect(ensureWorkspaceId(blocked)).rejects.toBeDefined()
+
+    await rm(blocked)
+    await expect(ensureWorkspaceId(blocked)).resolves.toMatch(/^[A-Za-z0-9_-]{21}$/)
   })
 })

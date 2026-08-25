@@ -58,12 +58,15 @@ translation, which is an adapter's job, and listing it would put five
 permanently-unshrinkable entries in a list whose whole value is that it
 shrinks.
 
-A mechanic is named by its path UNDER `store/`, so the database layer reads
-as `db/<module>`. It used to be invisible: the matcher read a single path
-segment, so every `store/db/**` import from an adapter passed the guard
-silently. That was a blind spot rather than a decision, and it read as
-coverage until someone measured it — four such edges existed when the regex
-was widened, all under `mcp/`.
+A mechanic is named by its FULL path under `store/`, at whatever depth, so
+the database layer reads as `db/<module>`. It used to be invisible: the
+matcher read a single path segment, so every `store/db/**` import from an
+adapter passed the guard silently. That was a blind spot rather than a
+decision, and it read as coverage until someone measured it — four such
+edges existed when the regex was widened, all under `mcp/`. The depth is
+unbounded on purpose: `store/db/` is how deep the tree happens to go today,
+not a property of it, and a matcher enumerating the depths it has seen is
+the same blind spot one directory further down.
 
 The wiring exemption above is a DIRECTORY list, which misses a composition
 root that happens to live inside an adapter tree. `ADAPTER_SCAN_EXEMPT_FILES`
