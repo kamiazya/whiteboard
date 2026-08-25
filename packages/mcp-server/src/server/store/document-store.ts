@@ -30,6 +30,7 @@ import {
   isSelfOrDescendant,
   planSubtreeMove,
   reassembleSnapshot,
+  shouldCompact,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import type { Value } from 'loro-crdt'
@@ -126,14 +127,23 @@ async function saveSnapshotLocked(
   documentId: string,
   snapshot: Uint8Array,
   frontier: Uint8Array<ArrayBuffer>,
+  supersededDeltaCount: number,
 ): Promise<void> {
   await withDocumentWriteLock(documentId, async () => {
     const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
-    await documentStore.saveSnapshot({
-      docRef: { kind: 'document', documentId },
+    const docRef = { kind: 'document' as const, documentId }
+    if (supersededDeltaCount === 0) {
+      await documentStore.saveSnapshot({ docRef, manifest, chunks, frontier })
+      return
+    }
+    // One operation rather than save-then-clear, so an append landing between
+    // the two halves is not dropped.
+    await documentStore.saveCompactedSnapshot({
+      docRef,
       manifest,
       chunks,
       frontier,
+      supersededDeltaCount,
     })
   })
 }
@@ -181,6 +191,42 @@ async function importStoredIfBehind(
   if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
 }
 
+function totalBytes(deltas: readonly Uint8Array[]): number {
+  return deltas.reduce((sum, delta) => sum + delta.byteLength, 0)
+}
+
+/**
+ * Writes `doc` as a whole, replacing whatever snapshot was there.
+ *
+ * The fallback for every case an append cannot serve: no stored base yet, a
+ * base this build cannot read, or a delta log grown past the fold budget.
+ */
+async function writeWholeSnapshot(
+  documentStore: LibsqlDocumentStore,
+  docRef: { kind: 'document'; documentId: string },
+  doc: LoroDoc,
+  supersededDeltaCount: number,
+): Promise<number> {
+  const snapshot = doc.export({ mode: 'snapshot' })
+  const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
+  const frontier = doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>
+  if (supersededDeltaCount === 0) {
+    await documentStore.saveSnapshot({ docRef, manifest, chunks, frontier })
+  } else {
+    // One operation, not save-then-clear: an append landing between the two
+    // halves would be dropped, and it is neither in this snapshot nor
+    // superseded by it.
+    await documentStore.saveCompactedSnapshot({
+      docRef,
+      manifest,
+      chunks,
+      frontier,
+      supersededDeltaCount,
+    })
+  }
+  return snapshot.byteLength
+}
+
 async function mergeAndSaveSnapshotLocked(
   documentStore: LibsqlDocumentStore,
   workspaceId: string,
@@ -189,23 +235,78 @@ async function mergeAndSaveSnapshotLocked(
 ): Promise<number> {
   const docRef = { kind: 'document' as const, documentId }
   return withDocumentWriteLock(documentId, async () => {
+    let merged = true
     try {
       await importStoredIfBehind(documentStore, documentId, doc)
     } catch (err) {
+      merged = false
       getLogger('document').warning(
         { workspaceId, documentId, err: err as Error },
         'stored snapshot failed to merge before save; overwriting',
       )
     }
-    const snapshot = doc.export({ mode: 'snapshot' })
-    const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
-    await documentStore.saveSnapshot({
+
+    // Read the log BEFORE deciding, because every branch needs it. An
+    // overwrite has to say how much of it the new snapshot supersedes: a
+    // whole-snapshot write that left the log behind would have `loadDocument`
+    // replay deltas anchored to bytes that are gone.
+    const existing = (await documentStore.loadDeltas({ docRef, sinceFrontier: new Uint8Array() }))
+      .updates
+
+    // A base this build cannot read is one of the cases that must still
+    // overwrite. Appending to it would leave a log anchored to bytes nothing
+    // can load — the document would read as damaged forever instead of being
+    // repaired by the next save.
+    let manifest: Awaited<ReturnType<LibsqlDocumentStore['readSnapshotManifest']>> = null
+    if (merged) {
+      try {
+        manifest = await documentStore.readSnapshotManifest({ docRef })
+      } catch {
+        return writeWholeSnapshot(documentStore, docRef, doc, existing.length)
+      }
+    }
+    const stored = manifest === null ? null : await documentStore.readFrontier({ docRef })
+    // No base, an unreadable one, or one with no frontier to compute a delta
+    // against. The last is not merely unlikely — it is the case where a
+    // "nothing to do" answer would be a silent lost update, so it writes.
+    if (!merged || manifest === null || stored === null) {
+      return writeWholeSnapshot(documentStore, docRef, doc, existing.length)
+    }
+
+    // A VERSION comparison, not a byte count. An update carrying no ops is
+    // still 22 bytes of envelope, so testing `byteLength === 0` never fires
+    // and every save of an untouched document would append those 22 bytes —
+    // an autosave loop grows the log forever with nothing in it.
+    const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
+    if (comparison === 0) {
+      return manifest.totalBytes + totalBytes(existing)
+    }
+
+    const update = doc.export({
+      mode: 'update',
+      from: VersionVector.decode(stored.frontier),
+    }) as Uint8Array<ArrayBuffer>
+
+    // Folding is cheap HERE in a way it is not in the browser: the live
+    // document already holds every op, so the fold is just the whole-snapshot
+    // write this function used to do unconditionally. The browser has only
+    // the stored bytes and must replay them to reach the same state.
+    if (shouldCompact([...existing, update])) {
+      return writeWholeSnapshot(documentStore, docRef, doc, existing.length)
+    }
+
+    await documentStore.appendDeltas({
       docRef,
-      manifest,
-      chunks,
-      frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+      deltaBatch: {
+        updates: [update],
+        newFrontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+      },
     })
-    return snapshot.byteLength
+    // What the document occupies, for the soft-cap warning: the base plus the
+    // log it now carries. The snapshot's own size no longer moves on a save,
+    // so reporting it alone would make a document look like it stopped
+    // growing the moment it started being appended to.
+    return manifest.totalBytes + totalBytes(existing) + update.byteLength
   })
 }
 
@@ -366,6 +467,23 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
       throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
         locationKind: 'identity',
       })
+    }
+    // The snapshot is the BASE, not the document. Since saves append rather
+    // than rewrite, everything written since the last fold is in the log, and
+    // a read that stopped at the snapshot would serve a document missing its
+    // most recent edits — the newest ones, which is the worst half to lose.
+    const { updates } = await documentStore.loadDeltas({
+      docRef: { kind: 'document', documentId },
+      sinceFrontier: new Uint8Array(),
+    })
+    for (const update of updates) {
+      try {
+        doc.import(update)
+      } catch (error) {
+        throw corruptStoredData(blobPath, `invalid canvas delta (${errorMessage(error)})`, {
+          locationKind: 'identity',
+        })
+      }
     }
   } catch (error) {
     if (isCorruptStoredDataError(error)) {
@@ -629,7 +747,17 @@ export async function compactDocument(
     if (existing === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
-    const beforeBytes = existing.manifest.totalBytes
+    // The log, read inside the lock alongside the base. Compaction rewrites
+    // the whole stored state, so it has to SEE the whole stored state: a save
+    // appends rather than rewrites, and a compaction that read only the base
+    // would fold a document missing every edit since the last fold and then
+    // write that as the new truth.
+    const { updates: storedDeltas } = await documentStore.loadDeltas({
+      docRef,
+      sinceFrontier: new Uint8Array(),
+    })
+    const beforeBytes =
+      existing.manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
 
     const cut = await versionStore.earliestFrontiers(workspaceId, path)
     if (!cut) {
@@ -662,6 +790,15 @@ export async function compactDocument(
         locationKind: 'identity',
       })
     }
+    for (const update of storedDeltas) {
+      try {
+        doc.import(update)
+      } catch (error) {
+        throw corruptStoredData(blobPath, `invalid canvas delta (${errorMessage(error)})`, {
+          locationKind: 'identity',
+        })
+      }
+    }
 
     const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
     if (shallow.byteLength >= beforeBytes) {
@@ -672,6 +809,10 @@ export async function compactDocument(
       documentId,
       shallow,
       doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+      // Exactly the log this fold consumed. Anything appended since the read
+      // above is neither in `shallow` nor superseded by it, and dropping it
+      // would lose an edit that arrived while compaction ran.
+      storedDeltas.length,
     )
     // Stamp the canvas row so the auto-Optimize loop can skip documents that
     // have not changed since the last successful compaction, and so the UI

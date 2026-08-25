@@ -7,9 +7,9 @@
  */
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import { COMPACT_DELTA_BYTES } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
-import { COMPACT_DELTA_BYTES } from './loro-compaction.js'
 import { LoroStore } from './loro-store.js'
 
 function canvasWith(n: number, nudge = 0): SpatialCanvas {

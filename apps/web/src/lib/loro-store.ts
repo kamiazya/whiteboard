@@ -21,12 +21,12 @@ import {
   chunkSnapshot,
   isStoredDocumentUnreadableError,
   reassembleSnapshot,
+  shouldCompact,
 } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { inTransaction, request } from './idb-tx.js'
-import { shouldCompact } from './loro-compaction.js'
 
 /**
  * Narrow surface consumers need to seed, read back, and persist a document's

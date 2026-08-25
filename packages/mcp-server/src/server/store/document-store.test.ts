@@ -153,26 +153,53 @@ describe('saveDocument nests withDocumentWriteLock (identity-convergence flip)',
     const docRef = { kind: 'document' as const, documentId }
 
     // Patch the class prototype (not one instance) so this observes every
-    // saveSnapshot call for this document, including document-store.ts's
-    // own internally-cached LibsqlDocumentStore instance.
+    // write for this document, including document-store.ts's own
+    // internally-cached LibsqlDocumentStore instance.
+    //
+    // BOTH write paths are wrapped, because a save picks between them: it
+    // appends a delta normally and writes a whole snapshot only when there is
+    // no base or the log has grown past the fold budget. Watching
+    // `saveSnapshot` alone counted the tool's write and missed the one racing
+    // it — which reads as "no interleaving happened" and is how this test
+    // would stop testing anything.
     const events: string[] = []
     const originalSaveSnapshot = LibsqlDocumentStore.prototype.saveSnapshot
+    const originalAppendDeltas = LibsqlDocumentStore.prototype.appendDeltas
     let delayedOnce = false
+    const forDoc = (docRef: { kind: string; documentId?: string }): boolean =>
+      docRef.kind === 'document' && docRef.documentId === documentId
+    // Hold the FIRST write open (the tool's) so a concurrent, unserialized
+    // saveDocument call has a real window to land its own write before the
+    // tool's completes — the exact interleaving the canvas-doc lock exists to
+    // rule out.
+    async function delayFirst(): Promise<void> {
+      if (delayedOnce) return
+      delayedOnce = true
+      await new Promise((r) => setTimeout(r, 50))
+    }
     LibsqlDocumentStore.prototype.saveSnapshot = async function (
       this: InstanceType<typeof LibsqlDocumentStore>,
       input,
     ) {
-      const forThisDoc = input.docRef.kind === 'document' && input.docRef.documentId === documentId
-      if (forThisDoc) events.push('save-start')
-      // Hold the FIRST save call open (the tool's) so a concurrent,
-      // unserialized saveDocument call has a real window to land its own
-      // save call before the tool's completes — the exact interleaving
-      // the canvas-doc lock exists to rule out.
-      if (forThisDoc && !delayedOnce) {
-        delayedOnce = true
-        await new Promise((r) => setTimeout(r, 50))
+      const forThisDoc = forDoc(input.docRef)
+      if (forThisDoc) {
+        events.push('save-start')
+        await delayFirst()
       }
       const result = await originalSaveSnapshot.call(this, input)
+      if (forThisDoc) events.push('save-end')
+      return result
+    }
+    LibsqlDocumentStore.prototype.appendDeltas = async function (
+      this: InstanceType<typeof LibsqlDocumentStore>,
+      input,
+    ) {
+      const forThisDoc = forDoc(input.docRef)
+      if (forThisDoc) {
+        events.push('save-start')
+        await delayFirst()
+      }
+      const result = await originalAppendDeltas.call(this, input)
       if (forThisDoc) events.push('save-end')
       return result
     }
@@ -205,6 +232,7 @@ describe('saveDocument nests withDocumentWriteLock (identity-convergence flip)',
       await Promise.all([toolWrite, httpWrite])
     } finally {
       LibsqlDocumentStore.prototype.saveSnapshot = originalSaveSnapshot
+      LibsqlDocumentStore.prototype.appendDeltas = originalAppendDeltas
     }
 
     // Every save-start for this document is either the tool's own single
@@ -410,6 +438,91 @@ describe('saveDocument / loadDocument', () => {
       docRef: { kind: 'document', documentId: documentId! },
     })
     expect(result?.frontier).toEqual(doc.oplogVersion().encode())
+  })
+
+  it('appends a delta on re-save instead of rewriting the whole snapshot', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+
+    // Big enough that rewriting it would be the obvious cost. The daemon
+    // exported the whole thing on EVERY save, so an 88-byte edit to a
+    // megabyte document wrote a megabyte.
+    const doc = new LoroDoc()
+    const nodes = doc.getMap('nodes')
+    for (let i = 0; i < 4000; i += 1) nodes.set(`n${i}`, { type: 'text', x: i, text: `node ${i}` })
+    doc.commit()
+    await saveDocument('session1', 'incremental', doc)
+
+    const db = await getDb(tempDir)
+    const documentId = await getDocumentIdByPath(db, 'session1', 'incremental')
+    const docRef = { kind: 'document' as const, documentId: documentId! }
+    const store = new LibsqlDocumentStore(db)
+    const baseline = await store.readSnapshotManifest({ docRef })
+    expect(baseline).not.toBeNull()
+
+    nodes.set('n0', { type: 'text', x: 999, text: 'edited' })
+    doc.commit()
+    await saveDocument('session1', 'incremental', doc, { overwrite: true })
+
+    // The snapshot is untouched — byte-for-byte the one the first save wrote.
+    expect(await store.readSnapshotManifest({ docRef })).toEqual(baseline)
+    // And the edit is in the delta log, small.
+    const { updates } = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    expect(updates).toHaveLength(1)
+    expect(updates[0]!.byteLength).toBeLessThan(baseline!.totalBytes / 10)
+    // The frontier still describes the document as a whole, deltas included.
+    expect((await store.readFrontier({ docRef }))?.frontier).toEqual(doc.oplogVersion().encode())
+  })
+
+  it('does not grow the delta log when the document has not changed', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+
+    const doc = new LoroDoc()
+    doc.getMap('nodes').set('a', { text: 'only edit' })
+    doc.commit()
+    await saveDocument('session1', 'idle', doc)
+
+    // Saves with nothing between them. An autosave loop and a WS heartbeat
+    // both produce exactly this, so a log that grows here grows without a
+    // bound on an untouched document.
+    for (let i = 0; i < 5; i += 1) {
+      await saveDocument('session1', 'idle', doc, { overwrite: true })
+    }
+
+    const db = await getDb(tempDir)
+    const documentId = await getDocumentIdByPath(db, 'session1', 'idle')
+    const store = new LibsqlDocumentStore(db)
+    const { updates } = await store.loadDeltas({
+      docRef: { kind: 'document', documentId: documentId! },
+      sinceFrontier: new Uint8Array(),
+    })
+    // Zero, not "small". An update carrying no ops is still 22 bytes of
+    // envelope, which is exactly why "is it empty?" cannot be asked of the
+    // bytes.
+    expect(updates).toEqual([])
+  })
+
+  it('reads back everything a re-save appended, not just the snapshot', async () => {
+    const doc = new LoroDoc()
+    doc.getMap('nodes').set('a', { text: 'first' })
+    doc.commit()
+    await saveDocument('session1', 'roundtrip', doc)
+
+    doc.getMap('nodes').set('b', { text: 'second' })
+    doc.commit()
+    await saveDocument('session1', 'roundtrip', doc, { overwrite: true })
+
+    // The whole point of appending rather than rewriting is that a reader
+    // still sees one document. A load that returned only the snapshot would
+    // silently drop every edit since it.
+    const loaded = await loadDocument('session1', 'roundtrip')
+    expect(loaded?.getMap('nodes').toJSON()).toEqual({
+      a: { text: 'first' },
+      b: { text: 'second' },
+    })
   })
 
   it('mints a canonical ULID for a new row, so both writers share one id space', async () => {
