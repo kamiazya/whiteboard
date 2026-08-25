@@ -225,6 +225,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-search',
+      '@kamiazya/whiteboard-workspace-index',
     ],
     allowedThirdParty: [],
   },

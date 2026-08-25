@@ -383,6 +383,56 @@ export function moveWorkspaceNodeToPath(doc: LoroDoc, from: string, to: string):
   return true
 }
 
+/**
+ * Folds a STANDALONE document into the workspace tree as a node at `path`.
+ *
+ * The migration step: every pre-workspace document is its own LoroDoc with
+ * root containers (`nodes`, `body`, ...), and a workspace-tree document holds
+ * the same containers on a node's meta. This copies the one into the other,
+ * keeping the `documentId` the caller supplies — which is the id the old
+ * world already published, so nothing that names the document notices the
+ * move.
+ *
+ * A VALUE copy, deliberately. The source's edit history stays in the old
+ * store until it is retired; carrying it into the workspace document would
+ * multiply the workspace's oplog by every document's past for no reader that
+ * exists.
+ *
+ * Answers null without writing when the id is already in the tree, which is
+ * what makes a crashed fold safe to run again: the work list is derived from
+ * "index rows not yet in the tree", so a document folded before the crash is
+ * simply not work anymore.
+ */
+export function adoptWorkspaceDocument(
+  doc: LoroDoc,
+  input: { path: string; documentId: string; kind: DocumentKind; name?: string },
+  source: LoroDoc,
+): WorkspaceDocumentEntry | null {
+  if (resolveWorkspaceDocumentById(doc, input.documentId) !== null) return null
+  const created = createWorkspaceDocumentAtPath(doc, input)
+  if (created === null) return null
+  const node = nodeById(doc, input.documentId)
+  if (node === null) return null
+  // Root containers, enumerated from the JSON projection: a string is a
+  // Text container and an object is a Map, which is the whole vocabulary the
+  // bridge writes (container VALUES are plain objects by convention — see
+  // package-loro-adapter.md). Meta keys the node already carries (segment,
+  // kind, ...) are scalars set above and not in the source, so no collision.
+  const projected = source.toJSON() as Record<string, unknown>
+  for (const [key, value] of Object.entries(projected)) {
+    if (typeof value === 'string') {
+      node.data.setContainer(key, new LoroText()).insert(0, value)
+    } else if (typeof value === 'object' && value !== null) {
+      const map = node.data.setContainer(key, new LoroMap())
+      for (const [entryKey, entryValue] of Object.entries(value as Record<string, unknown>)) {
+        map.set(entryKey, entryValue)
+      }
+    }
+  }
+  doc.commit()
+  return resolveWorkspaceDocumentById(doc, input.documentId)
+}
+
 /** Where a deleted document's evacuated bytes are recorded. */
 export const WORKSPACE_TRASH_KEY = 'trash'
 

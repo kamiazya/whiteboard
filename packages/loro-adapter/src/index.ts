@@ -26,6 +26,7 @@ export {
   writeTrustFacets,
 } from './loro-bridge.js'
 export {
+  adoptWorkspaceDocument,
   type CreateWorkspaceDocumentInput,
   createWorkspaceDocument,
   createWorkspaceDocumentAtPath,

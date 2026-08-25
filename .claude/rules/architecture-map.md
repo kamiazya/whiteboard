@@ -17,7 +17,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/plugin-visual` | the bundled `visual` plugin as an ordinary plugin package — data half (schemas, resolvers, the icon geometry `visual.symbol` enumerates) at `.`, what it draws ON a node at `/decorations`, React half at `/ui` | facet-engine, facet-ui, model, react, lucide-react, zod; canvas-render TYPE-ONLY (devDependency) |
 | `packages/canvas-viewer` | Read-only spatial-canvas scene viewer UI (renders canvas-render SVG), shared between `apps/web` and the MCP Apps widget | model, codec, render, `@modelcontextprotocol/ext-apps`, react, zod |
 | `packages/mcp-server` | Node composition root: CLI, stdio, local store impls, resvg, Inversify container | server-core + port impls |
-| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
+| `apps/web` | Browser composition root: Canvas API backend, IndexedDB store impls, read-write spatial canvas editor, markdown editor | loro-adapter, model, codec, render, canvas-viewer, ports, facet-engine, facet-ui, plugin-visual, search, workspace-index, `@kamiazya/whiteboard-mcp`'s browser-safe client subpaths (`/api-client`, `/api-contracts`, `/browser-contract`) + port impls |
 
 **A third-party dependency is judged by that criterion, not by a quota.** The
 `allowedThirdParty` lists in `architecture-map.ts` are a RECORD of what has

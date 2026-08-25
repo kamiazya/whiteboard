@@ -12,6 +12,7 @@ import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { readSpatialCanvas, writeSpatialCanvas } from './loro-bridge.js'
 import {
+  adoptWorkspaceDocument,
   createWorkspaceDocument,
   deleteWorkspaceDocument,
   documentContainers,
@@ -120,6 +121,47 @@ describe('workspace tree', () => {
     expect(entry?.name).toBe('Design System')
     // The address does not move when the label does.
     expect(entry?.path).toBe('design')
+  })
+
+  describe('adopting a standalone document (the migration step)', () => {
+    it('copies the root containers onto the node and keeps the documentId', () => {
+      const standalone = new LoroDoc()
+      standalone.setPeerId(9n)
+      writeSpatialCanvas(standalone, {
+        nodes: [{ id: 'n1', type: 'text', x: 5, y: 6, width: 80, height: 40, text: 'moved in' }],
+        edges: [],
+      })
+
+      const doc = workspace()
+      const adopted = adoptWorkspaceDocument(
+        doc,
+        { path: 'imported/design', documentId: ID_A, kind: 'spatial' },
+        standalone,
+      )
+
+      expect(adopted?.documentId).toBe(ID_A)
+      expect(adopted?.path).toBe('imported/design')
+      const read = readSpatialCanvas(documentContainers(doc, ID_A))
+      expect(read.nodes).toHaveLength(1)
+      expect(read.nodes[0]?.type === 'text' ? read.nodes[0].text : null).toBe('moved in')
+    })
+
+    it('answers null without writing when the id is already in the tree', () => {
+      const doc = workspace()
+      createWorkspaceDocument(doc, { documentId: ID_A, segment: 'design', kind: 'spatial' })
+      const before = doc.oplogVersion().encode()
+
+      const again = adoptWorkspaceDocument(
+        doc,
+        { path: 'design', documentId: ID_A, kind: 'spatial' },
+        new LoroDoc(),
+      )
+
+      // The re-run safety of the whole fold: a document already carried over
+      // is not work, and must not become a second node either.
+      expect(again).toBeNull()
+      expect(doc.oplogVersion().encode()).toEqual(before)
+    })
   })
 
   describe('what convergence decides, not this code', () => {
