@@ -45,8 +45,8 @@ import {
   DocumentStoreWorkspaceDocs,
   LoroWorkspaceDocumentIndex,
 } from '@kamiazya/whiteboard-workspace-index'
-import type { Value } from 'loro-crdt'
-import { LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
+import type { Frontiers, Value } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -145,6 +145,48 @@ const workspaceDocCache = new Map<string, LoroDoc>()
 
 function workspaceDocCacheKey(workspaceId: string): string {
   return `${getDataDir()}::${workspaceId}`
+}
+
+/**
+ * The STORED workspace record's frontiers when the tree serves `path`, null
+ * on the legacy plane. What a branch head stores for a tree-served document:
+ * a projection's frontiers die with the process, the workspace record's
+ * outlive it.
+ */
+export async function workspaceFrontiersForPath(
+  workspaceId: string,
+  path: string,
+): Promise<Uint8Array | null> {
+  const db = await dbReady()
+  const documentId = await getDocumentIdByPath(db, workspaceId, path)
+  if (!documentId) return null
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const stored = await docs.open(workspaceId)
+  if (stored === null || resolveWorkspaceDocumentById(stored, documentId) === null) return null
+  return new Uint8Array(encodeFrontiers(stored.frontiers()))
+}
+
+/**
+ * The document at `path` as it stood at `frontiers` of the WORKSPACE
+ * document — null when the tree does not serve the path (legacy plane).
+ * Throws when the frontiers cannot be checked out (a tip recorded against a
+ * different lineage, e.g. a pre-cutover branch of a since-folded document —
+ * that history was deliberately not carried by the fold).
+ */
+export async function projectDocumentAtWorkspaceFrontiers(
+  workspaceId: string,
+  path: string,
+  frontiers: Frontiers,
+): Promise<LoroDoc | null> {
+  const db = await dbReady()
+  const documentId = await getDocumentIdByPath(db, workspaceId, path)
+  if (!documentId) return null
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const stored = await docs.open(workspaceId)
+  if (stored === null || resolveWorkspaceDocumentById(stored, documentId) === null) return null
+  const clone = LoroDoc.fromSnapshot(stored.export({ mode: 'snapshot' }))
+  clone.checkout(frontiers)
+  return projectWorkspaceDocument(clone, documentId)
 }
 
 /** Test-only: drops every cached live workspace document, simulating a restart. */
