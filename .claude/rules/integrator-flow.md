@@ -40,6 +40,29 @@ for (const k of await caches.keys()) await caches.delete(k)
 
 When a preview contradicts a green test, suspect the cache before suspecting the layer under test. The cheapest discriminator is a **control action**: exercise some other feature that writes through the same path (adding a node, say). If the control persists and the feature under test does not, the transport and the server are fine and the difference is in the code the browser is actually running.
 
+## Do not touch the tree while a browser suite runs
+
+Vite's dep optimizer watches the lockfile. A `pnpm install` — even
+`--frozen-lockfile`, even one that changes nothing — logs
+`Re-optimizing dependencies because lockfile has changed` and rebuilds the
+module graph **under the tests already running against it**.
+
+Measured: reverting an incidental `pnpm-lock.yaml` change mid-run turned a
+green `pnpm test:browser` into **13 failing files and 49 failing tests** out
+of 798 — `spatial-editor`, `context-menu` (15 of 15), `VersionTimeline`,
+`merge-ui`. The re-run on a quiet tree, same commit, was 798/798. The
+failing file passed 15/15 in isolation immediately afterwards, which is the
+cheapest discriminator when this is suspected.
+
+It reads exactly like a real, systemic break in whatever the diff touched,
+and the diff in that case could not reach `apps/web` at all. The tell is in
+the run's own log, not in any failure message — grep it for
+`Re-optimizing` before diagnosing a broad browser failure. Then re-run on a
+quiet tree, and only believe the second result.
+
+The same applies to `git stash` / `git checkout` of anything the suite
+imports. Start the run, then leave the working tree alone.
+
 ## CI flakes
 
 - A known-flake failure gets one `gh run rerun <id> --failed`. The second occurrence of the same flake in CI promotes it to a root-cause fix lane (own worktree + dev-loop); do not keep re-running.
