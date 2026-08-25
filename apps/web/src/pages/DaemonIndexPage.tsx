@@ -152,14 +152,20 @@ export function DaemonIndexPage({
         if (isStale()) return
         const ids = res.workspaces.map((w) => w.workspaceId)
         setWorkspaces(ids)
-        // A replacement re-enters the selection effect, which owns `loaded`
-        // from there. Nothing replacing it leaves the page exactly where a
-        // daemon that lists no workspaces at all already leaves it — measured:
-        // the loading state, no create control. That end state is a
-        // pre-existing dead end and deliberately not redesigned here; what
-        // matters is that a vanished workspace does not get a state of its
-        // own that the same emptiness reached any other way would not.
-        setSelectedWorkspace(ids.find((id) => id !== staleWorkspaceId) ?? null)
+        const next = ids.find((id) => id !== staleWorkspaceId)
+        if (next === undefined) {
+          // Nothing to move to — this was the only workspace, or the list and
+          // the documents disagree about it. Re-selecting the same one would
+          // come straight back here forever, and leaving the page in its
+          // loading state would spin without end. Say so instead: the request
+          // that failed is the one the person is waiting on.
+          setLoaded(true)
+          setLoadError('Failed to load documents for this workspace.')
+          return
+        }
+        // A real replacement re-enters the selection effect, which clears
+        // `loaded` itself and owns it from there.
+        setSelectedWorkspace(next)
       } catch {
         if (isStale()) return
         setLoadError('Failed to load workspaces.')
