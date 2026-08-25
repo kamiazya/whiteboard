@@ -7,6 +7,9 @@
  */
 
 import {
+  createWorkspaceDocumentAtPath,
+  documentContainers,
+  readMarkdownBody,
   readSpatialCanvas,
   setNodeLock,
   writeSpatialCanvas,
@@ -1028,6 +1031,100 @@ describe('createDocumentSyncSession', () => {
       const result = readSpatialCanvas(merged)
       expect(result.edges).toEqual([])
       expect(result.nodes.find((n) => n.id === 'n-b')).toMatchObject({ text: 'renamed-by-peer' })
+    })
+  })
+
+  // Content scope: when the backend delivers a WORKSPACE document (one Loro
+  // doc holding every document as a tree node), the session's content lives
+  // on that node's containers, not at the doc's roots. `contentDocumentId`
+  // is the seam — unset, every read/write goes to the roots exactly as
+  // before (all the tests above), so this block is the scoped half only.
+  describe('content scope (workspace document)', () => {
+    // A canonical ULID — workspaceNodeMetaSchema rejects anything else.
+    const SCOPED_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+    function makeWorkspaceSnapshot(canvas: SpatialCanvas): Uint8Array {
+      const ws = new LoroDoc()
+      createWorkspaceDocumentAtPath(ws, { path: 'design', documentId: SCOPED_ID, kind: 'spatial' })
+      writeSpatialCanvas(documentContainers(ws, SCOPED_ID), canvas)
+      ws.commit()
+      return ws.export({ mode: 'snapshot' })
+    }
+
+    it('hydrates from the tree node and commits edits there — the workspace doc roots stay empty', async () => {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps({ contentDocumentId: SCOPED_ID }))
+      session.connect()
+      const snapshotBytes = makeWorkspaceSnapshot(twoNodeCanvas())
+      backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+      // Hydration read the node's containers, not the workspace doc's roots
+      // (which hold no canvas at all).
+      expect(session.getCanvas()).toEqual(twoNodeCanvas())
+
+      const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+      session.onChange(applyCommand(twoNodeCanvas(), command), command)
+      await vi.advanceTimersByTimeAsync(300)
+
+      const replay = new LoroDoc()
+      replay.import(snapshotBytes)
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) replay.import(bytes)
+      const scoped = readSpatialCanvas(documentContainers(replay, SCOPED_ID))
+      expect(scoped.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 10, y: 20 })
+      // The write went through the tree node — never to where a per-document
+      // doc keeps its content. A session that ignored the scope would leave
+      // the moved node here.
+      expect(readSpatialCanvas(replay).nodes).toEqual([])
+    })
+
+    it('locks and undo resolve through the scope', async () => {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps({ contentDocumentId: SCOPED_ID }))
+      session.connect()
+      const snapshotBytes = makeWorkspaceSnapshot(twoNodeCanvas())
+      backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+      session.setNodeLock('n-a', true)
+      expect(session.getNodeLocks()).toEqual(new Set(['n-a']))
+
+      const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 5, y: 5 }
+      const next = applyCommand(twoNodeCanvas(), command)
+      session.onChange(next, command)
+      await vi.advanceTimersByTimeAsync(300)
+      expect(session.getCanvas()).toEqual(next)
+
+      // Undo runs on the workspace doc's UndoManager but the published value
+      // is read back through the scope — the reverted move must be visible.
+      expect(session.undo()).toBe(true)
+      expect(session.getCanvas()).toEqual(twoNodeCanvas())
+    })
+
+    it('a markdown body writes to the node`s own text container, never the doc root', async () => {
+      const backend = makeFakeBackend()
+      const session = createDocumentSyncSession(backend, makeDeps({ contentDocumentId: SCOPED_ID }))
+      session.connect()
+      // A markdown document: empty canvas, body in the node's text container.
+      const ws = new LoroDoc()
+      createWorkspaceDocumentAtPath(ws, {
+        path: 'notes',
+        documentId: SCOPED_ID,
+        kind: 'markdown',
+      })
+      ws.commit()
+      const snapshotBytes = ws.export({ mode: 'snapshot' })
+      backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+      const body: EditorCommand = { kind: 'set-body', text: '# scoped body' }
+      session.onChange(session.getCanvas(), body)
+      await vi.advanceTimersByTimeAsync(300)
+      expect(session.getMarkdownBody()).toBe('# scoped body')
+
+      const replay = new LoroDoc()
+      replay.import(snapshotBytes)
+      for (const bytes of backend._ctrl.pushLocalUpdateCalls) replay.import(bytes)
+      expect(readMarkdownBody(documentContainers(replay, SCOPED_ID))).toBe('# scoped body')
+      // The workspace doc's own root `body` container stayed empty.
+      expect(readMarkdownBody(replay)).toBe('')
     })
   })
 

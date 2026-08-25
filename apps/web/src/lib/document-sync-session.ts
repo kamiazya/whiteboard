@@ -1,5 +1,7 @@
 import {
   deleteSpatialNode,
+  type DocumentContainers,
+  documentContainers,
   readCoreFacets,
   readEdgeLocks,
   readMarkdownBody,
@@ -136,6 +138,19 @@ export interface SessionDeps {
   onRestoreChange: (inProgress: boolean, label: string | null) => void
   dispatchIdentityEvent: (eventName: string, identity: UseDocumentSyncOptions['identity']) => void
   generations: GenerationCounters
+  /**
+   * When set, the backend's bytes are a WORKSPACE document and this session's
+   * content lives on the tree node carrying this documentId: every bridge
+   * read/write resolves `documentContainers(doc, contentDocumentId)` instead
+   * of the doc's roots. Unset means the doc IS the document (every
+   * per-document backend today), which keeps all existing behavior unchanged.
+   *
+   * Fixed for the session's lifetime, like the backend itself — a different
+   * document is a different session. The CRDT plumbing (import/export,
+   * UndoManager, subscribeLocalUpdates) stays on the real LoroDoc either way;
+   * only WHERE content containers are found changes.
+   */
+  contentDocumentId?: string
 }
 
 export interface DocumentSyncSession {
@@ -209,7 +224,11 @@ export interface DocumentSyncSession {
  * merge granularity a whole-document rewrite would discard: a concurrent
  * peer edit to a different node survives a merge against this write.
  */
-function writeCommandTarget(doc: LoroDoc, next: SpatialCanvas, command: EditorCommand): boolean {
+function writeCommandTarget(
+  doc: DocumentContainers,
+  next: SpatialCanvas,
+  command: EditorCommand,
+): boolean {
   switch (command.kind) {
     case 'move-node':
     case 'resize-node':
@@ -343,7 +362,7 @@ function writeSubCommand(
  * so the fallback is also what recovers from a node/edge removed from `next`
  * without a corresponding command.
  */
-function commitToDoc(doc: LoroDoc, next: SpatialCanvas, command: EditorCommand): void {
+function commitToDoc(doc: DocumentContainers, next: SpatialCanvas, command: EditorCommand): void {
   try {
     if (writeCommandTarget(doc, next, command)) return
     log.warn('editor command target missing from next canvas; falling back to full resync', {
@@ -399,6 +418,19 @@ export function createDocumentSyncSession(
     return disposed || deps.generations.currentConnectionGeneration() !== myGeneration
   }
 
+  /**
+   * Where this session's content containers live: the doc's roots, or — when
+   * a content scope is set — the workspace tree node carrying
+   * `contentDocumentId`. Resolved per call, never cached: a restore re-mints
+   * the node under a NEW TreeID for the same documentId, and a cached handle
+   * would keep pointing at the deleted node.
+   */
+  function contentOf(targetDoc: LoroDoc): DocumentContainers {
+    return deps.contentDocumentId === undefined
+      ? targetDoc
+      : documentContainers(targetDoc, deps.contentDocumentId)
+  }
+
   function notify(canvas: SpatialCanvas, origin: 'local' | 'external'): void {
     for (const listener of listeners) listener(canvas, origin)
   }
@@ -428,7 +460,7 @@ export function createDocumentSyncSession(
   function publishCanvasFromDoc(targetDoc: LoroDoc): void {
     deps.generations.nextApplyGeneration()
     if (isStale()) return
-    const canvas = readSpatialCanvas(targetDoc)
+    const canvas = readSpatialCanvas(contentOf(targetDoc))
     currentCanvas = canvas
     notify(canvas, 'external')
   }
@@ -502,7 +534,11 @@ export function createDocumentSyncSession(
     const guardedCommit = (): void => {
       for (const command of commands) {
         try {
-          commitToDoc(targetDoc, next, command)
+          // contentOf resolves inside the try: a scoped node deleted between
+          // scheduling and commit throws here, and must fail only this
+          // target — guardedCommit's contract is that the chain never
+          // rejects.
+          commitToDoc(contentOf(targetDoc), next, command)
         } catch (err) {
           log.error('scene commit failed; skipping this target', err)
         }
@@ -842,7 +878,7 @@ export function createDocumentSyncSession(
   }
 
   function getNodeLocks(): ReadonlySet<string> {
-    return doc === null ? EMPTY_LOCKS : readNodeLocks(doc)
+    return doc === null ? EMPTY_LOCKS : readNodeLocks(contentOf(doc))
   }
 
   function notifyLocksChanged(): void {
@@ -855,26 +891,26 @@ export function createDocumentSyncSession(
     // subscribeLocalUpdates push, like every other local change. The canvas
     // VALUE is unchanged, so subscribers get a lock notification rather
     // than a canvas publish.
-    workspaceSetNodeLock(doc, nodeId, locked)
+    workspaceSetNodeLock(contentOf(doc), nodeId, locked)
     notifyLocksChanged()
   }
 
   function getEdgeLocks(): ReadonlySet<string> {
-    return doc === null ? EMPTY_LOCKS : readEdgeLocks(doc)
+    return doc === null ? EMPTY_LOCKS : readEdgeLocks(contentOf(doc))
   }
 
   function setEdgeLock(edgeId: string, locked: boolean): void {
     if (doc === null) return
-    workspaceSetEdgeLock(doc, edgeId, locked)
+    workspaceSetEdgeLock(contentOf(doc), edgeId, locked)
     notifyLocksChanged()
   }
 
   function getMarkdownBody(): string {
-    return doc === null ? '' : readMarkdownBody(doc)
+    return doc === null ? '' : readMarkdownBody(contentOf(doc))
   }
 
   function getCoreFacets(): StoredCoreFacets | undefined {
-    return doc === null ? undefined : readCoreFacets(doc)
+    return doc === null ? undefined : readCoreFacets(contentOf(doc))
   }
 
   function notifyBodyChanged(): void {
