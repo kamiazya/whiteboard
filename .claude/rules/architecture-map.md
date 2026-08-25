@@ -11,6 +11,7 @@ Package boundaries are cut by **runtime requirements**, not by feature. The shar
 | `packages/facet-engine` | the facet engine (ADR-0013): definePlugin/defineFacet, registry, write validation, compat resolution. Knows no plugin | zod only |
 | `packages/search` | lexical search: dictionary-free tokenizer (latin words, CJK bigrams), BM25 ranking, snippets, and the one definition of a document's searchable text | model |
 | `packages/loro-adapter` | LoroDoc<->model bridge | model, ports, loro-crdt |
+| `packages/workspace-index` | the `DocumentIndex` port over a workspace's Loro tree — one implementation for both roots, since a tree-backed index differs between them in nothing | model, ports, loro-adapter, loro-crdt |
 | `packages/server-core` | `/api/v1` Hono routes + MCP tool definitions, exposed as `createServer(deps)` | crdt, render, facet-engine, plugin-visual, search, hono, zod, loro-crdt |
 | `packages/facet-ui` | the facet system's React half, as a LIBRARY: primitives, the validated writer, the derived form. Knows no plugin | facet-engine, react, lucide-react |
 | `packages/plugin-visual` | the bundled `visual` plugin as an ordinary plugin package — data half (schemas, resolvers, the icon geometry `visual.symbol` enumerates) at `.`, what it draws ON a node at `/decorations`, React half at `/ui` | facet-engine, facet-ui, model, react, lucide-react, zod; canvas-render TYPE-ONLY (devDependency) |

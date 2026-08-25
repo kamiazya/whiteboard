@@ -121,6 +121,19 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // model's storedCoreFacetsSchema field-by-field on read.
     allowedThirdParty: ['loro-crdt', 'zod'],
   },
+  '@kamiazya/whiteboard-workspace-index': {
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-loro-adapter',
+    ],
+    // loro-crdt: this package reads a workspace's tree, so it needs the same
+    // runtime `loro-adapter` does. It exists as its own package precisely
+    // because neither of the two that could otherwise host it can: this needs
+    // BOTH ports and loro-crdt, and `loro-adapter` is deliberately closed to
+    // ports while `ports` is deliberately closed to loro-crdt.
+    allowedThirdParty: ['loro-crdt'],
+  },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',

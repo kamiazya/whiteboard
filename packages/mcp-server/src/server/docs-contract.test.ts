@@ -66,6 +66,7 @@ describe('docs/ contract', () => {
       'packages/loro-adapter': 'loro-adapter',
       'packages/search': 'search node',
       'packages/server-core': 'server-core',
+      'packages/workspace-index': 'workspace-index',
       'packages/canvas-viewer': 'canvas-viewer',
       'apps/web': 'web',
     }
