@@ -1,3 +1,4 @@
+export type { DocumentContainers } from './loro-bridge.js'
 export {
   deleteSpatialEdge,
   deleteSpatialNode,
@@ -24,3 +25,18 @@ export {
   writeSpatialNode,
   writeTrustFacets,
 } from './loro-bridge.js'
+export {
+  type CreateWorkspaceDocumentInput,
+  createWorkspaceDocument,
+  deleteWorkspaceDocument,
+  documentContainers,
+  moveWorkspaceDocument,
+  readWorkspaceDocuments,
+  resolveWorkspaceDocument,
+  resolveWorkspaceDocumentById,
+  setWorkspaceDocumentName,
+  WORKSPACE_TREE_KEY,
+  type WorkspaceDocumentEntry,
+  type WorkspaceNodeMeta,
+  workspaceNodeMetaSchema,
+} from './workspace-tree.js'

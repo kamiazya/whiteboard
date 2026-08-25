@@ -10,6 +10,8 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 
@@ -33,6 +35,13 @@ export function createInMemoryDocumentStore(): DocumentStore {
       const stored = snapshots.get(docRefKey(input.docRef))
       if (!stored) return null
       return structuredClone(stored) as LoadSnapshotResult
+    },
+    async readSnapshotManifest(
+      input: ReadSnapshotManifestInput,
+    ): Promise<ReadSnapshotManifestResult> {
+      const stored = snapshots.get(docRefKey(input.docRef))
+      if (!stored) return null
+      return structuredClone(stored.manifest) as ReadSnapshotManifestResult
     },
     async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
       const { docRef, manifest, chunks, frontier } = input

@@ -14,13 +14,35 @@ implementations live in the composition roots.
 - LoroDoc⇔model bridge: the CRDT merge–aware conversion deferred from
   codec. Reading and writing a document's content — spatial canvas,
   document kind, core facets, body.
+- **The workspace tree** (`workspace-tree.ts`): a workspace as ONE Loro
+  document, with each document it holds as a node of a `LoroTree` whose
+  meta carries that document's own containers.
+
+  This is a boundary that MOVED, and the paragraph below used to say the
+  opposite. It said placement belongs to `ports`' `DocumentIndex` and that
+  this package "knows a document's content and nothing about where it
+  sits" — a clean split, and the right one while a workspace was an index
+  beside a pile of separate Loro documents.
+
+  The workspace-document design retires that split rather than bending it:
+  placement and content become the SAME CRDT structure, which is what lets
+  a move on one peer and an edit on another merge with no coordinator.
+  There is no longer a "where it sits" separable from the document, so
+  there is nothing left for the old boundary to divide. Deriving a path
+  from a node's ancestry is reading the tree, not implementing a port.
+
+  What did NOT move is the port: `DocumentIndex` is still implemented by
+  each composition root, still owns the listing ORDER
+  (`compareDocumentPaths`) and the error taxonomy, and now reads the tree
+  instead of its own rows.
 
 ## What does NOT belong here
 
-- Placement: which documents a workspace holds, their paths, and their
-  names. That is `ports`' `DocumentIndex`, implemented by each
-  composition root. This package knows a document's content and nothing
-  about where it sits.
+- The `DocumentIndex` port itself, or its ordering and error contracts.
+  `readWorkspaceDocuments` deliberately answers in TREE order and does not
+  sort: sorting is the port's promise, and importing `compareDocumentPaths`
+  would give this package a `ports` dependency for one comparator. The
+  shadowing rule needs tree order and nothing else.
 - Store/sync **implementations** (local libSQL/fs, IndexedDB, Durable
   Objects) — those live in composition roots (`mcp-server`, `apps/web`).
 - HTTP routes, MCP tool definitions — those live in `server-core` or
@@ -31,7 +53,11 @@ implementations live in the composition roots.
 ## Dependency rules
 
 - Runtime dependencies: `model`, `loro-crdt`, and `zod` (all via `catalog:`
-  or `workspace:*`). Not `ports` — see the note under the heading.
+  or `workspace:*`). **Still not `ports`**, even now that the workspace tree
+  lives here — the one thing that tempted it was `compareDocumentPaths`, and
+  that belongs to the port's contract rather than to the tree. `architecture-
+  map.ts` enforces this; note the top-level `architecture-map.md` table has
+  listed `ports` for this package for some time and is wrong about it.
 - Forbidden imports: `node:*`, DOM globals (`document`/`window`/`navigator`),
   `inversify`.
 - Enforced by `tools/arch-lint` (`arch-lint-node` vitest project).
@@ -40,6 +66,14 @@ implementations live in the composition roots.
 
 - Every mutation calls `doc.commit()` after writing, so incremental
   exports (`mode: 'update'`) capture the change boundary.
+- The content bridge takes a `DocumentContainers`, not a `LoroDoc`. The two
+  storage models differ in WHERE a container is found and in nothing else —
+  a root of the document, or a key on a tree node's meta — so the bridge is
+  written once and hosted twice. `LoroDoc` satisfies the interface
+  structurally, which is why the move cost no call site a change.
+- A tree-node host uses `getOrCreateContainer`, never `setContainer`. The
+  latter REPLACES what is at the key: measured, a second `setContainer` on
+  an occupied key leaves `{}`, so writing a document twice would wipe it.
 - LoroDoc spatial layout: `doc.getMap('nodes')` keyed by nodeId,
   `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
   (not a nested LoroMap container) — this preserves node-level CRDT

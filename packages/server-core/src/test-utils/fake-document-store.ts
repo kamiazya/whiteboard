@@ -11,6 +11,8 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
@@ -47,6 +49,12 @@ export class FakeDocumentStore implements DocumentStore {
     const entry = this.saved.get(docRefKey(input.docRef))
     if (entry === undefined) return null
     return { manifest: entry.manifest, chunks: entry.chunks, frontier: entry.frontier }
+  }
+
+  async readSnapshotManifest(
+    input: ReadSnapshotManifestInput,
+  ): Promise<ReadSnapshotManifestResult> {
+    return this.saved.get(docRefKey(input.docRef))?.manifest ?? null
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
