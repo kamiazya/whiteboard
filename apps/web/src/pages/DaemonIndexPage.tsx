@@ -138,6 +138,42 @@ export function DaemonIndexPage({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonBaseUrl])
 
+  // Re-reads the workspace list and moves off the one that vanished.
+  //
+  // Deliberately picks a workspace OTHER than the stale id even if the server
+  // still lists it: were the two to disagree, selecting it again would send
+  // the page straight back into this path and loop. Choosing a different one
+  // — or nothing — always terminates, and the dropdown still lets a person
+  // pick it by hand.
+  const reselectAfterStale = useCallback(
+    async (staleWorkspaceId: string, isStale: () => boolean) => {
+      try {
+        const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
+        if (isStale()) return
+        const ids = res.workspaces.map((w) => w.workspaceId)
+        setWorkspaces(ids)
+        const next = ids.find((id) => id !== staleWorkspaceId)
+        if (next === undefined) {
+          // Nothing to move to — this was the only workspace, or the list and
+          // the documents disagree about it. Re-selecting the same one would
+          // come straight back here forever, and leaving the page in its
+          // loading state would spin without end. Say so instead: the request
+          // that failed is the one the person is waiting on.
+          setLoaded(true)
+          setLoadError('Failed to load documents for this workspace.')
+          return
+        }
+        // A real replacement re-enters the selection effect, which clears
+        // `loaded` itself and owns it from there.
+        setSelectedWorkspace(next)
+      } catch {
+        if (isStale()) return
+        setLoadError('Failed to load workspaces.')
+      }
+    },
+    [daemonFetch, daemonBaseUrl],
+  )
+
   const loadWorkspace = useCallback(
     async (workspaceId: string, isStale: () => boolean) => {
       setLoadError(null)
@@ -166,16 +202,34 @@ export function DaemonIndexPage({
       } catch (err) {
         if (isStale()) return
         setRows([])
-        setLoaded(true)
-        // A 404 is a workspace with no document tree yet — a calm empty
-        // workspace (the onboarding state can create into it), not a broken
-        // page. Anything else is a genuine failure and keeps the alert.
-        if (!(err instanceof DaemonApiError && err.status === 404)) {
-          setLoadError('Failed to load documents for this workspace.')
+        // A 404 means the workspace is GONE, not empty. An existing workspace
+        // with no documents answers 200 with an empty array; only an absent
+        // one 404s. And `selectedWorkspace` is only ever set from
+        // `GET /api/workspaces`, so the sole way to arrive here is that the
+        // workspace was deleted AFTER that list was taken — by an agent,
+        // another tab, or the CLI.
+        //
+        // So the selection is what went stale, and re-listing is the repair.
+        // Rendering the empty create-into-it state instead would hide a real
+        // anomaly, and a create issued against a workspace that no longer
+        // exists would silently make a DIFFERENT one (the route passes
+        // `createWorkspace: true`).
+        if (err instanceof DaemonApiError && err.status === 404) {
+          // Deliberately NOT `setLoaded(true)` here. The load is not over —
+          // the page is still deciding what it is showing. Marking it
+          // complete renders the onboarding empty state for the workspace
+          // that just vanished, with a live Create button that passes
+          // `createWorkspace: true`, so a click inside this window would
+          // silently make a DIFFERENT workspace. `reselectAfterStale` sets it
+          // only once there is nothing left to choose.
+          void reselectAfterStale(workspaceId, isStale)
+          return
         }
+        setLoaded(true)
+        setLoadError('Failed to load documents for this workspace.')
       }
     },
-    [daemonFetch, daemonBaseUrl],
+    [daemonFetch, daemonBaseUrl, reselectAfterStale],
   )
 
   useEffect(() => {

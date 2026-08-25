@@ -104,6 +104,10 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // Create button. The operation refuses an unknown workspace rather than
       // answering with an empty list, which is what makes this translation
       // possible without a second existence query.
+      //
+      // So the two cases a client must tell apart are: a workspace that
+      // exists and holds nothing answers 200 with an empty array, and only an
+      // ABSENT one answers 404. A 404 here therefore means gone, never empty.
       if (err instanceof WorkspaceNotFoundError) {
         return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
       }
