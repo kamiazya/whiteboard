@@ -28,7 +28,7 @@ export function valueImportsOf(source: string, packageName: string): string[] {
   const pattern = new RegExp(
     String.raw`(^|\n)[ \t]*(import|export)\b([\s\S]*?)from[ \t]*['"]` +
       packageName.replace(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`) +
-      String.raw`['"]`,
+      `['"]`,
     'g',
   )
   const offenders: string[] = []

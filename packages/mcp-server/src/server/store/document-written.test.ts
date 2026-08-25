@@ -46,7 +46,6 @@ describe('documentWritten', () => {
       .where('path', '=', 'agent-written')
       .executeTakeFirstOrThrow()
 
-    const before = _autoCompactTimerCountForTests()
     await documentWritten({ documentId })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)

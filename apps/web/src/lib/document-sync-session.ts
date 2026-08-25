@@ -1,6 +1,6 @@
 import {
-  deleteSpatialNode,
   type DocumentContainers,
+  deleteSpatialNode,
   documentContainers,
   readCoreFacets,
   readEdgeLocks,
