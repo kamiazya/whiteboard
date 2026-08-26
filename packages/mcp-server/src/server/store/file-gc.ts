@@ -202,7 +202,7 @@ async function collectReferencedFileIds(
       // "treat it as referencing nothing", which is the exact bug this
       // guards against.
       try {
-        const past = await versionStore.load(workspaceId, v.id, live)
+        const past = await versionStore.load(workspaceId, v.id)
         if (past === null) {
           throw new Error('versionStore.load returned null for a version list() just reported')
         }

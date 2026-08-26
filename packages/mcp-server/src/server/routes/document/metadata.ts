@@ -10,7 +10,7 @@ import {
   setWorkspaceName,
 } from '../../store/names-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
-import { handleCorruptStoredData } from './_shared.js'
+import { handleCorruptStoredData, handleDocumentNotFound } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 // User-facing workspace / canvas names.
@@ -36,6 +36,8 @@ export function createDocumentMetadataRouter() {
       const names = await loadWorkspaceNames(workspaceId)
       return c.json(names)
     } catch (err) {
+      const missing = handleDocumentNotFound(err)
+      if (missing) return c.json(missing.body, missing.status)
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err
@@ -59,6 +61,8 @@ export function createDocumentMetadataRouter() {
       const updated = await setWorkspaceName(workspaceId, parsed.data.name)
       return c.json(updated)
     } catch (err) {
+      const missing = handleDocumentNotFound(err)
+      if (missing) return c.json(missing.body, missing.status)
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err
@@ -74,6 +78,8 @@ export function createDocumentMetadataRouter() {
       const updated = await setDocumentDisplayName(workspaceId, path, parsed.data.name)
       return c.json(updated)
     } catch (err) {
+      const missing = handleDocumentNotFound(err)
+      if (missing) return c.json(missing.body, missing.status)
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err
@@ -90,6 +96,8 @@ export function createDocumentMetadataRouter() {
       const updated = await setDocumentPinned(workspaceId, path, parsed.data.pinned)
       return c.json(updated)
     } catch (err) {
+      const missing = handleDocumentNotFound(err)
+      if (missing) return c.json(missing.body, missing.status)
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err

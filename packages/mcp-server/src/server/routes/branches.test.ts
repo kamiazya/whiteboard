@@ -16,6 +16,18 @@ vi.mock('../config.js', () => ({
 
 const { createBranchesRouter } = await import('./branches.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
+const { saveDocument, _clearWorkspaceDocCacheForTests } = await import('../store/document-store.js')
+const { clearCache } = await import('../store/doc-cache.js')
+const { LoroDoc } = await import('loro-crdt')
+const { beforeEach } = await import('vitest')
+
+// Branch writers refuse a path with no document, so the canvas every test
+// routes to is seeded first — the shape production always has.
+beforeEach(async () => {
+  clearCache()
+  _clearWorkspaceDocCacheForTests()
+  await saveDocument('s1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+})
 
 type PerformMergeFn = (
   sid: string,

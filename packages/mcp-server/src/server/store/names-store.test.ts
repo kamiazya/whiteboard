@@ -16,7 +16,17 @@ vi.mock('../config.js', () => ({
 
 const { loadWorkspaceNames, setWorkspaceName, setDocumentDisplayName, setDocumentPinned } =
   await import('./names-store.js')
+const { saveDocument } = await import('./document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
+const { LoroDoc } = await import('loro-crdt')
+
+// Metadata writers refuse a path with no document, so every test that names
+// one seeds it first — the shape production always has.
+async function seedDocuments(workspaceId, paths) {
+  for (const path of paths) {
+    await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
+  }
+}
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -24,6 +34,7 @@ describe('names-store', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'names-test-'))
     handle = await createIsolatedDb({ dataDir: tempDir })
+    await seedDocuments('sess-1', ['a', 'b', 'c1', 'c2', 'path', 'notes/meeting', 'arch/overview'])
   })
 
   afterEach(async () => {
@@ -34,6 +45,20 @@ describe('names-store', () => {
   it('returns empty WorkspaceNames for an uninitialized session', async () => {
     const names = await loadWorkspaceNames('sess-1')
     expect(names).toEqual({ documents: {}, pinned: [] })
+  })
+
+  // Metadata writes must not CREATE documents: a minted row here has no kind
+  // and no workspace-tree node — a corrupt state the boot fold deletes and
+  // the listing contract rejects. Creating documents is saveDocument /
+  // createDocument's job alone.
+  it('setDocumentDisplayName refuses a path with no document instead of minting a phantom row', async () => {
+    await expect(setDocumentDisplayName('sess-1', 'never-created', 'Name')).rejects.toThrow(
+      /no document/i,
+    )
+  })
+
+  it('setDocumentPinned refuses a path with no document instead of minting a phantom row', async () => {
+    await expect(setDocumentPinned('sess-1', 'never-created', true)).rejects.toThrow(/no document/i)
   })
 
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
@@ -102,11 +127,11 @@ describe('names-store', () => {
   it('setDocumentPinned(false) removes from the array and is a no-op for missing paths', async () => {
     await setDocumentPinned('sess-1', 'c1', true)
     await setDocumentPinned('sess-1', 'c2', true)
-    let names = await setDocumentPinned('sess-1', 'c1', false)
+    const names = await setDocumentPinned('sess-1', 'c1', false)
     expect(names.pinned).toEqual(['c2'])
-    // Unpinning a missing path is a no-op.
-    names = await setDocumentPinned('sess-1', 'nope', false)
-    expect(names.pinned).toEqual(['c2'])
+    // Unpinning a path with no document is the caller naming a document
+    // that does not exist — refused like every other metadata write.
+    await expect(setDocumentPinned('sess-1', 'nope', false)).rejects.toThrow(/no document/i)
   })
 
   it('keeps pinned independent from name and workspace changes', async () => {

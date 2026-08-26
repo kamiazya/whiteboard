@@ -146,7 +146,7 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
         // — mirrors live-doc.ts's POST /update handler.
         return await withWorkspaceWriteLock(workspaceId, async () => {
           const doc = await getDoc(workspaceId, path)
-          const past = await versionStore.load(workspaceId, id, doc)
+          const past = await versionStore.load(workspaceId, id)
           if (!past) {
             return c.json({ error: 'not_found' }, 404)
           }

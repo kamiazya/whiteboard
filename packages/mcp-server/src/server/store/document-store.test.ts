@@ -56,6 +56,39 @@ async function teardownIsolatedDb(): Promise<void> {
 // instead of a separate FS blob tree the two paths cannot see into each
 // other's writes. RED today: loadDocument still reads only the FS blob, so
 // content seeded directly into the Libsql snapshot tables reads back empty.
+// Insert a raw pre-fold documents row (no tree node, no kind) the way
+// legacy data actually looks on disk. Production writers refuse to mint
+// rows now, so legacy fixtures are seeded directly.
+async function seedLegacyRow(
+  db: Awaited<ReturnType<typeof import('./db/index.js')['getDb']>>,
+  workspaceId: string,
+  path: string,
+): Promise<string> {
+  const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
+  const now = Date.now()
+  await db
+    .insertInto('workspaces')
+    .values({ id: workspaceId, displayName: null, createdAt: now, updatedAt: now })
+    .onConflict((oc) => oc.column('id').doNothing())
+    .execute()
+  const id = generateDocumentId()
+  await db
+    .insertInto('documents')
+    .values({
+      id,
+      workspaceId,
+      path,
+      displayName: null,
+      isPinned: 0,
+      pinOrder: null,
+      currentBranch: 'main',
+      createdAt: now,
+      updatedAt: now,
+    })
+    .execute()
+  return id
+}
+
 describe('loadDocument reads through LibsqlDocumentStore (identity-convergence flip)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-flip-test-'))
@@ -70,12 +103,14 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
   it('returns real content seeded directly into the Libsql snapshot tables, not an empty doc', async () => {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
-    const { upsertDocumentRow } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
 
     const db = await getDb(getDataDir())
-    const documentId = await upsertDocumentRow(db, 'session1', 'seeded')
+    // A raw pre-fold row: no tree node, content only on the legacy plane.
+    // Inserted directly because production writers no longer mint rows —
+    // this fixture IS the legacy state the upgrade path exists to read.
+    const documentId = await seedLegacyRow(db, 'session1', 'seeded')
 
     const seedDoc = new LoroDoc()
     seedDoc.getText('content').insert(0, 'real content')
@@ -250,13 +285,12 @@ describe('legacy LoroList -> MovableList migration reads and persists through Li
   it('migrates a legacy LoroList doc seeded directly in Libsql, persists the movable list back through saveDocument, and backs up the pre-migration bytes', async () => {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
-    const { upsertDocumentRow } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { access } = await import('node:fs/promises')
 
     const db = await getDb(getDataDir())
-    const documentId = await upsertDocumentRow(db, 'session1', 'legacy')
+    const documentId = await seedLegacyRow(db, 'session1', 'legacy')
 
     // Build a legacy doc: elements stored in a plain LoroList, the shape
     // migrateLegacyListToMovable repairs on load. No production code writes

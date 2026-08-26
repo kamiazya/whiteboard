@@ -24,6 +24,7 @@ import {
   withDocumentBranchesLock,
 } from '../store/branches-store.js'
 import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
+import { DocumentNotFoundError } from '../store/db/upsert-workspace.js'
 import {
   validateBranchName,
   validateDocumentPath,
@@ -80,7 +81,13 @@ function handleValidation(err: unknown): { status: 400; body: ApiErrorBody } | n
   return null
 }
 
-function handleCorruption(err: unknown): { status: 500; body: ApiErrorBody } | null {
+function handleCorruption(err: unknown): { status: 500 | 404; body: ApiErrorBody } | null {
+  // Branch state writers refuse a path with no document instead of minting a
+  // phantom row; that refusal is the caller naming a document that does not
+  // exist.
+  if (err instanceof DocumentNotFoundError) {
+    return { status: 404, body: { error: 'not_found', message: err.message } }
+  }
   const body = corruptStoredDataBody(err)
   if (body) return { status: 500, body }
   return null

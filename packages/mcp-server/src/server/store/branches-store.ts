@@ -2,7 +2,7 @@ import { getDataDir } from '../config.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertDocumentRow } from './db/upsert-workspace.js'
+import { requireDocumentRow } from './db/upsert-workspace.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
@@ -100,7 +100,7 @@ async function saveDocumentBranchesLocked(
   }
   validateBranchName(state.head)
   const db = await dbReady()
-  const documentId = await upsertDocumentRow(db, workspaceId, path)
+  const documentId = await requireDocumentRow(db, workspaceId, path)
   await db.transaction().execute(async (trx) => {
     await trx.deleteFrom('branches').where('documentId', '=', documentId).execute()
     if (state.branches.length > 0) {

@@ -28,6 +28,16 @@ const {
 } = await import('./branches-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { withWorkspaceWriteLock, _resetWorkspaceLocksForTests } = await import('./workspace-lock.js')
+const { saveDocument } = await import('./document-store.js')
+const { LoroDoc } = await import('loro-crdt')
+
+// Branch writers refuse a path with no document, so every test that names
+// one seeds it first — the shape production always has.
+async function seedDocuments(pairs: Array<[string, string]>): Promise<void> {
+  for (const [workspaceId, path] of pairs) {
+    await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
+  }
+}
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -35,6 +45,14 @@ describe('branches-store', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-branches-test-'))
     handle = await createIsolatedDb({ dataDir: tempDir })
+    await seedDocuments([
+      ['sess-a', 'canvas-x'],
+      ['sess-a', '621/header'],
+      ['sess-lock-create', 'canvas'],
+      ['sess-lock-delete', 'canvas'],
+      ['sess-lock-rename', 'canvas'],
+      ['sess-lock-sethead', 'canvas'],
+    ])
   })
 
   afterEach(async () => {
@@ -66,6 +84,18 @@ describe('branches-store', () => {
   })
 
   describe('saveDocumentBranches + round-trip', () => {
+    // Branch state must not CREATE documents: a minted row here has no kind
+    // and no workspace-tree node — a corrupt state the boot fold deletes and
+    // the listing contract rejects.
+    it('refuses a path with no document instead of minting a phantom row', async () => {
+      await expect(
+        saveDocumentBranches('sess-1', 'never-created', {
+          head: 'main',
+          branches: [{ name: 'main', color: DEFAULT_MAIN_COLOR, tipFrontiers: '' }],
+        }),
+      ).rejects.toThrow(/no document/i)
+    })
+
     it('round-trips every BranchMeta field through save/load', async () => {
       const state = {
         head: 'feature-x',

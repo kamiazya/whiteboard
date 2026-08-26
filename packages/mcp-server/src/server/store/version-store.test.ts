@@ -23,6 +23,16 @@ vi.mock('../config.js', () => ({
 }))
 
 const { FileVersionStore } = await import('./version-store.js')
+const { saveDocument } = await import('./document-store.js')
+
+// Version save refuses a path with no document, so tests seed each path they
+// checkpoint — the shape production always has (auto-version fires after
+// saveDocument; manual save requires an existing document).
+async function seedDocuments(workspaceId: string, paths: string[]): Promise<void> {
+  for (const path of paths) {
+    await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
+  }
+}
 
 function appendElement(doc: LoroDoc, id: string, type = 'rectangle'): void {
   const list = doc.getMovableList('elements')
@@ -46,6 +56,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     const { createIsolatedDb } = await import('./db/test-helpers.js')
     handle = await createIsolatedDb({ dataDir: tempDir })
     store = new FileVersionStore()
+    await seedDocuments('sess-1', ['canvas-a', 'canvas-b', 'canvas-x', 'canvas-y', 'canvas-z'])
   })
 
   afterEach(async () => {
@@ -66,29 +77,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.label).toBeUndefined()
     expect(entry.hasThumbnail).toBe(false)
     expect(entry.branchName).toBe('main')
-  })
-
-  it('save on a fresh path mints a ULID documents row the agent index can see', async () => {
-    // FileVersionStore.save is a third id-minting site (via upsertCanvasRow):
-    // it creates the `documents` row for a path with no prior row, just like
-    // saveDocument/createDocument do. Before this row's id was a nanoid, it
-    // never round-tripped through documentIdSchema, so SqliteDocumentIndex
-    // skipped it — a version saved on an unindexed path was invisible to
-    // every agent-facing listing despite being visible in the user's gallery.
-    const doc = new LoroDoc()
-    appendElement(doc, 'e1')
-    await store.save('sess-1', 'canvas-fresh', doc, { auto: true })
-
-    const row = await handle.db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('path', '=', 'canvas-fresh')
-      .executeTakeFirstOrThrow()
-    expect(documentIdSchema.safeParse(row.id).success).toBe(true)
-
-    const index = new SqliteDocumentIndex(handle.db)
-    const entries = await index.listDocuments({ workspaceId: 'sess-1' })
-    expect(entries.map((entry) => entry.path)).toContain('canvas-fresh')
   })
 
   it('save counts nodes-model nodes, not the retired legacy elements list', async () => {
@@ -166,15 +154,20 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('load returns the past-state doc from save time', async () => {
+    // Content must be PERSISTED for a checkpoint to capture it: frontiers
+    // point into the stored workspace record's oplog, so in-memory edits
+    // that never went through saveDocument are invisible to a version.
     const live = new LoroDoc()
     appendElement(live, 'a')
+    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
     const entry = await store.save('sess-1', 'canvas-a', live, { auto: true, label: 'v1' })
 
     appendElement(live, 'b')
     appendElement(live, 'c')
+    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
     expect(countElements(live)).toBe(3)
 
-    const past = await store.load('sess-1', entry.id, live)
+    const past = await store.load('sess-1', entry.id)
     expect(past).not.toBeNull()
     expect(countElements(past!)).toBe(1)
     const pastIds = (past!.getMovableList('elements').toJSON() as Array<{ id: string }>).map(
@@ -186,11 +179,12 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   it('load does not mutate the live doc', async () => {
     const live = new LoroDoc()
     appendElement(live, 'x1')
+    await saveDocument('sess-1', 'canvas-a', live, { kind: 'spatial', overwrite: true })
     const entry = await store.save('sess-1', 'canvas-a', live, { auto: true })
     appendElement(live, 'x2')
     const liveCountBefore = countElements(live)
 
-    await store.load('sess-1', entry.id, live)
+    await store.load('sess-1', entry.id)
 
     expect(countElements(live)).toBe(liveCountBefore)
     appendElement(live, 'x3')
@@ -199,7 +193,7 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   it('returns null for an unknown version id', async () => {
     const live = new LoroDoc()
-    const past = await store.load('sess-1', 'nope', live)
+    const past = await store.load('sess-1', 'nope')
     expect(past).toBeNull()
   })
 
@@ -226,9 +220,9 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
 
   it('rejects invalid ids during validation', async () => {
     const live = new LoroDoc()
-    await expect(store.load('sess-1', '../escape', live)).rejects.toThrow(/Invalid version id/i)
-    await expect(store.load('sess-1', 'a.b', live)).rejects.toThrow(/Invalid version id/i)
-    await expect(store.load('sess-1', '', live)).rejects.toThrow(/Invalid version id/i)
+    await expect(store.load('sess-1', '../escape')).rejects.toThrow(/Invalid version id/i)
+    await expect(store.load('sess-1', 'a.b')).rejects.toThrow(/Invalid version id/i)
+    await expect(store.load('sess-1', '')).rejects.toThrow(/Invalid version id/i)
   })
 
   it('round-trips saveThumbnail -> loadThumbnail and updates hasThumbnail', async () => {
@@ -393,21 +387,40 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     })
   })
 
-  it('earliestFrontiers returns null when no versions exist', async () => {
-    await expect(store.earliestFrontiers('sess-1', 'canvas-a')).resolves.toBeNull()
+  // Version save must not CREATE documents: a minted row here has no kind
+  // and no workspace-tree node — a corrupt state the boot fold deletes and
+  // the listing contract rejects. Creating documents is saveDocument /
+  // createDocument's job alone, and a checkpoint of a document that does
+  // not exist checkpoints nothing.
+  it('save refuses a path with no document instead of minting a phantom row', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+    await expect(store.save('sess-1', 'never-created', doc, { auto: true })).rejects.toThrow(
+      /no document/i,
+    )
   })
 
-  it('earliestFrontiers returns the oldest stored frontiers for the path', async () => {
-    const a = new LoroDoc()
-    appendElement(a, 'a1')
-    await store.save('sess-1', 'canvas-a', a, { auto: true })
-    appendElement(a, 'a2')
-    await store.save('sess-1', 'canvas-a', a, { auto: true })
+  // Legacy per-document-scoped rows (workspaceScoped=0) are deleted by the
+  // boot fold; one that still exists is corrupt stored data and must be
+  // surfaced, not silently checked out against a projection lineage that
+  // does not contain its frontiers.
+  it('load surfaces a legacy workspaceScoped=0 row as corrupt stored data', async () => {
+    const doc = makeSpatialDoc({
+      nodes: [{ id: 'n1', type: 'text', text: 'x', x: 0, y: 0, width: 10, height: 10 }],
+      edges: [],
+    })
+    await saveDocument('sess-1', 'canvas-a', doc, { kind: 'spatial', overwrite: true })
+    const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
 
-    const frontiers = await store.earliestFrontiers('sess-1', 'canvas-a')
-    expect(frontiers).not.toBeNull()
-    // Decoded Frontiers is a non-empty array of OpId-shaped objects.
-    expect(Array.isArray(frontiers)).toBe(true)
+    const { getDb } = await import('./db/index.js')
+    const db = await getDb(tempDir)
+    await db
+      .updateTable('versions')
+      .set({ workspaceScoped: 0 })
+      .where('id', '=', entry.id)
+      .execute()
+
+    await expect(store.load('sess-1', entry.id)).rejects.toThrow(/corrupt/i)
   })
 
   describe('pruneSandwichedAutoVersions', () => {

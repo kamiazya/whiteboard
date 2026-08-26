@@ -45,7 +45,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
       list: vi.fn(),
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn(),
-      earliestFrontiers: vi.fn().mockResolvedValue([]),
       earliestWorkspaceFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
@@ -113,7 +112,6 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       // reason: 'no-versions'. That is the realistic dry-run shape; what
       // matters is the bulk endpoint loops every canvas and aggregates
       // totals correctly.
-      earliestFrontiers: vi.fn().mockResolvedValue(null),
       earliestWorkspaceFrontiers: vi.fn().mockResolvedValue(null),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),

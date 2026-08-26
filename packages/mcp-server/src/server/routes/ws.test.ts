@@ -176,7 +176,6 @@ describe('handleWsUpgrade auto-version corruption', () => {
       list: vi.fn(),
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn(),
-      earliestFrontiers: vi.fn(),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
     }
@@ -226,7 +225,6 @@ describe('handleWsUpgrade auto-version corruption', () => {
       list: vi.fn(),
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn(),
-      earliestFrontiers: vi.fn(),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
     }

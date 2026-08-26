@@ -279,7 +279,6 @@ describe('purgeDanglingFiles', () => {
         throw new Error('not used')
       },
       loadThumbnail: async () => null,
-      earliestFrontiers: async () => null,
       getFrontiersBase64: async () => null,
     }
 
@@ -472,7 +471,6 @@ describe('purgeDanglingFiles', () => {
         throw new Error('not used')
       },
       loadThumbnail: async () => null,
-      earliestFrontiers: async () => null,
       getFrontiersBase64: async () => null,
     }
 

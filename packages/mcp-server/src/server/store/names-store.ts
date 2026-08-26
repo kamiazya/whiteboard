@@ -3,7 +3,7 @@ import { getDataDir } from '../config.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertDocumentRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { requireDocumentRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 
 export type { WorkspaceNames }
 
@@ -81,7 +81,7 @@ export async function setDocumentDisplayName(
   validateDocumentPath(path)
   const trimmed = name.trim()
   const db = await dbReady()
-  await upsertDocumentRow(db, workspaceId, path)
+  await requireDocumentRow(db, workspaceId, path)
   const now = Date.now()
   await db
     .updateTable('documents')
@@ -107,7 +107,7 @@ export async function setDocumentPinned(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const db = await dbReady()
-  await upsertDocumentRow(db, workspaceId, path)
+  await requireDocumentRow(db, workspaceId, path)
   await db.transaction().execute(async (trx) => {
     const row = await trx
       .selectFrom('documents')
