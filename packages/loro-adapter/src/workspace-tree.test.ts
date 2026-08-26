@@ -19,11 +19,16 @@ import {
   documentContainers,
   moveWorkspaceDocument,
   projectWorkspaceDocument,
+  readPinnedDocumentIds,
   readWorkspaceDocuments,
+  readWorkspaceMeta,
   reconcileDocContent,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
+  setWorkspaceLastCompactedAt,
+  setWorkspacePinned,
+  updateWorkspaceDocumentMeta,
   writeWorkspaceDocumentContent,
 } from './workspace-tree.js'
 
@@ -479,5 +484,82 @@ describe('reconcileDocContent (restore = a new edit equal to the past)', () => {
     past.commit()
     reconcileDocContent(live, past)
     expect(live.getMovableList('elements').toJSON()).toEqual([{ id: 'a' }])
+  })
+})
+
+describe('row-relocated meta (dual-plane collapse S4a)', () => {
+  const ULID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const ULID_B = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
+
+  it('round-trips currentBranch / createdAt / updatedAt through node meta', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ULID_A, kind: 'spatial' })
+    updateWorkspaceDocumentMeta(doc, ULID_A, {
+      currentBranch: 'feature',
+      createdAt: 111,
+      updatedAt: 222,
+    })
+    doc.commit()
+
+    const entry = resolveWorkspaceDocumentById(doc, ULID_A)
+    expect(entry?.currentBranch).toBe('feature')
+    expect(entry?.createdAt).toBe(111)
+    expect(entry?.updatedAt).toBe(222)
+  })
+
+  it('a replica that merges the meta write converges on it', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ULID_A, kind: 'spatial' })
+    doc.commit()
+    const replica = new LoroDoc()
+    replica.import(doc.export({ mode: 'snapshot' }))
+
+    updateWorkspaceDocumentMeta(doc, ULID_A, { updatedAt: 999 })
+    doc.commit()
+    replica.import(doc.export({ mode: 'update' }))
+
+    expect(resolveWorkspaceDocumentById(replica, ULID_A)?.updatedAt).toBe(999)
+  })
+
+  // readMeta tries the document parse first; a folder must keep parsing as a
+  // folder even now that document meta carries more optional fields — a
+  // misparse here would surface folders as malformed documents.
+  it('a folder node still reads as a folder alongside the extended document meta', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'dir/leaf', documentId: ULID_A, kind: 'spatial' })
+    updateWorkspaceDocumentMeta(doc, ULID_A, { currentBranch: 'main', updatedAt: 1 })
+    doc.commit()
+
+    const entries = readWorkspaceDocuments(doc)
+    expect(entries.map((e) => e.path)).toEqual(['dir/leaf'])
+  })
+
+  it('pinned document ids live in a workspace-level movable list, in order', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ULID_A, kind: 'spatial' })
+    createWorkspaceDocumentAtPath(doc, { path: 'b', documentId: ULID_B, kind: 'spatial' })
+
+    expect(readPinnedDocumentIds(doc)).toEqual([])
+    setWorkspacePinned(doc, ULID_B, true)
+    setWorkspacePinned(doc, ULID_A, true)
+    doc.commit()
+    expect(readPinnedDocumentIds(doc)).toEqual([ULID_B, ULID_A])
+
+    // Idempotent re-pin keeps position; unpin removes.
+    setWorkspacePinned(doc, ULID_B, true)
+    expect(readPinnedDocumentIds(doc)).toEqual([ULID_B, ULID_A])
+    setWorkspacePinned(doc, ULID_B, false)
+    expect(readPinnedDocumentIds(doc)).toEqual([ULID_A])
+    // Unpinning an id that is not pinned is a no-op on the list.
+    setWorkspacePinned(doc, ULID_B, false)
+    expect(readPinnedDocumentIds(doc)).toEqual([ULID_A])
+  })
+
+  it('lastCompactedAt is workspace-level meta', () => {
+    const doc = new LoroDoc()
+    expect(readWorkspaceMeta(doc).lastCompactedAt).toBeUndefined()
+    setWorkspaceLastCompactedAt(doc, 12345)
+    doc.commit()
+    expect(readWorkspaceMeta(doc).lastCompactedAt).toBe(12345)
   })
 })

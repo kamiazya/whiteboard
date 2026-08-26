@@ -51,6 +51,15 @@ export const workspaceNodeMetaSchema = z.object({
    * read as though somebody typed the path in as a title.
    */
   name: z.string().min(1).optional(),
+  /**
+   * Row-relocated meta (dual-plane collapse): state that used to live only
+   * in the daemon's `documents` table and is shared CRDT state by decision —
+   * every client sees the same branch HEAD and timestamps. All optional so
+   * every workspace document written before this schema keeps parsing.
+   */
+  currentBranch: z.string().min(1).optional(),
+  createdAt: z.number().int().optional(),
+  updatedAt: z.number().int().optional(),
 })
 export type WorkspaceNodeMeta = z.infer<typeof workspaceNodeMetaSchema>
 
@@ -164,6 +173,87 @@ function nodeById(doc: LoroDoc, documentId: string): LoroTreeNode | null {
     }
   }
   return null
+}
+
+const workspaceDocumentMetaPatchSchema = workspaceNodeMetaSchema
+  .pick({ currentBranch: true, createdAt: true, updatedAt: true })
+  .strict()
+export type WorkspaceDocumentMetaPatch = z.infer<typeof workspaceDocumentMetaPatchSchema>
+
+/**
+ * Write the row-relocated meta fields onto a document's node. Only the keys
+ * present in `patch` are touched, so a branch switch cannot clobber a
+ * concurrent timestamp update. Returns false when no document carries the id
+ * — the caller decides whether that is an error.
+ */
+export function updateWorkspaceDocumentMeta(
+  doc: LoroDoc,
+  documentId: string,
+  patch: WorkspaceDocumentMetaPatch,
+): boolean {
+  const parsed = workspaceDocumentMetaPatchSchema.parse(patch)
+  const node = nodeById(doc, documentId)
+  if (node === null) return false
+  for (const [key, value] of Object.entries(parsed)) {
+    if (value !== undefined) node.data.set(key, value)
+  }
+  doc.commit()
+  return true
+}
+
+/**
+ * Workspace-LEVEL meta: state that describes the workspace rather than any
+ * one document. `pinned` lives beside it as a LoroMovableList container —
+ * order is a property of the list, and a movable list merges concurrent
+ * pins without the ties and gaps a per-node integer would leave.
+ */
+export const WORKSPACE_META_KEY = 'workspaceMeta'
+const PINNED_KEY = 'pinned'
+
+export const workspaceMetaSchema = z.object({
+  lastCompactedAt: z.number().int().optional(),
+})
+export type WorkspaceMeta = z.infer<typeof workspaceMetaSchema>
+
+function workspaceMetaMap(doc: LoroDoc): LoroMap {
+  return doc.getMap(WORKSPACE_META_KEY)
+}
+
+export function readWorkspaceMeta(doc: LoroDoc): WorkspaceMeta {
+  const raw = workspaceMetaMap(doc).get('lastCompactedAt')
+  const parsed = workspaceMetaSchema.safeParse(raw === undefined ? {} : { lastCompactedAt: raw })
+  return parsed.success ? parsed.data : {}
+}
+
+export function setWorkspaceLastCompactedAt(doc: LoroDoc, at: number): void {
+  workspaceMetaMap(doc).set('lastCompactedAt', workspaceMetaSchema.shape.lastCompactedAt.parse(at))
+  doc.commit()
+}
+
+/**
+ * Pinned documentIds in pin order. Reads never attach the container — a read
+ * that mutates would clear an UndoManager's redo stack (see
+ * attachContentContainers) — so an unpinned workspace answers [] without
+ * writing anything.
+ */
+export function readPinnedDocumentIds(doc: LoroDoc): string[] {
+  const existing = workspaceMetaMap(doc).get(PINNED_KEY)
+  if (!(existing instanceof LoroMovableList)) return []
+  return existing.toArray().filter((v): v is string => typeof v === 'string')
+}
+
+export function setWorkspacePinned(doc: LoroDoc, documentId: string, pinned: boolean): void {
+  documentIdSchema.parse(documentId)
+  const map = workspaceMetaMap(doc)
+  const list = map.getOrCreateContainer(PINNED_KEY, new LoroMovableList())
+  const index = list.toArray().indexOf(documentId)
+  if (pinned) {
+    // Idempotent: re-pinning keeps the position it already has.
+    if (index === -1) list.push(documentId)
+  } else if (index !== -1) {
+    list.delete(index, 1)
+  }
+  doc.commit()
 }
 
 /** Every node, folders included, in tree order with its derived path. */
