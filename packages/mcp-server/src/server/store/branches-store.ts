@@ -1,8 +1,14 @@
+import {
+  resolveWorkspaceDocumentById,
+  updateWorkspaceDocumentMeta,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { getDataDir } from '../config.js'
+import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { requireDocumentRow } from './db/upsert-workspace.js'
+import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
@@ -126,6 +132,27 @@ async function saveDocumentBranchesLocked(
       .where('id', '=', documentId)
       .execute()
   })
+  // Mirror the HEAD into the workspace record's node meta (dual-plane
+  // collapse S4b): shared CRDT state every replica converges on, while the
+  // row column keeps serving today's reads. Guarded by a read so a tip-only
+  // save does not append a same-value op per save. Fail-soft while the row
+  // is what reads serve: a mirror hiccup must not fail a branch write that
+  // already durably committed.
+  try {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null) {
+      const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
+      if (entry !== null && (entry.currentBranch ?? 'main') !== state.head) {
+        updateWorkspaceDocumentMeta(workspaceDoc, documentId, { currentBranch: state.head })
+        await saveWorkspaceDoc(workspaceId, workspaceDoc)
+      }
+    }
+  } catch (err) {
+    getLogger('branches-store').warning(
+      { workspaceId, path, err },
+      'failed to mirror branch HEAD into the workspace record',
+    )
+  }
 }
 
 // Every branch mutation (createBranch, deleteBranch, updateBranchTip,

@@ -514,10 +514,11 @@ describe('performBranchMerge', () => {
     await branchesStore.setHead(SID, PATH, 'feature')
     // The failure injection point moved with the fan-out: the cleanup
     // reconcile now fails at the workspace record's save instead of at a
-    // broadcast dep that no longer exists.
-    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockRejectedValueOnce(
-      new Error('save boom'),
-    )
+    // broadcast dep that no longer exists. Every save fails (not just once):
+    // the head switch's own fail-soft branch-HEAD mirror also saves the
+    // record now, and a single-shot rejection would be consumed there,
+    // letting the reconcile under test succeed.
+    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockRejectedValue(new Error('save boom'))
     const cap = captureLogsForTests('warning')
 
     try {

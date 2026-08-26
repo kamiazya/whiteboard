@@ -1,9 +1,12 @@
+import { setWorkspacePinned } from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceNames } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
+import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { requireDocumentRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 
 export type { WorkspaceNames }
 
@@ -107,7 +110,7 @@ export async function setDocumentPinned(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const db = await dbReady()
-  await requireDocumentRow(db, workspaceId, path)
+  const documentId = await requireDocumentRow(db, workspaceId, path)
   await db.transaction().execute(async (trx) => {
     const row = await trx
       .selectFrom('documents')
@@ -140,5 +143,23 @@ export async function setDocumentPinned(
         .execute()
     }
   })
+  // Mirror into the workspace record's pinned list (dual-plane collapse
+  // S4b): shared CRDT state every replica converges on, while the row
+  // columns keep serving today's reads. setWorkspacePinned is idempotent,
+  // so the no-op row branches stay no-ops here too. Fail-soft while the row
+  // is what reads serve: a mirror hiccup must not fail a pin that already
+  // durably committed.
+  try {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null) {
+      setWorkspacePinned(workspaceDoc, documentId, pinned)
+      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    }
+  } catch (err) {
+    getLogger('names-store').warning(
+      { workspaceId, path, err },
+      'failed to mirror pin state into the workspace record',
+    )
+  }
   return loadWorkspaceNames(workspaceId)
 }

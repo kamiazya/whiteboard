@@ -322,11 +322,16 @@ export function createWorkspaceDocument(
   doc: LoroDoc,
   input: CreateWorkspaceDocumentInput,
 ): WorkspaceDocumentEntry {
+  // Creation stamps both timestamps unless the caller carries its own (the
+  // boot fold preserving what a row already recorded).
+  const now = Date.now()
   const meta = workspaceNodeMetaSchema.parse({
     documentId: input.documentId,
     segment: input.segment,
     kind: input.kind,
     ...(input.name === undefined ? {} : { name: input.name }),
+    createdAt: input.createdAt ?? now,
+    updatedAt: input.updatedAt ?? input.createdAt ?? now,
   })
   const parent = input.parentId === undefined ? null : nodeById(doc, input.parentId)
   if (input.parentId !== undefined && parent === null) {
@@ -337,6 +342,8 @@ export function createWorkspaceDocument(
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind satisfies DocumentKind)
   if (meta.name !== undefined) node.data.set('name', meta.name)
+  node.data.set('createdAt', meta.createdAt)
+  node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)
   doc.commit()
   return { ...meta, path: resolveWorkspaceDocumentById(doc, meta.documentId)?.path ?? meta.segment }
@@ -441,7 +448,14 @@ export function ensureFolderPath(doc: LoroDoc, segments: readonly string[]): Tre
  */
 export function createWorkspaceDocumentAtPath(
   doc: LoroDoc,
-  input: { path: string; documentId: string; kind: DocumentKind; name?: string },
+  input: {
+    path: string
+    documentId: string
+    kind: DocumentKind
+    name?: string
+    createdAt?: number
+    updatedAt?: number
+  },
 ): WorkspaceDocumentEntry | null {
   const segments = input.path.split('/')
   const own = segments[segments.length - 1] as string
@@ -455,16 +469,21 @@ export function createWorkspaceDocumentAtPath(
           const parent = ensureFolderPath(doc, segments.slice(0, -1))
           return parent === undefined ? tree(doc).createNode() : tree(doc).createNode(parent)
         })()
+  const now = Date.now()
   const meta = workspaceNodeMetaSchema.parse({
     documentId: input.documentId,
     segment: own,
     kind: input.kind,
     ...(input.name === undefined ? {} : { name: input.name }),
+    createdAt: input.createdAt ?? now,
+    updatedAt: input.updatedAt ?? input.createdAt ?? now,
   })
   node.data.set('documentId', meta.documentId)
   node.data.set('segment', meta.segment)
   node.data.set('kind', meta.kind)
   if (meta.name !== undefined) node.data.set('name', meta.name)
+  node.data.set('createdAt', meta.createdAt)
+  node.data.set('updatedAt', meta.updatedAt)
   attachContentContainers(node)
   doc.commit()
   return { ...meta, path: input.path }
@@ -516,13 +535,28 @@ export function moveWorkspaceNodeToPath(doc: LoroDoc, from: string, to: string):
  */
 export function adoptWorkspaceDocument(
   doc: LoroDoc,
-  input: { path: string; documentId: string; kind: DocumentKind; name?: string },
+  input: {
+    path: string
+    documentId: string
+    kind: DocumentKind
+    name?: string
+    createdAt?: number
+    updatedAt?: number
+  },
   source: LoroDoc,
 ): WorkspaceDocumentEntry | null {
   if (resolveWorkspaceDocumentById(doc, input.documentId) !== null) return null
   const created = createWorkspaceDocumentAtPath(doc, input)
   if (created === null) return null
-  if (!writeWorkspaceDocumentContent(doc, input.documentId, source)) return null
+  // The content write re-stamps updatedAt on a diff; carry the caller's
+  // value so a fold records the document's own history, not fold time.
+  if (
+    !writeWorkspaceDocumentContent(doc, input.documentId, source, {
+      ...(input.updatedAt === undefined ? {} : { updatedAt: input.updatedAt }),
+    })
+  ) {
+    return null
+  }
   return resolveWorkspaceDocumentById(doc, input.documentId)
 }
 
@@ -564,16 +598,21 @@ export function writeWorkspaceDocumentContent(
   doc: LoroDoc,
   documentId: string,
   source: LoroDoc,
+  opts: { updatedAt?: number } = {},
 ): boolean {
   const node = nodeById(doc, documentId)
   if (node === null) return false
   const projected = source.toJSON() as Record<string, unknown>
+  // Tracked so the updatedAt stamp rides ONLY a real diff, in the same
+  // commit as it — an identical write must keep committing no ops at all.
+  let changed = false
   for (const [key, value] of Object.entries(projected)) {
     if (typeof value === 'string') {
       const text = node.data.getOrCreateContainer(key, new LoroText())
       if (text.toString() !== value) {
         text.delete(0, text.length)
         if (value.length > 0) text.insert(0, value)
+        changed = true
       }
     } else if (Array.isArray(value)) {
       // A legacy List/MovableList root (old clients' `elements`). Carried as
@@ -584,16 +623,23 @@ export function writeWorkspaceDocumentContent(
       if (!jsonEqual(list.toJSON(), value)) {
         for (let i = list.length - 1; i >= 0; i--) list.delete(i, 1)
         for (const entry of value) list.push(entry as Parameters<typeof list.push>[0])
+        changed = true
       }
     } else if (typeof value === 'object' && value !== null) {
       const map = node.data.getOrCreateContainer(key, new LoroMap())
       const existing = map.toJSON() as Record<string, unknown>
       const wanted = value as Record<string, unknown>
       for (const [entryKey, entryValue] of Object.entries(wanted)) {
-        if (!jsonEqual(existing[entryKey], entryValue)) map.set(entryKey, entryValue)
+        if (!jsonEqual(existing[entryKey], entryValue)) {
+          map.set(entryKey, entryValue)
+          changed = true
+        }
       }
       for (const entryKey of Object.keys(existing)) {
-        if (!(entryKey in wanted)) map.delete(entryKey)
+        if (!(entryKey in wanted)) {
+          map.delete(entryKey)
+          changed = true
+        }
       }
     }
   }
@@ -603,12 +649,17 @@ export function writeWorkspaceDocumentContent(
       const map = node.data.getOrCreateContainer(key, new LoroMap())
       for (const entryKey of Object.keys(map.toJSON() as Record<string, unknown>)) {
         map.delete(entryKey)
+        changed = true
       }
     } else {
       const text = node.data.getOrCreateContainer(key, new LoroText())
-      if (text.length > 0) text.delete(0, text.length)
+      if (text.length > 0) {
+        text.delete(0, text.length)
+        changed = true
+      }
     }
   }
+  if (changed) node.data.set('updatedAt', opts.updatedAt ?? Date.now())
   doc.commit()
   return true
 }

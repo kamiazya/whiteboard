@@ -563,3 +563,89 @@ describe('row-relocated meta (dual-plane collapse S4a)', () => {
     expect(readWorkspaceMeta(doc).lastCompactedAt).toBe(12345)
   })
 })
+
+describe('row-relocated meta write paths (dual-plane collapse S4b)', () => {
+  const ULID_A = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+  it('creation stamps createdAt and updatedAt', () => {
+    const before = Date.now()
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, { path: 'a', documentId: ULID_A, kind: 'spatial' })
+    const after = Date.now()
+
+    const entry = resolveWorkspaceDocumentById(doc, ULID_A)
+    expect(entry?.createdAt).toBeGreaterThanOrEqual(before)
+    expect(entry?.createdAt).toBeLessThanOrEqual(after)
+    expect(entry?.updatedAt).toBe(entry?.createdAt)
+  })
+
+  it('creation honors supplied timestamps (the fold carries the row values)', () => {
+    const doc = new LoroDoc()
+    createWorkspaceDocumentAtPath(doc, {
+      path: 'a',
+      documentId: ULID_A,
+      kind: 'spatial',
+      createdAt: 111,
+      updatedAt: 222,
+    })
+    const entry = resolveWorkspaceDocumentById(doc, ULID_A)
+    expect(entry?.createdAt).toBe(111)
+    expect(entry?.updatedAt).toBe(222)
+  })
+
+  it('a content diff bumps updatedAt in the SAME commit; an identical write bumps nothing', () => {
+    const standalone = new LoroDoc()
+    standalone.setPeerId(9n)
+    writeSpatialCanvas(standalone, {
+      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' }],
+      edges: [],
+    })
+    const doc = workspace()
+    adoptWorkspaceDocument(
+      doc,
+      { path: 'design', documentId: ULID_A, kind: 'spatial', createdAt: 1, updatedAt: 1 },
+      standalone,
+    )
+
+    // Identical write: no ops, so updatedAt cannot move either.
+    const before = doc.oplogVersion()
+    writeWorkspaceDocumentContent(doc, ULID_A, standalone)
+    expect(doc.oplogVersion().compare(before)).toBe(0)
+
+    // A real diff: the replica that imports ONE update frame sees the new
+    // content and the new updatedAt together — the stamp rides the same
+    // commit, never a second save.
+    const replica = new LoroDoc()
+    replica.import(doc.export({ mode: 'snapshot' }))
+    const from = doc.version()
+    const changed = new LoroDoc()
+    changed.setPeerId(9n)
+    writeSpatialCanvas(changed, {
+      nodes: [{ id: 'n-a', type: 'text', x: 5, y: 5, width: 80, height: 40, text: 'aa' }],
+      edges: [],
+    })
+    const stampFloor = Date.now()
+    writeWorkspaceDocumentContent(doc, ULID_A, changed)
+    replica.import(doc.export({ mode: 'update', from }))
+    const merged = resolveWorkspaceDocumentById(replica, ULID_A)
+    expect(merged?.updatedAt).toBeGreaterThanOrEqual(stampFloor)
+  })
+
+  it('adoption carries the supplied updatedAt instead of stamping fold time', () => {
+    const standalone = new LoroDoc()
+    standalone.setPeerId(9n)
+    writeSpatialCanvas(standalone, {
+      nodes: [{ id: 'n-a', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'aa' }],
+      edges: [],
+    })
+    const doc = workspace()
+    adoptWorkspaceDocument(
+      doc,
+      { path: 'design', documentId: ULID_A, kind: 'spatial', createdAt: 111, updatedAt: 222 },
+      standalone,
+    )
+    const entry = resolveWorkspaceDocumentById(doc, ULID_A)
+    expect(entry?.createdAt).toBe(111)
+    expect(entry?.updatedAt).toBe(222)
+  })
+})

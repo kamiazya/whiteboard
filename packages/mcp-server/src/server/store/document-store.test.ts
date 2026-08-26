@@ -1236,6 +1236,19 @@ describe('compactDocument', () => {
     expect(stamp).not.toBeNull()
     expect(stamp!).toBeGreaterThanOrEqual(before)
     expect(stamp!).toBeLessThanOrEqual(after)
+
+    // Workspace-level mirror (dual-plane collapse S4b): compaction operates
+    // on the workspace record's oplog, so the shared timestamp lives on the
+    // workspace meta — and only successful compaction writes it, same as the
+    // row stamp ('untouched' compacted nothing above).
+    const { openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+    const workspaceDoc = await openWorkspaceDocIfStored('session1')
+    expect(workspaceDoc).not.toBeNull()
+    if (workspaceDoc === null) throw new Error('unreachable')
+    const wsStamp = readWorkspaceMeta(workspaceDoc).lastCompactedAt
+    expect(wsStamp).toBeGreaterThanOrEqual(before)
+    expect(wsStamp).toBeLessThanOrEqual(after)
   })
 
   // compactDocument reads the workspace record, exports the shallow

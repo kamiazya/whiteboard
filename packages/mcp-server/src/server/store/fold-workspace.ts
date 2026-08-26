@@ -49,7 +49,7 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
 
   const rows = await db
     .selectFrom('documents')
-    .select(['id', 'workspaceId', 'path', 'displayName', 'kind'])
+    .select(['id', 'workspaceId', 'path', 'displayName', 'kind', 'createdAt', 'updatedAt'])
     .execute()
 
   const byWorkspace = new Map<string, typeof rows>()
@@ -110,6 +110,10 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
           documentId: row.id,
           kind: kind.data,
           ...(row.displayName === null ? {} : { name: row.displayName }),
+          // The row's own history, not fold time — a fold is a relocation,
+          // not an edit.
+          createdAt: row.createdAt,
+          updatedAt: row.updatedAt,
         },
         source,
       )

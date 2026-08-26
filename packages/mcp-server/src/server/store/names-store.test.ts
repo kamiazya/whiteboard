@@ -61,6 +61,35 @@ describe('names-store', () => {
     await expect(setDocumentPinned('sess-1', 'never-created', true)).rejects.toThrow(/no document/i)
   })
 
+  // Pin state is shared CRDT state (dual-plane collapse S4b): the row write
+  // keeps serving today's reads, and the workspace record's pinned list is
+  // what every replica converges on.
+  it('mirrors pin and unpin into the workspace record pinned list', async () => {
+    const { openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { readPinnedDocumentIds } = await import('@kamiazya/whiteboard-loro-adapter')
+    const { getDb } = await import('./db/index.js')
+    const db = await getDb(tempDir)
+    const idOf = async (path: string) => {
+      const row = await db
+        .selectFrom('documents')
+        .select(['id'])
+        .where('workspaceId', '=', 'sess-1')
+        .where('path', '=', path)
+        .executeTakeFirstOrThrow()
+      return row.id
+    }
+
+    await setDocumentPinned('sess-1', 'b', true)
+    await setDocumentPinned('sess-1', 'a', true)
+    const doc = await openWorkspaceDocIfStored('sess-1')
+    expect(doc).not.toBeNull()
+    if (doc === null) throw new Error('unreachable')
+    expect(readPinnedDocumentIds(doc)).toEqual([await idOf('b'), await idOf('a')])
+
+    await setDocumentPinned('sess-1', 'b', false)
+    expect(readPinnedDocumentIds(doc)).toEqual([await idOf('a')])
+  })
+
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
     await setWorkspaceName('sess-1', 'My Workspace')
     const names = await loadWorkspaceNames('sess-1')

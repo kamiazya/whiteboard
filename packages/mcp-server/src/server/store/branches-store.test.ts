@@ -129,6 +129,35 @@ describe('branches-store', () => {
       ])
     })
 
+    // The branch HEAD is shared CRDT state (dual-plane collapse S4b): the
+    // documents.currentBranch write keeps serving today's reads, and the
+    // workspace record's node meta is what every replica converges on.
+    it('mirrors the branch HEAD into the workspace record node meta', async () => {
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
+      await saveDocumentBranches('sess-a', 'canvas-x', {
+        head: 'feature',
+        branches: [
+          {
+            name: 'main',
+            color: DEFAULT_MAIN_COLOR,
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+          {
+            name: 'feature',
+            color: '#9333ea',
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+        ],
+      })
+      const doc = await openWorkspaceDocIfStored('sess-a')
+      expect(doc).not.toBeNull()
+      if (doc === null) throw new Error('unreachable')
+      expect(resolveWorkspaceDocument(doc, 'canvas-x')?.currentBranch).toBe('feature')
+    })
+
     it('round-trips every BranchMeta field through save/load', async () => {
       const state = {
         head: 'feature-x',

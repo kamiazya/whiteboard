@@ -28,6 +28,7 @@ import {
   projectWorkspaceDocument,
   readDocumentKind,
   resolveWorkspaceDocumentById,
+  setWorkspaceLastCompactedAt,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -921,6 +922,12 @@ export async function compactDocument(
       .set({ lastCompactedAt: Date.now() })
       .where('id', '=', documentId)
       .execute()
+    // Workspace-level mirror (dual-plane collapse S4b): compaction folds the
+    // WORKSPACE record's oplog, so the shared timestamp describes the
+    // workspace rather than any one document. Written after the compacted
+    // snapshot, as a small delta on top of it.
+    setWorkspaceLastCompactedAt(doc, Date.now())
+    await saveWorkspaceDoc(workspaceId, doc)
     // No eviction: the live workspace document keeps its full in-memory
     // history and the frontier just written is its own current one, so both
     // it and the projections served from it stay coherent with the store.

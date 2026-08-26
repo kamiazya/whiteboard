@@ -131,6 +131,25 @@ it('folds every documents-table row into its workspace document, content include
   ])
 })
 
+it('carries the row timestamps into node meta instead of stamping fold time', async () => {
+  const db = await getDb(tempDir)
+  const documentId = await seedLegacy('ws-a', 'design', 'timestamped')
+  await db
+    .updateTable('documents')
+    .set({ createdAt: 111, updatedAt: 222 })
+    .where('id', '=', documentId)
+    .execute()
+
+  await foldWorkspaceDocuments()
+
+  const workspace = await openWorkspace('ws-a')
+  expect(workspace).not.toBeNull()
+  if (workspace === null) return
+  const entry = resolveWorkspaceDocumentById(workspace, documentId)
+  expect(entry?.createdAt).toBe(111)
+  expect(entry?.updatedAt).toBe(222)
+})
+
 it('is idempotent, and picks up documents created between runs', async () => {
   await seedLegacy('ws-a', 'design', 'first')
   expect((await foldWorkspaceDocuments()).folded).toBe(1)
