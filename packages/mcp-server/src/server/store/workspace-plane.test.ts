@@ -69,7 +69,7 @@ async function stores() {
   return {
     db,
     inner,
-    routed: new WorkspaceRoutedDocumentStore(inner, db),
+    routed: new WorkspaceRoutedDocumentStore(inner),
     index: new DualPlaneDocumentIndex(new SqliteDocumentIndex(db), db),
   }
 }
@@ -84,7 +84,9 @@ it('a tool read (document ref) sees a daemon-route write, and a tool write lands
     .executeTakeFirstOrThrow()
 
   // Tool read: the same content the route wrote.
-  const loaded = await routed.loadSnapshot({ docRef: { kind: 'document', documentId: row.id } })
+  const loaded = await routed.loadSnapshot({
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+  })
   expect(loaded).not.toBeNull()
   if (loaded === null) return
   const toolDoc = new LoroDoc()
@@ -101,14 +103,18 @@ it('a tool read (document ref) sees a daemon-route write, and a tool write lands
     1_000_000,
   )
   await routed.saveSnapshot({
-    docRef: { kind: 'document', documentId: row.id },
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
     manifest,
     chunks,
     frontier: new Uint8Array(toolDoc.oplogVersion().encode()),
   })
   expect(readText(await loadDocument('ws-a', 'design'))).toBe('tool-edited')
   // Still nothing on the legacy per-document plane.
-  expect(await inner.loadSnapshot({ docRef: { kind: 'document', documentId: row.id } })).toBeNull()
+  expect(
+    await inner.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+    }),
+  ).toBeNull()
 })
 
 it('readFrontier answers for a tree-served document, and the stamp moves when its content does', async () => {
@@ -125,15 +131,42 @@ it('readFrontier answers for a tree-served document, and the stamp moves when it
     .where('path', '=', 'design')
     .executeTakeFirstOrThrow()
 
-  const before = await routed.readFrontier({ docRef: { kind: 'document', documentId: row.id } })
+  const before = await routed.readFrontier({
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+  })
   expect(before).not.toBeNull()
   if (before === null) return
 
   await saveDocument('ws-a', 'design', canvasDoc('v2'), { kind: 'spatial', overwrite: true })
-  const after = await routed.readFrontier({ docRef: { kind: 'document', documentId: row.id } })
+  const after = await routed.readFrontier({
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
+  })
   expect(after).not.toBeNull()
   if (after === null) return
   expect(Buffer.from(after.frontier).equals(Buffer.from(before.frontier))).toBe(false)
+})
+
+it('routes a document ref by ITS OWN workspace, with no documents-table lookup (S6)', async () => {
+  // The ref carries the workspace since W3, so the route needs no reverse
+  // row lookup — and must keep serving even when the row is gone, because
+  // the rows are a mirror on their way out, not an address book.
+  const { db, routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('tree-truth'), { kind: 'spatial' })
+  const row = await db
+    .selectFrom('documents')
+    .select(['id'])
+    .where('path', '=', 'design')
+    .executeTakeFirstOrThrow()
+  await db.deleteFrom('documents').where('id', '=', row.id).execute()
+
+  const ref = { kind: 'document', workspaceId: 'ws-a', documentId: row.id } as const
+  const loaded = await routed.loadSnapshot({ docRef: ref })
+  expect(loaded).not.toBeNull()
+  if (loaded === null) return
+  const doc = new LoroDoc()
+  doc.import(reassembleSnapshot(loaded.manifest, loaded.chunks))
+  expect(readText(doc)).toBe('tree-truth')
+  expect(await routed.readFrontier({ docRef: ref })).not.toBeNull()
 })
 
 it('workspace-tree refs pass straight through to the inner store', async () => {

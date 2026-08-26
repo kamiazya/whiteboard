@@ -75,8 +75,8 @@ async function writeThroughToolPath(text: string): Promise<void> {
   const doc = textDoc(text)
   const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1024 * 1024)
   const { WorkspaceRoutedDocumentStore } = await import('../store/workspace-plane.js')
-  await new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db), db).saveSnapshot({
-    docRef: { kind: 'document', documentId },
+  await new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db)).saveSnapshot({
+    docRef: { kind: 'document', workspaceId: WORKSPACE, documentId },
     manifest,
     chunks,
     // The tools' own value (`document-io.ts`). It is what tells a reader the

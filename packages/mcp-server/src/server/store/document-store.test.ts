@@ -179,7 +179,7 @@ describe('route saves and tool writes serialize on the workspace document', () =
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
     const db = await getDb(getDataDir())
-    return { db, routed: new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db), db) }
+    return { db, routed: new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db)) }
   }
 
   async function toolWrite(
@@ -189,7 +189,7 @@ describe('route saves and tool writes serialize on the workspace document', () =
   ): Promise<void> {
     const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
     const { withDocumentWriteLock } = await import('./workspace-lock.js')
-    const docRef = { kind: 'document' as const, documentId }
+    const docRef = { kind: 'document' as const, workspaceId: 'session1', documentId }
     await withDocumentWriteLock(documentId, async () => {
       const existing = await routed.loadSnapshot({ docRef })
       const doc = new LoroDoc()
@@ -1318,8 +1318,8 @@ describe('compactDocument', () => {
 
     const compactPromise = compactDocument('session1', 'test', delayedStore)
     await new Promise((r) => setTimeout(r, 20))
-    const routed = new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db), db)
-    const docRef = { kind: 'document' as const, documentId }
+    const routed = new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db))
+    const docRef = { kind: 'document' as const, workspaceId: 'session1', documentId }
     const existing = await routed.loadSnapshot({ docRef })
     const toolDoc = new LoroDoc()
     toolDoc.import(reassembleSnapshot(existing!.manifest, existing!.chunks))

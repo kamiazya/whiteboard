@@ -27,6 +27,7 @@ import {
   moveWorkspaceNodeToPath,
   projectWorkspaceDocument,
   readDocumentKind,
+  resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceLastCompactedAt,
   updateWorkspaceDocumentMeta,
@@ -47,7 +48,7 @@ import {
   LoroWorkspaceDocumentIndex,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers, Value } from 'loro-crdt'
-import { encodeFrontiers, LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
+import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -320,14 +321,6 @@ export function cacheBackedWorkspaceDocs(): {
   }
 }
 
-/**
- * The documents `loadDocument` served from the workspace tree. `getDoc`'s
- * cache-refresh must NOT replay legacy per-document deltas into these: a
- * projection has its own fresh oplog, and importing the old lineage's ops
- * on top of it resurrects pre-fold state over current content.
- */
-const treeServedDocs = new WeakSet<LoroDoc>()
-
 /** The tree index delete/rename go through, so a daemon delete evacuates the same way a port delete does. */
 async function workspaceTreeIndex(): Promise<LoroWorkspaceDocumentIndex> {
   return new LoroWorkspaceDocumentIndex(cacheBackedWorkspaceDocs(), new FsBlobStore(getDataDir()))
@@ -335,50 +328,6 @@ async function workspaceTreeIndex(): Promise<LoroWorkspaceDocumentIndex> {
 
 async function documentStoreReady(): Promise<LibsqlDocumentStore> {
   return new LibsqlDocumentStore(await dbReady())
-}
-
-// Merge-then-save for the live-doc path. The lock alone only makes an
-// overwrite ATOMIC — it cannot make it correct: `doc` may be a long-lived
-// cached instance (doc-cache) that has not seen ops an MCP tool wrote to
-// these same rows since it loaded, and exporting it as the whole new truth
-// would erase them in one clean write. When the stored frontier is not
-// already contained in the doc's version (behind or concurrent), import
-// the stored snapshot first so the save is a CRDT merge — ops the doc
-// already carries are no-ops, unseen ops join the history (and, for a
-// cached doc, heal the live session in place). The frontier check is the
-// fast path: one small row read skips the full snapshot load whenever this
-// doc was the last writer. A stored snapshot that fails to import falls
-// back to plain overwrite — the pre-flip semantics for an unreadable
-// snapshot — with a warning.
-/**
- * Brings `doc` up to the stored bytes when it is behind them, and does
- * nothing when it is not.
- *
- * Used on BOTH sides, and for the same reason from opposite directions: a
- * writer must not overwrite work it never saw, and a reader must not serve
- * a cached document someone else has since written past. The read side is
- * what makes the resident LRU self-correcting — every write would otherwise
- * have to remember to evict, and the MCP tools cannot: they address
- * documents by id and have no idea what path a document is cached under.
- *
- * Throws rather than logging, so each caller can say what its own failure
- * costs — an overwrite on the write side, stale bytes on the read side.
- */
-async function importStoredIfBehind(
-  documentStore: LibsqlDocumentStore,
-  workspaceId: string,
-  documentId: string,
-  doc: LoroDoc,
-): Promise<void> {
-  const docRef = { kind: 'document' as const, workspaceId, documentId }
-  const stored = await documentStore.readFrontier({ docRef })
-  if (stored === null) return
-  const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
-  // `undefined` means the two histories diverged — neither is a prefix of the
-  // other — which is still a reason to merge, not to ignore.
-  if (comparison !== undefined && comparison >= 0) return
-  const existing = await documentStore.loadSnapshot({ docRef })
-  if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
 }
 
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
@@ -544,20 +493,26 @@ export async function saveDocument(
 export async function loadDocument(workspaceId: string, path: string): Promise<LoroDoc> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
+  // The workspace tree answers first, and resolves the PATH itself (S6):
+  // the tree is the address book now, so a document lists and serves even
+  // if its mirror row is skewed or gone. The projection is a VALUE copy
+  // with its own oplog.
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const entry = resolveWorkspaceDocument(workspaceDoc, path)
+    if (entry !== null) {
+      const projected = projectWorkspaceDocument(workspaceDoc, entry.documentId)
+      if (projected !== null) {
+        return projected
+      }
+    }
+  }
+  // Below: the LEGACY plane — a pre-fold document the boot fold has not
+  // absorbed yet (or skipped as unreadable). Only the rows know those, so
+  // the row lookup is correct here and nowhere else.
   const db = await dbReady()
   const documentId = await getDocumentIdByPath(db, workspaceId, path)
   if (!documentId) return new LoroDoc()
-  // The workspace tree answers first: that is where a kind-carrying save
-  // persists. The projection is a VALUE copy with its own oplog — see
-  // treeServedDocs for why the legacy delta log must never replay into it.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc !== null) {
-    const projected = projectWorkspaceDocument(workspaceDoc, documentId)
-    if (projected !== null) {
-      treeServedDocs.add(projected)
-      return projected
-    }
-  }
   // Purely a stable identity label for corrupt-data error messages and the
   // legacy-migration backup file below — no longer an FS path this function
   // reads from.
@@ -641,33 +596,12 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
  * only when a *fresh* instance is the point.
  */
 export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc> {
-  // Only a HIT can be stale; a miss is about to load the stored bytes anyway.
-  // Paying the two small indexed reads here rather than on every call keeps
-  // the common path unchanged.
-  const cached = peekDoc(workspaceId, path)
-  if (cached !== undefined) {
-    try {
-      // A tree-served projection is refreshed by every write flowing through
-      // it (saveDocument diffs against the live workspace doc), and the
-      // legacy delta log belongs to a DIFFERENT oplog — importing it here
-      // would resurrect pre-fold state over current content.
-      if (!treeServedDocs.has(cached)) {
-        const db = await dbReady()
-        const documentId = await getDocumentIdByPath(db, workspaceId, path)
-        if (documentId) {
-          await importStoredIfBehind(await documentStoreReady(), workspaceId, documentId, cached)
-        }
-      }
-    } catch (err) {
-      // Serving the cached document is the honest fallback: it is what this
-      // process last knew, and refusing to answer would turn a stale read
-      // into a failed one.
-      getLogger('document').warning(
-        { workspaceId, path, err: err as Error },
-        'could not refresh cached document from the store; serving cached bytes',
-      )
-    }
-  }
+  // No staleness refresh: every served document is a tree projection that
+  // each write path mutates in place (saveDocument diffs against the live
+  // workspace doc), so a cache hit IS the current state. The legacy
+  // per-document delta replay that used to run here died with the legacy
+  // plane — replaying that other oplog into a projection resurrected
+  // pre-fold state over current content.
   return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path))
 }
 

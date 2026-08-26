@@ -22,9 +22,7 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
     // node, and index mutations mirror into it, so the tool surface and the
     // daemon's own routes see one document.
     bind(TOKENS.DocumentStore)
-      .toDynamicValue(
-        () => new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(opts.db), opts.db),
-      )
+      .toDynamicValue(() => new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(opts.db)))
       .inSingletonScope()
     bind(TOKENS.BlobStore)
       .toDynamicValue(() => new FsBlobStore(opts.blobDir))

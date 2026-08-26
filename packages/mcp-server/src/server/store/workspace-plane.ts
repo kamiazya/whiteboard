@@ -13,13 +13,10 @@
 import {
   createWorkspaceDocumentAtPath,
   moveWorkspaceNodeToPath,
-  readDocumentKind,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -69,23 +66,6 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
-interface DocumentRow {
-  workspaceId: string
-  path: string
-  kind: string | null
-}
-
-async function documentRowById(
-  db: Kysely<DatabaseSchema>,
-  documentId: string,
-): Promise<DocumentRow | undefined> {
-  return db
-    .selectFrom('documents')
-    .select(['workspaceId', 'path', 'kind'])
-    .where('id', '=', documentId)
-    .executeTakeFirst()
-}
-
 /**
  * `DocumentStore` whose `document:` refs read and write THROUGH the
  * workspace tree when the tree holds the document, delegating everything
@@ -94,33 +74,39 @@ async function documentRowById(
  * changes.
  */
 export class WorkspaceRoutedDocumentStore implements DocumentStore {
-  constructor(
-    private readonly inner: DocumentStore,
-    private readonly db: Kysely<DatabaseSchema>,
-  ) {}
+  constructor(private readonly inner: DocumentStore) {}
+
+  /**
+   * The tree entry for a document ref, resolved through the ref's OWN
+   * workspace (the ref carries it since W3) — no documents-table reverse
+   * lookup. Null when the tree does not hold the document, which routes
+   * the operation to the inner store (the legacy plane, or nothing).
+   */
+  async #treeEntry(docRef: {
+    workspaceId: string
+    documentId: string
+  }): Promise<{ path: string } | null> {
+    const workspaceDoc = await openWorkspaceDocIfStored(docRef.workspaceId)
+    if (workspaceDoc === null) return null
+    return resolveWorkspaceDocumentById(workspaceDoc, docRef.documentId)
+  }
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     if (input.docRef.kind === 'document') {
-      const row = await documentRowById(this.db, input.docRef.documentId)
-      if (row !== undefined) {
-        const workspaceDoc = await openWorkspaceDocIfStored(row.workspaceId)
-        if (
-          workspaceDoc !== null &&
-          resolveWorkspaceDocumentById(workspaceDoc, input.docRef.documentId) !== null
-        ) {
-          // Served from the SAME cached projection the route path mutates —
-          // not a fresh per-call projection — so a tool's load-modify-save
-          // round-trips through one lineage and its save is a real CRDT
-          // merge (tombstones included) instead of a value diff against a
-          // stranger's history.
-          const doc = await getDoc(row.workspaceId, row.path)
-          const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
-          const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
-          return {
-            manifest,
-            chunks,
-            frontier: new Uint8Array(doc.oplogVersion().encode()),
-          }
+      const entry = await this.#treeEntry(input.docRef)
+      if (entry !== null) {
+        // Served from the SAME cached projection the route path mutates —
+        // not a fresh per-call projection — so a tool's load-modify-save
+        // round-trips through one lineage and its save is a real CRDT
+        // merge (tombstones included) instead of a value diff against a
+        // stranger's history.
+        const doc = await getDoc(input.docRef.workspaceId, entry.path)
+        const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
+        const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
+        return {
+          manifest,
+          chunks,
+          frontier: new Uint8Array(doc.oplogVersion().encode()),
         }
       }
     }
@@ -141,48 +127,39 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
     if (input.docRef.kind === 'document') {
-      const { documentId } = input.docRef
-      const row = await documentRowById(this.db, documentId)
-      if (row !== undefined) {
+      const { workspaceId, documentId } = input.docRef
+      // Under the workspace write lock, like every other writer of the
+      // live workspace document — the route save path holds it too, so a
+      // tool write and a route save on the same workspace settle into a
+      // definite order instead of interleaving their diff-writes. Safe
+      // to acquire while the tool surface's canvas-doc lock is held:
+      // the lock is re-entrant per async chain and nothing nests the
+      // two the other way around anymore.
+      const wrote = await withWorkspaceWriteLock(workspaceId, async () => {
+        const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+        if (workspaceDoc === null) return false
+        const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
+        // A document the tree does not hold has no path here — the create
+        // path (documentIndex.createDocument) is what places one, so a
+        // save for an unknown id falls through to the inner store rather
+        // than inventing a placement.
+        if (entry === null) return false
         const doc = new LoroDoc()
         doc.import(reassembleSnapshot(input.manifest, input.chunks))
-        const parsedRowKind = documentKindSchema.safeParse(row.kind)
-        const kind: DocumentKind | null = parsedRowKind.success
-          ? parsedRowKind.data
-          : (readDocumentKind(doc) ?? null)
-        if (kind !== null) {
-          // Under the workspace write lock, like every other writer of the
-          // live workspace document — the route save path holds it too, so a
-          // tool write and a route save on the same workspace settle into a
-          // definite order instead of interleaving their diff-writes. Safe
-          // to acquire while the tool surface's canvas-doc lock is held:
-          // the lock is re-entrant per async chain and nothing nests the
-          // two the other way around anymore.
-          const wrote = await withWorkspaceWriteLock(row.workspaceId, async () => {
-            const workspaceDoc = await getWorkspaceDoc(row.workspaceId)
-            if (resolveWorkspaceDocumentById(workspaceDoc, documentId) === null) {
-              createWorkspaceDocumentAtPath(workspaceDoc, {
-                path: row.path,
-                documentId,
-                kind,
-              })
-            }
-            // MERGE into the cached projection — the doc instance
-            // loadSnapshot serves and every route save mutates — rather
-            // than diff-writing the tool's own copy over the tree. A tool
-            // that loaded before a concurrent route write then converges
-            // with it (import is a CRDT merge; ops the projection already
-            // has are no-ops) instead of value-diffing the other writer's
-            // edit back out.
-            const live = await getDoc(row.workspaceId, row.path)
-            live.import(doc.export({ mode: 'update' }))
-            if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
-            await saveWorkspaceDoc(row.workspaceId, workspaceDoc)
-            return true
-          })
-          if (wrote) return
-        }
-      }
+        // MERGE into the cached projection — the doc instance
+        // loadSnapshot serves and every route save mutates — rather
+        // than diff-writing the tool's own copy over the tree. A tool
+        // that loaded before a concurrent route write then converges
+        // with it (import is a CRDT merge; ops the projection already
+        // has are no-ops) instead of value-diffing the other writer's
+        // edit back out.
+        const live = await getDoc(workspaceId, entry.path)
+        live.import(doc.export({ mode: 'update' }))
+        if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
+        await saveWorkspaceDoc(workspaceId, workspaceDoc)
+        return true
+      })
+      if (wrote) return
     }
     return this.inner.saveSnapshot(input)
   }
@@ -203,22 +180,16 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
 
   async readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult> {
     if (input.docRef.kind === 'document') {
-      const row = await documentRowById(this.db, input.docRef.documentId)
-      if (row !== undefined) {
-        const workspaceDoc = await openWorkspaceDocIfStored(row.workspaceId)
-        if (
-          workspaceDoc !== null &&
-          resolveWorkspaceDocumentById(workspaceDoc, input.docRef.documentId) !== null
-        ) {
-          // The projection's version, same source as loadSnapshot's
-          // `frontier` — this is what ContentFactsCache stamps search /
-          // backlinks / tags facts with, and the retired per-document
-          // record would answer null here, silently blanking the whole
-          // corpus. The stamp is per-process (a re-projection mints a new
-          // lineage), which can only over-invalidate, never under.
-          const doc = await getDoc(row.workspaceId, row.path)
-          return { frontier: new Uint8Array(doc.oplogVersion().encode()) }
-        }
+      const entry = await this.#treeEntry(input.docRef)
+      if (entry !== null) {
+        // The projection's version, same source as loadSnapshot's
+        // `frontier` — this is what ContentFactsCache stamps search /
+        // backlinks / tags facts with, and the retired per-document
+        // record would answer null here, silently blanking the whole
+        // corpus. The stamp is per-process (a re-projection mints a new
+        // lineage), which can only over-invalidate, never under.
+        const doc = await getDoc(input.docRef.workspaceId, entry.path)
+        return { frontier: new Uint8Array(doc.oplogVersion().encode()) }
       }
     }
     return this.inner.readFrontier(input)
