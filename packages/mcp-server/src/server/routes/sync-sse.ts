@@ -14,6 +14,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
+import { workspaceDocKey } from '../../shared/sse-stream-hub.js'
 import type {
   SyncMessageEvent,
   SyncReadyEvent,
@@ -101,6 +102,23 @@ function toBase64(bytes: Uint8Array): string {
  */
 export function sseBroadcastUpdate(workspaceId: string, path: string, update: Uint8Array): void {
   const key = docKey(workspaceId, path)
+  const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
+  const frame = JSON.stringify(payload)
+  for (const stream of streams.values()) {
+    if (!stream.docs.has(key)) continue
+    stream.send('update', frame)
+  }
+}
+
+/**
+ * Fan a WORKSPACE-DOCUMENT update out to every stream subscribed at
+ * workspace granularity (`workspace:<id>` keys). Kept apart from the
+ * per-document fan-out above because the two carry different Loro lineages:
+ * a per-document subscriber handed workspace-document bytes (or the
+ * reverse) would be importing a stranger's history.
+ */
+export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
+  const key = workspaceDocKey(workspaceId)
   const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
   const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {

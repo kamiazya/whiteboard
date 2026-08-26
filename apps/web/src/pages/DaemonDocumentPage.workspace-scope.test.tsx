@@ -92,7 +92,49 @@ vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
   },
 }))
 
+const sseConstructed: {
+  workspaceId: string
+  path: string
+  options: { workspaceScope?: boolean } | undefined
+}[] = []
+
+vi.mock('@kamiazya/whiteboard-mcp/sse-backend', () => ({
+  SseBackend: class {
+    constructor(
+      workspaceId: string,
+      path: string,
+      _baseUrl: string,
+      _transport?: unknown,
+      _streamSource?: unknown,
+      options?: { workspaceScope?: boolean },
+    ) {
+      sseConstructed.push({ workspaceId, path, options })
+      this.options = options
+    }
+    options: { workspaceScope?: boolean } | undefined
+    connect(handlers: DocumentBackendHandlers): void {
+      handlers.onConnected()
+      handlers.onSnapshot(
+        this.options?.workspaceScope
+          ? workspaceSnapshot()
+          : new Uint8Array(new LoroDoc().export({ mode: 'snapshot' })),
+      )
+    }
+    disconnect(): void {}
+    pushLocalUpdate(): void {}
+    getFile(): Promise<Blob | null> {
+      return Promise.resolve(null)
+    }
+    putFile(): Promise<void> {
+      return Promise.resolve()
+    }
+    sendClientReady(): void {}
+    sendExportResponse(): void {}
+  },
+}))
+
 const { DaemonDocumentPage } = await import('./DaemonDocumentPage.js')
+const { DEV_TRANSPORT_OVERRIDE_KEY } = await import('../lib/dev-transport-override.js')
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
@@ -101,6 +143,7 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
   beforeEach(() => {
     window.localStorage.clear()
     constructed.length = 0
+    sseConstructed.length = 0
     vi.stubGlobal(
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
@@ -143,6 +186,25 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
       expect(document.body.textContent).toContain('Hello from the workspace document'),
     )
     expect(screen.getByTestId('markdown-source-wrap')).toBeTruthy()
+  })
+
+  it('opts the SSE transport into workspace scope too, and hydrates the scoped document', async () => {
+    window.localStorage.setItem(DEV_TRANSPORT_OVERRIDE_KEY, 'sse')
+    await act(async () => {
+      render(
+        <DaemonDocumentPage
+          daemonBaseUrl="http://127.0.0.1:3099"
+          workspaceId="w1"
+          path="agent-note"
+        />,
+      )
+    })
+
+    await waitFor(() => expect(sseConstructed.length).toBeGreaterThan(0))
+    expect(sseConstructed[0]?.options?.workspaceScope).toBe(true)
+    await waitFor(() =>
+      expect(document.body.textContent).toContain('Hello from the workspace document'),
+    )
   })
 
   it('keeps a kindless legacy document on the per-document contract', async () => {

@@ -9,7 +9,7 @@
 // would only add base64 inflation. This stream carries incremental updates.
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
-import { resetSyncStreamsForTests } from './sync-sse.js'
+import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
 import {
   broadcastLoroUpdate,
   sendHeadChanged,
@@ -144,6 +144,34 @@ describe('SSE sync transport', () => {
     // SSE is a text protocol, so Loro update bytes travel base64-encoded.
     expect(updateFrame).toContain(`"doc":"ws-1/canvas-a"`)
     expect(updateFrame).toContain(`"update":"${btoa('\x01\x02\x03')}"`)
+  })
+
+  it('fans a workspace-document update out at workspace granularity, and only there', async () => {
+    const app = createApp(createRuntimeOptions())
+    const workspaceScoped = await openStream(app)
+    const perDoc = await openStream(app)
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: workspaceScoped.streamId, subscribe: ['workspace:ws-1'] }),
+    })
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: perDoc.streamId, subscribe: ['ws-1/canvas-a'] }),
+    })
+
+    sseBroadcastWorkspaceUpdate('ws-1', new Uint8Array([4, 5, 6]))
+
+    const frames = await readEvents(workspaceScoped.res, 1)
+    const updateFrame = frames.find((f) => f.includes('event: update'))
+    expect(updateFrame).toBeDefined()
+    expect(updateFrame).toContain(`"doc":"workspace:ws-1"`)
+    expect(updateFrame).toContain(`"update":"${btoa('\x04\x05\x06')}"`)
+    // A per-document subscriber must never receive workspace-document bytes:
+    // they are a different Loro lineage its replica cannot import.
+    const perDocFrames = await readEvents(perDoc.res, 1, 300)
+    expect(perDocFrames.filter((f) => f.includes('event: update'))).toEqual([])
   })
 
   it('does not deliver a doc the stream never subscribed to', async () => {

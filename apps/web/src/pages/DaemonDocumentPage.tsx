@@ -232,8 +232,9 @@ export function DaemonDocumentPage({
       }
     }
     // Null where SharedWorker is unavailable; SseBackend then opens its own
-    // stream, which is correct but not shared across tabs. The SSE transport
-    // stays per-document — the widget/hosted surface has not moved yet.
+    // stream, which is correct but not shared across tabs. Same granularity
+    // rule as the WebSocket branch: a tree-served document syncs at
+    // workspace-document granularity, a kindless legacy one per document.
     const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
     return {
       backend: new SseBackend(
@@ -242,8 +243,9 @@ export function DaemonDocumentPage({
         daemonBaseUrl,
         { fetch: daemonFetch },
         shared,
+        workspaceSyncDocumentId === undefined ? undefined : { workspaceScope: true },
       ),
-      contentDocumentId: undefined,
+      contentDocumentId: workspaceSyncDocumentId,
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [

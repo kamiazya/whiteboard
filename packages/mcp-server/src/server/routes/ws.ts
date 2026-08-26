@@ -36,6 +36,7 @@ import {
   sseBroadcastText,
   sseBroadcastTextToReady,
   sseBroadcastUpdate,
+  sseBroadcastWorkspaceUpdate,
 } from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
@@ -63,8 +64,12 @@ function isWorkspaceScope(workspaceId: string, ws: WebSocket): boolean {
 // back is a no-op by CRDT semantics.
 onWorkspaceDocUpdated((workspaceId, update) => {
   const clients = workspaceScopeConnections.get(workspaceId)
-  if (!clients) return
-  for (const ws of clients) ws.send(update)
+  if (clients) {
+    for (const ws of clients) ws.send(update)
+  }
+  // The SSE transport is the same audience over a different pipe: a stream
+  // subscribed at workspace granularity gets the same persisted bytes.
+  sseBroadcastWorkspaceUpdate(workspaceId, update)
 })
 
 // Sticky viewport state per canvas. The MCP `viewport_set` tool only fires the

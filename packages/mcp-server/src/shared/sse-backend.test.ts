@@ -306,3 +306,80 @@ describe('SseBackend', () => {
     backend.disconnect()
   })
 })
+
+describe('SseBackend workspace scope', () => {
+  it('seeds from the workspace-document snapshot, takes binary only at workspace granularity, and keeps per-document text', async () => {
+    const fake = createFakeTransport([])
+    const { handlers, snapshots, updates } = createHandlers()
+    let versions = 0
+    handlers.onVersionCreated = () => {
+      versions += 1
+    }
+    const backend = new SseBackend(
+      'ws-1',
+      'canvas-a',
+      'http://127.0.0.1:3099',
+      fake.transport,
+      undefined,
+      { workspaceScope: true },
+    )
+
+    backend.connect(handlers)
+    await vi.waitFor(() => expect(snapshots.length).toBe(1))
+    expect(fake.calls.some((c) => c.url.includes('/api/w/ws-1/workspace-document/snapshot'))).toBe(
+      true,
+    )
+
+    // Both keys are subscribed: the workspace key carries binary, the
+    // per-document key carries the text messages that stay per path.
+    await vi.waitFor(() => {
+      const bodies = fake.calls
+        .filter((c) => c.url.includes('/api/sync/subscribe'))
+        .map((c) => String(c.body))
+      expect(bodies.some((b) => b.includes('workspace:ws-1'))).toBe(true)
+      expect(bodies.some((b) => b.includes('ws-1/canvas-a'))).toBe(true)
+    })
+
+    // A workspace-granularity update reaches the session...
+    fake.push(sseFrame('update', JSON.stringify({ doc: 'workspace:ws-1', update: btoa('\x09') })))
+    await vi.waitFor(() => expect(updates.length).toBe(1))
+    // ...while a per-document frame is ignored: its bytes are a projection's
+    // own lineage, which a workspace replica cannot import.
+    fake.push(sseFrame('update', JSON.stringify({ doc: 'ws-1/canvas-a', update: btoa('\x08') })))
+    await flush()
+    expect(updates.length).toBe(1)
+
+    // Text messages stay per document.
+    fake.push(
+      sseFrame(
+        'message',
+        JSON.stringify({
+          doc: 'ws-1/canvas-a',
+          raw: JSON.stringify({
+            type: 'version_created',
+            version: {
+              id: 'v1',
+              path: 'canvas-a',
+              createdAt: new Date(0).toISOString(),
+              elementCount: 0,
+              auto: true,
+              hasThumbnail: false,
+              branchName: 'main',
+            },
+          }),
+        }),
+      ),
+    )
+    await vi.waitFor(() => expect(versions).toBe(1))
+
+    // A local push goes to the workspace-document update route.
+    await backend.pushLocalUpdate(new Uint8Array([1, 2]))
+    expect(
+      fake.calls.some(
+        (c) => c.url.includes('/api/w/ws-1/workspace-document/update') && c.method === 'POST',
+      ),
+    ).toBe(true)
+
+    backend.disconnect()
+  })
+})

@@ -1156,7 +1156,6 @@ describe('createApp daemon mutation auth', () => {
   it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
     const { saveDocument } = await import('./store/document-store.js')
     const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const { writeSpatialNode } = await import('@kamiazya/whiteboard-loro-adapter')
 
     const app = createApp(createRuntimeOptions())
 

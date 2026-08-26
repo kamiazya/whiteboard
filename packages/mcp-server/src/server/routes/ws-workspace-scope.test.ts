@@ -216,3 +216,44 @@ it('a per-document frame is never raw-forwarded to a workspace-scope socket, whi
     readSpatialCanvas(documentContainers(replica, entry.documentId)).nodes.map((n) => n.id),
   ).toEqual(['n-a', 'n-b'])
 })
+
+it('a per-document save reaches an SSE stream subscribed at workspace granularity', async () => {
+  // End-to-end through the funnel: saveDocument -> saveWorkspaceDoc ->
+  // onWorkspaceDocUpdated (ws.ts's module listener) -> SSE fan-out.
+  const { createSyncSseRouter, resetSyncStreamsForTests } = await import('./sync-sse.js')
+  const app = createSyncSseRouter()
+  const res = await app.request('/api/sync/stream')
+  const reader = res.body?.getReader()
+  if (!reader) throw new Error('no stream body')
+  const decoder = new TextDecoder()
+  const first = await reader.read()
+  const streamId = JSON.parse(
+    decoder
+      .decode(first.value)
+      .split('\n')
+      .find((l) => l.startsWith('data:'))
+      ?.slice(5) ?? '{}',
+  ).streamId as string
+  try {
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId, subscribe: ['workspace:session1'] }),
+    })
+
+    const edited = canvasDoc(['n-a', 'n-sse'])
+    await saveDocument('session1', 'c', edited, { kind: 'spatial', overwrite: true })
+
+    const chunk = await Promise.race([
+      reader.read(),
+      new Promise<null>((r) => setTimeout(() => r(null), 2000)),
+    ])
+    expect(chunk).not.toBeNull()
+    const frame = decoder.decode(chunk?.value)
+    expect(frame).toContain('event: update')
+    expect(frame).toContain('"doc":"workspace:session1"')
+  } finally {
+    await reader.cancel().catch(() => {})
+    resetSyncStreamsForTests()
+  }
+})
