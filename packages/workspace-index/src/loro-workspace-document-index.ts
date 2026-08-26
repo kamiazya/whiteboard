@@ -52,6 +52,7 @@ import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
+  DocumentPathContestedError,
   DocumentPathTakenError,
   isSelfOrDescendant,
   WorkspaceNotFoundError,
@@ -195,6 +196,12 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
 
   async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
     const doc = await this.#open(input.workspaceId)
+    // A contested path is refused, never silently resolved to whichever
+    // sibling tree order favors: the caller names the winner by id, or
+    // renames one. The listing (with its `shadowed` marks) is how a caller
+    // sees the contest at all.
+    const atPath = readWorkspaceDocuments(doc).filter((entry) => entry.path === input.path)
+    if (atPath.length > 1) throw new DocumentPathContestedError(input.workspaceId, input.path)
     const found = resolveWorkspaceDocument(doc, input.path)
     return found === null ? null : entryOf(found)
   }
@@ -338,11 +345,13 @@ function entryOf(found: {
   path: string
   kind: DocumentEntry['kind']
   name?: string
+  shadowed?: true
 }): DocumentEntry {
   return {
     documentId: found.documentId,
     path: found.path,
     ...(found.kind === undefined ? {} : { kind: found.kind }),
     ...(found.name === undefined ? {} : { name: found.name }),
+    ...(found.shadowed === undefined ? {} : { shadowed: found.shadowed }),
   }
 }

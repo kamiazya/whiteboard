@@ -23,6 +23,14 @@ export const documentEntrySchema = z
      * though somebody typed the path in as a title.
      */
     name: z.string().min(1).optional(),
+    /**
+     * True when an earlier sibling owns this path — only reachable through
+     * concurrent creation on two replicas, which no local uniqueness check
+     * can prevent. Shown rather than hidden: the data has converged, and a
+     * listing that dropped half of it would read as loss. `z.literal(true)`
+     * so the absent case has exactly one spelling.
+     */
+    shadowed: z.literal(true).optional(),
   })
   .strict()
 export type DocumentEntry = z.infer<typeof documentEntrySchema>
@@ -123,6 +131,26 @@ export class DocumentPathTakenError extends Error {
   ) {
     super(`Document path "${path}" already exists in workspace "${workspaceId}"`)
     this.name = 'DocumentPathTakenError'
+  }
+}
+
+/**
+ * Thrown when resolution BY PATH names a path that more than one document
+ * carries — reachable only through concurrent creation on two replicas.
+ * The listing shows both (one `shadowed`); resolving the ambiguity is the
+ * caller's decision, made by id or by renaming one, never by this port
+ * silently picking whichever sibling tree order favors.
+ */
+export class DocumentPathContestedError extends Error {
+  constructor(
+    readonly workspaceId: string,
+    readonly path: string,
+  ) {
+    super(
+      `More than one document carries "${path}" in workspace "${workspaceId}". ` +
+        'Resolve by documentId, or rename one of them.',
+    )
+    this.name = 'DocumentPathContestedError'
   }
 }
 

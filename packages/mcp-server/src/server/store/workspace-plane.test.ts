@@ -147,6 +147,45 @@ it('workspace-tree refs pass straight through to the inner store', async () => {
   expect(reopened).not.toBeNull()
 })
 
+it('index READS answer from the tree, not the rows (dual-plane collapse S5b)', async () => {
+  // Skew the rows behind the tree's back: the flipped read must keep
+  // answering what the workspace record says, because after S5b the tree
+  // IS the listing and the rows are a write-only mirror on their way out.
+  const { db, index } = await stores()
+  await index.createWorkspace({ workspaceId: 'ws-flip' })
+  const entry = await index.createDocument({
+    workspaceId: 'ws-flip',
+    path: 'truth',
+    kind: 'spatial',
+  })
+  await db
+    .updateTable('documents')
+    .set({ path: 'rows-skewed', displayName: 'Rows-only name' })
+    .where('id', '=', entry.documentId)
+    .execute()
+
+  const listing = await index.listDocuments({ workspaceId: 'ws-flip' })
+  expect(listing.map((e) => e.path)).toEqual(['truth'])
+  expect(listing[0]?.name).toBeUndefined()
+
+  const resolved = await index.resolveDocument({ workspaceId: 'ws-flip', path: 'truth' })
+  expect(resolved?.documentId).toBe(entry.documentId)
+  const byId = await index.resolveDocumentById({
+    workspaceId: 'ws-flip',
+    documentId: entry.documentId,
+  })
+  expect(byId?.path).toBe('truth')
+})
+
+it('index reads fall back to the rows only when no workspace record is stored', async () => {
+  // A workspace created before any document save has a rows-side row and
+  // no stored workspace record; the empty listing must still answer.
+  const { index } = await stores()
+  await index.createWorkspace({ workspaceId: 'ws-empty' })
+  expect(await index.listDocuments({ workspaceId: 'ws-empty' })).toEqual([])
+  expect(await index.resolveDocument({ workspaceId: 'ws-empty', path: 'nope' })).toBeNull()
+})
+
 it('the dual-plane index creates, renames and deletes on BOTH planes', async () => {
   const { db, index } = await stores()
   await index.createWorkspace({ workspaceId: 'ws-a' })

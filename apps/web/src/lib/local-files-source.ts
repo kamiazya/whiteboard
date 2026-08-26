@@ -123,6 +123,7 @@ export function createLocalFilesSource(
         path: entry.path,
         ...(entry.name === undefined ? {} : { name: entry.name }),
         ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+        ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
         ...(tagsById.has(entry.documentId)
           ? { tags: tagsById.get(entry.documentId) as readonly string[] }
           : {}),

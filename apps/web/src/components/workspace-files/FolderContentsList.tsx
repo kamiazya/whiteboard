@@ -116,8 +116,19 @@ export function FolderContentsList({
               {/* The display name is the label everywhere else; the segment
                   is the fallback for a document nobody named, never a name
                   invented from the path. */}
-              <span data-testid="card-title" className="truncate text-sm">
-                {entry.name ?? entry.path.split('/').at(-1)}
+              <span className="flex min-w-0 items-center gap-1">
+                <span data-testid="card-title" className="truncate text-sm">
+                  {entry.name ?? entry.path.split('/').at(-1)}
+                </span>
+                {entry.shadowed && (
+                  <span
+                    data-testid="card-shadowed-badge"
+                    title="Another document owns this path. Rename this one to resolve the conflict."
+                    className="shrink-0 rounded bg-amber-500/15 px-1 text-[10px] font-medium text-amber-600 dark:text-amber-400"
+                  >
+                    Path conflict
+                  </span>
+                )}
               </span>
               <span data-testid="card-subtitle" className="text-muted-foreground truncate text-xs">
                 {cardSubtitle(entry)}

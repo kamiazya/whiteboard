@@ -162,7 +162,10 @@ describe('dual-plane listing parity (S5a scoreboard)', () => {
           if (!isExpectedRefusal(err)) throw err
         }
 
-        const rowListing = await index.listDocuments({ workspaceId })
+        // The ROWS side must come from SqliteDocumentIndex directly: after
+        // the S5b read flip the dual-plane index answers from the tree, so
+        // comparing through it would be the tree against itself.
+        const rowListing = await rows.listDocuments({ workspaceId })
         const treeListing = await tree.listDocuments({ workspaceId })
         expect(comparable(treeListing)).toEqual(comparable(rowListing))
 

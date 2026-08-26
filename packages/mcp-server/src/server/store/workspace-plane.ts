@@ -46,7 +46,11 @@ import type {
   SaveSnapshotInput,
   SetDocumentNameInput,
 } from '@kamiazya/whiteboard-ports'
-import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
+import {
+  chunkSnapshot,
+  reassembleSnapshot,
+  WorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import type { Kysely } from 'kysely'
 import { LoroDoc } from 'loro-crdt'
@@ -259,16 +263,46 @@ export class DualPlaneDocumentIndex implements DocumentIndex {
     return entry
   }
 
+  /**
+   * Reads answer from the TREE (dual-plane collapse S5b): the workspace
+   * record is what every replica converges on, so it is what a listing
+   * shows — `shadowed` marks included — while the rows stay a write-only
+   * mirror until they retire. The rows answer only when no workspace
+   * record is stored yet (a workspace created before any document save),
+   * where they correctly say "exists, empty" — and still throw for a
+   * workspace that exists nowhere.
+   */
+  async #readThroughTree<T>(
+    fromTree: (tree: LoroWorkspaceDocumentIndex) => Promise<T>,
+    fromRows: () => Promise<T>,
+  ): Promise<T> {
+    try {
+      return await fromTree(this.#treeIndex())
+    } catch (err) {
+      if (err instanceof WorkspaceNotFoundError) return fromRows()
+      throw err
+    }
+  }
+
   async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
-    return this.rows.resolveDocument(input)
+    return this.#readThroughTree(
+      (tree) => tree.resolveDocument(input),
+      () => this.rows.resolveDocument(input),
+    )
   }
 
   async resolveDocumentById(input: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
-    return this.rows.resolveDocumentById(input)
+    return this.#readThroughTree(
+      (tree) => tree.resolveDocumentById(input),
+      () => this.rows.resolveDocumentById(input),
+    )
   }
 
   async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
-    return this.rows.listDocuments(input)
+    return this.#readThroughTree(
+      (tree) => tree.listDocuments(input),
+      () => this.rows.listDocuments(input),
+    )
   }
 
   async moveDocument(input: MoveDocumentInput): Promise<void> {
