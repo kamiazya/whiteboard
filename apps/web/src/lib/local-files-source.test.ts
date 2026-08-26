@@ -28,15 +28,44 @@ describe('createLocalFilesSource', () => {
     await expect(createLocalFilesSource().listDocuments()).resolves.toEqual([])
   })
 
-  it('lists what the index holds', async () => {
+  it('lists a legacy row-plane document — the startup fold absorbs it into the tree', async () => {
+    // A pre-collapse browser's world: an index row plus a content record,
+    // nothing in the workspace tree. The default source folds on first read,
+    // so the legacy document lists with its name and kind intact.
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
-    await index.createDocument({ workspaceId: 'local', path: 'a', kind: 'spatial', name: 'A' })
+    const entry = await index.createDocument({
+      workspaceId: 'local',
+      path: 'a',
+      kind: 'spatial',
+      name: 'A',
+    })
+    await new LoroStore().save(entry.documentId, new Loro().export({ mode: 'snapshot' }))
 
     const entries = await createLocalFilesSource().listDocuments()
     expect(entries.map((e) => ({ path: e.path, name: e.name, kind: e.kind }))).toEqual([
       { path: 'a', name: 'A', kind: 'spatial' },
     ])
+  })
+
+  it('defaults to the production index: a document only the workspace tree knows is listed', async () => {
+    // Production injects FoldingBrowserIndex (App.tsx), whose creates land
+    // in the workspace tree and write no legacy row. A default of
+    // IdbDocumentIndex would silently list a DIFFERENT store than the app
+    // writes to — exactly the split the injectable parameter exists to
+    // close, reopened by the default.
+    const { FoldingBrowserIndex } = await import('./folding-browser-index.js')
+    const production = new FoldingBrowserIndex()
+    await production.createWorkspace({ workspaceId: 'local' }).catch(() => {})
+    await production.createDocument({
+      workspaceId: 'local',
+      path: 'tree-only',
+      kind: 'markdown',
+      name: 'Tree Only',
+    })
+
+    const entries = await createLocalFilesSource().listDocuments()
+    expect(entries.map((e) => e.path)).toContain('tree-only')
   })
 
   it('creates a document with seeded content, like every other local create', async () => {
@@ -56,10 +85,8 @@ describe('createLocalFilesSource', () => {
 
   it('renames through the index, so the subtree moves with it', async () => {
     const source = createLocalFilesSource()
-    const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
-    await index.createDocument({ workspaceId: 'local', path: 'plan', kind: 'markdown' })
-    await index.createDocument({ workspaceId: 'local', path: 'plan/sub', kind: 'markdown' })
+    await source.createDocument('plan', 'markdown')
+    await source.createDocument('plan/sub', 'markdown')
 
     await source.renameDocumentPath('plan', 'roadmap')
 
@@ -73,13 +100,10 @@ describe('createLocalFilesSource', () => {
     // the two addresses differ (a nested path never equals an id) so only
     // the id can produce this result.
     const source = createLocalFilesSource()
-    const index = new IdbDocumentIndex()
-    await ensureLocalWorkspace(index)
-    const created = await index.createDocument({
-      workspaceId: 'local',
-      path: 'plans/roadmap',
-      kind: 'markdown',
-    })
+    await source.createDocument('plans/roadmap', 'markdown')
+    const created = (await source.listDocuments())[0]
+    expect(created).toBeDefined()
+    if (created === undefined) return
 
     await source.setDocumentName({ documentId: created.documentId, path: created.path }, 'Roadmap')
     expect((await source.listDocuments())[0]?.name).toBe('Roadmap')

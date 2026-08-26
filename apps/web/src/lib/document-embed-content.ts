@@ -13,15 +13,13 @@ import {
   readCoreFacets,
   readMarkdownBody,
   readSpatialCanvas,
-  resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
-import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { loadDocumentContent } from './workspace-content.js'
 
@@ -36,15 +34,22 @@ const log = getAppLogger('document-embed-content')
  * Total like every loader here: an unnamed, missing or corrupt row is
  * `undefined`, and the caller falls back to the reference.
  */
+// Lazy singleton, not per-call: the folding index memoizes its startup fold
+// per instance, and a canvas full of embeds resolves one name per embed.
+let embedIndex: FoldingBrowserIndex | null = null
+
+/** The fold memo is per-instance, so a test that swaps the database out
+ *  from under the singleton must also drop the folded instance. */
+export function resetEmbedIndexForTests(): void {
+  embedIndex = null
+}
+
 async function loadDocumentName(documentId: string): Promise<string | undefined> {
   try {
-    // The workspace tree owns naming now; the legacy index row remains the
-    // answer for a document nothing has folded yet.
-    const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID).catch(() => null)
-    const treeEntry =
-      workspace === null ? null : resolveWorkspaceDocumentById(workspace, documentId)
-    if (treeEntry !== null) return treeEntry.name
-    const entry = await new IdbDocumentIndex().resolveDocumentById({
+    // The workspace tree owns naming; the production index's fold gate is
+    // what makes a legacy record (row + content, not yet in the tree)
+    // answer too — one read path, no second store of its own.
+    const entry = await (embedIndex ??= new FoldingBrowserIndex()).resolveDocumentById({
       workspaceId: BROWSER_WORKSPACE_ID,
       documentId,
     })

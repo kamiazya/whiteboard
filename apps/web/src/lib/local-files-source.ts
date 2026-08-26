@@ -16,7 +16,7 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from '../components/workspace-files/files-source.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import {
   BROWSER_WORKSPACE_ID,
   type ContentClock,
@@ -38,16 +38,19 @@ import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 export function createLocalFilesSource(
   deps: {
     // Injectable so the page can hand the panel the SAME stores it was
-    // given: two IdbDocumentIndex instances happen to agree because they
-    // open one database, but an injected test double does not have that
-    // luck, and the panel silently reading a different store than the page
-    // is exactly the split this parameter closes.
+    // given: two index instances happen to agree because they open one
+    // database, but an injected test double does not have that luck, and
+    // the panel silently reading a different store than the page is exactly
+    // the split this parameter closes.
     index?: DocumentIndex
     loro?: LoroStoreLike
     clock?: ContentClock
   } = {},
 ): WorkspaceFilesSource {
-  const index = deps.index ?? new IdbDocumentIndex()
+  // The default matches what production injects (App.tsx): the tree index
+  // behind the startup fold. Defaulting to the legacy row index would list
+  // a store the app no longer writes to.
+  const index = deps.index ?? new FoldingBrowserIndex()
   const loro = deps.loro ?? new LoroStore()
   const clock = deps.clock ?? idbContentClock()
 
