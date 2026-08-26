@@ -59,16 +59,11 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
     byWorkspace.set(row.workspaceId, bucket)
   }
 
-  // The legacy record and the version rows anchored to its oplog go
-  // together: once the record is swept, a workspaceScoped=0 row can never be
-  // checked out again, so keeping it would only manufacture a 500 later.
+  // Version rows anchored to a legacy record's oplog no longer exist by the
+  // time this runs: migration 0015 deleted them along with the scope flag,
+  // so the sweep is only about the content record itself.
   async function sweepLegacy(documentId: string): Promise<void> {
     await store.deleteDoc({ docRef: { kind: 'document', documentId } })
-    await db
-      .deleteFrom('versions')
-      .where('documentId', '=', documentId)
-      .where('workspaceScoped', '=', 0)
-      .execute()
   }
 
   let folded = 0

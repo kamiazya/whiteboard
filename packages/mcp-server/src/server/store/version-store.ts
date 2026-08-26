@@ -246,6 +246,7 @@ export class FileVersionStore implements VersionStore {
         .values({
           id,
           documentId,
+          workspaceId,
           branchName,
           auto: opts.auto ? 1 : 0,
           label: opts.label ?? null,
@@ -258,7 +259,6 @@ export class FileVersionStore implements VersionStore {
           frontiers,
           hasThumbnail: 0,
           createdAt,
-          workspaceScoped: 1,
         })
         .execute()
 
@@ -284,21 +284,11 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const row = await db
       .selectFrom('versions')
-      .innerJoin('documents', 'documents.id', 'versions.documentId')
-      .select(['versions.frontiers', 'versions.workspaceScoped', 'versions.documentId'])
-      .where('documents.workspaceId', '=', workspaceId)
-      .where('versions.id', '=', id)
+      .select(['frontiers', 'documentId'])
+      .where('workspaceId', '=', workspaceId)
+      .where('id', '=', id)
       .executeTakeFirst()
     if (!row) return null
-    // Legacy per-document-scoped rows are deleted by the boot fold; one that
-    // survives is corrupt stored data — its frontiers point into a retired
-    // record's oplog and can be checked out against nothing.
-    if (row.workspaceScoped !== 1) {
-      throw corruptStoredData(
-        `versions/${id}`,
-        'version row is per-document scoped, which the boot fold should have deleted',
-      )
-    }
     // Checked out against the STORED workspace document, whose oplog the
     // frontiers were recorded in — never against a live per-document
     // projection, whose fresh lineage does not contain them. The past state
@@ -331,18 +321,11 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const row = await db
       .selectFrom('versions')
-      .innerJoin('documents', 'documents.id', 'versions.documentId')
-      .select(['versions.frontiers', 'versions.workspaceScoped'])
-      .where('documents.workspaceId', '=', workspaceId)
-      .where('versions.id', '=', id)
+      .select(['frontiers'])
+      .where('workspaceId', '=', workspaceId)
+      .where('id', '=', id)
       .executeTakeFirst()
     if (!row) return null
-    if (row.workspaceScoped !== 1) {
-      throw corruptStoredData(
-        `versions/${id}`,
-        'version row is per-document scoped, which the boot fold should have deleted',
-      )
-    }
     const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
       workspaceId,
     )
@@ -388,10 +371,9 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const owningCanvas = await db
       .selectFrom('versions')
-      .innerJoin('documents', 'documents.id', 'versions.documentId')
-      .select(['versions.id'])
-      .where('documents.workspaceId', '=', workspaceId)
-      .where('versions.id', '=', id)
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .where('id', '=', id)
       .executeTakeFirst()
     if (!owningCanvas) {
       throw new Error(`version "${id}" not found in workspace "${workspaceId}"`)
@@ -507,10 +489,9 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const row = await db
       .selectFrom('versions')
-      .innerJoin('documents', 'documents.id', 'versions.documentId')
-      .select(['versions.frontiers'])
-      .where('documents.workspaceId', '=', workspaceId)
-      .where('versions.id', '=', id)
+      .select(['frontiers'])
+      .where('workspaceId', '=', workspaceId)
+      .where('id', '=', id)
       .executeTakeFirst()
     return row?.frontiers ?? null
   }
@@ -520,14 +501,10 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const row = await db
       .selectFrom('versions')
-      .innerJoin('documents', 'documents.id', 'versions.documentId')
-      .select(['versions.frontiers'])
-      .where('documents.workspaceId', '=', workspaceId)
-      // Only scoped rows point into the workspace record's oplog; a legacy
-      // row constrains nothing here (its oplog is its own record's).
-      .where('versions.workspaceScoped', '=', 1)
-      .orderBy('versions.createdAt', 'asc')
-      .orderBy('versions.id', 'asc')
+      .select(['frontiers'])
+      .where('workspaceId', '=', workspaceId)
+      .orderBy('createdAt', 'asc')
+      .orderBy('id', 'asc')
       .limit(1)
       .executeTakeFirst()
     if (!row) return null

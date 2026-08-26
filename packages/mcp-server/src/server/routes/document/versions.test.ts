@@ -21,7 +21,6 @@ const { clearCache } = await import('../../store/doc-cache.js')
 const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
   '../../store/document-store.js'
 )
-const { LoroDoc } = await import('loro-crdt')
 const { createVersionsRouter } = await import('./versions.js')
 const { createDocumentRouter } = await import('../document.js')
 

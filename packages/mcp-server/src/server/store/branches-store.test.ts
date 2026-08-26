@@ -96,6 +96,39 @@ describe('branches-store', () => {
       ).rejects.toThrow(/no document/i)
     })
 
+    // Branches are keyed on workspaceId directly (dual-plane collapse S3),
+    // so workspace-scoped reads need no join through the documents table.
+    it('records the workspaceId on every branch row', async () => {
+      await saveDocumentBranches('sess-a', 'canvas-x', {
+        head: 'main',
+        branches: [
+          {
+            name: 'main',
+            color: DEFAULT_MAIN_COLOR,
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+          {
+            name: 'feature',
+            color: '#9333ea',
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+        ],
+      })
+      const { getDb } = await import('./db/index.js')
+      const db = await getDb(tempDir)
+      const rows = await db
+        .selectFrom('branches')
+        .select(['name', 'workspaceId'])
+        .orderBy('name')
+        .execute()
+      expect(rows).toEqual([
+        { name: 'feature', workspaceId: 'sess-a' },
+        { name: 'main', workspaceId: 'sess-a' },
+      ])
+    })
+
     it('round-trips every BranchMeta field through save/load', async () => {
       const state = {
         head: 'feature-x',

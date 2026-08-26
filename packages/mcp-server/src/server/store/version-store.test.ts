@@ -1,11 +1,9 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
-import { SqliteDocumentIndex } from './sqlite-document-index.js'
 
 // Tests for the native Loro version store backed by the sqlite metadata DB.
 // Frontiers and metadata live in the versions table; thumbnails live as PNG
@@ -192,7 +190,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('returns null for an unknown version id', async () => {
-    const live = new LoroDoc()
     const past = await store.load('sess-1', 'nope')
     expect(past).toBeNull()
   })
@@ -219,7 +216,6 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
   })
 
   it('rejects invalid ids during validation', async () => {
-    const live = new LoroDoc()
     await expect(store.load('sess-1', '../escape')).rejects.toThrow(/Invalid version id/i)
     await expect(store.load('sess-1', 'a.b')).rejects.toThrow(/Invalid version id/i)
     await expect(store.load('sess-1', '')).rejects.toThrow(/Invalid version id/i)
@@ -400,27 +396,23 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     )
   })
 
-  // Legacy per-document-scoped rows (workspaceScoped=0) are deleted by the
-  // boot fold; one that still exists is corrupt stored data and must be
-  // surfaced, not silently checked out against a projection lineage that
-  // does not contain its frontiers.
-  it('load surfaces a legacy workspaceScoped=0 row as corrupt stored data', async () => {
-    const doc = makeSpatialDoc({
-      nodes: [{ id: 'n1', type: 'text', text: 'x', x: 0, y: 0, width: 10, height: 10 }],
-      edges: [],
-    })
-    await saveDocument('sess-1', 'canvas-a', doc, { kind: 'spatial', overwrite: true })
+  // Versions are keyed on workspaceId directly (dual-plane collapse S3):
+  // every workspace-scoped query used to reach the workspaceId through the
+  // documents table, which was the version table's last read dependency on
+  // the row plane.
+  it('save records the workspaceId on the version row', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
     const entry = await store.save('sess-1', 'canvas-a', doc, { auto: true })
 
     const { getDb } = await import('./db/index.js')
     const db = await getDb(tempDir)
-    await db
-      .updateTable('versions')
-      .set({ workspaceScoped: 0 })
+    const row = await db
+      .selectFrom('versions')
+      .select(['workspaceId'])
       .where('id', '=', entry.id)
-      .execute()
-
-    await expect(store.load('sess-1', entry.id)).rejects.toThrow(/corrupt/i)
+      .executeTakeFirst()
+    expect(row).toEqual({ workspaceId: 'sess-1' })
   })
 
   describe('pruneSandwichedAutoVersions', () => {

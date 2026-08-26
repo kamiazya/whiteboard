@@ -120,6 +120,7 @@ describe('getDb / closeDb', () => {
       .insertInto('branches')
       .values({
         documentId: 'cv-fk',
+        workspaceId: 'ws-fk',
         name: 'main',
         tipFrontiers: '',
         color: null,
@@ -134,6 +135,7 @@ describe('getDb / closeDb', () => {
         .insertInto('branches')
         .values({
           documentId: 'cv-does-not-exist',
+          workspaceId: 'ws-fk',
           name: 'orphan',
           tipFrontiers: '',
           color: null,

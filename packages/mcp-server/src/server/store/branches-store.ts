@@ -109,6 +109,7 @@ async function saveDocumentBranchesLocked(
         .values(
           state.branches.map((b) => ({
             documentId,
+            workspaceId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,

@@ -187,13 +187,15 @@ it('the REAL migrator upgrades a third-site nanoid row that postdates 0008: zero
   const newRow = documentRows.find((r) => r.id !== 'uH6qTx6Ai2hl')
   expect(newRow).toBeDefined()
 
-  const versionRows = (await db.selectFrom('versions').selectAll().execute()) as {
-    documentId: string
-  }[]
-  for (const v of versionRows) expect(v.documentId).not.toBe('uH6qTx6Ai2hl')
+  // 0015 deletes pre-0014 version rows outright (legacy per-document
+  // checkpoints); the version-carry across 0012's re-mint is asserted at the
+  // 0014 point in 0012-ulid-remaining-document-ids.test.ts instead.
+  const versionRows = await db.selectFrom('versions').selectAll().execute()
+  expect(versionRows).toEqual([])
   const branchRows = (await db.selectFrom('branches').selectAll().execute()) as {
     documentId: string
   }[]
+  expect(branchRows).toHaveLength(1)
   for (const b of branchRows) expect(b.documentId).not.toBe('uH6qTx6Ai2hl')
 
   for (const table of [

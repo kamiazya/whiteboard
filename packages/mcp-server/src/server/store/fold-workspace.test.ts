@@ -158,37 +158,14 @@ it('DELETES a pre-kind row instead of leaving it on a plane nothing serves anymo
 })
 
 it('sweeps the legacy content record once a document is folded onto the tree', async () => {
+  // Legacy per-document version rows are gone before any fold runs —
+  // migration 0015 deleted them with the scope flag — so the sweep here is
+  // only about the content record.
   const documentId = await seedLegacy('ws-a', 'design', 'to be swept')
-  // A legacy version row points into the per-document oplog being swept —
-  // it can never be checked out again, so the sweep takes it too.
-  const db = await getDb(tempDir)
-  await db
-    .insertInto('versions')
-    .values({
-      id: 'v-legacy',
-      documentId,
-      branchName: 'main',
-      auto: 0,
-      label: null,
-      operatorKind: 'human',
-      operatorPeerId: '1',
-      operatorDisplayName: null,
-      operatorAgentId: null,
-      operatorWorkspaceId: null,
-      elementCount: 1,
-      frontiers: '[]',
-      hasThumbnail: 0,
-      createdAt: Date.now(),
-      workspaceScoped: 0,
-    })
-    .execute()
 
   await foldWorkspaceDocuments()
 
   expect(await legacyRecord(documentId)).toBeNull()
-  expect(
-    await db.selectFrom('versions').select(['id']).where('id', '=', 'v-legacy').executeTakeFirst(),
-  ).toBeUndefined()
   // The fold itself still worked.
   const workspace = await openWorkspace('ws-a')
   expect(workspace === null ? null : resolveWorkspaceDocumentById(workspace, documentId)).not.toBe(

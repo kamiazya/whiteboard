@@ -36,6 +36,7 @@ interface DocumentsTable {
 
 interface BranchesTable {
   documentId: string
+  workspaceId: string
   name: string
   tipFrontiers: string
   color: string | null
@@ -46,7 +47,10 @@ interface BranchesTable {
 
 interface VersionsTable {
   id: string
+  // Kept as the FK that cascades a document delete to its versions; reads
+  // key on workspaceId, whose oplog the frontiers point into.
   documentId: string
+  workspaceId: string
   branchName: string
   auto: Bool
   label: string | null
@@ -59,8 +63,6 @@ interface VersionsTable {
   frontiers: string
   hasThumbnail: Bool
   createdAt: Timestamp
-  /** 1: frontiers point into the WORKSPACE document's oplog; 0: the legacy per-document oplog. */
-  workspaceScoped: Bool
 }
 
 // Single-row key/value store for daemon-runtime markers (currentWorkspaceId,
