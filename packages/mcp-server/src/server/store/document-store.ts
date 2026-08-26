@@ -38,7 +38,6 @@ import {
   isSelfOrDescendant,
   planSubtreeMove,
   reassembleSnapshot,
-  shouldCompact,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
@@ -60,12 +59,12 @@ import { deleteDocumentRow } from './db/delete-document-row.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { evictDoc, getOrLoad, peekDoc } from './doc-cache.js'
+import { evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
 import { thumbnailPath } from './version-store.js'
-import { withDocumentWriteLock, withWorkspaceWriteLock } from './workspace-lock.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Chunk size shared with the MCP tool write path (server-core's
 // document-io.ts) and migration 0011's FS-blob importer: an arbitrary
@@ -110,8 +109,6 @@ function errorMessage(error: unknown): string {
 
 // Soft cap for snapshot size. Do not block saves when exceeded because preserving user
 // data is more important; emit one warning per threshold breach and suggest compactDocument().
-const SNAPSHOT_WARN_BYTES = 32 * 1024 * 1024 // 32 MiB
-const warnedSnapshots = new Set<string>()
 
 async function dbReady() {
   await prepareDataDir(getDataDir())
@@ -189,6 +186,31 @@ export async function projectDocumentAtWorkspaceFrontiers(
   return projectWorkspaceDocument(clone, documentId)
 }
 
+/**
+ * A detached clone of the STORED workspace record, or null when none is
+ * stored. What version/branch machinery forks and checks out: the stored
+ * record's oplog is durable across restarts, where a projection's is
+ * per-process.
+ */
+export async function cloneStoredWorkspaceDoc(workspaceId: string): Promise<LoroDoc | null> {
+  const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
+  const stored = await docs
+    .open(workspaceId)
+    .catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
+  return stored === null ? null : LoroDoc.fromSnapshot(stored.export({ mode: 'snapshot' }))
+}
+
+// A workspace record whose stored bytes will not decode is CORRUPTION, and
+// every reader should say so with the same structured error the per-document
+// path uses — a raw wasm decode error surfaces as an unstructured 500.
+function throwWorkspaceRecordCorrupt(workspaceId: string, err: unknown): never {
+  if (isCorruptStoredDataError(err)) throw err
+  throw corruptStoredData(
+    `workspace-tree:${workspaceId}`,
+    `workspace record could not be opened (${errorMessage(err)})`,
+  )
+}
+
 /** Test-only: drops every cached live workspace document, simulating a restart. */
 export function _clearWorkspaceDocCacheForTests(): void {
   workspaceDocCache.clear()
@@ -209,7 +231,9 @@ export async function getWorkspaceDoc(workspaceId: string): Promise<LoroDoc> {
   const cached = workspaceDocCache.get(key)
   if (cached !== undefined) return cached
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  const doc = await docs.create(workspaceId)
+  const doc = await docs
+    .create(workspaceId)
+    .catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
   workspaceDocCache.set(key, doc)
   return doc
 }
@@ -220,7 +244,9 @@ export async function openWorkspaceDocIfStored(workspaceId: string): Promise<Lor
   const cached = workspaceDocCache.get(key)
   if (cached !== undefined) return cached
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  const doc = await docs.open(workspaceId)
+  const doc = await docs
+    .open(workspaceId)
+    .catch((err) => throwWorkspaceRecordCorrupt(workspaceId, err))
   if (doc !== null) workspaceDocCache.set(key, doc)
   return doc
 }
@@ -245,7 +271,18 @@ export async function saveWorkspaceDoc(
   doc: LoroDoc,
 ): Promise<Uint8Array | null> {
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
-  const update = await docs.save(workspaceId, doc)
+  let update: Uint8Array | null
+  try {
+    update = await docs.save(workspaceId, doc)
+  } catch (err) {
+    // The live workspace doc now carries ops durable storage refused, and
+    // every cached projection derives from it. Serving either as though
+    // persisted would resurrect exactly the unpersisted-state bug eviction
+    // exists to prevent — drop both so the next read reloads stored bytes.
+    evictWorkspaceDocCache(workspaceId)
+    evictWorkspaceDocs(workspaceId)
+    throw err
+  }
   if (update !== null) {
     for (const listener of workspaceDocUpdatedListeners) {
       try {
@@ -298,41 +335,6 @@ async function documentStoreReady(): Promise<LibsqlDocumentStore> {
   return new LibsqlDocumentStore(await dbReady())
 }
 
-// Chunk + replace a document's snapshot rows under the canvas-doc write
-// lock. Every mutating MCP tool serializes its load-modify-save against
-// this same key (workspace-lock.ts's withDocumentWriteLock) — since both
-// paths write the same Libsql rows, taking it here closes the lost-update
-// window between the HTTP/WS save path and an agent's tool call racing on
-// the SAME document. Callers hold the workspace lock first; that nesting
-// direction is safe because no code path ever acquires the canvas-doc lock
-// and then reaches for the workspace lock, so there is no cycle to
-// deadlock on.
-async function saveSnapshotLocked(
-  documentStore: LibsqlDocumentStore,
-  documentId: string,
-  snapshot: Uint8Array,
-  frontier: Uint8Array<ArrayBuffer>,
-  supersededDeltaCount: number,
-): Promise<void> {
-  await withDocumentWriteLock(documentId, async () => {
-    const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
-    const docRef = { kind: 'document' as const, documentId }
-    if (supersededDeltaCount === 0) {
-      await documentStore.saveSnapshot({ docRef, manifest, chunks, frontier })
-      return
-    }
-    // One operation rather than save-then-clear, so an append landing between
-    // the two halves is not dropped.
-    await documentStore.saveCompactedSnapshot({
-      docRef,
-      manifest,
-      chunks,
-      frontier,
-      supersededDeltaCount,
-    })
-  })
-}
-
 // Merge-then-save for the live-doc path. The lock alone only makes an
 // overwrite ATOMIC — it cannot make it correct: `doc` may be a long-lived
 // cached instance (doc-cache) that has not seen ops an MCP tool wrote to
@@ -374,125 +376,6 @@ async function importStoredIfBehind(
   if (comparison !== undefined && comparison >= 0) return
   const existing = await documentStore.loadSnapshot({ docRef })
   if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
-}
-
-function totalBytes(deltas: readonly Uint8Array[]): number {
-  return deltas.reduce((sum, delta) => sum + delta.byteLength, 0)
-}
-
-/**
- * Writes `doc` as a whole, replacing whatever snapshot was there.
- *
- * The fallback for every case an append cannot serve: no stored base yet, a
- * base this build cannot read, or a delta log grown past the fold budget.
- */
-async function writeWholeSnapshot(
-  documentStore: LibsqlDocumentStore,
-  docRef: { kind: 'document'; documentId: string },
-  doc: LoroDoc,
-  supersededDeltaCount: number,
-): Promise<number> {
-  const snapshot = doc.export({ mode: 'snapshot' })
-  const { manifest, chunks } = chunkSnapshot(snapshot, SNAPSHOT_MAX_CHUNK_BYTES)
-  const frontier = doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>
-  if (supersededDeltaCount === 0) {
-    await documentStore.saveSnapshot({ docRef, manifest, chunks, frontier })
-  } else {
-    // One operation, not save-then-clear: an append landing between the two
-    // halves would be dropped, and it is neither in this snapshot nor
-    // superseded by it.
-    await documentStore.saveCompactedSnapshot({
-      docRef,
-      manifest,
-      chunks,
-      frontier,
-      supersededDeltaCount,
-    })
-  }
-  return snapshot.byteLength
-}
-
-async function mergeAndSaveSnapshotLocked(
-  documentStore: LibsqlDocumentStore,
-  workspaceId: string,
-  documentId: string,
-  doc: LoroDoc,
-): Promise<number> {
-  const docRef = { kind: 'document' as const, documentId }
-  return withDocumentWriteLock(documentId, async () => {
-    let merged = true
-    try {
-      await importStoredIfBehind(documentStore, documentId, doc)
-    } catch (err) {
-      merged = false
-      getLogger('document').warning(
-        { workspaceId, documentId, err: err as Error },
-        'stored snapshot failed to merge before save; overwriting',
-      )
-    }
-
-    // Read the log BEFORE deciding, because every branch needs it. An
-    // overwrite has to say how much of it the new snapshot supersedes: a
-    // whole-snapshot write that left the log behind would have `loadDocument`
-    // replay deltas anchored to bytes that are gone.
-    const existing = (await documentStore.loadDeltas({ docRef, sinceFrontier: new Uint8Array() }))
-      .updates
-
-    // A base this build cannot read is one of the cases that must still
-    // overwrite. Appending to it would leave a log anchored to bytes nothing
-    // can load — the document would read as damaged forever instead of being
-    // repaired by the next save.
-    let manifest: Awaited<ReturnType<LibsqlDocumentStore['readSnapshotManifest']>> = null
-    if (merged) {
-      try {
-        manifest = await documentStore.readSnapshotManifest({ docRef })
-      } catch {
-        return writeWholeSnapshot(documentStore, docRef, doc, existing.length)
-      }
-    }
-    const stored = manifest === null ? null : await documentStore.readFrontier({ docRef })
-    // No base, an unreadable one, or one with no frontier to compute a delta
-    // against. The last is not merely unlikely — it is the case where a
-    // "nothing to do" answer would be a silent lost update, so it writes.
-    if (!merged || manifest === null || stored === null) {
-      return writeWholeSnapshot(documentStore, docRef, doc, existing.length)
-    }
-
-    // A VERSION comparison, not a byte count. An update carrying no ops is
-    // still 22 bytes of envelope, so testing `byteLength === 0` never fires
-    // and every save of an untouched document would append those 22 bytes —
-    // an autosave loop grows the log forever with nothing in it.
-    const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
-    if (comparison === 0) {
-      return manifest.totalBytes + totalBytes(existing)
-    }
-
-    const update = doc.export({
-      mode: 'update',
-      from: VersionVector.decode(stored.frontier),
-    }) as Uint8Array<ArrayBuffer>
-
-    // Folding is cheap HERE in a way it is not in the browser: the live
-    // document already holds every op, so the fold is just the whole-snapshot
-    // write this function used to do unconditionally. The browser has only
-    // the stored bytes and must replay them to reach the same state.
-    if (shouldCompact([...existing, update])) {
-      return writeWholeSnapshot(documentStore, docRef, doc, existing.length)
-    }
-
-    await documentStore.appendDeltas({
-      docRef,
-      deltaBatch: {
-        updates: [update],
-        newFrontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-      },
-    })
-    // What the document occupies, for the soft-cap warning: the base plus the
-    // log it now carries. The snapshot's own size no longer moves on a save,
-    // so reporting it alone would make a document look like it stopped
-    // growing the moment it started being appended to.
-    return manifest.totalBytes + totalBytes(existing) + update.byteLength
-  })
 }
 
 // ── save LoroDoc by writing the snapshot binary to the blobs/ tree and
@@ -561,7 +444,7 @@ export async function saveDocument(
     // second minting policy here would keep producing rows the agent surface
     // has to skip. One table, one id space.
     const documentId = existingDocumentId ?? generateDocumentId()
-    const documentStore = await documentStoreReady()
+    const _documentStore = await documentStoreReady()
     // Which plane this document persists on. A save with a KNOWN kind lands
     // on the workspace tree (the node's containers are the content record);
     // a kindless save of a document the tree does not hold stays on the
@@ -577,23 +460,27 @@ export async function saveDocument(
       const parsed = documentKindSchema.safeParse(row?.kind)
       existingKind = parsed.success ? parsed.data : null
     }
-    const kindForTree = options.kind ?? existingKind ?? readDocumentKind(doc) ?? null
-    let savedBytes = 0
-    let savedToTree = false
-    if (kindForTree !== null) {
-      const workspaceDoc = await getWorkspaceDoc(workspaceId)
-      if (resolveWorkspaceDocumentById(workspaceDoc, documentId) === null) {
-        createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
-      }
-      // The create can answer null on a path the tree already gave to
-      // another document; the content write then finds no node and the save
-      // falls back to the legacy plane rather than being lost.
-      savedToTree = writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)
-      if (savedToTree) await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    // Every save lands on the workspace tree. A save that names no kind and
+    // finds none stored or in the doc's own bytes is a lazy-create of an
+    // empty document (the WS/update path on a path with no row); the spatial
+    // editor is what opens those, so 'spatial' is the honest default — not a
+    // guess about someone else's data, because pre-kind rows no longer exist
+    // (the startup fold deletes them as this project's own data defect).
+    const kindForTree = options.kind ?? existingKind ?? readDocumentKind(doc) ?? 'spatial'
+    const workspaceDoc = await getWorkspaceDoc(workspaceId)
+    if (resolveWorkspaceDocumentById(workspaceDoc, documentId) === null) {
+      createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
     }
-    if (!savedToTree) {
-      savedBytes = await mergeAndSaveSnapshotLocked(documentStore, workspaceId, documentId, doc)
+    // The create answers null when the tree already gave this path to a
+    // DIFFERENT document — a rows/tree divergence. With no legacy plane to
+    // fall back to, writing anywhere else would fork storage silently, so
+    // refuse loudly instead.
+    if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)) {
+      throw new ConflictError(
+        `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
+      )
     }
+    await saveWorkspaceDoc(workspaceId, workspaceDoc)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingDocumentId) {
       // A plain re-save (WS updates, live-doc writes, compactDocument) omits
@@ -622,30 +509,16 @@ export async function saveDocument(
           currentBranch: 'main',
           createdAt: now,
           updatedAt: now,
-          // Written on insert. The update branch above honors an explicit
-          // `kind` too (a plain re-save omits it and leaves the stored value
-          // untouched); the onConflict branch below is the rare
-          // insert-raced-with-a-concurrent-insert fallback and, like a plain
-          // re-save, does not touch `kind`.
-          kind: options.kind ?? null,
+          // Written on insert, always matching what the tree just recorded.
+          // The update branch above honors an explicit `kind` too (a plain
+          // re-save omits it and leaves the stored value untouched); the
+          // onConflict branch below is the rare insert-raced-with-a-
+          // concurrent-insert fallback and, like a plain re-save, does not
+          // touch `kind`.
+          kind: kindForTree,
         })
         .onConflict((oc) => oc.columns(['workspaceId', 'path']).doUpdateSet({ updatedAt: now }))
         .execute()
-    }
-    if (savedBytes > SNAPSHOT_WARN_BYTES) {
-      const key = `${workspaceId}/${path}`
-      if (!warnedSnapshots.has(key)) {
-        warnedSnapshots.add(key)
-        getLogger('document-store').warning(
-          {
-            workspaceId,
-            path,
-            bytes: savedBytes,
-            thresholdBytes: SNAPSHOT_WARN_BYTES,
-          },
-          'snapshot exceeds soft cap; consider compactDocument() to GC op-log',
-        )
-      }
     }
     notifyDocumentSaved(workspaceId, path)
   })
@@ -963,6 +836,19 @@ export interface CompactResult {
   reason?: 'no-versions' | 'no-file' | 'no-gain' | 'ok'
 }
 
+/**
+ * Compacts the WORKSPACE record: a shallow snapshot cut at the earliest
+ * frontiers any workspace-scoped version still needs, superseding the delta
+ * log it folded. The per-document address survives in the signature because
+ * the routes and the auto-compact debouncer speak per document, but since
+ * every document now lives in the one workspace record, they all compact the
+ * same thing — a second call right after answers 'no-gain'.
+ *
+ * Risk parity with the retired per-document compaction, not an improvement
+ * on it: the cut considers version rows only, so a branch head recorded
+ * before the workspace's earliest version can lose the history its checkout
+ * needs, exactly as the old design could per document.
+ */
 export async function compactDocument(
   workspaceId: string,
   path: string,
@@ -976,89 +862,50 @@ export async function compactDocument(
     return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
   }
   const documentStore = await documentStoreReady()
-  const docRef = { kind: 'document' as const, documentId }
+  const docRef = { kind: 'workspace-tree' as const, workspaceId }
 
-  // Hold the canvas-doc write lock across the read that decides the shallow
-  // snapshot AND the write that persists it. Previously only the final
-  // saveSnapshotLocked call was locked, so a concurrent canvas-doc write (an
-  // MCP tool call, or a WS/HTTP save) landing between this function's reads
-  // and its write was invisible to both reads and got silently discarded by
-  // the shallow write that followed — the same lost-update class
-  // saveDocument's own write already guards against, now reachable here too
-  // because compaction's target and the tool surface's target are the same
-  // Libsql rows.
-  return withDocumentWriteLock(documentId, async () => {
-    const existing = await documentStore.loadSnapshot({ docRef })
-    if (existing === null) {
+  // The workspace lock is what every workspace-record writer holds, so the
+  // read that decides the shallow snapshot and the write that persists it
+  // see no concurrent tree write in between.
+  return withWorkspaceWriteLock(workspaceId, async () => {
+    const manifest = await documentStore.readSnapshotManifest({ docRef })
+    if (manifest === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
-    // The log, read inside the lock alongside the base. Compaction rewrites
-    // the whole stored state, so it has to SEE the whole stored state: a save
-    // appends rather than rewrites, and a compaction that read only the base
-    // would fold a document missing every edit since the last fold and then
-    // write that as the new truth.
     const { updates: storedDeltas } = await documentStore.loadDeltas({
       docRef,
       sinceFrontier: new Uint8Array(),
     })
     const beforeBytes =
-      existing.manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
+      manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
 
-    const cut = await versionStore.earliestFrontiers(workspaceId, path)
+    const cut = await versionStore.earliestWorkspaceFrontiers(workspaceId)
     if (!cut) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
     }
 
-    // Decode inline rather than delegating to loadDocument(): that function
-    // also runs a one-shot legacy-migration that calls saveDocument, which
-    // would acquire the workspace lock while this canvas-doc lock is still
-    // held — the opposite of every other caller's nesting order (workspace
-    // lock outer, canvas-doc lock inner, per this module's header comment)
-    // and a lock-order-inversion deadlock waiting to happen against a
-    // concurrent saveDocument on the same document. Skipping migration here
-    // is safe: it is idempotent and re-runs on the next ordinary
-    // loadDocument() call, so compaction just defers it rather than losing it.
-    const blobPath = documentBlobPath(workspaceId, documentId)
-    let originalBytes: Uint8Array
-    try {
-      originalBytes = reassembleSnapshot(existing.manifest, existing.chunks)
-    } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`, {
-        locationKind: 'identity',
-      })
-    }
-    let doc: LoroDoc
-    try {
-      doc = LoroDoc.fromSnapshot(originalBytes)
-    } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
-        locationKind: 'identity',
-      })
-    }
-    for (const update of storedDeltas) {
-      try {
-        doc.import(update)
-      } catch (error) {
-        throw corruptStoredData(blobPath, `invalid canvas delta (${errorMessage(error)})`, {
-          locationKind: 'identity',
-        })
-      }
-    }
-
+    // The live cached workspace document IS the current state — every write
+    // path mutates it under the lock held here — so the fold exports from
+    // it instead of re-reading stored bytes.
+    const doc = await getWorkspaceDoc(workspaceId)
     const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
     if (shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }
     }
-    await saveSnapshotLocked(
-      documentStore,
-      documentId,
-      shallow,
-      doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
+    const { manifest: fresh, chunks } = chunkSnapshot(
+      new Uint8Array(shallow),
+      SNAPSHOT_MAX_CHUNK_BYTES,
+    )
+    await documentStore.saveCompactedSnapshot({
+      docRef,
+      manifest: fresh,
+      chunks,
+      frontier: new Uint8Array(doc.oplogVersion().encode()),
       // Exactly the log this fold consumed. Anything appended since the read
       // above is neither in `shallow` nor superseded by it, and dropping it
       // would lose an edit that arrived while compaction ran.
-      storedDeltas.length,
-    )
+      supersededDeltaCount: storedDeltas.length,
+    })
     // Stamp the canvas row so the auto-Optimize loop can skip documents that
     // have not changed since the last successful compaction, and so the UI
     // can surface "Auto-optimised Ns ago" without reading file mtimes.
@@ -1067,13 +914,9 @@ export async function compactDocument(
       .set({ lastCompactedAt: Date.now() })
       .where('id', '=', documentId)
       .execute()
-    // Drop the cached LoroDoc for this canvas. Without this, a still-resident
-    // full doc (held open by an active WS connection or a previous getDoc)
-    // would be re-exported on the next save and clobber the shallow snapshot
-    // we just wrote. Done inside compactDocument so every caller — manual
-    // optimize_canvases route and the debounced auto-compact alike — gets
-    // the same invariant for free.
-    evictDoc(workspaceId, path)
+    // No eviction: the live workspace document keeps its full in-memory
+    // history and the frontier just written is its own current one, so both
+    // it and the projections served from it stay coherent with the store.
     return { compacted: true, beforeBytes, afterBytes: shallow.byteLength, reason: 'ok' }
   })
 }

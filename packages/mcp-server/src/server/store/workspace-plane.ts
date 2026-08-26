@@ -13,7 +13,6 @@
 import {
   createWorkspaceDocumentAtPath,
   moveWorkspaceNodeToPath,
-  projectWorkspaceDocument,
   readDocumentKind,
   resolveWorkspaceDocumentById,
   setWorkspaceDocumentName,
@@ -53,13 +52,16 @@ import type { Kysely } from 'kysely'
 import { LoroDoc } from 'loro-crdt'
 import { getDataDir } from '../config.js'
 import type { DatabaseSchema } from './db/schema.js'
+import { evictDoc } from './doc-cache.js'
 import {
   cacheBackedWorkspaceDocs,
+  getDoc,
   getWorkspaceDoc,
   openWorkspaceDocIfStored,
   saveWorkspaceDoc,
 } from './document-store.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
 
@@ -98,16 +100,22 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
       const row = await documentRowById(this.db, input.docRef.documentId)
       if (row !== undefined) {
         const workspaceDoc = await openWorkspaceDocIfStored(row.workspaceId)
-        if (workspaceDoc !== null) {
-          const projected = projectWorkspaceDocument(workspaceDoc, input.docRef.documentId)
-          if (projected !== null) {
-            const bytes = new Uint8Array(projected.export({ mode: 'snapshot' }))
-            const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
-            return {
-              manifest,
-              chunks,
-              frontier: new Uint8Array(projected.oplogVersion().encode()),
-            }
+        if (
+          workspaceDoc !== null &&
+          resolveWorkspaceDocumentById(workspaceDoc, input.docRef.documentId) !== null
+        ) {
+          // Served from the SAME cached projection the route path mutates —
+          // not a fresh per-call projection — so a tool's load-modify-save
+          // round-trips through one lineage and its save is a real CRDT
+          // merge (tombstones included) instead of a value diff against a
+          // stranger's history.
+          const doc = await getDoc(row.workspaceId, row.path)
+          const bytes = new Uint8Array(doc.export({ mode: 'snapshot' }))
+          const { manifest, chunks } = chunkSnapshot(bytes, SNAPSHOT_MAX_CHUNK_BYTES)
+          return {
+            manifest,
+            chunks,
+            frontier: new Uint8Array(doc.oplogVersion().encode()),
           }
         }
       }
@@ -129,7 +137,8 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
     if (input.docRef.kind === 'document') {
-      const row = await documentRowById(this.db, input.docRef.documentId)
+      const { documentId } = input.docRef
+      const row = await documentRowById(this.db, documentId)
       if (row !== undefined) {
         const doc = new LoroDoc()
         doc.import(reassembleSnapshot(input.manifest, input.chunks))
@@ -138,18 +147,36 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
           ? parsedRowKind.data
           : (readDocumentKind(doc) ?? null)
         if (kind !== null) {
-          const workspaceDoc = await getWorkspaceDoc(row.workspaceId)
-          if (resolveWorkspaceDocumentById(workspaceDoc, input.docRef.documentId) === null) {
-            createWorkspaceDocumentAtPath(workspaceDoc, {
-              path: row.path,
-              documentId: input.docRef.documentId,
-              kind,
-            })
-          }
-          if (writeWorkspaceDocumentContent(workspaceDoc, input.docRef.documentId, doc)) {
+          // Under the workspace write lock, like every other writer of the
+          // live workspace document — the route save path holds it too, so a
+          // tool write and a route save on the same workspace settle into a
+          // definite order instead of interleaving their diff-writes. Safe
+          // to acquire while the tool surface's canvas-doc lock is held:
+          // the lock is re-entrant per async chain and nothing nests the
+          // two the other way around anymore.
+          const wrote = await withWorkspaceWriteLock(row.workspaceId, async () => {
+            const workspaceDoc = await getWorkspaceDoc(row.workspaceId)
+            if (resolveWorkspaceDocumentById(workspaceDoc, documentId) === null) {
+              createWorkspaceDocumentAtPath(workspaceDoc, {
+                path: row.path,
+                documentId,
+                kind,
+              })
+            }
+            // MERGE into the cached projection — the doc instance
+            // loadSnapshot serves and every route save mutates — rather
+            // than diff-writing the tool's own copy over the tree. A tool
+            // that loaded before a concurrent route write then converges
+            // with it (import is a CRDT merge; ops the projection already
+            // has are no-ops) instead of value-diffing the other writer's
+            // edit back out.
+            const live = await getDoc(row.workspaceId, row.path)
+            live.import(doc.export({ mode: 'update' }))
+            if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
             await saveWorkspaceDoc(row.workspaceId, workspaceDoc)
-            return
-          }
+            return true
+          })
+          if (wrote) return
         }
       }
     }
@@ -189,7 +216,7 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
 export class DualPlaneDocumentIndex implements DocumentIndex {
   constructor(
     private readonly rows: DocumentIndex,
-    private readonly db: Kysely<DatabaseSchema>,
+    readonly _db: Kysely<DatabaseSchema>,
   ) {}
 
   #treeIndex(): LoroWorkspaceDocumentIndex {
@@ -232,6 +259,10 @@ export class DualPlaneDocumentIndex implements DocumentIndex {
       moveWorkspaceNodeToPath(workspaceDoc, input.from, input.to)
       await saveWorkspaceDoc(input.workspaceId, workspaceDoc)
     }
+    // Both path keys: a cached doc under the old path would serve a path
+    // that no longer exists, and one under the new path predates the move.
+    evictDoc(input.workspaceId, input.from)
+    evictDoc(input.workspaceId, input.to)
   }
 
   async setDocumentName(input: SetDocumentNameInput): Promise<void> {
@@ -259,6 +290,7 @@ export class DualPlaneDocumentIndex implements DocumentIndex {
         await this.#treeIndex().deleteDocument(input)
       }
     }
-    return this.rows.deleteDocument(input)
+    await this.rows.deleteDocument(input)
+    evictDoc(input.workspaceId, input.path)
   }
 }

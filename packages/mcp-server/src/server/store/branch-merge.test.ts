@@ -23,7 +23,9 @@ const { createBranch, loadDocumentBranches, saveDocumentBranches } = await impor
   './branches-store.js'
 )
 const branchesStore = await import('./branches-store.js')
-const { saveDocument, loadDocument } = await import('./document-store.js')
+const { saveDocument, loadDocument, workspaceFrontiersForPath } = await import(
+  './document-store.js'
+)
 const { clearCache } = await import('./doc-cache.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -122,8 +124,12 @@ describe('performBranchMerge', () => {
     await saveDocument(SID, PATH, doc, { overwrite: true })
     await createBranch(SID, PATH, { name: 'feature' })
 
-    // Pin main to the A-only state so it stops tracking the live doc.
-    const mainOnlyTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    // Pin main to the A-only state so it stops tracking the live doc. Tips
+    // are recorded the way app.ts's getCurrentFrontiers records them: as
+    // WORKSPACE record frontiers, the one lineage branch history lives in.
+    const mainOnlyTip = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString(
+      'base64',
+    )
     const state = await loadDocumentBranches(SID, PATH)
     const main = state.branches.find((b) => b.name === 'main')!
     main.tipFrontiers = mainOnlyTip
@@ -134,7 +140,7 @@ describe('performBranchMerge', () => {
     const withC = await loadDocument(SID, PATH)
     writeSpatialNode(withC, { id: 'C', type: 'text', text: 'c', x: 0, y: 0, width: 10, height: 10 })
     await saveDocument(SID, PATH, withC, { overwrite: true })
-    const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
+    const featureTip = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString('base64')
     const afterAddC = await loadDocumentBranches(SID, PATH)
     const feature = afterAddC.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = featureTip
@@ -468,7 +474,9 @@ describe('performBranchMerge', () => {
     await createBranch(SID, PATH, { name: 'feature' })
     const state = await loadDocumentBranches(SID, PATH)
     const feature = state.branches.find((b) => b.name === 'feature')!
-    feature.tipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    feature.tipFrontiers = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString(
+      'base64',
+    )
     await saveDocumentBranches(SID, PATH, state)
 
     await performBranchMerge(deps, SID, PATH, {
@@ -506,9 +514,11 @@ describe('performBranchMerge', () => {
       ],
       edges: [],
     })
-    feature.tipFrontiers = Buffer.from(encodeFrontiers(diverged.frontiers())).toString('base64')
-    await saveDocumentBranches(SID, PATH, state)
     await saveDocument(SID, PATH, diverged, { overwrite: true })
+    feature.tipFrontiers = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString(
+      'base64',
+    )
+    await saveDocumentBranches(SID, PATH, state)
     await branchesStore.setHead(SID, PATH, 'feature')
     deps.broadcastLoroUpdate.mockImplementationOnce(() => {
       throw new Error('broadcast boom')
@@ -539,31 +549,42 @@ describe('performBranchMerge', () => {
       edges: [],
     })
     await saveDocument(SID, PATH, forkDoc, { overwrite: true })
-    const forkSnapshot = forkDoc.export({ mode: 'snapshot' })
     await createBranch(SID, PATH, { name: 'feature' })
 
-    // Target side: same peer continues and deletes A.
-    deleteSpatialNode(forkDoc, 'A')
-    const mainTip = Buffer.from(encodeFrontiers(forkDoc.frontiers())).toString('base64')
-
-    // Source side: a fresh peer, independently continuing from the fork
-    // point (A still alive), adding F.
-    const sourceDoc = new LoroDoc()
-    sourceDoc.import(forkSnapshot)
-    sourceDoc.setPeerId('999')
-    writeSpatialNode(sourceDoc, {
-      id: 'F',
-      type: 'text',
-      text: 'f',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
+    // Source side: a REPLICA of the workspace record (its own peer), forked
+    // at the point where A is still alive, independently adding F — the
+    // shape a second keeper's concurrent edit takes after the sync cutover.
+    const { cloneStoredWorkspaceDoc, getWorkspaceDoc, saveWorkspaceDoc } = await import(
+      './document-store.js'
+    )
+    const { resolveWorkspaceDocument, documentContainers, writeSpatialCanvas } = await import(
+      '@kamiazya/whiteboard-loro-adapter'
+    )
+    const replica = (await cloneStoredWorkspaceDoc(SID))!
+    replica.setPeerId('999')
+    const entry = resolveWorkspaceDocument(replica, PATH)!
+    const replicaFrom = replica.version()
+    writeSpatialCanvas(documentContainers(replica, entry.documentId), {
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'F', type: 'text', text: 'f', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [],
     })
-    const sourceTip = Buffer.from(encodeFrontiers(sourceDoc.frontiers())).toString('base64')
+    replica.commit()
+    const sourceTip = Buffer.from(encodeFrontiers(replica.frontiers())).toString('base64')
 
-    forkDoc.import(sourceDoc.export({ mode: 'snapshot' }))
-    await saveDocument(SID, PATH, forkDoc, { overwrite: true })
+    // Target side: this keeper continues and deletes A.
+    const live = await loadDocument(SID, PATH)
+    deleteSpatialNode(live, 'A')
+    await saveDocument(SID, PATH, live, { overwrite: true })
+    const mainTip = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString('base64')
+
+    // The replica's concurrent edit arrives, exactly as the sync path
+    // delivers it: imported into the live workspace document.
+    const workspaceDoc = await getWorkspaceDoc(SID)
+    workspaceDoc.import(replica.export({ mode: 'update', from: replicaFrom }))
+    await saveWorkspaceDoc(SID, workspaceDoc)
     clearCache()
 
     const state = await loadDocumentBranches(SID, PATH)

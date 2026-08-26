@@ -293,9 +293,12 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
         (node) => node.path !== input.path && isSelfOrDescendant(node.path, input.path),
       )
       if (descendants.length > 0) {
+        // NAME a descendant, matching the other index implementations: a
+        // count tells the caller to go looking, a path tells them what they
+        // would be destroying.
         throw new DocumentHasDescendantsError(
           input.path,
-          `Delete or move its ${descendants.length} descendant(s) first.`,
+          `Delete "${descendants[0]?.path}" and any others below it first.`,
         )
       }
       // EVACUATE FIRST. The order is the whole guarantee: if the export or the

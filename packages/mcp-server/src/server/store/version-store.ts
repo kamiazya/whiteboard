@@ -82,6 +82,12 @@ export interface VersionStore {
   // null when none exist, because compaction would otherwise risk losing all
   // history.
   earliestFrontiers(workspaceId: string, path: string): Promise<Frontiers | null>
+  // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
+  // workspace — the earliest point any version checkout still needs from the
+  // workspace record's history, so the safe cut for compacting that record.
+  // Null when the workspace has no scoped versions (compacting would then
+  // risk history nothing has measured the need for).
+  earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null>
   // Public API used when creating branches from a version id.
   // Returns null only when the version is missing.
   getFrontiersBase64(workspaceId: string, id: string): Promise<string | null>
@@ -336,7 +342,7 @@ export class FileVersionStore implements VersionStore {
       .where('documents.workspaceId', '=', workspaceId)
       .where('versions.id', '=', id)
       .executeTakeFirst()
-    if (!row || row.workspaceScoped !== 1) return null
+    if (row?.workspaceScoped !== 1) return null
     const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
       workspaceId,
     )
@@ -533,6 +539,32 @@ export class FileVersionStore implements VersionStore {
     } catch (error) {
       throw corruptStoredData(
         `versions/${path}`,
+        `frontiers could not be decoded (${errorMessage(error)})`,
+      )
+    }
+  }
+
+  async earliestWorkspaceFrontiers(workspaceId: string): Promise<Frontiers | null> {
+    validateWorkspaceId(workspaceId)
+    const db = await dbReady()
+    const row = await db
+      .selectFrom('versions')
+      .innerJoin('documents', 'documents.id', 'versions.documentId')
+      .select(['versions.frontiers'])
+      .where('documents.workspaceId', '=', workspaceId)
+      // Only scoped rows point into the workspace record's oplog; a legacy
+      // row constrains nothing here (its oplog is its own record's).
+      .where('versions.workspaceScoped', '=', 1)
+      .orderBy('versions.createdAt', 'asc')
+      .orderBy('versions.id', 'asc')
+      .limit(1)
+      .executeTakeFirst()
+    if (!row) return null
+    try {
+      return decodeFrontiers(base64ToBytes(row.frontiers))
+    } catch (error) {
+      throw corruptStoredData(
+        `versions/${workspaceId}`,
         `frontiers could not be decoded (${errorMessage(error)})`,
       )
     }

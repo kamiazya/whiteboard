@@ -46,6 +46,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn(),
       earliestFrontiers: vi.fn().mockResolvedValue([]),
+      earliestWorkspaceFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
       pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),
@@ -62,22 +63,25 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
 
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
-    const row = await db
+    const _row = await db
       .selectFrom('documents')
       .select(['id'])
       .where('workspaceId', '=', 'session1')
       .where('path', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
-    // Corrupt the Libsql snapshot rows directly — content no longer lives in
-    // an FS blob for compactDocument to stat/read.
+    // Corrupt the WORKSPACE record's snapshot rows directly — that is where
+    // content lives — and drop the live cache so the compact actually reads
+    // the stored bytes.
     const libsqlStore = new LibsqlDocumentStore(db)
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await libsqlStore.saveSnapshot({
-      docRef: { kind: 'document', documentId: row.id },
+      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
       manifest,
       chunks,
       frontier: new Uint8Array(),
     })
+    const { _clearWorkspaceDocCacheForTests } = await import('../../store/document-store.js')
+    _clearWorkspaceDocCacheForTests()
 
     const app = createDocumentRouter({ versionStore: createVersionStoreMock() })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/compact', {
@@ -87,7 +91,7 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
     expect(res.status).toBe(500)
     await expect(res.json()).resolves.toEqual({
       error: 'corrupt_stored_data',
-      message: expect.stringContaining(`${row.id}.loro`),
+      message: expect.stringContaining('workspace-tree:session1'),
     })
   })
 
@@ -110,6 +114,7 @@ describe('POST /api/workspaces/:workspaceId/documents/optimize-all', () => {
       // matters is the bulk endpoint loops every canvas and aggregates
       // totals correctly.
       earliestFrontiers: vi.fn().mockResolvedValue(null),
+      earliestWorkspaceFrontiers: vi.fn().mockResolvedValue(null),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
       // The bulk-optimize route doesn't exercise prune by default, but the

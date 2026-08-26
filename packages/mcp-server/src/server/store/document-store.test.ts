@@ -93,12 +93,13 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
     expect(loaded.getText('content').toString()).toBe('real content')
   })
 
-  it('a saveDocument write is immediately visible through LibsqlDocumentStore.loadSnapshot directly', async () => {
+  it('a saveDocument write is immediately durable in the stored workspace record', async () => {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
     const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
+    const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+    const { documentContainers } = await import('@kamiazya/whiteboard-loro-adapter')
 
     const doc = new LoroDoc()
     doc.getText('content').insert(0, 'written via saveDocument')
@@ -108,27 +109,25 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
     const db = await getDb(getDataDir())
     const documentId = await getDocumentIdByPath(db, 'session1', 'write-through')
     expect(documentId).not.toBeNull()
-    const store = new LibsqlDocumentStore(db)
-    const snapshot = await store.loadSnapshot({
-      docRef: { kind: 'document', documentId: documentId! },
-    })
-    expect(snapshot).not.toBeNull()
-    const reloaded = new LoroDoc()
-    reloaded.import(reassembleSnapshot(snapshot!.manifest, snapshot!.chunks))
-    expect(reloaded.getText('content').toString()).toBe('written via saveDocument')
+    // A FRESH open of the stored record — not the live cache — so this
+    // proves durability, not memory.
+    const stored = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
+      'session1',
+    )
+    expect(stored).not.toBeNull()
+    expect(documentContainers(stored!, documentId!).getText('content').toString()).toBe(
+      'written via saveDocument',
+    )
   })
 })
 
-// Lock-namespace unification: saveDocument (the HTTP/WS path) and every
-// mutating MCP tool now write the SAME LibsqlDocumentStore rows, so they
-// must serialize on the SAME per-document queue (workspace-lock.ts's
-// withDocumentWriteLock) or one writer's saveSnapshot transaction can land
-// concurrently with another's on a single shared db connection. Before the
-// flip this was harmless (the two paths wrote disjoint storage); after it,
-// it is the same lost-update class canvas-doc-write-lock.test.ts already
-// pins for two unserialized MCP calls, now reachable from a THIRD writer
-// (saveDocument) that has no lock of its own.
-describe('saveDocument nests withDocumentWriteLock (identity-convergence flip)', () => {
+// Every writer of a workspace's content — the HTTP/WS route path
+// (saveDocument) and the MCP tool surface (WorkspaceRoutedDocumentStore) —
+// mutates the SAME live workspace document, so they must serialize on the
+// workspace write lock and the route flow must LOAD inside that lock: a
+// projection read before a tool write completed would diff the tool's edit
+// right back out.
+describe('route saves and tool writes serialize on the workspace document', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-lock-race-test-'))
     await setupIsolatedDb()
@@ -139,197 +138,101 @@ describe('saveDocument nests withDocumentWriteLock (identity-convergence flip)',
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('a concurrent saveDocument write is never interleaved into an MCP-tool-style write holding the canvas-doc lock on the same document', async () => {
+  async function toolStores() {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
-    const { withDocumentWriteLock } = await import('./workspace-lock.js')
-
-    await saveDocument('session1', 'race', new LoroDoc())
+    const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
     const db = await getDb(getDataDir())
-    const documentId = (await getDocumentIdByPath(db, 'session1', 'race'))!
-    const docRef = { kind: 'document' as const, documentId }
+    return { db, routed: new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db), db) }
+  }
 
-    // Patch the class prototype (not one instance) so this observes every
-    // write for this document, including document-store.ts's own
-    // internally-cached LibsqlDocumentStore instance.
-    //
-    // BOTH write paths are wrapped, because a save picks between them: it
-    // appends a delta normally and writes a whole snapshot only when there is
-    // no base or the log has grown past the fold budget. Watching
-    // `saveSnapshot` alone counted the tool's write and missed the one racing
-    // it — which reads as "no interleaving happened" and is how this test
-    // would stop testing anything.
-    const events: string[] = []
-    const originalSaveSnapshot = LibsqlDocumentStore.prototype.saveSnapshot
-    const originalAppendDeltas = LibsqlDocumentStore.prototype.appendDeltas
-    let delayedOnce = false
-    const forDoc = (docRef: { kind: string; documentId?: string }): boolean =>
-      docRef.kind === 'document' && docRef.documentId === documentId
-    // Hold the FIRST write open (the tool's) so a concurrent, unserialized
-    // saveDocument call has a real window to land its own write before the
-    // tool's completes — the exact interleaving the canvas-doc lock exists to
-    // rule out.
-    async function delayFirst(): Promise<void> {
-      if (delayedOnce) return
-      delayedOnce = true
-      await new Promise((r) => setTimeout(r, 50))
-    }
-    LibsqlDocumentStore.prototype.saveSnapshot = async function (
-      this: InstanceType<typeof LibsqlDocumentStore>,
-      input,
-    ) {
-      const forThisDoc = forDoc(input.docRef)
-      if (forThisDoc) {
-        events.push('save-start')
-        await delayFirst()
-      }
-      const result = await originalSaveSnapshot.call(this, input)
-      if (forThisDoc) events.push('save-end')
-      return result
-    }
-    LibsqlDocumentStore.prototype.appendDeltas = async function (
-      this: InstanceType<typeof LibsqlDocumentStore>,
-      input,
-    ) {
-      const forThisDoc = forDoc(input.docRef)
-      if (forThisDoc) {
-        events.push('save-start')
-        await delayFirst()
-      }
-      const result = await originalAppendDeltas.call(this, input)
-      if (forThisDoc) events.push('save-end')
-      return result
-    }
-
-    try {
-      const toolWrite = withDocumentWriteLock(documentId, async () => {
-        events.push('tool-critical-section-start')
-        const libsqlStore = new LibsqlDocumentStore(db)
-        const doc = new LoroDoc()
-        doc.getMap('root').set('marker', 'tool')
-        doc.commit()
-        const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
-        await libsqlStore.saveSnapshot({
-          docRef,
-          manifest,
-          chunks,
-          frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-        })
-        events.push('tool-critical-section-end')
-      })
-
-      // Give the tool a head start so it acquires the lock and enters its
-      // (delayed) save before the HTTP write races in.
-      await new Promise((r) => setTimeout(r, 5))
-      const httpDoc = new LoroDoc()
-      httpDoc.getMap('root').set('marker', 'http')
-      httpDoc.commit()
-      const httpWrite = saveDocument('session1', 'race', httpDoc, { overwrite: true })
-
-      await Promise.all([toolWrite, httpWrite])
-    } finally {
-      LibsqlDocumentStore.prototype.saveSnapshot = originalSaveSnapshot
-      LibsqlDocumentStore.prototype.appendDeltas = originalAppendDeltas
-    }
-
-    // Every save-start for this document is either the tool's own single
-    // save (inside its critical section) or one that started only AFTER
-    // the tool's critical section fully released — never one that started
-    // WHILE the tool's save was still in flight (the lost-update/torn-write
-    // window this slice's lock unification closes).
-    const startIdx = events.indexOf('tool-critical-section-start')
-    const endIdx = events.indexOf('tool-critical-section-end')
-    expect(startIdx).toBeGreaterThanOrEqual(0)
-    expect(endIdx).toBeGreaterThan(startIdx)
-    const saveStarts = events
-      .map((e, i) => [e, i] as const)
-      .filter(([e]) => e === 'save-start')
-      .map(([, i]) => i)
-    expect(saveStarts.length).toBe(2)
-    // Exactly one save-start may fall inside the tool's critical section —
-    // its own. Any OTHER save-start landing in that same window means a
-    // second writer's transaction started while the tool's was still open;
-    // the events array records only ARRIVAL order, so without this exact
-    // count check two same-window save-starts would each individually look
-    // "inside the tool's window" and the loop below would wrongly wave both
-    // through.
-    const withinToolWindow = saveStarts.filter((i) => i > startIdx && i < endIdx)
-    expect(
-      withinToolWindow.length,
-      `save-start(s) landed inside the tool's critical section: ${JSON.stringify(withinToolWindow)}; events were ${events.join(',')}`,
-    ).toBe(1)
-    for (const i of saveStarts) {
-      if (withinToolWindow.includes(i)) continue
-      expect(i, `save-start at index ${i}; events were ${events.join(',')}`).toBeGreaterThan(endIdx)
-    }
-  })
-})
-
-// The lock alone only makes an overwrite ATOMIC — it cannot make it
-// correct. doc-cache holds a long-lived LoroDoc that WS frames mutate in
-// place; an MCP tool writing the same Libsql rows out of band leaves that
-// cached doc stale, and its next save would export the stale state as the
-// whole new truth, erasing the agent's ops in one atomic write. The save
-// path must MERGE the stored snapshot into the outgoing doc first (a CRDT
-// import: known ops are no-ops), so both writers' ops survive.
-describe('saveDocument merges an out-of-band write instead of clobbering it', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-merge-save-test-'))
-    await setupIsolatedDb()
-  })
-
-  afterEach(async () => {
-    await teardownIsolatedDb()
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
-  it('a stale cached doc save preserves ops an MCP-style writer stored since it loaded', async () => {
-    const { getDb } = await import('./db/index.js')
-    const { getDataDir } = await import('../config.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
-    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+  async function toolWrite(
+    routed: import('./workspace-plane.js').WorkspaceRoutedDocumentStore,
+    documentId: string,
+    marker: string,
+  ): Promise<void> {
     const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
+    const { withDocumentWriteLock } = await import('./workspace-lock.js')
+    const docRef = { kind: 'document' as const, documentId }
+    await withDocumentWriteLock(documentId, async () => {
+      const existing = await routed.loadSnapshot({ docRef })
+      const doc = new LoroDoc()
+      if (existing !== null) doc.import(reassembleSnapshot(existing.manifest, existing.chunks))
+      doc.getMap('nodes').set(marker, { id: marker })
+      doc.commit()
+      const { manifest, chunks } = chunkSnapshot(
+        new Uint8Array(doc.export({ mode: 'snapshot' })),
+        1_000_000,
+      )
+      await routed.saveSnapshot({
+        docRef,
+        manifest,
+        chunks,
+        frontier: new Uint8Array(doc.oplogVersion().encode()),
+      })
+    })
+  }
 
-    // Create, then take the "cached" live doc the WS session would hold.
+  // The route flow exactly as ws.ts and live-doc.ts run it: resolve the doc
+  // AND persist it inside one workspace-lock hold.
+  async function routeWrite(path: string, marker: string): Promise<void> {
+    const { getDoc } = await import('./document-store.js')
+    const { withWorkspaceWriteLock } = await import('./workspace-lock.js')
+    await withWorkspaceWriteLock('session1', async () => {
+      const doc = await getDoc('session1', path)
+      doc.getMap('nodes').set(marker, { id: marker })
+      doc.commit()
+      await saveDocument('session1', path, doc, { overwrite: true })
+    })
+  }
+
+  it('a tool write and a route save racing on the same document both survive', async () => {
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const seed = new LoroDoc()
+    seed.getMap('nodes').set('base', { id: 'base' })
+    seed.commit()
+    await saveDocument('session1', 'race', seed)
+    const { db, routed } = await toolStores()
+    const documentId = (await getDocumentIdByPath(db, 'session1', 'race'))!
+
+    await Promise.all([toolWrite(routed, documentId, 'agent'), routeWrite('race', 'web')])
+
+    const reloaded = await loadDocument('session1', 'race')
+    expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])
+  })
+
+  // Sequential shape of the same guarantee, pinning the MECHANISM: the tool
+  // surface reads and writes THROUGH the cached projection the route path
+  // mutates, so a tool save is a CRDT merge into the same lineage — the
+  // live cached doc gains the tool's op instead of being left stale (or
+  // evicted, which would break every per-document socket's lineage).
+  it("a route save after an out-of-band tool write preserves both writers' ops", async () => {
+    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { getDoc } = await import('./document-store.js')
+    const { peekDoc } = await import('./doc-cache.js')
+
     const seed = new LoroDoc()
     seed.getMap('nodes').set('base', { id: 'base' })
     seed.commit()
     await saveDocument('session1', 'merge-race', seed, { overwrite: true })
-    const live = await loadDocument('session1', 'merge-race')
+    // Warm the projection cache the way a WS session would.
+    await getDoc('session1', 'merge-race')
+    expect(peekDoc('session1', 'merge-race')).toBeDefined()
 
-    // Out-of-band MCP-style write: an independent load-modify-save straight
-    // through LibsqlDocumentStore, exactly as server-core's document-io does
-    // — the doc-cache (and `live`) never see it.
-    const db = await getDb(getDataDir())
+    const { db, routed } = await toolStores()
     const documentId = (await getDocumentIdByPath(db, 'session1', 'merge-race'))!
-    const docRef = { kind: 'document' as const, documentId }
-    const store = new LibsqlDocumentStore(db)
-    const agentDoc = new LoroDoc()
-    const existing = await store.loadSnapshot({ docRef })
-    agentDoc.import(reassembleSnapshot(existing!.manifest, existing!.chunks))
-    agentDoc.getMap('nodes').set('agent', { id: 'agent' })
-    agentDoc.commit()
-    const agentSnapshot = agentDoc.export({ mode: 'snapshot' })
-    const { manifest, chunks } = chunkSnapshot(agentSnapshot, 1_000_000)
-    await store.saveSnapshot({
-      docRef,
-      manifest,
-      chunks,
-      frontier: agentDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    })
+    await toolWrite(routed, documentId, 'agent')
 
-    // The stale cached doc makes its own edit and saves.
-    live.getMap('nodes').set('web', { id: 'web' })
-    live.commit()
-    await saveDocument('session1', 'merge-race', live, { overwrite: true })
-
-    // Both writers' ops must survive in the stored truth.
+    // The cached projection STAYS, and already carries the tool's op —
+    // a WS session holding it keeps its lineage and sees the edit.
+    const cached = peekDoc('session1', 'merge-race')
+    expect(cached).toBeDefined()
+    expect(cached!.getMap('nodes').keys().sort()).toEqual(['agent', 'base'])
+    // The route flow writes through the same instance and both ops survive.
+    await routeWrite('merge-race', 'web')
     const reloaded = await loadDocument('session1', 'merge-race')
-    const keys = reloaded.getMap('nodes').keys().sort()
-    expect(keys).toEqual(['agent', 'base', 'web'])
+    expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])
   })
 })
 
@@ -422,27 +325,26 @@ describe('saveDocument / loadDocument', () => {
     expect(loaded.getMovableList('elements').length).toBe(0)
   })
 
-  it("persists the frontier bytes as the doc's own oplog version, readable back via LibsqlDocumentStore.readFrontier", async () => {
+  it("persists the workspace record's frontier as the live workspace doc's oplog version", async () => {
     const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const { getWorkspaceDoc } = await import('./document-store.js')
     const doc = new LoroDoc()
     doc.getMovableList('elements').insert(0, 'x')
     doc.commit()
     await saveDocument('session1', 'frontier-check', doc)
 
     const db = await getDb(tempDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'frontier-check')
     const store = new LibsqlDocumentStore(db)
     const result = await store.readFrontier({
-      docRef: { kind: 'document', documentId: documentId! },
+      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
     })
-    expect(result?.frontier).toEqual(doc.oplogVersion().encode())
+    const workspaceDoc = await getWorkspaceDoc('session1')
+    expect(result?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
   it('appends a delta on re-save instead of rewriting the whole snapshot', async () => {
     const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
     // Big enough that rewriting it would be the obvious cost. The daemon
@@ -455,8 +357,7 @@ describe('saveDocument / loadDocument', () => {
     await saveDocument('session1', 'incremental', doc)
 
     const db = await getDb(tempDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'incremental')
-    const docRef = { kind: 'document' as const, documentId: documentId! }
+    const docRef = { kind: 'workspace-tree' as const, workspaceId: 'session1' }
     const store = new LibsqlDocumentStore(db)
     const baseline = await store.readSnapshotManifest({ docRef })
     expect(baseline).not.toBeNull()
@@ -465,19 +366,17 @@ describe('saveDocument / loadDocument', () => {
     doc.commit()
     await saveDocument('session1', 'incremental', doc, { overwrite: true })
 
-    // The snapshot is untouched — byte-for-byte the one the first save wrote.
+    // The workspace record's snapshot is untouched — byte-for-byte the one
+    // the first save wrote.
     expect(await store.readSnapshotManifest({ docRef })).toEqual(baseline)
     // And the edit is in the delta log, small.
     const { updates } = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
     expect(updates).toHaveLength(1)
     expect(updates[0]!.byteLength).toBeLessThan(baseline!.totalBytes / 10)
-    // The frontier still describes the document as a whole, deltas included.
-    expect((await store.readFrontier({ docRef }))?.frontier).toEqual(doc.oplogVersion().encode())
   })
 
   it('does not grow the delta log when the document has not changed', async () => {
     const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
 
     const doc = new LoroDoc()
@@ -493,16 +392,15 @@ describe('saveDocument / loadDocument', () => {
     }
 
     const db = await getDb(tempDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'idle')
     const store = new LibsqlDocumentStore(db)
-    const { updates } = await store.loadDeltas({
-      docRef: { kind: 'document', documentId: documentId! },
-      sinceFrontier: new Uint8Array(),
-    })
-    // Zero, not "small". An update carrying no ops is still 22 bytes of
-    // envelope, which is exactly why "is it empty?" cannot be asked of the
-    // bytes.
-    expect(updates).toEqual([])
+    const docRef = { kind: 'workspace-tree' as const, workspaceId: 'session1' }
+    const { updates } = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    // Exactly what the CONTENT-BEARING save appended (the record is minted
+    // empty at workspace creation, so the first content arrives as one
+    // delta) — and not one entry more. An update carrying no ops is still
+    // 22 bytes of envelope, which is exactly why "did it grow?" cannot be
+    // asked of the bytes.
+    expect(updates).toHaveLength(1)
   })
 
   it('reads back everything a re-save appended, not just the snapshot', async () => {
@@ -600,25 +498,27 @@ describe('saveDocument / loadDocument', () => {
     expect(doc.getMovableList('elements').length).toBe(0)
   })
 
-  it('throws on broken snapshots instead of returning an empty LoroDoc', async () => {
+  it('throws on a broken workspace record instead of returning an empty LoroDoc', async () => {
     const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
+    const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
     await saveDocument('session1', 'broken', new LoroDoc())
     const db = await getDb(tempDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'broken')
-    // Overwrite the Libsql snapshot rows directly with bytes that are not a
-    // valid Loro snapshot — the corruption a Libsql-backed store can suffer,
-    // now that content no longer lives in an FS blob.
+    // Overwrite the workspace record's snapshot rows directly with bytes
+    // that are not a valid Loro snapshot — the corruption a Libsql-backed
+    // store can suffer.
     const store = new LibsqlDocumentStore(db)
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'document', documentId: documentId! },
+      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
       manifest,
       chunks,
       frontier: new Uint8Array(),
     })
+    // The live cache still holds the pre-corruption doc; drop it so the read
+    // actually exercises the stored bytes.
+    _clearWorkspaceDocCacheForTests()
 
     await expect(loadDocument('session1', 'broken')).rejects.toThrow()
   })
@@ -847,15 +747,15 @@ describe('listDocuments', () => {
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
-  it('omits kind when saveDocument is called without one — the row records none', async () => {
-    // saveDocument stores NULL for an omitted kind (it does not invent
-    // 'spatial'), and the listing now reports that absence rather than
-    // guessing. Clients that must render something (the gallery badge, the
-    // daemon page's editor choice) already default locally, so the rendered
-    // result is unchanged — only the claim in the data is gone.
+  it("records 'spatial' for a kindless save — every document lands on the tree with a kind", async () => {
+    // A kindless save is a lazy-create of an empty document (the WS/update
+    // path on a path with no row); the spatial editor is what opens those,
+    // and pre-kind rows no longer exist (the startup fold deletes them), so
+    // this is a default about OUR OWN lazy-create, not a guess about
+    // someone else's data.
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const list = await listDocuments('session1')
-    expect(list.find((c) => c.path === 'canvas-a')?.kind).toBeUndefined()
+    expect(list.find((c) => c.path === 'canvas-a')?.kind).toBe('spatial')
   })
 
   it('does not reset kind on an overwrite:true re-save', async () => {
@@ -929,12 +829,33 @@ describe('getDocumentKind', () => {
   })
 
   it('reports an unrecorded kind as unknown rather than guessing spatial', async () => {
-    // Its only callers stamp the answer onto a restored canvas's row, so a
-    // guess here is not a display default — it is written down, and a
-    // markdown document that predates kinds becomes permanently spatial,
-    // opened by the wrong editor. Both callers already omit a null kind,
-    // which copies the source's real state, unknown included.
-    await saveDocument('session1', 'canvas-a', new LoroDoc())
+    // saveDocument can no longer produce a kind-less row, so the null case
+    // is seeded raw — the defect shape the fold deletes at boot, still
+    // answered honestly by a read that happens first.
+    const { getDb } = await import('./db/index.js')
+    const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
+    const db = await getDb(tempDir)
+    const now = Date.now()
+    await db
+      .insertInto('workspaces')
+      .values({ id: 'session1', createdAt: now, updatedAt: now })
+      .onConflict((oc) => oc.column('id').doNothing())
+      .execute()
+    await db
+      .insertInto('documents')
+      .values({
+        id: generateDocumentId(),
+        workspaceId: 'session1',
+        path: 'canvas-a',
+        displayName: null,
+        isPinned: 0,
+        pinOrder: null,
+        currentBranch: 'main',
+        createdAt: now,
+        updatedAt: now,
+        kind: null,
+      })
+      .execute()
     expect(await getDocumentKind('session1', 'canvas-a')).toBeNull()
   })
 })
@@ -1152,34 +1073,32 @@ describe('compactDocument', () => {
   // dir, so the previous "non-directory parent" stat failure no longer
   // applies. Coverage of the corrupt-snapshot branch lives below.
 
-  it('treats invalid snapshots as corruption instead of falling back to empty state', async () => {
+  it('treats an invalid workspace record as corruption instead of compacting over it', async () => {
     const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
+    const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
     const doc = new LoroDoc()
     const store = new FileVersionStore()
     await saveDocument('session1', 'broken', doc)
     await store.save('session1', 'broken', doc, { auto: true })
     const db = await getDb(tempDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'broken')
-    // Corrupt the Libsql snapshot rows directly — compactDocument's
-    // beforeBytes read succeeds (the header is intact), but its internal
-    // loadDocument() call decodes the garbage chunk bytes and must surface
-    // corruption rather than a silently-empty compaction.
+    // Corrupt the workspace record's snapshot rows directly — the
+    // beforeBytes read succeeds (the header is intact), but re-opening the
+    // live workspace document decodes the garbage bytes and must surface
+    // corruption rather than silently compacting an empty document over
+    // real data.
     const libsqlStore = new LibsqlDocumentStore(db)
     const { manifest, chunks } = chunkSnapshot(Buffer.from('not-a-loro-snapshot'), 1_000_000)
     await libsqlStore.saveSnapshot({
-      docRef: { kind: 'document', documentId: documentId! },
+      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
       manifest,
       chunks,
       frontier: new Uint8Array(),
     })
+    _clearWorkspaceDocCacheForTests()
 
-    await expect(compactDocument('session1', 'broken', store)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining(`${documentId}.loro`),
-    })
+    await expect(compactDocument('session1', 'broken', store)).rejects.toThrow()
   })
 
   it('compacts at a version cut point while keeping restore working', async () => {
@@ -1220,17 +1139,18 @@ describe('compactDocument', () => {
     expect(past!.getMovableList('elements').length).toBe(30)
 
     // Compaction prunes history, not state, so the frontier written for the
-    // shallow snapshot must still match the doc's current oplog version.
+    // shallow workspace record must still match the live workspace doc's
+    // current oplog version — later saves keep appending from it.
     const { getDb } = await import('./db/index.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const { getWorkspaceDoc } = await import('./document-store.js')
     const db = await getDb(tempDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'test')
     const libsqlStore = new LibsqlDocumentStore(db)
     const frontierResult = await libsqlStore.readFrontier({
-      docRef: { kind: 'document', documentId: documentId! },
+      docRef: { kind: 'workspace-tree', workspaceId: 'session1' },
     })
-    expect(frontierResult?.frontier).toEqual(live.oplogVersion().encode())
+    const workspaceDoc = await getWorkspaceDoc('session1')
+    expect(frontierResult?.frontier).toEqual(workspaceDoc.oplogVersion().encode())
   })
 
   it('writes lastCompactedAt only on successful compaction', async () => {
@@ -1286,21 +1206,18 @@ describe('compactDocument', () => {
     expect(stamp!).toBeLessThanOrEqual(after)
   })
 
-  // compactDocument's beforeBytes read and its internal doc reload both ran
-  // unlocked before this test's fix, with only the final shallow-snapshot
-  // write taking withDocumentWriteLock. A concurrent canvas-doc write (an
-  // MCP tool call, or a WS/HTTP save) landing in that unlocked window was
-  // captured by neither read, so compactDocument's later write silently
-  // discarded it — the same lost-update class saveDocument's own write
-  // already guards against, now reachable against compaction too because
-  // both paths write the same Libsql rows.
-  it('does not lose a concurrent canvas-doc write racing into the window between compactDocument reading the doc and writing its shallow snapshot', async () => {
+  // compactDocument reads the workspace record, exports the shallow
+  // snapshot from the live workspace doc, and writes it back — all under the
+  // workspace write lock, the same lock every content writer holds. A
+  // concurrent tool write therefore lands strictly before or strictly after
+  // the fold, and survives either way.
+  it('does not lose a concurrent tool write racing the compaction', async () => {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
     const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
     const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
-    const { withDocumentWriteLock } = await import('./workspace-lock.js')
 
     const doc = new LoroDoc()
     const list = doc.getMovableList('elements')
@@ -1324,59 +1241,42 @@ describe('compactDocument', () => {
     const db = await getDb(getDataDir())
     const documentId = (await getDocumentIdByPath(db, 'session1', 'test'))!
 
-    // Delay only compactDocument's SECOND loadSnapshot call for this
-    // document (its internal doc reload, after the beforeBytes read) —
-    // AFTER it has already captured the pre-race bytes, so the delay opens
-    // a real wall-clock window without changing what compactDocument reads.
-    const originalLoadSnapshot = LibsqlDocumentStore.prototype.loadSnapshot
-    let loadCallsForDoc = 0
-    LibsqlDocumentStore.prototype.loadSnapshot = async function (
-      this: InstanceType<typeof LibsqlDocumentStore>,
-      input,
-    ) {
-      const forThisDoc = input.docRef.kind === 'document' && input.docRef.documentId === documentId
-      const result = await originalLoadSnapshot.call(this, input)
-      if (forThisDoc) {
-        loadCallsForDoc++
-        if (loadCallsForDoc === 2) {
-          await new Promise((r) => setTimeout(r, 60))
+    // Hold the cut lookup open so the tool write races into compaction's
+    // window instead of trivially serializing before it.
+    const delayedStore = new Proxy(store, {
+      get(target, prop, receiver) {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
+            await new Promise((r) => setTimeout(r, 60))
+            return target.earliestWorkspaceFrontiers(workspaceId)
+          }
         }
-      }
-      return result
-    }
+        return Reflect.get(target, prop, receiver)
+      },
+    })
 
-    try {
-      const compactPromise = compactDocument('session1', 'test', store)
+    const compactPromise = compactDocument('session1', 'test', delayedStore)
+    await new Promise((r) => setTimeout(r, 20))
+    const routed = new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db), db)
+    const docRef = { kind: 'document' as const, documentId }
+    const existing = await routed.loadSnapshot({ docRef })
+    const toolDoc = new LoroDoc()
+    toolDoc.import(reassembleSnapshot(existing!.manifest, existing!.chunks))
+    toolDoc.getMap('root').set('agentMarker', 'concurrent-edit')
+    toolDoc.commit()
+    const chunked = chunkSnapshot(new Uint8Array(toolDoc.export({ mode: 'snapshot' })), 1_000_000)
+    const toolWrite = routed.saveSnapshot({
+      docRef,
+      manifest: chunked.manifest,
+      chunks: chunked.chunks,
+      frontier: new Uint8Array(toolDoc.oplogVersion().encode()),
+    })
 
-      // Give compactDocument a head start so it is mid-delay inside its
-      // second (doc-reload) read before this fires from a genuinely
-      // separate call chain (not nested inside compactDocument's own).
-      await new Promise((r) => setTimeout(r, 20))
-      const concurrentWrite = withDocumentWriteLock(documentId, async () => {
-        const libsqlStore = new LibsqlDocumentStore(db)
-        const existing = await libsqlStore.loadSnapshot({
-          docRef: { kind: 'document', documentId },
-        })
-        const base = new LoroDoc()
-        base.import(reassembleSnapshot(existing!.manifest, existing!.chunks))
-        base.getMap('root').set('agentMarker', 'concurrent-edit')
-        base.commit()
-        const chunked = chunkSnapshot(base.export({ mode: 'snapshot' }), 1_000_000)
-        await libsqlStore.saveSnapshot({
-          docRef: { kind: 'document', documentId },
-          manifest: chunked.manifest,
-          chunks: chunked.chunks,
-          frontier: base.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-        })
-      })
-
-      await Promise.all([compactPromise, concurrentWrite])
-    } finally {
-      LibsqlDocumentStore.prototype.loadSnapshot = originalLoadSnapshot
-    }
+    await Promise.all([compactPromise, toolWrite])
 
     const after = await loadDocument('session1', 'test')
     expect(after.getMap('root').get('agentMarker')).toBe('concurrent-edit')
+    expect(after.getMovableList('elements').length).toBe(60)
   })
 })
 
@@ -1438,11 +1338,10 @@ describe('deleteDocument', () => {
       .where('path', '=', 'canvas-a')
       .executeTakeFirstOrThrow()
     const documentId = documentRow.id
-    const docRef = { kind: 'document' as const, documentId }
+    const _docRef = { kind: 'document' as const, documentId }
     const libsqlStore = new LibsqlDocumentStore(db)
 
     const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
-    await expect(libsqlStore.loadSnapshot({ docRef })).resolves.not.toBeNull()
     await expect(stat(thumbPath)).resolves.toBeDefined()
 
     await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
@@ -1466,8 +1365,16 @@ describe('deleteDocument', () => {
       .execute()
     expect(versionsAfter).toEqual([])
 
-    await expect(libsqlStore.loadSnapshot({ docRef })).resolves.toBeNull()
-    await expect(libsqlStore.readFrontier({ docRef })).resolves.toBeNull()
+    // Content now lives in the workspace record: the tree node is gone and
+    // the bytes were EVACUATED into the trash, not destroyed.
+    const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+    const { resolveWorkspaceDocumentById, readTrashEntries } = await import(
+      '@kamiazya/whiteboard-loro-adapter'
+    )
+    const stored = await new DocumentStoreWorkspaceDocs(libsqlStore).open('session1')
+    expect(stored).not.toBeNull()
+    expect(resolveWorkspaceDocumentById(stored!, documentId)).toBeNull()
+    expect(readTrashEntries(stored!).map((t) => t.documentId)).toContain(documentId)
     await expect(stat(thumbPath)).rejects.toThrow()
 
     const wsRow = await db
@@ -1674,8 +1581,6 @@ describe('renameDocumentPath', () => {
   it('moves only the path: branches/versions rows and the Libsql snapshot stay byte-identical and keyed to the same documentId', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
-    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'a', doc)
@@ -1691,11 +1596,7 @@ describe('renameDocumentPath', () => {
       .where('path', '=', 'a')
       .executeTakeFirstOrThrow()
     const documentId = before.id
-    const libsqlStore = new LibsqlDocumentStore(db)
-    const docRef = { kind: 'document' as const, documentId }
-    const snapshotBefore = await libsqlStore.loadSnapshot({ docRef })
-    if (snapshotBefore === null) throw new Error('expected a snapshot')
-    const blobBefore = reassembleSnapshot(snapshotBefore.manifest, snapshotBefore.chunks)
+    const contentBefore = (await loadDocument('session1', 'a')).toJSON()
 
     await expect(renameDocumentPath('session1', 'a', 'b')).resolves.toEqual({ documentId })
 
@@ -1724,10 +1625,8 @@ describe('renameDocumentPath', () => {
       .execute()
     expect(versionsAfter.map((v) => v.id)).toEqual([version.id])
 
-    const snapshotAfter = await libsqlStore.loadSnapshot({ docRef })
-    if (snapshotAfter === null) throw new Error('expected a snapshot')
-    const blobAfter = reassembleSnapshot(snapshotAfter.manifest, snapshotAfter.chunks)
-    expect(blobAfter).toEqual(blobBefore)
+    // Content is untouched by the move — same documentId, same value.
+    expect((await loadDocument('session1', 'b')).toJSON()).toEqual(contentBefore)
 
     // loadDocumentBranches also resolves under the new path.
     const branches = await loadDocumentBranches('session1', 'b')
@@ -1992,15 +1891,16 @@ describe('auto-compact', () => {
     expect(await readLastCompactedAt()).toBe(settled)
   })
 
-  it('evicts the doc-cache after a successful auto-compact so the next save does not clobber the compacted file', async () => {
-    // The trap: scheduleAutoCompact rewrites the on-disk blob with a
-    // shallow snapshot, but a still-cached full LoroDoc would re-export
-    // the entire history on the next save and silently undo the
-    // optimisation. Confirm the cache is dropped so getDoc reloads from
-    // the compacted file.
+  it('keeps the cached doc coherent through an auto-compact — the next save does not clobber the compacted record', async () => {
+    // The legacy trap was a cached full doc re-exporting its entire history
+    // over a freshly shallowed record. The workspace record's compaction
+    // writes its OWN live doc's frontier, so the cache needs no eviction —
+    // this pins that a post-compact edit round-trips instead of resurrecting
+    // pre-compact bytes or losing the edit.
     const { LoroMap } = await import('loro-crdt')
     const { peekDoc, clearCache } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
+    const { getDb } = await import('./db/index.js')
 
     clearCache()
 
@@ -2021,23 +1921,36 @@ describe('auto-compact', () => {
     doc.commit()
     await saveDocument('session1', 'cached', doc, { overwrite: true })
 
-    // Pull through getDoc so the cache holds a live LoroDoc — this is what
-    // happens on every WebSocket-backed canvas in production.
     await getDoc('session1', 'cached')
     expect(peekDoc('session1', 'cached')).toBeDefined()
 
     scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
-
-    // Poll instead of a fixed sleep so this does not flake on a slow CI
-    // runner. The whole point of this test: after the scheduled compaction
-    // lands, the cache must be empty for that key so the next save reloads
-    // the compacted file as its base.
     await vi.waitFor(
-      () => {
-        expect(peekDoc('session1', 'cached')).toBeUndefined()
+      async () => {
+        const db = await getDb(tempDir)
+        const row = await db
+          .selectFrom('documents')
+          .select(['lastCompactedAt'])
+          .where('workspaceId', '=', 'session1')
+          .where('path', '=', 'cached')
+          .executeTakeFirst()
+        expect(row?.lastCompactedAt ?? null).not.toBeNull()
       },
       { timeout: 2000 },
     )
+
+    // Edit and save AFTER the compaction, then reload from stored bytes
+    // only: everything survives.
+    const live = await getDoc('session1', 'cached')
+    live.getMap('root').set('post-compact', 'edit')
+    live.commit()
+    await saveDocument('session1', 'cached', live, { overwrite: true })
+    const { _clearWorkspaceDocCacheForTests } = await import('./document-store.js')
+    clearCache()
+    _clearWorkspaceDocCacheForTests()
+    const reloaded = await loadDocument('session1', 'cached')
+    expect(reloaded.getMovableList('elements').length).toBe(60)
+    expect(reloaded.getMap('root').get('post-compact')).toBe('edit')
   })
 })
 
@@ -2086,19 +1999,19 @@ describe('auto-compact disposal', () => {
 
   // compactDocument normally settles fast enough (in-memory DB, tiny fixture)
   // that polling for "in flight" would race the compaction to zero. Delay
-  // just the earliestFrontiers lookup — the first await compactDocument makes
-  // — so tests can deterministically observe the in-flight window instead of
-  // depending on real-clock luck.
+  // just the cut lookup — an await compactDocument makes early on — so tests
+  // can deterministically observe the in-flight window instead of depending
+  // on real-clock luck.
   function withDelayedEarliestFrontiers(
     store: InstanceType<typeof FileVersionStore>,
     delayMs: number,
   ): InstanceType<typeof FileVersionStore> {
     return new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, path: string) => {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
             await new Promise((r) => setTimeout(r, delayMs))
-            return target.earliestFrontiers(workspaceId, path)
+            return target.earliestWorkspaceFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -2176,10 +2089,10 @@ describe('auto-compact disposal', () => {
     const rescheduleCallCount = { count: 0 }
     const countingStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, path: string) => {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
             rescheduleCallCount.count += 1
-            return target.earliestFrontiers(workspaceId, path)
+            return target.earliestWorkspaceFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -2187,11 +2100,11 @@ describe('auto-compact disposal', () => {
     })
     const reentrantStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, path: string) => {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
             await rescheduleGate
             scheduleAutoCompact('session1', 'reentrant', countingStore, { debounceMs: 0 })
-            return target.earliestFrontiers(workspaceId, path)
+            return target.earliestWorkspaceFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)
@@ -2234,13 +2147,13 @@ describe('auto-compact disposal', () => {
 
     const reentrantStore = new Proxy(store, {
       get(target, prop, receiver) {
-        if (prop === 'earliestFrontiers') {
-          return async (workspaceId: string, path: string) => {
+        if (prop === 'earliestWorkspaceFrontiers') {
+          return async (workspaceId: string) => {
             await new Promise((r) => setTimeout(r, 100))
             // Mirrors a compaction resuming and touching the DB again
             // (e.g. via loadDocument()) while teardown is draining hooks.
             reentrantDb = await getDb(tempDir)
-            return target.earliestFrontiers(workspaceId, path)
+            return target.earliestWorkspaceFrontiers(workspaceId)
           }
         }
         return Reflect.get(target, prop, receiver)

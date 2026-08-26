@@ -1,3 +1,8 @@
+import {
+  projectWorkspaceDocument,
+  reconcileDocContent,
+  resolveWorkspaceDocument,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import type { MergeBadge } from '../../shared/merge-engine.js'
 import { detectMergeBadges, meetVersion, toElementMap } from '../../shared/merge-engine.js'
@@ -10,7 +15,8 @@ import {
   setHead as setHeadPersist,
   updateBranchTip,
 } from './branches-store.js'
-import { getDoc, saveDocument } from './document-store.js'
+import { corruptStoredData } from './corrupt-stored-data.js'
+import { cloneStoredWorkspaceDoc, getDoc, saveDocument } from './document-store.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -100,11 +106,39 @@ export function performBranchMerge(
     const intoTip = intoBranch.tipFrontiers
     const liveDoc = await getDoc(sid, path)
 
+    // A tree-served document's branch tips are recorded against the
+    // WORKSPACE record's oplog (see app.ts's getCurrentFrontiers): they are
+    // checked out on a clone of that record and the document is PROJECTED at
+    // that point. The per-document fallback below survives only for the
+    // damaged-content remnant the fold could not move.
+    const wsClone = await cloneStoredWorkspaceDoc(sid)
+    const wsEntry = wsClone === null ? null : resolveWorkspaceDocument(wsClone, path)
+    const projectAtWorkspaceFrontiers = (
+      branchLabel: string,
+      frontiers: ReturnType<typeof decodeBranchTipOrThrow>,
+    ): LoroDoc => {
+      const at = LoroDoc.fromSnapshot(wsClone!.export({ mode: 'snapshot' }))
+      try {
+        at.checkout(frontiers)
+      } catch (err) {
+        throw corruptStoredData(
+          `${sid}/branches/${path}.json#${branchLabel}.tipFrontiers`,
+          `branch "${branchLabel}" tipFrontiers could not be checked out against the workspace record (${err instanceof Error ? err.message : 'unknown error'})`,
+        )
+      }
+      // A projection that answers null means the document did not exist at
+      // that point of history — an empty doc is the honest value there.
+      return projectWorkspaceDocument(at, wsEntry!.documentId) ?? new LoroDoc()
+    }
+
     const cloneAt = (branchName: string, tipBase64: string): LoroDoc => {
       if (tipBase64.length === 0) {
         return LoroDoc.fromSnapshot(liveDoc.export({ mode: 'snapshot' }))
       }
       const frontiers = decodeBranchTipOrThrow(sid, path, branchName, tipBase64)
+      if (wsClone !== null && wsEntry !== null) {
+        return projectAtWorkspaceFrontiers(branchName, frontiers)
+      }
       return checkoutCloneOrThrow(
         liveDoc,
         frontiers,
@@ -122,20 +156,34 @@ export function performBranchMerge(
     // stable target/source/preview triple to surface LWW differences.
     const previewDoc = sourceDoc
 
-    // The merge base is the common ancestor: the per-peer minimum
-    // ("meet") of target's and source's version vectors, checked out
-    // against the live doc's full history. An all-omitted (empty) meet
-    // checks out to genesis, which correctly classifies every source
-    // element as new rather than resurrected.
-    const baseFrontiers = liveDoc.vvToFrontiers(
-      meetVersion(targetDoc.version(), sourceDoc.version()),
-    )
-    const baseDoc = checkoutCloneOrThrow(
-      liveDoc,
-      baseFrontiers,
-      `${sid}/branches/${path}.json#merge-base`,
-      'merge base could not be checked out against the live document',
-    )
+    // The merge base is the common ancestor: the per-peer minimum ("meet")
+    // of target's and source's version vectors. For a tree-served document
+    // the only lineage the tips share is the WORKSPACE record's — the
+    // projections above each mint their own — so the meet is computed there
+    // and the base is projected at it. An all-omitted (empty) meet checks
+    // out to genesis, which correctly classifies every source element as
+    // new rather than resurrected.
+    let baseDoc: LoroDoc
+    if (wsClone !== null && wsEntry !== null) {
+      const tipVV = (tipBase64: string | undefined, branchLabel: string) =>
+        tipBase64 !== undefined && tipBase64.length > 0
+          ? wsClone.frontiersToVV(decodeBranchTipOrThrow(sid, path, branchLabel, tipBase64))
+          : wsClone.version()
+      const baseFrontiers = wsClone.vvToFrontiers(
+        meetVersion(tipVV(intoTip, into), tipVV(sourceTip, source)),
+      )
+      baseDoc = projectAtWorkspaceFrontiers('merge-base', baseFrontiers)
+    } else {
+      const baseFrontiers = liveDoc.vvToFrontiers(
+        meetVersion(targetDoc.version(), sourceDoc.version()),
+      )
+      baseDoc = checkoutCloneOrThrow(
+        liveDoc,
+        baseFrontiers,
+        `${sid}/branches/${path}.json#merge-base`,
+        'merge base could not be checked out against the live document',
+      )
+    }
 
     const badges = detectMergeBadges({
       base: baseDoc,
@@ -218,7 +266,11 @@ export function performBranchMerge(
     // HEAD===source cleanup path below.
     const reconcileLiveDocToPreview = async () => {
       const prevVV = liveDoc.version()
-      liveDoc.import(previewDoc.export({ mode: 'snapshot' }))
+      // A DIFF-write, not an import: the preview is a projection with its
+      // own per-process lineage, and importing a foreign lineage into the
+      // live doc loses to newer local lamports instead of applying (the
+      // same measured no-op that broke restore before order 6).
+      reconcileDocContent(liveDoc, previewDoc)
       liveDoc.commit()
       await saveDocument(sid, path, liveDoc, { overwrite: true })
       const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array

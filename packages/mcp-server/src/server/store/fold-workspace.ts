@@ -8,6 +8,18 @@
  * not. A crash needs no cleanup (what was folded is not work anymore), and a
  * document created after this build but before its write path moves to the
  * tree is picked up at the next startup.
+ *
+ * This fold also ENDS the legacy plane rather than coexisting with it:
+ * - A pre-kind row (kind: null) is DELETED, row and content record both.
+ *   It is this project's own data defect from before kinds existed — there
+ *   are no external users whose documents it could be — and keeping a whole
+ *   read path alive for it is what forced two storage planes to coexist.
+ * - A tree-resident document's leftover per-document record is swept, along
+ *   with the version rows whose frontiers point into that record's oplog
+ *   (they can never be checked out again once the record is gone).
+ * The one thing still served from a legacy record afterwards is a document
+ * whose stored content would not load — the fold cannot copy what it cannot
+ * read, so the damaged record stays where the corruption error can name it.
  */
 import {
   adoptWorkspaceDocument,
@@ -25,12 +37,15 @@ import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 export interface FoldReport {
   folded: number
   skipped: number
+  /** Pre-kind rows removed outright (row + content record). */
+  deleted: number
 }
 
 export async function foldWorkspaceDocuments(): Promise<FoldReport> {
   await prepareDataDir(getDataDir())
   const db = await getDb(getDataDir())
-  const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db))
+  const store = new LibsqlDocumentStore(db)
+  const docs = new DocumentStoreWorkspaceDocs(store)
 
   const rows = await db
     .selectFrom('documents')
@@ -44,17 +59,39 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
     byWorkspace.set(row.workspaceId, bucket)
   }
 
+  // The legacy record and the version rows anchored to its oplog go
+  // together: once the record is swept, a workspaceScoped=0 row can never be
+  // checked out again, so keeping it would only manufacture a 500 later.
+  async function sweepLegacy(documentId: string): Promise<void> {
+    await store.deleteDoc({ docRef: { kind: 'document', documentId } })
+    await db
+      .deleteFrom('versions')
+      .where('documentId', '=', documentId)
+      .where('workspaceScoped', '=', 0)
+      .execute()
+  }
+
   let folded = 0
   let skipped = 0
+  let deleted = 0
   for (const [workspaceId, members] of byWorkspace) {
     const workspace = await docs.create(workspaceId)
     for (const row of members) {
-      if (resolveWorkspaceDocumentById(workspace, row.id) !== null) continue
-      // A pre-kind row has content but no recorded format, and adopting it
-      // would mean inventing one. It keeps being served by the old path.
       const kind = documentKindSchema.safeParse(row.kind)
+      if (resolveWorkspaceDocumentById(workspace, row.id) !== null) {
+        // Already tree-resident: nothing to fold, but an interrupted earlier
+        // boot may have left the per-document record behind — sweep it.
+        await sweepLegacy(row.id)
+        continue
+      }
       if (!kind.success) {
-        skipped += 1
+        await db.deleteFrom('documents').where('id', '=', row.id).execute()
+        await sweepLegacy(row.id)
+        getLogger('fold-workspace').notice(
+          { workspaceId, path: row.path },
+          'deleted a pre-kind document (own pre-release data defect; nothing serves it anymore)',
+        )
+        deleted += 1
         continue
       }
       let source: Awaited<ReturnType<typeof loadDocument>>
@@ -83,9 +120,12 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
       )
       // Saved PER DOCUMENT, so a crash mid-fold loses at most the one in
       // flight — the next startup derives it as still-pending and retries.
+      // The sweep runs strictly AFTER the save: until the tree write is
+      // durable, the legacy record is still the document's only copy.
       await docs.save(workspaceId, workspace)
+      await sweepLegacy(row.id)
       folded += 1
     }
   }
-  return { folded, skipped }
+  return { folded, skipped, deleted }
 }

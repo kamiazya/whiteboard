@@ -191,17 +191,18 @@ describe('POST /api/w/:workspaceId/document/:path/update', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    // Force the persistence step inside saveDocument to fail after doc.import()
-    // has already mutated the cached doc.
-    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementationOnce(() => {
-      throw new Error('simulated snapshot failure')
-    })
+    // Force the persistence step inside saveDocument — the workspace-record
+    // save — to fail after doc.import() has already mutated the cached doc.
+    const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+    const saveSpy = vi
+      .spyOn(DocumentStoreWorkspaceDocs.prototype, 'save')
+      .mockRejectedValueOnce(new Error('simulated snapshot failure'))
     const res = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: update,
     })
-    exportSpy.mockRestore()
+    saveSpy.mockRestore()
 
     expect(res.status).toBe(500)
     // The cache must be evicted: without eviction, the in-memory doc already

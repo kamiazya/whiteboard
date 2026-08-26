@@ -15,7 +15,9 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, loadDocument } = await import('./document-store.js')
+const { saveDocument, loadDocument, workspaceFrontiersForPath } = await import(
+  './document-store.js'
+)
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
 const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
@@ -381,7 +383,11 @@ describe('purgeDanglingFiles', () => {
     // File node lives at the point where "feature" branches off.
     const doc = makeSpatialDocWithImage('branch-only-image')
     await saveDocument('ws_branch', 'page', doc)
-    const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    // Recorded the way app.ts's getCurrentFrontiers records tips: as
+    // WORKSPACE record frontiers, the lineage branch history lives in.
+    const branchTip = Buffer.from((await workspaceFrontiersForPath('ws_branch', 'page'))!).toString(
+      'base64',
+    )
     await createBranch('ws_branch', 'page', { name: 'feature', initialTipFrontiers: branchTip })
 
     // At head (main), the file node is removed — main's live state no
@@ -487,7 +493,9 @@ describe('purgeDanglingFiles', () => {
     const doc = makeSpatialDocWithImage('about-to-be-tip-referenced')
     await saveDocument('ws_branch_race', 'page', doc)
     await createBranch('ws_branch_race', 'page', { name: 'feature' })
-    const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    const branchTip = Buffer.from(
+      (await workspaceFrontiersForPath('ws_branch_race', 'page'))!,
+    ).toString('base64')
 
     // Head (main) no longer references the image — only the about-to-land
     // "feature" tip update will.
@@ -535,7 +543,9 @@ describe('purgeDanglingFiles', () => {
     const doc = makeSpatialDocWithImage('about-to-be-tip-referenced-live')
     await saveDocument('ws_branch_race_live', 'page', doc)
     await createBranch('ws_branch_race_live', 'page', { name: 'feature' })
-    const branchTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    const branchTip = Buffer.from(
+      (await workspaceFrontiersForPath('ws_branch_race_live', 'page'))!,
+    ).toString('base64')
 
     // Head (main) no longer references the image — only the about-to-land
     // "feature" tip update will.

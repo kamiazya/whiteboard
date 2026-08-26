@@ -105,22 +105,25 @@ it('loadDocument serves the tree content back, edits included', async () => {
   expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('second')
 })
 
-it('a kindless save of a NEW document stays on the legacy per-document plane', async () => {
+it('a kindless save of a NEW document lands on the tree as spatial — nothing writes the legacy plane', async () => {
+  // The only kindless saves left are lazy-creates of an empty document (the
+  // WS/update path on a path with no row); the spatial editor is what opens
+  // them, so 'spatial' is the honest default — not a guess about someone
+  // else's data, because pre-kind rows no longer exist (the fold deletes
+  // them as this project's own data defect).
   await saveDocument('ws-a', 'no-kind', canvasDoc('kindless'))
 
   const row = await documentRow('no-kind')
   expect(row).toBeDefined()
   if (row === undefined) return
+  expect(row.kind).toBe('spatial')
+  const workspace = await openWorkspace('ws-a')
+  expect(workspace).not.toBeNull()
+  if (workspace === null) return
+  expect(resolveWorkspaceDocumentById(workspace, row.id)?.path).toBe('no-kind')
   const db = await getDb(tempDir)
   const store = new LibsqlDocumentStore(db)
-  // The content record is the legacy one…
-  expect(
-    await store.loadSnapshot({ docRef: { kind: 'document', documentId: row.id } }),
-  ).not.toBeNull()
-  // …and no tree node was invented for it.
-  const workspace = await openWorkspace('ws-a')
-  expect(workspace === null ? null : resolveWorkspaceDocumentById(workspace, row.id)).toBeNull()
-  // It still loads.
+  expect(await store.loadSnapshot({ docRef: { kind: 'document', documentId: row.id } })).toBeNull()
   const loaded = await loadDocument('ws-a', 'no-kind')
   const canvas = readSpatialCanvas(loaded)
   expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('kindless')

@@ -11,7 +11,6 @@ import { existsSync, mkdtempSync, rmSync } from 'node:fs'
 import { readdir } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { DOCUMENT_DOC_KEY_PREFIX } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 
@@ -48,16 +47,16 @@ describe('storage layer follows the effective data dir seam', () => {
     const overrideEntries = await readdir(overrideDir)
     expect(overrideEntries).toContain('whiteboard.db')
 
-    // Canvas content lives in the sqlite db's Libsql snapshot tables now,
-    // not a separate blob tree — confirm the row landed under the override
-    // dir's db, keyed to the document just saved.
+    // Canvas content lives in the sqlite db's Libsql snapshot tables now —
+    // in the WORKSPACE record — confirm the row landed under the override
+    // dir's db, keyed to the workspace just saved into.
     const db = await getDb(overrideDir)
     const documentId = await getDocumentIdByPath(db, 'ws-seam-test', 'seam-canvas')
     expect(documentId).not.toBeNull()
     const snapshotRow = await db
       .selectFrom('documentSnapshots')
       .select(['docKey'])
-      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}${documentId}`)
+      .where('docKey', '=', 'workspace-tree:ws-seam-test')
       .executeTakeFirst()
     expect(snapshotRow).toBeDefined()
 
