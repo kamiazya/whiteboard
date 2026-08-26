@@ -11,51 +11,37 @@ import {
   requiredScopesForClientTextMessage,
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
-import { evictDoc, evictWorkspaceDocs } from '../store/doc-cache.js'
+import { evictWorkspaceDocs } from '../store/doc-cache.js'
 import {
   evictWorkspaceDocCache,
   getDoc,
   getWorkspaceDoc,
   onWorkspaceDocUpdated,
-  saveDocument,
   saveWorkspaceDoc,
   workspaceExists,
 } from '../store/document-store.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
-// From _shared, not from canvas.js which merely re-exports it: importing the
-// router barrel pulls its whole graph — including restore.ts and live-doc.ts,
-// which close the loop back here with `await import('../ws.js')`. That cycle
-// let a request reach `sendRestoreEvent` while this module's own body had not
-// run, so `connections` was still in its TDZ and the restore 500'd with a bare
-// ReferenceError. Taking the setter from the 42-line module that defines it
-// keeps the seam and drops the edge.
-import { setBroadcastFn } from './document/_shared.js'
 import {
   setSyncSseHooks,
   sseBroadcastText,
   sseBroadcastTextToReady,
-  sseBroadcastUpdate,
   sseBroadcastWorkspaceUpdate,
 } from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
-// Connection registry: key = "workspaceId/path", value = Set<WebSocket>
+// Connection registry: key = "workspaceId/path", value = Set<WebSocket>.
+// The path names WHICH document the socket's text traffic (version_created,
+// viewport, restore events) belongs to; binary traffic is workspace-
+// granularity for every socket (see workspaceConnections).
 const connections = new Map<string, Set<WebSocket>>()
 const readyConnections = new Map<string, Set<WebSocket>>()
 
-// Sockets that opted into workspace-document granularity (`?scope=workspace`),
-// keyed by workspaceId. They ALSO sit in `connections` under their path so
-// text messages (version_created, viewport, restore events) keep flowing —
-// but binary traffic is disjoint by lineage: they receive workspace-document
-// updates from the store's fan-out, and must never receive a raw
-// per-document frame, whose ops live in a projection's per-process lineage
-// that a workspace replica cannot import.
-const workspaceScopeConnections = new Map<string, Set<WebSocket>>()
-
-function isWorkspaceScope(workspaceId: string, ws: WebSocket): boolean {
-  return workspaceScopeConnections.get(workspaceId)?.has(ws) ?? false
-}
+// Every socket, keyed by workspaceId: binary traffic is the workspace
+// document's lineage, one contract for all clients. (The per-document
+// binary contract — a projection's per-process lineage per socket — is
+// retired; a workspace replica could never import those frames.)
+const workspaceConnections = new Map<string, Set<WebSocket>>()
 
 // The store-side funnel: every persisted workspace-document update — from a
 // workspace-scope socket, an HTTP update at either granularity, an MCP tool
@@ -63,7 +49,7 @@ function isWorkspaceScope(workspaceId: string, ws: WebSocket): boolean {
 // the store persisted. No sender exclusion: a sender importing its own ops
 // back is a no-op by CRDT semantics.
 onWorkspaceDocUpdated((workspaceId, update) => {
-  const clients = workspaceScopeConnections.get(workspaceId)
+  const clients = workspaceConnections.get(workspaceId)
   if (clients) {
     for (const ws of clients) ws.send(update)
   }
@@ -115,25 +101,6 @@ function broadcastTextMessage(workspaceId: string, path: string, message: Server
   forEachClient(workspaceId, path, (ws) => ws.send(raw))
   sseBroadcastText(workspaceId, path, raw)
 }
-
-// Exported so app.ts can wire it into the branches router checkoutTo flow.
-export function broadcastLoroUpdate(
-  workspaceId: string,
-  path: string,
-  update: Uint8Array,
-  excludeWs?: WebSocket,
-): void {
-  forEachClient(workspaceId, path, (ws) => {
-    if (ws !== excludeWs && !isWorkspaceScope(workspaceId, ws)) ws.send(update)
-  })
-  // SSE subscribers are the same audience reached by a different transport, so
-  // every producer that reaches WS clients must reach them too — otherwise an
-  // MCP tool edit would be invisible to a hosted page that has no ws:// path.
-  sseBroadcastUpdate(workspaceId, path, update)
-}
-
-// Set the broadcastFn used by canvas.ts.
-setBroadcastFn(broadcastLoroUpdate)
 
 // The SSE transport needs the same viewport cache and pending-request resolver
 // this module owns; injected rather than imported because ws.ts -> sync-sse.ts
@@ -278,12 +245,10 @@ export async function handleWsUpgrade(
 ): Promise<void> {
   let workspaceId = ''
   let path = ''
-  let scope: 'document' | 'workspace' = 'document'
   try {
     const target = parseWsTargetFromRequestUrl(req.url, req.headers.host ?? 'localhost')
     workspaceId = target.workspaceId
     path = target.path
-    scope = target.scope
   } catch {
     ws.close()
     return
@@ -307,29 +272,22 @@ export async function handleWsUpgrade(
     return
   }
 
-  // Register the connection.
+  // Register the connection: path-keyed for text traffic, workspace-keyed
+  // for binary traffic.
   if (!connections.has(key)) {
     connections.set(key, new Set())
   }
   connections.get(key)!.add(ws)
-  if (scope === 'workspace') {
-    if (!workspaceScopeConnections.has(workspaceId)) {
-      workspaceScopeConnections.set(workspaceId, new Set())
-    }
-    workspaceScopeConnections.get(workspaceId)!.add(ws)
+  if (!workspaceConnections.has(workspaceId)) {
+    workspaceConnections.set(workspaceId, new Set())
   }
+  workspaceConnections.get(workspaceId)!.add(ws)
   runtimeTouch()
 
-  // On connect, send the latest snapshot as binary for the initial load —
-  // the workspace document for a workspace-scope socket, the per-document
-  // projection otherwise.
-  if (scope === 'workspace') {
-    const workspaceDoc = await getWorkspaceDoc(workspaceId)
-    ws.send(workspaceDoc.export({ mode: 'snapshot' }))
-  } else {
-    const doc = await getDoc(workspaceId, path)
-    ws.send(doc.export({ mode: 'snapshot' }))
-  }
+  // On connect, send the workspace document's snapshot as binary for the
+  // initial load. Every socket rides the workspace lineage.
+  const workspaceDoc = await getWorkspaceDoc(workspaceId)
+  ws.send(workspaceDoc.export({ mode: 'snapshot' }))
 
   // Holds the most recent W3C trace-context the client announced via
   // `ws_trace`. Consumed (and cleared) by the next binary frame so each
@@ -444,101 +402,48 @@ export async function handleWsUpgrade(
       ? getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions, parentCtx)
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
-      if (scope === 'workspace') {
-        // Workspace-document granularity: import into the live workspace
-        // document under the same lock every other mutation path holds.
-        // Fan-out to workspace-scope subscribers happens inside
-        // saveWorkspaceDoc's listener, with the exact persisted bytes.
-        const persisted = await withWorkspaceWriteLock(workspaceId, async () => {
-          const workspaceDoc = await getWorkspaceDoc(workspaceId)
-          if (isClosing) return false
-          try {
-            workspaceDoc.import(bytes)
-          } catch (err: unknown) {
-            getLogger('ws').warning(
-              { workspaceId, path, updateBytes: bytes.byteLength, err },
-              'ws workspace-scope update rejected: malformed Loro import data',
-            )
-            closeSocket(1003, 'Malformed workspace update')
-            return false
-          }
-          await saveWorkspaceDoc(workspaceId, workspaceDoc)
-          // Every cached per-document projection of this workspace is now
-          // stale; a stale one would diff old content back over this import
-          // on its next save. Dropped inside the lock so no reader grabs a
-          // stale projection between the import and the eviction.
-          evictWorkspaceDocs(workspaceId)
-          return true
-        })
-        if (!persisted) return
-        try {
-          onPersistedForTests?.(workspaceId, path)
-        } catch (err: unknown) {
-          getLogger('ws').warning(
-            { workspaceId, path, err },
-            'onPersistedForTests test hook threw; ignoring',
-          )
-        }
-        // Auto-version for the socket's own path over the fresh projection.
-        getDoc(workspaceId, path)
-          .then((doc) => autoVersionTrigger(workspaceId, path, doc))
-          .then((entry) => {
-            if (entry) sendVersionCreated(workspaceId, path, entry)
-          })
-          .catch((err: unknown) => {
-            getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
-          })
-        return
-      }
-
-      // Resolve the doc AND persist it inside one workspace-lock hold. getDoc()
-      // alone is unlocked, so a rename/delete that runs its whole lock-protected
-      // section between an unlocked read here and saveDocument()'s own later lock
-      // acquisition would find no row left at this path and silently insert a
-      // brand-new phantom canvas back at it (or resurrect deleted content).
-      // Sharing the lock across the read and the write closes that window —
-      // mirrors live-doc.ts's POST /update handler. Only the read-import-save
-      // span is covered: broadcast, the test hook, and auto-version trigger
-      // below stay outside since they never wait on another writer.
-      const currentDoc = await withWorkspaceWriteLock(workspaceId, async () => {
-        const doc = await getDoc(workspaceId, path)
+      // Import into the live workspace document under the same lock every
+      // other mutation path holds. Fan-out to subscribers happens inside
+      // saveWorkspaceDoc's listener, with the exact persisted bytes.
+      const persisted = await withWorkspaceWriteLock(workspaceId, async () => {
+        const workspaceDoc = await getWorkspaceDoc(workspaceId)
         // A second (or later) frame's handler can pass the `isClosing` check
-        // above before this frame's `await getDoc` resolves — both were
-        // still false at the top when they started. Recheck immediately after
-        // the await so a frame that lost that race does not import, persist,
-        // or close a socket the earlier frame already tore down.
-        if (isClosing) return null
-
+        // above before this frame's await resolves — both were still false
+        // at the top when they started. Recheck after the await so a frame
+        // that lost that race does not import, persist, or close a socket
+        // the earlier frame already tore down.
+        if (isClosing) return false
         // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
         // throw a non-Error value) whenever the bytes are not a valid Loro
         // update/snapshot. A write-scope credential is real authorization to
         // send edits, not a guarantee the bytes are well-formed CRDT data, so
-        // this boundary must not be able to crash the daemon on one bad frame.
-        // Treat it as a protocol violation: discard the frame, never persist
-        // or broadcast it, and close — consistent with the 1008 scope-violation
-        // close above, but 1003 (Unsupported Data) since the socket itself was
-        // authorized, only this frame's payload was not decodable.
+        // this boundary must not be able to crash the daemon on one bad
+        // frame. Treat it as a protocol violation: discard the frame, never
+        // persist or broadcast it, and close 1003 (Unsupported Data) — the
+        // socket was authorized, only this frame's payload was not decodable.
         try {
-          doc.import(bytes)
+          workspaceDoc.import(bytes)
         } catch (err: unknown) {
           getLogger('ws').warning(
             { workspaceId, path, updateBytes: bytes.byteLength, err },
             'ws binary update rejected: malformed Loro import data',
           )
-          closeSocket(1003, 'Malformed canvas update')
-          return null
+          closeSocket(1003, 'Malformed workspace update')
+          return false
         }
-
-        await saveDocument(workspaceId, path, doc, { overwrite: true })
-        return doc
+        await saveWorkspaceDoc(workspaceId, workspaceDoc)
+        // Every cached per-document projection of this workspace is now
+        // stale; a stale one would diff old content back over this import
+        // on its next save. Dropped inside the lock so no reader grabs a
+        // stale projection between the import and the eviction.
+        evictWorkspaceDocs(workspaceId)
+        return true
       })
-      if (currentDoc === null) return
-
+      if (!persisted) return
       // Isolated in its own try/catch: this hook exists only so tests can
       // await a deterministic "persisted" signal instead of polling. A
       // callback throwing must never be able to make an already-successful
-      // save look like a persistence failure (cache eviction + 1011 close
-      // + dropped broadcast) to real clients.
+      // save look like a persistence failure to real clients.
       try {
         onPersistedForTests?.(workspaceId, path)
       } catch (err: unknown) {
@@ -547,12 +452,9 @@ export async function handleWsUpgrade(
           'onPersistedForTests test hook threw; ignoring',
         )
       }
-      broadcastLoroUpdate(workspaceId, path, bytes, ws)
-
-      // Trigger auto-versioning on the WS path as well, since browser edits primarily use it.
-      // The trigger is throttled, so frequent edits stay safe.
-      // On success, push version_created to all clients so the browser can generate and upload a thumbnail.
-      autoVersionTrigger(workspaceId, path, currentDoc)
+      // Auto-version for the socket's own path over the fresh projection.
+      getDoc(workspaceId, path)
+        .then((doc) => autoVersionTrigger(workspaceId, path, doc))
         .then((entry) => {
           if (entry) sendVersionCreated(workspaceId, path, entry)
         })
@@ -560,22 +462,17 @@ export async function handleWsUpgrade(
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')
         })
     } catch (err: unknown) {
-      // A failure here (loadDocument via getDoc, or saveDocument) is a
-      // server-side/state problem rather than client misbehavior. If the doc
-      // was already mutated in-memory by a successful import above but
-      // saveDocument then rejected, evict the cache entry so the next getDoc
-      // reloads from disk instead of silently keeping the unpersisted
-      // mutation live. The sender's local doc still has the import applied,
-      // so leaving the socket open would let it keep building on an edit the
-      // server never persisted and other clients never received — close
-      // 1011 (Internal Error) so the client reconnects and resyncs from the
-      // persisted (evicted, disk-backed) state instead.
+      // A failure here is a server-side/state problem rather than client
+      // misbehavior. The import above already mutated the cached live
+      // workspace document; drop it (and every stale projection) so the next
+      // access reloads from durable bytes. The sender's local doc still has
+      // the edit applied, so leaving the socket open would let it keep
+      // building on an edit the server never persisted — close 1011
+      // (Internal Error) so the client reconnects and resyncs from the
+      // persisted state instead.
       getLogger('ws').error({ workspaceId, path, err }, 'ws binary update failed')
-      evictDoc(workspaceId, path)
-      // A workspace-scope import that failed to persist has mutated the
-      // cached live workspace document; drop it too so the next access
-      // reloads from durable bytes.
-      if (scope === 'workspace') evictWorkspaceDocCache(workspaceId)
+      evictWorkspaceDocs(workspaceId)
+      evictWorkspaceDocCache(workspaceId)
       closeSocket(1011, 'Failed to persist canvas update')
     } finally {
       wsSpan.end()
@@ -604,11 +501,11 @@ export async function handleWsUpgrade(
         readyConnections.delete(key)
       }
     }
-    const scopeClients = workspaceScopeConnections.get(workspaceId)
+    const scopeClients = workspaceConnections.get(workspaceId)
     if (scopeClients) {
       scopeClients.delete(ws)
       if (scopeClients.size === 0) {
-        workspaceScopeConnections.delete(workspaceId)
+        workspaceConnections.delete(workspaceId)
       }
     }
   })

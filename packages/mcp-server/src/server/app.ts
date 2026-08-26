@@ -48,7 +48,7 @@ import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
-import { broadcastLoroUpdate, sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
+import { sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
@@ -512,7 +512,6 @@ export function createApp(options: AppOptions) {
               })`,
             )
           }
-          const prevVV = doc.version()
           if (past !== null) {
             reconcileDocContent(doc, past)
           } else {
@@ -525,10 +524,8 @@ export function createApp(options: AppOptions) {
             reconcileDocContent(doc, clone)
           }
           await saveDocument(sid, path, doc, { overwrite: true })
-          const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
-          if (update.byteLength > 0) {
-            broadcastLoroUpdate(sid, path, update)
-          }
+          // The workspace record's funnel broadcasts the persisted bytes;
+          // no per-document fan-out remains.
         },
         // Notify all peers when the HEAD switch is complete.
         notifyHeadChanged: (sid, path, head) => sendHeadChanged(sid, path, head),
@@ -545,12 +542,7 @@ export function createApp(options: AppOptions) {
         // boundary, and the swallowed-failure cleanup branches); this is
         // just the composition-root wiring of its store + ws dependencies.
         performMerge: (sid, path, args) =>
-          performBranchMerge(
-            { versionStore, broadcastLoroUpdate, sendHeadChanged },
-            sid,
-            path,
-            args,
-          ),
+          performBranchMerge({ versionStore, sendHeadChanged }, sid, path, args),
       }),
     )
   }

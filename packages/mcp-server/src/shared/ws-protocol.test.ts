@@ -48,9 +48,9 @@ describe('buildWhiteboardWsUrl', () => {
     )
   })
 
-  it('carries ?scope=workspace when asked for workspace granularity', () => {
-    expect(
-      buildWhiteboardWsUrl('https://example.com/app', 'ws1', 'main', { scope: 'workspace' }),
-    ).toBe('wss://example.com/ws/ws1/main?scope=workspace')
+  it('carries no query params — every socket is workspace granularity', () => {
+    expect(buildWhiteboardWsUrl('https://example.com/app?foo=1', 'ws1', 'main')).toBe(
+      'wss://example.com/ws/ws1/main',
+    )
   })
 })

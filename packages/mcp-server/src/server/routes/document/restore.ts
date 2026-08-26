@@ -22,7 +22,7 @@ import {
 import type { VersionStore } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import { validateDocumentPath, validateVersionId, validationErrorBody } from '../../validators.js'
-import { getBroadcastFn, handleCorruptStoredData } from './_shared.js'
+import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface RestoreRouterOptions {
@@ -46,7 +46,6 @@ async function reconcileCommitSaveBroadcast(
   const { sendRestoreEvent } = await import('../ws.js')
   sendRestoreEvent(workspaceId, targetPath, 'started', label)
   try {
-    const prevVV = doc.version()
     try {
       // A DIFF, not an import: nothing rewinds in a CRDT, so restore is a
       // NEW edit whose result equals the past state. The old
@@ -69,10 +68,9 @@ async function reconcileCommitSaveBroadcast(
       evictDoc(workspaceId, targetPath)
       throw err
     }
-    const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
-    if (update.byteLength > 0) {
-      getBroadcastFn()(workspaceId, targetPath, update)
-    }
+    // No per-document broadcast: saveDocument persisted through the
+    // workspace record, whose funnel already fanned the exact persisted
+    // bytes to every subscriber.
   } finally {
     // Always send complete, even on error, or the client overlay can stay locked forever.
     sendRestoreEvent(workspaceId, targetPath, 'complete')
@@ -289,16 +287,13 @@ export function createRestoreRouter(options: RestoreRouterOptions) {
                     await renameDocumentPath(workspaceId, live.path, node.path)
                   }
                   const liveDoc = await getDoc(workspaceId, node.path)
-                  const prevVV = liveDoc.version()
                   reconcileDocContent(liveDoc, past)
                   await saveDocument(workspaceId, node.path, liveDoc, {
                     overwrite: true,
                     kind: node.meta.kind,
                   })
-                  const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
-                  if (update.byteLength > 0) {
-                    getBroadcastFn()(workspaceId, node.path, update)
-                  }
+                  // The workspace record's funnel broadcasts the persisted
+                  // bytes; no per-document fan-out remains.
                 } else {
                   // Deleted since the version: recreated under the SAME
                   // documentId's row lineage as far as the tree is concerned

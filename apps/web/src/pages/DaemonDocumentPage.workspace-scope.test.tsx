@@ -1,10 +1,11 @@
 /**
- * The daemon page's workspace-granularity sync wiring (order 7): when the
- * documents summary shows the open document is tree-served (it has an id and
- * a kind), the DEFAULT backend opts into `?scope=workspace` and the sync
- * session is scoped to that document inside the workspace snapshot. An
- * injected backend (every older test, embedders) and a kindless legacy
- * document keep the per-document contract unchanged.
+ * The daemon page's workspace-granularity sync wiring: every listed document
+ * is tree-served, so the DEFAULT backend opts into `?scope=workspace` and the
+ * sync session is scoped to that document inside the workspace snapshot. An
+ * injected backend (every older test, embedders) keeps the per-document
+ * session contract unchanged. A URL naming a path the list does not contain
+ * gets a not-found state instead of a connection — the per-document lazy
+ * empty doc it used to fall back to is retired.
  */
 import {
   createWorkspaceDocumentAtPath,
@@ -34,6 +35,7 @@ vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
     ...actual,
     listWorkspaces: vi.fn(),
     listDocuments: vi.fn(),
+    createDocument: vi.fn(),
   }
 })
 
@@ -55,29 +57,18 @@ function workspaceSnapshot(): Uint8Array {
 const constructed: {
   workspaceId: string
   path: string
-  options: { workspaceScope?: boolean } | undefined
 }[] = []
 
 vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
   DaemonBackend: class {
-    constructor(
-      workspaceId: string,
-      path: string,
-      _locationHref: string,
-      _apiTransport?: unknown,
-      options?: { workspaceScope?: boolean },
-    ) {
-      constructed.push({ workspaceId, path, options })
-      this.options = options
+    constructor(workspaceId: string, path: string, _locationHref: string, _apiTransport?: unknown) {
+      constructed.push({ workspaceId, path })
     }
-    options: { workspaceScope?: boolean } | undefined
     connect(handlers: DocumentBackendHandlers): void {
       handlers.onConnected()
-      handlers.onSnapshot(
-        this.options?.workspaceScope
-          ? workspaceSnapshot()
-          : new Uint8Array(new LoroDoc().export({ mode: 'snapshot' })),
-      )
+      // Every socket serves the WORKSPACE document's snapshot — the only
+      // binary contract.
+      handlers.onSnapshot(workspaceSnapshot())
     }
     disconnect(): void {}
     pushLocalUpdate(): void {}
@@ -95,7 +86,6 @@ vi.mock('@kamiazya/whiteboard-mcp/daemon-backend', () => ({
 const sseConstructed: {
   workspaceId: string
   path: string
-  options: { workspaceScope?: boolean } | undefined
 }[] = []
 
 vi.mock('@kamiazya/whiteboard-mcp/sse-backend', () => ({
@@ -106,19 +96,12 @@ vi.mock('@kamiazya/whiteboard-mcp/sse-backend', () => ({
       _baseUrl: string,
       _transport?: unknown,
       _streamSource?: unknown,
-      options?: { workspaceScope?: boolean },
     ) {
-      sseConstructed.push({ workspaceId, path, options })
-      this.options = options
+      sseConstructed.push({ workspaceId, path })
     }
-    options: { workspaceScope?: boolean } | undefined
     connect(handlers: DocumentBackendHandlers): void {
       handlers.onConnected()
-      handlers.onSnapshot(
-        this.options?.workspaceScope
-          ? workspaceSnapshot()
-          : new Uint8Array(new LoroDoc().export({ mode: 'snapshot' })),
-      )
+      handlers.onSnapshot(workspaceSnapshot())
     }
     disconnect(): void {}
     pushLocalUpdate(): void {}
@@ -138,6 +121,7 @@ const { DEV_TRANSPORT_OVERRIDE_KEY } = await import('../lib/dev-transport-overri
 
 const mockListWorkspaces = vi.mocked(daemonApiClient.listWorkspaces)
 const mockListDocuments = vi.mocked(daemonApiClient.listDocuments)
+const mockCreateDocument = vi.mocked(daemonApiClient.createDocument)
 
 describe('DaemonDocumentPage workspace-scope sync', () => {
   beforeEach(() => {
@@ -179,7 +163,6 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
     })
 
     await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
-    expect(constructed[0]?.options?.workspaceScope).toBe(true)
     // The body renders — the session found the document INSIDE the workspace
     // snapshot, which is the whole contentDocumentId wiring in one signal.
     await waitFor(() =>
@@ -201,27 +184,41 @@ describe('DaemonDocumentPage workspace-scope sync', () => {
     })
 
     await waitFor(() => expect(sseConstructed.length).toBeGreaterThan(0))
-    expect(sseConstructed[0]?.options?.workspaceScope).toBe(true)
     await waitFor(() =>
       expect(document.body.textContent).toContain('Hello from the workspace document'),
     )
   })
 
-  it('keeps a kindless legacy document on the per-document contract', async () => {
-    mockListDocuments.mockResolvedValue({
-      documents: [{ path: 'agent-note', id: DOCUMENT_ID, updatedAt: '2026-01-01' }],
-    })
+  it('shows a not-found state for a URL path the list does not contain, instead of connecting', async () => {
+    // The per-document contract used to catch this case with a lazily created
+    // empty doc, so a stale URL silently minted a blank canvas at the old
+    // path on first edit. The honest answer is on the record: nothing at
+    // this path, with creating it as an explicit act.
     await act(async () => {
       render(
         <DaemonDocumentPage
           daemonBaseUrl="http://127.0.0.1:3099"
           workspaceId="w1"
-          path="agent-note"
+          path="deleted-note"
         />,
       )
     })
 
-    await waitFor(() => expect(constructed.length).toBeGreaterThan(0))
-    expect(constructed[0]?.options?.workspaceScope ?? false).toBe(false)
+    await waitFor(() => expect(document.body.textContent).toContain('deleted-note'))
+    expect(constructed).toHaveLength(0)
+    expect(sseConstructed).toHaveLength(0)
+
+    // The affordance creates THAT path, not a generic untitled one.
+    mockCreateDocument.mockResolvedValue({ path: 'deleted-note' })
+    const button = screen.getByRole('button', { name: /create/i })
+    await act(async () => {
+      button.click()
+    })
+    expect(mockCreateDocument).toHaveBeenCalledWith(
+      expect.anything(),
+      'http://127.0.0.1:3099',
+      'w1',
+      'deleted-note',
+    )
   })
 })

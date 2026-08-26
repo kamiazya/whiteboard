@@ -69,23 +69,11 @@ export interface DaemonApiTransport {
 // would silently spam reconnects with no way for the user to recover.
 const MAX_CONSECUTIVE_IMMEDIATE_FAILURES = 3
 
-export interface DaemonBackendOptions {
-  /**
-   * Subscribe at workspace-document granularity (`?scope=workspace`): the
-   * initial frame is the WORKSPACE document's snapshot and remote frames
-   * are workspace-document updates. The caller must scope its sync session
-   * to the open document (`contentDocumentId`) — a workspace snapshot fed
-   * into an unscoped session reads as an empty document.
-   */
-  workspaceScope?: boolean
-}
-
 export class DaemonBackend implements DocumentBackend {
   private readonly workspaceId: string
   private readonly path: string
   private readonly locationHref: string
   private readonly apiTransport: DaemonApiTransport | undefined
-  private readonly workspaceScope: boolean
 
   private ws: WebSocket | null = null
   private cancelled = false
@@ -106,13 +94,11 @@ export class DaemonBackend implements DocumentBackend {
     path: string,
     locationHref: string,
     apiTransport?: DaemonApiTransport,
-    options?: DaemonBackendOptions,
   ) {
     this.workspaceId = workspaceId
     this.path = path
     this.locationHref = locationHref
     this.apiTransport = apiTransport
-    this.workspaceScope = options?.workspaceScope === true
   }
 
   connect(handlers: DocumentBackendHandlers): void {
@@ -184,13 +170,13 @@ export class DaemonBackend implements DocumentBackend {
 
     const daemonToken = readDaemonTokenOnce() ?? this.apiTransport?.wsToken?.() ?? null
 
+    // The initial frame is the WORKSPACE document's snapshot and remote
+    // frames are workspace-document updates — the only binary contract. The
+    // caller scopes its sync session to the open document
+    // (`contentDocumentId`); a workspace snapshot fed into an unscoped
+    // session reads as an empty document.
     const ws = new WebSocket(
-      buildWhiteboardWsUrl(
-        this.locationHref,
-        this.workspaceId,
-        this.path,
-        this.workspaceScope ? { scope: 'workspace' } : undefined,
-      ),
+      buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.path),
       buildWhiteboardWsProtocols(daemonToken),
     )
     // Required: without this, binary frames arrive as Blob and the ArrayBuffer

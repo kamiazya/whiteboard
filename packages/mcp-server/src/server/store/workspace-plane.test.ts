@@ -111,6 +111,31 @@ it('a tool read (document ref) sees a daemon-route write, and a tool write lands
   expect(await inner.loadSnapshot({ docRef: { kind: 'document', documentId: row.id } })).toBeNull()
 })
 
+it('readFrontier answers for a tree-served document, and the stamp moves when its content does', async () => {
+  // ContentFactsCache (search / backlinks / tags) validates every cached
+  // fact by this frontier. The legacy per-document record it used to read
+  // is retired, so a null here silently blanks the whole search corpus —
+  // the exact shape `pnpm smoke:e2e`'s wb_document_search step caught.
+  const { routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('v1'), { kind: 'spatial' })
+  const { db } = await stores()
+  const row = await db
+    .selectFrom('documents')
+    .select(['id'])
+    .where('path', '=', 'design')
+    .executeTakeFirstOrThrow()
+
+  const before = await routed.readFrontier({ docRef: { kind: 'document', documentId: row.id } })
+  expect(before).not.toBeNull()
+  if (before === null) return
+
+  await saveDocument('ws-a', 'design', canvasDoc('v2'), { kind: 'spatial', overwrite: true })
+  const after = await routed.readFrontier({ docRef: { kind: 'document', documentId: row.id } })
+  expect(after).not.toBeNull()
+  if (after === null) return
+  expect(Buffer.from(after.frontier).equals(Buffer.from(before.frontier))).toBe(false)
+})
+
 it('workspace-tree refs pass straight through to the inner store', async () => {
   const { inner, routed } = await stores()
   const ws = new LoroDoc()

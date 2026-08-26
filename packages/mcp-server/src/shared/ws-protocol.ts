@@ -23,15 +23,14 @@ export function buildWhiteboardWsUrl(
   locationHref: string,
   workspaceId: string,
   path: string,
-  options?: { scope?: 'workspace' },
 ): string {
   const url = new URL(locationHref)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  // Every socket subscribes at workspace-document granularity; the path
+  // stays in the URL because it remains the auth and auto-version target
+  // (see routes/ws-validation.ts).
   url.pathname = `/ws/${workspaceId}/${path.split('/').map(encodeURIComponent).join('/')}`
-  // `?scope=workspace` subscribes at workspace-document granularity; the
-  // path stays in the URL because it remains the auth and auto-version
-  // target (see routes/ws-validation.ts).
-  url.search = options?.scope === 'workspace' ? 'scope=workspace' : ''
+  url.search = ''
   url.hash = ''
   return url.toString()
 }

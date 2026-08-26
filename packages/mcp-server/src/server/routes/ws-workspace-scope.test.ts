@@ -111,6 +111,21 @@ afterEach(async () => {
   _clearWorkspaceDocCacheForTests()
 })
 
+it('a plain connect (no scope param) answers the WORKSPACE document snapshot too — the per-document binary contract is retired', async () => {
+  const ws = await connect('/ws/session1/c')
+  expect(ws.closes).toEqual([])
+  const frames = ws.binaryFrames()
+  expect(frames.length).toBe(1)
+
+  const replica = new LoroDoc()
+  replica.import(frames[0] as Uint8Array)
+  const entry = resolveWorkspaceDocument(replica, 'c')
+  expect(entry).not.toBeNull()
+  if (entry === null) return
+  const canvas = readSpatialCanvas(documentContainers(replica, entry.documentId))
+  expect(canvas.nodes.map((n) => n.id)).toEqual(['n-a'])
+})
+
 it('a scope=workspace connect answers the WORKSPACE document snapshot', async () => {
   const ws = await connect('/ws/session1/c?scope=workspace')
   expect(ws.closes).toEqual([])
@@ -171,49 +186,50 @@ it('a workspace-scope binary frame persists and reaches the other workspace-scop
   ).toEqual(['n-a', 'n-b'])
 })
 
-it('a per-document frame is never raw-forwarded to a workspace-scope socket, which converges anyway', async () => {
+it('a plain socket is a full workspace participant: its edit persists and reaches a scope=workspace socket', async () => {
   const wsScope = await connect('/ws/session1/c?scope=workspace')
   const plainSender = await connect('/ws/session1/c')
-  const plainReceiver = await connect('/ws/session1/c')
 
-  // The per-document client edits in the projection's lineage.
-  const perDocReplica = new LoroDoc()
-  perDocReplica.import(plainSender.binaryFrames()[0] as Uint8Array)
-  const from = perDocReplica.version()
-  writeSpatialCanvas(perDocReplica, {
+  // The plain client edits in the workspace lineage — the only binary
+  // contract left; its connect frame IS the workspace snapshot.
+  const replica = new LoroDoc()
+  replica.import(plainSender.binaryFrames()[0] as Uint8Array)
+  const entry = resolveWorkspaceDocument(replica, 'c')
+  expect(entry).not.toBeNull()
+  if (entry === null) return
+  const from = replica.version()
+  writeSpatialCanvas(documentContainers(replica, entry.documentId), {
     nodes: [
       { id: 'n-a', type: 'text', text: 'n-a', x: 0, y: 0, width: 10, height: 10 },
       { id: 'n-b', type: 'text', text: 'n-b', x: 0, y: 0, width: 10, height: 10 },
     ],
     edges: [],
   })
-  perDocReplica.commit()
-  const rawFrame = new Uint8Array(perDocReplica.export({ mode: 'update', from }))
+  replica.commit()
+  const update = new Uint8Array(replica.export({ mode: 'update', from }))
 
   const wsScopeBaseline = wsScope.binaryFrames().length
-  const plainBaseline = plainReceiver.binaryFrames().length
-  await plainSender.emitMessage(Buffer.from(rawFrame), true)
+  await plainSender.emitMessage(Buffer.from(update), true)
 
-  // The plain peer got the raw frame; the workspace-scope socket did not.
-  const plainReceived = plainReceiver.binaryFrames().slice(plainBaseline)
-  expect(plainReceived.map((f) => Buffer.from(f).toString('base64'))).toContain(
-    Buffer.from(rawFrame).toString('base64'),
-  )
+  // Persisted through the workspace record.
+  expect(readSpatialCanvas(await loadDocument('session1', 'c')).nodes.map((n) => n.id)).toEqual([
+    'n-a',
+    'n-b',
+  ])
+
+  // The scope=workspace socket converges from the funnel's fan-out.
   const wsScopeReceived = wsScope.binaryFrames().slice(wsScopeBaseline)
-  expect(wsScopeReceived.map((f) => Buffer.from(f).toString('base64'))).not.toContain(
-    Buffer.from(rawFrame).toString('base64'),
-  )
-
-  // And still converges: the workspace-document fan-out carried the edit.
   expect(wsScopeReceived.length).toBeGreaterThan(0)
-  const replica = new LoroDoc()
-  replica.import(wsScope.binaryFrames()[0] as Uint8Array)
-  for (const frame of wsScopeReceived) replica.import(frame)
-  const entry = resolveWorkspaceDocument(replica, 'c')
-  expect(entry).not.toBeNull()
-  if (entry === null) return
+  const receiverReplica = new LoroDoc()
+  receiverReplica.import(wsScope.binaryFrames()[0] as Uint8Array)
+  for (const frame of wsScopeReceived) receiverReplica.import(frame)
+  const receiverEntry = resolveWorkspaceDocument(receiverReplica, 'c')
+  expect(receiverEntry).not.toBeNull()
+  if (receiverEntry === null) return
   expect(
-    readSpatialCanvas(documentContainers(replica, entry.documentId)).nodes.map((n) => n.id),
+    readSpatialCanvas(documentContainers(receiverReplica, receiverEntry.documentId)).nodes.map(
+      (n) => n.id,
+    ),
   ).toEqual(['n-a', 'n-b'])
 })
 

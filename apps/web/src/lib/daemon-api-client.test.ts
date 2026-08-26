@@ -140,26 +140,30 @@ describe('listWorkspaces', () => {
 
 describe('listDocuments', () => {
   it('parses a valid response body', async () => {
-    const fetchFn = vi
-      .fn()
-      .mockResolvedValue(jsonResponse({ documents: [{ path: 'main', updatedAt: '2026-01-01' }] }))
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse({
+        documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
+      }),
+    )
     const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
-    // A kind-less entry stays kind-less: the client no longer invents
-    // 'spatial' for a daemon that recorded no kind, so "stored as spatial"
-    // and "never recorded" stay distinguishable. Consumers that must render
-    // something (the gallery badge, the daemon page's editor choice) default
-    // locally and visibly.
     expect(result).toEqual({
-      documents: [{ path: 'main', updatedAt: '2026-01-01' }],
+      documents: [{ path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' }],
     })
   })
 
-  it('preserves a recorded kind', async () => {
+  it('rejects a summary the daemon serves without id or kind — every row records both', async () => {
     const fetchFn = vi
       .fn()
-      .mockResolvedValue(
-        jsonResponse({ documents: [{ path: 'note', updatedAt: '2026-01-01', kind: 'markdown' }] }),
-      )
+      .mockResolvedValue(jsonResponse({ documents: [{ path: 'main', updatedAt: '2026-01-01' }] }))
+    await expect(listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')).rejects.toThrow(/validation/i)
+  })
+
+  it('preserves a recorded kind', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(
+      jsonResponse({
+        documents: [{ path: 'note', id: 'id-note', updatedAt: '2026-01-01', kind: 'markdown' }],
+      }),
+    )
     const result = await listDocuments(fetchFn, DAEMON_BASE_URL, 'w1')
     expect(result.documents[0]?.kind).toBe('markdown')
   })

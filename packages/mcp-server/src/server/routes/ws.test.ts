@@ -1,6 +1,12 @@
 import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import {
+  documentContainers,
+  readSpatialCanvas,
+  resolveWorkspaceDocument,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -22,6 +28,23 @@ const { createAutoVersionTrigger } = await import('./document.js')
 const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest, setOnPersistedForTests } =
   await import('./ws.js')
 const { captureLogsForTests } = await import('../log.js')
+
+// Build a binary frame in the WORKSPACE lineage — the only binary contract:
+// import the connect snapshot, write one spatial node into the registered
+// document's containers, and export the delta.
+function workspaceEditFrame(snapshot: Uint8Array, path: string, nodeId: string): Buffer {
+  const clientDoc = new LoroDoc()
+  clientDoc.import(snapshot)
+  const prevVV = clientDoc.version()
+  const entry = resolveWorkspaceDocument(clientDoc, path)
+  if (!entry) throw new Error(`no document at "${path}" in workspace snapshot`)
+  writeSpatialCanvas(documentContainers(clientDoc, entry.documentId), {
+    nodes: [{ id: nodeId, type: 'text', text: nodeId, x: 0, y: 0, width: 10, height: 10 }],
+    edges: [],
+  })
+  clientDoc.commit()
+  return Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array)
+}
 
 class FakeWebSocket {
   sent: Array<string | Uint8Array> = []
@@ -158,6 +181,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
       renameBranchInVersions: vi.fn(),
     }
     setAutoVersionTrigger(createAutoVersionTrigger(versionStore, 0))
+    await saveDocument('session1', 'canvas-a', new LoroDoc())
 
     const ws = new FakeWebSocket()
     await handleWsUpgrade(
@@ -168,18 +192,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
       ws as never,
     )
 
-    const clientDoc = new LoroDoc()
-    const prevVV = clientDoc.version()
-    const list = clientDoc.getMovableList('elements')
-    const map = list.insertContainer(0, new LoroMap())
-    map.set('id', 'ws-elem')
-    map.set('type', 'rectangle')
-    clientDoc.commit()
-
-    await ws.emitMessage(
-      Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array),
-      true,
-    )
+    await ws.emitMessage(workspaceEditFrame(ws.sent[0] as Uint8Array, 'canvas-a', 'ws-elem'), true)
     await new Promise((resolve) => setTimeout(resolve, 50))
 
     expect(versionStore.save).toHaveBeenCalledTimes(1)
@@ -187,8 +200,7 @@ describe('handleWsUpgrade auto-version corruption', () => {
 
     clearCache()
     const saved = await loadDocument('session1', 'canvas-a')
-    const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
-    expect(elements.map((entry) => entry.id)).toEqual(['ws-elem'])
+    expect(readSpatialCanvas(saved).nodes.map((n) => n.id)).toEqual(['ws-elem'])
 
     ws.emitClose()
   })
@@ -560,6 +572,7 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
 
   it('a canvas:write-granted connection can still emit a CRDT mutation (no regression)', async () => {
     setAutoVersionTrigger(() => Promise.resolve(null))
+    await saveDocument('session1', 'canvas-writable', new LoroDoc())
     const ws = new FakeWebSocket()
     await handleWsUpgrade(
       { url: '/ws/session1/canvas-writable', headers: { host: 'localhost:3099' } } as never,
@@ -567,24 +580,15 @@ describe('handleWsUpgrade per-message scope enforcement (ADR-0005)', () => {
       ['canvas:read', 'canvas:write'],
     )
 
-    const clientDoc = new LoroDoc()
-    const prevVV = clientDoc.version()
-    const list = clientDoc.getMovableList('elements')
-    const map = list.insertContainer(0, new LoroMap())
-    map.set('id', 'persists-fine')
-    map.set('type', 'rectangle')
-    clientDoc.commit()
-
     await ws.emitMessage(
-      Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array),
+      workspaceEditFrame(ws.sent[0] as Uint8Array, 'canvas-writable', 'persists-fine'),
       true,
     )
     await new Promise((resolve) => setTimeout(resolve, 30))
 
     clearCache()
     const saved = await loadDocument('session1', 'canvas-writable')
-    const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
-    expect(elements.map((entry) => entry.id)).toEqual(['persists-fine'])
+    expect(readSpatialCanvas(saved).nodes.map((n) => n.id)).toEqual(['persists-fine'])
 
     ws.emitClose()
   })
@@ -684,7 +688,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
       await new Promise((resolve) => setImmediate(resolve))
 
       expect(unhandled).toBeNull()
-      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed workspace update' }])
 
       ws.emitClose()
     } finally {
@@ -715,7 +719,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
       const canary = 'token-canary-must-not-be-logged'
       await ws.emitMessage(Buffer.from(canary, 'utf8'), true)
 
-      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+      expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed workspace update' }])
 
       clearCache()
       const saved = await loadDocument('session1', 'canvas-malformed-2')
@@ -762,7 +766,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
     await ws.emitMessage(Buffer.from([1, 2, 3]), true)
     await ws.emitMessage(Buffer.from([4, 5, 6]), true)
 
-    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed workspace update' }])
     ws.emitClose()
   })
 
@@ -792,7 +796,7 @@ describe('handleWsUpgrade malformed binary frame (DoS hardening)', () => {
     await new Promise((resolve) => setImmediate(resolve))
     await new Promise((resolve) => setImmediate(resolve))
 
-    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed canvas update' }])
+    expect(ws.closes).toEqual([{ code: 1003, reason: 'Malformed workspace update' }])
     ws.emitClose()
   })
 })
@@ -869,6 +873,7 @@ describe('handleWsUpgrade binary update persistence failure', () => {
     setAutoVersionTrigger(() => Promise.resolve(null))
     const logs = captureLogsForTests()
     try {
+      await saveDocument('session1', 'canvas-hook-throws', new LoroDoc())
       const ws = new FakeWebSocket()
       await handleWsUpgrade(
         { url: '/ws/session1/canvas-hook-throws', headers: { host: 'localhost:3099' } } as never,
@@ -876,26 +881,20 @@ describe('handleWsUpgrade binary update persistence failure', () => {
         ['canvas:read', 'canvas:write'],
       )
 
-      const clientDoc = new LoroDoc()
-      const prevVV = clientDoc.version()
-      const list = clientDoc.getMovableList('elements')
-      const map = list.insertContainer(0, new LoroMap())
-      map.set('id', 'hook-elem')
-      clientDoc.commit()
-      const update = clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
+      const update = workspaceEditFrame(ws.sent[0] as Uint8Array, 'canvas-hook-throws', 'hook-elem')
 
       setOnPersistedForTests(() => {
         throw new Error('simulated test-hook failure')
       })
 
-      await ws.emitMessage(Buffer.from(update), true)
+      await ws.emitMessage(update, true)
 
       // A throwing test hook must not be able to make an already-successful
       // save look like a persistence failure: no 1011 close, data lands on
       // disk, and the throw is only logged, not fatal.
       expect(ws.closes).toEqual([])
       const saved = await loadDocument('session1', 'canvas-hook-throws')
-      expect(saved.getMovableList('elements').toJSON()).toEqual([{ id: 'hook-elem' }])
+      expect(readSpatialCanvas(saved).nodes.map((n) => n.id)).toEqual(['hook-elem'])
 
       const warningRecord = logs.records.find(
         (r) => r.level === 'warning' && r.msg === 'onPersistedForTests test hook threw; ignoring',

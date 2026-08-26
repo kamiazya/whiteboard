@@ -30,18 +30,6 @@ export interface SseTransport {
   fetch: typeof globalThis.fetch
 }
 
-export interface SseBackendOptions {
-  /**
-   * Subscribe at workspace-document granularity: the seed snapshot and every
-   * binary update are the WORKSPACE document's, and local pushes go to its
-   * update route. Text messages (version_created, viewport, restore events)
-   * keep flowing on the per-document key — they are addressed per path.
-   * The caller must scope its sync session to the open document
-   * (`contentDocumentId`), same contract as DaemonBackend's workspaceScope.
-   */
-  workspaceScope?: boolean
-}
-
 export class SseBackend implements DocumentBackend {
   private readonly workspaceId: string
   private readonly path: string
@@ -54,10 +42,16 @@ export class SseBackend implements DocumentBackend {
   private ownedHub: SseStreamHub | null = null
   private unsubscribe: (() => void) | null = null
   private unsubscribeText: (() => void) | null = null
-  /** The key binary frames travel on: the per-document key, or the
-   *  workspace key when this backend subscribes at workspace granularity. */
+  /**
+   * The key binary frames travel on: always the WORKSPACE document's — the
+   * seed snapshot and every update are the workspace record's, and local
+   * pushes go to its update route (the per-document binary contract is
+   * retired). Text messages (version_created, viewport, restore events)
+   * keep flowing on the per-document key — they are addressed per path.
+   * The caller scopes its sync session to the open document
+   * (`contentDocumentId`), same contract as DaemonBackend.
+   */
   private readonly binaryKey: string
-  private readonly workspaceScope: boolean
 
   constructor(
     workspaceId: string,
@@ -65,7 +59,6 @@ export class SseBackend implements DocumentBackend {
     baseUrl: string,
     transport?: SseTransport,
     streamSource?: SseStreamSource,
-    options?: SseBackendOptions,
   ) {
     this.workspaceId = workspaceId
     this.path = path
@@ -73,8 +66,7 @@ export class SseBackend implements DocumentBackend {
     this.transport = transport
     this.streamSource = streamSource
     this.docKey = `${workspaceId}/${path}`
-    this.workspaceScope = options?.workspaceScope === true
-    this.binaryKey = this.workspaceScope ? workspaceDocKey(workspaceId) : this.docKey
+    this.binaryKey = workspaceDocKey(workspaceId)
   }
 
   private get fetchFn(): typeof globalThis.fetch {
@@ -116,11 +108,9 @@ export class SseBackend implements DocumentBackend {
     const source = this.resolveSource()
     this.unsubscribe = source.subscribe(this.binaryKey, {
       onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
-      // At workspace granularity nothing addresses text to the workspace
-      // key today; per-document text arrives on the subscription below.
-      onMessage: (raw) => {
-        if (!this.workspaceScope) this.dispatchText(raw, handlers)
-      },
+      // Nothing addresses text to the workspace key; per-document text
+      // arrives on the subscription below.
+      onMessage: () => {},
       // The stream belongs to the source, so its liveness is the only signal
       // this backend has that updates are still arriving.
       onConnectionChange: (connected) => {
@@ -129,15 +119,12 @@ export class SseBackend implements DocumentBackend {
         else handlers.onDisconnected?.()
       },
     })
-    if (this.workspaceScope) {
-      // Text messages stay per document — and ONLY text: a per-document
-      // binary frame carries a projection's own lineage, which the
-      // workspace replica this session holds cannot import.
-      this.unsubscribeText = source.subscribe(this.docKey, {
-        onUpdate: () => {},
-        onMessage: (raw) => this.dispatchText(raw, handlers),
-      })
-    }
+    // Text messages stay per document — and ONLY text: no binary frame
+    // travels on a per-document key any more.
+    this.unsubscribeText = source.subscribe(this.docKey, {
+      onUpdate: () => {},
+      onMessage: (raw) => this.dispatchText(raw, handlers),
+    })
     // No unconditional report here: the source announces its state at
     // subscribe time and on every change, so anything added on top would
     // either overwrite an accurate "not connected yet" or double-report a

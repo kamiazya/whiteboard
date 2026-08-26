@@ -95,27 +95,11 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Fan a Loro update out to every SSE stream subscribed to that document.
- * Called alongside the WebSocket fan-out so a change reaches both transports
- * regardless of which one produced it — an MCP tool edit and a WS peer edit
- * are indistinguishable to a subscriber.
- */
-export function sseBroadcastUpdate(workspaceId: string, path: string, update: Uint8Array): void {
-  const key = docKey(workspaceId, path)
-  const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
-  const frame = JSON.stringify(payload)
-  for (const stream of streams.values()) {
-    if (!stream.docs.has(key)) continue
-    stream.send('update', frame)
-  }
-}
-
-/**
  * Fan a WORKSPACE-DOCUMENT update out to every stream subscribed at
- * workspace granularity (`workspace:<id>` keys). Kept apart from the
- * per-document fan-out above because the two carry different Loro lineages:
- * a per-document subscriber handed workspace-document bytes (or the
- * reverse) would be importing a stranger's history.
+ * workspace granularity (`workspace:<id>` keys). The only binary fan-out:
+ * the per-document one is retired — a per-document subscriber handed
+ * workspace-document bytes (or the reverse) would be importing a stranger's
+ * history, so per-document keys carry text events only.
  */
 export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
   const key = workspaceDocKey(workspaceId)

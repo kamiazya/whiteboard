@@ -7,13 +7,7 @@ import type { LinkTarget } from '../components/markdown-editor/link-target.js'
  * `path` is its address — auto-generated (`untitled-2`), ASCII-only, and
  * what a URL and a rename-following link key on. The `displayName` is the
  * only identifier the user ever chose, and the only one the UI shows.
- *
- * `id` is optional on the summary because an older daemon omits it; the
- * path stands in, exactly as every other consumer of this list does.
  */
-function documentId(entry: DocumentSummary): string {
-  return entry.id ?? entry.path
-}
 
 /**
  * What `[[...]]` may name: BOTH the display name and the path, because both
@@ -26,11 +20,10 @@ export function daemonLinkEntries(
   documents: readonly DocumentSummary[],
 ): readonly UniqueNameEntry[] {
   return documents.flatMap((entry) => {
-    const id = documentId(entry)
-    const byPath = { id, name: entry.path }
+    const byPath = { id: entry.id, name: entry.path }
     return entry.displayName === undefined || entry.displayName === entry.path
       ? [byPath]
-      : [{ id, name: entry.displayName }, byPath]
+      : [{ id: entry.id, name: entry.displayName }, byPath]
   })
 }
 
@@ -50,13 +43,12 @@ export function daemonLinkTargets(
   { excludeDocumentId }: { excludeDocumentId?: string } = {},
 ): readonly LinkTarget[] {
   return documents.flatMap((entry) => {
-    const id = documentId(entry)
-    if (id === excludeDocumentId) return []
+    if (entry.id === excludeDocumentId) return []
     return [
       {
-        id,
+        id: entry.id,
         name: entry.displayName ?? entry.path,
-        ...(entry.kind ? { kind: entry.kind } : {}),
+        kind: entry.kind,
       },
     ]
   })

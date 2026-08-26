@@ -50,16 +50,12 @@ export function createDaemonFilesSource(
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
         const tagsById = new Map((tagRes?.documents ?? []).map((doc) => [doc.documentId, doc.tags]))
         return res.documents.map((entry) => ({
-          // An older daemon omits the id; the path stands in, as it does
-          // everywhere else that reads this list.
-          documentId: entry.id ?? entry.path,
+          documentId: entry.id,
           path: entry.path,
           ...(entry.displayName === undefined ? {} : { name: entry.displayName }),
-          ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+          kind: entry.kind,
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
-          ...(tagsById.has(entry.id ?? entry.path)
-            ? { tags: tagsById.get(entry.id ?? entry.path) as readonly string[] }
-            : {}),
+          ...(tagsById.has(entry.id) ? { tags: tagsById.get(entry.id) as readonly string[] } : {}),
           ...(pinIndex.has(entry.path) ? { pinOrder: pinIndex.get(entry.path) as number } : {}),
         }))
       } catch (err) {

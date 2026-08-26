@@ -198,6 +198,25 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
   }
 
   async readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult> {
+    if (input.docRef.kind === 'document') {
+      const row = await documentRowById(this.db, input.docRef.documentId)
+      if (row !== undefined) {
+        const workspaceDoc = await openWorkspaceDocIfStored(row.workspaceId)
+        if (
+          workspaceDoc !== null &&
+          resolveWorkspaceDocumentById(workspaceDoc, input.docRef.documentId) !== null
+        ) {
+          // The projection's version, same source as loadSnapshot's
+          // `frontier` — this is what ContentFactsCache stamps search /
+          // backlinks / tags facts with, and the retired per-document
+          // record would answer null here, silently blanking the whole
+          // corpus. The stamp is per-process (a re-projection mints a new
+          // lineage), which can only over-invalidate, never under.
+          const doc = await getDoc(row.workspaceId, row.path)
+          return { frontier: new Uint8Array(doc.oplogVersion().encode()) }
+        }
+      }
+    }
     return this.inner.readFrontier(input)
   }
 

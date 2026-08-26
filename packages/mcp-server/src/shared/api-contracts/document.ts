@@ -155,10 +155,10 @@ export const documentSummarySchema = z.object({
   // user-facing, URL-addressed identity. Deliberately not pattern-bound:
   // clients must treat it as opaque and resolve refs by LOOKUP, never by
   // format — the nanoid alphabet overlaps the path charset.
-  // Optional so a new client can still parse an older daemon's id-less list
-  // (the web app and the locally installed daemon version independently);
-  // clients fall back to the path when the id is absent.
-  id: z.string().min(1).optional(),
+  // Required: every row has the id, and the workspace-granularity sync
+  // contract binds a session's content by it, so a summary without one
+  // would leave the client no document to sync.
+  id: z.string().min(1),
   // The name the user actually chose, ABSENT when they never chose one. The
   // path is an auto-generated ASCII address ('untitled-2') that cannot carry
   // a title in most scripts, so it is an identity for the URL and never one
@@ -167,13 +167,12 @@ export const documentSummarySchema = z.object({
   // the list from — the split is what let the two disagree.
   displayName: z.string().min(1).optional(),
   updatedAt: z.string(),
-  // ABSENT when the row records no kind. Defaulting it to 'spatial' used to
-  // hide that state: a caller could not tell a stored spatial document from
-  // one whose kind was never recorded, and the guess escaped into new rows
-  // (wb_version_restore forked it as stored fact). Every write path records
-  // a kind today, so an absent one is a pre-kind row — a caller that needs
-  // to render something decides for itself, in the open.
-  kind: documentKindSchema.optional(),
+  // Required: every write path records a kind and the boot fold deletes
+  // pre-kind rows, so an absent kind no longer describes any state the
+  // daemon can be in. (It was optional while pre-kind rows existed, so a
+  // client could tell "stored as spatial" from "never recorded" instead of
+  // being handed a guess.)
+  kind: documentKindSchema,
 })
 
 export const listDocumentsResponseSchema = z.object({

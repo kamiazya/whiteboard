@@ -481,6 +481,13 @@ export async function saveDocument(
       )
     }
     await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    // A caller may hand this function a doc that is NOT the cached
+    // projection (a fresh import, a checkout clone) — the cached one is then
+    // behind the content just written, and the next getDoc would serve (and
+    // a later save would diff) the stale copy. Self-heal at the funnel entry
+    // instead of trusting every such caller to remember to evict.
+    const cached = peekDoc(workspaceId, path)
+    if (cached !== undefined && cached !== doc) evictDoc(workspaceId, path)
     await upsertWorkspaceRow(db, workspaceId)
     if (existingDocumentId) {
       // A plain re-save (WS updates, live-doc writes, compactDocument) omits
@@ -1030,16 +1037,21 @@ export async function listDocuments(
     .select(['path', 'id', 'displayName', 'updatedAt', 'kind'])
     .where('workspaceId', '=', workspaceId)
     .execute()
-  return rows.map((r) => ({
-    path: r.path,
-    id: r.id,
-    // Absent rather than null when unset, the same shape rule `kind` follows
-    // below: a document nobody renamed has no name of its own to report.
-    ...(r.displayName ? { displayName: r.displayName } : {}),
-    updatedAt: new Date(r.updatedAt).toISOString(),
-    // No guess: an unrecorded kind is reported as absent (see
-    // canvasSummarySchema). The row is still listed — only the claim about
-    // its kind is withheld.
-    ...(r.kind ? { kind: r.kind } : {}),
-  }))
+  return rows.map((r) => {
+    // Kind is a stored invariant: every write path records one and the boot
+    // fold deletes pre-kind rows, so a null here is corrupt stored data —
+    // surfaced, not guessed over.
+    if (!r.kind) {
+      throw new Error(`document row "${workspaceId}/${r.path}" has no recorded kind`)
+    }
+    return {
+      path: r.path,
+      id: r.id,
+      // Absent rather than null when unset: a document nobody renamed has no
+      // name of its own to report.
+      ...(r.displayName ? { displayName: r.displayName } : {}),
+      updatedAt: new Date(r.updatedAt).toISOString(),
+      kind: r.kind,
+    }
+  })
 }

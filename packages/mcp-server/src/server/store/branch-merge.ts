@@ -22,7 +22,6 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 export interface PerformBranchMergeDeps {
   versionStore: VersionStore
-  broadcastLoroUpdate: (workspaceId: string, path: string, update: Uint8Array) => void
   sendHeadChanged: (workspaceId: string, path: string, head: string) => void
 }
 
@@ -90,7 +89,7 @@ export function performBranchMerge(
   path: string,
   { source, into, dryRun }: PerformBranchMergeArgs,
 ): Promise<PerformBranchMergeResult> {
-  const { versionStore, broadcastLoroUpdate, sendHeadChanged } = deps
+  const { versionStore, sendHeadChanged } = deps
   return withWorkspaceWriteLock(sid, async () => {
     const state = await loadDocumentBranches(sid, path)
     const sourceBranch = state.branches.find((b) => b.name === source)
@@ -265,7 +264,6 @@ export function performBranchMerge(
     // (possibly empty) delta. Shared by the HEAD===into commit path and the
     // HEAD===source cleanup path below.
     const reconcileLiveDocToPreview = async () => {
-      const prevVV = liveDoc.version()
       // A DIFF-write, not an import: the preview is a projection with its
       // own per-process lineage, and importing a foreign lineage into the
       // live doc loses to newer local lamports instead of applying (the
@@ -273,15 +271,8 @@ export function performBranchMerge(
       reconcileDocContent(liveDoc, previewDoc)
       liveDoc.commit()
       await saveDocument(sid, path, liveDoc, { overwrite: true })
-      const update = liveDoc.export({ mode: 'update', from: prevVV }) as Uint8Array
-      // loro's update export is never truly empty — a no-op exports a 22-byte
-      // header-only envelope (measured against loro-crdt directly) — so a
-      // no-op reconcile still broadcasts, and clients import the envelope as
-      // a no-op. This guard only defends against a hypothetical zero-byte
-      // export.
-      if (update.byteLength > 0) {
-        broadcastLoroUpdate(sid, path, update)
-      }
+      // The workspace record's funnel broadcasts the persisted bytes; no
+      // per-document fan-out remains.
     }
 
     // Commit by moving the target tipFrontiers to the source tip, unless the source

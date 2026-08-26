@@ -166,13 +166,14 @@ export function DaemonDocumentPage({
   } | null>(null)
   const [importSectionOpen, setImportSectionOpen] = useState(false)
 
-  // A tree-served document (the summary carries both an id and a kind) syncs
-  // at workspace-document granularity; a kindless legacy document stays on
-  // the per-document contract. Derived as a plain string so a summary
-  // refresh that changes only updatedAt cannot flip the backend identity.
+  // Every listed document is tree-served and syncs at workspace-document
+  // granularity; the id is what binds this session's content inside the
+  // workspace record. Derived as a plain string so a summary refresh that
+  // changes only updatedAt cannot flip the backend identity. Undefined only
+  // while the path is absent from the list (a stale URL).
   const workspaceSyncDocumentId = useMemo(() => {
     const entry = controller.documents.find((d) => d.path === controller.path)
-    return entry?.id !== undefined && entry.kind != null ? entry.id : undefined
+    return entry?.id
   }, [controller.documents, controller.path])
 
   // Backend identity is keyed on (workspaceId, path, daemonFetch, sync
@@ -199,6 +200,12 @@ export function DaemonDocumentPage({
       daemonFetch,
     )
     if (injected) return { backend: injected, contentDocumentId: undefined }
+    // Nothing is at this path (a stale URL — the document was deleted or
+    // never existed): no connection. The per-document contract used to catch
+    // this with a lazily created empty doc, which silently minted a blank
+    // canvas at the old path on the first edit; creating a document is an
+    // explicit act now (see the not-found state below).
+    if (workspaceSyncDocumentId === undefined) return null
     // A secure page cannot open a ws:// socket to an http daemon at all, so
     // the transport is decided up front rather than attempted and retried.
     //
@@ -218,23 +225,17 @@ export function DaemonDocumentPage({
       // the socket credential-less and is rejected 401 (edits then stay
       // browser-only while the page looks connected).
       return {
-        backend: new DaemonBackend(
-          controller.workspaceId,
-          controller.path,
-          daemonBaseUrl,
-          {
-            fetch: daemonFetch,
-            wsToken: () => token,
-          },
-          workspaceSyncDocumentId === undefined ? undefined : { workspaceScope: true },
-        ),
+        backend: new DaemonBackend(controller.workspaceId, controller.path, daemonBaseUrl, {
+          fetch: daemonFetch,
+          wsToken: () => token,
+        }),
         contentDocumentId: workspaceSyncDocumentId,
       }
     }
     // Null where SharedWorker is unavailable; SseBackend then opens its own
     // stream, which is correct but not shared across tabs. Same granularity
-    // rule as the WebSocket branch: a tree-served document syncs at
-    // workspace-document granularity, a kindless legacy one per document.
+    // as the WebSocket branch: every document syncs at workspace-document
+    // granularity.
     const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
     return {
       backend: new SseBackend(
@@ -243,7 +244,6 @@ export function DaemonDocumentPage({
         daemonBaseUrl,
         { fetch: daemonFetch },
         shared,
-        workspaceSyncDocumentId === undefined ? undefined : { workspaceScope: true },
       ),
       contentDocumentId: workspaceSyncDocumentId,
     }
@@ -783,7 +783,42 @@ export function DaemonDocumentPage({
             </details>
           )}
         </div>
-        {controller.documents.length === 0 ? (
+        {canvas !== null &&
+        controller.documents.length > 0 &&
+        workspaceSyncDocumentId === undefined ? (
+          <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+            {onNavigateBack && (
+              <button
+                type="button"
+                onClick={onNavigateBack}
+                className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <span aria-hidden="true">← </span>Back to documents
+              </button>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Nothing is at <span className="font-medium text-foreground">“{canvas.path}”</span> in
+              this workspace. It may have been deleted or renamed.
+            </p>
+            {controller.createError && (
+              <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+                {controller.createError}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={creating}
+              onClick={() => {
+                setCreating(true)
+                void controller.createDocument(canvas.path).finally(() => setCreating(false))
+              }}
+            >
+              Create a canvas at this path
+            </Button>
+          </div>
+        ) : controller.documents.length === 0 ? (
           <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
             {/* WorkspaceTopBar (the usual home for this button) only mounts once
                 a canvas is selected, so a workspace that resolves to zero
@@ -862,12 +897,10 @@ export function DaemonDocumentPage({
                   // safe); the label shows its current path and the current
                   // canvas is excluded. Legacy documents still carry path refs,
                   // which resolveRefPath misses and switchDocument takes as-is.
-                  // An older daemon's list has no ids yet; those entries fall
-                  // back to path refs (same behavior as before ids existed).
                   fileRefOptions={controller.documents
                     .filter((entry) => entry.path !== canvas?.path)
                     .map((entry) => ({
-                      file: entry.id ?? entry.path,
+                      file: entry.id,
                       label: entry.path,
                       kind: entry.kind,
                     }))}

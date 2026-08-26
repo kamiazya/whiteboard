@@ -664,10 +664,11 @@ describe('listDocuments', () => {
     expect(paths).not.toContain('exports')
   })
 
-  it('omits kind for a row that records none, instead of guessing spatial', async () => {
-    // The guess used to escape as stored fact (wb_version_restore forked it
-    // into new rows), and no caller could tell "stored as spatial" from
-    // "never recorded". An unrecorded kind is now absent, not invented.
+  it('surfaces a row without a kind as corrupt instead of guessing spatial', async () => {
+    // Kind is a stored invariant (every save records one, the boot fold
+    // deletes pre-kind rows), and the summary contract requires it. A null
+    // here can only be corrupt stored data, and a guess used to escape as
+    // stored fact (wb_version_restore forked it into new rows).
     await saveDocument('session1', 'kindless', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
@@ -679,10 +680,7 @@ describe('listDocuments', () => {
       .where('path', '=', 'kindless')
       .execute()
 
-    const [entry] = await listDocuments('session1')
-
-    expect(entry?.path).toBe('kindless')
-    expect(entry?.kind).toBeUndefined()
+    await expect(listDocuments('session1')).rejects.toThrow(/has no recorded kind/)
   })
 
   it('reports a recorded kind unchanged', async () => {
