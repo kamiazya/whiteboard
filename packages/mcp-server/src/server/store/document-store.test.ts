@@ -804,6 +804,22 @@ describe('listDocuments', () => {
     expect(list.find((c) => c.path === 'note')?.kind).toBe('markdown')
   })
 
+  // Pinned counterexample from the S5a parity scoreboard (shrunk by
+  // fast-check): create('a/y' as markdown) then an explicit-kind re-save
+  // left the row saying 'spatial' while the tree node still said
+  // 'markdown' — the kind sync above only wrote the row.
+  it('an explicit-kind re-save updates the TREE node kind, not only the row', async () => {
+    const { openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
+    await saveDocument('session1', 'note', new LoroDoc(), { kind: 'markdown' })
+    await saveDocument('session1', 'note', new LoroDoc(), { overwrite: true, kind: 'spatial' })
+
+    const workspaceDoc = await openWorkspaceDocIfStored('session1')
+    expect(workspaceDoc).not.toBeNull()
+    if (workspaceDoc === null) throw new Error('unreachable')
+    expect(resolveWorkspaceDocument(workspaceDoc, 'note')?.kind).toBe('spatial')
+  })
+
   it('recursively lists nested paths as session-relative paths', async () => {
     await saveDocument('session1', 'top-level', new LoroDoc())
     await saveDocument('session1', '621/header', new LoroDoc())

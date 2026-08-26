@@ -176,7 +176,8 @@ function nodeById(doc: LoroDoc, documentId: string): LoroTreeNode | null {
 }
 
 const workspaceDocumentMetaPatchSchema = workspaceNodeMetaSchema
-  .pick({ currentBranch: true, createdAt: true, updatedAt: true })
+  .pick({ kind: true, currentBranch: true, createdAt: true, updatedAt: true })
+  .partial()
   .strict()
 export type WorkspaceDocumentMetaPatch = z.infer<typeof workspaceDocumentMetaPatchSchema>
 

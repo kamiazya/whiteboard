@@ -29,6 +29,7 @@ import {
   readDocumentKind,
   resolveWorkspaceDocumentById,
   setWorkspaceLastCompactedAt,
+  updateWorkspaceDocumentMeta,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
@@ -470,8 +471,14 @@ export async function saveDocument(
     // (the startup fold deletes them as this project's own data defect).
     const kindForTree = options.kind ?? existingKind ?? readDocumentKind(doc) ?? 'spatial'
     const workspaceDoc = await getWorkspaceDoc(workspaceId)
-    if (resolveWorkspaceDocumentById(workspaceDoc, documentId) === null) {
+    const treeEntry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
+    if (treeEntry === null) {
       createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
+    } else if (options.kind !== undefined && treeEntry.kind !== options.kind) {
+      // An explicit kind is an intentional sync request and must land on
+      // BOTH planes: the row update below alone left the tree node saying
+      // the old kind (found by the S5a parity scoreboard).
+      updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: options.kind })
     }
     // The create answers null when the tree already gave this path to a
     // DIFFERENT document — a rows/tree divergence. With no legacy plane to
