@@ -1,10 +1,11 @@
 /**
- * The daemon document store over the WORKSPACE document: a save with a known
- * kind writes into the document's tree node (no per-document record), loads
- * serve from the tree, and delete/rename keep the tree in step with the
- * `documents` table. The kindless save stays on the legacy per-document
- * plane, exactly like the startup fold's pre-kind rule — inventing a kind at
- * save time would be the same guess the fold refuses to make.
+ * The daemon document store over the WORKSPACE document: a save writes into
+ * the document's tree node (no per-document record and no documents row —
+ * the tree IS the address book), loads serve from the tree, and
+ * delete/rename operate on the tree alone. A kindless save of a NEW
+ * document defaults to spatial: the only kindless saves left are
+ * lazy-creates of an empty document, and the spatial editor is what opens
+ * them.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -65,16 +66,12 @@ async function openWorkspace(workspaceId: string) {
   return new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(workspaceId)
 }
 
-async function documentRow(path: string) {
+async function documentRowCount(): Promise<number> {
   const db = await getDb(tempDir)
-  return db
-    .selectFrom('documents')
-    .select(['id', 'kind'])
-    .where('path', '=', path)
-    .executeTakeFirst()
+  return (await db.selectFrom('documents').select(['id']).execute()).length
 }
 
-it('a save with a kind lands on the workspace tree node and writes no per-document record', async () => {
+it('a save with a kind lands on the workspace tree node and writes no per-document record and no row', async () => {
   await saveDocument('ws-a', 'design', canvasDoc('tree-borne'), { kind: 'spatial' })
 
   const workspace = await openWorkspace('ws-a')
@@ -83,15 +80,18 @@ it('a save with a kind lands on the workspace tree node and writes no per-docume
   const entry = resolveWorkspaceDocument(workspace, 'design')
   expect(entry).not.toBeNull()
   if (entry === null) return
+  expect(entry.kind).toBe('spatial')
   const canvas = readSpatialCanvas(documentContainers(workspace, entry.documentId))
   expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('tree-borne')
 
-  const row = await documentRow('design')
-  expect(row?.kind).toBe('spatial')
+  // The tree is the address book: no documents row, no per-document record.
+  expect(await documentRowCount()).toBe(0)
   const db = await getDb(tempDir)
   const store = new LibsqlDocumentStore(db)
   expect(
-    await store.loadSnapshot({ docRef: { kind: 'document', documentId: entry.documentId } }),
+    await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: entry.documentId },
+    }),
   ).toBeNull()
 })
 
@@ -107,23 +107,27 @@ it('loadDocument serves the tree content back, edits included', async () => {
 
 it('a kindless save of a NEW document lands on the tree as spatial — nothing writes the legacy plane', async () => {
   // The only kindless saves left are lazy-creates of an empty document (the
-  // WS/update path on a path with no row); the spatial editor is what opens
-  // them, so 'spatial' is the honest default — not a guess about someone
-  // else's data, because pre-kind rows no longer exist (the fold deletes
-  // them as this project's own data defect).
+  // WS/update path on a path with no tree entry); the spatial editor is what
+  // opens them, so 'spatial' is the honest default — not a guess about
+  // someone else's data, because pre-kind rows no longer exist (the fold
+  // deletes them as this project's own data defect).
   await saveDocument('ws-a', 'no-kind', canvasDoc('kindless'))
 
-  const row = await documentRow('no-kind')
-  expect(row).toBeDefined()
-  if (row === undefined) return
-  expect(row.kind).toBe('spatial')
   const workspace = await openWorkspace('ws-a')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
-  expect(resolveWorkspaceDocumentById(workspace, row.id)?.path).toBe('no-kind')
+  const entry = resolveWorkspaceDocument(workspace, 'no-kind')
+  expect(entry).not.toBeNull()
+  if (entry === null) return
+  expect(entry.kind).toBe('spatial')
+  expect(await documentRowCount()).toBe(0)
   const db = await getDb(tempDir)
   const store = new LibsqlDocumentStore(db)
-  expect(await store.loadSnapshot({ docRef: { kind: 'document', documentId: row.id } })).toBeNull()
+  expect(
+    await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: entry.documentId },
+    }),
+  ).toBeNull()
   const loaded = await loadDocument('ws-a', 'no-kind')
   const canvas = readSpatialCanvas(loaded)
   expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('kindless')
@@ -131,32 +135,52 @@ it('a kindless save of a NEW document lands on the tree as spatial — nothing w
 
 it('deleteDocument evacuates the tree node into the trash', async () => {
   await saveDocument('ws-a', 'doomed', canvasDoc('keep a copy'), { kind: 'spatial' })
-  const row = await documentRow('doomed')
-  expect(row).toBeDefined()
-  if (row === undefined) return
+  const before = await openWorkspace('ws-a')
+  expect(before).not.toBeNull()
+  if (before === null) return
+  const entry = resolveWorkspaceDocument(before, 'doomed')
+  expect(entry).not.toBeNull()
+  if (entry === null) return
 
   expect(await deleteDocument('ws-a', 'doomed')).toBe(true)
 
   const workspace = await openWorkspace('ws-a')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
-  expect(resolveWorkspaceDocumentById(workspace, row.id)).toBeNull()
+  expect(resolveWorkspaceDocumentById(workspace, entry.documentId)).toBeNull()
   // Evacuated, not destroyed: the trash records where the bytes went.
-  expect(readTrashEntries(workspace).map((t) => t.documentId)).toContain(row.id)
+  expect(readTrashEntries(workspace).map((t) => t.documentId)).toContain(entry.documentId)
 })
 
-it('renameDocumentPath moves the tree node with the row', async () => {
+it('saving a workspace record registers the workspace — a tool-created workspace must not be invisible to workspaceExists', async () => {
+  // The smoke-caught shape: wb_document_create with createWorkspace goes
+  // through the tree index and WorkspaceDocs alone (no saveDocument), and a
+  // workspace with a stored record but no registry row answers
+  // workspaceExists=false — so the WS route refuses the very workspace the
+  // tool just created (4404) and the browser never gets a snapshot.
+  const { cacheBackedWorkspaceDocs, workspaceExists } = await import('./document-store.js')
+  const docs = cacheBackedWorkspaceDocs()
+  const record = await docs.create('ws-tool-made')
+  await docs.save('ws-tool-made', record)
+
+  expect(await workspaceExists('ws-tool-made')).toBe(true)
+})
+
+it('renameDocumentPath moves the tree node', async () => {
   await saveDocument('ws-a', 'old-place', canvasDoc('movable'), { kind: 'spatial' })
-  const row = await documentRow('old-place')
-  expect(row).toBeDefined()
-  if (row === undefined) return
+  const before = await openWorkspace('ws-a')
+  expect(before).not.toBeNull()
+  if (before === null) return
+  const entry = resolveWorkspaceDocument(before, 'old-place')
+  expect(entry).not.toBeNull()
+  if (entry === null) return
 
   await renameDocumentPath('ws-a', 'old-place', 'new-place')
 
   const workspace = await openWorkspace('ws-a')
   expect(workspace).not.toBeNull()
   if (workspace === null) return
-  expect(resolveWorkspaceDocumentById(workspace, row.id)?.path).toBe('new-place')
+  expect(resolveWorkspaceDocumentById(workspace, entry.documentId)?.path).toBe('new-place')
   const loaded = await loadDocument('ws-a', 'new-place')
   const canvas = readSpatialCanvas(loaded)
   expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('movable')

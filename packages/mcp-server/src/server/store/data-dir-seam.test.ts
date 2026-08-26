@@ -18,9 +18,8 @@ const importBaseDir = mkdtempSync(join(tmpdir(), 'whiteboard-seam-base-'))
 process.env.WHITEBOARD_DATA_DIR = importBaseDir
 
 const { overrideDataDir, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
-const { saveDocument } = await import('./document-store.js')
+const { saveDocument, resolveDocumentIdAtPath } = await import('./document-store.js')
 const { closeDb, getDb } = await import('./db/index.js')
-const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
 
 describe('storage layer follows the effective data dir seam', () => {
   let overrideDir: string
@@ -51,7 +50,7 @@ describe('storage layer follows the effective data dir seam', () => {
     // in the WORKSPACE record — confirm the row landed under the override
     // dir's db, keyed to the workspace just saved into.
     const db = await getDb(overrideDir)
-    const documentId = await getDocumentIdByPath(db, 'ws-seam-test', 'seam-canvas')
+    const documentId = await resolveDocumentIdAtPath('ws-seam-test', 'seam-canvas')
     expect(documentId).not.toBeNull()
     const snapshotRow = await db
       .selectFrom('documentSnapshots')

@@ -1,14 +1,12 @@
 import { TOKENS } from '@kamiazya/whiteboard-ports'
+import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { ContainerModule } from 'inversify'
 import type { Kysely } from 'kysely'
 import type { DatabaseSchema } from '../server/store/db/schema.js'
+import { cacheBackedWorkspaceDocs } from '../server/store/document-store.js'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
-import { SqliteDocumentIndex } from '../server/store/sqlite-document-index.js'
-import {
-  DualPlaneDocumentIndex,
-  WorkspaceRoutedDocumentStore,
-} from '../server/store/workspace-plane.js'
+import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
 
 export interface StoreLocalModuleOptions {
   db: Kysely<DatabaseSchema>
@@ -17,10 +15,12 @@ export interface StoreLocalModuleOptions {
 
 export function createStoreLocalModule(opts: StoreLocalModuleOptions): ContainerModule {
   return new ContainerModule(({ bind }) => {
-    // Both ports are routed through the workspace tree (see
-    // workspace-plane.ts): content reads/writes land on the document's tree
-    // node, and index mutations mirror into it, so the tool surface and the
-    // daemon's own routes see one document.
+    // Content reads/writes land on the document's workspace-tree node (see
+    // workspace-plane.ts), and the index IS the tree — the dual-plane
+    // wrapper and its rows mirror retired with the documents table's
+    // address-book role (dual-plane collapse S7). Cache-backed, so the
+    // index operates on the same live workspace doc every other path
+    // writes through.
     bind(TOKENS.DocumentStore)
       .toDynamicValue(() => new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(opts.db)))
       .inSingletonScope()
@@ -28,7 +28,10 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
       .toDynamicValue(() => new FsBlobStore(opts.blobDir))
       .inSingletonScope()
     bind(TOKENS.DocumentIndex)
-      .toDynamicValue(() => new DualPlaneDocumentIndex(new SqliteDocumentIndex(opts.db), opts.db))
+      .toDynamicValue(
+        () =>
+          new LoroWorkspaceDocumentIndex(cacheBackedWorkspaceDocs(), new FsBlobStore(opts.blobDir)),
+      )
       .inSingletonScope()
   })
 }

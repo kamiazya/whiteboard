@@ -65,18 +65,14 @@ describe('names-store', () => {
   // keeps serving today's reads, and the workspace record's pinned list is
   // what every replica converges on.
   it('mirrors pin and unpin into the workspace record pinned list', async () => {
-    const { openWorkspaceDocIfStored } = await import('./document-store.js')
+    const { openWorkspaceDocIfStored, resolveDocumentIdAtPath } = await import(
+      './document-store.js'
+    )
     const { readPinnedDocumentIds } = await import('@kamiazya/whiteboard-loro-adapter')
-    const { getDb } = await import('./db/index.js')
-    const db = await getDb(tempDir)
     const idOf = async (path: string) => {
-      const row = await db
-        .selectFrom('documents')
-        .select(['id'])
-        .where('workspaceId', '=', 'sess-1')
-        .where('path', '=', path)
-        .executeTakeFirstOrThrow()
-      return row.id
+      const id = await resolveDocumentIdAtPath('sess-1', path)
+      if (id === null) throw new Error(`no document at ${path}`)
+      return id
     }
 
     await setDocumentPinned('sess-1', 'b', true)

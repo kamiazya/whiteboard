@@ -252,9 +252,9 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     // (content lives in the db now, not a separate blob artifact tree).
     expect(existsSync(join(scratchDir, 'whiteboard.db'))).toBe(true)
     const { getDb } = await import('../store/db/index.js')
-    const { getDocumentIdByPath } = await import('../store/db/upsert-workspace.js')
+    const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
     const db = await getDb(scratchDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'registered-seed')
+    const documentId = await resolveDocumentIdAtPath('session1', 'registered-seed')
     expect(documentId).not.toBeNull()
     const snapshotRow = await db
       .selectFrom('documentSnapshots')

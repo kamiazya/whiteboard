@@ -14,6 +14,7 @@ import { migration as ulidRemainingDocumentIds } from './0012-ulid-remaining-doc
 import { migration as documentDocKeyPrefix } from './0013-document-dockey-prefix.js'
 import { migration as versionsWorkspaceScoped } from './0014-versions-workspace-scoped.js'
 import { migration as versionsBranchesWorkspaceId } from './0015-versions-branches-workspace-id.js'
+import { migration as dropDocumentsFk } from './0016-drop-documents-fk.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -39,4 +40,5 @@ export const migrations: Record<string, Migration> = {
   '0013-document-dockey-prefix': documentDocKeyPrefix,
   '0014-versions-workspace-scoped': versionsWorkspaceScoped,
   '0015-versions-branches-workspace-id': versionsBranchesWorkspaceId,
+  '0016-drop-documents-fk': dropDocumentsFk,
 }

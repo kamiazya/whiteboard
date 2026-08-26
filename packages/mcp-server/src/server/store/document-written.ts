@@ -1,9 +1,10 @@
+import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentWritten } from '@kamiazya/whiteboard-server-core'
 
 import { getDataDir } from '../config.js'
 import { scheduleAutoCompact } from './auto-compact.js'
-import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
+import { openWorkspaceDocIfStored } from './document-store.js'
 import { FileVersionStore } from './version-store.js'
 
 /**
@@ -25,21 +26,18 @@ import { FileVersionStore } from './version-store.js'
  * `compactDocument` from there, so that would close an import cycle
  * `cycle-check.ts` rejects.
  */
-export const documentWritten: DocumentWritten = async ({ documentId }) => {
+export const documentWritten: DocumentWritten = async ({ workspaceId, documentId }) => {
   const dataDir = getDataDir()
   await prepareDataDir(dataDir)
-  const db = await getDb(dataDir)
-  // The compaction path addresses a document by (workspaceId, path) while
-  // a tool call knows only its id, so this is the one lookup that bridges
-  // them. Indexed, and it runs once per save rather than per operation.
-  const row = await db
-    .selectFrom('documents')
-    .select(['workspaceId', 'path'])
-    .where('id', '=', documentId)
-    .executeTakeFirst()
-  // A write to a document with no placement row is possible — a tool can
-  // save bytes for an id the index has not been told about — and there is
-  // nothing to compact under a name that does not exist.
-  if (!row) return
-  scheduleAutoCompact(row.workspaceId, row.path, new FileVersionStore())
+  // The compaction path addresses a document by (workspaceId, path) while a
+  // tool call knows the workspace and the id, so this is the one lookup that
+  // bridges them. It runs once per save rather than per operation.
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc === null) return
+  // A write to a document the tree has not been told about is possible — a
+  // tool can save bytes for an id with no placement — and there is nothing
+  // to compact under a name that does not exist.
+  const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
+  if (entry === null) return
+  scheduleAutoCompact(workspaceId, entry.path, new FileVersionStore())
 }

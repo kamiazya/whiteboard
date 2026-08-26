@@ -10,8 +10,12 @@ import { getDataDir } from '../config.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { requireDocumentRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
-import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
+import { upsertWorkspaceRow } from './db/upsert-workspace.js'
+import {
+  openWorkspaceDocIfStored,
+  requireDocumentAtPath,
+  saveWorkspaceDoc,
+} from './document-store.js'
 
 export type { WorkspaceNames }
 
@@ -89,20 +93,9 @@ export async function setDocumentDisplayName(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const trimmed = name.trim()
-  const db = await dbReady()
-  const documentId = await requireDocumentRow(db, workspaceId, path)
-  const now = Date.now()
-  await db
-    .updateTable('documents')
-    .set({
-      displayName: trimmed.length > 0 ? trimmed : null,
-      updatedAt: now,
-    })
-    .where('workspaceId', '=', workspaceId)
-    .where('path', '=', path)
-    .execute()
-  // The workspace record is where reads answer from (S7), so this write is
-  // primary, not a best-effort mirror: a failure surfaces to the caller.
+  const documentId = await requireDocumentAtPath(workspaceId, path)
+  // The workspace record is the only home this write has (S7): the rows are
+  // no longer maintained, so a failure here surfaces to the caller.
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
   if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
     setWorkspaceDocumentName(workspaceDoc, {
@@ -114,10 +107,8 @@ export async function setDocumentDisplayName(
   return loadWorkspaceNames(workspaceId)
 }
 
-// Pin / unpin a canvas. Idempotent:
-//   - pinned=true on a not-yet-pinned canvas: append at the end (max pinOrder+1)
-//   - pinned=true on an already-pinned canvas: no-op, order preserved
-//   - pinned=false: clear isPinned + pinOrder
+// Pin / unpin a document. Idempotent: re-pinning keeps the position it
+// already has in the workspace record's pinned list; unpinning removes it.
 export async function setDocumentPinned(
   workspaceId: string,
   path: string,
@@ -125,44 +116,9 @@ export async function setDocumentPinned(
 ): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const db = await dbReady()
-  const documentId = await requireDocumentRow(db, workspaceId, path)
-  await db.transaction().execute(async (trx) => {
-    const row = await trx
-      .selectFrom('documents')
-      .select(['isPinned', 'pinOrder'])
-      .where('workspaceId', '=', workspaceId)
-      .where('path', '=', path)
-      .executeTakeFirst()
-    if (!row) return
-    const isPinnedNow = row.isPinned === 1
-    if (pinned && !isPinnedNow) {
-      const max = await trx
-        .selectFrom('documents')
-        .select((eb) => eb.fn.max('pinOrder').as('maxOrder'))
-        .where('workspaceId', '=', workspaceId)
-        .where('isPinned', '=', 1)
-        .executeTakeFirst()
-      const nextOrder = (max?.maxOrder ?? -1) + 1
-      await trx
-        .updateTable('documents')
-        .set({ isPinned: 1, pinOrder: nextOrder, updatedAt: Date.now() })
-        .where('workspaceId', '=', workspaceId)
-        .where('path', '=', path)
-        .execute()
-    } else if (!pinned && isPinnedNow) {
-      await trx
-        .updateTable('documents')
-        .set({ isPinned: 0, pinOrder: null, updatedAt: Date.now() })
-        .where('workspaceId', '=', workspaceId)
-        .where('path', '=', path)
-        .execute()
-    }
-  })
-  // The workspace record's pinned list is what reads answer from (S7), so
-  // this write is primary, not a best-effort mirror: a failure surfaces to
-  // the caller. setWorkspacePinned is idempotent, so the no-op row branches
-  // stay no-ops here too.
+  const documentId = await requireDocumentAtPath(workspaceId, path)
+  // The workspace record's pinned list is the only home this write has
+  // (S7): the rows are no longer maintained, so a failure surfaces.
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
   if (workspaceDoc !== null) {
     setWorkspacePinned(workspaceDoc, documentId, pinned)

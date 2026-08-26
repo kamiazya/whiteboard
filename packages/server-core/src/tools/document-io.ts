@@ -108,7 +108,7 @@ export async function saveDocumentSnapshot(
   // observer owns reporting its own failure — server-core is a shared
   // layer with no logger to report it for them.
   try {
-    await deps.documentWritten({ documentId })
+    await deps.documentWritten({ workspaceId, documentId })
   } catch {
     // Deliberately swallowed; see above and document-io.test.ts.
   }

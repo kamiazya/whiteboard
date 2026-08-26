@@ -24,9 +24,11 @@ import { access, mkdir, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   createWorkspaceDocumentAtPath,
-  moveWorkspaceNodeToPath,
   projectWorkspaceDocument,
   readDocumentKind,
+  readWorkspaceDocuments,
+  readWorkspaceMeta,
+  readWorkspaceNodes,
   resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   setWorkspaceLastCompactedAt,
@@ -34,12 +36,10 @@ import {
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
-import { documentKindSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import {
   chunkSnapshot,
-  DocumentMoveIntoSelfError,
-  isSelfOrDescendant,
-  planSubtreeMove,
+  DocumentPathTakenError,
   reassembleSnapshot,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
@@ -61,7 +61,11 @@ import {
 import { deleteDocumentRow } from './db/delete-document-row.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import {
+  DocumentNotFoundError,
+  getDocumentIdByPath,
+  upsertWorkspaceRow,
+} from './db/upsert-workspace.js'
 import { evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
@@ -153,16 +157,37 @@ function workspaceDocCacheKey(workspaceId: string): string {
  * a projection's frontiers die with the process, the workspace record's
  * outlive it.
  */
+/**
+ * The documentId at `path` — the tree answers; a pre-fold legacy row is the
+ * only fallback (the boot fold is the one consumer that still needs it).
+ */
+export async function resolveDocumentIdAtPath(
+  workspaceId: string,
+  path: string,
+): Promise<string | null> {
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const entry = resolveWorkspaceDocument(workspaceDoc, path)
+    if (entry !== null) return entry.documentId
+  }
+  const db = await dbReady()
+  return getDocumentIdByPath(db, workspaceId, path)
+}
+
+/** `resolveDocumentIdAtPath` that throws the routes' 404-mapped error instead of answering null. */
+export async function requireDocumentAtPath(workspaceId: string, path: string): Promise<string> {
+  const documentId = await resolveDocumentIdAtPath(workspaceId, path)
+  if (documentId === null) throw new DocumentNotFoundError(workspaceId, path)
+  return documentId
+}
+
 export async function workspaceFrontiersForPath(
   workspaceId: string,
   path: string,
 ): Promise<Uint8Array | null> {
-  const db = await dbReady()
-  const documentId = await getDocumentIdByPath(db, workspaceId, path)
-  if (!documentId) return null
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
   const stored = await docs.open(workspaceId)
-  if (stored === null || resolveWorkspaceDocumentById(stored, documentId) === null) return null
+  if (stored === null || resolveWorkspaceDocument(stored, path) === null) return null
   return new Uint8Array(encodeFrontiers(stored.frontiers()))
 }
 
@@ -178,15 +203,14 @@ export async function projectDocumentAtWorkspaceFrontiers(
   path: string,
   frontiers: Frontiers,
 ): Promise<LoroDoc | null> {
-  const db = await dbReady()
-  const documentId = await getDocumentIdByPath(db, workspaceId, path)
-  if (!documentId) return null
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
   const stored = await docs.open(workspaceId)
-  if (stored === null || resolveWorkspaceDocumentById(stored, documentId) === null) return null
+  if (stored === null) return null
+  const entry = resolveWorkspaceDocument(stored, path)
+  if (entry === null) return null
   const clone = LoroDoc.fromSnapshot(stored.export({ mode: 'snapshot' }))
   clone.checkout(frontiers)
-  return projectWorkspaceDocument(clone, documentId)
+  return projectWorkspaceDocument(clone, entry.documentId)
 }
 
 /**
@@ -273,6 +297,13 @@ export async function saveWorkspaceDoc(
   workspaceId: string,
   doc: LoroDoc,
 ): Promise<Uint8Array | null> {
+  // The workspaces table is the REGISTRY of workspaces this daemon keeps
+  // (workspaceExists reads it to refuse ids it never heard of), and this is
+  // the choke point every durable workspace-record write funnels through —
+  // including the tree index's createDocument, which never touches
+  // saveDocument. Without this, a workspace minted by an MCP tool has a
+  // stored record but no registry row, and the WS route refuses it (4404).
+  await upsertWorkspaceRow(await dbReady(), workspaceId)
   const docs = new DocumentStoreWorkspaceDocs(await documentStoreReady())
   let update: Uint8Array | null
   try {
@@ -380,59 +411,40 @@ export async function saveDocument(
   return withWorkspaceWriteLock(workspaceId, async () => {
     const overwrite = options.overwrite ?? false
     const db = await dbReady()
-    const existingDocumentId = await getDocumentIdByPath(db, workspaceId, path)
-    if (existingDocumentId && !overwrite) {
+    // The workspace REGISTRY row is still real (workspaceExists answers from
+    // it); the documents rows are not written here anymore — the tree is the
+    // whole record of what exists (S7).
+    await upsertWorkspaceRow(db, workspaceId)
+    const workspaceDoc = await getWorkspaceDoc(workspaceId)
+    const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
+    const existingDocumentId =
+      existingEntry?.documentId ?? (await getDocumentIdByPath(db, workspaceId, path))
+    if (existingDocumentId !== null && !overwrite) {
       throw new ConflictError(
         `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
       )
     }
-    // Pre-allocate the documentId for new documents so the snapshot can be
-    // written before any metadata row commits. If the snapshot write fails
-    // (driver error, transient corruption) we leave no DB row behind, so a
-    // retry can succeed instead of hitting a phantom ConflictError on the
-    // orphan.
-    // A ULID, not a nanoid: the document index creates rows in this same
-    // table and the port's DocumentEntry accepts only a canonical ULID, so a
-    // second minting policy here would keep producing rows the agent surface
-    // has to skip. One table, one id space.
+    // A ULID, not a nanoid: the document index creates documents in this
+    // same tree and the port's DocumentEntry accepts only a canonical ULID,
+    // so a second minting policy here would keep producing documents the
+    // agent surface has to skip. One tree, one id space.
     const documentId = existingDocumentId ?? generateDocumentId()
-    const _documentStore = await documentStoreReady()
-    // Which plane this document persists on. A save with a KNOWN kind lands
-    // on the workspace tree (the node's containers are the content record);
-    // a kindless save of a document the tree does not hold stays on the
-    // legacy per-document plane — recording it in the tree would mean
-    // inventing the format, the same guess the startup fold refuses.
-    let existingKind: DocumentKind | null = null
-    if (existingDocumentId !== undefined && existingDocumentId !== null) {
-      const row = await db
-        .selectFrom('documents')
-        .select(['kind'])
-        .where('id', '=', documentId)
-        .executeTakeFirst()
-      const parsed = documentKindSchema.safeParse(row?.kind)
-      existingKind = parsed.success ? parsed.data : null
-    }
-    // Every save lands on the workspace tree. A save that names no kind and
-    // finds none stored or in the doc's own bytes is a lazy-create of an
-    // empty document (the WS/update path on a path with no row); the spatial
-    // editor is what opens those, so 'spatial' is the honest default — not a
-    // guess about someone else's data, because pre-kind rows no longer exist
-    // (the startup fold deletes them as this project's own data defect).
-    const kindForTree = options.kind ?? existingKind ?? readDocumentKind(doc) ?? 'spatial'
-    const workspaceDoc = await getWorkspaceDoc(workspaceId)
-    const treeEntry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
-    if (treeEntry === null) {
+    // A save that names no kind and finds none on the tree or in the doc's
+    // own bytes is a lazy-create of an empty document (the WS/update path on
+    // an unknown path); the spatial editor is what opens those, so 'spatial'
+    // is the honest default — not a guess about someone else's data.
+    const kindForTree = options.kind ?? existingEntry?.kind ?? readDocumentKind(doc) ?? 'spatial'
+    if (existingEntry === null) {
       createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: kindForTree })
-    } else if (options.kind !== undefined && treeEntry.kind !== options.kind) {
-      // An explicit kind is an intentional sync request and must land on
-      // BOTH planes: the row update below alone left the tree node saying
-      // the old kind (found by the S5a parity scoreboard).
+    } else if (options.kind !== undefined && existingEntry.kind !== options.kind) {
+      // An explicit kind is an intentional sync request (e.g. restore
+      // reconciling a different-kind source's content onto an existing
+      // target); a plain re-save omits it and must never touch the value.
       updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: options.kind })
     }
     // The create answers null when the tree already gave this path to a
-    // DIFFERENT document — a rows/tree divergence. With no legacy plane to
-    // fall back to, writing anywhere else would fork storage silently, so
-    // refuse loudly instead.
+    // DIFFERENT document — with no legacy plane to fall back to, writing
+    // anywhere else would fork storage silently, so refuse loudly instead.
     if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, doc)) {
       throw new ConflictError(
         `Path "${workspaceId}/${path}" is held by a different document in the workspace tree.`,
@@ -446,45 +458,6 @@ export async function saveDocument(
     // instead of trusting every such caller to remember to evict.
     const cached = peekDoc(workspaceId, path)
     if (cached !== undefined && cached !== doc) evictDoc(workspaceId, path)
-    await upsertWorkspaceRow(db, workspaceId)
-    if (existingDocumentId) {
-      // A plain re-save (WS updates, live-doc writes, compactDocument) omits
-      // `kind` and must never touch the stored value. An explicit `kind` is
-      // an intentional sync request (e.g. restore reconciling a different-
-      // kind source's content onto an existing target) and is honored.
-      await db
-        .updateTable('documents')
-        .set({
-          updatedAt: Date.now(),
-          ...(options.kind !== undefined ? { kind: options.kind } : {}),
-        })
-        .where('id', '=', documentId)
-        .execute()
-    } else {
-      const now = Date.now()
-      await db
-        .insertInto('documents')
-        .values({
-          id: documentId,
-          workspaceId,
-          path,
-          displayName: null,
-          isPinned: 0,
-          pinOrder: null,
-          currentBranch: 'main',
-          createdAt: now,
-          updatedAt: now,
-          // Written on insert, always matching what the tree just recorded.
-          // The update branch above honors an explicit `kind` too (a plain
-          // re-save omits it and leaves the stored value untouched); the
-          // onConflict branch below is the rare insert-raced-with-a-
-          // concurrent-insert fallback and, like a plain re-save, does not
-          // touch `kind`.
-          kind: kindForTree,
-        })
-        .onConflict((oc) => oc.columns(['workspaceId', 'path']).doUpdateSet({ updatedAt: now }))
-        .execute()
-    }
     notifyDocumentSaved(workspaceId, path)
   })
 }
@@ -648,9 +621,7 @@ export async function workspaceExists(workspaceId: string): Promise<boolean> {
 export async function documentExists(workspaceId: string, path: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const db = await dbReady()
-  const documentId = await getDocumentIdByPath(db, workspaceId, path)
-  return documentId !== null
+  return (await resolveDocumentIdAtPath(workspaceId, path)) !== null
 }
 
 async function unlinkIfExists(path: string): Promise<void> {
@@ -717,14 +688,12 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
   validateDocumentPath(path)
   return withWorkspaceWriteLock(workspaceId, async () => {
     const db = await dbReady()
-    const documentId = await getDocumentIdByPath(db, workspaceId, path)
-    if (!documentId) return false
+    const documentId = await resolveDocumentIdAtPath(workspaceId, path)
+    if (documentId === null) return false
 
     // Same three steps, in the same order, as wb_document_delete
     // (server-core's document-crud.ts) — deliberately, because the two used
-    // to be separate implementations and only one of them cleaned up. Each
-    // step is now one shared piece rather than a copy: `deleteDocumentRow`
-    // holds the descendant refusal, `documentTeardown` holds the files.
+    // to be separate implementations and only one of them cleaned up.
     const finalizeTeardown = await documentTeardown.begin({ workspaceId, documentId, path })
 
     // The tree node goes through the index's delete, which EVACUATES the
@@ -739,9 +708,15 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
       await index.deleteDocument({ workspaceId, path })
     }
 
+    // A legacy mirror row, when one still exists (pre-fold documents only).
     await deleteDocumentRow(db, workspaceId, path)
+    // Version/branch rows no longer cascade from a documents row (migration
+    // 0016 dropped the FK — a tree-only document has no row to cascade
+    // from), so delete-completeness lives HERE now.
+    await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
+    await db.deleteFrom('branches').where('documentId', '=', documentId).execute()
 
-    // The identity row goes first, then the Libsql snapshot/delta/frontier
+    // The identity goes first, then the Libsql snapshot/delta/frontier
     // rows, so a crash between the two leaves an orphaned-but-unreachable
     // snapshot rather than a listed canvas with no content.
     const documentStore = await documentStoreReady()
@@ -769,14 +744,9 @@ export async function getDocumentKind(
 ): Promise<DocumentKind | null> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const db = await dbReady()
-  const row = await db
-    .selectFrom('documents')
-    .select(['kind'])
-    .where('workspaceId', '=', workspaceId)
-    .where('path', '=', path)
-    .executeTakeFirst()
-  return row?.kind ?? null
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc === null) return null
+  return resolveWorkspaceDocument(workspaceDoc, path)?.kind ?? null
 }
 
 export interface CompactResult {
@@ -806,9 +776,9 @@ export async function compactDocument(
 ): Promise<CompactResult> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const db = await dbReady()
-  const documentId = await getDocumentIdByPath(db, workspaceId, path)
-  if (!documentId) {
+  const _db = await dbReady()
+  const documentId = await resolveDocumentIdAtPath(workspaceId, path)
+  if (documentId === null) {
     return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
   }
   const documentStore = await documentStoreReady()
@@ -856,18 +826,9 @@ export async function compactDocument(
       // would lose an edit that arrived while compaction ran.
       supersededDeltaCount: storedDeltas.length,
     })
-    // Stamp the canvas row so the auto-Optimize loop can skip documents that
-    // have not changed since the last successful compaction, and so the UI
-    // can surface "Auto-optimised Ns ago" without reading file mtimes.
-    await db
-      .updateTable('documents')
-      .set({ lastCompactedAt: Date.now() })
-      .where('id', '=', documentId)
-      .execute()
-    // Workspace-level mirror (dual-plane collapse S4b): compaction folds the
-    // WORKSPACE record's oplog, so the shared timestamp describes the
-    // workspace rather than any one document. Written after the compacted
-    // snapshot, as a small delta on top of it.
+    // Compaction folds the WORKSPACE record's oplog, so the timestamp the
+    // storage report shows describes the workspace, on the workspace meta.
+    // Written after the compacted snapshot, as a small delta on top of it.
     setWorkspaceLastCompactedAt(doc, Date.now())
     await saveWorkspaceDoc(workspaceId, doc)
     // No eviction: the live workspace document keeps its full in-memory
@@ -882,12 +843,15 @@ export async function compactDocument(
 // client-side aggregation. Returns null when no canvas has been compacted yet.
 export async function readLatestCompactedAt(): Promise<number | null> {
   const db = await dbReady()
-  const row = await db
-    .selectFrom('documents')
-    .select((eb) => eb.fn.max('lastCompactedAt').as('maxAt'))
-    .executeTakeFirst()
-  const value = row?.maxAt ?? null
-  return value === null || typeof value !== 'number' ? null : value
+  const workspaces = await db.selectFrom('workspaces').select(['id']).execute()
+  let latest: number | null = null
+  for (const { id } of workspaces) {
+    const workspaceDoc = await openWorkspaceDocIfStored(id)
+    if (workspaceDoc === null) continue
+    const at = readWorkspaceMeta(workspaceDoc).lastCompactedAt
+    if (at !== undefined && (latest === null || at > latest)) latest = at
+  }
+  return latest
 }
 
 // ── list workspaces from the workspaces table ──
@@ -897,12 +861,11 @@ export async function listWorkspaces(): Promise<{ workspaceId: string }[]> {
   return rows.map((r) => ({ workspaceId: r.id }))
 }
 
-// ── rename a canvas's path ──
-// Updates only documents.path. branches/versions FK on documentId and the blob
-// path also uses documentId, so none of that moves. Returns null (never
-// throws) for a missing source canvas, matching deleteDocument's boolean-
-// shaped "already gone" handling; a rename onto an already-taken path
-// throws ConflictError instead of a raw unique-constraint error.
+// ── rename a document's path ──
+// A tree move: the node is re-parented and descendants ride along for free.
+// Returns null (never throws) for a missing source, matching
+// deleteDocument's boolean-shaped "already gone" handling; a rename onto an
+// already-taken path throws ConflictError, the error the routes map.
 export async function renameDocumentPath(
   workspaceId: string,
   oldPath: string,
@@ -912,95 +875,68 @@ export async function renameDocumentPath(
   validateDocumentPath(oldPath)
   validateDocumentPath(newPath)
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const db = await dbReady()
-    const documentId = await getDocumentIdByPath(db, workspaceId, oldPath)
-    if (!documentId) return null
-    if (oldPath === newPath) return { documentId }
-    // The one rule planSubtreeMove leaves to its callers, and the index's
-    // moveDocument already enforces. Without it the depth-ordered write —
-    // correct for an upward move — is inverted, and the shallow row lands on
-    // a path its own descendant has not vacated, surfacing as a raw unique
-    // constraint error instead of an answer the caller can act on.
-    if (isSelfOrDescendant(newPath, oldPath)) {
-      throw new DocumentMoveIntoSelfError(oldPath, newPath)
-    }
-
-    const rows = await db
-      .selectFrom('documents')
-      .select(['id', 'path'])
-      .where('workspaceId', '=', workspaceId)
-      .execute()
-    const plan = planSubtreeMove(rows, oldPath, newPath)
-    if (!plan.ok) {
-      // `not-found` is unreachable — getDocumentIdByPath already answered
-      // for oldPath — so the only outcome left is a collision.
-      const collided = plan.reason === 'taken' ? plan.path : newPath
-      throw new ConflictError(`Canvas "${workspaceId}/${collided}" already exists`)
-    }
-
-    const now = Date.now()
-    await db.transaction().execute(async (trx) => {
-      for (const move of plan.moves) {
-        await trx
-          .updateTable('documents')
-          .set({ path: move.path, updatedAt: now })
-          .where('id', '=', move.id)
-          .execute()
-      }
-    })
-
-    // The tree mirrors the move: a document the tree holds is re-parented
-    // (descendants ride along in the tree for free — the row plan above is
-    // the table's spelling of the same subtree move).
     const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-    if (workspaceDoc !== null && resolveWorkspaceDocumentById(workspaceDoc, documentId) !== null) {
-      moveWorkspaceNodeToPath(workspaceDoc, oldPath, newPath)
-      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    const entry = workspaceDoc === null ? null : resolveWorkspaceDocument(workspaceDoc, oldPath)
+    // A path only the rows know is a pre-fold legacy document; renaming one
+    // before the boot fold has absorbed it is not a supported operation —
+    // the fold will place it, and the rename can happen after.
+    if (entry === null) return null
+    const documentId = entry.documentId
+    if (oldPath === newPath) return { documentId }
+
+    // The paths whose cache keys this move invalidates, collected BEFORE
+    // the move because the tree is the only record of the subtree.
+    const movedPaths =
+      workspaceDoc === null
+        ? []
+        : readWorkspaceNodes(workspaceDoc)
+            .map((node) => node.path)
+            .filter((path) => path === oldPath || path.startsWith(`${oldPath}/`))
+
+    // The index's move owns the collision rules (occupied destination,
+    // move-into-self, folder promotion) — one definition, not a second
+    // rows-shaped copy of it.
+    const index = await workspaceTreeIndex()
+    try {
+      await index.moveDocument({ workspaceId, from: oldPath, to: newPath })
+    } catch (err) {
+      if (err instanceof DocumentPathTakenError) {
+        throw new ConflictError(`Canvas "${workspaceId}/${err.path}" already exists`)
+      }
+      throw err
     }
 
     // Force the next getDoc() to reload under every key the move touched.
     // A source path: a caller still reading through it should lazily create
     // a fresh canvas rather than resurrect the moved doc's cached instance.
     // A destination path: a WS connect or update-route call against it
-    // before this move can lazily cache an empty phantom doc there (getDoc()
-    // creates one for any path with no DB row yet) — leaving that phantom
-    // cached would shadow the just-moved canvas's real content and the next
-    // write through it would persist the phantom over it. Both halves apply
-    // to every descendant, not only the two paths the caller named.
-    for (const move of plan.moves) {
-      evictDoc(workspaceId, move.from)
-      evictDoc(workspaceId, move.path)
+    // before this move can lazily cache an empty phantom doc there — leaving
+    // that phantom cached would shadow the just-moved canvas's real content.
+    for (const from of movedPaths) {
+      evictDoc(workspaceId, from)
+      evictDoc(workspaceId, from === oldPath ? newPath : `${newPath}${from.slice(oldPath.length)}`)
     }
     return { documentId }
   })
 }
 
-// ── list documents from the documents table ──
+// ── list documents from the workspace record ──
 export async function listDocuments(
   workspaceId: string,
 ): Promise<Pick<DocumentSummary, 'path' | 'id' | 'displayName' | 'updatedAt' | 'kind'>[]> {
   validateWorkspaceId(workspaceId)
-  const db = await dbReady()
-  const rows = await db
-    .selectFrom('documents')
-    .select(['path', 'id', 'displayName', 'updatedAt', 'kind'])
-    .where('workspaceId', '=', workspaceId)
-    .execute()
-  return rows.map((r) => {
-    // Kind is a stored invariant: every write path records one and the boot
-    // fold deletes pre-kind rows, so a null here is corrupt stored data —
-    // surfaced, not guessed over.
-    if (!r.kind) {
-      throw new Error(`document row "${workspaceId}/${r.path}" has no recorded kind`)
-    }
-    return {
-      path: r.path,
-      id: r.id,
-      // Absent rather than null when unset: a document nobody renamed has no
-      // name of its own to report.
-      ...(r.displayName ? { displayName: r.displayName } : {}),
-      updatedAt: new Date(r.updatedAt).toISOString(),
-      kind: r.kind,
-    }
-  })
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc === null) return []
+  return readWorkspaceDocuments(workspaceDoc).map((entry) => ({
+    path: entry.path,
+    id: entry.documentId,
+    // Absent rather than null when unset: a document nobody renamed has no
+    // name of its own to report.
+    ...(entry.name === undefined ? {} : { displayName: entry.name }),
+    // Every tree write stamps updatedAt (S4b) and the fold carries the row
+    // value; a record written between the cutover and S4b simply has none,
+    // and the epoch is the honest "unknown" for our own pre-release data.
+    updatedAt: new Date(entry.updatedAt ?? entry.createdAt ?? 0).toISOString(),
+    kind: entry.kind,
+  }))
 }

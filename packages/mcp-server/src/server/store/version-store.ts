@@ -2,7 +2,7 @@ import { mkdir, readFile, unlink, writeFile } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import {
   projectWorkspaceDocument,
-  resolveWorkspaceDocumentById,
+  resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
@@ -20,7 +20,7 @@ import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getDocumentIdByPath, requireDocumentRow } from './db/upsert-workspace.js'
+import { DocumentNotFoundError } from './db/upsert-workspace.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -220,26 +220,22 @@ export class FileVersionStore implements VersionStore {
       const operator = opts.operator
 
       const db = await dbReady()
-      const documentId = await requireDocumentRow(db, workspaceId, path)
       // A document's checkpoint lives in the WORKSPACE document's oplog:
       // that lineage is durable across restarts, while a projection's is
       // reborn per process — frontiers recorded against it would break on
       // the first daemon restart. The stored record (not a cache) is read,
-      // because a checkpoint must point at persisted ops. Every document is
-      // tree-served (the boot fold guarantees it), so a missing record or
-      // tree node here is corrupt stored data, not a scope to fall back to.
+      // because a checkpoint must point at persisted ops — and it is also
+      // the address book now (S7): the path resolves in the tree, with no
+      // documents-row lookup left.
       const storedWorkspace = await new DocumentStoreWorkspaceDocs(
         new LibsqlDocumentStore(db),
       ).open(workspaceId)
-      if (
-        storedWorkspace === null ||
-        resolveWorkspaceDocumentById(storedWorkspace, documentId) === null
-      ) {
-        throw corruptStoredData(
-          `versions/${workspaceId}/${path}`,
-          'document has a row but no workspace-tree record to checkpoint against',
-        )
+      const entry =
+        storedWorkspace === null ? null : resolveWorkspaceDocument(storedWorkspace, path)
+      if (storedWorkspace === null || entry === null) {
+        throw new DocumentNotFoundError(workspaceId, path)
       }
+      const documentId = entry.documentId
       const frontiers = bytesToBase64(encodeFrontiers(storedWorkspace.frontiers()))
       await db
         .insertInto('versions')
@@ -346,7 +342,7 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
     const db = await dbReady()
-    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    const documentId = await this.resolveDocumentId(db, workspaceId, path)
     if (!documentId) return []
     const rows = await db
       .selectFrom('versions')
@@ -409,7 +405,7 @@ export class FileVersionStore implements VersionStore {
     validateBranchName(newName)
     if (oldName === newName) return 0
     const db = await dbReady()
-    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    const documentId = await this.resolveDocumentId(db, workspaceId, path)
     if (!documentId) return 0
     const result = await db
       .updateTable('versions')
@@ -427,7 +423,7 @@ export class FileVersionStore implements VersionStore {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
     const db = await dbReady()
-    const documentId = await getDocumentIdByPath(db, workspaceId, path)
+    const documentId = await this.resolveDocumentId(db, workspaceId, path)
     if (!documentId) return { deletedCount: 0, deletedIds: [] }
     const rows = await db
       .selectFrom('versions')
@@ -516,6 +512,21 @@ export class FileVersionStore implements VersionStore {
         `frontiers could not be decoded (${errorMessage(error)})`,
       )
     }
+  }
+
+  // The stored record is the address book (S7). ponytail: opens the whole
+  // record per call; route frequency is low, cache when a measured
+  // workspace makes it slow.
+  private async resolveDocumentId(
+    db: Awaited<ReturnType<typeof dbReady>>,
+    workspaceId: string,
+    path: string,
+  ): Promise<string | null> {
+    const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
+      workspaceId,
+    )
+    if (storedWorkspace === null) return null
+    return resolveWorkspaceDocument(storedWorkspace, path)?.documentId ?? null
   }
 
   private async prune(workspaceId: string, documentId: string): Promise<void> {

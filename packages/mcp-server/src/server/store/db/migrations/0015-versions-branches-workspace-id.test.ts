@@ -24,6 +24,7 @@ const DOC_B = '01JQZ0000000000000000000B0'
 interface Handle {
   db: Kysely<Record<string, Record<string, unknown>>>
   migrateToPre0015(): Promise<void>
+  migrateTo0015(): Promise<void>
   migrateToHead(): Promise<void>
 }
 
@@ -43,6 +44,10 @@ async function openDb(): Promise<Handle> {
     db,
     async migrateToPre0015() {
       const { error } = await migrator.migrateTo(PRE_0015)
+      expect(error).toBeUndefined()
+    },
+    async migrateTo0015() {
+      const { error } = await migrator.migrateTo('0015-versions-branches-workspace-id')
       expect(error).toBeUndefined()
     },
     async migrateToHead() {
@@ -184,16 +189,19 @@ describe('0015-versions-branches-workspace-id', () => {
     expect(ids).toEqual(['v-scoped'])
   })
 
-  it('keeps the ON DELETE CASCADE from documents to versions and branches', async () => {
+  it('keeps the ON DELETE CASCADE from documents to versions and branches at the 0015 point', async () => {
     // The re-key adds a column; it must not rebuild the tables in a way that
-    // silently drops migration 0001's cascade — the delete-completeness the
-    // document delete path relies on.
+    // silently drops migration 0001's cascade — at THIS point in the log the
+    // delete path still relies on it. 0016 then removes the FK deliberately
+    // (delete-completeness moves into the delete path's explicit cleanup),
+    // so this pins the state AT 0015, not at head — 0016's own test pins the
+    // rows surviving a documents delete afterwards.
     const handle = await openDb()
     await handle.migrateToPre0015()
     await seedWorkspaceWithDocuments(handle.db)
     await seedVersionRow(handle.db, 'v-a', DOC_A)
     await seedBranchRow(handle.db, DOC_A, 'main')
-    await handle.migrateToHead()
+    await handle.migrateTo0015()
 
     await handle.db.deleteFrom('documents').where('id', '=', DOC_A).execute()
 

@@ -35,7 +35,7 @@ const { saveDocument, getDoc } = await import('../store/document-store.js')
 const { clearCache } = await import('../store/doc-cache.js')
 const { getDb } = await import('../store/db/index.js')
 const { LibsqlDocumentStore } = await import('../store/libsql/libsql-document-store.js')
-const { getDocumentIdByPath } = await import('../store/db/upsert-workspace.js')
+const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
 
 const WORKSPACE = 'ws_cache'
 const PATH = 'design'
@@ -70,7 +70,7 @@ function textDoc(text: string): LoroDoc {
  */
 async function writeThroughToolPath(text: string): Promise<void> {
   const db = await getDb(tempDir)
-  const documentId = await getDocumentIdByPath(db, WORKSPACE, PATH)
+  const documentId = await resolveDocumentIdAtPath(WORKSPACE, PATH)
   if (documentId === undefined || documentId === null) throw new Error('no documentId for path')
   const doc = textDoc(text)
   const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1024 * 1024)

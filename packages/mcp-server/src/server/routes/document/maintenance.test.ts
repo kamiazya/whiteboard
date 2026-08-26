@@ -62,12 +62,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/compact', () => {
 
     await saveDocument('session1', 'canvas-a', new LoroDoc())
     const db = await getDb(tmp.dir)
-    const _row = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'canvas-a')
-      .executeTakeFirstOrThrow()
     // Corrupt the WORKSPACE record's snapshot rows directly — that is where
     // content lives — and drop the live cache so the compact actually reads
     // the stored bytes.

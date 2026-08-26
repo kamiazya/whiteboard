@@ -29,14 +29,15 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, loadDocument } = await import('./document-store.js')
-const { WorkspaceRoutedDocumentStore, DualPlaneDocumentIndex } = await import(
-  './workspace-plane.js'
-)
+const { saveDocument, loadDocument, cacheBackedWorkspaceDocs, resolveDocumentIdAtPath } =
+  await import('./document-store.js')
+const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-const { SqliteDocumentIndex } = await import('./sqlite-document-index.js')
+const { LoroWorkspaceDocumentIndex } = await import('@kamiazya/whiteboard-workspace-index')
+const { FsBlobStore } = await import('./fs/fs-blob-store.js')
+const { join: joinPath } = await import('node:path')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -70,18 +71,21 @@ async function stores() {
     db,
     inner,
     routed: new WorkspaceRoutedDocumentStore(inner),
-    index: new DualPlaneDocumentIndex(new SqliteDocumentIndex(db), db),
+    // The production wiring: the tree IS the index (S7), cache-backed so it
+    // operates on the same live workspace doc every other path writes.
+    index: new LoroWorkspaceDocumentIndex(
+      cacheBackedWorkspaceDocs(),
+      new FsBlobStore(joinPath(tempDir, 'blobs')),
+    ),
   }
 }
 
 it('a tool read (document ref) sees a daemon-route write, and a tool write lands on the tree', async () => {
-  const { db, inner, routed } = await stores()
+  const { inner, routed } = await stores()
   await saveDocument('ws-a', 'design', canvasDoc('route-written'), { kind: 'spatial' })
-  const row = await db
-    .selectFrom('documents')
-    .select(['id'])
-    .where('path', '=', 'design')
-    .executeTakeFirstOrThrow()
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+  const row = { id: rowId }
 
   // Tool read: the same content the route wrote.
   const loaded = await routed.loadSnapshot({
@@ -124,12 +128,9 @@ it('readFrontier answers for a tree-served document, and the stamp moves when it
   // the exact shape `pnpm smoke:e2e`'s wb_document_search step caught.
   const { routed } = await stores()
   await saveDocument('ws-a', 'design', canvasDoc('v1'), { kind: 'spatial' })
-  const { db } = await stores()
-  const row = await db
-    .selectFrom('documents')
-    .select(['id'])
-    .where('path', '=', 'design')
-    .executeTakeFirstOrThrow()
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+  const row = { id: rowId }
 
   const before = await routed.readFrontier({
     docRef: { kind: 'document', workspaceId: 'ws-a', documentId: row.id },
@@ -152,11 +153,9 @@ it('routes a document ref by ITS OWN workspace, with no documents-table lookup (
   // the rows are a mirror on their way out, not an address book.
   const { db, routed } = await stores()
   await saveDocument('ws-a', 'design', canvasDoc('tree-truth'), { kind: 'spatial' })
-  const row = await db
-    .selectFrom('documents')
-    .select(['id'])
-    .where('path', '=', 'design')
-    .executeTakeFirstOrThrow()
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+  const row = { id: rowId }
   await db.deleteFrom('documents').where('id', '=', row.id).execute()
 
   const ref = { kind: 'document', workspaceId: 'ws-a', documentId: row.id } as const
@@ -180,10 +179,9 @@ it('workspace-tree refs pass straight through to the inner store', async () => {
   expect(reopened).not.toBeNull()
 })
 
-it('index READS answer from the tree, not the rows (dual-plane collapse S5b)', async () => {
-  // Skew the rows behind the tree's back: the flipped read must keep
-  // answering what the workspace record says, because after S5b the tree
-  // IS the listing and the rows are a write-only mirror on their way out.
+it('an index create lists and resolves with NO documents row anywhere (S7)', async () => {
+  // The tree is the whole record of what exists: nothing writes the
+  // documents table for a created document anymore.
   const { db, index } = await stores()
   await index.createWorkspace({ workspaceId: 'ws-flip' })
   const entry = await index.createDocument({
@@ -191,35 +189,24 @@ it('index READS answer from the tree, not the rows (dual-plane collapse S5b)', a
     path: 'truth',
     kind: 'spatial',
   })
-  await db
-    .updateTable('documents')
-    .set({ path: 'rows-skewed', displayName: 'Rows-only name' })
-    .where('id', '=', entry.documentId)
-    .execute()
 
+  expect(
+    await db.selectFrom('documents').select(['id']).where('id', '=', entry.documentId).execute(),
+  ).toEqual([])
   const listing = await index.listDocuments({ workspaceId: 'ws-flip' })
   expect(listing.map((e) => e.path)).toEqual(['truth'])
-  expect(listing[0]?.name).toBeUndefined()
-
   const resolved = await index.resolveDocument({ workspaceId: 'ws-flip', path: 'truth' })
   expect(resolved?.documentId).toBe(entry.documentId)
-  const byId = await index.resolveDocumentById({
-    workspaceId: 'ws-flip',
-    documentId: entry.documentId,
-  })
-  expect(byId?.path).toBe('truth')
 })
 
-it('index reads fall back to the rows only when no workspace record is stored', async () => {
-  // A workspace created before any document save has a rows-side row and
-  // no stored workspace record; the empty listing must still answer.
+it('an empty created workspace lists as empty (createWorkspace stores the record)', async () => {
   const { index } = await stores()
   await index.createWorkspace({ workspaceId: 'ws-empty' })
   expect(await index.listDocuments({ workspaceId: 'ws-empty' })).toEqual([])
   expect(await index.resolveDocument({ workspaceId: 'ws-empty', path: 'nope' })).toBeNull()
 })
 
-it('the dual-plane index creates, renames and deletes on BOTH planes', async () => {
+it('the index creates, renames and deletes on the tree', async () => {
   const { db, index } = await stores()
   await index.createWorkspace({ workspaceId: 'ws-a' })
   const entry = await index.createDocument({

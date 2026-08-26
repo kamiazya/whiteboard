@@ -43,19 +43,3 @@ export class DocumentNotFoundError extends Error {
     this.name = 'DocumentNotFoundError'
   }
 }
-
-// Look up the documents row a metadata write targets, refusing a path with
-// no document. This used to MINT a row when none existed — an affordance
-// from the era when metadata could arrive before content. A minted row now
-// has no kind and no workspace-tree node, a corrupt state the boot fold
-// deletes and the listing contract rejects; creating documents is
-// saveDocument / createDocument's job alone.
-export async function requireDocumentRow(
-  db: Database,
-  workspaceId: string,
-  path: string,
-): Promise<string> {
-  const existing = await getDocumentIdByPath(db, workspaceId, path)
-  if (existing === null) throw new DocumentNotFoundError(workspaceId, path)
-  return existing
-}

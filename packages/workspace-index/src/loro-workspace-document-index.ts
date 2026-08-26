@@ -252,14 +252,29 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
           vacated.add(node.path)
         }
       }
+      // Collect every collision before refusing, because the FIRST one found
+      // is often a folder the destination merely passes through (`a` -> `c`
+      // hits the folder `c` before the document `c/d` under it), and naming
+      // the folder sends the caller to retry a rename that was never the
+      // problem. A document collision is the real conflict, so it wins the
+      // report; a folder-only collision still refuses — the tree cannot hold
+      // two nodes at one path — but is only named when nothing better exists.
+      const collisions: { produced: string; withFolder: boolean }[] = []
       for (const node of moving) {
         const produced = rewritten(node.path, input.from, input.to)
         // A path the move is itself emptying is free. `a/b` moving to `a`
         // produces `a/b` again from `a/b/b`, and treating that as occupied
         // would refuse a move that is perfectly well defined.
         if (vacated.has(produced)) continue
-        if (nodes.some((other) => other.path === produced)) {
-          throw new DocumentPathTakenError(input.workspaceId, produced)
+        const occupant = nodes.find((other) => other.path === produced)
+        if (occupant !== undefined) {
+          collisions.push({ produced, withFolder: occupant.type === 'folder' })
+        }
+      }
+      if (collisions.length > 0) {
+        const named = collisions.find((c) => !c.withFolder) ?? collisions[0]
+        if (named !== undefined) {
+          throw new DocumentPathTakenError(input.workspaceId, named.produced)
         }
       }
       // ONE tree move. The descendants come with it because their paths are

@@ -8,7 +8,7 @@ import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { requireDocumentRow } from './db/upsert-workspace.js'
+import { DocumentNotFoundError } from './db/upsert-workspace.js'
 import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -135,7 +135,9 @@ async function saveDocumentBranchesLocked(
   }
   validateBranchName(state.head)
   const db = await dbReady()
-  const documentId = await requireDocumentRow(db, workspaceId, path)
+  const target = await resolveDocumentForBranches(workspaceId, path)
+  if (target === null) throw new DocumentNotFoundError(workspaceId, path)
+  const documentId = target.documentId
   await db.transaction().execute(async (trx) => {
     await trx.deleteFrom('branches').where('documentId', '=', documentId).execute()
     if (state.branches.length > 0) {
@@ -155,11 +157,6 @@ async function saveDocumentBranchesLocked(
         )
         .execute()
     }
-    await trx
-      .updateTable('documents')
-      .set({ currentBranch: state.head, updatedAt: Date.now() })
-      .where('id', '=', documentId)
-      .execute()
   })
   // Mirror the HEAD into the workspace record's node meta (dual-plane
   // collapse S4b): shared CRDT state every replica converges on, while the

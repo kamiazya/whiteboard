@@ -11,57 +11,28 @@
  * (versions, branches and the fold still key off it).
  */
 import {
-  createWorkspaceDocumentAtPath,
-  moveWorkspaceNodeToPath,
   resolveWorkspaceDocumentById,
-  setWorkspaceDocumentName,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
-  CreateDocumentInput,
-  CreateWorkspaceInput,
   DeleteDocInput,
-  DeleteDocumentInput,
-  DocumentEntry,
-  DocumentIndex,
   DocumentStore,
-  ListDocumentsInput,
   LoadDeltasInput,
   LoadDeltasResult,
   LoadSnapshotInput,
   LoadSnapshotResult,
-  MoveDocumentInput,
   ReadFrontierInput,
   ReadFrontierResult,
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
-  ResolveDocumentByIdInput,
-  ResolveDocumentInput,
   SaveCompactedSnapshotInput,
   SaveSnapshotInput,
-  SetDocumentNameInput,
 } from '@kamiazya/whiteboard-ports'
-import {
-  chunkSnapshot,
-  reassembleSnapshot,
-  WorkspaceNotFoundError,
-} from '@kamiazya/whiteboard-ports'
-import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
-import type { Kysely } from 'kysely'
+import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { getDataDir } from '../config.js'
-import type { DatabaseSchema } from './db/schema.js'
-import { evictDoc } from './doc-cache.js'
-import {
-  cacheBackedWorkspaceDocs,
-  getDoc,
-  getWorkspaceDoc,
-  openWorkspaceDocIfStored,
-  saveWorkspaceDoc,
-} from './document-store.js'
-import { FsBlobStore } from './fs/fs-blob-store.js'
+import { getDoc, openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 const SNAPSHOT_MAX_CHUNK_BYTES = 1_000_000
@@ -197,124 +168,5 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
 
   async deleteDoc(input: DeleteDocInput): Promise<void> {
     return this.inner.deleteDoc(input)
-  }
-}
-
-/**
- * `DocumentIndex` that keeps the `documents` table authoritative for reads
- * (listing order, the fold's work list, versions/branches joins) while
- * mirroring every MUTATION into the workspace tree — through the shared
- * live workspace doc, so the content plane and this metadata plane cannot
- * drift apart within one process.
- */
-export class DualPlaneDocumentIndex implements DocumentIndex {
-  constructor(
-    private readonly rows: DocumentIndex,
-    readonly _db: Kysely<DatabaseSchema>,
-  ) {}
-
-  #treeIndex(): LoroWorkspaceDocumentIndex {
-    return new LoroWorkspaceDocumentIndex(cacheBackedWorkspaceDocs(), new FsBlobStore(getDataDir()))
-  }
-
-  async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
-    return this.rows.createWorkspace(input)
-  }
-
-  async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
-    const entry = await this.rows.createDocument(input)
-    const workspaceDoc = await getWorkspaceDoc(input.workspaceId)
-    createWorkspaceDocumentAtPath(workspaceDoc, {
-      path: entry.path,
-      documentId: entry.documentId,
-      kind: input.kind,
-      ...(entry.name === undefined ? {} : { name: entry.name }),
-    })
-    await saveWorkspaceDoc(input.workspaceId, workspaceDoc)
-    return entry
-  }
-
-  /**
-   * Reads answer from the TREE (dual-plane collapse S5b): the workspace
-   * record is what every replica converges on, so it is what a listing
-   * shows — `shadowed` marks included — while the rows stay a write-only
-   * mirror until they retire. The rows answer only when no workspace
-   * record is stored yet (a workspace created before any document save),
-   * where they correctly say "exists, empty" — and still throw for a
-   * workspace that exists nowhere.
-   */
-  async #readThroughTree<T>(
-    fromTree: (tree: LoroWorkspaceDocumentIndex) => Promise<T>,
-    fromRows: () => Promise<T>,
-  ): Promise<T> {
-    try {
-      return await fromTree(this.#treeIndex())
-    } catch (err) {
-      if (err instanceof WorkspaceNotFoundError) return fromRows()
-      throw err
-    }
-  }
-
-  async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
-    return this.#readThroughTree(
-      (tree) => tree.resolveDocument(input),
-      () => this.rows.resolveDocument(input),
-    )
-  }
-
-  async resolveDocumentById(input: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
-    return this.#readThroughTree(
-      (tree) => tree.resolveDocumentById(input),
-      () => this.rows.resolveDocumentById(input),
-    )
-  }
-
-  async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
-    return this.#readThroughTree(
-      (tree) => tree.listDocuments(input),
-      () => this.rows.listDocuments(input),
-    )
-  }
-
-  async moveDocument(input: MoveDocumentInput): Promise<void> {
-    await this.rows.moveDocument(input)
-    const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId)
-    if (workspaceDoc !== null) {
-      moveWorkspaceNodeToPath(workspaceDoc, input.from, input.to)
-      await saveWorkspaceDoc(input.workspaceId, workspaceDoc)
-    }
-    // Both path keys: a cached doc under the old path would serve a path
-    // that no longer exists, and one under the new path predates the move.
-    evictDoc(input.workspaceId, input.from)
-    evictDoc(input.workspaceId, input.to)
-  }
-
-  async setDocumentName(input: SetDocumentNameInput): Promise<void> {
-    await this.rows.setDocumentName(input)
-    const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId)
-    if (
-      workspaceDoc !== null &&
-      resolveWorkspaceDocumentById(workspaceDoc, input.documentId) !== null
-    ) {
-      setWorkspaceDocumentName(workspaceDoc, {
-        documentId: input.documentId,
-        ...(input.name === undefined ? {} : { name: input.name }),
-      })
-      await saveWorkspaceDoc(input.workspaceId, workspaceDoc)
-    }
-  }
-
-  async deleteDocument(input: DeleteDocumentInput): Promise<void> {
-    // Tree first, because its delete EVACUATES: if the export or blob write
-    // fails, both planes still hold the document and the caller can retry.
-    const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId)
-    if (workspaceDoc !== null) {
-      const entry = await this.rows.resolveDocument(input)
-      if (entry !== null && resolveWorkspaceDocumentById(workspaceDoc, entry.documentId) !== null) {
-        await this.#treeIndex().deleteDocument(input)
-      }
-    }
-    await this.rows.deleteDocument(input)
-    evictDoc(input.workspaceId, input.path)
   }
 }

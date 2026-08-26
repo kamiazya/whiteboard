@@ -131,7 +131,7 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
   it('a saveDocument write is immediately durable in the stored workspace record', async () => {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
     const { documentContainers } = await import('@kamiazya/whiteboard-loro-adapter')
@@ -142,7 +142,7 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
     await saveDocument('session1', 'write-through', doc)
 
     const db = await getDb(getDataDir())
-    const documentId = await getDocumentIdByPath(db, 'session1', 'write-through')
+    const documentId = await resolveDocumentIdAtPath('session1', 'write-through')
     expect(documentId).not.toBeNull()
     // A FRESH open of the stored record — not the live cache — so this
     // proves durability, not memory.
@@ -223,13 +223,13 @@ describe('route saves and tool writes serialize on the workspace document', () =
   }
 
   it('a tool write and a route save racing on the same document both survive', async () => {
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
     const seed = new LoroDoc()
     seed.getMap('nodes').set('base', { id: 'base' })
     seed.commit()
     await saveDocument('session1', 'race', seed)
-    const { db, routed } = await toolStores()
-    const documentId = (await getDocumentIdByPath(db, 'session1', 'race'))!
+    const { routed } = await toolStores()
+    const documentId = (await resolveDocumentIdAtPath('session1', 'race'))!
 
     await Promise.all([toolWrite(routed, documentId, 'agent'), routeWrite('race', 'web')])
 
@@ -243,8 +243,7 @@ describe('route saves and tool writes serialize on the workspace document', () =
   // live cached doc gains the tool's op instead of being left stale (or
   // evicted, which would break every per-document socket's lineage).
   it("a route save after an out-of-band tool write preserves both writers' ops", async () => {
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
-    const { getDoc } = await import('./document-store.js')
+    const { resolveDocumentIdAtPath, getDoc } = await import('./document-store.js')
     const { peekDoc } = await import('./doc-cache.js')
 
     const seed = new LoroDoc()
@@ -255,8 +254,8 @@ describe('route saves and tool writes serialize on the workspace document', () =
     await getDoc('session1', 'merge-race')
     expect(peekDoc('session1', 'merge-race')).toBeDefined()
 
-    const { db, routed } = await toolStores()
-    const documentId = (await getDocumentIdByPath(db, 'session1', 'merge-race'))!
+    const { routed } = await toolStores()
+    const documentId = (await resolveDocumentIdAtPath('session1', 'merge-race'))!
     await toolWrite(routed, documentId, 'agent')
 
     // The cached projection STAYS, and already carries the tool's op —
@@ -466,13 +465,12 @@ describe('saveDocument / loadDocument', () => {
     await saveDocument('session1', 'ulid-mint', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
-    const db = await getDb(getDataDir())
-    const row = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'ulid-mint')
-      .executeTakeFirst()
+    const _db = await getDb(getDataDir())
+    const rowId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
+      'session1',
+      'ulid-mint',
+    )
+    const row = rowId === null ? undefined : { id: rowId }
     expect(row?.id).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
   })
 
@@ -698,23 +696,35 @@ describe('listDocuments', () => {
     expect(paths).not.toContain('exports')
   })
 
-  it('surfaces a row without a kind as corrupt instead of guessing spatial', async () => {
-    // Kind is a stored invariant (every save records one, the boot fold
-    // deletes pre-kind rows), and the summary contract requires it. A null
-    // here can only be corrupt stored data, and a guess used to escape as
-    // stored fact (wb_version_restore forked it into new rows).
-    await saveDocument('session1', 'kindless', new LoroDoc())
+  it('answers from the workspace tree only — a legacy documents row never appears', async () => {
+    // Post-collapse the documents table is a frozen inbox only the boot fold
+    // reads: the listing is a tree walk, so a row with no tree entry (the
+    // pre-fold legacy shape) must not leak into the summary. The old
+    // "kindless row is corrupt" guard retired with the row read itself —
+    // a tree entry cannot be kindless, the meta schema requires the kind.
+    await saveDocument('session1', 'in-tree', new LoroDoc())
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
     const db = await getDb(getDataDir())
     await db
-      .updateTable('documents')
-      .set({ kind: null })
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'kindless')
+      .insertInto('documents')
+      .values({
+        id: '01JQZ00000000000000LEGACY0',
+        workspaceId: 'session1',
+        path: 'row-only',
+        displayName: null,
+        isPinned: 0,
+        pinOrder: null,
+        currentBranch: 'main',
+        createdAt: Date.now(),
+        updatedAt: Date.now(),
+        kind: 'spatial',
+      })
       .execute()
 
-    await expect(listDocuments('session1')).rejects.toThrow(/has no recorded kind/)
+    const paths = (await listDocuments('session1')).map((c) => c.path)
+    expect(paths).toContain('in-tree')
+    expect(paths).not.toContain('row-only')
   })
 
   it('reports a recorded kind unchanged', async () => {
@@ -1203,17 +1213,15 @@ describe('compactDocument', () => {
 
   it('writes lastCompactedAt only on successful compaction', async () => {
     const { LoroMap } = await import('loro-crdt')
-    const { getDb } = await import('./db/index.js')
 
-    async function readLastCompactedAt(path: string): Promise<number | null> {
-      const db = await getDb(tempDir)
-      const row = await db
-        .selectFrom('documents')
-        .select(['lastCompactedAt'])
-        .where('workspaceId', '=', 'session1')
-        .where('path', '=', path)
-        .executeTakeFirst()
-      return row?.lastCompactedAt ?? null
+    async function readLastCompactedAt(_path: string): Promise<number | null> {
+      // Workspace-level meta (S4b/S7): compaction folds the workspace
+      // record, so there is one stamp per workspace, not per document.
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      if (workspaceDoc === null) return null
+      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
     }
 
     // Case 1: no version → reason='no-versions' → lastCompactedAt stays null.
@@ -1275,7 +1283,7 @@ describe('compactDocument', () => {
   it('does not lose a concurrent tool write racing the compaction', async () => {
     const { getDb } = await import('./db/index.js')
     const { getDataDir } = await import('../config.js')
-    const { getDocumentIdByPath } = await import('./db/upsert-workspace.js')
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { WorkspaceRoutedDocumentStore } = await import('./workspace-plane.js')
     const { chunkSnapshot, reassembleSnapshot } = await import('@kamiazya/whiteboard-ports')
@@ -1300,7 +1308,7 @@ describe('compactDocument', () => {
     await saveDocument('session1', 'test', doc, { overwrite: true })
 
     const db = await getDb(getDataDir())
-    const documentId = (await getDocumentIdByPath(db, 'session1', 'test'))!
+    const documentId = (await resolveDocumentIdAtPath('session1', 'test'))!
 
     // Hold the cut lookup open so the tool write races into compaction's
     // window instead of trivially serializing before it.
@@ -1377,7 +1385,7 @@ describe('deleteDocument', () => {
     expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['a-sibling'])
   })
 
-  it('removes the documents row, cascades branches/versions rows, deletes the Libsql snapshot rows, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
+  it('removes the tree entry, deletes branches/versions rows explicitly, and unlinks the version thumbnail PNGs, leaving the workspace row and a sibling canvas untouched', async () => {
     const { getDb } = await import('./db/index.js')
     const { createBranch } = await import('./branches-store.js')
     const { stat } = await import('node:fs/promises')
@@ -1392,14 +1400,9 @@ describe('deleteDocument', () => {
     await createBranch('session1', 'canvas-a', { name: 'feature' })
 
     const db = await getDb(tempDir)
-    const documentRow = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'canvas-a')
-      .executeTakeFirstOrThrow()
-    const documentId = documentRow.id
-    const _docRef = { kind: 'document' as const, documentId }
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
+    const documentId = await resolveDocumentIdAtPath('session1', 'canvas-a')
+    if (documentId === null) throw new Error('document missing from the tree')
     const libsqlStore = new LibsqlDocumentStore(db)
 
     const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
@@ -1444,13 +1447,9 @@ describe('deleteDocument', () => {
       .where('id', '=', 'session1')
       .executeTakeFirst()
     expect(wsRow).toBeDefined()
-    const siblingRow = await db
-      .selectFrom('documents')
-      .select(['path'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'canvas-b')
-      .executeTakeFirst()
-    expect(siblingRow).toBeDefined()
+    // The sibling lives in the tree (documents rows retired with the
+    // dual-plane collapse), so "untouched" is a listing fact.
+    expect((await listDocuments('session1')).map((c) => c.path)).toEqual(['canvas-b'])
   })
 
   // The defect this closes: wb_document_delete removed the index row and the
@@ -1463,10 +1462,13 @@ describe('deleteDocument', () => {
     const { getDb } = await import('./db/index.js')
     const { stat } = await import('node:fs/promises')
     const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
-    const { SqliteDocumentIndex } = await import('./sqlite-document-index.js')
+    const { LoroWorkspaceDocumentIndex } = await import('@kamiazya/whiteboard-workspace-index')
+    const { FsBlobStore } = await import('./fs/fs-blob-store.js')
     const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
     const { peekDoc } = await import('./doc-cache.js')
-    const { documentTeardown } = await import('./document-store.js')
+    const { cacheBackedWorkspaceDocs, documentTeardown, resolveDocumentIdAtPath } = await import(
+      './document-store.js'
+    )
 
     const doc = new LoroDoc()
     await saveDocument('session1', 'agent-deleted', doc)
@@ -1481,12 +1483,9 @@ describe('deleteDocument', () => {
     expect(peekDoc('session1', 'agent-deleted')).toBeDefined()
 
     const db = await getDb(tempDir)
-    const { id: documentId } = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'agent-deleted')
-      .executeTakeFirstOrThrow()
+    const documentId = await resolveDocumentIdAtPath('session1', 'agent-deleted')
+    expect(documentId).not.toBeNull()
+    if (documentId === null) throw new Error('unreachable')
     const thumbPath = join(tempDir, 'blobs', 'session1', 'versions', `${version.id}.png`)
     await expect(stat(thumbPath)).resolves.toBeDefined()
 
@@ -1494,7 +1493,10 @@ describe('deleteDocument', () => {
       {
         documentStore: new LibsqlDocumentStore(db),
         blobStore: {} as never,
-        documentIndex: new SqliteDocumentIndex(db),
+        documentIndex: new LoroWorkspaceDocumentIndex(
+          cacheBackedWorkspaceDocs(),
+          new FsBlobStore(join(tempDir, 'blobs')),
+        ),
         documentTeardown,
       },
       { workspaceId: 'session1', documentId },
@@ -1502,12 +1504,7 @@ describe('deleteDocument', () => {
 
     await expect(stat(thumbPath)).rejects.toThrow()
     expect(peekDoc('session1', 'agent-deleted')).toBeUndefined()
-    const rowAfter = await db
-      .selectFrom('documents')
-      .selectAll()
-      .where('id', '=', documentId)
-      .executeTakeFirst()
-    expect(rowAfter).toBeUndefined()
+    expect(await resolveDocumentIdAtPath('session1', 'agent-deleted')).toBeNull()
   })
 
   it('removes the .pre-migrate-bak file the legacy migration leaves beside the blob', async () => {
@@ -1515,13 +1512,13 @@ describe('deleteDocument', () => {
     const { mkdir, stat, writeFile } = await import('node:fs/promises')
 
     await saveDocument('session1', 'migrated', new LoroDoc())
-    const db = await getDb(tempDir)
-    const row = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'migrated')
-      .executeTakeFirstOrThrow()
+    const _db = await getDb(tempDir)
+    const rowId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
+      'session1',
+      'migrated',
+    )
+    if (rowId === null) throw new Error('document missing from the tree')
+    const row = { id: rowId }
     const bakPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro.pre-migrate-bak`)
     // saveDocument no longer creates the blob directory (no FS blob is
     // written on the happy path), so the bak file's parent has to be made
@@ -1549,12 +1546,12 @@ describe('deleteDocument', () => {
     // unconditional unlinkIfExists(blobPath) call must still no-op cleanly.
     await saveDocument('session1', 'row-only', new LoroDoc())
     const db = await getDb(tempDir)
-    const row = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'row-only')
-      .executeTakeFirstOrThrow()
+    const rowId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
+      'session1',
+      'row-only',
+    )
+    if (rowId === null) throw new Error('document missing from the tree')
+    const row = { id: rowId }
 
     await expect(deleteDocument('session1', 'row-only')).resolves.toBe(true)
     const after = await db
@@ -1650,12 +1647,12 @@ describe('renameDocumentPath', () => {
     const version = await store.save('session1', 'a', doc, { auto: true })
 
     const db = await getDb(tempDir)
-    const before = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'a')
-      .executeTakeFirstOrThrow()
+    const beforeId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
+      'session1',
+      'a',
+    )
+    if (beforeId === null) throw new Error('document missing from the tree')
+    const before = { id: beforeId }
     const documentId = before.id
     const contentBefore = (await loadDocument('session1', 'a')).toJSON()
 
@@ -1664,12 +1661,12 @@ describe('renameDocumentPath', () => {
     const list = await listDocuments('session1')
     expect(list.map((c) => c.path)).toEqual(['b'])
 
-    const after = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'b')
-      .executeTakeFirstOrThrow()
+    const afterId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
+      'session1',
+      'b',
+    )
+    if (afterId === null) throw new Error('document missing from the tree')
+    const after = { id: afterId }
     expect(after.id).toBe(documentId)
 
     const branchesAfter = await db
@@ -1716,13 +1713,13 @@ describe('renameDocumentPath', () => {
   it('rename to the SAME path is a no-op success, returning the existing documentId', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
     const { getDb } = await import('./db/index.js')
-    const db = await getDb(tempDir)
-    const before = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'session1')
-      .where('path', '=', 'a')
-      .executeTakeFirstOrThrow()
+    const _db = await getDb(tempDir)
+    const beforeId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
+      'session1',
+      'a',
+    )
+    if (beforeId === null) throw new Error('document missing from the tree')
+    const before = { id: beforeId }
 
     await expect(renameDocumentPath('session1', 'a', 'a')).resolves.toEqual({
       documentId: before.id,
@@ -1889,17 +1886,13 @@ describe('auto-compact', () => {
 
   it('scheduleAutoCompact debounces rapid triggers into a single compaction', async () => {
     const { LoroMap } = await import('loro-crdt')
-    const { getDb } = await import('./db/index.js')
 
     async function readLastCompactedAt(): Promise<number | null> {
-      const db = await getDb(tempDir)
-      const row = await db
-        .selectFrom('documents')
-        .select(['lastCompactedAt'])
-        .where('workspaceId', '=', 'session1')
-        .where('path', '=', 'big')
-        .executeTakeFirst()
-      return row?.lastCompactedAt ?? null
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      if (workspaceDoc === null) return null
+      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
     }
 
     // Build a canvas with a version cut + extra ops so compactDocument
@@ -1961,7 +1954,6 @@ describe('auto-compact', () => {
     const { LoroMap } = await import('loro-crdt')
     const { peekDoc, clearCache } = await import('./doc-cache.js')
     const { getDoc } = await import('./document-store.js')
-    const { getDb } = await import('./db/index.js')
 
     clearCache()
 
@@ -1988,14 +1980,12 @@ describe('auto-compact', () => {
     scheduleAutoCompact('session1', 'cached', store, { debounceMs: 50 })
     await vi.waitFor(
       async () => {
-        const db = await getDb(tempDir)
-        const row = await db
-          .selectFrom('documents')
-          .select(['lastCompactedAt'])
-          .where('workspaceId', '=', 'session1')
-          .where('path', '=', 'cached')
-          .executeTakeFirst()
-        expect(row?.lastCompactedAt ?? null).not.toBeNull()
+        const { openWorkspaceDocIfStored } = await import('./document-store.js')
+        const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+        const workspaceDoc = await openWorkspaceDocIfStored('session1')
+        expect(
+          workspaceDoc && (readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null),
+        ).not.toBeNull()
       },
       { timeout: 2000 },
     )
@@ -2103,17 +2093,13 @@ describe('auto-compact disposal', () => {
 
   it('disposeAutoCompact awaits an already-fired in-flight compaction before resolving', async () => {
     const store = await buildCompactableCanvas('cached')
-    const { getDb } = await import('./db/index.js')
 
     async function readLastCompactedAt(): Promise<number | null> {
-      const db = await getDb(tempDir)
-      const row = await db
-        .selectFrom('documents')
-        .select(['lastCompactedAt'])
-        .where('workspaceId', '=', 'session1')
-        .where('path', '=', 'cached')
-        .executeTakeFirst()
-      return row?.lastCompactedAt ?? null
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      if (workspaceDoc === null) return null
+      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
     }
 
     scheduleAutoCompact('session1', 'cached', withDelayedEarliestFrontiers(store, 100), {
@@ -2242,17 +2228,13 @@ describe('auto-compact disposal', () => {
 
   it('is idempotent, and scheduleAutoCompact still works after a dispose', async () => {
     const store = await buildCompactableCanvas('again')
-    const { getDb } = await import('./db/index.js')
 
     async function readLastCompactedAt(): Promise<number | null> {
-      const db = await getDb(tempDir)
-      const row = await db
-        .selectFrom('documents')
-        .select(['lastCompactedAt'])
-        .where('workspaceId', '=', 'session1')
-        .where('path', '=', 'again')
-        .executeTakeFirst()
-      return row?.lastCompactedAt ?? null
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      if (workspaceDoc === null) return null
+      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
     }
 
     await disposeAutoCompact()
@@ -2269,17 +2251,13 @@ describe('auto-compact disposal', () => {
 
   it('composes with uninstallAutoCompact() in either order without dropping in-flight work', async () => {
     const store = await buildCompactableCanvas('composed')
-    const { getDb } = await import('./db/index.js')
 
     async function readLastCompactedAt(): Promise<number | null> {
-      const db = await getDb(tempDir)
-      const row = await db
-        .selectFrom('documents')
-        .select(['lastCompactedAt'])
-        .where('workspaceId', '=', 'session1')
-        .where('path', '=', 'composed')
-        .executeTakeFirst()
-      return row?.lastCompactedAt ?? null
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { readWorkspaceMeta } = await import('@kamiazya/whiteboard-loro-adapter')
+      const workspaceDoc = await openWorkspaceDocIfStored('session1')
+      if (workspaceDoc === null) return null
+      return readWorkspaceMeta(workspaceDoc).lastCompactedAt ?? null
     }
 
     scheduleAutoCompact('session1', 'composed', withDelayedEarliestFrontiers(store, 100), {
