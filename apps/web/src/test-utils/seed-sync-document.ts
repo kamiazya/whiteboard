@@ -25,7 +25,7 @@ export async function seedSyncDocument(
   // writing it through `IdbDocumentStore` keeps this helper from carrying its
   // own copy of a storage layout that has already changed once underneath it.
   if (!('raw' in content)) {
-    const docRef = { kind: 'document', documentId } as const
+    const docRef = { kind: 'document', workspaceId: 'local', documentId } as const
     const store = new IdbDocumentStore(dbName)
     const { manifest, chunks } = chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)
     // Empty, matching what `LoroStore` writes: nothing in the browser reads a

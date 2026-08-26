@@ -64,7 +64,7 @@ describe('wb_facet_set tool', () => {
     })
 
     const loaded = await store.loadSnapshot({
-      docRef: { kind: 'document', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
     })
     expect(loaded).not.toBeNull()
     const doc = new LoroDoc()
@@ -177,7 +177,9 @@ describe('facets belong to OKF (ADR-0009 decision 3)', () => {
       }),
     ).rejects.toThrow(DocumentKindMismatchError)
 
-    const snap = await store.loadSnapshot({ docRef: { kind: 'document', documentId: DOCUMENT_ID } })
+    const snap = await store.loadSnapshot({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+    })
     const doc = new LoroDoc()
     if (snap) doc.import(reassembleSnapshot(snap.manifest, snap.chunks))
     expect(readFacets(doc)).toEqual({})
@@ -313,7 +315,7 @@ describe('node-target writes (nodeId)', () => {
     expect(result.facets).toEqual({ 'visual.shape/v0': { kind: 'hexagon' } })
 
     const loaded = await documentStore.loadSnapshot({
-      docRef: { kind: 'document', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
     })
     expect(loaded).not.toBeNull()
     const doc = new LoroDoc()

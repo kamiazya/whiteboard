@@ -12,6 +12,7 @@ const VALID_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 describe('versionSaveInputSchema', () => {
   it('accepts valid input', () => {
     const result = versionSaveInputSchema.safeParse({
+      workspaceId: 'default',
       documentId: VALID_DOCUMENT_ID,
       label: 'Initial draft',
     })
@@ -36,6 +37,7 @@ describe('versionSaveInputSchema', () => {
 
   it('accepts label at exactly 200 characters', () => {
     const result = versionSaveInputSchema.safeParse({
+      workspaceId: 'default',
       documentId: VALID_DOCUMENT_ID,
       label: 'x'.repeat(200),
     })
@@ -86,6 +88,7 @@ describe('versionSaveOutputSchema', () => {
 describe('versionListInputSchema', () => {
   it('accepts valid input', () => {
     const result = versionListInputSchema.safeParse({
+      workspaceId: 'default',
       documentId: VALID_DOCUMENT_ID,
     })
     expect(result.success).toBe(true)

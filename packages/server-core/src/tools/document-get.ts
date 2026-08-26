@@ -69,7 +69,7 @@ export function createDocumentGetTool(deps: ServerDeps) {
     inputSchema: documentGetInputSchema,
     outputSchema: documentGetOutputSchema,
     async execute(input: DocumentGetInput): Promise<DocumentGetOutput> {
-      const doc = await loadOrCreateDocument(deps, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
       // A document created before kinds existed carries none on its own Loro
       // doc. Its index row, written at creation time, may still have one —
       // consult it before refusing. This is a read-only fallback: the kind

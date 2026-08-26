@@ -74,7 +74,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
     inputSchema: canvasViewInputSchema,
     outputSchema: canvasViewOutputSchema,
     async execute(input: CanvasViewInput): Promise<CanvasViewOutput> {
-      const { doc, canvas } = await loadDocument(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const resolved = await resolveFileReferences(deps, input.workspaceId, canvas)
       return {

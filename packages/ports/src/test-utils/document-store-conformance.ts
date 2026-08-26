@@ -60,14 +60,19 @@ export function describeDocumentStoreConformance(
     }
   }
 
-  const DOC: DocRef = { kind: 'document', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }
-  const OTHER: DocRef = { kind: 'document', documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ' }
+  const DOC_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+  const DOC: DocRef = { kind: 'document', workspaceId: 'conformance-ws', documentId: DOC_ID }
+  const OTHER: DocRef = {
+    kind: 'document',
+    workspaceId: 'conformance-ws',
+    documentId: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+  }
   // Same id STRING as a workspace would use, different kind. The key a store
   // derives has to keep these apart.
   // The SAME identifier string as DOC, so a store that keys on the id alone
   // and drops `kind` fails the case below. With two different strings it
   // passes without ever exercising what it claims to.
-  const TREE: DocRef = { kind: 'workspace-tree', workspaceId: DOC.documentId }
+  const TREE: DocRef = { kind: 'workspace-tree', workspaceId: DOC_ID }
 
   // Annotated with the buffer parameter so this compiles the same way under
   // every consumer's lib: a bare `Uint8Array` is `Uint8Array<ArrayBufferLike>`

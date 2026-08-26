@@ -56,7 +56,7 @@ export class ContentFactsCache {
     const result = new Map<string, ContentFacts>()
     for (const entry of entries) {
       const frontier = await deps.documentStore.readFrontier({
-        docRef: { kind: 'document', documentId: entry.documentId },
+        docRef: { kind: 'document', workspaceId, documentId: entry.documentId },
       })
       if (frontier === null) {
         held.delete(entry.documentId)
@@ -73,7 +73,7 @@ export class ContentFactsCache {
         result.set(entry.documentId, cached.facts)
         continue
       }
-      const { doc } = await loadDocument(deps, entry.documentId)
+      const { doc } = await loadDocument(deps, workspaceId, entry.documentId)
       const facts = extractContentFacts(entry, doc)
       held.set(entry.documentId, { stamp, facts })
       result.set(entry.documentId, facts)

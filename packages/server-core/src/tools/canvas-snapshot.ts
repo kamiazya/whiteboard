@@ -236,7 +236,7 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
     inputSchema: canvasSnapshotInputSchema,
     outputSchema: canvasSnapshotSchema,
     async execute(input: CanvasSnapshotInput): Promise<CanvasSnapshot> {
-      const { doc, canvas } = await loadDocument(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(
         deps,
         input.workspaceId,

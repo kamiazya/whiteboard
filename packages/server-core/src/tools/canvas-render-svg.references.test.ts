@@ -178,7 +178,9 @@ describe('reference resolution edge cases', () => {
     // label is strictly better than showing a raw id.
     const store = new FakeDocumentStore()
     await seedWorkspace(store, NOTE_ID)
-    await store.deleteDoc({ docRef: { kind: 'document', documentId: NOTE_ID } })
+    await store.deleteDoc({
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: NOTE_ID },
+    })
     const tool = createCanvasRenderSvgTool(makeDeps(store))
 
     const result = await tool.execute({

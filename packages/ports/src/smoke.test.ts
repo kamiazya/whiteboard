@@ -37,6 +37,7 @@ describe('ports package smoke', () => {
 
     const docRef = pkg.docRefSchema.parse({
       kind: 'document',
+      workspaceId: 'workspace-a',
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
     })
     expect(docRef.kind).toBe('document')

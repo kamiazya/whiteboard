@@ -99,7 +99,10 @@ export async function seedDoc(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await store.saveSnapshot({
-    docRef: { kind: 'document', documentId },
+    // The stored key is derived from the documentId alone (see ports'
+    // doc-ref-key.ts), so this seed workspaceId never has to match the
+    // workspaceId a test's tool input names.
+    docRef: { kind: 'document', workspaceId: 'seed-ws', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,

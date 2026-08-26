@@ -62,8 +62,8 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
   // Version rows anchored to a legacy record's oplog no longer exist by the
   // time this runs: migration 0015 deleted them along with the scope flag,
   // so the sweep is only about the content record itself.
-  async function sweepLegacy(documentId: string): Promise<void> {
-    await store.deleteDoc({ docRef: { kind: 'document', documentId } })
+  async function sweepLegacy(workspaceId: string, documentId: string): Promise<void> {
+    await store.deleteDoc({ docRef: { kind: 'document', workspaceId, documentId } })
   }
 
   let folded = 0
@@ -76,12 +76,12 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
       if (resolveWorkspaceDocumentById(workspace, row.id) !== null) {
         // Already tree-resident: nothing to fold, but an interrupted earlier
         // boot may have left the per-document record behind — sweep it.
-        await sweepLegacy(row.id)
+        await sweepLegacy(workspaceId, row.id)
         continue
       }
       if (!kind.success) {
         await db.deleteFrom('documents').where('id', '=', row.id).execute()
-        await sweepLegacy(row.id)
+        await sweepLegacy(workspaceId, row.id)
         getLogger('fold-workspace').notice(
           { workspaceId, path: row.path },
           'deleted a pre-kind document (own pre-release data defect; nothing serves it anymore)',
@@ -122,7 +122,7 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
       // The sweep runs strictly AFTER the save: until the tree write is
       // durable, the legacy record is still the document's only copy.
       await docs.save(workspaceId, workspace)
-      await sweepLegacy(row.id)
+      await sweepLegacy(workspaceId, row.id)
       folded += 1
     }
   }

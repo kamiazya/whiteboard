@@ -98,7 +98,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // with still does. That row is consulted before refusing.
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'markdown')
-    await saveDocumentSnapshot(deps, documentId, new LoroDoc()) // overwrite: doc loses its kind
+    await saveDocumentSnapshot(deps, 'ws', documentId, new LoroDoc()) // overwrite: doc loses its kind
 
     const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentId })
 
@@ -110,7 +110,7 @@ describe('wb_document_get reads a document in its own format', () => {
   it('a kindless doc falls back to the index row kind: spatial', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, documentId, new LoroDoc()) // overwrite: doc loses its kind
+    await saveDocumentSnapshot(deps, 'ws', documentId, new LoroDoc()) // overwrite: doc loses its kind
 
     const result = await createDocumentGetTool(deps).execute({ workspaceId: 'ws', documentId })
 
@@ -146,7 +146,7 @@ describe('wb_document_get reads a document in its own format', () => {
     // made the missing format invisible.
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, documentId, new LoroDoc()) // overwrite: no kind
+    await saveDocumentSnapshot(deps, 'ws', documentId, new LoroDoc()) // overwrite: no kind
     const deviantDeps: ServerDeps = {
       ...deps,
       // strips `kind` from the real index's answer
@@ -175,7 +175,7 @@ describe('wb_document_get reads a document in its own format', () => {
   it('a kindless doc whose index row resolves to null (wrong workspace) is still refused', async () => {
     const deps = makeDeps()
     const documentId = await createDoc(deps, 'spatial')
-    await saveDocumentSnapshot(deps, documentId, new LoroDoc()) // overwrite: no kind
+    await saveDocumentSnapshot(deps, 'ws', documentId, new LoroDoc()) // overwrite: no kind
     const deviantDeps: ServerDeps = {
       ...deps,
       // simulates the wrong-workspace / not-found case

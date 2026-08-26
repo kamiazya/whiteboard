@@ -85,7 +85,7 @@ export async function wbDocumentCreate(
   // document yet to ask. The kind is written once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
-  await saveDocumentSnapshot(deps, entry.documentId, doc)
+  await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId, doc)
 
   // A body is written by DELEGATING to `wb_document_set` rather than by
   // repeating what it does. Its write is not a one-liner — it parses OKF,
@@ -168,7 +168,9 @@ export async function wbDocumentDelete(
     workspaceId: input.workspaceId,
     path: entry.path,
   })
-  await deps.documentStore.deleteDoc({ docRef: { kind: 'document', documentId: entry.documentId } })
+  await deps.documentStore.deleteDoc({
+    docRef: { kind: 'document', workspaceId: input.workspaceId, documentId: entry.documentId },
+  })
   await finalizeTeardown()
   return { deleted: true }
 }

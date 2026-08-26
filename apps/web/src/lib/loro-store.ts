@@ -27,6 +27,7 @@ import { Loro } from 'loro-crdt'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { inTransaction, request } from './idb-tx.js'
+import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 
 /**
  * Narrow surface consumers need to seed, read back, and persist a document's
@@ -63,7 +64,8 @@ const MAX_CHUNK_BYTES = 1_000_000
 const EMPTY_FRONTIER = new Uint8Array()
 
 function refOf(documentId: string): DocRef {
-  return { kind: 'document', documentId }
+  // Every document this store keeps lives in the browser's own workspace.
+  return { kind: 'document', workspaceId: BROWSER_WORKSPACE_ID, documentId }
 }
 
 /**

@@ -28,7 +28,9 @@ function makeDeps(documentStore: FakeDocumentStore) {
 }
 
 async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
-  const snapshot = await store.loadSnapshot({ docRef: { kind: 'document', documentId } })
+  const snapshot = await store.loadSnapshot({
+    docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId },
+  })
   const doc = new LoroDoc()
   if (snapshot !== null) {
     doc.import(reassembleSnapshot(snapshot.manifest, snapshot.chunks))
@@ -40,7 +42,11 @@ describe('wb_version_save tool', () => {
   test('saves a version and returns metadata', async () => {
     const tool = createVersionSaveTool(makeDeps(new FakeDocumentStore()))
 
-    const result = await tool.execute({ documentId: DOCUMENT_ID, label: 'v1' })
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      label: 'v1',
+    })
 
     expect(result.documentId).toBe(DOCUMENT_ID)
     expect(result.label).toBe('v1')
@@ -52,8 +58,16 @@ describe('wb_version_save tool', () => {
   test('each save produces a unique versionId', async () => {
     const tool = createVersionSaveTool(makeDeps(new FakeDocumentStore()))
 
-    const r1 = await tool.execute({ documentId: DOCUMENT_ID, label: 'v1' })
-    const r2 = await tool.execute({ documentId: DOCUMENT_ID, label: 'v2' })
+    const r1 = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      label: 'v1',
+    })
+    const r2 = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      label: 'v2',
+    })
 
     expect(r1.versionId).not.toBe(r2.versionId)
   })
@@ -71,7 +85,7 @@ describe('wb_version_list tool', () => {
   test('returns empty list for a canvas with no versions', async () => {
     const tool = createVersionListTool(makeDeps(new FakeDocumentStore()))
 
-    const result = await tool.execute({ documentId: DOCUMENT_ID })
+    const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result).toEqual({ documentId: DOCUMENT_ID, versions: [] })
   })
@@ -82,12 +96,12 @@ describe('wb_version_list tool', () => {
     const listTool = createVersionListTool(deps)
 
     vi.setSystemTime(new Date('2026-01-01T00:00:00Z'))
-    await saveTool.execute({ documentId: DOCUMENT_ID, label: 'first' })
+    await saveTool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'first' })
 
     vi.setSystemTime(new Date('2026-01-02T00:00:00Z'))
-    await saveTool.execute({ documentId: DOCUMENT_ID, label: 'second' })
+    await saveTool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'second' })
 
-    const result = await listTool.execute({ documentId: DOCUMENT_ID })
+    const result = await listTool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.versions).toHaveLength(2)
     expect(result.versions[0].label).toBe('second')
@@ -100,20 +114,20 @@ describe('wb_version_list tool', () => {
     const saveTool = createVersionSaveTool(deps)
     const listTool = createVersionListTool(deps)
 
-    await saveTool.execute({ documentId: DOCUMENT_ID, label: 'valid' })
+    await saveTool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, label: 'valid' })
 
     const doc = await loadDoc(store, DOCUMENT_ID)
     doc.getMap('versions').set('corrupt-version', JSON.stringify({ label: 'bad', frontier: 123 }))
     doc.commit()
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'document', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
     })
 
-    const result = await listTool.execute({ documentId: DOCUMENT_ID })
+    const result = await listTool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.versions).toHaveLength(1)
     expect(result.versions[0].label).toBe('valid')
@@ -135,7 +149,11 @@ describe('wb_version_restore tool', () => {
       })
     })
 
-    const saved = await saveTool.execute({ documentId: DOCUMENT_ID, label: 'before-edit' })
+    const saved = await saveTool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      label: 'before-edit',
+    })
 
     const doc = await loadDoc(store, DOCUMENT_ID)
     writeSpatialCanvas(doc, {
@@ -145,7 +163,7 @@ describe('wb_version_restore tool', () => {
     doc.commit()
     const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1_000_000)
     await store.saveSnapshot({
-      docRef: { kind: 'document', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
       manifest,
       chunks,
       frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -215,7 +233,11 @@ describe('wb_version_restore tool', () => {
     const deps = makeDeps(store)
     const saveTool = createVersionSaveTool(deps)
     const restoreTool = createVersionRestoreTool(deps)
-    const saved = await saveTool.execute({ documentId: DOCUMENT_ID, label: 'v1' })
+    const saved = await saveTool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      label: 'v1',
+    })
 
     await expect(
       restoreTool.execute({

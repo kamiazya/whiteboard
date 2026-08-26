@@ -40,7 +40,7 @@ export function createCanvasRenderSvgTool(deps: ServerDeps) {
     inputSchema: canvasRenderSvgInputSchema,
     outputSchema: canvasRenderSvgOutputSchema,
     async execute(input: CanvasRenderSvgInput): Promise<CanvasRenderSvgOutput> {
-      const { doc, canvas } = await loadDocument(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'wb_scene_render')
       const references = input.embedReferences
         ? await resolveFileReferences(deps, input.workspaceId, canvas)

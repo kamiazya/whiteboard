@@ -84,7 +84,7 @@ export function createBodyPatchTool(deps: ServerDeps) {
     outputSchema: bodyPatchOutputSchema,
     execute: async (input: BodyPatchInput): Promise<BodyPatchOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc, canvas } = await loadDocument(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
 
       const node = canvas.nodes.find((candidate) => candidate.id === input.nodeId)
       if (node === undefined) throw new NodeNotFoundError(input.documentId, input.nodeId)
@@ -126,7 +126,7 @@ export function createBodyPatchTool(deps: ServerDeps) {
         throw new NodeNotFoundError(input.documentId, input.nodeId)
       }
 
-      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, parsed.data)
 
       return { documentId: input.documentId, node: updatedNode }
     },

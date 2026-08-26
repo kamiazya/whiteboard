@@ -54,7 +54,7 @@ const OKF_EXPORT_PLACEHOLDER_TYPE = 'canvas'
  * document, and the `/okf` route reaches it directly for the workspace tree.
  */
 export async function exportOkf(deps: ServerDeps, input: ExportOkfInput): Promise<ExportOkfOutput> {
-  const { doc } = await loadDocument(deps, input.documentId)
+  const { doc } = await loadDocument(deps, input.workspaceId, input.documentId)
   const coreFacets = readCoreFacets(doc)
   // The name is the workspace's (ADR-0009 decision 2), so it is read from
   // there rather than from stored content — the frontmatter `title` this

@@ -1,4 +1,4 @@
-import { documentIdSchema, generateDocumentId } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, generateDocumentId, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { encodeFrontiers } from 'loro-crdt'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -7,6 +7,7 @@ import { versionRecordSchema } from './version-record.js'
 
 export const versionSaveInputSchema = z
   .object({
+    workspaceId: workspaceIdSchema.describe('Workspace that holds the document.'),
     documentId: documentIdSchema.describe('Canvas ID (ULID) to save a version of.'),
     label: z.string().min(1).max(200).describe('Human-readable label for this version.'),
   })
@@ -31,7 +32,7 @@ export function createVersionSaveTool(deps: ServerDeps) {
     inputSchema: versionSaveInputSchema,
     outputSchema: versionSaveOutputSchema,
     async execute(input: VersionSaveInput): Promise<VersionSaveOutput> {
-      const doc = await loadOrCreateDocument(deps, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
 
       const versionId = generateDocumentId()
       const timestamp = new Date().toISOString()
@@ -43,7 +44,7 @@ export function createVersionSaveTool(deps: ServerDeps) {
       versions.set(versionId, JSON.stringify(record))
       doc.commit()
 
-      await saveDocumentSnapshot(deps, input.documentId, doc)
+      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
 
       return {
         documentId: input.documentId,

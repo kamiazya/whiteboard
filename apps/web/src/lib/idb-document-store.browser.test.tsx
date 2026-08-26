@@ -54,7 +54,11 @@ describe('IdbDocumentStore', () => {
  * size of the whole document.
  */
 describe('IdbDocumentStore layout', () => {
-  const docRef: DocRef = { kind: 'document', documentId: '01JD000000000000000000000A' }
+  const docRef: DocRef = {
+    kind: 'document',
+    workspaceId: 'local',
+    documentId: '01JD000000000000000000000A',
+  }
 
   function openRaw(version?: number): Promise<IDBDatabase> {
     return new Promise((resolve, reject) => {

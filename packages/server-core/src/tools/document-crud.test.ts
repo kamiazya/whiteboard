@@ -247,7 +247,11 @@ describe('wbDocumentDelete', () => {
       kind: 'spatial',
       createWorkspace: true,
     })
-    const docRef = { kind: 'document', documentId: created.documentId } as const
+    const docRef = {
+      kind: 'document',
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    } as const
     expect(await deps.documentStore.loadSnapshot({ docRef })).not.toBeNull()
 
     await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
@@ -376,7 +380,11 @@ describe('wbDocumentDelete document teardown seam', () => {
       kind: 'spatial',
       createWorkspace: true,
     })
-    const docRef = { kind: 'document', documentId: created.documentId } as const
+    const docRef = {
+      kind: 'document',
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    } as const
 
     // Recorded from inside the seam, not asserted afterwards: whether the
     // row was still there AT begin is the whole point — a version's

@@ -365,10 +365,11 @@ async function documentStoreReady(): Promise<LibsqlDocumentStore> {
  */
 async function importStoredIfBehind(
   documentStore: LibsqlDocumentStore,
+  workspaceId: string,
   documentId: string,
   doc: LoroDoc,
 ): Promise<void> {
-  const docRef = { kind: 'document' as const, documentId }
+  const docRef = { kind: 'document' as const, workspaceId, documentId }
   const stored = await documentStore.readFrontier({ docRef })
   if (stored === null) return
   const comparison = doc.oplogVersion().compare(VersionVector.decode(stored.frontier))
@@ -559,7 +560,7 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
   let originalBytes: Uint8Array
   try {
     const snapshot = await documentStore.loadSnapshot({
-      docRef: { kind: 'document', documentId },
+      docRef: { kind: 'document', workspaceId, documentId },
     })
     if (snapshot === null) return new LoroDoc()
     try {
@@ -581,7 +582,7 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
     // a read that stopped at the snapshot would serve a document missing its
     // most recent edits — the newest ones, which is the worst half to lose.
     const { updates } = await documentStore.loadDeltas({
-      docRef: { kind: 'document', documentId },
+      docRef: { kind: 'document', workspaceId, documentId },
       sinceFrontier: new Uint8Array(),
     })
     for (const update of updates) {
@@ -647,7 +648,7 @@ export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc
         const db = await dbReady()
         const documentId = await getDocumentIdByPath(db, workspaceId, path)
         if (documentId) {
-          await importStoredIfBehind(await documentStoreReady(), documentId, cached)
+          await importStoredIfBehind(await documentStoreReady(), workspaceId, documentId, cached)
         }
       }
     } catch (err) {
@@ -803,7 +804,7 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
     // rows, so a crash between the two leaves an orphaned-but-unreachable
     // snapshot rather than a listed canvas with no content.
     const documentStore = await documentStoreReady()
-    await documentStore.deleteDoc({ docRef: { kind: 'document', documentId } })
+    await documentStore.deleteDoc({ docRef: { kind: 'document', workspaceId, documentId } })
 
     await finalizeTeardown()
 

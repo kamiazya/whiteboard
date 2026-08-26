@@ -1,4 +1,4 @@
-import { documentIdSchema } from '@kamiazya/whiteboard-model'
+import { documentIdSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
 import { loadOrCreateDocument } from './document-io.js'
@@ -10,6 +10,7 @@ const versionEntrySchema = versionRecordSchema.extend({
 
 export const versionListInputSchema = z
   .object({
+    workspaceId: workspaceIdSchema.describe('Workspace that holds the document.'),
     documentId: documentIdSchema.describe('Canvas ID (ULID) to list saved versions for.'),
   })
   .strict()
@@ -30,7 +31,7 @@ export function createVersionListTool(deps: ServerDeps) {
     inputSchema: versionListInputSchema,
     outputSchema: versionListOutputSchema,
     async execute(input: VersionListInput): Promise<VersionListOutput> {
-      const doc = await loadOrCreateDocument(deps, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
 
       const versions = doc.getMap('versions')
       const entries: z.infer<typeof versionEntrySchema>[] = []

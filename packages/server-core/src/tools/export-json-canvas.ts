@@ -35,7 +35,7 @@ export async function exportJsonCanvas(
   deps: ServerDeps,
   input: ExportJsonCanvasInput,
 ): Promise<ExportJsonCanvasOutput> {
-  const { canvas } = await loadDocument(deps, input.documentId)
+  const { canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   const mode = input.options?.strict === true ? 'strict' : 'extended'
   return { json: serializeSpatial(canvas, mode) }
 }
