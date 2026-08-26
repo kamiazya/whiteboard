@@ -48,11 +48,12 @@ backed by more than one representation today. Read
 | Daemon (agent/MCP tree) | a ULID `documentId` plus a `segment` path | alias path derived from segments |
 
 **Paths are the canonical user-facing identity** in daemon mode: URLs,
-sync, versions, and branches all address a canvas as
-`(workspaceId, path)`. A path is assigned at creation (derived
-automatically — `untitled`, `untitled-2`, … — since creation asks for no
-name up front) and is currently immutable; whether paths become renamable
-is deliberately an open question (see
+versions, branches, and per-document text events all address a canvas as
+`(workspaceId, path)`, while binary sync rides the workspace record and
+scopes to a document by its `documentId`. A path is assigned at creation
+(derived automatically — `untitled`, `untitled-2`, … — since creation asks
+for no name up front) and can be renamed later; a stored `[[reference]]`
+survives the rename because it names the `documentId` (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
 which predates the rename and calls this a *slug* throughout).
 
@@ -98,12 +99,19 @@ That split is **gone**, in three steps recorded in the migration log:
 - An agent and a human work on the same document through whichever surface
   they prefer: an MCP tool call, the daemon's HTTP API, and the WebSocket
   session all read and write one stored document.
-- A save from a long-lived editing session **merges** the stored snapshot
-  before writing, so a tool call that lands mid-session is not overwritten by
-  the next save from that session.
-- A document whose `kind` was never recorded reports **no** kind rather than
-  claiming `spatial`; a surface that must render something (the gallery's
-  kind badge, the editor choice) decides locally.
+- A workspace's documents live in **one workspace record** (a single Loro
+  document holding the tree and every document's content), and live sync
+  runs at that granularity: a WebSocket or SSE session receives the
+  workspace record's snapshot and its updates, scoped in the client to the
+  open document by its `documentId`. Text events (version created, restore,
+  viewport) stay addressed per path.
+- A save from a long-lived editing session **merges** into that record
+  before writing, so a tool call that lands mid-session is not overwritten
+  by the next save from that session.
+- Every listed document carries its `id` and its `kind` — both are required
+  by the listing contract. Rows recorded before kinds existed were this
+  project's own pre-release data and are deleted at startup, so "kind never
+  recorded" is no longer a state a surface has to render.
 - Documents kept in the browser still cross into daemon mode only by an explicit,
   user-initiated copy, which re-creates the document under a new path — no
   identifier carries over. That half of ADR-0007 is unchanged.
