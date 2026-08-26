@@ -150,6 +150,34 @@ it('carries the row timestamps into node meta instead of stamping fold time', as
   expect(entry?.updatedAt).toBe(222)
 })
 
+it('carries pins and the branch HEAD into the workspace record', async () => {
+  // Reads answer from the tree after S7, so row-only pin/HEAD state on a
+  // pre-fold database must be relocated by the fold or it silently
+  // vanishes at the flip.
+  const db = await getDb(tempDir)
+  const pinnedId = await seedLegacy('ws-a', 'pinned-doc', 'pin me')
+  const headId = await seedLegacy('ws-a', 'branched-doc', 'branch me')
+  await db
+    .updateTable('documents')
+    .set({ isPinned: 1, pinOrder: 0 })
+    .where('id', '=', pinnedId)
+    .execute()
+  await db
+    .updateTable('documents')
+    .set({ currentBranch: 'feature' })
+    .where('id', '=', headId)
+    .execute()
+
+  await foldWorkspaceDocuments()
+
+  const workspace = await openWorkspace('ws-a')
+  expect(workspace).not.toBeNull()
+  if (workspace === null) return
+  const { readPinnedDocumentIds } = await import('@kamiazya/whiteboard-loro-adapter')
+  expect(readPinnedDocumentIds(workspace)).toEqual([pinnedId])
+  expect(resolveWorkspaceDocumentById(workspace, headId)?.currentBranch).toBe('feature')
+})
+
 it('is idempotent, and picks up documents created between runs', async () => {
   await seedLegacy('ws-a', 'design', 'first')
   expect((await foldWorkspaceDocuments()).folded).toBe(1)

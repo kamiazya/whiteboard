@@ -90,6 +90,24 @@ describe('names-store', () => {
     expect(readPinnedDocumentIds(doc)).toEqual([await idOf('a')])
   })
 
+  // S7: reads answer from the workspace record, not the rows — skewing the
+  // rows behind the tree's back must not change what the listing says.
+  it('loadWorkspaceNames answers names and pins from the tree, not the rows', async () => {
+    const { getDb } = await import('./db/index.js')
+    await setDocumentDisplayName('sess-1', 'a', 'Tree name')
+    await setDocumentPinned('sess-1', 'b', true)
+    const db = await getDb(tempDir)
+    await db
+      .updateTable('documents')
+      .set({ displayName: 'Rows-only name', isPinned: 0, pinOrder: null })
+      .where('workspaceId', '=', 'sess-1')
+      .execute()
+
+    const names = await loadWorkspaceNames('sess-1')
+    expect(names.documents.a).toBe('Tree name')
+    expect(names.pinned).toEqual(['b'])
+  })
+
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
     await setWorkspaceName('sess-1', 'My Workspace')
     const names = await loadWorkspaceNames('sess-1')

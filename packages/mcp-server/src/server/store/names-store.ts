@@ -1,7 +1,12 @@
-import { setWorkspacePinned } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  readPinnedDocumentIds,
+  readWorkspaceDocuments,
+  resolveWorkspaceDocument,
+  setWorkspaceDocumentName,
+  setWorkspacePinned,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceNames } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
-import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
@@ -27,31 +32,32 @@ async function dbReady() {
 export async function loadWorkspaceNames(workspaceId: string): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
+  // The WORKSPACE's own name stays in the workspaces table — it names the
+  // container, not any document, and the registry row is its home.
   const wsRow = await db
     .selectFrom('workspaces')
     .select(['displayName'])
     .where('id', '=', workspaceId)
     .executeTakeFirst()
-  const documentRows = await db
-    .selectFrom('documents')
-    .select(['path', 'displayName', 'isPinned', 'pinOrder'])
-    .where('workspaceId', '=', workspaceId)
-    .execute()
+  // Document names and pins answer from the workspace record (S7): the
+  // tree is what every replica converges on, and the boot fold carries any
+  // pre-fold row-only state into it before this can be asked.
   const documents: Record<string, string> = {}
-  const pinned: Array<{ path: string; order: number }> = []
-  for (const row of documentRows) {
-    if (row.displayName !== null) {
-      documents[row.path] = row.displayName
+  const pinned: string[] = []
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const entries = readWorkspaceDocuments(workspaceDoc)
+    const pathById = new Map<string, string>()
+    for (const entry of entries) {
+      pathById.set(entry.documentId, entry.path)
+      if (entry.name !== undefined) documents[entry.path] = entry.name
     }
-    if (row.isPinned === 1) {
-      pinned.push({ path: row.path, order: row.pinOrder ?? Number.MAX_SAFE_INTEGER })
+    for (const documentId of readPinnedDocumentIds(workspaceDoc)) {
+      const path = pathById.get(documentId)
+      if (path !== undefined) pinned.push(path)
     }
   }
-  pinned.sort((a, b) => a.order - b.order)
-  const out: WorkspaceNames = {
-    documents,
-    pinned: pinned.map((p) => p.path),
-  }
+  const out: WorkspaceNames = { documents, pinned }
   if (wsRow?.displayName) {
     out.workspace = wsRow.displayName
   }
@@ -84,7 +90,7 @@ export async function setDocumentDisplayName(
   validateDocumentPath(path)
   const trimmed = name.trim()
   const db = await dbReady()
-  await requireDocumentRow(db, workspaceId, path)
+  const documentId = await requireDocumentRow(db, workspaceId, path)
   const now = Date.now()
   await db
     .updateTable('documents')
@@ -95,6 +101,16 @@ export async function setDocumentDisplayName(
     .where('workspaceId', '=', workspaceId)
     .where('path', '=', path)
     .execute()
+  // The workspace record is where reads answer from (S7), so this write is
+  // primary, not a best-effort mirror: a failure surfaces to the caller.
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
+    setWorkspaceDocumentName(workspaceDoc, {
+      documentId,
+      ...(trimmed.length > 0 ? { name: trimmed } : {}),
+    })
+    await saveWorkspaceDoc(workspaceId, workspaceDoc)
+  }
   return loadWorkspaceNames(workspaceId)
 }
 
@@ -143,23 +159,14 @@ export async function setDocumentPinned(
         .execute()
     }
   })
-  // Mirror into the workspace record's pinned list (dual-plane collapse
-  // S4b): shared CRDT state every replica converges on, while the row
-  // columns keep serving today's reads. setWorkspacePinned is idempotent,
-  // so the no-op row branches stay no-ops here too. Fail-soft while the row
-  // is what reads serve: a mirror hiccup must not fail a pin that already
-  // durably committed.
-  try {
-    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-    if (workspaceDoc !== null) {
-      setWorkspacePinned(workspaceDoc, documentId, pinned)
-      await saveWorkspaceDoc(workspaceId, workspaceDoc)
-    }
-  } catch (err) {
-    getLogger('names-store').warning(
-      { workspaceId, path, err },
-      'failed to mirror pin state into the workspace record',
-    )
+  // The workspace record's pinned list is what reads answer from (S7), so
+  // this write is primary, not a best-effort mirror: a failure surfaces to
+  // the caller. setWorkspacePinned is idempotent, so the no-op row branches
+  // stay no-ops here too.
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    setWorkspacePinned(workspaceDoc, documentId, pinned)
+    await saveWorkspaceDoc(workspaceId, workspaceDoc)
   }
   return loadWorkspaceNames(workspaceId)
 }

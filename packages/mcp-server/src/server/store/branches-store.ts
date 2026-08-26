@@ -1,4 +1,5 @@
 import {
+  resolveWorkspaceDocument,
   resolveWorkspaceDocumentById,
   updateWorkspaceDocumentMeta,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -56,19 +57,18 @@ export async function loadDocumentBranches(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const db = await dbReady()
-  const documentRow = await db
-    .selectFrom('documents')
-    .select(['id', 'currentBranch'])
-    .where('workspaceId', '=', workspaceId)
-    .where('path', '=', path)
-    .executeTakeFirst()
-  if (!documentRow) {
+  // The document and its HEAD resolve from the workspace record (S7); the
+  // branch ROWS stay in sqlite, keyed by the id the tree answers. The boot
+  // fold carries a pre-fold row's HEAD into the tree before this can be
+  // asked, so no rows fallback for the pointer is needed.
+  const target = await resolveDocumentForBranches(workspaceId, path)
+  if (target === null) {
     return { branches: [defaultMain()], head: 'main' }
   }
   const branchRows = await db
     .selectFrom('branches')
     .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
-    .where('documentId', '=', documentRow.id)
+    .where('documentId', '=', target.documentId)
     .orderBy('createdAt', 'asc')
     .orderBy('name', 'asc')
     .execute()
@@ -83,13 +83,42 @@ export async function loadDocumentBranches(
     ...(r.sourceBranchName !== null ? { baseBranch: r.sourceBranchName } : {}),
     ...(r.sourceVersionId !== null ? { baseVersionId: r.sourceVersionId } : {}),
   }))
-  const persistedHead = documentRow.currentBranch
+  const persistedHead = target.currentBranch ?? 'main'
   const head = branches.some((b) => b.name === persistedHead)
     ? persistedHead
     : branches.some((b) => b.name === 'main')
       ? 'main'
       : branches[0]!.name
   return { branches, head }
+}
+
+/**
+ * The documentId + HEAD for a path: the tree answers when it holds the
+ * document; a pre-fold legacy document (rows only) answers from its row so
+ * branch state survives until the boot fold relocates it.
+ */
+async function resolveDocumentForBranches(
+  workspaceId: string,
+  path: string,
+): Promise<{ documentId: string; currentBranch?: string } | null> {
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const entry = resolveWorkspaceDocument(workspaceDoc, path)
+    if (entry !== null) {
+      return {
+        documentId: entry.documentId,
+        ...(entry.currentBranch === undefined ? {} : { currentBranch: entry.currentBranch }),
+      }
+    }
+  }
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('documents')
+    .select(['id', 'currentBranch'])
+    .where('workspaceId', '=', workspaceId)
+    .where('path', '=', path)
+    .executeTakeFirst()
+  return row === undefined ? null : { documentId: row.id, currentBranch: row.currentBranch }
 }
 
 // The actual write, assuming the workspace write lock is already held by

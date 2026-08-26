@@ -24,6 +24,8 @@
 import {
   adoptWorkspaceDocument,
   resolveWorkspaceDocumentById,
+  setWorkspacePinned,
+  updateWorkspaceDocumentMeta,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
@@ -49,7 +51,18 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
 
   const rows = await db
     .selectFrom('documents')
-    .select(['id', 'workspaceId', 'path', 'displayName', 'kind', 'createdAt', 'updatedAt'])
+    .select([
+      'id',
+      'workspaceId',
+      'path',
+      'displayName',
+      'kind',
+      'createdAt',
+      'updatedAt',
+      'isPinned',
+      'pinOrder',
+      'currentBranch',
+    ])
     .execute()
 
   const byWorkspace = new Map<string, typeof rows>()
@@ -71,6 +84,7 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
   let deleted = 0
   for (const [workspaceId, members] of byWorkspace) {
     const workspace = await docs.create(workspaceId)
+    const foldedThisRun: typeof members = []
     for (const row of members) {
       const kind = documentKindSchema.safeParse(row.kind)
       if (resolveWorkspaceDocumentById(workspace, row.id) !== null) {
@@ -117,6 +131,15 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
         },
         source,
       )
+      // Row-only state relocates with the document (S7 reads answer from
+      // the tree): the HEAD pointer, and — below, ordered across the whole
+      // workspace — its pin. Only for THIS run's folds: a row a later boot
+      // still holds must not re-pin a document the user has since unpinned
+      // in the tree.
+      if (row.currentBranch !== 'main') {
+        updateWorkspaceDocumentMeta(workspace, row.id, { currentBranch: row.currentBranch })
+      }
+      foldedThisRun.push(row)
       // Saved PER DOCUMENT, so a crash mid-fold loses at most the one in
       // flight — the next startup derives it as still-pending and retries.
       // The sweep runs strictly AFTER the save: until the tree write is
@@ -124,6 +147,13 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
       await docs.save(workspaceId, workspace)
       await sweepLegacy(workspaceId, row.id)
       folded += 1
+    }
+    const pinnedFolds = foldedThisRun
+      .filter((row) => row.isPinned === 1)
+      .sort((a, b) => (a.pinOrder ?? 0) - (b.pinOrder ?? 0))
+    if (pinnedFolds.length > 0) {
+      for (const row of pinnedFolds) setWorkspacePinned(workspace, row.id, true)
+      await docs.save(workspaceId, workspace)
     }
   }
   return { folded, skipped, deleted }
