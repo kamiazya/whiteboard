@@ -48,7 +48,7 @@ import {
   LoroWorkspaceDocumentIndex,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers, Value } from 'loro-crdt'
-import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
+import { decodeFrontiers, encodeFrontiers, LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
@@ -769,6 +769,51 @@ export interface CompactResult {
  * before the workspace's earliest version can lose the history its checkout
  * needs, exactly as the old design could per document.
  */
+/**
+ * The earliest history any reader still needs: the pointwise-minimum version
+ * vector across the earliest version row and every branch tip recorded for
+ * the workspace, converted back to a frontiers cut. A peer absent from any
+ * pin's vector means that pin includes none of the peer's ops, so the
+ * minimum excludes the peer entirely — the cut only ever moves BACKWARD
+ * from the version-only cut, never forward.
+ */
+async function retainedHistoryCut(
+  workspaceId: string,
+  doc: LoroDoc,
+  earliestVersion: Frontiers,
+): Promise<Frontiers> {
+  const db = await dbReady()
+  const rows = await db
+    .selectFrom('branches')
+    .select(['tipFrontiers', 'name', 'documentId'])
+    .where('workspaceId', '=', workspaceId)
+    .execute()
+  const pins: Frontiers[] = [earliestVersion]
+  for (const row of rows) {
+    // An empty tip is a branch nothing has written to yet — it pins nothing.
+    if (row.tipFrontiers.length === 0) continue
+    try {
+      pins.push(decodeFrontiers(new Uint8Array(Buffer.from(row.tipFrontiers, 'base64'))))
+    } catch (error) {
+      throw corruptStoredData(
+        `${workspaceId}/branches/${row.documentId}#${row.name}`,
+        `tipFrontiers could not be decoded (${error instanceof Error ? error.message : String(error)})`,
+      )
+    }
+  }
+  if (pins.length === 1) return earliestVersion
+  const vvs = pins.map((f) => doc.frontiersToVV(f).toJSON())
+  const min = new Map(vvs[0])
+  for (const vv of vvs.slice(1)) {
+    for (const [peer, counter] of [...min]) {
+      const other = vv.get(peer)
+      if (other === undefined) min.delete(peer)
+      else if (other < counter) min.set(peer, other)
+    }
+  }
+  return doc.vvToFrontiers(VersionVector.parseJSON(min))
+}
+
 export async function compactDocument(
   workspaceId: string,
   path: string,
@@ -799,8 +844,8 @@ export async function compactDocument(
     const beforeBytes =
       manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
 
-    const cut = await versionStore.earliestWorkspaceFrontiers(workspaceId)
-    if (!cut) {
+    const earliestVersion = await versionStore.earliestWorkspaceFrontiers(workspaceId)
+    if (!earliestVersion) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-versions' }
     }
 
@@ -808,6 +853,14 @@ export async function compactDocument(
     // path mutates it under the lock held here — so the fold exports from
     // it instead of re-reading stored bytes.
     const doc = await getWorkspaceDoc(workspaceId)
+
+    // Branch tips pin history exactly like version rows do: Loro refuses a
+    // checkout before the shallow start, so a cut past a branch tip breaks
+    // that branch's switch, merge and file-gc scan. The cut is held back to
+    // the pointwise-minimum version vector across the earliest version and
+    // every recorded branch tip — strictly conservative, and the version
+    // requirement stays: no version row still means no compaction at all.
+    const cut = await retainedHistoryCut(workspaceId, doc, earliestVersion)
     const shallow = doc.export({ mode: 'shallow-snapshot', frontiers: cut })
     if (shallow.byteLength >= beforeBytes) {
       return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'no-gain' }

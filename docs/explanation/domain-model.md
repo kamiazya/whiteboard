@@ -129,6 +129,14 @@ That split is **gone**, in four steps recorded in the migration log:
   them), and resolution is an explicit rename. An agent asking for a
   contested path gets an error pointing at resolution by `documentId` or a
   rename, never a silent suffix.
+- The workspace record accumulates every edit's history, and the daemon
+  periodically **compacts** it: history older than anything still reachable
+  is folded into the snapshot. What stays reachable is exactly what your
+  saved versions and branches point at — the record keeps history back to
+  the oldest version and the oldest branch tip, and nothing before that.
+  Deleting old versions (or the automatic version pruning) is therefore
+  what lets compaction reclaim space; a branch left on an old state keeps
+  the history its checkout needs for as long as the branch exists.
 - Documents kept in the browser still cross into daemon mode only by an explicit,
   user-initiated copy, which re-creates the document under a new path — no
   identifier carries over. That half of ADR-0007 is unchanged.
