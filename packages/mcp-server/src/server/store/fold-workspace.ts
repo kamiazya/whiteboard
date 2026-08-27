@@ -23,6 +23,7 @@
  */
 import {
   adoptWorkspaceDocument,
+  readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
   setWorkspacePinned,
   updateWorkspaceDocumentMeta,
@@ -162,5 +163,62 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
       await docs.save(workspaceId, workspace)
     }
   }
+
+  // Since migration 0016 dropped the documents FK, a crash between
+  // documentTeardown's row delete and its explicit versions/branches sweeps
+  // can strand rows for a document that exists nowhere. This is the
+  // compensating sweep: a row is an orphan when its documentId is neither in
+  // the workspace tree nor in the documents table. Conservative on purpose —
+  // a workspace whose record cannot be OPENED is left alone, because the
+  // address book itself is the evidence of what is live.
+  await sweepOrphanVersionRows(db, docs)
+
   return { folded, skipped, deleted }
+}
+
+async function sweepOrphanVersionRows(
+  db: Awaited<ReturnType<typeof getDb>>,
+  docs: DocumentStoreWorkspaceDocs,
+): Promise<void> {
+  const workspaceIds = new Set<string>()
+  for (const table of ['versions', 'branches'] as const) {
+    const rows = await db.selectFrom(table).select(['workspaceId']).distinct().execute()
+    for (const row of rows) workspaceIds.add(row.workspaceId)
+  }
+  for (const workspaceId of workspaceIds) {
+    let workspace: Awaited<ReturnType<typeof docs.open>>
+    try {
+      workspace = await docs.open(workspaceId)
+    } catch {
+      continue
+    }
+    if (workspace === null) continue
+    const live = new Set(readWorkspaceDocuments(workspace).map((entry) => entry.documentId))
+    const legacyRows = await db
+      .selectFrom('documents')
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .execute()
+    for (const row of legacyRows) live.add(row.id)
+    for (const table of ['versions', 'branches'] as const) {
+      const referenced = await db
+        .selectFrom(table)
+        .select(['documentId'])
+        .distinct()
+        .where('workspaceId', '=', workspaceId)
+        .execute()
+      for (const { documentId } of referenced) {
+        if (live.has(documentId)) continue
+        await db
+          .deleteFrom(table)
+          .where('workspaceId', '=', workspaceId)
+          .where('documentId', '=', documentId)
+          .execute()
+        getLogger('fold-workspace').notice(
+          { workspaceId, documentId, table },
+          'swept rows for a document that exists nowhere (crash-window orphan)',
+        )
+      }
+    }
+  }
 }

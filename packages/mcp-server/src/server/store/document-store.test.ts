@@ -123,7 +123,7 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
     const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
     const store = new LibsqlDocumentStore(db)
     await store.saveSnapshot({
-      docRef: { kind: 'document', documentId },
+      docRef: { kind: 'document', workspaceId: 'session1', documentId },
       manifest,
       chunks,
       frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -309,7 +309,7 @@ describe('legacy LoroList -> MovableList migration reads and persists through Li
     const { manifest, chunks } = chunkSnapshot(legacyBytes, 1_000_000)
     const store = new LibsqlDocumentStore(db)
     await store.saveSnapshot({
-      docRef: { kind: 'document', documentId },
+      docRef: { kind: 'document', workspaceId: 'session1', documentId },
       manifest,
       chunks,
       frontier: legacyDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,

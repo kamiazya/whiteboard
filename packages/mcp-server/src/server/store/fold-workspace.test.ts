@@ -87,7 +87,7 @@ async function seedLegacyRecord(documentId: string, doc: LoroDoc): Promise<void>
     1_000_000,
   )
   await store.saveSnapshot({
-    docRef: { kind: 'document', documentId },
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId },
     manifest,
     chunks,
     frontier: new Uint8Array(doc.oplogVersion().encode()),
@@ -96,7 +96,9 @@ async function seedLegacyRecord(documentId: string, doc: LoroDoc): Promise<void>
 
 async function legacyRecord(documentId: string) {
   const db = await getDb(tempDir)
-  return new LibsqlDocumentStore(db).loadSnapshot({ docRef: { kind: 'document', documentId } })
+  return new LibsqlDocumentStore(db).loadSnapshot({
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId },
+  })
 }
 
 async function openWorkspace(workspaceId: string) {
@@ -252,6 +254,91 @@ it('DELETES a pre-kind row instead of leaving it on a plane nothing serves anymo
       .where('documentId', '=', documentId)
       .executeTakeFirst(),
   ).toBeUndefined()
+})
+
+it('sweeps versions/branches rows whose document exists nowhere; live rows survive', async () => {
+  const db = await getDb(tempDir)
+  const now = Date.now()
+  const insertVersion = (id: string, documentId: string, workspaceId: string) =>
+    db
+      .insertInto('versions')
+      .values({
+        id,
+        documentId,
+        workspaceId,
+        branchName: 'main',
+        auto: 0,
+        label: null,
+        operatorKind: 'system',
+        operatorPeerId: 'peer-1',
+        operatorDisplayName: null,
+        operatorAgentId: null,
+        operatorWorkspaceId: null,
+        elementCount: 0,
+        frontiers: 'AAECAw==',
+        hasThumbnail: 0,
+        createdAt: now,
+      })
+      .execute()
+  const insertBranch = (documentId: string, workspaceId: string, name: string) =>
+    db
+      .insertInto('branches')
+      .values({
+        documentId,
+        workspaceId,
+        name,
+        tipFrontiers: '',
+        color: null,
+        sourceBranchName: null,
+        sourceVersionId: null,
+        createdAt: now,
+      })
+      .execute()
+
+  // Tree-resident after the fold: its rows are LIVE.
+  const liveId = await seedLegacy('ws-a', 'kept', 'content')
+  await insertVersion('v-live', liveId, 'ws-a')
+  await insertBranch(liveId, 'ws-a', 'main')
+  // Row-only (no readable content, so the fold skips it): its documents row
+  // still names it, so its version history is live too.
+  const skippedId = generateDocumentId()
+  await db
+    .insertInto('documents')
+    .values({
+      id: skippedId,
+      workspaceId: 'ws-a',
+      path: 'skipped',
+      displayName: null,
+      isPinned: 0,
+      pinOrder: null,
+      currentBranch: 'main',
+      createdAt: now,
+      updatedAt: now,
+      kind: 'spatial',
+    })
+    .execute()
+  await insertVersion('v-skipped', skippedId, 'ws-a')
+  // The crash-window orphan documentTeardown's non-atomic delete can leave:
+  // a documentId that exists in no tree, no documents row, no trash.
+  const ghostId = generateDocumentId()
+  await insertVersion('v-ghost', ghostId, 'ws-a')
+  await insertBranch(ghostId, 'ws-a', 'stale')
+  // A workspace with rows but NO openable workspace record: conservative —
+  // nothing is swept where the address book itself cannot be read.
+  await db
+    .insertInto('workspaces')
+    .values({ id: 'ws-recordless', createdAt: now, updatedAt: now })
+    .execute()
+  await insertVersion('v-recordless', generateDocumentId(), 'ws-recordless')
+
+  await foldWorkspaceDocuments()
+
+  const versionIds = (await db.selectFrom('versions').select(['id']).execute()).map((r) => r.id)
+  expect(versionIds.sort()).toEqual(['v-live', 'v-recordless', 'v-skipped'])
+  const branchDocs = (await db.selectFrom('branches').select(['documentId']).execute()).map(
+    (r) => r.documentId,
+  )
+  expect(branchDocs).toEqual([liveId])
 })
 
 it('sweeps the legacy content record once a document is folded onto the tree', async () => {

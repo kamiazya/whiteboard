@@ -173,6 +173,8 @@ describe('prepareDataDir', () => {
     // ...and the import is still reachable, so the assertion above is not
     // passing merely because nothing was written at all.
     const store = new LibsqlDocumentStore(db)
-    expect(await store.loadSnapshot({ docRef: { kind: 'document', documentId } })).not.toBeNull()
+    expect(
+      await store.loadSnapshot({ docRef: { kind: 'document', workspaceId: 'ws-1', documentId } }),
+    ).not.toBeNull()
   })
 })

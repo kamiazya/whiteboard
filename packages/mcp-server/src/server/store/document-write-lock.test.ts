@@ -66,7 +66,7 @@ async function makeDeps() {
   _w(seedDoc, CANVAS)
   const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
   await documentStore.saveSnapshot({
-    docRef: { kind: 'document', documentId: DOCUMENT_ID },
+    docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
     manifest,
     chunks,
     frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -81,7 +81,7 @@ async function makeDeps() {
 /** The canvas as actually stored, after everything settles. */
 async function storedCanvas(deps: Awaited<ReturnType<typeof makeDeps>>) {
   const stored = await deps.documentStore.loadSnapshot({
-    docRef: { kind: 'document', documentId: DOCUMENT_ID },
+    docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
   })
   if (stored === null) throw new Error('no snapshot')
   const doc = new LoroDoc()

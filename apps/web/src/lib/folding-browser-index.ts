@@ -15,17 +15,20 @@
  * IS in the tree over a fold hiccup would be worse than a briefly
  * incomplete list.
  */
-import type {
-  CreateDocumentInput,
-  CreateWorkspaceInput,
-  DeleteDocumentInput,
-  DocumentEntry,
-  DocumentIndex,
-  ListDocumentsInput,
-  MoveDocumentInput,
-  ResolveDocumentByIdInput,
-  ResolveDocumentInput,
-  SetDocumentNameInput,
+import { documentKindSchema } from '@kamiazya/whiteboard-model'
+import {
+  type CreateDocumentInput,
+  type CreateWorkspaceInput,
+  compareDocumentPaths,
+  type DeleteDocumentInput,
+  type DocumentEntry,
+  type DocumentIndex,
+  isWorkspaceNotFoundError,
+  type ListDocumentsInput,
+  type MoveDocumentInput,
+  type ResolveDocumentByIdInput,
+  type ResolveDocumentInput,
+  type SetDocumentNameInput,
 } from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { getAppLogger } from './app-logger.js'
@@ -38,17 +41,53 @@ const log = getAppLogger('folding-browser-index')
 
 export class FoldingBrowserIndex implements DocumentIndex {
   private readonly inner: LoroWorkspaceDocumentIndex
+  private readonly legacy: IdbDocumentIndex
   private folded: Promise<void> | null = null
 
   constructor(private readonly dbName?: string) {
+    this.legacy = new IdbDocumentIndex(dbName)
     this.inner = new LoroWorkspaceDocumentIndex(
       new BrowserWorkspaceDocs(dbName),
       new IdbBlobStore(dbName),
       // The browser's workspaces registry lives in the same IndexedDB store
       // the legacy index keeps it in — registration, not placement, so it is
       // not part of what the fold retires.
-      { listWorkspaces: () => new IdbDocumentIndex(dbName).listWorkspaces() },
+      { listWorkspaces: () => this.legacy.listWorkspaces() },
     )
+  }
+
+  // ── fold-skipped fallback ──
+  //
+  // The fold leaves a record it cannot read where it is, and fold-workspace.ts
+  // promises that record is "still reported by the old path as
+  // damaged-but-present". This index is the old path's successor, so the
+  // promise is kept HERE: a legacy row whose document never made it into the
+  // tree is still listed, resolvable and deletable, and opening it reaches
+  // LoroStore.load's classification (update-to-open vs corrupt) instead of a
+  // silent disappearance. A pre-kind row stays invisible — that is this
+  // project's own pre-release data defect, ignored by standing decision.
+
+  /** Legacy rows serving documents the tree does not hold, valid-kind only. */
+  private async foldSkippedRows(workspaceId: string): Promise<DocumentEntry[]> {
+    let rows: DocumentEntry[]
+    try {
+      rows = await this.legacy.listDocuments({ workspaceId })
+    } catch (error) {
+      // No legacy workspace means nothing was ever skipped. Anything else is
+      // a real storage failure and must not be silently read as "no rows".
+      if (isWorkspaceNotFoundError(error)) return []
+      throw error
+    }
+    const skipped: DocumentEntry[] = []
+    for (const row of rows) {
+      if (!documentKindSchema.safeParse(row.kind).success) continue
+      if (
+        (await this.inner.resolveDocumentById({ workspaceId, documentId: row.documentId })) !== null
+      )
+        continue
+      skipped.push(row)
+    }
+    return skipped
   }
 
   async listWorkspaces(): Promise<{ workspaceId: string }[]> {
@@ -90,17 +129,26 @@ export class FoldingBrowserIndex implements DocumentIndex {
 
   async resolveDocument(input: ResolveDocumentInput): Promise<DocumentEntry | null> {
     await this.ensureFolded()
-    return this.inner.resolveDocument(input)
+    const fromTree = await this.inner.resolveDocument(input)
+    if (fromTree !== null) return fromTree
+    const skipped = await this.foldSkippedRows(input.workspaceId)
+    return skipped.find((row) => row.path === input.path) ?? null
   }
 
   async resolveDocumentById(input: ResolveDocumentByIdInput): Promise<DocumentEntry | null> {
     await this.ensureFolded()
-    return this.inner.resolveDocumentById(input)
+    const fromTree = await this.inner.resolveDocumentById(input)
+    if (fromTree !== null) return fromTree
+    const skipped = await this.foldSkippedRows(input.workspaceId)
+    return skipped.find((row) => row.documentId === input.documentId) ?? null
   }
 
   async listDocuments(input: ListDocumentsInput): Promise<DocumentEntry[]> {
     await this.ensureFolded()
-    return this.inner.listDocuments(input)
+    const fromTree = await this.inner.listDocuments(input)
+    const skipped = await this.foldSkippedRows(input.workspaceId)
+    if (skipped.length === 0) return fromTree
+    return [...fromTree, ...skipped].sort((a, b) => compareDocumentPaths(a.path, b.path))
   }
 
   async moveDocument(input: MoveDocumentInput): Promise<void> {
@@ -115,7 +163,13 @@ export class FoldingBrowserIndex implements DocumentIndex {
 
   async deleteDocument(input: DeleteDocumentInput): Promise<void> {
     await this.ensureFolded()
-    return this.inner.deleteDocument(input)
+    if ((await this.inner.resolveDocument(input)) !== null) {
+      return this.inner.deleteDocument(input)
+    }
+    // A fold-skipped document lives only in the legacy row; deleting it there
+    // is what lets a user clear a damaged document instead of keeping an
+    // error screen forever.
+    return this.legacy.deleteDocument(input)
   }
 }
 
