@@ -271,6 +271,7 @@ export async function runE2eCheckpointSmoke({
     console.log('[e2e] wb_facet_set → seeded canvas state')
 
     const saved = await callTool('wb_version_save', {
+      workspaceId: WORKSPACE_ID,
       documentId,
       label: 'e2e-version-1',
     })
@@ -285,7 +286,7 @@ export async function runE2eCheckpointSmoke({
     }
     console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
-    const versions = await callTool('wb_version_list', { documentId })
+    const versions = await callTool('wb_version_list', { workspaceId: WORKSPACE_ID, documentId })
     if (versions.documentId !== documentId || !Array.isArray(versions.versions)) {
       throw new Error(`wb_version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
