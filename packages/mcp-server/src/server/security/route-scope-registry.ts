@@ -67,6 +67,14 @@ export function resolveApiRouteScope(method: string, path: string): RouteScopeDe
     return { kind: 'scoped', scopes: [isWrite ? 'files:write' : 'files:read'] }
   }
 
+  // The workspace-document sync surface: one snapshot/update pair for the
+  // whole workspace document. Same tier as the per-document equivalents —
+  // a workspace-granularity update is still a canvas mutation, just scoped
+  // wider, and the snapshot answers the same content canvas:read grants.
+  if (/^\/api\/w\/[^/]+\/workspace-document\/(snapshot|update)$/.test(path)) {
+    return { kind: 'scoped', scopes: [isWrite ? 'canvas:write' : 'canvas:read'] }
+  }
+
   // Canvas write operations that arrive as POST but mutate state.
   if (/^\/api\/w\/[^/]+\/document\/.+\/(update|export)$/.test(path) && method === 'POST') {
     return { kind: 'scoped', scopes: ['canvas:write'] }

@@ -1,6 +1,6 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
-import { encodeFrontiers, LoroDoc, LoroMap } from 'loro-crdt'
+import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { withTempDataDir } from './routes/_test-helpers.js'
 
@@ -101,8 +101,12 @@ describe('performMerge vs rename race', () => {
     doc.commit()
     await saveDocument('session1', 'canvas-a', doc, { overwrite: true })
 
-    // feature's tip freezes the rect-1-only state.
-    const featureTipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    // feature's tip freezes the rect-1-only state — recorded as WORKSPACE
+    // record frontiers, the lineage production tips live in.
+    const { workspaceFrontiersForPath } = await import('./store/document-store.js')
+    const featureTipFrontiers = Buffer.from(
+      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
+    ).toString('base64')
 
     await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',

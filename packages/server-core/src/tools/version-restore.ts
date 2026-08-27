@@ -47,7 +47,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const doc = await loadOrCreateDocument(deps, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
 
       const versions = doc.getMap('versions')
       const raw = versions.get(input.versionId)
@@ -73,7 +73,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
       writeSpatialCanvas(doc, oldCanvas)
       doc.commit()
 
-      await saveDocumentSnapshot(deps, input.documentId, doc)
+      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
 
       return {
         documentId: input.documentId,

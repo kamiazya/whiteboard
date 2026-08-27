@@ -1,7 +1,9 @@
+import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { mergeToSnapshot } from '../components/migration/import-from-browser.js'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
+import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import {
   BROWSER_WORKSPACE_ID,
@@ -15,6 +17,7 @@ import {
 } from '../lib/local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 
 // Re-exported so the many page-side consumers keep their import path; the
 // type itself lives beside the concrete store.
@@ -91,7 +94,18 @@ export async function createSeededDocument(
     ...(trimmed ? { name: trimmed } : {}),
   })
   try {
-    await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
+    // Tree-backed index: the node the create just made IS the content record
+    // (its containers are the empty document), so a seed with content copies
+    // into it and an empty create only stamps the clock. The legacy branch
+    // keeps the per-document record for an index without a workspace
+    // document behind it — injected test doubles included.
+    const seededInTree =
+      content !== undefined
+        ? await seedWorkspaceDocumentContent(entry.documentId, content)
+        : await touchIfWorkspaceBacked(entry.documentId)
+    if (!seededInTree) {
+      await loro.save(entry.documentId, content ?? loro.createEmptySnapshot())
+    }
   } catch (err) {
     try {
       await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: entry.path })
@@ -529,11 +543,24 @@ export function useBrowserDocumentController(
     const source = snapshotRef.current
     if (source === null) throw new Error('No canvas is open to duplicate.')
 
-    const loroResult = await loroRef.current.load(source.documentId)
-    if (loroResult.kind !== 'ok') {
-      throw new Error('The canvas data could not be read for duplication.')
+    // The workspace document is where an edited document's current state
+    // lives; the per-document record is the pre-fold copy and goes stale the
+    // moment the editor commits. Projection first, old record as the fallback
+    // for a document nothing has folded yet (and for jsdom tests, whose
+    // injected store is the only storage there is).
+    const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID).catch(() => null)
+    const projected =
+      workspace === null ? null : projectWorkspaceDocument(workspace, source.documentId)
+    let mergedSnapshot: Uint8Array
+    if (projected !== null) {
+      mergedSnapshot = new Uint8Array(projected.export({ mode: 'snapshot' }))
+    } else {
+      const loroResult = await loroRef.current.load(source.documentId)
+      if (loroResult.kind !== 'ok') {
+        throw new Error('The canvas data could not be read for duplication.')
+      }
+      mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
     }
-    const mergedSnapshot = mergeToSnapshot(loroResult.snapshot, loroResult.deltas ?? [])
 
     const existingNames = new Set(
       (await listLocalDocuments(indexRef.current, clockRef.current)).map((row) => row.name),

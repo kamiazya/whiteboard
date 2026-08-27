@@ -56,5 +56,6 @@ export default defineConfig({
     '@kamiazya/whiteboard-ports',
     '@kamiazya/whiteboard-loro-adapter',
     '@kamiazya/whiteboard-server-core',
+    '@kamiazya/whiteboard-workspace-index',
   ],
 })

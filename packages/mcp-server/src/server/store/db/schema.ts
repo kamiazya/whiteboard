@@ -36,6 +36,7 @@ interface DocumentsTable {
 
 interface BranchesTable {
   documentId: string
+  workspaceId: string
   name: string
   tipFrontiers: string
   color: string | null
@@ -46,7 +47,11 @@ interface BranchesTable {
 
 interface VersionsTable {
   id: string
+  // No FK since migration 0016 — delete paths sweep these rows explicitly
+  // (documentTeardown's bracket, fold-workspace's pre-kind delete). Reads
+  // key on workspaceId, whose oplog the frontiers point into.
   documentId: string
+  workspaceId: string
   branchName: string
   auto: Bool
   label: string | null

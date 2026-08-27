@@ -9,6 +9,10 @@ export function parseWsTargetFromRequestUrl(
   host = 'localhost',
 ): { workspaceId: string; path: string } {
   const url = new URL(rawUrl ?? '/', `http://${host}`)
+  // Query params are ignored: every socket syncs at workspace-document
+  // granularity (the interim `?scope=workspace` opt-in is retired along
+  // with the per-document binary contract). The path stays in the URL as
+  // the auth target and the auto-version / text-message target.
   const parts = url.pathname.split('/')
   // The tail is a document path, so anything from one segment up is valid —
   // /ws/:workspaceId/<path...>. Each segment decodes separately; the

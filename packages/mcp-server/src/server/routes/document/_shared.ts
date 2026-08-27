@@ -1,27 +1,6 @@
 import { userInfo } from 'node:os'
-import type { WebSocket } from 'ws'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
-
-// WS broadcast function injected from ws.ts. Held behind get/set indirection
-// (rather than a plain export) because ws.ts registers the real
-// implementation only after both modules have finished loading, breaking the
-// canvas <-> ws import cycle.
-export type BroadcastFn = (
-  workspaceId: string,
-  path: string,
-  update: Uint8Array,
-  excludeWs?: WebSocket,
-) => void
-
-let broadcastLoroUpdate: BroadcastFn = () => {}
-
-export function setBroadcastFn(fn: BroadcastFn): void {
-  broadcastLoroUpdate = fn
-}
-
-export function getBroadcastFn(): BroadcastFn {
-  return broadcastLoroUpdate
-}
+import { DocumentNotFoundError } from '../../store/document-not-found-error.js'
 
 export function defaultHumanDisplayName(): string {
   try {
@@ -38,5 +17,19 @@ export function handleCorruptStoredData(
 ): { status: 500; body: { error: 'corrupt_stored_data'; message: string } } | null {
   const body = corruptStoredDataBody(err)
   if (body) return { status: 500, body }
+  return null
+}
+
+/**
+ * Metadata writers (names, pins, branches, version save) refuse a path with
+ * no document instead of minting a phantom row; routes answer that refusal
+ * as 404 — the caller named a document that does not exist.
+ */
+export function handleDocumentNotFound(
+  err: unknown,
+): { status: 404; body: { error: 'not_found'; message: string } } | null {
+  if (err instanceof DocumentNotFoundError) {
+    return { status: 404, body: { error: 'not_found', message: err.message } }
+  }
   return null
 }

@@ -22,7 +22,7 @@ import type {
   DocumentBackendHandlers,
 } from './document-backend-contract.js'
 import type { SseStreamSource } from './sse-stream-hub.js'
-import { SseStreamHub } from './sse-stream-hub.js'
+import { SseStreamHub, workspaceDocKey } from './sse-stream-hub.js'
 import { uploadFiles } from './upload-files.js'
 import { parseServerTextMessage } from './ws-text-message.js'
 
@@ -41,6 +41,17 @@ export class SseBackend implements DocumentBackend {
   private cancelled = false
   private ownedHub: SseStreamHub | null = null
   private unsubscribe: (() => void) | null = null
+  private unsubscribeText: (() => void) | null = null
+  /**
+   * The key binary frames travel on: always the WORKSPACE document's — the
+   * seed snapshot and every update are the workspace record's, and local
+   * pushes go to its update route (the per-document binary contract is
+   * retired). Text messages (version_created, viewport, restore events)
+   * keep flowing on the per-document key — they are addressed per path.
+   * The caller scopes its sync session to the open document
+   * (`contentDocumentId`), same contract as DaemonBackend.
+   */
+  private readonly binaryKey: string
 
   constructor(
     workspaceId: string,
@@ -55,6 +66,7 @@ export class SseBackend implements DocumentBackend {
     this.transport = transport
     this.streamSource = streamSource
     this.docKey = `${workspaceId}/${path}`
+    this.binaryKey = workspaceDocKey(workspaceId)
   }
 
   private get fetchFn(): typeof globalThis.fetch {
@@ -79,7 +91,7 @@ export class SseBackend implements DocumentBackend {
     // worker-backed source asks the worker's replica, so a second tab opens
     // without a daemon round trip and off this thread.
     try {
-      const bytes = await this.resolveSource().snapshot(this.docKey)
+      const bytes = await this.resolveSource().snapshot(this.binaryKey)
       if (this.cancelled) return
       // `null` is "the authority does not know this document" — the caller
       // keeps its own state and the stream fills in from empty, the same
@@ -94,9 +106,11 @@ export class SseBackend implements DocumentBackend {
     if (this.cancelled) return
 
     const source = this.resolveSource()
-    this.unsubscribe = source.subscribe(this.docKey, {
+    this.unsubscribe = source.subscribe(this.binaryKey, {
       onUpdate: (bytes) => handlers.onRemoteUpdate(bytes),
-      onMessage: (raw) => this.dispatchText(raw, handlers),
+      // Nothing addresses text to the workspace key; per-document text
+      // arrives on the subscription below.
+      onMessage: () => {},
       // The stream belongs to the source, so its liveness is the only signal
       // this backend has that updates are still arriving.
       onConnectionChange: (connected) => {
@@ -104,6 +118,12 @@ export class SseBackend implements DocumentBackend {
         if (connected) handlers.onConnected()
         else handlers.onDisconnected?.()
       },
+    })
+    // Text messages stay per document — and ONLY text: no binary frame
+    // travels on a per-document key any more.
+    this.unsubscribeText = source.subscribe(this.docKey, {
+      onUpdate: () => {},
+      onMessage: (raw) => this.dispatchText(raw, handlers),
     })
     // No unconditional report here: the source announces its state at
     // subscribe time and on every change, so anything added on top would
@@ -140,6 +160,8 @@ export class SseBackend implements DocumentBackend {
     this.cancelled = true
     this.unsubscribe?.()
     this.unsubscribe = null
+    this.unsubscribeText?.()
+    this.unsubscribeText = null
     // Only a hub this backend created is closed here — a shared one outlives
     // any single canvas and is owned by whoever injected it.
     this.ownedHub?.close()
@@ -156,7 +178,7 @@ export class SseBackend implements DocumentBackend {
     // Returned, not swallowed: `DocumentBackendHandlers` already treats a
     // rejected push as the session's `error` status, and with no worker in
     // front there is nothing else that will ever retry this write.
-    return this.resolveSource().push(this.docKey, bytes)
+    return this.resolveSource().push(this.binaryKey, bytes)
   }
 
   async getFile(fileId: string): Promise<Blob | null> {

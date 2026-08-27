@@ -3,7 +3,7 @@ import { TOKENS } from '@kamiazya/whiteboard-ports'
 import { Container } from 'inversify'
 import { describe, expect, it } from 'vitest'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
-import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
+import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
 import { createStoreLocalModule } from './store-local.module.js'
 
 describe('createStoreLocalModule', () => {
@@ -17,7 +17,7 @@ describe('createStoreLocalModule', () => {
     const docStore = container.get<DocumentStore>(TOKENS.DocumentStore)
     const blobStore = container.get<BlobStore>(TOKENS.BlobStore)
 
-    expect(docStore).toBeInstanceOf(LibsqlDocumentStore)
+    expect(docStore).toBeInstanceOf(WorkspaceRoutedDocumentStore)
     expect(blobStore).toBeInstanceOf(FsBlobStore)
   })
 

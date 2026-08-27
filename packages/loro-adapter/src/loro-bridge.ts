@@ -14,8 +14,32 @@ import {
   type TrustFacets,
   trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
-import type { LoroDoc } from 'loro-crdt'
+import type { LoroMap, LoroText } from 'loro-crdt'
 import type { z } from 'zod'
+
+/**
+ * Where one document's containers live.
+ *
+ * Every function below reaches for containers by name and never for the
+ * document as a whole, so the only thing it needs is something that can hand
+ * one over. `LoroDoc` satisfies this structurally — a document's containers
+ * are its roots — and so does a workspace-tree node, whose containers hang off
+ * its own meta map. That is the whole reason this type exists: the two storage
+ * models differ in WHERE a container is found and in nothing else, so the
+ * bridge should not have to be written twice.
+ *
+ * Call sites that pass a `LoroDoc` keep compiling unchanged.
+ */
+export interface DocumentContainers {
+  getMap(key: string): LoroMap
+  getText(key: string): LoroText
+  /**
+   * Part of the seam because the bridge decides where a write ENDS, and that
+   * is not something to leave each caller to remember. A tree-node host
+   * delegates to the document its node belongs to.
+   */
+  commit(): void
+}
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
@@ -44,7 +68,7 @@ const EDGE_LOCKS_KEY = 'edgeLocks'
  * this call — an entry left behind for an id the canvas no longer has would
  * be inherited by a later element reminted onto that id.
  */
-function dropLockInto(doc: LoroDoc, mapKey: string, id: string): void {
+function dropLockInto(doc: DocumentContainers, mapKey: string, id: string): void {
   const locksMap = doc.getMap(mapKey)
   if (locksMap.keys().includes(id)) locksMap.delete(id)
 }
@@ -131,7 +155,7 @@ function edgeToFields(edge: CanvasEdge): Fields {
   return fields
 }
 
-export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
+export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
@@ -176,16 +200,16 @@ export function writeSpatialCanvas(doc: LoroDoc, canvas: SpatialCanvas): void {
 // Non-committing internals shared by the single committing helpers below
 // and `withSpatialBatch`'s writer, so field projection and the delete
 // cascade can never drift between the two paths.
-function writeNodeInto(doc: LoroDoc, node: SpatialNode): void {
+function writeNodeInto(doc: DocumentContainers, node: SpatialNode): void {
   doc.getMap(NODES_KEY).set(node.id, nodeToFields(node))
 }
 
-function writeEdgeInto(doc: LoroDoc, edge: CanvasEdge): void {
+function writeEdgeInto(doc: DocumentContainers, edge: CanvasEdge): void {
   doc.getMap(EDGES_KEY).set(edge.id, edgeToFields(edge))
 }
 
 /** Returns false (writing nothing) when the node id is absent. */
-function deleteNodeCascadeInto(doc: LoroDoc, nodeId: string): boolean {
+function deleteNodeCascadeInto(doc: DocumentContainers, nodeId: string): boolean {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   if (!nodesMap.keys().includes(nodeId)) return false
@@ -205,7 +229,7 @@ function deleteNodeCascadeInto(doc: LoroDoc, nodeId: string): boolean {
 }
 
 /** Returns false (writing nothing) when the edge id is absent. */
-function deleteEdgeInto(doc: LoroDoc, edgeId: string): boolean {
+function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
   const edgesMap = doc.getMap(EDGES_KEY)
   if (!edgesMap.keys().includes(edgeId)) return false
   edgesMap.delete(edgeId)
@@ -222,7 +246,7 @@ function deleteEdgeInto(doc: LoroDoc, edgeId: string): boolean {
  * fine-grained caller (e.g. a debounced editor commit) can never drift from
  * the full-resync encoding.
  */
-export function writeSpatialNode(doc: LoroDoc, node: SpatialNode): void {
+export function writeSpatialNode(doc: DocumentContainers, node: SpatialNode): void {
   writeNodeInto(doc, node)
   doc.commit()
 }
@@ -230,7 +254,7 @@ export function writeSpatialNode(doc: LoroDoc, node: SpatialNode): void {
 /**
  * Edge counterpart to `writeSpatialNode` — see its doc comment.
  */
-export function writeSpatialEdge(doc: LoroDoc, edge: CanvasEdge): void {
+export function writeSpatialEdge(doc: DocumentContainers, edge: CanvasEdge): void {
   writeEdgeInto(doc, edge)
   doc.commit()
 }
@@ -244,7 +268,7 @@ export function writeSpatialEdge(doc: LoroDoc, edge: CanvasEdge): void {
  * its edges, rather than leaving one half of the deletion undone.
  * Idempotent and a no-op (no commit) for an id absent from the doc.
  */
-export function deleteSpatialNode(doc: LoroDoc, nodeId: string): void {
+export function deleteSpatialNode(doc: DocumentContainers, nodeId: string): void {
   if (deleteNodeCascadeInto(doc, nodeId)) doc.commit()
 }
 
@@ -252,7 +276,7 @@ export function deleteSpatialNode(doc: LoroDoc, nodeId: string): void {
  * Edge counterpart to `deleteSpatialNode` — removes exactly one edge, no
  * cascade needed since an edge has no dependents of its own.
  */
-export function deleteSpatialEdge(doc: LoroDoc, edgeId: string): void {
+export function deleteSpatialEdge(doc: DocumentContainers, edgeId: string): void {
   if (deleteEdgeInto(doc, edgeId)) doc.commit()
 }
 
@@ -284,7 +308,10 @@ export interface SpatialBatchWriter {
  * with an UNRELATED commit on the same doc: the pending ops would be
  * silently absorbed into that step.
  */
-export function withSpatialBatch(doc: LoroDoc, fn: (writer: SpatialBatchWriter) => void): void {
+export function withSpatialBatch(
+  doc: DocumentContainers,
+  fn: (writer: SpatialBatchWriter) => void,
+): void {
   let wrote = false
   const writer: SpatialBatchWriter = {
     writeNode(node) {
@@ -308,7 +335,7 @@ export function withSpatialBatch(doc: LoroDoc, fn: (writer: SpatialBatchWriter) 
   if (wrote) doc.commit()
 }
 
-function readLocks(doc: LoroDoc, mapKey: string): ReadonlySet<string> {
+function readLocks(doc: DocumentContainers, mapKey: string): ReadonlySet<string> {
   const locksMap = doc.getMap(mapKey)
   const locked = new Set<string>()
   for (const id of locksMap.keys()) {
@@ -317,7 +344,7 @@ function readLocks(doc: LoroDoc, mapKey: string): ReadonlySet<string> {
   return locked
 }
 
-function setLock(doc: LoroDoc, mapKey: string, id: string, locked: boolean): void {
+function setLock(doc: DocumentContainers, mapKey: string, id: string, locked: boolean): void {
   const locksMap = doc.getMap(mapKey)
   if ((locksMap.get(id) === true) === locked) return
   if (locked) locksMap.set(id, true)
@@ -331,7 +358,7 @@ function setLock(doc: LoroDoc, mapKey: string, id: string, locked: boolean): voi
  * — and therefore never reaches an export, a render, or a JSON Canvas
  * file, which is what keeps the stored document spec-clean.
  */
-export function readNodeLocks(doc: LoroDoc): ReadonlySet<string> {
+export function readNodeLocks(doc: DocumentContainers): ReadonlySet<string> {
   return readLocks(doc, NODE_LOCKS_KEY)
 }
 
@@ -340,7 +367,7 @@ export function readNodeLocks(doc: LoroDoc): ReadonlySet<string> {
  * no-op (no commit, no undo step), matching this bridge's convention that
  * nothing-changed writes stay out of history.
  */
-export function setNodeLock(doc: LoroDoc, nodeId: string, locked: boolean): void {
+export function setNodeLock(doc: DocumentContainers, nodeId: string, locked: boolean): void {
   setLock(doc, NODE_LOCKS_KEY, nodeId, locked)
 }
 
@@ -349,16 +376,16 @@ export function setNodeLock(doc: LoroDoc, nodeId: string, locked: boolean): void
  * property derived from the endpoints: an edge is its own object here, so
  * locking one must not depend on what its endpoints happen to be.
  */
-export function readEdgeLocks(doc: LoroDoc): ReadonlySet<string> {
+export function readEdgeLocks(doc: DocumentContainers): ReadonlySet<string> {
   return readLocks(doc, EDGE_LOCKS_KEY)
 }
 
 /** Edge counterpart to `setNodeLock` — same no-op-on-unchanged contract. */
-export function setEdgeLock(doc: LoroDoc, edgeId: string, locked: boolean): void {
+export function setEdgeLock(doc: DocumentContainers, edgeId: string, locked: boolean): void {
   setLock(doc, EDGE_LOCKS_KEY, edgeId, locked)
 }
 
-export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
+export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
 
@@ -389,7 +416,7 @@ export function readSpatialCanvas(doc: LoroDoc): SpatialCanvas {
  * Entries stay per-key rather than one opaque object value, so two peers
  * writing different keys converge on both surviving after a CRDT merge.
  */
-function replaceBucket(doc: LoroDoc, mapKey: string, entries: Fields): void {
+function replaceBucket(doc: DocumentContainers, mapKey: string, entries: Fields): void {
   const map = doc.getMap(mapKey)
   const existingKeys = map.keys()
 
@@ -409,7 +436,7 @@ function replaceBucket(doc: LoroDoc, mapKey: string, entries: Fields): void {
  * nodes/edges above: a plain-object-valued `LoroMap` keyed by facet key, so
  * one domain's CRDT merge never overwrites another's.
  */
-export function writeFacets(doc: LoroDoc, facets: ExtensionFacets): void {
+export function writeFacets(doc: DocumentContainers, facets: ExtensionFacets): void {
   replaceBucket(doc, FACETS_KEY, facets)
 }
 
@@ -418,7 +445,7 @@ export function writeFacets(doc: LoroDoc, facets: ExtensionFacets): void {
  * corrupt entry in the underlying LoroMap is dropped instead of failing the
  * entire read — consistent with readSpatialCanvas's per-node tolerance.
  */
-export function readFacets(doc: LoroDoc): ExtensionFacets {
+export function readFacets(doc: DocumentContainers): ExtensionFacets {
   const facetsMap = doc.getMap(FACETS_KEY)
   const result: ExtensionFacets = {}
   for (const key of facetsMap.keys()) {
@@ -450,7 +477,7 @@ const CORE_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
  * omitted) rather than merging with stale prior state, matching
  * `writeFacets`'s replace-on-rewrite convention.
  */
-export function writeCoreFacets(doc: LoroDoc, meta: StoredCoreFacets): void {
+export function writeCoreFacets(doc: DocumentContainers, meta: StoredCoreFacets): void {
   replaceBucket(doc, CORE_KEY, { ...meta })
 }
 
@@ -466,7 +493,7 @@ const TRUST_FACET_FIELD_SCHEMAS: Record<string, z.ZodTypeAny> = Object.assign(
  * Replace-on-rewrite, matching `writeCoreFacets`/`writeFacets`: a write
  * states the whole family rather than merging with whatever was there.
  */
-export function writeTrustFacets(doc: LoroDoc, trust: TrustFacets): void {
+export function writeTrustFacets(doc: DocumentContainers, trust: TrustFacets): void {
   const entries: Fields = {}
   if (trust.generated !== undefined) entries.generated = { ...trust.generated }
   if (trust.verified !== undefined) entries.verified = trust.verified.map((event) => ({ ...event }))
@@ -484,7 +511,7 @@ export function writeTrustFacets(doc: LoroDoc, trust: TrustFacets): void {
  * with a `verified` list and no `generated` is a perfectly good OKF concept —
  * so an all-dropped read answers `undefined` rather than an empty object.
  */
-export function readTrustFacets(doc: LoroDoc): TrustFacets | undefined {
+export function readTrustFacets(doc: DocumentContainers): TrustFacets | undefined {
   if (readDocumentKind(doc) === 'spatial') return undefined
 
   const trustMap = doc.getMap(TRUST_KEY)
@@ -523,7 +550,7 @@ export function readTrustFacets(doc: LoroDoc): TrustFacets | undefined {
  * A document with no kind is allowed through, exactly as those tools allow
  * one: an absent kind is not evidence of a format.
  */
-export function readCoreFacets(doc: LoroDoc): StoredCoreFacets | undefined {
+export function readCoreFacets(doc: DocumentContainers): StoredCoreFacets | undefined {
   if (readDocumentKind(doc) === 'spatial') return undefined
 
   const coreMap = doc.getMap(CORE_KEY)
@@ -581,7 +608,7 @@ export const MARKDOWN_BODY_NODE_ID = 'okf-body'
  * empty string for a document with no body at all is the honest answer: it
  * has no body, which is a valid state, not a failure.
  */
-export function readMarkdownBody(doc: LoroDoc): string {
+export function readMarkdownBody(doc: DocumentContainers): string {
   const container = doc.getText(MARKDOWN_BODY_KEY).toString()
   if (container.length > 0) return container
 
@@ -631,7 +658,7 @@ function markdownBodyFromCanvas(canvas: SpatialCanvas): string {
  * older writer, so a rewritten document cannot keep a stale second body for
  * a later reader to find.
  */
-export function writeMarkdownBody(doc: LoroDoc, body: string): void {
+export function writeMarkdownBody(doc: DocumentContainers, body: string): void {
   const text = doc.getText(MARKDOWN_BODY_KEY)
   text.delete(0, text.length)
   if (body.length > 0) text.insert(0, body)
@@ -651,7 +678,7 @@ export function writeMarkdownBody(doc: LoroDoc, body: string): void {
  * is what makes a format follow from the document rather than from a
  * caller-supplied parameter (ADR-0009 decision 4).
  */
-export function writeDocumentKind(doc: LoroDoc, kind: DocumentKind): void {
+export function writeDocumentKind(doc: DocumentContainers, kind: DocumentKind): void {
   doc.getMap(DOCUMENT_KEY).set('kind', kind)
   doc.commit()
 }
@@ -662,7 +689,34 @@ export function writeDocumentKind(doc: LoroDoc, kind: DocumentKind): void {
  * into the same CRDT map. Both cases are for the caller to report; failing
  * here would replace its message with a parse error from three layers down.
  */
-export function readDocumentKind(doc: LoroDoc): DocumentKind | undefined {
+export function readDocumentKind(doc: DocumentContainers): DocumentKind | undefined {
   const parsed = documentKindSchema.safeParse(doc.getMap(DOCUMENT_KEY).get('kind'))
   return parsed.success ? parsed.data : undefined
 }
+
+/**
+ * Every container this bridge reads or writes, by key and kind.
+ *
+ * Exists for hosts that place a document's containers somewhere attachment is
+ * an OP — a workspace tree node's meta map, unlike a doc's roots, which are
+ * implicit. Such a host must pre-attach these when the document node is
+ * created: otherwise the first READ of a missing container attaches it via
+ * `getOrCreateContainer`, and that stray local op clears the UndoManager's
+ * redo stack. Measured: create → undo → read → redo left the document empty,
+ * while the same sequence without the read redid fine.
+ *
+ * A container added to this bridge without an entry here reopens exactly that
+ * bug for documents hosted on a tree node — extend the list with the key.
+ */
+export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 'text' }> = [
+  { key: NODES_KEY, kind: 'map' },
+  { key: EDGES_KEY, kind: 'map' },
+  { key: CANVAS_KEY, kind: 'map' },
+  { key: FACETS_KEY, kind: 'map' },
+  { key: NODE_LOCKS_KEY, kind: 'map' },
+  { key: EDGE_LOCKS_KEY, kind: 'map' },
+  { key: CORE_KEY, kind: 'map' },
+  { key: TRUST_KEY, kind: 'map' },
+  { key: DOCUMENT_KEY, kind: 'map' },
+  { key: MARKDOWN_BODY_KEY, kind: 'text' },
+]

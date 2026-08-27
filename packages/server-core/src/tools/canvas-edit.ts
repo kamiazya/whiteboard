@@ -398,7 +398,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const { doc, canvas } = await loadDocument(deps, input.documentId)
+      const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
 
       // Same rule as the single-purpose adds this replaced: a markdown
       // document keeps its OKF body in a text node, so spatial ops on it
@@ -790,7 +790,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // working-copy comment above.
       for (const node of parsed.data.nodes) setNodeLock(doc, node.id, nodeLocks.has(node.id))
       for (const edge of parsed.data.edges) setEdgeLock(doc, edge.id, edgeLocks.has(edge.id))
-      await saveDocumentBodySnapshot(deps, input.documentId, doc, parsed.data)
+      await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, parsed.data)
 
       const touched = {
         nodes: [...touchedNodes].sort(),

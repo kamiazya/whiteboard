@@ -1,4 +1,3 @@
-import { DOCUMENT_DOC_KEY_PREFIX } from '@kamiazya/whiteboard-ports'
 // Regression test for tmp/issues/ws-real-socket-e2e-needs-injectable-data-dir.md:
 // exercises a REAL WebSocketServer + real `ws` client (not the FakeWebSocket
 // used elsewhere in ws.test.ts) so a Loro binary update travels over an
@@ -24,7 +23,13 @@ import { mkdir, mkdtemp, rm } from 'node:fs/promises'
 import { createServer, type Server } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { LoroDoc, LoroMap } from 'loro-crdt'
+import {
+  documentContainers,
+  readSpatialCanvas,
+  resolveWorkspaceDocument,
+  writeSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { LoroDoc } from 'loro-crdt'
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { WebSocket, WebSocketServer } from 'ws'
 
@@ -209,33 +214,34 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     const { server, wss, port } = await startWsServer()
 
     const { ws: client, snapshot } = await connectAndCaptureSnapshot(
-      `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
+      `ws://127.0.0.1:${port}/ws/session1/registered-seed`,
     )
     try {
-      // First frame off the wire is always the initial snapshot; wait for
-      // it before sending an update so the client doc's version vector is
-      // based on the server's starting state.
+      // First frame off the wire is always the initial snapshot — the
+      // WORKSPACE record's, the only binary contract. The client edits the
+      // document's containers inside it, exactly like apps/web's session.
       const snapshotBytes = await snapshot
-      const serverDoc = new LoroDoc()
-      serverDoc.import(new Uint8Array(snapshotBytes))
-      const prevVV = serverDoc.version()
-
       const clientDoc = new LoroDoc()
       clientDoc.import(new Uint8Array(snapshotBytes))
-      const list = clientDoc.getMovableList('elements')
-      const map = list.insertContainer(0, new LoroMap())
-      map.set('id', 'real-socket-elem')
-      map.set('type', 'rectangle')
+      const prevVV = clientDoc.version()
+      const entry = resolveWorkspaceDocument(clientDoc, 'registered-seed')
+      expect(entry).not.toBeNull()
+      if (entry === null) return
+      writeSpatialCanvas(documentContainers(clientDoc, entry.documentId), {
+        nodes: [
+          { id: 'real-socket-elem', type: 'text', text: 'x', x: 0, y: 0, width: 10, height: 10 },
+        ],
+        edges: [],
+      })
       clientDoc.commit()
 
       const update = Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array)
-      const persisted = waitForPersisted('session1', 'canvas-a')
+      const persisted = waitForPersisted('session1', 'registered-seed')
       client.send(update)
       await persisted
 
-      const saved = await loadDocument('session1', 'canvas-a')
-      const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
-      expect(elements.map((entry) => entry.id)).toContain('real-socket-elem')
+      const saved = await loadDocument('session1', 'registered-seed')
+      expect(readSpatialCanvas(saved).nodes.map((n) => n.id)).toContain('real-socket-elem')
     } finally {
       client.close()
       await closeWsServer(server, wss)
@@ -246,14 +252,14 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     // (content lives in the db now, not a separate blob artifact tree).
     expect(existsSync(join(scratchDir, 'whiteboard.db'))).toBe(true)
     const { getDb } = await import('../store/db/index.js')
-    const { getDocumentIdByPath } = await import('../store/db/upsert-workspace.js')
+    const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
     const db = await getDb(scratchDir)
-    const documentId = await getDocumentIdByPath(db, 'session1', 'canvas-a')
+    const documentId = await resolveDocumentIdAtPath('session1', 'registered-seed')
     expect(documentId).not.toBeNull()
     const snapshotRow = await db
       .selectFrom('documentSnapshots')
       .select(['docKey'])
-      .where('docKey', '=', `${DOCUMENT_DOC_KEY_PREFIX}${documentId}`)
+      .where('docKey', '=', 'workspace-tree:session1')
       .executeTakeFirst()
     expect(snapshotRow).toBeDefined()
 
@@ -266,10 +272,10 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
     const { server, wss, port } = await startWsServer()
 
     const { ws: clientA, snapshot: snapshotA } = await connectAndCaptureSnapshot(
-      `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
+      `ws://127.0.0.1:${port}/ws/session1/registered-seed`,
     )
     const { ws: clientB, snapshot: snapshotB } = await connectAndCaptureSnapshot(
-      `ws://127.0.0.1:${port}/ws/session1/canvas-a`,
+      `ws://127.0.0.1:${port}/ws/session1/registered-seed`,
     )
     try {
       // Drain each client's initial snapshot frame before sending anything else.
@@ -285,7 +291,7 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
 
       const { code, reason } = await closeEvent
       expect(code).toBe(1003)
-      expect(reason).toBe('Malformed canvas update')
+      expect(reason).toBe('Malformed workspace update')
 
       // The daemon and the concurrent connection must survive the bad frame.
       expect(clientB.readyState).toBe(WebSocket.OPEN)
@@ -293,21 +299,25 @@ describe('handleWsUpgrade over a real WebSocketServer + real ws client', () => {
       const clientDoc = new LoroDoc()
       clientDoc.import(new Uint8Array(snapshotBytesB))
       const prevVV = clientDoc.version()
-      const list = clientDoc.getMovableList('elements')
-      const map = list.insertContainer(0, new LoroMap())
-      map.set('id', 'survivor-elem')
-      map.set('type', 'rectangle')
+      const entry = resolveWorkspaceDocument(clientDoc, 'registered-seed')
+      expect(entry).not.toBeNull()
+      if (entry === null) return
+      writeSpatialCanvas(documentContainers(clientDoc, entry.documentId), {
+        nodes: [
+          { id: 'survivor-elem', type: 'text', text: 'x', x: 0, y: 0, width: 10, height: 10 },
+        ],
+        edges: [],
+      })
       clientDoc.commit()
       const update = Buffer.from(clientDoc.export({ mode: 'update', from: prevVV }) as Uint8Array)
-      const persisted = waitForPersisted('session1', 'canvas-a')
+      const persisted = waitForPersisted('session1', 'registered-seed')
       clientB.send(update)
       await persisted
 
       // Only B's element made it to disk; A's malformed bytes never
       // decoded into anything that could be persisted.
-      const saved = await loadDocument('session1', 'canvas-a')
-      const elements = saved.getMovableList('elements').toJSON() as Array<{ id: string }>
-      expect(elements.map((entry) => entry.id)).toEqual(['survivor-elem'])
+      const saved = await loadDocument('session1', 'registered-seed')
+      expect(readSpatialCanvas(saved).nodes.map((n) => n.id)).toEqual(['survivor-elem'])
     } finally {
       clientA.close()
       clientB.close()

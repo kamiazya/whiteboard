@@ -30,11 +30,26 @@ function jsonResponse(body: unknown, status = 200): Response {
   })
 }
 
+// The list contract requires id and kind on every row (the daemon always
+// serves both); fixtures may omit them for brevity and get daemon-shaped
+// defaults filled in here.
+function withSummaryDefaults(
+  rows: Array<{
+    path: string
+    updatedAt: string
+    id?: string
+    kind?: string
+    displayName?: string
+  }>,
+) {
+  return rows.map((row) => ({ id: `id-${row.path}`, kind: 'spatial', ...row }))
+}
+
 interface MockRoutes {
   workspaces: Array<{ workspaceId: string }>
   documentsByWorkspace: Record<
     string,
-    Array<{ path: string; updatedAt: string; kind?: string; displayName?: string }>
+    Array<{ path: string; updatedAt: string; id?: string; kind?: string; displayName?: string }>
   >
   namesByWorkspace?: Record<
     string,
@@ -75,7 +90,7 @@ function installFetchMock(routes: MockRoutes) {
       if (override) return Promise.resolve(override)
       const documents = routes.documentsByWorkspace[workspaceId]
       if (!documents) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
-      const respond = () => jsonResponse({ documents })
+      const respond = () => jsonResponse({ documents: withSummaryDefaults(documents) })
       if (routes.delayCanvases) return routes.delayCanvases.then(respond)
       return Promise.resolve(respond())
     }
@@ -443,12 +458,18 @@ describe('DaemonIndexPage', () => {
       }
       if (url.includes('/ws-a/documents')) {
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: withSummaryDefaults([
+              { path: 'alpha', updatedAt: new Date().toISOString() },
+            ]),
+          }),
         )
       }
       if (url.includes('/ws-b/documents')) {
         const respond = () =>
-          jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] })
+          jsonResponse({
+            documents: withSummaryDefaults([{ path: 'beta', updatedAt: new Date().toISOString() }]),
+          })
         if (released) return Promise.resolve(respond())
         return new Promise<Response>((resolve) => {
           waiters.push(() => resolve(respond()))
@@ -568,7 +589,9 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-b/documents')) {
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'beta', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: withSummaryDefaults([{ path: 'beta', updatedAt: new Date().toISOString() }]),
+          }),
         )
       }
       return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
@@ -584,7 +607,9 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('beta')).toBeTruthy()
 
     resolveA?.(
-      jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+      jsonResponse({
+        documents: withSummaryDefaults([{ path: 'alpha', updatedAt: new Date().toISOString() }]),
+      }),
     )
 
     await new Promise((resolve) => setTimeout(resolve, 0))
@@ -655,6 +680,7 @@ describe('DaemonIndexPage', () => {
           jsonResponse({
             documents: [
               {
+                id: 'id-alpha',
                 path: 'alpha',
                 displayName: 'Alpha',
                 updatedAt: new Date().toISOString(),
@@ -739,14 +765,28 @@ describe('DaemonIndexPage', () => {
       if (url.endsWith('/api/workspaces/ws-a/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
           jsonResponse({
-            documents: [{ path: 'alpha', updatedAt: new Date().toISOString(), kind: 'markdown' }],
+            documents: [
+              {
+                id: 'id-alpha',
+                path: 'alpha',
+                updatedAt: new Date().toISOString(),
+                kind: 'markdown',
+              },
+            ],
           }),
         )
       }
       if (url.endsWith('/api/workspaces/ws-b/documents') && (!init || init.method === undefined)) {
         return Promise.resolve(
           jsonResponse({
-            documents: [{ path: 'beta', updatedAt: new Date().toISOString(), kind: 'markdown' }],
+            documents: [
+              {
+                id: 'id-beta',
+                path: 'beta',
+                updatedAt: new Date().toISOString(),
+                kind: 'markdown',
+              },
+            ],
           }),
         )
       }
@@ -994,7 +1034,12 @@ describe('DaemonIndexPage', () => {
             documents:
               created.length === 0
                 ? []
-                : serverPaths.map((path) => ({ path, updatedAt: new Date().toISOString() })),
+                : serverPaths.map((path) => ({
+                    id: `id-${path}`,
+                    path,
+                    updatedAt: new Date().toISOString(),
+                    kind: 'spatial',
+                  })),
           }),
         )
       }
@@ -1358,7 +1403,11 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: [
+              { path: 'alpha', id: 'doc-a', kind: 'spatial', updatedAt: new Date().toISOString() },
+            ],
+          }),
         )
       }
       return Promise.resolve(jsonResponse({}, 404))
@@ -1403,7 +1452,11 @@ describe('DaemonIndexPage', () => {
       }
       if (url.endsWith('/api/workspaces/ws-a/documents')) {
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'alpha', updatedAt: new Date().toISOString() }] }),
+          jsonResponse({
+            documents: [
+              { path: 'alpha', id: 'doc-a', kind: 'spatial', updatedAt: new Date().toISOString() },
+            ],
+          }),
         )
       }
       return Promise.resolve(jsonResponse({}, 404))

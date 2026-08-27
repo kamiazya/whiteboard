@@ -38,6 +38,7 @@
     "@kamiazya/whiteboard-plugin-visual": "workspace:*",
     "@kamiazya/whiteboard-ports": "workspace:*",
     "@kamiazya/whiteboard-search": "workspace:*",
+    "@kamiazya/whiteboard-workspace-index": "workspace:*",
     "@lezer/highlight": "^1.2.1",
     "@lezer/markdown": "^1.7.2",
     "@radix-ui/react-alert-dialog": "^1.1.23",

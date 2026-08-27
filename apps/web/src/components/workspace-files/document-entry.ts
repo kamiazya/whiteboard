@@ -31,6 +31,12 @@ export interface WorkspaceDocumentEntry {
    * them first, and retiring it must not silently lose that.
    */
   readonly pinOrder?: number
+  /**
+   * True when an earlier sibling owns this path — reachable only through
+   * concurrent creation on two replicas. Shown as a conflict badge; the
+   * user resolves it explicitly by renaming (never a silent auto-suffix).
+   */
+  readonly shadowed?: true
 }
 
 /**

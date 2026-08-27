@@ -170,6 +170,11 @@ export class DaemonBackend implements DocumentBackend {
 
     const daemonToken = readDaemonTokenOnce() ?? this.apiTransport?.wsToken?.() ?? null
 
+    // The initial frame is the WORKSPACE document's snapshot and remote
+    // frames are workspace-document updates — the only binary contract. The
+    // caller scopes its sync session to the open document
+    // (`contentDocumentId`); a workspace snapshot fed into an unscoped
+    // session reads as an empty document.
     const ws = new WebSocket(
       buildWhiteboardWsUrl(this.locationHref, this.workspaceId, this.path),
       buildWhiteboardWsProtocols(daemonToken),

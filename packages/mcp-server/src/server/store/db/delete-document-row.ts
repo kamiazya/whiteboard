@@ -17,11 +17,11 @@ import type { Database } from './index.js'
  * contract: a cascade is reachable from one call naming one path, and
  * deletion has nothing to undo it.
  *
- * `branches`/`versions` rows go with it via the ON DELETE CASCADE FKs
- * declared in migration 0001 (`PRAGMA foreign_keys=ON` is set per connection
- * in db/index.ts). Anything filed under a VERSION id — a thumbnail — is
- * therefore unreachable after this returns, which is why document teardown
- * collects what it needs before calling here.
+ * `branches`/`versions` rows do NOT go with it: migration 0016 dropped the
+ * cascade FK, so the caller's teardown deletes them explicitly after this
+ * returns (documentTeardown's bracket). Anything filed under a VERSION id —
+ * a thumbnail — still becomes unreachable once those rows go, which is why
+ * document teardown collects what it needs before calling here.
  *
  * Callers hold the workspace write lock. It is re-entrant per async chain,
  * so taking it again around this is safe and is what both callers do.

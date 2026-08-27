@@ -27,6 +27,7 @@ const PRE_0012 = '0011-import-fs-blobs'
 interface Handle {
   db: Kysely<Record<string, Record<string, unknown>>>
   migrateToPre0012(): Promise<void>
+  migrateTo(name: string): Promise<void>
   migrateToHead(): Promise<void>
 }
 
@@ -46,6 +47,10 @@ async function openDb(): Promise<Handle> {
     db,
     async migrateToPre0012() {
       const { error } = await migrator.migrateTo(PRE_0012)
+      expect(error).toBeUndefined()
+    },
+    async migrateTo(name: string) {
+      const { error } = await migrator.migrateTo(name)
       expect(error).toBeUndefined()
     },
     async migrateToHead() {
@@ -140,7 +145,10 @@ describe('0012-ulid-remaining-document-ids', () => {
     await mkdir(blobDir, { recursive: true })
     await writeFile(join(blobDir, 'uH6qTx6Ai2hl.loro'), new Uint8Array([1, 2, 3]))
 
-    await handle.migrateToHead()
+    // The version-carry is asserted at 0014, the last point the row still
+    // exists: 0015 deletes pre-0014 version rows as legacy per-document
+    // checkpoints (their frontiers point into oplogs the fold retired).
+    await handle.migrateTo('0014-versions-workspace-scoped')
 
     const row = (await handle.db
       .selectFrom('documents')
@@ -159,6 +167,8 @@ describe('0012-ulid-remaining-document-ids', () => {
       .selectAll()
       .executeTakeFirstOrThrow()) as { documentId: string }
     expect(branch.documentId).toBe(row.id)
+
+    await handle.migrateToHead()
 
     // migrateToHead now runs 0013 too, which rewrites the prefix this
     // migration wrote. The SEED above stays `canvas:` — it reproduces a

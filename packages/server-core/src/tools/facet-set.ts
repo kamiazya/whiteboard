@@ -63,7 +63,7 @@ export function createFacetSetTool(deps: ServerDeps) {
     outputSchema: facetSetOutputSchema,
     execute: async (input: FacetSetInput): Promise<FacetSetOutput> => {
       await assertDocumentInWorkspace(deps.documentIndex, input.workspaceId, input.documentId)
-      const doc = await loadOrCreateDocument(deps, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
       const kind = readDocumentKind(doc)
       const registry = deps.facetRegistry ?? bundledFacetRegistry
 
@@ -131,7 +131,7 @@ export function createFacetSetTool(deps: ServerDeps) {
           ...canvas,
           nodes: canvas.nodes.map((candidate) => (candidate.id === nodeId ? nextNode : candidate)),
         })
-        await saveDocumentSnapshot(deps, input.documentId, doc)
+        await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
         return { documentId: input.documentId, facets: merged }
       }
 
@@ -155,7 +155,7 @@ export function createFacetSetTool(deps: ServerDeps) {
       for (const key of deletions) delete mergedFacets[key]
       writeFacets(doc, mergedFacets)
 
-      await saveDocumentSnapshot(deps, input.documentId, doc)
+      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
 
       return { documentId: input.documentId, facets: mergedFacets }
     },

@@ -11,6 +11,8 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
   SaveSnapshotInput,
   SnapshotChunk,
@@ -69,8 +71,23 @@ export class LibsqlDocumentStore implements DocumentStore {
    * appendDeltas, so a later appendDeltas call also changes what a
    * subsequent loadSnapshot reports.
    */
-  async loadSnapshot({ docRef }: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-    const docKey = docRefKey(docRef)
+  async readSnapshotManifest({
+    docRef,
+  }: ReadSnapshotManifestInput): Promise<ReadSnapshotManifestResult> {
+    // The header row IS the manifest here, so this is `loadSnapshot` minus
+    // the chunk query — which is the whole point: a caller deciding whether
+    // to fold must not pull the snapshot to find out.
+    return this.readSnapshotHeader(docRefKey(docRef))
+  }
+
+  /**
+   * The `documentSnapshots` row as a manifest, or null when there is none.
+   *
+   * Shared by `loadSnapshot` and `readSnapshotManifest` so the two cannot
+   * grow different answers to "is there a snapshot" — a caller uses the
+   * cheap one to decide whether to call the expensive one.
+   */
+  private async readSnapshotHeader(docKey: string): Promise<ReadSnapshotManifestResult> {
     const header = await this.db
       .selectFrom('documentSnapshots')
       .select(['chunkCount', 'totalBytes', 'maxChunkBytes'])
@@ -89,6 +106,19 @@ export class LibsqlDocumentStore implements DocumentStore {
         `Stored document ${docKey} has a snapshot header that describes no snapshot`,
       )
     }
+    return {
+      chunkCount: header.chunkCount,
+      totalBytes: header.totalBytes,
+      maxChunkBytes: header.maxChunkBytes,
+    }
+  }
+
+  async loadSnapshot({ docRef }: LoadSnapshotInput): Promise<LoadSnapshotResult> {
+    const docKey = docRefKey(docRef)
+    const manifest = await this.readSnapshotHeader(docKey)
+    if (manifest === null) {
+      return null
+    }
 
     const [chunkRows, frontier] = await Promise.all([
       this.db
@@ -102,19 +132,11 @@ export class LibsqlDocumentStore implements DocumentStore {
 
     const chunks: SnapshotChunk[] = chunkRows.map((row) => ({
       index: row.chunkIndex,
-      of: header.chunkCount,
+      of: manifest.chunkCount,
       bytes: normalizeBlob(row.bytes),
     }))
 
-    return {
-      manifest: {
-        chunkCount: header.chunkCount,
-        totalBytes: header.totalBytes,
-        maxChunkBytes: header.maxChunkBytes,
-      },
-      chunks,
-      frontier,
-    }
+    return { manifest, chunks, frontier }
   }
 
   // Current "latest write wins" frontier for a doc, or an empty frontier when

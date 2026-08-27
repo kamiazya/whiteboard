@@ -45,6 +45,25 @@ describe('FolderContentsList', () => {
     ).toBeNull()
   })
 
+  // A contested path (two documents converged onto one address) is SHOWN,
+  // never hidden: the badge is how the user learns a rename is needed —
+  // resolution stays explicit, no silent auto-suffix.
+  it('marks a shadowed document with a path-conflict badge', () => {
+    const contested: WorkspaceDocumentEntry[] = [
+      { documentId: 'own1', path: 'design', name: 'Owner', kind: 'spatial' },
+      { documentId: 'riv1', path: 'design', name: 'Rival', kind: 'markdown', shadowed: true },
+    ]
+    render(<FolderContentsList documents={contested} folder="" onOpen={vi.fn()} />)
+    const badges = screen.getAllByTestId('card-shadowed-badge')
+    expect(badges).toHaveLength(1)
+    expect(badges[0]?.textContent).toMatch(/path conflict/i)
+  })
+
+  it('renders no conflict badge for an uncontested document', () => {
+    render(<FolderContentsList documents={docs} folder="design" onOpen={vi.fn()} />)
+    expect(screen.queryByTestId('card-shadowed-badge')).toBeNull()
+  })
+
   it('says the folder is empty rather than rendering an empty list', () => {
     render(<FolderContentsList documents={docs} folder="design/notes/kickoff" onOpen={vi.fn()} />)
     expect(screen.getByText(/empty/i).textContent).toMatch(/empty/i)

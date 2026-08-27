@@ -51,6 +51,7 @@ import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import type { ContentClock } from '../lib/local-document-summary.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -86,11 +87,11 @@ export interface DaemonDocumentPageProps {
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
-  // Optional: when provided (the real App.tsx wiring always provides it),
-  // renders a collapsed "Import from this browser" disclosure so a user who
-  // previously worked in the browser can copy those documents onto this
-  // daemon workspace. Absent in tests/embedders that don't need the flow.
-  browserStore?: DocumentIndex
+  // Defaults to the shared browser index, which renders a collapsed
+  // "Import from this browser" disclosure so a user who previously worked in
+  // the browser can copy those documents onto this daemon workspace. Tests /
+  // embedders inject a fake; `null` hides the flow entirely.
+  browserStore?: DocumentIndex | null
   browserClock?: ContentClock
   // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the
@@ -105,7 +106,9 @@ export function DaemonDocumentPage({
   token,
   capabilities = DAEMON_CAPABILITIES,
   createBackend,
-  browserStore,
+  // Resolved here, not in App: App is the entry chunk and the concrete index
+  // drags loro-crdt with it (entry-graph-loro-free.test.ts).
+  browserStore = sharedFoldingBrowserIndex(),
   browserClock,
   onNavigateBack,
 }: DaemonDocumentPageProps) {
@@ -127,40 +130,6 @@ export function DaemonDocumentPage({
   // never left. Only values that define the connection belong in those deps.
   const createBackendRef = useRef(createBackend)
   createBackendRef.current = createBackend
-  const resolvedCreateBackend = useCallback(
-    (workspaceId: string, path: string, daemonFetch: typeof fetch): DocumentBackend => {
-      const injected = createBackendRef.current?.(workspaceId, path, daemonFetch)
-      if (injected) return injected
-      // A secure page cannot open a ws:// socket to an http daemon at all, so
-      // the transport is decided up front rather than attempted and retried.
-      //
-      // The override in front is development-only and compiles away entirely
-      // in a production build. It exists because the rule below is correct AND
-      // makes the SSE path — and the SharedWorker behind it — unreachable from
-      // `pnpm dev`, which serves plain http.
-      const transport =
-        devTransportOverride() ??
-        selectDocumentTransport({
-          pageOrigin: window.location.origin,
-          daemonBaseUrl,
-        })
-      if (transport !== 'sse') {
-        // wsToken carries the pairing session token into the WS upgrade —
-        // without it a pairing-grant session authenticates HTTP but opens
-        // the socket credential-less and is rejected 401 (edits then stay
-        // browser-only while the page looks connected).
-        return new DaemonBackend(workspaceId, path, daemonBaseUrl, {
-          fetch: daemonFetch,
-          wsToken: () => token,
-        })
-      }
-      // Null where SharedWorker is unavailable; SseBackend then opens its own
-      // stream, which is correct but not shared across tabs.
-      const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
-      return new SseBackend(workspaceId, path, daemonBaseUrl, { fetch: daemonFetch }, shared)
-    },
-    [daemonBaseUrl, token],
-  )
 
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
 
@@ -200,16 +169,98 @@ export function DaemonDocumentPage({
   } | null>(null)
   const [importSectionOpen, setImportSectionOpen] = useState(false)
 
-  // Backend identity is keyed on (workspaceId, path, daemonFetch) — a change
-  // to any of these tears down the old connection and opens a new one via
-  // useDocumentSync's own effect cleanup (see BrowserDocumentPage for the
-  // same ownership split: this hook only decides WHEN to swap identity, not
-  // how disconnect/connect ordering happens).
-  const backend = useMemo(() => {
+  // Every listed document is tree-served and syncs at workspace-document
+  // granularity; the id is what binds this session's content inside the
+  // workspace record. Derived as a plain string so a summary refresh that
+  // changes only updatedAt cannot flip the backend identity. Undefined only
+  // while the path is absent from the list (a stale URL).
+  const workspaceSyncDocumentId = useMemo(() => {
+    const entry = controller.documents.find((d) => d.path === controller.path)
+    return entry?.id
+  }, [controller.documents, controller.path])
+
+  // Backend identity is keyed on (workspaceId, path, daemonFetch, sync
+  // granularity) — a change to any of these tears down the old connection and
+  // opens a new one via useDocumentSync's own effect cleanup (see
+  // BrowserDocumentPage for the same ownership split: this hook only decides
+  // WHEN to swap identity, not how disconnect/connect ordering happens).
+  // `contentDocumentId` travels WITH the backend because they only make sense
+  // together: an injected backend (tests, embedders) keeps the per-document
+  // contract, so scoping the session against its snapshot would misread it.
+  const backendState = useMemo((): {
+    backend: DocumentBackend
+    contentDocumentId: string | undefined
+  } | null => {
     if (controller.workspaceId === null || controller.path === null) return null
-    return resolvedCreateBackend(controller.workspaceId, controller.path, daemonFetch)
+    // No backend until the initial documents list is in: the page renders a
+    // skeleton anyway, and the list is what decides the sync granularity —
+    // connecting before it loads would open a per-document socket only to
+    // tear it down and reconnect at workspace scope a moment later.
+    if (controller.loading) return null
+    const injected = createBackendRef.current?.(
+      controller.workspaceId,
+      controller.path,
+      daemonFetch,
+    )
+    if (injected) return { backend: injected, contentDocumentId: undefined }
+    // Nothing is at this path (a stale URL — the document was deleted or
+    // never existed): no connection. The per-document contract used to catch
+    // this with a lazily created empty doc, which silently minted a blank
+    // canvas at the old path on the first edit; creating a document is an
+    // explicit act now (see the not-found state below).
+    if (workspaceSyncDocumentId === undefined) return null
+    // A secure page cannot open a ws:// socket to an http daemon at all, so
+    // the transport is decided up front rather than attempted and retried.
+    //
+    // The override in front is development-only and compiles away entirely
+    // in a production build. It exists because the rule below is correct AND
+    // makes the SSE path — and the SharedWorker behind it — unreachable from
+    // `pnpm dev`, which serves plain http.
+    const transport =
+      devTransportOverride() ??
+      selectDocumentTransport({
+        pageOrigin: window.location.origin,
+        daemonBaseUrl,
+      })
+    if (transport !== 'sse') {
+      // wsToken carries the pairing session token into the WS upgrade —
+      // without it a pairing-grant session authenticates HTTP but opens
+      // the socket credential-less and is rejected 401 (edits then stay
+      // browser-only while the page looks connected).
+      return {
+        backend: new DaemonBackend(controller.workspaceId, controller.path, daemonBaseUrl, {
+          fetch: daemonFetch,
+          wsToken: () => token,
+        }),
+        contentDocumentId: workspaceSyncDocumentId,
+      }
+    }
+    // Null where SharedWorker is unavailable; SseBackend then opens its own
+    // stream, which is correct but not shared across tabs. Same granularity
+    // as the WebSocket branch: every document syncs at workspace-document
+    // granularity.
+    const shared = createSharedSseStreamSource(daemonBaseUrl, token) ?? undefined
+    return {
+      backend: new SseBackend(
+        controller.workspaceId,
+        controller.path,
+        daemonBaseUrl,
+        { fetch: daemonFetch },
+        shared,
+      ),
+      contentDocumentId: workspaceSyncDocumentId,
+    }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [resolvedCreateBackend, controller.workspaceId, controller.path, daemonFetch])
+  }, [
+    controller.workspaceId,
+    controller.path,
+    controller.loading,
+    daemonFetch,
+    daemonBaseUrl,
+    token,
+    workspaceSyncDocumentId,
+  ])
+  const backend = backendState?.backend ?? null
 
   // A rejected session belongs to one backend identity — switching to a new
   // canvas opens a fresh connection, so a stale banner must not outlive the
@@ -249,6 +300,9 @@ export function DaemonDocumentPage({
     setEdgeLock,
     syncStatus,
   } = useDocumentSync(backend, {
+    ...(backendState?.contentDocumentId === undefined
+      ? {}
+      : { contentDocumentId: backendState.contentDocumentId }),
     onAuthError: () => setAuthError(true),
     onHeadChanged: () => setBranchRefreshSignal((n) => n + 1),
     onVersionCreated: () => setVersionRefreshSignal((n) => n + 1),
@@ -732,7 +786,42 @@ export function DaemonDocumentPage({
             </details>
           )}
         </div>
-        {controller.documents.length === 0 ? (
+        {canvas !== null &&
+        controller.documents.length > 0 &&
+        workspaceSyncDocumentId === undefined ? (
+          <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
+            {onNavigateBack && (
+              <button
+                type="button"
+                onClick={onNavigateBack}
+                className="self-start rounded-md px-2 py-1 text-xs font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <span aria-hidden="true">← </span>Back to documents
+              </button>
+            )}
+            <p className="text-sm text-muted-foreground">
+              Nothing is at <span className="font-medium text-foreground">“{canvas.path}”</span> in
+              this workspace. It may have been deleted or renamed.
+            </p>
+            {controller.createError && (
+              <div role="alert" aria-live="assertive" className="text-xs text-destructive">
+                {controller.createError}
+              </div>
+            )}
+            <Button
+              type="button"
+              variant="outline"
+              size="sm"
+              disabled={creating}
+              onClick={() => {
+                setCreating(true)
+                void controller.createDocument(canvas.path).finally(() => setCreating(false))
+              }}
+            >
+              Create a canvas at this path
+            </Button>
+          </div>
+        ) : controller.documents.length === 0 ? (
           <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
             {/* WorkspaceTopBar (the usual home for this button) only mounts once
                 a canvas is selected, so a workspace that resolves to zero
@@ -811,12 +900,10 @@ export function DaemonDocumentPage({
                   // safe); the label shows its current path and the current
                   // canvas is excluded. Legacy documents still carry path refs,
                   // which resolveRefPath misses and switchDocument takes as-is.
-                  // An older daemon's list has no ids yet; those entries fall
-                  // back to path refs (same behavior as before ids existed).
                   fileRefOptions={controller.documents
                     .filter((entry) => entry.path !== canvas?.path)
                     .map((entry) => ({
-                      file: entry.id ?? entry.path,
+                      file: entry.id,
                       label: entry.path,
                       kind: entry.kind,
                     }))}

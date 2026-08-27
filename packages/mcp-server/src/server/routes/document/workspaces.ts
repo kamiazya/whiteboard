@@ -3,10 +3,10 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  isWorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import {
   type ServerDeps,
-  WorkspaceNotFoundError,
   wbDocumentCreate,
   wbDocumentDelete,
   wbDocumentList,
@@ -95,6 +95,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
           ...(entry.name === undefined ? {} : { displayName: entry.name }),
           ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+          ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
         })),
       }
       return c.json(response)
@@ -108,7 +109,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // So the two cases a client must tell apart are: a workspace that
       // exists and holds nothing answers 200 with an empty array, and only an
       // ABSENT one answers 404. A 404 here therefore means gone, never empty.
-      if (err instanceof WorkspaceNotFoundError) {
+      if (isWorkspaceNotFoundError(err)) {
         return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
       }
       const issue = handleCorruptStoredData(err)
@@ -200,6 +201,12 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         const response: DeleteDocumentResponse = { ok: true }
         return c.json(response)
       } catch (err) {
+        // The tree index refuses an unknown workspace with a throw where the
+        // retired SQL index answered null; this surface's spelling of both
+        // is the same 404.
+        if (isWorkspaceNotFoundError(err)) {
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
+        }
         // A refusal, not a failure: the caller has to name what it destroys.
         if (err instanceof DocumentHasDescendantsError) {
           return c.json({ title: err.message } satisfies ApiErrorBody, 409)
@@ -255,7 +262,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         return c.json(response)
       } catch (err) {
         // Absent is a 404 here and a throw there — the same translation the
-        // delete makes, in the opposite direction.
+        // delete makes, in the opposite direction. An unknown WORKSPACE is
+        // the same answer: nothing at that address.
+        if (isWorkspaceNotFoundError(err)) {
+          return c.json({ title: `Canvas "${path}" not found` }, 404)
+        }
         if (err instanceof DocumentNotFoundError) {
           return c.json({ title: `Canvas "${path}" not found` }, 404)
         }

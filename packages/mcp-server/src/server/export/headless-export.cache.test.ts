@@ -35,7 +35,7 @@ const { saveDocument, getDoc } = await import('../store/document-store.js')
 const { clearCache } = await import('../store/doc-cache.js')
 const { getDb } = await import('../store/db/index.js')
 const { LibsqlDocumentStore } = await import('../store/libsql/libsql-document-store.js')
-const { getDocumentIdByPath } = await import('../store/db/upsert-workspace.js')
+const { resolveDocumentIdAtPath } = await import('../store/document-store.js')
 
 const WORKSPACE = 'ws_cache'
 const PATH = 'design'
@@ -61,18 +61,22 @@ function textDoc(text: string): LoroDoc {
 
 /**
  * The MCP tool surface's write, reproduced exactly: resolve the documentId,
- * build a FRESH LoroDoc, and save it against `document:<id>`. That freshness
- * is the whole point — a caller mutating the cached instance in place leaves
- * the cache correct by identity, and every tool call does the opposite.
+ * build a FRESH LoroDoc, and save it against `document:<id>` through the
+ * store the composition root actually injects — WorkspaceRoutedDocumentStore,
+ * which merges the write into the live cached projection and the workspace
+ * record. That freshness is the whole point — a caller mutating the cached
+ * instance in place leaves the cache correct by identity, and every tool
+ * call does the opposite.
  */
 async function writeThroughToolPath(text: string): Promise<void> {
   const db = await getDb(tempDir)
-  const documentId = await getDocumentIdByPath(db, WORKSPACE, PATH)
+  const documentId = await resolveDocumentIdAtPath(WORKSPACE, PATH)
   if (documentId === undefined || documentId === null) throw new Error('no documentId for path')
   const doc = textDoc(text)
   const { manifest, chunks } = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1024 * 1024)
-  await new LibsqlDocumentStore(db).saveSnapshot({
-    docRef: { kind: 'document', documentId },
+  const { WorkspaceRoutedDocumentStore } = await import('../store/workspace-plane.js')
+  await new WorkspaceRoutedDocumentStore(new LibsqlDocumentStore(db)).saveSnapshot({
+    docRef: { kind: 'document', workspaceId: WORKSPACE, documentId },
     manifest,
     chunks,
     // The tools' own value (`document-io.ts`). It is what tells a reader the

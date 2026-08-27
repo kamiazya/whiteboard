@@ -26,6 +26,9 @@ export function buildWhiteboardWsUrl(
 ): string {
   const url = new URL(locationHref)
   url.protocol = url.protocol === 'https:' ? 'wss:' : 'ws:'
+  // Every socket subscribes at workspace-document granularity; the path
+  // stays in the URL because it remains the auth and auto-version target
+  // (see routes/ws-validation.ts).
   url.pathname = `/ws/${workspaceId}/${path.split('/').map(encodeURIComponent).join('/')}`
   url.search = ''
   url.hash = ''

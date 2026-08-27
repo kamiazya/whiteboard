@@ -94,9 +94,11 @@ describe('getDb / closeDb', () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
 
-    // The branches table FKs documents.id with ON DELETE CASCADE. Inserting a
-    // branch row whose documentId does not exist must throw, and deleting a
-    // canvas must also delete its branches.
+    // The documents table FKs workspaces.id with ON DELETE CASCADE — the one
+    // FK pair still in the schema now that 0016 dropped the documents FK
+    // from versions/branches. Inserting a legacy documents row whose
+    // workspaceId does not exist must throw, and deleting a workspace must
+    // also delete its rows.
     const now = Date.now()
     await db
       .insertInto('workspaces')
@@ -116,39 +118,29 @@ describe('getDb / closeDb', () => {
         updatedAt: now,
       })
       .execute()
-    await db
-      .insertInto('branches')
-      .values({
-        documentId: 'cv-fk',
-        name: 'main',
-        tipFrontiers: '',
-        color: null,
-        sourceBranchName: null,
-        sourceVersionId: null,
-        createdAt: now,
-      })
-      .execute()
 
     await expect(
       db
-        .insertInto('branches')
+        .insertInto('documents')
         .values({
-          documentId: 'cv-does-not-exist',
-          name: 'orphan',
-          tipFrontiers: '',
-          color: null,
-          sourceBranchName: null,
-          sourceVersionId: null,
+          id: 'cv-orphan',
+          workspaceId: 'ws-does-not-exist',
+          path: 'orphan',
+          displayName: null,
+          isPinned: 0,
+          pinOrder: null,
+          currentBranch: 'main',
           createdAt: now,
+          updatedAt: now,
         })
         .execute(),
     ).rejects.toThrow(/FOREIGN KEY/i)
 
-    await db.deleteFrom('documents').where('id', '=', 'cv-fk').execute()
+    await db.deleteFrom('workspaces').where('id', '=', 'ws-fk').execute()
     const remaining = await db
-      .selectFrom('branches')
+      .selectFrom('documents')
       .selectAll()
-      .where('documentId', '=', 'cv-fk')
+      .where('workspaceId', '=', 'ws-fk')
       .execute()
     expect(remaining).toEqual([])
   })

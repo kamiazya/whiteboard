@@ -16,7 +16,17 @@ vi.mock('../config.js', () => ({
 
 const { loadWorkspaceNames, setWorkspaceName, setDocumentDisplayName, setDocumentPinned } =
   await import('./names-store.js')
+const { saveDocument } = await import('./document-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
+const { LoroDoc } = await import('loro-crdt')
+
+// Metadata writers refuse a path with no document, so every test that names
+// one seeds it first — the shape production always has.
+async function seedDocuments(workspaceId, paths) {
+  for (const path of paths) {
+    await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
+  }
+}
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -24,6 +34,7 @@ describe('names-store', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'names-test-'))
     handle = await createIsolatedDb({ dataDir: tempDir })
+    await seedDocuments('sess-1', ['a', 'b', 'c1', 'c2', 'path', 'notes/meeting', 'arch/overview'])
   })
 
   afterEach(async () => {
@@ -34,6 +45,63 @@ describe('names-store', () => {
   it('returns empty WorkspaceNames for an uninitialized session', async () => {
     const names = await loadWorkspaceNames('sess-1')
     expect(names).toEqual({ documents: {}, pinned: [] })
+  })
+
+  // Metadata writes must not CREATE documents: a minted row here has no kind
+  // and no workspace-tree node — a corrupt state the boot fold deletes and
+  // the listing contract rejects. Creating documents is saveDocument /
+  // createDocument's job alone.
+  it('setDocumentDisplayName refuses a path with no document instead of minting a phantom row', async () => {
+    await expect(setDocumentDisplayName('sess-1', 'never-created', 'Name')).rejects.toThrow(
+      /no document/i,
+    )
+  })
+
+  it('setDocumentPinned refuses a path with no document instead of minting a phantom row', async () => {
+    await expect(setDocumentPinned('sess-1', 'never-created', true)).rejects.toThrow(/no document/i)
+  })
+
+  // Pin state is shared CRDT state (dual-plane collapse S4b): the row write
+  // keeps serving today's reads, and the workspace record's pinned list is
+  // what every replica converges on.
+  it('mirrors pin and unpin into the workspace record pinned list', async () => {
+    const { openWorkspaceDocIfStored, resolveDocumentIdAtPath } = await import(
+      './document-store.js'
+    )
+    const { readPinnedDocumentIds } = await import('@kamiazya/whiteboard-loro-adapter')
+    const idOf = async (path: string) => {
+      const id = await resolveDocumentIdAtPath('sess-1', path)
+      if (id === null) throw new Error(`no document at ${path}`)
+      return id
+    }
+
+    await setDocumentPinned('sess-1', 'b', true)
+    await setDocumentPinned('sess-1', 'a', true)
+    const doc = await openWorkspaceDocIfStored('sess-1')
+    expect(doc).not.toBeNull()
+    if (doc === null) throw new Error('unreachable')
+    expect(readPinnedDocumentIds(doc)).toEqual([await idOf('b'), await idOf('a')])
+
+    await setDocumentPinned('sess-1', 'b', false)
+    expect(readPinnedDocumentIds(doc)).toEqual([await idOf('a')])
+  })
+
+  // S7: reads answer from the workspace record, not the rows — skewing the
+  // rows behind the tree's back must not change what the listing says.
+  it('loadWorkspaceNames answers names and pins from the tree, not the rows', async () => {
+    const { getDb } = await import('./db/index.js')
+    await setDocumentDisplayName('sess-1', 'a', 'Tree name')
+    await setDocumentPinned('sess-1', 'b', true)
+    const db = await getDb(tempDir)
+    await db
+      .updateTable('documents')
+      .set({ displayName: 'Rows-only name', isPinned: 0, pinOrder: null })
+      .where('workspaceId', '=', 'sess-1')
+      .execute()
+
+    const names = await loadWorkspaceNames('sess-1')
+    expect(names.documents.a).toBe('Tree name')
+    expect(names.pinned).toEqual(['b'])
   })
 
   it('setWorkspaceName persists the workspace name and loadWorkspaceNames returns it', async () => {
@@ -102,11 +170,11 @@ describe('names-store', () => {
   it('setDocumentPinned(false) removes from the array and is a no-op for missing paths', async () => {
     await setDocumentPinned('sess-1', 'c1', true)
     await setDocumentPinned('sess-1', 'c2', true)
-    let names = await setDocumentPinned('sess-1', 'c1', false)
+    const names = await setDocumentPinned('sess-1', 'c1', false)
     expect(names.pinned).toEqual(['c2'])
-    // Unpinning a missing path is a no-op.
-    names = await setDocumentPinned('sess-1', 'nope', false)
-    expect(names.pinned).toEqual(['c2'])
+    // Unpinning a path with no document is the caller naming a document
+    // that does not exist — refused like every other metadata write.
+    await expect(setDocumentPinned('sess-1', 'nope', false)).rejects.toThrow(/no document/i)
   })
 
   it('keeps pinned independent from name and workspace changes', async () => {

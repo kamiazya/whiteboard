@@ -1,5 +1,4 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
-import { MARKDOWN_BODY_KEY } from '@kamiazya/whiteboard-loro-adapter'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -43,6 +42,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
@@ -80,7 +80,8 @@ const TOP_BAR_FALLBACK_HEIGHT = 'h-12'
 const log = getAppLogger('browser-document-page')
 
 interface BrowserDocumentPageProps {
-  store: DocumentIndex
+  /** Defaults to the shared production index; injected by tests. */
+  store?: DocumentIndex
   /**
    * The two app-side concerns `DocumentIndex` does not own. Defaulted inside
    * the controller, so production passes neither; a jsdom test passes both,
@@ -117,7 +118,10 @@ function titleOf(name: string | null, path: string | null): string {
 }
 
 export function BrowserDocumentPage({
-  store,
+  // Stable across renders (the shared accessor memoizes). Living here rather
+  // than in App keeps loro-crdt off the entry chunk
+  // (entry-graph-loro-free.test.ts).
+  store = sharedFoldingBrowserIndex(),
   loro,
   capabilities = BROWSER_CAPABILITIES,
   initialPath,
@@ -263,8 +267,10 @@ export function BrowserDocumentPage({
     () =>
       markdownDoc.doc === null
         ? undefined
-        : [LoroSyncPlugin(markdownDoc.doc, (d) => d.getText(MARKDOWN_BODY_KEY))],
-    [markdownDoc.doc],
+        : // bodyTextOf, not a root getText: in workspace mode the doc is the
+          // WORKSPACE document and this document's body sits on its tree node.
+          [LoroSyncPlugin(markdownDoc.doc, (d) => markdownDoc.bodyTextOf(d))],
+    [markdownDoc.doc, markdownDoc.bodyTextOf],
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
@@ -447,8 +453,19 @@ export function BrowserDocumentPage({
   // wins — the sync layer's body-less doc would clobber the markdown body
   // written by use-markdown-body.
   const backend = useMemo(
-    () =>
-      documentId != null && documentKind !== 'markdown' ? new BrowserBackend(documentId) : null,
+    () => {
+      if (pageState.kind !== 'editing' || pageState.snapshot.kind === 'markdown') return null
+      const snap = pageState.snapshot
+      // path/kind/name ride along so connect() can place the document in the
+      // workspace tree when it is not there yet — a fresh document, or a
+      // record the startup fold could not classify on its own.
+      return new BrowserBackend({
+        documentId: snap.documentId,
+        path: snap.path,
+        kind: snap.kind,
+        ...(snap.name === snap.path ? {} : { name: snap.name }),
+      })
+    },
     // Re-create backend only when documentId/kind changes; a null id means not-yet-loaded.
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [documentId, documentKind],
@@ -472,7 +489,11 @@ export function BrowserDocumentPage({
     lockedEdgeIds,
     setEdgeLock,
     backendError,
-  } = useDocumentSync(backend)
+  } = useDocumentSync(backend, {
+    // The backend delivers the WORKSPACE document; this scopes the session's
+    // reads and writes to the tree node carrying this document's content.
+    ...(documentId === null ? {} : { contentDocumentId: documentId }),
+  })
 
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only

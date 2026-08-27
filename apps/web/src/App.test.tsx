@@ -602,7 +602,9 @@ describe('App daemon provider state', () => {
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
     expect(receivedDaemonPageProps?.capabilities).toEqual(DAEMON_STATE.capabilities)
-    expect(receivedDaemonPageProps?.browserStore).toBeDefined()
+    // browserStore is deliberately NOT passed by App: the page defaults to the
+    // shared index itself so the concrete class stays out of the entry chunk
+    // (entry-graph-loro-free.test.ts).
     expect(receivedDaemonPageProps?.onNavigateBack).toBeInstanceOf(Function)
   })
 

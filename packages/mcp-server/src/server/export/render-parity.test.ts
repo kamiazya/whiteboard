@@ -59,7 +59,7 @@ describe('wb_scene_render / export parity', () => {
     writeSpatialCanvas(doc, canvas)
     const snapshot = chunkSnapshot(doc.export({ mode: 'snapshot' }), 1 << 20)
     await deps.documentStore.saveSnapshot({
-      docRef: { kind: 'document', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: 'ws-1', documentId: DOCUMENT_ID },
       manifest: snapshot.manifest,
       chunks: snapshot.chunks,
       frontier: new Uint8Array(),

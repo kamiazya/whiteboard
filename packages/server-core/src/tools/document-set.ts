@@ -140,7 +140,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       }
 
       const { frontmatter, body } = parsed.value
-      const doc = await loadOrCreateDocument(deps, input.documentId)
+      const doc = await loadOrCreateDocument(deps, input.workspaceId, input.documentId)
       // Captured before anything below writes, because both are what the
       // document said a moment ago rather than what it is about to say.
       const storedTrust = readTrustFacets(doc)
@@ -222,7 +222,7 @@ export function createDocumentSetTool(deps: ServerDeps) {
       // rewritten.
       writeMarkdownBody(doc, body)
 
-      await saveDocumentSnapshot(deps, input.documentId, doc)
+      await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
 
       return { documentId: input.documentId, imported: true }
     },

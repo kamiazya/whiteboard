@@ -192,6 +192,21 @@ export async function main() {
   const dataDir = getDataDir()
   await prepareDataDir(dataDir)
 
+  // Fold per-document records into each workspace's workspace document
+  // before anything serves: routes and tools read the tree first, so a
+  // record left unfolded would read as an older copy. Non-fatal — the fold
+  // is derived and self-healing, and the legacy plane still serves whatever
+  // it skips.
+  try {
+    const { foldWorkspaceDocuments } = await import('./store/fold-workspace.js')
+    const report = await foldWorkspaceDocuments()
+    if (report.folded > 0 || report.skipped > 0) {
+      getLogger('server-index').notice({ ...report }, 'workspace document fold ran at startup')
+    }
+  } catch (err) {
+    getLogger('server-index').warning({ err }, 'workspace document fold failed at startup')
+  }
+
   // Notice level (not info) because misdirected persistence — e.g. a dev
   // daemon accidentally writing into the real ~/.whiteboard — is expensive
   // to notice otherwise; this line is the one place that names where data

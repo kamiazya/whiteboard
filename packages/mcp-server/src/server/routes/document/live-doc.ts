@@ -10,7 +10,6 @@ import { evictDoc } from '../../store/doc-cache.js'
 import { documentExists, getDoc, saveDocument } from '../../store/document-store.js'
 import type { VersionEntry } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
-import { getBroadcastFn } from './_shared.js'
 import { onDocumentAction } from './path-route.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's
@@ -85,8 +84,9 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
         return resolved
       })
 
-      // Broadcast to all WS clients because the originating WS context is unknown on HTTP requests.
-      getBroadcastFn()(workspaceId, path, bytes)
+      // No explicit broadcast: saveDocument persisted through the workspace
+      // record, whose funnel already fanned the persisted bytes to every
+      // subscriber (including the sender, whose re-import is a CRDT no-op).
 
       // Trigger auto-versioning. The throttle is built in, so below-threshold calls return null.
       // Even if saving the version fails, keep this API at 200 because the update itself is the priority.

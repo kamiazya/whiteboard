@@ -13,27 +13,10 @@ function render(ui: ReactElement) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>)
 }
 
-vi.mock('../lib/browser-backend.js', () => ({
-  BrowserBackend: class {
-    connect(handlers: { onConnected: () => void; onSnapshot: (b: Uint8Array) => void }) {
-      handlers.onConnected()
-      const { LoroDoc } = require('loro-crdt') as typeof import('loro-crdt')
-      handlers.onSnapshot(new LoroDoc().export({ mode: 'snapshot' }))
-    }
-    disconnect() {}
-    pushLocalUpdate() {
-      return Promise.resolve()
-    }
-    getFile() {
-      return Promise.resolve(null)
-    }
-    putFile() {
-      return Promise.resolve()
-    }
-    sendClientReady() {}
-    sendExportResponse() {}
-  },
-}))
+vi.mock('../lib/browser-backend.js', async () => {
+  const { FakeBrowserBackend } = await import('../test-utils/fake-browser-backend.js')
+  return { BrowserBackend: FakeBrowserBackend }
+})
 
 const snap: DocumentSnapshot = {
   documentId: '0AFMSY38DJQW16BGNTZ49EKRX2',

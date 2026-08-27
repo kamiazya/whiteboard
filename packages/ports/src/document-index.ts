@@ -24,12 +24,18 @@ export const documentEntrySchema = z
      */
     name: z.string().min(1).optional(),
     /**
+     * True when an earlier sibling owns this path — only reachable through
+     * concurrent creation on two replicas, which no local uniqueness check
+     * can prevent. Shown rather than hidden: the data has converged, and a
+     * listing that dropped half of it would read as loss. `z.literal(true)`
+     * so the absent case has exactly one spelling.
+     */
+    shadowed: z.literal(true).optional(),
+    /**
      * When the placement last changed, ISO 8601.
      *
-     * OPTIONAL because an index may genuinely not own it: the daemon's SQL
-     * twin has the column, while apps/web's IndexedDB index does not — that
-     * app reads timestamps from a separate store keyed by documentId. A
-     * required field would have forced one of them to invent a value, and an
+     * OPTIONAL because an index may genuinely not own it: a tree entry
+     * written before timestamps landed in the node meta has none, and an
      * invented timestamp is worse than an absent one because it reads as
      * fact. Every UI site that renders it already treats absence as "no age
      * to show".
@@ -112,6 +118,23 @@ export function compareDocumentPaths(left: string, right: string): number {
  * workspaceId is otherwise indistinguishable from a new one, and the caller
  * gets a workspace nobody asked for with its data quietly inside.
  */
+/**
+ * Cross-realm-safe guard for `WorkspaceNotFoundError`. `instanceof` alone is
+ * a trap here: this class reaches a consumer through more than one module
+ * graph (a bundler inlining one package while externalizing another, vitest
+ * transforming a workspace dependency a `vi.mock`ing test file pulls in),
+ * and two loads of this file make two class identities that `instanceof`
+ * refuses to relate. The name check is what survives that — measured: a
+ * route's `instanceof` answered false for an error whose constructor name
+ * matched exactly.
+ */
+export function isWorkspaceNotFoundError(error: unknown): error is WorkspaceNotFoundError {
+  return (
+    error instanceof WorkspaceNotFoundError ||
+    (error instanceof Error && error.name === 'WorkspaceNotFoundError')
+  )
+}
+
 export class WorkspaceNotFoundError extends Error {
   constructor(readonly workspaceId: string) {
     super(`Workspace not found: "${workspaceId}". Create it before adding documents to it.`)
@@ -135,6 +158,26 @@ export class DocumentPathTakenError extends Error {
   ) {
     super(`Document path "${path}" already exists in workspace "${workspaceId}"`)
     this.name = 'DocumentPathTakenError'
+  }
+}
+
+/**
+ * Thrown when resolution BY PATH names a path that more than one document
+ * carries — reachable only through concurrent creation on two replicas.
+ * The listing shows both (one `shadowed`); resolving the ambiguity is the
+ * caller's decision, made by id or by renaming one, never by this port
+ * silently picking whichever sibling tree order favors.
+ */
+export class DocumentPathContestedError extends Error {
+  constructor(
+    readonly workspaceId: string,
+    readonly path: string,
+  ) {
+    super(
+      `More than one document carries "${path}" in workspace "${workspaceId}". ` +
+        'Resolve by documentId, or rename one of them.',
+    )
+    this.name = 'DocumentPathContestedError'
   }
 }
 

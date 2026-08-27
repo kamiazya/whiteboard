@@ -24,7 +24,12 @@ import { createServer as createNetServer } from 'node:net'
 import { tmpdir } from 'node:os'
 import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
-import { readSpatialCanvas, writeSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  documentContainers,
+  readSpatialCanvas,
+  resolveWorkspaceDocument,
+  writeSpatialNode,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
 import { documentApiUrl } from '../../src/shared/api-contracts/document-url.js'
@@ -307,6 +312,8 @@ async function main() {
   }
   log('[e2e] HTTP path-snapshot → node A present with exact content')
 
+  // The socket serves the WORKSPACE document — the only binary contract —
+  // so the read below resolves this document's containers inside it.
   const wsUrl = buildWhiteboardWsUrl(mcpUrl, WORKSPACE_ID, DOCUMENT_PATH)
   const ws = new WebSocket(wsUrl, buildWhiteboardWsProtocols(TOKEN))
   // Long-lived for the whole WS lifetime (initial snapshot, the later push,
@@ -326,11 +333,17 @@ async function main() {
   const wsSnapshotBytes = new Uint8Array(wsSnapshotData)
   const wsDoc = new LoroDoc()
   wsDoc.import(wsSnapshotBytes)
-  const nodeAViaWs = readSpatialCanvas(wsDoc).nodes.find((n) => n.id === 'node-a')
+  const wsEntry = resolveWorkspaceDocument(wsDoc, DOCUMENT_PATH)
+  if (!wsEntry) {
+    throw new Error(`WS workspace snapshot has no document at "${DOCUMENT_PATH}"`)
+  }
+  const nodeAViaWs = readSpatialCanvas(documentContainers(wsDoc, wsEntry.documentId)).nodes.find(
+    (n) => n.id === 'node-a',
+  )
   if (nodeAViaWs?.text !== NODE_A.text) {
     throw new Error(`WS initial snapshot missing/mismatched node A: ${JSON.stringify(nodeAViaWs)}`)
   }
-  log('[e2e] WS connect → initial snapshot contains node A')
+  log('[e2e] WS connect → workspace snapshot contains node A inside this document')
 
   // ── Step 4: merge-before-save — one more MCP write (store-direct) lands
   //    while the WS session's doc-cache entry is still pinned to the doc it
@@ -354,13 +367,18 @@ async function main() {
   }
   log('[e2e] wb_canvas_edit → node C (while WS session stays open)')
 
-  // web-edit shape: import the connect-time snapshot into a fresh LoroDoc,
-  // write a node through loro-adapter's writeSpatialNode (the same bridge
-  // apps/web's editor calls), commit, export an incremental update relative
-  // to the pre-edit version, and push it as one binary frame.
+  // web-edit shape: import the connect-time WORKSPACE snapshot into a fresh
+  // LoroDoc, write a node into this document's containers through
+  // loro-adapter's writeSpatialNode (the same bridge apps/web's session
+  // calls via contentDocumentId), commit, export an incremental update
+  // relative to the pre-edit version, and push it as one binary frame.
   const clientDoc = new LoroDoc()
   clientDoc.import(wsSnapshotBytes)
   const preEditVersion = clientDoc.version()
+  const clientEntry = resolveWorkspaceDocument(clientDoc, DOCUMENT_PATH)
+  if (!clientEntry) {
+    throw new Error(`client workspace replica has no document at "${DOCUMENT_PATH}"`)
+  }
   const NODE_B = {
     id: 'node-b',
     type: 'text',
@@ -370,10 +388,11 @@ async function main() {
     height: 100,
     text: 'node B — added over WS (web-edit shape)',
   }
-  writeSpatialNode(clientDoc, NODE_B)
+  writeSpatialNode(documentContainers(clientDoc, clientEntry.documentId), NODE_B)
+  clientDoc.commit()
   const update = clientDoc.export({ mode: 'update', from: preEditVersion })
   ws.send(Buffer.from(update))
-  log('[e2e] WS push → node B (writeSpatialNode + incremental update frame)')
+  log('[e2e] WS push → node B (writeSpatialNode + incremental workspace update frame)')
 
   // ── Step 5: acceptance — MCP read-back names and contains all three
   //    writers' content. wb_canvas_snapshot is polled because the WS push

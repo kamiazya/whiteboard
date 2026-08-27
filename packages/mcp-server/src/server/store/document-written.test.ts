@@ -38,13 +38,10 @@ describe('documentWritten', () => {
   // that let the original gap survive.
   it('schedules a compaction for the document an agent write names', async () => {
     await saveDocument('ws-1', 'agent-written', new LoroDoc())
-    const db = await getDb(tempDir)
-    const { id: documentId } = await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('workspaceId', '=', 'ws-1')
-      .where('path', '=', 'agent-written')
-      .executeTakeFirstOrThrow()
+    const { resolveDocumentIdAtPath } = await import('./document-store.js')
+    const documentId = await resolveDocumentIdAtPath('ws-1', 'agent-written')
+    expect(documentId).not.toBeNull()
+    if (documentId === null) throw new Error('unreachable')
 
     // Asserted, not merely captured: `toBe(1)` below only proves the observer
     // scheduled something if nothing was scheduled already. Creating the
@@ -54,7 +51,7 @@ describe('documentWritten', () => {
     // is what keeps it that way.
     expect(_autoCompactTimerCountForTests()).toBe(0)
 
-    await documentWritten({ documentId })
+    await documentWritten({ workspaceId: 'ws-1', documentId })
 
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
@@ -105,15 +102,15 @@ describe('documentWritten', () => {
     expect(_autoCompactTimerCountForTests()).toBe(1)
   })
 
-  // A tool can save bytes for an id the index has never been told about.
+  // A tool can save bytes for an id the tree has never been told about.
   // There is nothing to compact under a name that does not exist, and that
   // must not throw into the write that just succeeded.
-  it('does nothing for a documentId with no placement row', async () => {
+  it('does nothing for a documentId with no tree placement', async () => {
     await saveDocument('ws-1', 'seeded', new LoroDoc())
     const before = _autoCompactTimerCountForTests()
 
     await expect(
-      documentWritten({ documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
+      documentWritten({ workspaceId: 'ws-1', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }),
     ).resolves.toBeUndefined()
 
     expect(_autoCompactTimerCountForTests()).toBe(before)

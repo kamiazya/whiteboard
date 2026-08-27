@@ -18,6 +18,9 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { clearCache } = await import('../../store/doc-cache.js')
+const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
+  '../../store/document-store.js'
+)
 const { createVersionsRouter } = await import('./versions.js')
 const { createDocumentRouter } = await import('../document.js')
 
@@ -34,6 +37,11 @@ describe('versions API', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
+    _clearWorkspaceDocCacheForTests()
+    // Version save refuses a path with no document; seed the canvases the
+    // routes below checkpoint — the shape production always has.
+    await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
   })
   afterEach(() => {
     clearCache()

@@ -1056,7 +1056,12 @@ describe('createApp daemon mutation auth', () => {
 
     // Pin feature's tip to the pre-deletion state so it stops tracking the
     // live doc (an empty tipFrontiers always resolves to the live doc).
-    const pinnedTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    // Recorded as WORKSPACE record frontiers — the lineage the production
+    // getCurrentFrontiers hook records tips in.
+    const { workspaceFrontiersForPath } = await import('./store/document-store.js')
+    const pinnedTip = Buffer.from(
+      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
+    ).toString('base64')
     const state = await loadDocumentBranches('session1', 'canvas-a')
     const feature = state.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = pinnedTip
@@ -1101,7 +1106,10 @@ describe('createApp daemon mutation auth', () => {
     })
 
     // Pin main to the A-only state so it stops tracking the live doc.
-    const mainOnlyTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    const { workspaceFrontiersForPath } = await import('./store/document-store.js')
+    const mainOnlyTip = Buffer.from(
+      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
+    ).toString('base64')
     const state = await loadDocumentBranches('session1', 'canvas-a')
     const main = state.branches.find((branch) => branch.name === 'main')!
     main.tipFrontiers = mainOnlyTip
@@ -1122,7 +1130,9 @@ describe('createApp daemon mutation auth', () => {
     })
     await saveDocument('session1', 'canvas-a', withC, { overwrite: true })
 
-    const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
+    const featureTip = Buffer.from(
+      (await workspaceFrontiersForPath('session1', 'canvas-a'))!,
+    ).toString('base64')
     const afterAddC = await loadDocumentBranches('session1', 'canvas-a')
     const feature = afterAddC.branches.find((branch) => branch.name === 'feature')!
     feature.tipFrontiers = featureTip
@@ -1146,7 +1156,6 @@ describe('createApp daemon mutation auth', () => {
   it('committed merge fires a resurrected badge across a genuine two-sided divergence', async () => {
     const { saveDocument } = await import('./store/document-store.js')
     const { loadDocumentBranches, saveDocumentBranches } = await import('./store/branches-store.js')
-    const { writeSpatialNode } = await import('@kamiazya/whiteboard-loro-adapter')
 
     const app = createApp(createRuntimeOptions())
 
@@ -1156,7 +1165,6 @@ describe('createApp daemon mutation auth', () => {
       edges: [],
     })
     await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
-    const forkSnapshot = forkDoc.export({ mode: 'snapshot' })
 
     await app.request('/api/workspaces/session1/documents/canvas-a/branches', {
       method: 'POST',
@@ -1164,36 +1172,45 @@ describe('createApp daemon mutation auth', () => {
       body: JSON.stringify({ name: 'feature' }),
     })
 
-    // Target side: the SAME peer continues past the fork and deletes A.
-    deleteSpatialNode(forkDoc, 'A')
-    const mainTip = Buffer.from(encodeFrontiers(forkDoc.frontiers())).toString('base64')
-
-    // Source side: a FRESH peer, independently continuing from the same
-    // fork point (A still alive), adding F. Neither mainTip's nor
-    // sourceTip's version vector is a subset of the other — the genuine
-    // bilateral case meetVersion (per-peer min of two vectors) exists for,
-    // unlike the one-sided ancestor/descendant cases covered above. Getting
-    // the meet wrong here is directly observable: an incorrectly-advanced
-    // base (e.g. one that already reflects target's delete of A) would
-    // silence the resurrected badge below instead of firing it.
-    const sourceDoc = new LoroDoc()
-    sourceDoc.import(forkSnapshot)
-    sourceDoc.setPeerId('999')
-    writeSpatialNode(sourceDoc, {
-      id: 'F',
-      type: 'text',
-      text: 'f',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
+    // Source side: a REPLICA of the workspace record (its own peer), forked
+    // where A is still alive, independently adding F — the shape a second
+    // keeper's concurrent edit takes after the sync cutover. Neither tip's
+    // version vector is a subset of the other — the genuine bilateral case
+    // meetVersion (per-peer min of two vectors) exists for. Getting the
+    // meet wrong is directly observable: an incorrectly-advanced base (one
+    // that already reflects target's delete of A) would silence the
+    // resurrected badge below instead of firing it.
+    const { cloneStoredWorkspaceDoc, getWorkspaceDoc, saveWorkspaceDoc, loadDocument } =
+      await import('./store/document-store.js')
+    const { resolveWorkspaceDocument, documentContainers, writeSpatialCanvas } = await import(
+      '@kamiazya/whiteboard-loro-adapter'
+    )
+    const replica = (await cloneStoredWorkspaceDoc('session1'))!
+    replica.setPeerId('999')
+    const entry = resolveWorkspaceDocument(replica, 'canvas-a')!
+    const replicaFrom = replica.version()
+    writeSpatialCanvas(documentContainers(replica, entry.documentId), {
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'F', type: 'text', text: 'f', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [],
     })
-    const sourceTip = Buffer.from(encodeFrontiers(sourceDoc.frontiers())).toString('base64')
+    replica.commit()
+    const sourceTip = Buffer.from(encodeFrontiers(replica.frontiers())).toString('base64')
 
-    // Merge both peers' ops into the shared live doc so both tips remain
-    // checkoutable against its full history.
-    forkDoc.import(sourceDoc.export({ mode: 'snapshot' }))
-    await saveDocument('session1', 'canvas-a', forkDoc, { overwrite: true })
+    // Target side: this keeper continues past the fork and deletes A.
+    const live = await loadDocument('session1', 'canvas-a')
+    deleteSpatialNode(live, 'A')
+    await saveDocument('session1', 'canvas-a', live, { overwrite: true })
+    const { workspaceFrontiersForPath: frontiersOf } = await import('./store/document-store.js')
+    const mainTip = Buffer.from((await frontiersOf('session1', 'canvas-a'))!).toString('base64')
+
+    // The replica's concurrent edit arrives exactly as the sync path
+    // delivers it: imported into the live workspace document.
+    const workspaceDoc = await getWorkspaceDoc('session1')
+    workspaceDoc.import(replica.export({ mode: 'update', from: replicaFrom }))
+    await saveWorkspaceDoc('session1', workspaceDoc)
 
     const state = await loadDocumentBranches('session1', 'canvas-a')
     const main = state.branches.find((branch) => branch.name === 'main')!

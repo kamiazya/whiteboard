@@ -1,6 +1,6 @@
 // @vitest-environment node
 import { describe, expect, it, vi } from 'vitest'
-import { SseStreamHub } from './sse-stream-hub.js'
+import { canvasSnapshotUrl, documentUpdateUrl, SseStreamHub } from './sse-stream-hub.js'
 
 function createFake() {
   const calls: { url: string; body?: string }[] = []
@@ -298,5 +298,22 @@ describe('SseStreamHub', () => {
     await flush()
 
     expect(fake.streamOpens()).toBe(1)
+  })
+})
+
+describe('doc-key URL mapping', () => {
+  it('maps a workspace-scope key to the workspace-document routes', () => {
+    expect(documentUpdateUrl('http://d', 'workspace:ws-1')).toBe(
+      'http://d/api/w/ws-1/workspace-document/update',
+    )
+    expect(canvasSnapshotUrl('http://d', 'workspace:ws-1')).toBe(
+      'http://d/api/w/ws-1/workspace-document/snapshot',
+    )
+  })
+
+  it('still maps a per-document key to the per-document routes', () => {
+    expect(documentUpdateUrl('http://d', 'ws-1/nested/path')).toBe(
+      'http://d/api/w/ws-1/document/nested/path/update',
+    )
   })
 })

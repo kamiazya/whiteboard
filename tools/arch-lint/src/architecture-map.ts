@@ -121,6 +121,19 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
     // model's storedCoreFacetsSchema field-by-field on read.
     allowedThirdParty: ['loro-crdt', 'zod'],
   },
+  '@kamiazya/whiteboard-workspace-index': {
+    allowedInternalDeps: [
+      '@kamiazya/whiteboard-model',
+      '@kamiazya/whiteboard-ports',
+      '@kamiazya/whiteboard-loro-adapter',
+    ],
+    // loro-crdt: this package reads a workspace's tree, so it needs the same
+    // runtime `loro-adapter` does. It exists as its own package precisely
+    // because neither of the two that could otherwise host it can: this needs
+    // BOTH ports and loro-crdt, and `loro-adapter` is deliberately closed to
+    // ports while `ports` is deliberately closed to loro-crdt.
+    allowedThirdParty: ['loro-crdt'],
+  },
   '@kamiazya/whiteboard-server-core': {
     allowedInternalDeps: [
       '@kamiazya/whiteboard-model',
@@ -212,6 +225,7 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
       '@kamiazya/whiteboard-ports',
       '@kamiazya/whiteboard-facet-engine',
       '@kamiazya/whiteboard-search',
+      '@kamiazya/whiteboard-workspace-index',
     ],
     allowedThirdParty: [],
   },
@@ -279,6 +293,13 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
+  // The workspace-granularity twin of live-doc.ts, carrying the same four
+  // edges for the same reasons — it retires WITH live-doc's when the sync
+  // surface gets its server-core home.
+  'routes/document/workspace-document.ts -> doc-cache',
+  'routes/document/workspace-document.ts -> document-store',
+  'routes/document/workspace-document.ts -> version-store',
+  'routes/document/workspace-document.ts -> workspace-lock',
   'routes/export.ts -> document-store',
   'routes/files.ts -> file-gc',
   'routes/files.ts -> version-store',
@@ -322,7 +343,12 @@ export const ADAPTER_SCAN_EXEMPT_FILES: readonly string[] = [
   'mcp/index.ts',
 ]
 
-export const MECHANICS_NOT_SCANNED: readonly string[] = ['corrupt-stored-data']
+export const MECHANICS_NOT_SCANNED: readonly string[] = [
+  'corrupt-stored-data',
+  // Same reasoning: DocumentNotFoundError is the 404 half of the taxonomy,
+  // and an adapter importing it to pick a status code is doing translation.
+  'document-not-found-error',
+]
 
 export function allowedDependencies(packageName: string): readonly string[] {
   return ARCHITECTURE_MAP[packageName]?.allowedInternalDeps ?? []

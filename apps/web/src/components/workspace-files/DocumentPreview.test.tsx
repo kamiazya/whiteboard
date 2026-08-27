@@ -23,6 +23,26 @@ describe('DocumentPreview', () => {
     expect(screen.getByText(/Select a document/)).not.toBeNull()
   })
 
+  // Explicit resolution of a contested path: the preview names the
+  // conflict beside the one control that fixes it (Rename), instead of a
+  // silent auto-suffix nobody chose.
+  it('explains a shadowed document next to the Rename control', async () => {
+    const shadowed: WorkspaceDocumentEntry = { ...doc, shadowed: true }
+    render(
+      <DocumentPreview document={shadowed} loadRender={async () => drawn} onRename={vi.fn()} />,
+    )
+    await act(async () => {})
+    expect(screen.getByTestId('preview-shadowed-notice').textContent).toMatch(
+      /another document owns this path/i,
+    )
+  })
+
+  it('shows no conflict notice for an uncontested document', async () => {
+    render(<DocumentPreview document={doc} loadRender={async () => drawn} onRename={vi.fn()} />)
+    await act(async () => {})
+    expect(screen.queryByTestId('preview-shadowed-notice')).toBeNull()
+  })
+
   // The pane draws the document. It used to pour the OKF source into a
   // <pre>, which showed the file — frontmatter and all — and showed nothing
   // whatsoever for a spatial document.

@@ -34,7 +34,9 @@ function makeDeps(documentStore: FakeDocumentStore) {
 }
 
 async function loadDoc(store: FakeDocumentStore, documentId: string): Promise<LoroDoc> {
-  const snap = await store.loadSnapshot({ docRef: { kind: 'document', documentId } })
+  const snap = await store.loadSnapshot({
+    docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId },
+  })
   if (!snap) throw new Error('no snapshot')
   const doc = new LoroDoc()
   doc.import(reassembleSnapshot(snap.manifest, snap.chunks))

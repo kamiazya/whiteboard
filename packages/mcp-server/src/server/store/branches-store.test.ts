@@ -28,6 +28,16 @@ const {
 } = await import('./branches-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { withWorkspaceWriteLock, _resetWorkspaceLocksForTests } = await import('./workspace-lock.js')
+const { saveDocument } = await import('./document-store.js')
+const { LoroDoc } = await import('loro-crdt')
+
+// Branch writers refuse a path with no document, so every test that names
+// one seeds it first — the shape production always has.
+async function seedDocuments(pairs: Array<[string, string]>): Promise<void> {
+  for (const [workspaceId, path] of pairs) {
+    await saveDocument(workspaceId, path, new LoroDoc(), { kind: 'spatial' })
+  }
+}
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -35,6 +45,14 @@ describe('branches-store', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-branches-test-'))
     handle = await createIsolatedDb({ dataDir: tempDir })
+    await seedDocuments([
+      ['sess-a', 'canvas-x'],
+      ['sess-a', '621/header'],
+      ['sess-lock-create', 'canvas'],
+      ['sess-lock-delete', 'canvas'],
+      ['sess-lock-rename', 'canvas'],
+      ['sess-lock-sethead', 'canvas'],
+    ])
   })
 
   afterEach(async () => {
@@ -66,6 +84,111 @@ describe('branches-store', () => {
   })
 
   describe('saveDocumentBranches + round-trip', () => {
+    // Branch state must not CREATE documents: a minted row here has no kind
+    // and no workspace-tree node — a corrupt state the boot fold deletes and
+    // the listing contract rejects.
+    it('refuses a path with no document instead of minting a phantom row', async () => {
+      await expect(
+        saveDocumentBranches('sess-1', 'never-created', {
+          head: 'main',
+          branches: [{ name: 'main', color: DEFAULT_MAIN_COLOR, tipFrontiers: '' }],
+        }),
+      ).rejects.toThrow(/no document/i)
+    })
+
+    // Branches are keyed on workspaceId directly (dual-plane collapse S3),
+    // so workspace-scoped reads need no join through the documents table.
+    it('records the workspaceId on every branch row', async () => {
+      await saveDocumentBranches('sess-a', 'canvas-x', {
+        head: 'main',
+        branches: [
+          {
+            name: 'main',
+            color: DEFAULT_MAIN_COLOR,
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+          {
+            name: 'feature',
+            color: '#9333ea',
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+        ],
+      })
+      const { getDb } = await import('./db/index.js')
+      const db = await getDb(tempDir)
+      const rows = await db
+        .selectFrom('branches')
+        .select(['name', 'workspaceId'])
+        .orderBy('name')
+        .execute()
+      expect(rows).toEqual([
+        { name: 'feature', workspaceId: 'sess-a' },
+        { name: 'main', workspaceId: 'sess-a' },
+      ])
+    })
+
+    // The branch HEAD is shared CRDT state (dual-plane collapse S4b): the
+    // documents.currentBranch write keeps serving today's reads, and the
+    // workspace record's node meta is what every replica converges on.
+    it('mirrors the branch HEAD into the workspace record node meta', async () => {
+      const { openWorkspaceDocIfStored } = await import('./document-store.js')
+      const { resolveWorkspaceDocument } = await import('@kamiazya/whiteboard-loro-adapter')
+      await saveDocumentBranches('sess-a', 'canvas-x', {
+        head: 'feature',
+        branches: [
+          {
+            name: 'main',
+            color: DEFAULT_MAIN_COLOR,
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+          {
+            name: 'feature',
+            color: '#9333ea',
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+        ],
+      })
+      const doc = await openWorkspaceDocIfStored('sess-a')
+      expect(doc).not.toBeNull()
+      if (doc === null) throw new Error('unreachable')
+      expect(resolveWorkspaceDocument(doc, 'canvas-x')?.currentBranch).toBe('feature')
+    })
+
+    // S7: the HEAD answers from the tree meta, not the rows column.
+    it('loadDocumentBranches reads the HEAD from the tree, not the rows', async () => {
+      await saveDocumentBranches('sess-a', 'canvas-x', {
+        head: 'feature',
+        branches: [
+          {
+            name: 'main',
+            color: DEFAULT_MAIN_COLOR,
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+          {
+            name: 'feature',
+            color: '#9333ea',
+            tipFrontiers: '',
+            createdAt: '2026-04-23T00:00:00.000Z',
+          },
+        ],
+      })
+      const { getDb } = await import('./db/index.js')
+      const db = await getDb(tempDir)
+      await db
+        .updateTable('documents')
+        .set({ currentBranch: 'main' })
+        .where('workspaceId', '=', 'sess-a')
+        .execute()
+
+      const state = await loadDocumentBranches('sess-a', 'canvas-x')
+      expect(state.head).toBe('feature')
+    })
+
     it('round-trips every BranchMeta field through save/load', async () => {
       const state = {
         head: 'feature-x',

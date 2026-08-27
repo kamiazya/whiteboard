@@ -15,7 +15,11 @@
 // fidelity at stake. The real-IDB contract stays pinned by the four
 // browser-mode keeper suites (see loro-store.browser.test.tsx).
 import 'fake-indexeddb/auto'
-import { readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  documentContainers,
+  readNodeLocks,
+  resolveWorkspaceDocumentById,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   act,
@@ -25,14 +29,13 @@ import {
   screen,
   waitFor,
 } from '@testing-library/react'
-import { Loro } from 'loro-crdt'
 import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
+import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
-import { LoroStore } from '../lib/loro-store.js'
+import { BROWSER_WORKSPACE_ID, IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import {
   clearWhiteboardDb,
   createNodeCommand,
@@ -85,10 +88,11 @@ async function mountPage(): Promise<void> {
 /**
  * Resolve once the current default document's STORED content agrees.
  *
- * Reads through `LoroStore`, so it sees exactly what a reload will: the
- * snapshot plus every delta the write path has committed so far. The
- * in-session lock set is not that — it is updated synchronously by the toggle,
- * and the write follows behind it.
+ * Reads the workspace document back through `BrowserWorkspaceDocs`, so it
+ * sees exactly what a reload will: the stored snapshot plus every delta the
+ * write path has committed so far, with the lock set on this document's own
+ * tree node. The in-session lock set is not that — it is updated
+ * synchronously by the toggle, and the write follows behind it.
  */
 async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
   // Testing Library's `waitFor`, not vitest's. `configure({ asyncUtilTimeout })`
@@ -98,13 +102,11 @@ async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
   await waitFor(
     async () => {
       const id = (await new IdbDefaultDocumentPointer().get()) ?? ''
-      const loaded = await new LoroStore().load(id)
-      expect(loaded.kind).toBe('ok')
-      if (loaded.kind !== 'ok') return
-      const doc = new Loro()
-      doc.import(loaded.snapshot)
-      for (const delta of loaded.deltas ?? []) doc.import(delta)
-      const locked = readNodeLocks(doc).size
+      const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID)
+      expect(workspace).not.toBeNull()
+      if (workspace === null) return
+      expect(resolveWorkspaceDocumentById(workspace, id)).not.toBeNull()
+      const locked = readNodeLocks(documentContainers(workspace, id)).size
       if (want === 'some') expect(locked).toBeGreaterThan(0)
       else expect(locked).toBe(0)
     },

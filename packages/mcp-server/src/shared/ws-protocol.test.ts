@@ -47,4 +47,10 @@ describe('buildWhiteboardWsUrl', () => {
       'wss://example.com/ws/ws1/my%20path',
     )
   })
+
+  it('carries no query params — every socket is workspace granularity', () => {
+    expect(buildWhiteboardWsUrl('https://example.com/app?foo=1', 'ws1', 'main')).toBe(
+      'wss://example.com/ws/ws1/main',
+    )
+  })
 })

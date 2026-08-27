@@ -135,6 +135,31 @@ describe('wbDocumentCreate', () => {
   })
 })
 
+describe('wbDocumentList shadowed threading', () => {
+  it('carries a shadowed marker through — the collision signal must survive the tool boundary', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    ;(deps.documentIndex as InMemoryDocumentIndex).seed({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'spatial',
+      shadowed: true,
+    })
+
+    const out = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+
+    expect(out.documents).toEqual([
+      {
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        path: 'a',
+        kind: 'spatial',
+        shadowed: true,
+      },
+    ])
+  })
+})
+
 describe('wbDocumentResolve', () => {
   // `documentDetailSchema` is shared with the list, so resolve must EMIT what
   // that schema declares. Omitting these left the schema saying more than the
@@ -335,7 +360,11 @@ describe('wbDocumentDelete', () => {
       kind: 'spatial',
       createWorkspace: true,
     })
-    const docRef = { kind: 'document', documentId: created.documentId } as const
+    const docRef = {
+      kind: 'document',
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    } as const
     expect(await deps.documentStore.loadSnapshot({ docRef })).not.toBeNull()
 
     await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
@@ -467,7 +496,11 @@ describe('wbDocumentDelete document teardown seam', () => {
       kind: 'spatial',
       createWorkspace: true,
     })
-    const docRef = { kind: 'document', documentId: created.documentId } as const
+    const docRef = {
+      kind: 'document',
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    } as const
 
     // Recorded from inside the seam, not asserted afterwards: whether the
     // row was still there ON ENTRY is the whole point — a version's

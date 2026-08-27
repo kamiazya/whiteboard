@@ -31,10 +31,17 @@ function touch(key: string, doc: LoroDoc): void {
   }
 }
 
+// One in-flight load per key. Two concurrent misses would otherwise each
+// mint their OWN doc instance, one writer would keep using the instance the
+// other's overwrote out of the cache, and their next saves would silently
+// clobber each other — a split-brain the LRU alone cannot prevent.
+const pendingLoads = new Map<string, { promise: Promise<LoroDoc>; aborted: boolean }>()
+
 /**
- * Read through the cache, calling `load` only on a miss. The loader is a
- * parameter rather than an import so this module stays a leaf; see
- * `getDoc` in document-store.ts for the one caller that supplies it.
+ * Read through the cache, calling `load` only on a miss — and only ONCE per
+ * concurrent miss. The loader is a parameter rather than an import so this
+ * module stays a leaf; see `getDoc` in document-store.ts for the one caller
+ * that supplies it.
  */
 export async function getOrLoad(
   workspaceId: string,
@@ -47,14 +54,38 @@ export async function getOrLoad(
     touch(key, existing)
     return existing
   }
-  const doc = await load()
-  touch(key, doc)
-  return doc
+  const inFlight = pendingLoads.get(key)
+  if (inFlight) return inFlight.promise
+  const entry = {
+    aborted: false,
+    promise: Promise.resolve().then(async () => {
+      try {
+        const doc = await load()
+        // An eviction that raced the load means the loaded state may already
+        // be stale — hand it to the caller that asked, but do not cache it.
+        if (!entry.aborted) touch(key, doc)
+        return doc
+      } finally {
+        if (pendingLoads.get(key) === entry) pendingLoads.delete(key)
+      }
+    }),
+  }
+  pendingLoads.set(key, entry)
+  return entry.promise
+}
+
+function abortPendingLoad(key: string): void {
+  const entry = pendingLoads.get(key)
+  if (entry) {
+    entry.aborted = true
+    pendingLoads.delete(key)
+  }
 }
 
 // Test helper: clear the cache.
 export function clearCache(): void {
   cache.clear()
+  for (const key of Array.from(pendingLoads.keys())) abortPendingLoad(key)
 }
 
 // Evict a doc after operations such as compact or rename that replace on-disk state,
@@ -62,7 +93,24 @@ export function clearCache(): void {
 // Callers already holding a live doc reference, such as WS handlers, do not get swapped
 // automatically. getDoc is safe because it always consults the cache first.
 export function evictDoc(workspaceId: string, path: string): void {
-  cache.delete(`${workspaceId}/${path}`)
+  const key = `${workspaceId}/${path}`
+  cache.delete(key)
+  abortPendingLoad(key)
+}
+
+// Evict every cached doc of one workspace. Needed after a workspace-
+// granularity import: it rewrites document content underneath every cached
+// per-document projection at once, and a stale projection is worse than a
+// stale doc — the next per-document save would diff the OLD content against
+// the tree and silently revert the imported edit.
+export function evictWorkspaceDocs(workspaceId: string): void {
+  const prefix = `${workspaceId}/`
+  for (const key of Array.from(cache.keys())) {
+    if (key.startsWith(prefix)) cache.delete(key)
+  }
+  for (const key of Array.from(pendingLoads.keys())) {
+    if (key.startsWith(prefix)) abortPendingLoad(key)
+  }
 }
 
 // /debug helper: list cached canvas keys ("workspaceId/path").

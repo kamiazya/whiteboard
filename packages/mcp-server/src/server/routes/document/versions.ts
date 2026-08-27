@@ -7,7 +7,11 @@ import {
 import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import { getDoc } from '../../store/document-store.js'
 import type { OperatorInfo, VersionStore } from '../../store/version-store.js'
-import { defaultHumanDisplayName, handleCorruptStoredData } from './_shared.js'
+import {
+  defaultHumanDisplayName,
+  handleCorruptStoredData,
+  handleDocumentNotFound,
+} from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
 export interface VersionsRouterOptions {
@@ -28,6 +32,8 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const response: ListVersionsResponse = { versions }
       return c.json(response)
     } catch (err) {
+      const missing = handleDocumentNotFound(err)
+      if (missing) return c.json(missing.body, missing.status)
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err
@@ -88,6 +94,8 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       const response: SaveVersionResponse = { version: entry }
       return c.json(response)
     } catch (err) {
+      const missing = handleDocumentNotFound(err)
+      if (missing) return c.json(missing.body, missing.status)
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err

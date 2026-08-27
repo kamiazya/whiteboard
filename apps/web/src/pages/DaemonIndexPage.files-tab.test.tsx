@@ -454,7 +454,14 @@ describe('DaemonIndexPage tree view', () => {
           // instead of the panel, and this test needs the panel's buttons.
           return Promise.resolve(
             jsonResponse({
-              documents: [{ path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' }],
+              documents: [
+                {
+                  id: 'id-seed',
+                  path: 'seed',
+                  updatedAt: '2026-08-01T00:00:00Z',
+                  kind: 'markdown',
+                },
+              ],
             }),
           )
         }
@@ -496,7 +503,14 @@ describe('DaemonIndexPage tree view', () => {
         if (url.match(/\/api\/workspaces\/[^/]+\/documents$/)) {
           return Promise.resolve(
             jsonResponse({
-              documents: [{ path: 'seed', updatedAt: '2026-08-01T00:00:00Z', kind: 'markdown' }],
+              documents: [
+                {
+                  id: 'id-seed',
+                  path: 'seed',
+                  updatedAt: '2026-08-01T00:00:00Z',
+                  kind: 'markdown',
+                },
+              ],
             }),
           )
         }

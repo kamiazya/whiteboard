@@ -14,6 +14,7 @@
 import { Hono } from 'hono'
 import { streamSSE } from 'hono/streaming'
 import { z } from 'zod'
+import { workspaceDocKey } from '../../shared/sse-stream-hub.js'
 import type {
   SyncMessageEvent,
   SyncReadyEvent,
@@ -94,13 +95,14 @@ function toBase64(bytes: Uint8Array): string {
 }
 
 /**
- * Fan a Loro update out to every SSE stream subscribed to that document.
- * Called alongside the WebSocket fan-out so a change reaches both transports
- * regardless of which one produced it — an MCP tool edit and a WS peer edit
- * are indistinguishable to a subscriber.
+ * Fan a WORKSPACE-DOCUMENT update out to every stream subscribed at
+ * workspace granularity (`workspace:<id>` keys). The only binary fan-out:
+ * the per-document one is retired — a per-document subscriber handed
+ * workspace-document bytes (or the reverse) would be importing a stranger's
+ * history, so per-document keys carry text events only.
  */
-export function sseBroadcastUpdate(workspaceId: string, path: string, update: Uint8Array): void {
-  const key = docKey(workspaceId, path)
+export function sseBroadcastWorkspaceUpdate(workspaceId: string, update: Uint8Array): void {
+  const key = workspaceDocKey(workspaceId)
   const payload: SyncUpdateEvent = { doc: key, update: toBase64(update) }
   const frame = JSON.stringify(payload)
   for (const stream of streams.values()) {

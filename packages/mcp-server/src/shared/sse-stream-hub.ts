@@ -171,11 +171,24 @@ export function toBase64(bytes: Uint8Array): string {
 }
 
 /**
- * The daemon's update route for a document.
+ * The workspace-granularity doc key: one subscription for the whole
+ * workspace document. Unambiguous against `${workspaceId}/${path}` keys
+ * because a workspace id contains no ':' and no '/', so no per-document
+ * key ever starts with this prefix without a slash following it.
+ */
+export const WORKSPACE_DOC_KEY_PREFIX = 'workspace:'
+
+export function workspaceDocKey(workspaceId: string): string {
+  return `${WORKSPACE_DOC_KEY_PREFIX}${workspaceId}`
+}
+
+/**
+ * The daemon's update route for a doc key.
  *
- * A document key IS `${workspaceId}/${path}`, which is the only reason
- * anything holding just the key can address this route. First slash only: a
- * path may contain more, a workspace id never does.
+ * A per-document key IS `${workspaceId}/${path}`, which is the only reason
+ * anything holding just the key can address this route (first slash only: a
+ * path may contain more, a workspace id never does). A `workspace:` key
+ * addresses the workspace-document routes instead.
  */
 export function documentUpdateUrl(baseUrl: string, doc: string): string | null {
   return canvasDocUrl(baseUrl, doc, 'update')
@@ -187,12 +200,18 @@ export function canvasSnapshotUrl(baseUrl: string, doc: string): string | null {
 }
 
 function canvasDocUrl(baseUrl: string, doc: string, action: 'update' | 'snapshot'): string | null {
+  const base = baseUrl.replace(/\/$/, '')
+  if (doc.startsWith(WORKSPACE_DOC_KEY_PREFIX)) {
+    const workspaceId = doc.slice(WORKSPACE_DOC_KEY_PREFIX.length)
+    if (workspaceId.length === 0) return null
+    return `${base}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/${action}`
+  }
   const slash = doc.indexOf('/')
   if (slash <= 0 || slash === doc.length - 1) return null
   // Raw halves: documentApiUrl encodes per segment itself.
   const workspaceId = doc.slice(0, slash)
   const path = doc.slice(slash + 1)
-  return `${baseUrl.replace(/\/$/, '')}${documentApiUrl(workspaceId, path, action)}`
+  return `${base}${documentApiUrl(workspaceId, path, action)}`
 }
 
 export class SseStreamHub implements SseStreamSource {

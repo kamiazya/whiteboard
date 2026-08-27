@@ -2,7 +2,6 @@ import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import { setBroadcastFn } from './document/_shared.js'
 import { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
@@ -11,9 +10,10 @@ import { createDocumentMetadataRouter } from './document/metadata.js'
 import { createRestoreRouter } from './document/restore.js'
 import { createThumbnailsRouter } from './document/thumbnails.js'
 import { createVersionsRouter } from './document/versions.js'
+import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 
-export { createAutoVersionTrigger, setBroadcastFn }
+export { createAutoVersionTrigger }
 
 export interface DocumentRouterOptions {
   // Allow tests to replace the store. Production uses FileVersionStore.
@@ -60,6 +60,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   app.route('/', createWorkspacesRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
   app.route('/', createLiveDocRouter({ triggerAutoVersion }))
+  app.route('/', createWorkspaceDocumentRouter({ triggerAutoVersion }))
   app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())

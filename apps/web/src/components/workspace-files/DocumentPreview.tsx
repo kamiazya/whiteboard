@@ -119,6 +119,15 @@ export function DocumentPreview({
             where someone who needs it can read it. BOTH are edited in the
             Rename dialog, which is the one place that explains how they
             differ. */}
+        {document.shadowed && (
+          <p
+            data-testid="preview-shadowed-notice"
+            role="alert"
+            className="rounded border border-amber-500/40 bg-amber-500/10 px-2 py-1 text-xs text-amber-700 dark:text-amber-300"
+          >
+            Another document owns this path. Rename this one to resolve the conflict.
+          </p>
+        )}
         <div className="flex min-w-0 items-center gap-2">
           <p className="text-muted-foreground truncate font-mono text-xs">{document.path}</p>
           {onRename !== undefined && (

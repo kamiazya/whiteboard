@@ -28,9 +28,9 @@ vi.mock('../lib/browser-backend.js', async () => {
     '../lib/browser-backend.js',
   )
   class RecordingBackend extends actual.BrowserBackend {
-    constructor(documentId: string) {
-      super(documentId)
-      constructedFor.push(documentId)
+    constructor(target: import('../lib/browser-backend.js').BrowserBackendTarget) {
+      super(target)
+      constructedFor.push(target.documentId)
     }
     connect(handlers: DocumentBackendHandlers) {
       connectedFor.push('connect')

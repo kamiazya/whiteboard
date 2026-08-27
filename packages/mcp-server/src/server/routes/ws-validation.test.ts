@@ -34,6 +34,14 @@ describe('parseWsTargetFromRequestUrl', () => {
     })
   })
 
+  it('ignores query params — the retired ?scope opt-in included', () => {
+    // Every socket syncs at workspace granularity; an old client still
+    // sending ?scope=workspace parses identically to one that does not.
+    expect(parseWsTargetFromRequestUrl('/ws/ws-1/notes?scope=workspace', '127.0.0.1:3099')).toEqual(
+      { workspaceId: 'ws-1', path: 'notes' },
+    )
+  })
+
   it('rejects invalid session ids before websocket upgrade', () => {
     expect(() => parseWsTargetFromRequestUrl('/ws/bad.sid/path', '127.0.0.1:3099')).toThrow(
       /Invalid workspaceId/,

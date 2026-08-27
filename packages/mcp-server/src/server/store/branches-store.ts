@@ -1,8 +1,15 @@
+import {
+  resolveWorkspaceDocument,
+  resolveWorkspaceDocumentById,
+  updateWorkspaceDocumentMeta,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { getDataDir } from '../config.js'
+import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertDocumentRow } from './db/upsert-workspace.js'
+import { DocumentNotFoundError } from './document-not-found-error.js'
+import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 // Canvas-scoped branch state. Backed by:
@@ -50,19 +57,18 @@ export async function loadDocumentBranches(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const db = await dbReady()
-  const documentRow = await db
-    .selectFrom('documents')
-    .select(['id', 'currentBranch'])
-    .where('workspaceId', '=', workspaceId)
-    .where('path', '=', path)
-    .executeTakeFirst()
-  if (!documentRow) {
+  // The document and its HEAD resolve from the workspace record (S7); the
+  // branch ROWS stay in sqlite, keyed by the id the tree answers. The boot
+  // fold carries a pre-fold row's HEAD into the tree before this can be
+  // asked, so no rows fallback for the pointer is needed.
+  const target = await resolveDocumentForBranches(workspaceId, path)
+  if (target === null) {
     return { branches: [defaultMain()], head: 'main' }
   }
   const branchRows = await db
     .selectFrom('branches')
     .select(['name', 'tipFrontiers', 'sourceBranchName', 'sourceVersionId', 'color', 'createdAt'])
-    .where('documentId', '=', documentRow.id)
+    .where('documentId', '=', target.documentId)
     .orderBy('createdAt', 'asc')
     .orderBy('name', 'asc')
     .execute()
@@ -77,13 +83,42 @@ export async function loadDocumentBranches(
     ...(r.sourceBranchName !== null ? { baseBranch: r.sourceBranchName } : {}),
     ...(r.sourceVersionId !== null ? { baseVersionId: r.sourceVersionId } : {}),
   }))
-  const persistedHead = documentRow.currentBranch
+  const persistedHead = target.currentBranch ?? 'main'
   const head = branches.some((b) => b.name === persistedHead)
     ? persistedHead
     : branches.some((b) => b.name === 'main')
       ? 'main'
       : branches[0]!.name
   return { branches, head }
+}
+
+/**
+ * The documentId + HEAD for a path: the tree answers when it holds the
+ * document; a pre-fold legacy document (rows only) answers from its row so
+ * branch state survives until the boot fold relocates it.
+ */
+async function resolveDocumentForBranches(
+  workspaceId: string,
+  path: string,
+): Promise<{ documentId: string; currentBranch?: string } | null> {
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const entry = resolveWorkspaceDocument(workspaceDoc, path)
+    if (entry !== null) {
+      return {
+        documentId: entry.documentId,
+        ...(entry.currentBranch === undefined ? {} : { currentBranch: entry.currentBranch }),
+      }
+    }
+  }
+  const db = await dbReady()
+  const row = await db
+    .selectFrom('documents')
+    .select(['id', 'currentBranch'])
+    .where('workspaceId', '=', workspaceId)
+    .where('path', '=', path)
+    .executeTakeFirst()
+  return row === undefined ? null : { documentId: row.id, currentBranch: row.currentBranch }
 }
 
 // The actual write, assuming the workspace write lock is already held by
@@ -100,7 +135,9 @@ async function saveDocumentBranchesLocked(
   }
   validateBranchName(state.head)
   const db = await dbReady()
-  const documentId = await upsertDocumentRow(db, workspaceId, path)
+  const target = await resolveDocumentForBranches(workspaceId, path)
+  if (target === null) throw new DocumentNotFoundError(workspaceId, path)
+  const documentId = target.documentId
   await db.transaction().execute(async (trx) => {
     await trx.deleteFrom('branches').where('documentId', '=', documentId).execute()
     if (state.branches.length > 0) {
@@ -109,6 +146,7 @@ async function saveDocumentBranchesLocked(
         .values(
           state.branches.map((b) => ({
             documentId,
+            workspaceId,
             name: b.name,
             tipFrontiers: b.tipFrontiers,
             color: b.color ?? null,
@@ -119,12 +157,28 @@ async function saveDocumentBranchesLocked(
         )
         .execute()
     }
-    await trx
-      .updateTable('documents')
-      .set({ currentBranch: state.head, updatedAt: Date.now() })
-      .where('id', '=', documentId)
-      .execute()
   })
+  // Mirror the HEAD into the workspace record's node meta (dual-plane
+  // collapse S4b): shared CRDT state every replica converges on, while the
+  // row column keeps serving today's reads. Guarded by a read so a tip-only
+  // save does not append a same-value op per save. Fail-soft while the row
+  // is what reads serve: a mirror hiccup must not fail a branch write that
+  // already durably committed.
+  try {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null) {
+      const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
+      if (entry !== null && (entry.currentBranch ?? 'main') !== state.head) {
+        updateWorkspaceDocumentMeta(workspaceDoc, documentId, { currentBranch: state.head })
+        await saveWorkspaceDoc(workspaceId, workspaceDoc)
+      }
+    }
+  } catch (err) {
+    getLogger('branches-store').warning(
+      { workspaceId, path, err },
+      'failed to mirror branch HEAD into the workspace record',
+    )
+  }
 }
 
 // Every branch mutation (createBranch, deleteBranch, updateBranchTip,

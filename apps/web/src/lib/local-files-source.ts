@@ -16,7 +16,7 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from '../components/workspace-files/files-source.js'
-import { IdbDocumentIndex } from './idb-document-index.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import {
   BROWSER_WORKSPACE_ID,
   type ContentClock,
@@ -24,6 +24,7 @@ import {
   idbContentClock,
 } from './local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from './loro-store.js'
+import { loadWorkspaceDocumentProjection } from './workspace-content.js'
 
 /**
  * `WorkspaceFilesSource` over the browser stores — the adapter that
@@ -37,16 +38,19 @@ import { LoroStore, type LoroStoreLike } from './loro-store.js'
 export function createLocalFilesSource(
   deps: {
     // Injectable so the page can hand the panel the SAME stores it was
-    // given: two IdbDocumentIndex instances happen to agree because they
-    // open one database, but an injected test double does not have that
-    // luck, and the panel silently reading a different store than the page
-    // is exactly the split this parameter closes.
+    // given: two index instances happen to agree because they open one
+    // database, but an injected test double does not have that luck, and
+    // the panel silently reading a different store than the page is exactly
+    // the split this parameter closes.
     index?: DocumentIndex
     loro?: LoroStoreLike
     clock?: ContentClock
   } = {},
 ): WorkspaceFilesSource {
-  const index = deps.index ?? new IdbDocumentIndex()
+  // The default matches what production injects (App.tsx): the tree index
+  // behind the startup fold. Defaulting to the legacy row index would list
+  // a store the app no longer writes to.
+  const index = deps.index ?? new FoldingBrowserIndex()
   const loro = deps.loro ?? new LoroStore()
   const clock = deps.clock ?? idbContentClock()
 
@@ -67,6 +71,11 @@ export function createLocalFilesSource(
   const corpus = new Map<string, { stamp: string; texts: string[] }>()
 
   async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
+    // The workspace document first — that is where the editor persists — and
+    // the injected per-document store as the fallback, which is also what an
+    // injected test double exercises.
+    const projected = await loadWorkspaceDocumentProjection(entry.documentId)
+    if (projected !== null) return projected
     const loaded = await loro.load(entry.documentId)
     if (loaded.kind !== 'ok') {
       throw new Error(`document ${entry.documentId} is not readable: ${loaded.kind}`)
@@ -117,6 +126,7 @@ export function createLocalFilesSource(
         path: entry.path,
         ...(entry.name === undefined ? {} : { name: entry.name }),
         ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+        ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
         ...(tagsById.has(entry.documentId)
           ? { tags: tagsById.get(entry.documentId) as readonly string[] }
           : {}),

@@ -11,6 +11,8 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
@@ -47,6 +49,12 @@ export class FakeDocumentStore implements DocumentStore {
     const entry = this.saved.get(docRefKey(input.docRef))
     if (entry === undefined) return null
     return { manifest: entry.manifest, chunks: entry.chunks, frontier: entry.frontier }
+  }
+
+  async readSnapshotManifest(
+    input: ReadSnapshotManifestInput,
+  ): Promise<ReadSnapshotManifestResult> {
+    return this.saved.get(docRefKey(input.docRef))?.manifest ?? null
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
@@ -91,7 +99,10 @@ export async function seedDoc(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await store.saveSnapshot({
-    docRef: { kind: 'document', documentId },
+    // The stored key is derived from the documentId alone (see ports'
+    // doc-ref-key.ts), so this seed workspaceId never has to match the
+    // workspaceId a test's tool input names.
+    docRef: { kind: 'document', workspaceId: 'seed-ws', documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,

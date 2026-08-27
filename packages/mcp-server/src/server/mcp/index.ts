@@ -160,6 +160,15 @@ export async function main() {
   // hook here to keep schema and v0 import bootstrapping symmetric.
   const { prepareDataDir } = await import('../store/db/prepare.js')
   await prepareDataDir(getDataDir())
+  // Symmetric with the HTTP daemon's startup fold (src/server/index.ts): the
+  // stdio entrypoint serves the same tree-first reads.
+  try {
+    const { foldWorkspaceDocuments } = await import('../store/fold-workspace.js')
+    await foldWorkspaceDocuments()
+  } catch {
+    // Non-fatal: the fold retries at the next start, and the legacy plane
+    // still serves whatever it skips.
+  }
   // serveStdio owns the era decision for the connection: a 2025-era opening
   // (`initialize`) is served exactly as the old hand-wired transport served
   // it, and a 2026-07-28 opening pins a modern instance from the same

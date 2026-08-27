@@ -1,9 +1,22 @@
+import {
+  readPinnedDocumentIds,
+  readWorkspaceDocuments,
+  resolveWorkspaceDocument,
+  setWorkspaceDocumentName,
+  setWorkspacePinned,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { WorkspaceNames } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertDocumentRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { upsertWorkspaceRow } from './db/upsert-workspace.js'
+import {
+  openWorkspaceDocIfStored,
+  requireDocumentAtPath,
+  saveWorkspaceDoc,
+} from './document-store.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 export type { WorkspaceNames }
 
@@ -24,31 +37,32 @@ async function dbReady() {
 export async function loadWorkspaceNames(workspaceId: string): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   const db = await dbReady()
+  // The WORKSPACE's own name stays in the workspaces table — it names the
+  // container, not any document, and the registry row is its home.
   const wsRow = await db
     .selectFrom('workspaces')
     .select(['displayName'])
     .where('id', '=', workspaceId)
     .executeTakeFirst()
-  const documentRows = await db
-    .selectFrom('documents')
-    .select(['path', 'displayName', 'isPinned', 'pinOrder'])
-    .where('workspaceId', '=', workspaceId)
-    .execute()
+  // Document names and pins answer from the workspace record (S7): the
+  // tree is what every replica converges on, and the boot fold carries any
+  // pre-fold row-only state into it before this can be asked.
   const documents: Record<string, string> = {}
-  const pinned: Array<{ path: string; order: number }> = []
-  for (const row of documentRows) {
-    if (row.displayName !== null) {
-      documents[row.path] = row.displayName
+  const pinned: string[] = []
+  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+  if (workspaceDoc !== null) {
+    const entries = readWorkspaceDocuments(workspaceDoc)
+    const pathById = new Map<string, string>()
+    for (const entry of entries) {
+      pathById.set(entry.documentId, entry.path)
+      if (entry.name !== undefined) documents[entry.path] = entry.name
     }
-    if (row.isPinned === 1) {
-      pinned.push({ path: row.path, order: row.pinOrder ?? Number.MAX_SAFE_INTEGER })
+    for (const documentId of readPinnedDocumentIds(workspaceDoc)) {
+      const path = pathById.get(documentId)
+      if (path !== undefined) pinned.push(path)
     }
   }
-  pinned.sort((a, b) => a.order - b.order)
-  const out: WorkspaceNames = {
-    documents,
-    pinned: pinned.map((p) => p.path),
-  }
+  const out: WorkspaceNames = { documents, pinned }
   if (wsRow?.displayName) {
     out.workspace = wsRow.displayName
   }
@@ -80,25 +94,26 @@ export async function setDocumentDisplayName(
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
   const trimmed = name.trim()
-  const db = await dbReady()
-  await upsertDocumentRow(db, workspaceId, path)
-  const now = Date.now()
-  await db
-    .updateTable('documents')
-    .set({
-      displayName: trimmed.length > 0 ? trimmed : null,
-      updatedAt: now,
-    })
-    .where('workspaceId', '=', workspaceId)
-    .where('path', '=', path)
-    .execute()
+  const documentId = await requireDocumentAtPath(workspaceId, path)
+  // The workspace record is the only home this write has (S7): the rows are
+  // no longer maintained, so a failure here surfaces to the caller. Under
+  // the workspace write lock like every other read-modify-write of the
+  // record — the open and the save must see no concurrent tree write.
+  await withWorkspaceWriteLock(workspaceId, async () => {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
+      setWorkspaceDocumentName(workspaceDoc, {
+        documentId,
+        ...(trimmed.length > 0 ? { name: trimmed } : {}),
+      })
+      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    }
+  })
   return loadWorkspaceNames(workspaceId)
 }
 
-// Pin / unpin a canvas. Idempotent:
-//   - pinned=true on a not-yet-pinned canvas: append at the end (max pinOrder+1)
-//   - pinned=true on an already-pinned canvas: no-op, order preserved
-//   - pinned=false: clear isPinned + pinOrder
+// Pin / unpin a document. Idempotent: re-pinning keeps the position it
+// already has in the workspace record's pinned list; unpinning removes it.
 export async function setDocumentPinned(
   workspaceId: string,
   path: string,
@@ -106,38 +121,15 @@ export async function setDocumentPinned(
 ): Promise<WorkspaceNames> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  const db = await dbReady()
-  await upsertDocumentRow(db, workspaceId, path)
-  await db.transaction().execute(async (trx) => {
-    const row = await trx
-      .selectFrom('documents')
-      .select(['isPinned', 'pinOrder'])
-      .where('workspaceId', '=', workspaceId)
-      .where('path', '=', path)
-      .executeTakeFirst()
-    if (!row) return
-    const isPinnedNow = row.isPinned === 1
-    if (pinned && !isPinnedNow) {
-      const max = await trx
-        .selectFrom('documents')
-        .select((eb) => eb.fn.max('pinOrder').as('maxOrder'))
-        .where('workspaceId', '=', workspaceId)
-        .where('isPinned', '=', 1)
-        .executeTakeFirst()
-      const nextOrder = (max?.maxOrder ?? -1) + 1
-      await trx
-        .updateTable('documents')
-        .set({ isPinned: 1, pinOrder: nextOrder, updatedAt: Date.now() })
-        .where('workspaceId', '=', workspaceId)
-        .where('path', '=', path)
-        .execute()
-    } else if (!pinned && isPinnedNow) {
-      await trx
-        .updateTable('documents')
-        .set({ isPinned: 0, pinOrder: null, updatedAt: Date.now() })
-        .where('workspaceId', '=', workspaceId)
-        .where('path', '=', path)
-        .execute()
+  const documentId = await requireDocumentAtPath(workspaceId, path)
+  // The workspace record's pinned list is the only home this write has
+  // (S7): the rows are no longer maintained, so a failure surfaces. Locked
+  // for the same reason as setDocumentDisplayName above.
+  await withWorkspaceWriteLock(workspaceId, async () => {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null) {
+      setWorkspacePinned(workspaceDoc, documentId, pinned)
+      await saveWorkspaceDoc(workspaceId, workspaceDoc)
     }
   })
   return loadWorkspaceNames(workspaceId)

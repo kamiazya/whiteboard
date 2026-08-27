@@ -48,9 +48,10 @@ export interface LoadedDocument {
  */
 export async function loadDocument(
   deps: ServerDeps,
+  workspaceId: string,
   documentId: DocumentId,
 ): Promise<LoadedDocument> {
-  const docRef = { kind: 'document' as const, documentId }
+  const docRef = { kind: 'document' as const, workspaceId, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
   if (existing === null) throw new SnapshotNotFoundError(documentId)
 
@@ -67,9 +68,10 @@ export async function loadDocument(
  */
 export async function loadOrCreateDocument(
   deps: ServerDeps,
+  workspaceId: string,
   documentId: DocumentId,
 ): Promise<LoroDoc> {
-  const docRef = { kind: 'document' as const, documentId }
+  const docRef = { kind: 'document' as const, workspaceId, documentId }
   const existing = await deps.documentStore.loadSnapshot({ docRef })
   const doc = new LoroDoc()
   if (existing !== null) {
@@ -85,6 +87,7 @@ export async function loadOrCreateDocument(
  */
 export async function saveDocumentSnapshot(
   deps: ServerDeps,
+  workspaceId: string,
   documentId: DocumentId,
   doc: LoroDoc,
 ): Promise<void> {
@@ -93,7 +96,7 @@ export async function saveDocumentSnapshot(
     SNAPSHOT_MAX_CHUNK_BYTES,
   )
   await deps.documentStore.saveSnapshot({
-    docRef: { kind: 'document', documentId },
+    docRef: { kind: 'document', workspaceId, documentId },
     manifest,
     chunks,
     frontier: doc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
@@ -105,7 +108,7 @@ export async function saveDocumentSnapshot(
   // observer owns reporting its own failure — server-core is a shared
   // layer with no logger to report it for them.
   try {
-    await deps.documentWritten({ documentId })
+    await deps.documentWritten({ workspaceId, documentId })
   } catch {
     // Deliberately swallowed; see above and document-io.test.ts.
   }
@@ -125,10 +128,11 @@ export async function saveDocumentSnapshot(
  */
 export async function saveDocumentBodySnapshot(
   deps: ServerDeps,
+  workspaceId: string,
   documentId: DocumentId,
   doc: LoroDoc,
   canvas: SpatialCanvas,
 ): Promise<void> {
   writeSpatialCanvas(doc, canvas)
-  await saveDocumentSnapshot(deps, documentId, doc)
+  await saveDocumentSnapshot(deps, workspaceId, documentId, doc)
 }

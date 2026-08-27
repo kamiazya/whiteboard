@@ -42,7 +42,6 @@ import {
   parseDaemonRoute,
   parseSettingsRoute,
 } from './lib/app-routes.js'
-import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import {
   BROWSER_CAPABILITIES,
   type ProviderState,
@@ -117,7 +116,10 @@ export function LazyPageFallback({
 }
 
 export function App({ providerState }: AppProps) {
-  const [browserStore] = useState(() => new IdbDocumentIndex())
+  // The browser's DocumentIndex (the workspace tree behind the startup fold)
+  // is NOT constructed here: the pages that need it default to the shared
+  // instance from folding-browser-index.ts, which keeps loro-crdt off the
+  // entry chunk's critical path (entry-graph-loro-free.test.ts).
   const [userSettingsStore] = useState(() => createUserSettingsStore())
   const [defaultProviderState] = useState<ProviderState>(() =>
     resolveHostedProviderStateFromRaw(
@@ -464,7 +466,6 @@ export function App({ providerState }: AppProps) {
                     workspaceId={daemonView.workspaceId}
                     path={daemonView.path}
                     token={pairedToken}
-                    browserStore={browserStore}
                     onNavigateBack={() =>
                       setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
                     }
@@ -551,7 +552,6 @@ export function App({ providerState }: AppProps) {
                   path={daemonView.path}
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
-                  browserStore={browserStore}
                   onNavigateBack={() =>
                     setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
                   }
@@ -628,13 +628,9 @@ export function App({ providerState }: AppProps) {
               // editor mounts only for /local/:path, whose in-editor
               // canvas switching it keeps owning — App re-routes solely when
               // the URL crosses the list/editor boundary.
-              <BrowserIndexPage
-                index={browserStore}
-                onOpenDocument={(path) => navigate(browserDocumentPath(path))}
-              />
+              <BrowserIndexPage onOpenDocument={(path) => navigate(browserDocumentPath(path))} />
             ) : (
               <BrowserDocumentPage
-                store={browserStore}
                 capabilities={effectiveState.capabilities}
                 initialPath={browserPath}
               />

@@ -96,7 +96,7 @@ export async function linkifyMentions(
       ? `[[${name}]]`
       : `[[${input.targetDocumentId}|${name}]]`
 
-  const { doc, canvas } = await loadDocument(deps, input.documentId)
+  const { doc, canvas } = await loadDocument(deps, input.workspaceId, input.documentId)
   const kind = source.kind ?? readDocumentKind(doc)
 
   if (kind === 'markdown') {
@@ -108,7 +108,7 @@ export async function linkifyMentions(
     }
     if (spans.length === 0) return { linked: 0 }
     doc.commit()
-    await saveDocumentSnapshot(deps, input.documentId, doc)
+    await saveDocumentSnapshot(deps, input.workspaceId, input.documentId, doc)
     return { linked: spans.length }
   }
 
@@ -121,6 +121,6 @@ export async function linkifyMentions(
   })
   if (linked === 0) return { linked: 0 }
   const candidate = spatialCanvasSchema.parse({ nodes, edges: canvas.edges })
-  await saveDocumentBodySnapshot(deps, input.documentId, doc, candidate)
+  await saveDocumentBodySnapshot(deps, input.workspaceId, input.documentId, doc, candidate)
   return { linked }
 }

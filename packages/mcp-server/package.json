@@ -181,7 +181,9 @@
     "@hono/node-server": "^2.0.12",
     "@libsql/client": "^0.17.3",
     "@libsql/kysely-libsql": "^0.4.1",
+    "@modelcontextprotocol/client": "^2.0.0",
     "@modelcontextprotocol/ext-apps": "1.7.5",
+    "@modelcontextprotocol/server": "^2.0.0",
     "@opentelemetry/api": "^1.9.1",
     "@opentelemetry/context-zone": "^2.10.0",
     "@opentelemetry/core": "^2.10.0",
@@ -206,9 +208,7 @@
     "pino": "^10.3.1",
     "ws": "^8.21.0",
     "yaml": "catalog:",
-    "zod": "catalog:",
-    "@modelcontextprotocol/client": "^2.0.0",
-    "@modelcontextprotocol/server": "^2.0.0"
+    "zod": "catalog:"
   },
   "peerDependencies": {
     "@huggingface/transformers": "^4.2.0"
@@ -227,6 +227,7 @@
     "@kamiazya/whiteboard-canvas-viewer": "workspace:*",
     "@kamiazya/whiteboard-loro-adapter": "workspace:*",
     "@kamiazya/whiteboard-server-core": "workspace:*",
+    "@kamiazya/whiteboard-workspace-index": "workspace:*",
     "@stryker-mutator/core": "^9.6.1",
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@types/node": "^24",

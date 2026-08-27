@@ -256,6 +256,12 @@ export function useDocumentSync(
       },
       dispatchIdentityEvent,
       generations: generationsRef.current,
+      // Captured once per session, deliberately: the scope names the document
+      // this backend serves, and a scope that moved without the backend
+      // moving would silently retarget writes mid-session.
+      ...(optionsRef.current.contentDocumentId === undefined
+        ? {}
+        : { contentDocumentId: optionsRef.current.contentDocumentId }),
     })
     sessionRef.current = session
     const unsubscribe = session.subscribe((next, origin) => {

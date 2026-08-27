@@ -202,10 +202,16 @@ export function describeDocumentIndexConformance(
 
       // The named error, not merely "something threw": a backing store with a
       // unique index throws on the write anyway, which would let an
-      // implementation that never checks pass this test.
-      await expect(index.moveDocument({ workspaceId: WS, from: 'a', to: 'c' })).rejects.toThrow(
-        DocumentPathTakenError,
-      )
+      // implementation that never checks pass this test. And the error names
+      // the path that actually collided (`c/d`), not the free destination the
+      // caller asked for — a message naming `c` sends the caller to retry a
+      // rename that was never the problem.
+      const rejection = await index
+        .moveDocument({ workspaceId: WS, from: 'a', to: 'c' })
+        .then(() => null)
+        .catch((err: unknown) => err)
+      expect(rejection).toBeInstanceOf(DocumentPathTakenError)
+      expect((rejection as DocumentPathTakenError).path).toBe('c/d')
 
       // Rejected whole: no half-move left behind.
       expect(await index.resolveDocument({ workspaceId: WS, path: 'a' })).not.toBeNull()

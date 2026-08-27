@@ -16,6 +16,10 @@ vi.mock('../../config.js', () => ({
 }))
 
 const { clearCache } = await import('../../store/doc-cache.js')
+const { saveDocument, _clearWorkspaceDocCacheForTests } = await import(
+  '../../store/document-store.js'
+)
+const { LoroDoc } = await import('loro-crdt')
 const { createThumbnailsRouter } = await import('./thumbnails.js')
 const { createDocumentRouter } = await import('../document.js')
 
@@ -31,6 +35,10 @@ describe('thumbnail PUT/GET endpoints', () => {
   beforeEach(async () => {
     await mkdir(join(tmp.dir, 'session1'), { recursive: true })
     clearCache()
+    _clearWorkspaceDocCacheForTests()
+    // Version save refuses a path with no document; seed the canvases the
+    // routes below checkpoint — the shape production always has.
+    await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
   })
   afterEach(() => {
     clearCache()
@@ -140,7 +148,6 @@ describe('thumbnail PUT/GET endpoints', () => {
       list: vi.fn().mockResolvedValue([{ id: 'v1', hasThumbnail: true }]),
       saveThumbnail: vi.fn(),
       loadThumbnail: vi.fn().mockResolvedValue(null),
-      earliestFrontiers: vi.fn().mockResolvedValue([]),
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
       pruneSandwichedAutoVersions: vi.fn().mockResolvedValue({ deletedCount: 0, deletedIds: [] }),

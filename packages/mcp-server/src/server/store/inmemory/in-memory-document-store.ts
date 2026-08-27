@@ -11,6 +11,8 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
   SaveSnapshotInput,
   SnapshotChunk,
@@ -66,6 +68,25 @@ export class InMemoryDocumentStore implements DocumentStore {
   writeUnreadableRecord(docRef: DocRef): void {
     const key = docRefKey(docRef)
     this.docs.set(key, { ...this.getRecord(key), unreadable: 'malformed' })
+  }
+
+  async readSnapshotManifest(
+    input: ReadSnapshotManifestInput,
+  ): Promise<ReadSnapshotManifestResult> {
+    const record = this.docs.get(docRefKey(input.docRef))
+    if (record?.unreadable !== undefined) {
+      throw new StoredDocumentUnreadableError(
+        record.unreadable,
+        `Stored document ${docRefKey(input.docRef)} is unreadable: ${record.unreadable}`,
+      )
+    }
+    // The same two conditions `loadSnapshot` answers null on, written out
+    // rather than delegating: this must stay cheap, and delegating is exactly
+    // the shortcut that would make it cost the whole snapshot.
+    if (!record?.snapshot || !record.frontier) {
+      return null
+    }
+    return record.snapshot.manifest
   }
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {

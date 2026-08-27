@@ -356,6 +356,7 @@ describe('listWorkspacesResponseSchema', () => {
 describe('documentSummarySchema', () => {
   const valid: DocumentSummary = {
     path: 'canvas-1',
+    id: 'doc-nanoid-1',
     updatedAt: '2024-01-01T00:00:00.000Z',
     kind: 'spatial',
   }
@@ -379,8 +380,10 @@ describe('documentSummarySchema', () => {
   // Absent is still not the same as arbitrary: a value that IS present must
   // be a string, which is the half worth keeping.
   it('leaves updatedAt ABSENT rather than requiring one the port cannot promise', () => {
-    expect(documentSummarySchema.safeParse({ path: 'canvas-1' }).success).toBe(true)
-    expect(documentSummarySchema.safeParse({ path: 'canvas-1', updatedAt: 7 }).success).toBe(false)
+    expect(documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x' }).success).toBe(true)
+    expect(
+      documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x', updatedAt: 7 }).success,
+    ).toBe(false)
   })
 
   it('accepts an explicit kind: markdown', () => {
@@ -388,24 +391,19 @@ describe('documentSummarySchema', () => {
     expect(result.kind).toBe('markdown')
   })
 
-  it('leaves kind ABSENT when the row records none, instead of defaulting it to spatial', () => {
-    // The default used to make "stored as spatial" and "never recorded"
-    // indistinguishable to every client. A summary now withholds the claim;
-    // a client that must render something decides for itself.
-    const result = documentSummarySchema.parse({
-      path: 'canvas-1',
-      updatedAt: '2024-01-01T00:00:00.000Z',
-    })
-    expect(result.kind).toBeUndefined()
+  // The id is what the workspace-granularity sync contract binds a session's
+  // content by, so a summary without one leaves the client no document to
+  // sync — required. `kind` follows the port's optional promise (the list
+  // route is an adapter over wbDocumentList), though in practice a
+  // workspace-tree entry always carries one.
+  it('rejects a summary without an id', () => {
+    const { id: _id, ...withoutId } = valid
+    expect(documentSummarySchema.safeParse(withoutId).success).toBe(false)
   })
 
-  it('still parses a recorded kind unchanged', () => {
-    const result = documentSummarySchema.parse({
-      path: 'canvas-1',
-      updatedAt: '2024-01-01T00:00:00.000Z',
-      kind: 'markdown',
-    })
-    expect(result.kind).toBe('markdown')
+  it('accepts a summary without a kind — the port leaves it optional', () => {
+    const { kind: _kind, ...withoutKind } = valid
+    expect(documentSummarySchema.safeParse(withoutKind).success).toBe(true)
   })
 
   it('rejects an unknown kind', () => {
@@ -415,7 +413,14 @@ describe('documentSummarySchema', () => {
 
 describe('listDocumentsResponseSchema', () => {
   const valid: ListDocumentsResponse = {
-    documents: [{ path: 'canvas-1', updatedAt: '2024-01-01T00:00:00.000Z', kind: 'spatial' }],
+    documents: [
+      {
+        path: 'canvas-1',
+        id: 'doc-nanoid-1',
+        updatedAt: '2024-01-01T00:00:00.000Z',
+        kind: 'spatial',
+      },
+    ],
   }
 
   it('parses a well-formed value', () => {

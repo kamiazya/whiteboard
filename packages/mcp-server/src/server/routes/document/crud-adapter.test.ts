@@ -60,6 +60,22 @@ async function depsRecordingTeardown(): Promise<{
   return { deps, entered, cleaned }
 }
 
+// A partial spy over the REAL index. Object.create is not enough here: the
+// tree index holds private fields, so any method reached through the
+// prototype chain with a detached receiver throws "Receiver must be an
+// instance of class". The Proxy leaves the receiver as the instance.
+function spyIndex<T extends object>(inner: T, overrides: Partial<T>): T {
+  return new Proxy(inner, {
+    get(target, key, _receiver) {
+      if (key in overrides) return overrides[key as keyof T]
+      const value = Reflect.get(target, key, target)
+      return typeof value === 'function'
+        ? (value as (...a: unknown[]) => unknown).bind(target)
+        : value
+    },
+  }) as T
+}
+
 async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   deps: Awaited<ReturnType<typeof resolveServerDeps>>
   created: string[]
@@ -73,15 +89,17 @@ async function depsRecordingCreate(bootstrapWorkspace = true): Promise<{
   if (bootstrapWorkspace) await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
   const created: string[] = []
   const listed: string[] = []
-  const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
-  index.createDocument = async (input) => {
-    created.push(`${input.workspaceId}:${input.path}`)
-    return await Object.getPrototypeOf(index).createDocument.call(index, input)
-  }
-  index.listDocuments = async (input) => {
-    listed.push(input.workspaceId)
-    return await Object.getPrototypeOf(index).listDocuments.call(index, input)
-  }
+  const inner = deps.documentIndex
+  const index = spyIndex(inner, {
+    createDocument: async (input) => {
+      created.push(`${input.workspaceId}:${input.path}`)
+      return await inner.createDocument(input)
+    },
+    listDocuments: async (input) => {
+      listed.push(input.workspaceId)
+      return await inner.listDocuments(input)
+    },
+  })
   return { deps: { ...deps, documentIndex: index }, created, listed }
 }
 
@@ -90,11 +108,13 @@ describe('GET /api/workspaces', () => {
     const { deps } = await depsRecordingCreate()
     await deps.documentIndex.createWorkspace({ workspaceId: 'ws-2' })
     const listed: string[] = []
-    const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
-    index.listWorkspaces = async () => {
-      listed.push('called')
-      return await Object.getPrototypeOf(index).listWorkspaces.call(index)
-    }
+    const inner = deps.documentIndex
+    const index = spyIndex(inner, {
+      listWorkspaces: async () => {
+        listed.push('called')
+        return await inner.listWorkspaces()
+      },
+    })
     const app = createWorkspacesRouter({ serverDeps: { ...deps, documentIndex: index } })
 
     const res = await app.request('/api/workspaces')
@@ -128,6 +148,31 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     // one — the field is optional on the port for the browser's sake, not
     // because the daemon may omit it.
     expect(typeof body.documents[0]?.updatedAt).toBe('string')
+  })
+
+  it('carries a shadowed marker into the response — the collision badge is dead without it', async () => {
+    const { deps } = await depsRecordingCreate()
+    const app = createWorkspacesRouter({
+      serverDeps: {
+        ...deps,
+        documentIndex: spyIndex(deps.documentIndex, {
+          listDocuments: async () => [
+            {
+              documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+              path: 'a',
+              kind: 'spatial' as const,
+              shadowed: true as const,
+            },
+          ],
+        }),
+      },
+    })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { documents: Record<string, unknown>[] }
+    expect(body.documents[0]).toMatchObject({ path: 'a', shadowed: true })
   })
 
   // "Empty" and "never registered" are different answers, and conflating them
@@ -172,7 +217,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
       path: 'fresh',
     })
     const snapshot = await deps.documentStore.loadSnapshot({
-      docRef: { kind: 'document', documentId: entry?.documentId ?? 'missing' },
+      docRef: { kind: 'document', workspaceId: 'ws-1', documentId: entry?.documentId ?? 'missing' },
     })
     expect(snapshot).not.toBeNull()
   })
@@ -254,11 +299,13 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
       createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
     )
     const moved: string[] = []
-    const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
-    index.moveDocument = async (input) => {
-      moved.push(`${input.from}->${input.to}`)
-      await Object.getPrototypeOf(index).moveDocument.call(index, input)
-    }
+    const inner2 = deps.documentIndex
+    const index = spyIndex(inner2, {
+      moveDocument: async (input) => {
+        moved.push(`${input.from}->${input.to}`)
+        await inner2.moveDocument(input)
+      },
+    })
     return { deps: { ...deps, documentIndex: index }, moved }
   }
 

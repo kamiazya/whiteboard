@@ -152,17 +152,4 @@ describe('DaemonDocumentPage file refs', () => {
     expect(missing?.('deleted-canvas-id')).toBe(true)
     expect(missing?.('asset:0f5bffa1-9d0f-4d2f-a2c4-0f0d4a1a2b3c')).toBe(false)
   })
-
-  it('falls back to path refs for entries an older daemon lists without ids', async () => {
-    mockListDocuments.mockResolvedValue({
-      documents: [
-        { path: 'main', updatedAt: '2026-01-01', kind: 'spatial' },
-        { path: 'second', updatedAt: '2026-01-02', kind: 'spatial' },
-      ],
-    })
-    await renderPage()
-    expect(capturedEditorProps?.fileRefOptions).toEqual([
-      { file: 'second', label: 'second', kind: 'spatial' },
-    ])
-  })
 })

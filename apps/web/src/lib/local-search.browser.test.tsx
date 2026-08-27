@@ -11,6 +11,7 @@ import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
+import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 // Body search in local mode, against real IndexedDB: the browser ranks with
 // the same stage-0 core the daemon uses, so a query finds the same
@@ -82,11 +83,14 @@ describe('local body search', () => {
     const source = createLocalFilesSource()
     expect(await source.searchDocuments('rewritten')).toEqual([])
 
-    // Edit through the same store the app uses.
+    // Edit through the store the app writes to: the first search above
+    // folded this document into the workspace tree, so the edit goes to the
+    // tree node — a raw LoroStore save would be invisible behind the
+    // tree projection, which is the point of the collapse, not a bug.
     const doc = new Loro()
     writeDocumentKind(doc, 'markdown')
     writeMarkdownBody(doc, 'rewritten wording')
-    await new LoroStore().save(id, doc.export({ mode: 'snapshot' }))
+    expect(await seedWorkspaceDocumentContent(id, doc.export({ mode: 'snapshot' }))).toBe(true)
 
     expect((await source.searchDocuments('rewritten')).map((h) => h.document.path)).toEqual([
       'draft',

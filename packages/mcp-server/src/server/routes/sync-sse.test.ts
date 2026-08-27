@@ -9,13 +9,8 @@
 // would only add base64 inflation. This stream carries incremental updates.
 import { afterEach, describe, expect, it } from 'vitest'
 import { createApp } from '../app.js'
-import { resetSyncStreamsForTests } from './sync-sse.js'
-import {
-  broadcastLoroUpdate,
-  sendHeadChanged,
-  sendViewportRequest,
-  setResolveViewportFn,
-} from './ws.js'
+import { resetSyncStreamsForTests, sseBroadcastWorkspaceUpdate } from './sync-sse.js'
+import { sendHeadChanged, sendViewportRequest, setResolveViewportFn } from './ws.js'
 
 // Both registries are module-level and outlive a single app instance, so a
 // stream opened here would otherwise stay subscribed for the rest of the run
@@ -124,7 +119,7 @@ describe('SSE sync transport', () => {
     expect(res.status).toBe(401)
   })
 
-  it('delivers a broadcast update to a stream subscribed to that doc', async () => {
+  it('delivers a workspace update to a stream subscribed at workspace granularity', async () => {
     const app = createApp(createRuntimeOptions())
     const { res, streamId } = await openStream(app)
     expect(res.status).toBe(200)
@@ -132,30 +127,58 @@ describe('SSE sync transport', () => {
     const subscribed = await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, subscribe: ['ws-1/canvas-a'] }),
+      body: JSON.stringify({ streamId, subscribe: ['workspace:ws-1'] }),
     })
     expect(subscribed.status).toBe(200)
 
-    broadcastLoroUpdate('ws-1', 'canvas-a', new Uint8Array([1, 2, 3]))
+    sseBroadcastWorkspaceUpdate('ws-1', new Uint8Array([1, 2, 3]))
 
     const frames = await readEvents(res, 1)
     const updateFrame = frames.find((f) => f.includes('event: update'))
     expect(updateFrame).toBeDefined()
     // SSE is a text protocol, so Loro update bytes travel base64-encoded.
-    expect(updateFrame).toContain(`"doc":"ws-1/canvas-a"`)
+    expect(updateFrame).toContain(`"doc":"workspace:ws-1"`)
     expect(updateFrame).toContain(`"update":"${btoa('\x01\x02\x03')}"`)
   })
 
-  it('does not deliver a doc the stream never subscribed to', async () => {
+  it('fans a workspace-document update out at workspace granularity, and only there', async () => {
+    const app = createApp(createRuntimeOptions())
+    const workspaceScoped = await openStream(app)
+    const perDoc = await openStream(app)
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: workspaceScoped.streamId, subscribe: ['workspace:ws-1'] }),
+    })
+    await app.request('/api/sync/subscribe', {
+      method: 'POST',
+      headers: { ...auth, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ streamId: perDoc.streamId, subscribe: ['ws-1/canvas-a'] }),
+    })
+
+    sseBroadcastWorkspaceUpdate('ws-1', new Uint8Array([4, 5, 6]))
+
+    const frames = await readEvents(workspaceScoped.res, 1)
+    const updateFrame = frames.find((f) => f.includes('event: update'))
+    expect(updateFrame).toBeDefined()
+    expect(updateFrame).toContain(`"doc":"workspace:ws-1"`)
+    expect(updateFrame).toContain(`"update":"${btoa('\x04\x05\x06')}"`)
+    // A per-document subscriber must never receive workspace-document bytes:
+    // they are a different Loro lineage its replica cannot import.
+    const perDocFrames = await readEvents(perDoc.res, 1, 300)
+    expect(perDocFrames.filter((f) => f.includes('event: update'))).toEqual([])
+  })
+
+  it('does not deliver a workspace the stream never subscribed to', async () => {
     const app = createApp(createRuntimeOptions())
     const { res, streamId } = await openStream(app)
     await app.request('/api/sync/subscribe', {
       method: 'POST',
       headers: { ...auth, 'Content-Type': 'application/json' },
-      body: JSON.stringify({ streamId, subscribe: ['ws-1/subscribed'] }),
+      body: JSON.stringify({ streamId, subscribe: ['workspace:ws-1'] }),
     })
 
-    broadcastLoroUpdate('ws-1', 'not-subscribed', new Uint8Array([9]))
+    sseBroadcastWorkspaceUpdate('ws-other', new Uint8Array([9]))
 
     const frames = await readEvents(res, 1, 300)
     expect(frames.filter((f) => f.includes('event: update'))).toEqual([])

@@ -1888,12 +1888,16 @@ describe('DaemonDocumentPage', () => {
       await waitFor(() => expect(listSpy).toHaveBeenCalled())
     })
 
-    it('does not render the import disclosure when browserStore is not provided', async () => {
+    it('does not render the import disclosure when browserStore is null', async () => {
+      // Omitting the prop now means "use the shared production index" (the
+      // default moved out of App so loro stays off the entry chunk); an
+      // embedder that wants NO import flow says so with null.
       await act(async () => {
         render(
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
+            browserStore={null}
           />,
           { container: document.body },
         )

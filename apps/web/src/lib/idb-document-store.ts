@@ -5,11 +5,19 @@
  * The daemon spreads one document's sync state across four tables
  * (`documentSnapshots`, `documentSnapshotChunks`, `documentFrontiers`,
  * `documentDeltas`) because a ROW is the unit there, and buys the port's
- * atomicity with a SQL transaction across them. Here a RECORD is the unit, so
- * all four live in one value under one key and a single `readwrite`
- * transaction gives the same guarantee without a join — including the two
- * places the daemon has to be careful about and this does not: replacing a
- * snapshot cannot orphan a chunk, and `deleteDoc` cannot half-succeed.
+ * atomicity with a SQL transaction across them. Here it is two stores — the
+ * manifest, frontier and delta log in one record per document, the snapshot's
+ * BYTES in a store of their own keyed by `[docRefKey, chunkIndex]` — and one
+ * `readwrite` transaction across both gives the same guarantee without a join.
+ *
+ * The split is not about size, it is about what a read costs. IndexedDB has no
+ * partial `get`: a record comes back whole. With the chunks inline, appending
+ * one 88-byte delta had to deserialize the entire snapshot first, so the price
+ * of an edit grew with the document. Everything the daemon needs care about
+ * across four tables is still free here — replacing a snapshot cannot orphan a
+ * chunk and `deleteDoc` cannot half-succeed — because both stores are written
+ * in the one transaction, and a chunk is addressed by the key of the record
+ * that describes it.
  *
  * The chunk list is stored as given rather than re-derived, because chunking
  * is the CALLER's: `maxChunkBytes` comes in on the manifest and ports
@@ -29,12 +37,14 @@ import type {
   LoadSnapshotResult,
   ReadFrontierInput,
   ReadFrontierResult,
+  ReadSnapshotManifestInput,
+  ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
-import { SYNC_DOCUMENTS_STORE } from './browser-idb.js'
+import { SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE } from './browser-idb.js'
 import { inTransaction, request, storedBytesSchema } from './idb-tx.js'
 
 /**
@@ -57,9 +67,12 @@ const chunkSchema = z.object({
   bytes: storedBytesSchema,
 })
 
+/** One document's chunks, as they come back out of their store. */
+const chunksSchema = z.array(chunkSchema)
+
 const syncRecordSchema = z
   .object({
-    v: z.literal(1),
+    v: z.literal(2),
     snapshot: z
       .object({
         manifest: z.object({
@@ -67,20 +80,8 @@ const syncRecordSchema = z
           totalBytes: z.number().int().min(0),
           maxChunkBytes: z.number().int().positive(),
         }),
-        chunks: z.array(chunkSchema),
       })
-      // The port's own manifest/chunk agreement, checked HERE rather than
-      // trusted. A record whose manifest and chunks disagree cannot be served
-      // as a `LoadSnapshotResult` — the result schema refines on exactly this
-      // — so accepting it would mean answering with a shape the contract says
-      // is invalid, or silently answering `null` for data that is present.
-      .refine(
-        (snap) =>
-          snap.chunks.length === snap.manifest.chunkCount &&
-          snap.chunks.reduce((sum, chunk) => sum + chunk.bytes.byteLength, 0) ===
-            snap.manifest.totalBytes,
-        { message: 'chunks must match manifest.chunkCount and sum to manifest.totalBytes' },
-      )
+      .strict()
       .nullable(),
     frontier: storedBytesSchema.nullable(),
     deltas: z.array(storedBytesSchema),
@@ -98,7 +99,19 @@ const syncRecordSchema = z
 
 type SyncRecord = z.infer<typeof syncRecordSchema>
 
-const EMPTY_RECORD: SyncRecord = { v: 1, snapshot: null, frontier: null, deltas: [] }
+const EMPTY_RECORD: SyncRecord = { v: 2, snapshot: null, frontier: null, deltas: [] }
+
+/**
+ * Every chunk of one document, as a key range.
+ *
+ * The upper bound is an EMPTY ARRAY rather than a large number, because
+ * IndexedDB orders keys by type before value and an array sorts after every
+ * number — so `[key, []]` is the first key past this document's chunks
+ * whatever index they carry, and no magic ceiling can be exceeded.
+ */
+function chunkRange(key: string): IDBKeyRange {
+  return IDBKeyRange.bound([key], [key, []])
+}
 
 /**
  * A stored record, or a refusal that says WHY.
@@ -118,7 +131,7 @@ function parseRecord(key: string, raw: unknown): SyncRecord {
   const parsed = syncRecordSchema.safeParse(raw)
   if (parsed.success) return parsed.data
   const version = (raw as { v?: unknown } | null)?.v
-  if (typeof version === 'number' && version !== 1) {
+  if (typeof version === 'number' && version !== 2) {
     throw new StoredDocumentUnreadableError(
       'unsupported-version',
       `Stored document ${key} was written in envelope version ${version}`,
@@ -149,64 +162,147 @@ function copy(bytes: Uint8Array): Uint8Array<ArrayBuffer> {
   return new Uint8Array(bytes)
 }
 
+/** Replaces every chunk of `key` with `chunks`, in the caller's transaction. */
+async function writeChunks(
+  tx: IDBTransaction,
+  key: string,
+  chunks: readonly { index: number; of: number; bytes: Uint8Array }[],
+): Promise<void> {
+  const store = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+  // Ranged, not per-index: the snapshot being replaced may have had MORE
+  // chunks than the one replacing it, and a put-only write would leave that
+  // tail behind for the next read to find and refuse.
+  await request(store.delete(chunkRange(key)))
+  for (const chunk of chunks) {
+    await request(store.put({ ...chunk, bytes: copy(chunk.bytes) }, [key, chunk.index]))
+  }
+}
+
 export class IdbDocumentStore implements DocumentStore {
   /** Only tests pass this; see `openWhiteboardDb`'s note on why it exists. */
   constructor(private readonly dbName?: string) {}
 
+  /**
+   * `stores` is per-call rather than always both, so an operation that does
+   * not touch snapshot bytes does not lock the store holding them. The
+   * transaction is the unit of atomicity AND of contention here, and every
+   * edit goes through `appendDeltas`.
+   */
   #read(
     mode: IDBTransactionMode,
     key: string,
+    stores: string[],
     body: (record: SyncRecord, tx: IDBTransaction) => Promise<void> | void,
   ) {
-    return inTransaction(this.dbName, [SYNC_DOCUMENTS_STORE], mode, async (tx) => {
+    return inTransaction(this.dbName, stores, mode, async (tx) => {
       const raw = await request(tx.objectStore(SYNC_DOCUMENTS_STORE).get(key))
       await body(raw === undefined ? EMPTY_RECORD : parseRecord(key, raw), tx)
     })
   }
 
-  async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
-    let result: LoadSnapshotResult = null
-    await this.#read('readonly', docRefKey(input.docRef), (record) => {
+  async readSnapshotManifest(
+    input: ReadSnapshotManifestInput,
+  ): Promise<ReadSnapshotManifestResult> {
+    let result: ReadSnapshotManifestResult = null
+    // The record store ALONE. Naming the chunk store here would re-open the
+    // cost this method exists to avoid, and it would do so invisibly — the
+    // answer would be identical, only slower with every byte the document
+    // grows.
+    await this.#read('readonly', docRefKey(input.docRef), [SYNC_DOCUMENTS_STORE], (record) => {
       if (record.snapshot === null || record.frontier === null) return
-      result = {
-        manifest: record.snapshot.manifest,
-        // Sorted by index, not by write order. Nothing in the contract says a
-        // caller saves chunks in order, and the daemon reads its own back
-        // through `order by chunkIndex` — a store that answered in insertion
-        // order would make reassembly depend on how it was written.
-        chunks: [...record.snapshot.chunks]
-          .sort((a, b) => a.index - b.index)
-          .map((chunk) => ({ ...chunk, bytes: copy(chunk.bytes) })),
-        // The CURRENT frontier, which later deltas may have moved past the
-        // one this snapshot was saved with. Answering with the saved one
-        // would tell a caller it is caught up when it is not.
-        frontier: copy(record.frontier),
-      }
+      result = record.snapshot.manifest
     })
+    return result
+  }
+
+  async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
+    const key = docRefKey(input.docRef)
+    let result: LoadSnapshotResult = null
+    await this.#read(
+      'readonly',
+      key,
+      [SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE],
+      async (record, tx) => {
+        if (record.snapshot === null || record.frontier === null) return
+        const manifest = record.snapshot.manifest
+        // `getAll` over the whole range, not `get` per index: the manifest
+        // says how many chunks there should be, and asking for exactly that
+        // many would hide a stored chunk it does not account for — which is
+        // precisely the disagreement below refuses on.
+        const raw = await request(
+          tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).getAll(chunkRange(key)),
+        )
+        const parsed = chunksSchema.safeParse(raw)
+        const chunks = parsed.success ? parsed.data : []
+        // The port's own manifest/chunk agreement, checked HERE rather than
+        // trusted. A snapshot whose manifest and chunks disagree cannot be
+        // served as a `LoadSnapshotResult` — the result schema refines on
+        // exactly this — so accepting it would mean answering with a shape
+        // the contract says is invalid, or silently answering `null` for data
+        // that is present.
+        //
+        // It moved out of the record schema when the bytes did. While the two
+        // were one value the disagreement was unreachable by construction;
+        // now they are two, so a write landing one and not the other is a
+        // state a read has to name. Same refusal either way: an unreadable
+        // document, not a missing one.
+        if (
+          !parsed.success ||
+          chunks.length !== manifest.chunkCount ||
+          chunks.reduce((sum, chunk) => sum + chunk.bytes.byteLength, 0) !== manifest.totalBytes
+        ) {
+          throw new StoredDocumentUnreadableError(
+            'malformed',
+            `Stored document ${key} has chunks that do not match its manifest`,
+          )
+        }
+        result = {
+          manifest,
+          // Sorted by the index each chunk CARRIES, not by the one in its
+          // key. A ranged `getAll` already answers in key order, so this is
+          // the same list on every sound store — it differs only where a
+          // chunk sits under a key that disagrees with itself, and there the
+          // value is what `reassembleSnapshot` will be checking.
+          chunks: [...chunks]
+            .sort((a, b) => a.index - b.index)
+            .map((chunk) => ({ ...chunk, bytes: copy(chunk.bytes) })),
+          // The CURRENT frontier, which later deltas may have moved past the
+          // one this snapshot was saved with. Answering with the saved one
+          // would tell a caller it is caught up when it is not.
+          frontier: copy(record.frontier),
+        }
+      },
+    )
     return result
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
     const key = docRefKey(input.docRef)
-    await this.#read('readwrite', key, async (record, tx) => {
-      const next: SyncRecord = {
-        ...record,
-        // Replaced, never merged: a snapshot is the whole state of the
-        // document at a point, so the previous chunk list has to go with it.
-        snapshot: {
-          manifest: input.manifest,
-          chunks: input.chunks.map((chunk) => ({ ...chunk, bytes: copy(chunk.bytes) })),
-        },
-        frontier: copy(input.frontier),
-      }
-      await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
-    })
+    await this.#read(
+      'readwrite',
+      key,
+      [SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE],
+      async (record, tx) => {
+        const next: SyncRecord = {
+          ...record,
+          // Replaced, never merged: a snapshot is the whole state of the
+          // document at a point, so the previous chunks have to go with it.
+          snapshot: { manifest: input.manifest },
+          frontier: copy(input.frontier),
+        }
+        await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
+        await writeChunks(tx, key, input.chunks)
+      },
+    )
   }
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {
     const key = docRefKey(input.docRef)
     const frontier = copy(input.deltaBatch.newFrontier)
-    await this.#read('readwrite', key, async (record, tx) => {
+    // The snapshot store is deliberately OUT of scope. Nothing here reads or
+    // writes a chunk, and naming the store would both lock it and re-open the
+    // cost this split exists to remove.
+    await this.#read('readwrite', key, [SYNC_DOCUMENTS_STORE], async (record, tx) => {
       const next: SyncRecord = {
         ...record,
         deltas: [...record.deltas, ...input.deltaBatch.updates.map(copy)],
@@ -226,7 +322,7 @@ export class IdbDocumentStore implements DocumentStore {
    */
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
     let result: LoadDeltasResult = { updates: [], frontier: new Uint8Array() }
-    await this.#read('readonly', docRefKey(input.docRef), (record) => {
+    await this.#read('readonly', docRefKey(input.docRef), [SYNC_DOCUMENTS_STORE], (record) => {
       result = {
         updates: record.deltas.map(copy),
         frontier: record.frontier === null ? new Uint8Array() : copy(record.frontier),
@@ -237,7 +333,7 @@ export class IdbDocumentStore implements DocumentStore {
 
   async readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult> {
     let result: ReadFrontierResult = null
-    await this.#read('readonly', docRefKey(input.docRef), (record) => {
+    await this.#read('readonly', docRefKey(input.docRef), [SYNC_DOCUMENTS_STORE], (record) => {
       if (record.frontier === null) return
       result = { frontier: copy(record.frontier) }
     })
@@ -251,21 +347,24 @@ export class IdbDocumentStore implements DocumentStore {
    */
   async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
     const key = docRefKey(input.docRef)
-    await this.#read('readwrite', key, async (record, tx) => {
-      const next: SyncRecord = {
-        v: 1,
-        snapshot: {
-          manifest: input.manifest,
-          chunks: input.chunks.map((chunk) => ({ ...chunk, bytes: copy(chunk.bytes) })),
-        },
-        frontier: copy(input.frontier),
-        // The half `saveSnapshot` does not do — but only the SUPERSEDED
-        // prefix. Anything appended after the caller folded is not in the
-        // snapshot, so clearing the whole log would lose it.
-        deltas: record.deltas.slice(input.supersededDeltaCount),
-      }
-      await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
-    })
+    await this.#read(
+      'readwrite',
+      key,
+      [SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE],
+      async (record, tx) => {
+        const next: SyncRecord = {
+          v: 2,
+          snapshot: { manifest: input.manifest },
+          frontier: copy(input.frontier),
+          // The half `saveSnapshot` does not do — but only the SUPERSEDED
+          // prefix. Anything appended after the caller folded is not in the
+          // snapshot, so clearing the whole log would lose it.
+          deltas: record.deltas.slice(input.supersededDeltaCount),
+        }
+        await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
+        await writeChunks(tx, key, input.chunks)
+      },
+    )
   }
 
   /**
@@ -282,12 +381,20 @@ export class IdbDocumentStore implements DocumentStore {
   }
 
   async deleteDoc(input: DeleteDocInput): Promise<void> {
-    await inTransaction(this.dbName, [SYNC_DOCUMENTS_STORE], 'readwrite', async (tx) => {
-      // One key holds the snapshot, the frontier and the deltas, so there is
-      // no partial delete to guard against — the state the daemon needs a
-      // transaction across four tables to remove is one record here. Deleting
-      // a key that is not there is already quiet, which is what the port asks.
-      await request(tx.objectStore(SYNC_DOCUMENTS_STORE).delete(docRefKey(input.docRef)))
-    })
+    const key = docRefKey(input.docRef)
+    await inTransaction(
+      this.dbName,
+      [SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE],
+      'readwrite',
+      async (tx) => {
+        // Two stores, one transaction, so there is still no partial delete to
+        // guard against — the state the daemon needs a transaction across four
+        // tables to remove is two ranged operations here. Deleting a key or a
+        // range that holds nothing is already quiet, which is what the port
+        // asks.
+        await request(tx.objectStore(SYNC_DOCUMENTS_STORE).delete(key))
+        await request(tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE).delete(chunkRange(key)))
+      },
+    )
   }
 }

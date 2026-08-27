@@ -1,6 +1,10 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
-import { readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  projectWorkspaceDocument,
+  readSpatialCanvas,
+  resolveWorkspaceDocument,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
@@ -10,7 +14,7 @@ import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { loadDocumentBranches } from './branches-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
-import { listDocuments, loadDocument } from './document-store.js'
+import { cloneStoredWorkspaceDoc, listDocuments, loadDocument } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -64,7 +68,13 @@ function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
       typeof (el as { get?: unknown }).get === 'function'
         ? (k: string) => (el as { get: (k: string) => unknown }).get(k)
         : null
-    const obj = get ? null : ((el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ?? null)
+    // Container entries answer via .get/.toJSON; a plain-VALUE entry — the
+    // shape a workspace-tree projection carries a legacy list in — is its
+    // own record.
+    const obj = get
+      ? null
+      : ((el as { toJSON?: () => Record<string, unknown> }).toJSON?.() ??
+        (el as Record<string, unknown>))
     const type = get ? get('type') : obj?.type
     if (type !== 'image') continue
     const isDeleted = get ? get('isDeleted') : obj?.isDeleted
@@ -131,9 +141,26 @@ async function collectReferencedFileIds(
   const referenced = new Set<string>()
   const skipped: SkippedScanTarget[] = []
   const documents = await listDocuments(workspaceId)
+  // A tree-served document's branch tips are recorded against the WORKSPACE
+  // record's oplog (app.ts getCurrentFrontiers), so they check out on a
+  // clone of that record and the document is projected at that point; the
+  // per-document fallback survives only for the damaged-content remnant the
+  // fold could not move.
+  const wsClone = await cloneStoredWorkspaceDoc(workspaceId)
   for (const { path } of documents) {
     const live = await loadDocument(workspaceId, path)
     collectFromDoc(live, referenced)
+
+    const wsEntry = wsClone === null ? null : resolveWorkspaceDocument(wsClone, path)
+    const checkoutTip = (frontiersBase64: string): LoroDoc | null => {
+      if (frontiersBase64.length === 0) return null
+      if (wsClone !== null && wsEntry !== null) {
+        const at = LoroDoc.fromSnapshot(wsClone.export({ mode: 'snapshot' }))
+        at.checkout(decodeFrontiers(new Uint8Array(Buffer.from(frontiersBase64, 'base64'))))
+        return projectWorkspaceDocument(at, wsEntry.documentId)
+      }
+      return checkoutFrontiersBase64(live, frontiersBase64)
+    }
 
     const { branches } = await loadDocumentBranches(workspaceId, path)
     for (const branch of branches) {
@@ -142,7 +169,7 @@ async function collectReferencedFileIds(
       // is only dangling when NO branch's tip references it, not just
       // the currently checked-out one.
       try {
-        const doc = checkoutFrontiersBase64(live, branch.tipFrontiers)
+        const doc = checkoutTip(branch.tipFrontiers)
         if (doc) collectFromDoc(doc, referenced)
       } catch (err) {
         // Unlike a version load failure (which can stem from ambiguous
@@ -175,7 +202,7 @@ async function collectReferencedFileIds(
       // "treat it as referencing nothing", which is the exact bug this
       // guards against.
       try {
-        const past = await versionStore.load(workspaceId, v.id, live)
+        const past = await versionStore.load(workspaceId, v.id)
         if (past === null) {
           throw new Error('versionStore.load returned null for a version list() just reported')
         }

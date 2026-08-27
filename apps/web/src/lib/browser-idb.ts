@@ -128,6 +128,18 @@ export function whiteboardDbName(): string {
  * keeps `loroDocuments` until its callers move, and two writers on one shape
  * during a transition is how a subtle corruption gets in.
  *
+ * v12 -> v13: moves a snapshot's chunk BYTES out of the `syncDocuments`
+ * record into their own store, `syncSnapshotChunks`, keyed by the pair
+ * `[docRefKey, chunkIndex]`. The record keeps the manifest and becomes
+ * envelope v2.
+ *
+ * v12 put them together for atomicity, which one record does buy. What it also
+ * bought is a read of the whole snapshot on every edit: `appendDeltas` reads
+ * the record to append to its delta log, and IndexedDB has no partial `get`,
+ * so appending 88 bytes deserialized however many megabytes the document had
+ * grown to. Two stores in one `readwrite` transaction keep the atomicity and
+ * charge the append only for what it touches.
+ *
  * Cross-tab upgrades are handled rather than accepted from v8 on: every
  * connection this module opens closes itself on `versionchange`, so a newer
  * tab's upgrade is not blocked by an older one sitting idle, and a block that
@@ -135,7 +147,7 @@ export function whiteboardDbName(): string {
  * message a caller can show instead of hanging on a request that never
  * settles.
  */
-export const DB_VERSION = 12
+export const DB_VERSION = 13
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -149,8 +161,20 @@ export const BLOBS_STORE = 'blobs'
 /** Where a document's file references live: fileId -> BlobRef. */
 export const DOCUMENT_FILES_STORE = 'documentFiles'
 
-/** The `DocumentStore` port's store, keyed by `docRefKey`. */
+/** The `DocumentStore` port's store, keyed by `docRefKey`. Holds a document's
+ * snapshot MANIFEST, frontier and delta log — never the snapshot's bytes. */
 export const SYNC_DOCUMENTS_STORE = 'syncDocuments'
+
+/**
+ * The snapshot bytes those manifests describe, keyed by `[docRefKey, index]`.
+ *
+ * A separate store rather than a separate field, because the cost this splits
+ * is IndexedDB's `get`: a record comes back whole or not at all, so any read of
+ * a document's delta log paid for its snapshot too. A compound key gives each
+ * chunk its own value while keeping a document's chunks contiguous, so
+ * replacing or deleting a snapshot is one ranged operation.
+ */
+export const SYNC_SNAPSHOT_CHUNKS_STORE = 'syncSnapshotChunks'
 
 /**
  * When a document's content was last written, keyed by documentId.
@@ -294,7 +318,7 @@ function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
  * snapshot alone is not its current state, so leaving the log behind would
  * silently roll every unsaved edit back.
  */
-function carryLoroDocuments(tx: IDBTransaction): void {
+function carryLoroDocuments(tx: IDBTransaction, done: () => void): void {
   const loro = tx.objectStore('loroDocuments')
   const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
   const stamps = tx.objectStore(CONTENT_TIMESTAMPS_STORE)
@@ -305,6 +329,7 @@ function carryLoroDocuments(tx: IDBTransaction): void {
       // Only once the walk is done: deleting the store mid-cursor would end
       // the walk with records still uncarried.
       tx.db.deleteObjectStore('loroDocuments')
+      done()
       return
     }
     const documentId = String(cursor.primaryKey)
@@ -335,6 +360,54 @@ function carryLoroDocuments(tx: IDBTransaction): void {
         `document:${documentId}`,
       )
       stamps.put(parsed.data.updatedAt, documentId)
+    }
+    cursor.continue()
+  }
+}
+
+/**
+ * True for a record written under the v12 envelope, whatever else is wrong
+ * with it.
+ *
+ * Deliberately shallower than `syncRecordSchema`: this decides whether a value
+ * is THIS migration's to rewrite, and a record whose snapshot is damaged is
+ * still one whose envelope has to move forward — leaving it at v1 would change
+ * `malformed` into `unsupported-version`, which tells the user the opposite
+ * thing about why their document will not open. A record carried across
+ * VERBATIM by v12 (one it could not parse either) has no `v: 1` and is left
+ * exactly where it is.
+ */
+function isEnvelopeV1(value: unknown): value is { v: 1; snapshot: unknown } {
+  return typeof value === 'object' && value !== null && (value as { v?: unknown }).v === 1
+}
+
+/**
+ * Moves every v12 record's inline chunks into `syncSnapshotChunks` and bumps
+ * the envelope to v2.
+ *
+ * Ordered AFTER `carryLoroDocuments` rather than beside it, for the reason
+ * every carrier in this file is ordered: it walks the store that carrier is
+ * still filling, and a cursor opened while those puts are queued sees an empty
+ * store, splits nothing, and looks exactly like a successful upgrade — leaving
+ * v1 records the new parser reports as unreadable documents.
+ */
+function splitInlineSnapshotChunks(tx: IDBTransaction): void {
+  const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
+  const chunks = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+  const cursorReq = sync.openCursor()
+  cursorReq.onsuccess = () => {
+    const cursor = cursorReq.result
+    if (!cursor) return
+    const record = cursor.value
+    if (isEnvelopeV1(record)) {
+      const snapshot = record.snapshot as { manifest?: unknown; chunks?: unknown } | null
+      const inline = snapshot === null ? undefined : snapshot.chunks
+      if (Array.isArray(inline)) {
+        for (const chunk of inline) chunks.put(chunk, [cursor.primaryKey, chunk.index])
+        cursor.update({ ...record, v: 2, snapshot: { manifest: snapshot?.manifest } })
+      } else {
+        cursor.update({ ...record, v: 2 })
+      }
     }
     cursor.continue()
   }
@@ -401,6 +474,9 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
       if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE)) {
         db.createObjectStore(SYNC_DOCUMENTS_STORE)
       }
+      if (!db.objectStoreNames.contains(SYNC_SNAPSHOT_CHUNKS_STORE)) {
+        db.createObjectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+      }
       if (!db.objectStoreNames.contains(CONTENT_TIMESTAMPS_STORE)) {
         db.createObjectStore(CONTENT_TIMESTAMPS_STORE)
       }
@@ -430,7 +506,11 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
           // discard decides which of those rows are worth carrying. Reading
           // before either drains sees an empty store and silently indexes
           // nothing.
-          discardPrePathDocuments(tx, () => backfillDocumentIndex(tx, () => carryLoroDocuments(tx)))
+          discardPrePathDocuments(tx, () =>
+            backfillDocumentIndex(tx, () =>
+              carryLoroDocuments(tx, () => splitInlineSnapshotChunks(tx)),
+            ),
+          )
         }
       }
       for (const [from, to] of RENAMED_STORES) copyStoreThenDelete(db, tx, from, to, onCopyDone)

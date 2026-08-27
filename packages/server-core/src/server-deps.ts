@@ -148,7 +148,13 @@ export interface ServerDeps {
   documentWritten: DocumentWritten
 }
 
-export type DocumentWritten = (input: { documentId: DocumentId }) => Promise<void>
+// Carries the workspaceId because the tree is the address book: resolving a
+// bare documentId back to its workspace would mean scanning every workspace
+// record, while every tool write already knows which workspace it wrote.
+export type DocumentWritten = (input: {
+  workspaceId: string
+  documentId: DocumentId
+}) => Promise<void>
 
 /**
  * A BRACKET around the delete, not a pair of hooks, because two separate

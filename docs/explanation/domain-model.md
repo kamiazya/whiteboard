@@ -44,15 +44,21 @@ backed by more than one representation today. Read
 | mode | identity of a canvas | shown to the user |
 |---|---|---|
 | Browser | a ULID `documentId` plus the pair `(workspaceId, path)` | display name, plus the path |
-| Daemon (gallery, editing, sync) | the pair `(workspaceId, path)` | display name, plus the path |
-| Daemon (agent/MCP tree) | a ULID `documentId` plus a `segment` path | alias path derived from segments |
+| Daemon (every surface) | a ULID `documentId` plus the pair `(workspaceId, path)` | display name, plus the path |
+
+The two daemon rows this table used to carry (the web gallery's
+path-keyed identity and the MCP tree's segment-derived alias) are one row
+now: every surface resolves the same workspace tree, where a document's
+path is derived from its node's ancestry and its `documentId` is the node's
+stable name.
 
 **Paths are the canonical user-facing identity** in daemon mode: URLs,
-sync, versions, and branches all address a canvas as
-`(workspaceId, path)`. A path is assigned at creation (derived
-automatically — `untitled`, `untitled-2`, … — since creation asks for no
-name up front) and is currently immutable; whether paths become renamable
-is deliberately an open question (see
+versions, branches, and per-document text events all address a canvas as
+`(workspaceId, path)`, while binary sync rides the workspace record and
+scopes to a document by its `documentId`. A path is assigned at creation
+(derived automatically — `untitled`, `untitled-2`, … — since creation asks
+for no name up front) and can be renamed later; a stored `[[reference]]`
+survives the rename because it names the `documentId` (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
 which predates the rename and calls this a *slug* throughout).
 
@@ -80,30 +86,57 @@ document store behind the agent-facing MCP tools. A document an agent
 created was invisible in the gallery, and a document the web app created was
 invisible to `wb_document_list`.
 
-That split is **gone**, in three steps recorded in the migration log:
+That split is **gone**, in four steps recorded in the migration log:
 
 - Migration `0007` adopted every `workspace-tree:<workspaceId>` document into
   the shared `documents` table, retiring the separate tree document.
 - Migration `0008` (and `0012` for the rows a later minting site kept
   producing) re-minted every id as a ULID, so both surfaces address a
   document by the same identifier — one table, one id space.
-- The byte store converged last: `loadDocument`/`saveDocument` read and write
+- The byte store converged next: `loadDocument`/`saveDocument` read and write
   the same Libsql snapshot rows the MCP tools use. Migration `0011` imported
   the pre-existing filesystem blobs, the daemon re-runs that import at every
   startup to catch anything written in between, and a blob file is deleted
   only once its bytes are proven byte-identical to the stored rows.
+- Finally the **workspace record became the address book itself**: placement,
+  names, pins, kinds and branch HEAD live on the workspace tree's nodes as
+  shared CRDT state, versions and branches are keyed on the workspace
+  (migrations `0015`/`0016`), and the `documents` table survives only as a
+  frozen legacy inbox the startup fold reads — nothing else reads or writes
+  it, and the daemon works with it empty.
 
 ## Practical consequences today
 
 - An agent and a human work on the same document through whichever surface
   they prefer: an MCP tool call, the daemon's HTTP API, and the WebSocket
   session all read and write one stored document.
-- A save from a long-lived editing session **merges** the stored snapshot
-  before writing, so a tool call that lands mid-session is not overwritten by
-  the next save from that session.
-- A document whose `kind` was never recorded reports **no** kind rather than
-  claiming `spatial`; a surface that must render something (the gallery's
-  kind badge, the editor choice) decides locally.
+- A workspace's documents live in **one workspace record** (a single Loro
+  document holding the tree and every document's content), and live sync
+  runs at that granularity: a WebSocket or SSE session receives the
+  workspace record's snapshot and its updates, scoped in the client to the
+  open document by its `documentId`. Text events (version created, restore,
+  viewport) stay addressed per path.
+- A save from a long-lived editing session **merges** into that record
+  before writing, so a tool call that lands mid-session is not overwritten
+  by the next save from that session.
+- Every listed document carries its `id` and its `kind` — both are required
+  by the listing contract. Rows recorded before kinds existed were this
+  project's own pre-release data and are deleted at startup, so "kind never
+  recorded" is no longer a state a surface has to render.
+- Because placement is CRDT state, two replicas can merge into **one path
+  holding two documents**. Nothing is auto-renamed: the earlier document
+  keeps the path, later ones are listed as *shadowed* (the gallery badges
+  them), and resolution is an explicit rename. An agent asking for a
+  contested path gets an error pointing at resolution by `documentId` or a
+  rename, never a silent suffix.
+- The workspace record accumulates every edit's history, and the daemon
+  periodically **compacts** it: history older than anything still reachable
+  is folded into the snapshot. What stays reachable is exactly what your
+  saved versions and branches point at — the record keeps history back to
+  the oldest version and the oldest branch tip, and nothing before that.
+  Deleting old versions (or the automatic version pruning) is therefore
+  what lets compaction reclaim space; a branch left on an old state keeps
+  the history its checkout needs for as long as the branch exists.
 - Documents kept in the browser still cross into daemon mode only by an explicit,
   user-initiated copy, which re-creates the document under a new path — no
   identifier carries over. That half of ADR-0007 is unchanged.

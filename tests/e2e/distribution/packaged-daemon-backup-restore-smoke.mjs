@@ -391,12 +391,11 @@ try {
     `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${WORKSPACE_ID}, canvas=${SEED_CANVAS_PATH})`,
   )
 
-  // Loro snapshot byte-equality. Without this assertion a regression
-  // that copies the DB but drops `blobs/` (where the canvas's `.loro`
-  // file lives) could still pass the workspace + canvas list checks
-  // above — the DB row would be intact even though the on-disk
-  // snapshot was lost. Reading the snapshot through the route forces
-  // daemon B to actually `loadCanvas` the restored file.
+  // Loro snapshot CONTENT equality. Without this assertion a regression
+  // that copies part of the data dir but drops the workspace record's
+  // snapshot rows could still pass the workspace + canvas list checks
+  // above. Reading the snapshot through the route forces daemon B to
+  // actually load and project the restored record.
   const snapshotBRes = await authedFetch(
     daemonB,
     `/api/w/${encodeURIComponent(WORKSPACE_ID)}/document/${encodeURIComponent(SEED_CANVAS_PATH)}/snapshot`,
@@ -408,23 +407,37 @@ try {
   if (restoredSnapshot.byteLength === 0) {
     throw new Error('daemon B snapshot bytes are empty — restored blob is missing or unreadable')
   }
-  if (restoredSnapshot.byteLength !== seededSnapshot.byteLength) {
+  // CONTENT equality, not byte equality. The snapshot route answers a
+  // projection out of the workspace record (dual-plane collapse), and a
+  // projection is a fresh LoroDoc minted per read — its encoding varies
+  // between processes (observed 414 vs 426 bytes for the same content, in
+  // both directions), so byte-pinning here fails on healthy restores.
+  // Importing both sides and comparing the CRDT state is what actually
+  // catches the regression this guard exists for: a restore that dropped
+  // the record's content answers an empty or different document, and the
+  // JSON comparison fails loudly.
+  const { createRequire } = await import('node:module')
+  const requireFromMcp = createRequire(resolve(REPO_ROOT, 'packages/mcp-server/package.json'))
+  const { LoroDoc } = requireFromMcp('loro-crdt')
+  const seededDoc = new LoroDoc()
+  seededDoc.import(seededSnapshot)
+  const restoredDoc = new LoroDoc()
+  restoredDoc.import(restoredSnapshot)
+  const seededJson = JSON.stringify(seededDoc.toJSON())
+  const restoredJson = JSON.stringify(restoredDoc.toJSON())
+  if (seededJson !== restoredJson) {
     throw new Error(
-      `restored snapshot byte length ${restoredSnapshot.byteLength} != seeded ${seededSnapshot.byteLength}`,
+      `restored snapshot content differs from seeded content\nseeded: ${seededJson}\nrestored: ${restoredJson}`,
     )
   }
-  for (let i = 0; i < seededSnapshot.byteLength; i++) {
-    if (restoredSnapshot[i] !== seededSnapshot[i]) {
-      throw new Error(`restored snapshot byte mismatch at index ${i}`)
-    }
+  if (seededJson === '{}') {
+    throw new Error('seeded snapshot decoded to an EMPTY document — the guard would pass vacuously')
   }
-  // Byte equality through `loadCanvas → doc.export({ mode: 'snapshot' })`
-  // means daemon B successfully read the restored
-  // `blobs/<wsId>/document/<documentId>.loro` file. The Loro runtime
-  // itself is exercised by the existing document-store integration
-  // tests; here byte equality is sufficient to catch a regression
-  // that drops `blobs/` from the backup or restore copy or that
-  // points the restored DB row at a different documentId.
+  // Content equality through the projection route means daemon B
+  // successfully read the restored workspace record and found the seeded
+  // document's containers inside it. The Loro runtime itself is exercised
+  // by the document-store integration tests; equality of the decoded state
+  // is what catches a restore that drops or mispoints the record.
   console.log(
     `[packaged-daemon-backup-restore-smoke] snapshot round-trip ok (${seededSnapshot.byteLength} bytes)`,
   )

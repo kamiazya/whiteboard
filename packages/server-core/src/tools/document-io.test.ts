@@ -9,6 +9,7 @@ import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
 
+const WORKSPACE_ID = 'ws-1'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
 const canvasDeps = (documentStore: FakeDocumentStore) => ({
@@ -22,9 +23,9 @@ const canvasDeps = (documentStore: FakeDocumentStore) => ({
 describe('document-io', () => {
   test('loadDocument throws SnapshotNotFoundError when no snapshot exists', async () => {
     const documentStore = new FakeDocumentStore()
-    await expect(loadDocument(canvasDeps(documentStore), DOCUMENT_ID)).rejects.toThrow(
-      SnapshotNotFoundError,
-    )
+    await expect(
+      loadDocument(canvasDeps(documentStore), WORKSPACE_ID, DOCUMENT_ID),
+    ).rejects.toThrow(SnapshotNotFoundError)
   })
 
   // Moved here with the loader: this used to live beside a second,
@@ -39,7 +40,7 @@ describe('document-io', () => {
       })
     })
 
-    const { doc, canvas } = await loadDocument(canvasDeps(documentStore), DOCUMENT_ID)
+    const { doc, canvas } = await loadDocument(canvasDeps(documentStore), WORKSPACE_ID, DOCUMENT_ID)
 
     expect(doc).toBeInstanceOf(LoroDoc)
     expect(canvas.nodes).toEqual([
@@ -64,13 +65,13 @@ describe('document-io', () => {
     writeSpatialCanvas(seedDoc, canvas)
     const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
     await documentStore.saveSnapshot({
-      docRef: { kind: 'document', documentId: DOCUMENT_ID },
+      docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
       manifest,
       chunks,
       frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
     })
 
-    const loaded = await loadDocument(deps, DOCUMENT_ID)
+    const loaded = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(loaded.canvas.nodes).toHaveLength(2)
 
     // Simulate a patch that only touches n1, passing the FULL node array back.
@@ -78,9 +79,9 @@ describe('document-io', () => {
       nodes: loaded.canvas.nodes.map((node) => (node.id === 'n1' ? { ...node, x: 99 } : node)),
       edges: loaded.canvas.edges,
     }
-    await saveDocumentBodySnapshot(deps, DOCUMENT_ID, loaded.doc, patched)
+    await saveDocumentBodySnapshot(deps, WORKSPACE_ID, DOCUMENT_ID, loaded.doc, patched)
 
-    const reloaded = await loadDocument(deps, DOCUMENT_ID)
+    const reloaded = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(reloaded.canvas.nodes).toHaveLength(2)
     const n2 = reloaded.canvas.nodes.find((node) => node.id === 'n2')
     expect(n2).toEqual(canvas.nodes[1])
@@ -110,6 +111,7 @@ describe('documentWritten', () => {
 
     await saveDocumentBodySnapshot(
       { ...canvasDeps(documentStore), documentWritten: observer },
+      WORKSPACE_ID,
       DOCUMENT_ID,
       new LoroDoc(),
       { nodes: [], edges: [] } satisfies SpatialCanvas,
@@ -140,6 +142,7 @@ describe('documentWritten', () => {
           order.push('observed')
         },
       },
+      WORKSPACE_ID,
       DOCUMENT_ID,
       new LoroDoc(),
       { nodes: [], edges: [] } satisfies SpatialCanvas,
@@ -164,6 +167,7 @@ describe('documentWritten', () => {
             throw new Error('scheduler exploded')
           },
         },
+        WORKSPACE_ID,
         DOCUMENT_ID,
         new LoroDoc(),
         { nodes: [], edges: [] } satisfies SpatialCanvas,
@@ -171,7 +175,9 @@ describe('documentWritten', () => {
     ).resolves.toBeUndefined()
 
     expect(
-      await documentStore.loadSnapshot({ docRef: { kind: 'document', documentId: DOCUMENT_ID } }),
+      await documentStore.loadSnapshot({
+        docRef: { kind: 'document', workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID },
+      }),
     ).not.toBeNull()
   })
 })

@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto'
 import { readFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { serveStatic } from '@hono/node-server/serve-static'
+import { reconcileDocContent } from '@kamiazya/whiteboard-loro-adapter'
 import { createServer as createDocumentServer } from '@kamiazya/whiteboard-server-core'
 import {
   createMcpHandler,
@@ -10,7 +11,7 @@ import {
 } from '@modelcontextprotocol/server'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
-import { encodeFrontiers } from 'loro-crdt'
+import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import {
   checkoutCloneOrThrow,
@@ -47,7 +48,7 @@ import { createRuntimeRouter } from './routes/runtime.js'
 import { createStatusRouter } from './routes/status.js'
 import { createSyncSseRouter } from './routes/sync-sse.js'
 import { createViewportRouter, resolveViewportRequest } from './routes/viewport.js'
-import { broadcastLoroUpdate, sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
+import { sendHeadChanged, setResolveViewportFn } from './routes/ws.js'
 import { createWsTicketRouter } from './routes/ws-ticket.js'
 import { createApiHostGuardMiddleware } from './security/api-host-guard.js'
 import { createApiLoopbackCorsMiddleware } from './security/cors-loopback.js'
@@ -69,9 +70,15 @@ import { OFFICIAL_HOSTED_APP_URL } from './security/web-origin-allowlist.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { performBranchMerge } from './store/branch-merge.js'
 import { loadDocumentBranches } from './store/branches-store.js'
-import { isCorruptStoredDataError } from './store/corrupt-stored-data.js'
+import { corruptStoredData, isCorruptStoredDataError } from './store/corrupt-stored-data.js'
 import { peekDoc } from './store/doc-cache.js'
-import { documentExists, getDoc, saveDocument } from './store/document-store.js'
+import {
+  documentExists,
+  getDoc,
+  projectDocumentAtWorkspaceFrontiers,
+  saveDocument,
+  workspaceFrontiersForPath,
+} from './store/document-store.js'
 import { FileVersionStore } from './store/version-store.js'
 
 export type { AppOptions, ServerModeAppOptions } from './app-types.js'
@@ -463,6 +470,14 @@ export function createApp(options: AppOptions) {
         // Return the live document frontiers as base64 so the previous HEAD can keep
         // its current position before a branch switch.
         getCurrentFrontiers: async (sid, path) => {
+          // Tree-served documents record the WORKSPACE document's frontiers:
+          // a projection's lineage dies with the process, so a head kept in
+          // it would break on the first daemon restart. Legacy documents
+          // keep the per-document frontiers they always had.
+          const workspaceFrontiers = await workspaceFrontiersForPath(sid, path)
+          if (workspaceFrontiers !== null) {
+            return Buffer.from(workspaceFrontiers).toString('base64')
+          }
           const cached = peekDoc(sid, path)
           if (!cached && !(await documentExists(sid, path))) {
             return null
@@ -480,20 +495,38 @@ export function createApp(options: AppOptions) {
             'checkout-target',
             tipFrontiersBase64,
           )
-          const clone = checkoutCloneOrThrow(
-            doc,
-            targetFrontiers,
-            `${sid}/branches/${path}.json#checkout-target.tipFrontiers`,
-            'tipFrontiers could not be checked out against the live document',
-          )
-          const prevVV = doc.version()
-          doc.import(clone.export({ mode: 'snapshot' }))
-          doc.commit()
-          await saveDocument(sid, path, doc, { overwrite: true })
-          const update = doc.export({ mode: 'update', from: prevVV }) as Uint8Array
-          if (update.byteLength > 0) {
-            broadcastLoroUpdate(sid, path, update)
+          // Tree-served: the tip names WORKSPACE-document frontiers; the
+          // past state is projected out of the stored record and diffed onto
+          // the live doc as new ops (a cross-lineage import would lose to
+          // the live doc's later ops and silently no-op). A tip this cannot
+          // check out is a pre-cutover branch of a since-folded document —
+          // history the fold deliberately did not carry — and surfaces as
+          // the same corrupt-tip error a damaged file would.
+          let past: LoroDoc | null = null
+          try {
+            past = await projectDocumentAtWorkspaceFrontiers(sid, path, targetFrontiers)
+          } catch (error) {
+            throw corruptStoredData(
+              `${sid}/branches/${path}.json#checkout-target.tipFrontiers`,
+              `tipFrontiers could not be checked out against the workspace document (${
+                error instanceof Error ? error.message : 'unknown error'
+              })`,
+            )
           }
+          if (past !== null) {
+            reconcileDocContent(doc, past)
+          } else {
+            const clone = checkoutCloneOrThrow(
+              doc,
+              targetFrontiers,
+              `${sid}/branches/${path}.json#checkout-target.tipFrontiers`,
+              'tipFrontiers could not be checked out against the live document',
+            )
+            reconcileDocContent(doc, clone)
+          }
+          await saveDocument(sid, path, doc, { overwrite: true })
+          // The workspace record's funnel broadcasts the persisted bytes;
+          // no per-document fan-out remains.
         },
         // Notify all peers when the HEAD switch is complete.
         notifyHeadChanged: (sid, path, head) => sendHeadChanged(sid, path, head),
@@ -510,12 +543,7 @@ export function createApp(options: AppOptions) {
         // boundary, and the swallowed-failure cleanup branches); this is
         // just the composition-root wiring of its store + ws dependencies.
         performMerge: (sid, path, args) =>
-          performBranchMerge(
-            { versionStore, broadcastLoroUpdate, sendHeadChanged },
-            sid,
-            path,
-            args,
-          ),
+          performBranchMerge({ versionStore, sendHeadChanged }, sid, path, args),
       }),
     )
   }

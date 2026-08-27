@@ -106,6 +106,11 @@ const documentDetailSchema = z
     // refuses to carry.
     kind: documentKindSchema.optional(),
     updatedAt: z.string().optional(),
+    // The losing side of a converged path collision (two replicas created
+    // one path). Shown rather than hidden, exactly as the port declares it —
+    // dropping it at this boundary is what left the daemon surface unable to
+    // say two documents collide while the browser index could.
+    shadowed: z.literal(true).optional(),
   })
   .strict()
 

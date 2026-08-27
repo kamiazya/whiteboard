@@ -10,7 +10,13 @@ describe('daemonLinkEntries', () => {
   // nothing invites you to type.
   it('resolves a reference by the display name the user can see', () => {
     const entries = daemonLinkEntries([
-      { path: 'untitled-2', id: ID, displayName: '週次レビュー', updatedAt: '' },
+      {
+        path: 'untitled-2',
+        id: ID,
+        displayName: '週次レビュー',
+        updatedAt: '',
+        kind: 'markdown',
+      },
     ])
     expect(entries).toContainEqual({ id: ID, name: '週次レビュー' })
   })
@@ -19,19 +25,22 @@ describe('daemonLinkEntries', () => {
   // makes a link survive a rename.
   it('keeps the path resolvable alongside the name', () => {
     const entries = daemonLinkEntries([
-      { path: 'untitled-2', id: ID, displayName: '週次レビュー', updatedAt: '' },
+      {
+        path: 'untitled-2',
+        id: ID,
+        displayName: '週次レビュー',
+        updatedAt: '',
+        kind: 'markdown',
+      },
     ])
     expect(entries).toContainEqual({ id: ID, name: 'untitled-2' })
   })
 
   it('offers only the path for a document nobody renamed', () => {
-    const entries = daemonLinkEntries([{ path: 'untitled', id: ID, updatedAt: '' }])
+    const entries = daemonLinkEntries([
+      { path: 'untitled', id: ID, updatedAt: '', kind: 'spatial' },
+    ])
     expect(entries).toEqual([{ id: ID, name: 'untitled' }])
-  })
-
-  it('falls back to the path as an id when an older daemon omits one', () => {
-    const entries = daemonLinkEntries([{ path: 'untitled', updatedAt: '' }])
-    expect(entries).toEqual([{ id: 'untitled', name: 'untitled' }])
   })
 
   // Left for the resolver's own ambiguity rule to reject rather than
@@ -39,8 +48,8 @@ describe('daemonLinkEntries', () => {
   // exactly the case where guessing is worse than a literal.
   it('emits both colliding entries rather than dropping one', () => {
     const entries = daemonLinkEntries([
-      { path: 'untitled-2', id: ID, updatedAt: '' },
-      { path: 'notes', id: OTHER, displayName: 'untitled-2', updatedAt: '' },
+      { path: 'untitled-2', id: ID, updatedAt: '', kind: 'spatial' },
+      { path: 'notes', id: OTHER, displayName: 'untitled-2', updatedAt: '', kind: 'spatial' },
     ])
     expect(entries.filter((e) => e.name === 'untitled-2')).toHaveLength(2)
   })
@@ -59,11 +68,11 @@ describe('daemonLinkTargets', () => {
           updatedAt: '',
           kind: 'markdown',
         },
-        { path: 'notes', id: OTHER, updatedAt: '' },
+        { path: 'notes', id: OTHER, updatedAt: '', kind: 'spatial' },
       ]),
     ).toEqual([
       { id: ID, name: '週次レビュー', kind: 'markdown' },
-      { id: OTHER, name: 'notes' },
+      { id: OTHER, name: 'notes', kind: 'spatial' },
     ])
   })
 })
@@ -71,8 +80,20 @@ describe('daemonLinkTargets', () => {
 describe('self-reference exclusion', () => {
   it('daemonLinkTargets leaves the open document out of its own link targets', () => {
     const documents = [
-      { path: 'self', id: 'id-self', updatedAt: 't', displayName: 'Self' },
-      { path: 'other', id: 'id-other', updatedAt: 't', displayName: 'Other' },
+      {
+        path: 'self',
+        id: 'id-self',
+        updatedAt: 't',
+        displayName: 'Self',
+        kind: 'spatial' as const,
+      },
+      {
+        path: 'other',
+        id: 'id-other',
+        updatedAt: 't',
+        displayName: 'Other',
+        kind: 'spatial' as const,
+      },
     ]
     const targets = daemonLinkTargets(documents, { excludeDocumentId: 'id-self' })
     expect(targets.map((t) => t.id)).toEqual(['id-other'])

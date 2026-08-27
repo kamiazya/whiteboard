@@ -23,7 +23,10 @@ const { createBranch, loadDocumentBranches, saveDocumentBranches } = await impor
   './branches-store.js'
 )
 const branchesStore = await import('./branches-store.js')
-const { saveDocument, loadDocument } = await import('./document-store.js')
+const { saveDocument, loadDocument, workspaceFrontiersForPath } = await import(
+  './document-store.js'
+)
+const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
 const { clearCache } = await import('./doc-cache.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
@@ -38,7 +41,6 @@ const PATH = 'canvas-a'
 function createDeps() {
   return {
     versionStore: new FileVersionStore(),
-    broadcastLoroUpdate: vi.fn(),
     sendHeadChanged: vi.fn(),
   }
 }
@@ -85,7 +87,6 @@ describe('performBranchMerge', () => {
     // Nothing persisted.
     await expect(loadDocumentBranches(SID, PATH)).resolves.toEqual(before)
     expect(saveSpy).not.toHaveBeenCalled()
-    expect(deps.broadcastLoroUpdate).not.toHaveBeenCalled()
     expect(deps.sendHeadChanged).not.toHaveBeenCalled()
   })
 
@@ -122,8 +123,12 @@ describe('performBranchMerge', () => {
     await saveDocument(SID, PATH, doc, { overwrite: true })
     await createBranch(SID, PATH, { name: 'feature' })
 
-    // Pin main to the A-only state so it stops tracking the live doc.
-    const mainOnlyTip = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    // Pin main to the A-only state so it stops tracking the live doc. Tips
+    // are recorded the way app.ts's getCurrentFrontiers records them: as
+    // WORKSPACE record frontiers, the one lineage branch history lives in.
+    const mainOnlyTip = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString(
+      'base64',
+    )
     const state = await loadDocumentBranches(SID, PATH)
     const main = state.branches.find((b) => b.name === 'main')!
     main.tipFrontiers = mainOnlyTip
@@ -134,7 +139,7 @@ describe('performBranchMerge', () => {
     const withC = await loadDocument(SID, PATH)
     writeSpatialNode(withC, { id: 'C', type: 'text', text: 'c', x: 0, y: 0, width: 10, height: 10 })
     await saveDocument(SID, PATH, withC, { overwrite: true })
-    const featureTip = Buffer.from(encodeFrontiers(withC.frontiers())).toString('base64')
+    const featureTip = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString('base64')
     const afterAddC = await loadDocumentBranches(SID, PATH)
     const feature = afterAddC.branches.find((b) => b.name === 'feature')!
     feature.tipFrontiers = featureTip
@@ -152,11 +157,11 @@ describe('performBranchMerge', () => {
     expect(result.changedElementIds).toEqual([])
     expect(result.conflictElementIds).toEqual([])
     expect(result.preMergeVersionId).toMatch(/\S+/)
-    expect(deps.broadcastLoroUpdate).toHaveBeenCalledTimes(1)
-    const [broadcastSid, broadcastPath, update] = deps.broadcastLoroUpdate.mock.calls[0]!
-    expect(broadcastSid).toBe(SID)
-    expect(broadcastPath).toBe(PATH)
-    expect((update as Uint8Array).byteLength).toBeGreaterThan(0)
+    // Fan-out is the workspace record's funnel now (the per-document
+    // broadcast dep is retired); this fixture's live doc already holds C, so
+    // the reconcile writes no new bytes and there is nothing to fan out —
+    // funnel delivery for a real change is pinned by the restore-route and
+    // ws-workspace-scope tests.
     expect(deps.sendHeadChanged).toHaveBeenCalledWith(SID, PATH, 'main')
 
     const after = await loadDocumentBranches(SID, PATH)
@@ -213,7 +218,6 @@ describe('performBranchMerge', () => {
     })
 
     expect(result.committed).toBe(true)
-    expect(deps.broadcastLoroUpdate).not.toHaveBeenCalled()
     // sendHeadChanged is only fired by the HEAD===into reconcile branch or the
     // switchedHead cleanup branch, neither of which applies here.
     expect(deps.sendHeadChanged).not.toHaveBeenCalled()
@@ -240,8 +244,6 @@ describe('performBranchMerge', () => {
 
     expect(result.committed).toBe(true)
     expect(updateBranchTipSpy).not.toHaveBeenCalled()
-    // No live-doc reconcile even though HEAD===into, because sourceTip is empty.
-    expect(deps.broadcastLoroUpdate).not.toHaveBeenCalled()
   })
 
   it('deletes the source branch when it is neither main nor into', async () => {
@@ -451,14 +453,12 @@ describe('performBranchMerge', () => {
     await expect(loadDocumentBranches(SID, PATH)).resolves.toEqual(before)
   })
 
-  it('a no-op reconcile still broadcasts a header-only envelope (loro never exports zero bytes)', async () => {
+  it('a no-op reconcile completes without error (fan-out is the funnel, fed only by real changes)', async () => {
     // HEAD===into with an INITIALIZED source tip pointing at the same state
-    // as the live doc: reconcileLiveDocToPreview runs and the import adds no
-    // ops. loro's update export is never truly empty — the no-op case is a
-    // 22-byte header-only envelope, which clients import as a no-op — so the
-    // byteLength guard does not (and cannot) filter it. This pins the
-    // MEASURED behavior; an earlier version of this test claimed the guard
-    // suppressed the broadcast, which no loro export can actually trigger.
+    // as the live doc: reconcileLiveDocToPreview runs and writes no ops.
+    // Under the retired per-document broadcast this exported a header-only
+    // envelope; now the workspace record's save sees no new bytes and the
+    // funnel stays quiet — the pin is that the merge still commits cleanly.
     const deps = createDeps()
     const doc = makeSpatialDoc({
       nodes: [{ id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 }],
@@ -468,18 +468,18 @@ describe('performBranchMerge', () => {
     await createBranch(SID, PATH, { name: 'feature' })
     const state = await loadDocumentBranches(SID, PATH)
     const feature = state.branches.find((b) => b.name === 'feature')!
-    feature.tipFrontiers = Buffer.from(encodeFrontiers(doc.frontiers())).toString('base64')
+    feature.tipFrontiers = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString(
+      'base64',
+    )
     await saveDocumentBranches(SID, PATH, state)
 
-    await performBranchMerge(deps, SID, PATH, {
+    const result = await performBranchMerge(deps, SID, PATH, {
       source: 'feature',
       into: 'main',
       dryRun: false,
     })
 
-    expect(deps.broadcastLoroUpdate).toHaveBeenCalledTimes(1)
-    const [, , update] = deps.broadcastLoroUpdate.mock.calls[0]!
-    expect((update as Uint8Array).byteLength).toBeLessThan(30)
+    expect(result.committed).toBe(true)
   })
 
   it('still reports switchedHead when reconciliation fails AFTER the head switch persisted', async () => {
@@ -506,13 +506,19 @@ describe('performBranchMerge', () => {
       ],
       edges: [],
     })
-    feature.tipFrontiers = Buffer.from(encodeFrontiers(diverged.frontiers())).toString('base64')
-    await saveDocumentBranches(SID, PATH, state)
     await saveDocument(SID, PATH, diverged, { overwrite: true })
+    feature.tipFrontiers = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString(
+      'base64',
+    )
+    await saveDocumentBranches(SID, PATH, state)
     await branchesStore.setHead(SID, PATH, 'feature')
-    deps.broadcastLoroUpdate.mockImplementationOnce(() => {
-      throw new Error('broadcast boom')
-    })
+    // The failure injection point moved with the fan-out: the cleanup
+    // reconcile now fails at the workspace record's save instead of at a
+    // broadcast dep that no longer exists. Every save fails (not just once):
+    // the head switch's own fail-soft branch-HEAD mirror also saves the
+    // record now, and a single-shot rejection would be consumed there,
+    // letting the reconcile under test succeed.
+    vi.spyOn(DocumentStoreWorkspaceDocs.prototype, 'save').mockRejectedValue(new Error('save boom'))
     const cap = captureLogsForTests('warning')
 
     try {
@@ -539,31 +545,42 @@ describe('performBranchMerge', () => {
       edges: [],
     })
     await saveDocument(SID, PATH, forkDoc, { overwrite: true })
-    const forkSnapshot = forkDoc.export({ mode: 'snapshot' })
     await createBranch(SID, PATH, { name: 'feature' })
 
-    // Target side: same peer continues and deletes A.
-    deleteSpatialNode(forkDoc, 'A')
-    const mainTip = Buffer.from(encodeFrontiers(forkDoc.frontiers())).toString('base64')
-
-    // Source side: a fresh peer, independently continuing from the fork
-    // point (A still alive), adding F.
-    const sourceDoc = new LoroDoc()
-    sourceDoc.import(forkSnapshot)
-    sourceDoc.setPeerId('999')
-    writeSpatialNode(sourceDoc, {
-      id: 'F',
-      type: 'text',
-      text: 'f',
-      x: 0,
-      y: 0,
-      width: 10,
-      height: 10,
+    // Source side: a REPLICA of the workspace record (its own peer), forked
+    // at the point where A is still alive, independently adding F — the
+    // shape a second keeper's concurrent edit takes after the sync cutover.
+    const { cloneStoredWorkspaceDoc, getWorkspaceDoc, saveWorkspaceDoc } = await import(
+      './document-store.js'
+    )
+    const { resolveWorkspaceDocument, documentContainers, writeSpatialCanvas } = await import(
+      '@kamiazya/whiteboard-loro-adapter'
+    )
+    const replica = (await cloneStoredWorkspaceDoc(SID))!
+    replica.setPeerId('999')
+    const entry = resolveWorkspaceDocument(replica, PATH)!
+    const replicaFrom = replica.version()
+    writeSpatialCanvas(documentContainers(replica, entry.documentId), {
+      nodes: [
+        { id: 'A', type: 'text', text: 'a', x: 0, y: 0, width: 10, height: 10 },
+        { id: 'F', type: 'text', text: 'f', x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [],
     })
-    const sourceTip = Buffer.from(encodeFrontiers(sourceDoc.frontiers())).toString('base64')
+    replica.commit()
+    const sourceTip = Buffer.from(encodeFrontiers(replica.frontiers())).toString('base64')
 
-    forkDoc.import(sourceDoc.export({ mode: 'snapshot' }))
-    await saveDocument(SID, PATH, forkDoc, { overwrite: true })
+    // Target side: this keeper continues and deletes A.
+    const live = await loadDocument(SID, PATH)
+    deleteSpatialNode(live, 'A')
+    await saveDocument(SID, PATH, live, { overwrite: true })
+    const mainTip = Buffer.from((await workspaceFrontiersForPath(SID, PATH))!).toString('base64')
+
+    // The replica's concurrent edit arrives, exactly as the sync path
+    // delivers it: imported into the live workspace document.
+    const workspaceDoc = await getWorkspaceDoc(SID)
+    workspaceDoc.import(replica.export({ mode: 'update', from: replicaFrom }))
+    await saveWorkspaceDoc(SID, workspaceDoc)
     clearCache()
 
     const state = await loadDocumentBranches(SID, PATH)

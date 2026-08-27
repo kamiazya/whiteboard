@@ -53,8 +53,19 @@ const { createStoreLocalModule } = await import('../../../di/store-local.module.
 async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
-  const index = Object.create(deps.documentIndex) as typeof deps.documentIndex
-  index[method] = () => Promise.reject(err)
+  // A Proxy that binds every untouched method to the REAL instance:
+  // Object.create is not enough for the tree index, whose private fields
+  // reject a detached receiver ("Receiver must be an instance of class").
+  const inner = deps.documentIndex
+  const index = new Proxy(inner, {
+    get(target, key) {
+      if (key === method) return () => Promise.reject(err)
+      const value = Reflect.get(target, key, target)
+      return typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value
+    },
+  }) as typeof deps.documentIndex
   return { ...deps, documentIndex: index }
 }
 

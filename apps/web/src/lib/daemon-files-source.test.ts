@@ -55,6 +55,34 @@ describe('createDaemonFilesSource setDocumentName', () => {
   })
 })
 
+describe('createDaemonFilesSource shadowed mapping', () => {
+  it('carries the shadowed collision marker into the panel entry', async () => {
+    const source = createDaemonFilesSource(
+      fetchStub({
+        documents: () =>
+          jsonResponse({
+            documents: [
+              {
+                path: 'contested',
+                id: 'id-a',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
+                shadowed: true,
+              },
+              { path: 'plain', id: 'id-b', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
+            ],
+          }),
+      }),
+      BASE,
+      'ws',
+    )
+    const entries = await source.listDocuments()
+    const byPath = new Map(entries.map((e) => [e.path, e.shadowed]))
+    expect(byPath.get('contested')).toBe(true)
+    expect(byPath.get('plain')).toBeUndefined()
+  })
+})
+
 describe('createDaemonFilesSource pinned mapping', () => {
   it('marks entries pinned from the names response, in pin order', async () => {
     const source = createDaemonFilesSource(
@@ -62,9 +90,9 @@ describe('createDaemonFilesSource pinned mapping', () => {
         documents: () =>
           jsonResponse({
             documents: [
-              { path: 'alpha', updatedAt: '2026-08-01T00:00:00Z' },
-              { path: 'beta', updatedAt: '2026-08-02T00:00:00Z' },
-              { path: 'gamma', updatedAt: '2026-08-03T00:00:00Z' },
+              { path: 'alpha', id: 'id-alpha', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+              { path: 'beta', id: 'id-beta', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
+              { path: 'gamma', id: 'id-gamma', updatedAt: '2026-08-03T00:00:00Z', kind: 'spatial' },
             ],
           }),
         names: () => jsonResponse({ documents: {}, pinned: ['gamma', 'beta'] }),
@@ -85,7 +113,11 @@ describe('createDaemonFilesSource pinned mapping', () => {
     const source = createDaemonFilesSource(
       fetchStub({
         documents: () =>
-          jsonResponse({ documents: [{ path: 'alpha', updatedAt: '2026-08-01T00:00:00Z' }] }),
+          jsonResponse({
+            documents: [
+              { path: 'alpha', id: 'id-alpha', updatedAt: '2026-08-01T00:00:00Z', kind: 'spatial' },
+            ],
+          }),
         names: () => jsonResponse({ message: 'boom' }, 500),
       }),
       BASE,
@@ -117,11 +149,13 @@ describe('createDaemonFilesSource tags', () => {
                 path: 'tagged',
                 id: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
                 updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
               },
               {
                 path: 'plain',
                 id: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
                 updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
               },
             ],
           }),
@@ -142,7 +176,16 @@ describe('createDaemonFilesSource tags', () => {
       if (url.endsWith('/document-tags')) return Promise.resolve(jsonResponse({ error: 'x' }, 500))
       if (url.endsWith('/documents'))
         return Promise.resolve(
-          jsonResponse({ documents: [{ path: 'tagged', updatedAt: '2026-08-01T00:00:00Z' }] }),
+          jsonResponse({
+            documents: [
+              {
+                path: 'tagged',
+                id: 'id-tagged',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
+              },
+            ],
+          }),
         )
       return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
     }) as unknown as typeof globalThis.fetch

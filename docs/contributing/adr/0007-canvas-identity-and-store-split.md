@@ -184,3 +184,41 @@ sync bridge was built (the ADR rejects that above, and it stays rejected).
 
 What decision 4 asked for is therefore done; decisions 1–3 and 5 stand
 unchanged, and path rename (decision 2) is still open.
+
+## Addendum (2026-08-26): the dual-plane collapse — the tree is the address book again
+
+The 2026-08-18 addendum's "the tree document is retired" is reversed, and
+the reversal is the completion of the same convergence, not a return to the
+split this ADR closed. What the workspace-document design showed is that
+placement and content belong in ONE CRDT structure: a workspace is a single
+Loro document (`workspace-tree:<workspaceId>`) whose tree nodes carry each
+document's containers, so a move on one peer and an edit on another merge
+with no coordinator.
+
+As built:
+
+- **The workspace tree is the address book.** Listing, path resolution,
+  names, pins, kinds, timestamps and branch HEAD all read from the
+  workspace record. The `documents` table survives only as a frozen legacy
+  inbox: the boot fold absorbs rows the tree does not know (deleting
+  pre-kind rows as this project's own data defect), and nothing else reads
+  or writes it. `rebuild-from-scratch.test.ts` is the permanent acceptance:
+  the entire document surface works, across a restart, with zero rows.
+- **Identity is unchanged.** `(workspaceId, path)` stays the user-facing
+  identity and the ULID `documentId` stays the stable one; a `DocRef`'s
+  document arm now carries `workspaceId` explicitly because a bare id no
+  longer names a storage location of its own.
+- **Versions and branches are keyed on `workspaceId`** (migration `0015`),
+  with `documentId` as a plain column: migration `0016` rebuilds both
+  tables without migration `0001`'s FK to `documents`, because a
+  tree-created document has no row for it to reference. Delete
+  completeness moved from the cascade into the delete path's explicit
+  cleanup.
+- **Contested paths are surfaced, not auto-resolved.** Two replicas can
+  merge into one path holding two documents; the listing marks the
+  shadowed entries and resolution is an explicit rename — an ambiguous
+  agent resolution is an error, never a silent suffix.
+
+Decisions 1–3 and 5 still stand; decision 2's rename is now the tree
+index's `moveDocument`, one operation with the collision rules in one
+place.

@@ -106,7 +106,11 @@ describe('snapshotManifestSchema', () => {
         chunkCount: 0,
         totalBytes: 0,
         maxChunkBytes: 4,
-        docRef: { kind: 'document', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' },
+        docRef: {
+          kind: 'document',
+          workspaceId: 'workspace-a',
+          documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        },
       }).success,
     ).toBe(false)
   })

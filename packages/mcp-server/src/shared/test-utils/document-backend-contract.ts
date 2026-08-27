@@ -25,8 +25,15 @@ import type { DocumentBackend, DocumentBackendHandlers } from '../document-backe
 
 export interface DocumentBackendHarness {
   backend: DocumentBackend
-  /** Bytes the backend has pushed upstream, however it does that. */
-  sentUpdates(): Uint8Array[]
+  /**
+   * Bytes the backend has pushed upstream, however it does that. Omitted by
+   * an implementation whose upstream is not a byte relay — the browser
+   * backend imports an update into the workspace document and persists the
+   * EFFECT, so the input bytes never travel anywhere to be observed. The
+   * send case below then skips (like `dropTransport`), and that
+   * implementation owes its own suite an equivalent effect-based case.
+   */
+  sentUpdates?(): Uint8Array[]
   /**
    * Drop this backend's transport, if it has one. Omitted by an
    * implementation with nothing to drop (the browser-local backend reads a
@@ -139,6 +146,10 @@ export function documentBackendContract(
 
   it('sends a local update upstream', async () => {
     const h = await create()
+    if (!h.sentUpdates) {
+      h.cleanup()
+      return
+    }
     const rec = recorder()
     h.backend.connect(rec.handlers)
     await settle()

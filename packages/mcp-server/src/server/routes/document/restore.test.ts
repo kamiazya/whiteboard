@@ -17,12 +17,11 @@ const tmp = withTempDataDir('whiteboard-restore-test-')
 
 const { createRestoreRouter } = await import('./restore.js')
 const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
-const { getDoc, saveDocument, getDocumentKind, loadDocument } = await import(
+const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdated } = await import(
   '../../store/document-store.js'
 )
 const { countAliveNodes } = await import('../../store/count-alive-nodes.js')
 const { createDocumentRouter } = await import('../document.js')
-const { setBroadcastFn } = await import('./_shared.js')
 // Pre-load ws.js before any restore call, mirroring restore-race.test.ts's
 // documented cycle workaround for document.ts's dynamic import.
 await import('../ws.js')
@@ -174,18 +173,19 @@ describe('restore router (kind propagation)', () => {
     expect(await getDocumentKind('session1', 'note-restored')).toBe('markdown')
   })
 
-  it('leaves an unrecorded kind unrecorded on the target instead of stamping spatial', async () => {
+  it("records 'spatial' for a lazy-created document, and restore copies that recorded kind", async () => {
     const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
-    // The /update path creates the row without a kind, exactly as every
-    // document predating kinds was created. Copying a guess here would be
-    // worse than copying the gap: the target keeps it forever, and a
-    // markdown document restored as spatial opens in the wrong editor.
+    // The /update path lazy-creates the row; every document now lands on
+    // the workspace tree with a kind (pre-kind rows were this project's own
+    // data defect and the startup fold deletes them), and the spatial
+    // editor is what opens a lazy-create — so 'spatial' is recorded, and a
+    // restore-to-target copies the record rather than a guess.
     await app.request('/api/w/session1/document/unknown-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
       body: nodesModelDocUpdate(['n1']),
     })
-    expect(await getDocumentKind('session1', 'unknown-a')).toBeNull()
+    expect(await getDocumentKind('session1', 'unknown-a')).toBe('spatial')
 
     const saveRes = await app.request('/api/workspaces/session1/documents/unknown-a/versions', {
       method: 'POST',
@@ -203,7 +203,7 @@ describe('restore router (kind propagation)', () => {
       },
     )
     expect(restoreRes.status).toBe(200)
-    expect(await getDocumentKind('session1', 'unknown-restored')).toBeNull()
+    expect(await getDocumentKind('session1', 'unknown-restored')).toBe('spatial')
   })
 })
 
@@ -294,28 +294,19 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
     expect(peekDoc('session1', 'canvas-a')).toBeDefined()
 
-    // Restore calls doc.export() twice before the failure point we care about:
-    // once inside versionStore.load() to clone the live doc, then again inside
-    // saveDocument() once reconcile+commit have already mutated the cached doc.
-    // Let the first pass through and fail only the second.
-    let exportCallCount = 0
-    const originalExport = LoroDoc.prototype.export
-    const exportSpy = vi.spyOn(LoroDoc.prototype, 'export').mockImplementation(function (
-      this: LoroDoc,
-      ...args: Parameters<typeof originalExport>
-    ) {
-      exportCallCount++
-      if (exportCallCount === 2) {
-        throw new Error('simulated snapshot failure')
-      }
-      return originalExport.apply(this, args)
-    })
+    // Fail the workspace-record save itself — the persistence step at the
+    // end of saveDocument — after reconcile+commit have already mutated the
+    // cached projection AND the live workspace doc.
+    const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+    const saveSpy = vi
+      .spyOn(DocumentStoreWorkspaceDocs.prototype, 'save')
+      .mockRejectedValueOnce(new Error('simulated snapshot failure'))
 
     const restoreRes = await app.request(
       `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
       { method: 'POST' },
     )
-    exportSpy.mockRestore()
+    saveSpy.mockRestore()
 
     expect(restoreRes.status).toBe(500)
     // The cache must be evicted: without eviction, the reconciled-but-never-
@@ -362,10 +353,13 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 
     expect(peekDoc('session1', 'canvas-a')).toBeDefined()
 
-    // doc.import already mutated the live cached doc by the time
-    // doc.commit() runs, so a throw here must still evict the cache -- not
-    // only the saveDocument failure path further down.
-    const commitSpy = vi.spyOn(LoroDoc.prototype, 'commit').mockImplementationOnce(() => {
+    // The reconcile has already mutated the live cached doc by the time its
+    // commit() runs, so a throw here must still evict the cache -- not only
+    // the saveDocument failure path further down. Spied on the cached
+    // INSTANCE, not the prototype: version machinery commits its own clones
+    // and projections first, and those must pass through.
+    const cachedLive = peekDoc('session1', 'canvas-a')!
+    const commitSpy = vi.spyOn(cachedLive, 'commit').mockImplementationOnce(() => {
       throw new Error('simulated commit failure')
     })
 
@@ -408,10 +402,6 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
 // instead of replacing persistence, so connected clients stay on the same
 // CRDT lineage and converge through the normal update broadcast.
 describe('overwrite restore reconciles instead of replacing', () => {
-  afterEach(() => {
-    setBroadcastFn(() => {})
-  })
-
   it('targetPath === path with overwrite:true reconciles the live doc in place and broadcasts an update', async () => {
     const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
 
@@ -448,29 +438,35 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const docBefore = peekDoc('session1', 'canvas-a')
     expect(docBefore).toBeDefined()
 
-    const broadcastCalls: Array<{ workspaceId: string; path: string; byteLength: number }> = []
-    setBroadcastFn((workspaceId, path, update) => {
-      broadcastCalls.push({ workspaceId, path, byteLength: update.byteLength })
+    // The restore persists through the workspace record; its funnel — the
+    // only fan-out left — carries the persisted bytes to subscribers.
+    const funnelUpdates: Array<{ workspaceId: string; byteLength: number }> = []
+    const stopFunnel = onWorkspaceDocUpdated((workspaceId, update) => {
+      funnelUpdates.push({ workspaceId, byteLength: update.byteLength })
     })
 
-    const restoreRes = await app.request(
-      `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'canvas-a', overwrite: true }),
-      },
-    )
+    let restoreRes: Response
+    try {
+      restoreRes = await app.request(
+        `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetPath: 'canvas-a', overwrite: true }),
+        },
+      )
+    } finally {
+      stopFunnel()
+    }
     expect(restoreRes.status).toBe(200)
 
     // Same object identity: the cached doc was mutated in place, not
     // replaced by a differently-lineaged document loaded from `past`.
     expect(peekDoc('session1', 'canvas-a')).toBe(docBefore)
 
-    expect(broadcastCalls).toHaveLength(1)
-    expect(broadcastCalls[0]?.workspaceId).toBe('session1')
-    expect(broadcastCalls[0]?.path).toBe('canvas-a')
-    expect(broadcastCalls[0]?.byteLength).toBeGreaterThan(0)
+    expect(funnelUpdates).toHaveLength(1)
+    expect(funnelUpdates[0]?.workspaceId).toBe('session1')
+    expect(funnelUpdates[0]?.byteLength).toBeGreaterThan(0)
   })
 
   it('targetPath === path WITHOUT overwrite still restores in place (same-path is never treated as a distinct target)', async () => {
@@ -542,25 +538,33 @@ describe('overwrite restore reconciles instead of replacing', () => {
       body: targetDoc.export({ mode: 'update', from: tvv0 }),
     })
 
-    const broadcastCalls: Array<{ path: string }> = []
-    setBroadcastFn((_workspaceId, path) => {
-      broadcastCalls.push({ path })
+    const funnelUpdates: Array<{ workspaceId: string }> = []
+    const stopFunnel = onWorkspaceDocUpdated((workspaceId) => {
+      funnelUpdates.push({ workspaceId })
     })
 
-    const restoreRes = await app.request(
-      `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
-      {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
-      },
-    )
+    let restoreRes: Response
+    try {
+      restoreRes = await app.request(
+        `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ targetPath: 'canvas-b', overwrite: true }),
+        },
+      )
+    } finally {
+      stopFunnel()
+    }
     expect(restoreRes.status).toBe(200)
     const restoreBody = (await restoreRes.json()) as { documentId: string; elementCount: number }
     expect(restoreBody.documentId).toBe('session1/canvas-b')
 
-    expect(broadcastCalls).toHaveLength(1)
-    expect(broadcastCalls[0]?.path).toBe('canvas-b')
+    // One persisted write for the target reconcile; subscribers converge on
+    // the document inside the workspace record rather than a path-addressed
+    // frame.
+    expect(funnelUpdates).toHaveLength(1)
+    expect(funnelUpdates[0]?.workspaceId).toBe('session1')
   })
 
   it('restoring into a new (non-existent) target path still creates it', async () => {

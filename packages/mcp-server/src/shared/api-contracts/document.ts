@@ -65,6 +65,13 @@ export const saveVersionRequestSchema = z.object({
 export const restoreVersionRequestSchema = z.object({
   targetPath: z.string().trim().min(1).optional(),
   overwrite: z.boolean().optional(),
+  /**
+   * In-place mode only: roll the document AND its descendants back to this
+   * version — descendants revert, documents deleted since come back, and
+   * documents created since are deleted (evacuated through the trash).
+   * Requires a workspace-scoped version; incompatible with `targetPath`.
+   */
+  subtree: z.boolean().optional(),
 })
 
 export const exportDocumentJsonRequestSchema = z.object({
@@ -148,10 +155,10 @@ export const documentSummarySchema = z.object({
   // user-facing, URL-addressed identity. Deliberately not pattern-bound:
   // clients must treat it as opaque and resolve refs by LOOKUP, never by
   // format — the nanoid alphabet overlaps the path charset.
-  // Optional so a new client can still parse an older daemon's id-less list
-  // (the web app and the locally installed daemon version independently);
-  // clients fall back to the path when the id is absent.
-  id: z.string().min(1).optional(),
+  // Required: every row has the id, and the workspace-granularity sync
+  // contract binds a session's content by it, so a summary without one
+  // would leave the client no document to sync.
+  id: z.string().min(1),
   // The name the user actually chose, ABSENT when they never chose one. The
   // path is an auto-generated ASCII address ('untitled-2') that cannot carry
   // a title in most scripts, so it is an identity for the URL and never one
@@ -166,13 +173,15 @@ export const documentSummarySchema = z.object({
   // longer claims a guarantee the port cannot make. Every UI site that
   // renders it already treated absence as "no age to show".
   updatedAt: z.string().optional(),
-  // ABSENT when the row records no kind. Defaulting it to 'spatial' used to
-  // hide that state: a caller could not tell a stored spatial document from
-  // one whose kind was never recorded, and the guess escaped into new rows
-  // (wb_version_restore forked it as stored fact). Every write path records
-  // a kind today, so an absent one is a pre-kind row — a caller that needs
-  // to render something decides for itself, in the open.
+  // Optional to match `DocumentEntry`, which this adapter reads from. In
+  // practice every listed document carries one — a workspace-tree entry
+  // cannot be kindless (the node meta schema requires it) — but the type
+  // follows the port's promise rather than claiming more.
   kind: documentKindSchema.optional(),
+  // The losing side of a converged path collision, carried from the port's
+  // DocumentEntry so the daemon-connected file browser can badge it the way
+  // the browser-kept one does.
+  shadowed: z.literal(true).optional(),
 })
 
 export const listDocumentsResponseSchema = z.object({

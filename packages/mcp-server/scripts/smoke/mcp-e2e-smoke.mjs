@@ -841,6 +841,7 @@ async function main() {
 
   // wb_version_save
   const saved = await callTool('wb_version_save', {
+    workspaceId: WORKSPACE_ID,
     documentId,
     label: 'e2e',
   })
@@ -856,7 +857,7 @@ async function main() {
   console.log(`[e2e] wb_version_save → ${saved.versionId}`)
 
   // wb_version_list
-  const listed = await callTool('wb_version_list', { documentId })
+  const listed = await callTool('wb_version_list', { workspaceId: WORKSPACE_ID, documentId })
   if (
     listed.documentId !== documentId ||
     !Array.isArray(listed.versions) ||
