@@ -23,6 +23,7 @@ export {
   BODY_LINE_HEIGHT_PX,
   layoutMdastBlocks,
 } from './layout/nodes/mdast-blocks.js'
+export type { ShapeContribution, ShapeTable } from './layout/nodes/node-outline.js'
 export {
   type NodeOutline,
   nodeOutline,
@@ -39,6 +40,7 @@ export type {
   DecorationContext,
   FacetCardData,
   NodeDecoration,
+  RenderContribution,
   ResolvedReference,
   SpatialContentCache,
   SpatialLayoutDegradation,
@@ -49,6 +51,7 @@ export {
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,
   naturalNodeContentSize,
+  resolveShapeTable,
 } from './layout/spatial-canvas.js'
 export { translateScene } from './layout/translate-scene.js'
 export type { FontDescriptor, MeasureText, TextMetrics } from './measure.js'

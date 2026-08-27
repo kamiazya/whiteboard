@@ -726,16 +726,28 @@ describe('DaemonIndexPage tree view', () => {
     expect((await screen.findByTestId('search-results')).textContent).toContain('Nothing matches')
   })
 
-  it('treats a 404 list as an empty workspace (onboarding, no alert)', async () => {
-    // A workspace with no document tree yet is a calm empty workspace the
-    // onboarding state can create into — not a broken page.
+  // Was `treats a 404 list as an empty workspace (onboarding, no alert)`, on
+  // the premise that "a workspace with no document tree yet is a calm empty
+  // workspace the onboarding state can create into". Measured against the real
+  // route, that premise is false: an existing workspace holding nothing
+  // answers 200 with an empty array, and only an ABSENT one answers 404. So a
+  // 404 means gone, and the onboarding state was offering to create into
+  // something that is not there — a create the route honours by silently
+  // making a DIFFERENT workspace, since it passes `createWorkspace: true`.
+  //
+  // This fixture is the disagreeing case specifically: the workspace list
+  // still reports `default` while its documents 404. There is nothing to move
+  // to, and re-selecting `default` would come straight back here forever, so
+  // the page reports the failure rather than spinning or pretending.
+  it('reports the failure when the list still names a workspace whose documents 404', async () => {
     installFetchMock({ status: 404, body: { error: 'Workspace not found: "default".' } })
     render(
       <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} token="secret" onOpenDocument={() => {}} />,
     )
 
-    await screen.findByText('What will you make first?')
-    expect(screen.queryByRole('alert')).toBeNull()
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Failed to load documents for this workspace.')
+    expect(screen.queryByText('What will you make first?')).toBeNull()
   })
 
   it('still shows the failure alert when the list fails for a non-404 reason', async () => {

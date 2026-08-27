@@ -1,4 +1,5 @@
 import {
+  act,
   cleanup,
   fireEvent,
   type RenderOptions,
@@ -63,17 +64,30 @@ interface MockRoutes {
   onSetCanvasName?: (workspaceId: string, path: string, name: string) => void
   /** When set, the documents fetch resolves only after this promise settles. */
   delayCanvases?: Promise<void>
+  /** Same, for the workspaces list. Consulted per call, so a test can leave
+   *  it unset for the initial load and set it before the re-list. */
+  delayWorkspaces?: Promise<void>
+  /** Override the documents GET. Return undefined to fall through to the
+   *  default. Consulted per call, so a test can answer 404 once and then
+   *  behave normally — a workspace deleted out from under the page. */
+  onListDocuments?: (workspaceId: string) => Response | undefined
 }
 
 function installFetchMock(routes: MockRoutes) {
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
-      return Promise.resolve(jsonResponse({ workspaces: routes.workspaces }))
+      const respond = () => jsonResponse({ workspaces: routes.workspaces })
+      // Held open so a test can inspect what renders WHILE the re-list is in
+      // flight — the window in which a deleted workspace is still selected.
+      if (routes.delayWorkspaces) return routes.delayWorkspaces.then(respond)
+      return Promise.resolve(respond())
     }
     const documentsMatch = url.match(/\/api\/workspaces\/([^/]+)\/documents$/)
     if (documentsMatch && (!init || init.method === undefined)) {
       const workspaceId = decodeURIComponent(documentsMatch[1])
+      const override = routes.onListDocuments?.(workspaceId)
+      if (override) return Promise.resolve(override)
       const documents = routes.documentsByWorkspace[workspaceId]
       if (!documents) return Promise.resolve(jsonResponse({ message: 'not found' }, 500))
       const respond = () => jsonResponse({ documents: withSummaryDefaults(documents) })
@@ -237,6 +251,124 @@ describe('DaemonIndexPage', () => {
     const wrapper = panel.closest('.animate-in') as HTMLElement | null
     expect(wrapper).not.toBeNull()
     expect(wrapper?.className).toMatch(/\bfade-in-0\b/)
+  })
+
+  // A 404 from the documents list means the workspace is GONE, not empty: an
+  // existing workspace with no documents answers 200 with an empty array
+  // (measured against the real route). And `selectedWorkspace` is only ever
+  // set from `GET /api/workspaces`, so the only way to reach this is that the
+  // workspace was deleted after that list was taken — by an agent, another
+  // tab, or the CLI.
+  //
+  // Re-listing is the repair: the selection is what went stale, so replacing
+  // it is what fixes the page. Showing an empty create-into-it state instead
+  // would hide a real anomaly, and creating into a workspace that no longer
+  // exists would silently make a DIFFERENT one.
+  it('re-lists and selects another workspace when the selected one has been deleted', async () => {
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+      onListDocuments: (workspaceId) => {
+        if (workspaceId !== 'ws-a') return undefined
+        // ws-a is gone; the workspace list the page already holds is stale.
+        routes.workspaces = [{ workspaceId: 'ws-b' }]
+        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    // Lands on ws-b's documents rather than an empty state for a workspace
+    // that is not there.
+    expect(await screen.findByText('beta')).toBeTruthy()
+    await waitFor(() => {
+      expect(
+        (screen.queryByRole('combobox', { name: 'Workspace' }) as HTMLSelectElement | null)
+          ?.value ?? 'ws-b',
+      ).toBe('ws-b')
+    })
+  })
+
+  // The loop guard, which the case above does NOT exercise: there the server
+  // stops listing the deleted workspace, so `ids[0]` happens to be the right
+  // answer and picking "any other" is indistinguishable from picking "first".
+  // Here the list and the documents disagree — the workspace is still listed
+  // but 404s — and selecting it again would send the page back through the
+  // same path forever.
+  it('does not re-select the stale workspace when the list still reports it', async () => {
+    let staleFetches = 0
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      // ws-a is never removed from the listing, on purpose.
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+      onListDocuments: (workspaceId) => {
+        if (workspaceId !== 'ws-a') return undefined
+        staleFetches += 1
+        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect(await screen.findByText('beta')).toBeTruthy()
+    // Counted rather than merely landing on ws-b: re-selecting the stale one
+    // would still reach ws-b eventually in some orderings, and the defect
+    // this pins is the repetition, not the destination.
+    expect(staleFetches).toBe(1)
+  })
+
+  // The window between "this workspace is gone" and "here is another one".
+  // Marking the load COMPLETE during it renders the onboarding empty state for
+  // a workspace that does not exist, Create button live — and that button
+  // passes `createWorkspace: true`, so a fast click would silently make a
+  // different workspace. The page must stay in its loading state until the
+  // re-list has actually chosen something.
+  it('does not offer the empty-workspace create state while re-listing', async () => {
+    let staleFetches = 0
+    let releaseRelist!: () => void
+    const relistGate = new Promise<void>((resolve) => {
+      releaseRelist = resolve
+    })
+    const routes: Parameters<typeof installFetchMock>[0] = {
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+      onListDocuments: (workspaceId) => {
+        if (workspaceId !== 'ws-a') return undefined
+        staleFetches += 1
+        // Only the re-list is held open; the first workspaces GET already ran.
+        routes.delayWorkspaces = relistGate
+        routes.workspaces = [{ workspaceId: 'ws-b' }]
+        return jsonResponse({ title: 'Workspace "ws-a" not found' }, 404)
+      },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    // Land INSIDE the window deliberately: wait until the 404 has actually
+    // been served, then flush the render it causes. Sampling earlier would
+    // catch the initial load's skeleton and pass whatever the 404 path does —
+    // the assertion has to be about the state AFTER the failure.
+    await waitFor(() => {
+      expect(staleFetches).toBe(1)
+    })
+    await act(async () => {
+      await Promise.resolve()
+    })
+
+    expect(screen.getByRole('status', { name: 'Loading documents' })).toBeTruthy()
+
+    releaseRelist()
+    expect(await screen.findByText('beta')).toBeTruthy()
   })
 
   it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
@@ -1213,6 +1345,131 @@ describe('DaemonIndexPage', () => {
     release()
     await screen.findByText('alpha')
     expect(screen.queryByRole('status', { name: /loading documents/i })).toBeNull()
+  })
+
+  it('a daemon holding no workspaces says so, instead of spinning on the skeleton forever', async () => {
+    // The list resolving EMPTY is not the same event as it failing, and it is
+    // not "still loading" either: there is simply nothing to select, so the
+    // documents fetch that would end the skeleton never runs. Measured before
+    // this test existed: `{ skeleton: true, createButtons: 0 }`, permanently.
+    const routes = {
+      workspaces: [] as Array<{ workspaceId: string }>,
+      documentsByWorkspace: {} as Record<string, never[]>,
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect(await screen.findByText(/no workspaces/i)).toBeTruthy()
+    expect(screen.queryByRole('status', { name: /loading documents/i })).toBeNull()
+    // And no control that cannot work: every create path needs a workspace to
+    // create INTO, and there is none.
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+  })
+
+  it('the no-workspaces state re-lists on demand, landing on a workspace that appeared since', async () => {
+    // The recovery here is someone else's write — an agent over MCP, the CLI —
+    // so the one action the page can honestly offer is to look again.
+    const routes = {
+      workspaces: [] as Array<{ workspaceId: string }>,
+      documentsByWorkspace: { 'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }] },
+    }
+    installFetchMock(routes)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await screen.findByText(/no workspaces/i)
+
+    routes.workspaces = [{ workspaceId: 'ws-a' }]
+    fireEvent.click(screen.getByRole('button', { name: /check again/i }))
+
+    expect(await screen.findByText('alpha')).toBeTruthy()
+  })
+
+  it('a slower earlier retry cannot undo the newer one that found a workspace', async () => {
+    // Both retry controls call loadWorkspaces() with its default isStale,
+    // which is only ever false — nothing there orders two overlapping manual
+    // retries. Pressing "Check again" twice is enough: if the FIRST response
+    // lands last it writes its empty list over the second's, and the
+    // no-workspaces branch keys on `workspaces.length === 0` alone, so the
+    // page flips back to "no workspaces" while a workspace is selected and
+    // its documents are on screen.
+    const pending: Array<(workspaces: Array<{ workspaceId: string }>) => void> = []
+    const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
+        return new Promise<Response>((resolve) => {
+          pending.push((workspaces) => resolve(jsonResponse({ workspaces })))
+        })
+      }
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(
+          jsonResponse({
+            documents: [
+              { path: 'alpha', id: 'doc-a', kind: 'spatial', updatedAt: new Date().toISOString() },
+            ],
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}, 404))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    // The mount load settles empty, putting the page in the no-workspaces state.
+    await waitFor(() => expect(pending).toHaveLength(1))
+    await act(async () => pending[0]([]))
+    await screen.findByText(/no workspaces/i)
+
+    // Two overlapping retries, resolved in reverse order: the LATER one finds
+    // ws-a, then the EARLIER one answers with the list as it was.
+    fireEvent.click(screen.getByRole('button', { name: /check again/i }))
+    await waitFor(() => expect(pending).toHaveLength(2))
+    fireEvent.click(screen.getByRole('button', { name: /check again/i }))
+    await waitFor(() => expect(pending).toHaveLength(3))
+
+    await act(async () => pending[2]([{ workspaceId: 'ws-a' }]))
+    await screen.findByText('alpha')
+
+    await act(async () => pending[1]([]))
+
+    expect(screen.queryByText(/no workspaces/i)).toBeNull()
+    expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
+  it('a failed workspace list offers a retry rather than a create button with nowhere to create', async () => {
+    // The create control this branch renders is a real recovery path when the
+    // DOCUMENTS list failed — the POST needs no rows. When the WORKSPACE list
+    // is what failed there is no selection behind it, so `handleCreate`
+    // returns at its first line and the button does nothing at all.
+    let listAttempts = 0
+    const fetchMock = vi.fn((input: RequestInfo | URL) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      if (url.endsWith('/api/workspaces')) {
+        listAttempts += 1
+        if (listAttempts === 1) return Promise.resolve(jsonResponse({ message: 'boom' }, 500))
+        return Promise.resolve(jsonResponse({ workspaces: [{ workspaceId: 'ws-a' }] }))
+      }
+      if (url.endsWith('/api/workspaces/ws-a/documents')) {
+        return Promise.resolve(
+          jsonResponse({
+            documents: [
+              { path: 'alpha', id: 'doc-a', kind: 'spatial', updatedAt: new Date().toISOString() },
+            ],
+          }),
+        )
+      }
+      return Promise.resolve(jsonResponse({}, 404))
+    })
+    vi.stubGlobal('fetch', fetchMock)
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect((await screen.findByRole('alert')).textContent).toBe('Failed to load workspaces.')
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+
+    fireEvent.click(screen.getByRole('button', { name: /try again/i }))
+    expect(await screen.findByText('alpha')).toBeTruthy()
   })
 
   it('empty workspace shows one clear next action that creates and opens a canvas', async () => {

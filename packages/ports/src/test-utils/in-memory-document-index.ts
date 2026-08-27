@@ -64,6 +64,10 @@ export class InMemoryDocumentIndex implements DocumentIndex {
     this.#workspaces.add(workspaceId)
   }
 
+  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+    return [...this.#workspaces].map((workspaceId) => ({ workspaceId }))
+  }
+
   async createDocument({
     workspaceId,
     path,

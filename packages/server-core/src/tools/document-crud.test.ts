@@ -25,6 +25,31 @@ function makeDeps(): ServerDeps {
 }
 
 describe('wbDocumentCreate', () => {
+  // `DocumentEntry.name` is `z.string().min(1).optional()`, and its own
+  // comment says why: absent is the meaningful "no name" state, where a
+  // reader falls back to the path segment. An empty string is neither — a
+  // name that reads as nothing, which the port says cannot exist.
+  //
+  // Normalised rather than rejected, because ADR-0006 point 3 is the older
+  // rule and outranks tidiness here: naming must never gate creation. A
+  // caller that sends a blank name gets a document, not an error.
+  it('treats a blank name as no name rather than storing one the port forbids', async () => {
+    const deps = makeDeps()
+    const created = await wbDocumentCreate(deps, {
+      workspaceId: 'ws-1',
+      path: 'blank',
+      kind: 'spatial',
+      name: '   ',
+      createWorkspace: true,
+    })
+
+    const entry = await deps.documentIndex.resolveDocumentById({
+      workspaceId: 'ws-1',
+      documentId: created.documentId,
+    })
+    expect(entry?.name).toBeUndefined()
+  })
+
   it('creates a document and returns documentId + path', async () => {
     const deps = makeDeps()
     const result = await wbDocumentCreate(deps, {
@@ -111,6 +136,33 @@ describe('wbDocumentCreate', () => {
 })
 
 describe('wbDocumentResolve', () => {
+  // `documentDetailSchema` is shared with the list, so resolve must EMIT what
+  // that schema declares. Omitting these left the schema saying more than the
+  // runtime did.
+  it('carries kind and updatedAt through, like the list does', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    ;(deps.documentIndex as InMemoryDocumentIndex).seed({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+
+    const out = await wbDocumentResolve(deps, {
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    })
+
+    expect(out).toEqual({
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+  })
+
   it('returns the document with its path', async () => {
     const deps = makeDeps()
     const created = await wbDocumentCreate(deps, {
@@ -123,7 +175,14 @@ describe('wbDocumentResolve', () => {
       workspaceId: 'ws-1',
       documentId: created.documentId,
     })
-    expect(got).toEqual({ documentId: created.documentId, path: 'parent/child' })
+    // `kind` is reported now that resolve emits what its schema declares. The
+    // in-memory index records no timestamp, which is why `updatedAt` is absent
+    // here and present in the case below that seeds one.
+    expect(got).toEqual({
+      documentId: created.documentId,
+      path: 'parent/child',
+      kind: 'spatial',
+    })
   })
 
   it('throws WorkspaceDocumentNotFoundError for a documentId that does not exist', async () => {
@@ -162,6 +221,35 @@ describe('wbDocumentResolve', () => {
 })
 
 describe('wbDocumentList', () => {
+  // The HTTP list surface reports both, and it used to reach the store
+  // directly because this operation dropped them — an adapter cannot report
+  // what the operation refuses to carry. `updatedAt` is OPTIONAL on
+  // `DocumentEntry` because the browser's index genuinely does not own it
+  // (apps/web reads timestamps from a separate store), so this asserts the
+  // pass-through, not that every index supplies one.
+  it('carries kind and updatedAt through rather than dropping them', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    ;(deps.documentIndex as InMemoryDocumentIndex).seed({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'markdown',
+      updatedAt: '2026-08-01T00:00:00.000Z',
+    })
+
+    const out = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+
+    expect(out.documents).toEqual([
+      {
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        path: 'a',
+        kind: 'markdown',
+        updatedAt: '2026-08-01T00:00:00.000Z',
+      },
+    ])
+  })
+
   it('throws WorkspaceNotFoundError for a workspace that was never created', async () => {
     const deps = makeDeps()
     await expect(wbDocumentList(deps, { workspaceId: 'ghost' })).rejects.toThrow(
@@ -360,17 +448,20 @@ describe('wbDocumentDelete document teardown seam', () => {
     return {
       events,
       teardown: {
-        async begin(input: { workspaceId: string; documentId: string; path: string }) {
-          events.push(`begin:${input.workspaceId}:${input.path}:${input.documentId}`)
-          return async () => {
-            events.push('finalize')
-          }
+        async around<T>(
+          input: { workspaceId: string; documentId: string; path: string },
+          deleteDocument: () => Promise<T>,
+        ) {
+          events.push(`enter:${input.workspaceId}:${input.path}:${input.documentId}`)
+          const result = await deleteDocument()
+          events.push('cleanup')
+          return result
         },
       },
     }
   }
 
-  it('begins teardown while the document still exists and finalizes after it is gone', async () => {
+  it('enters teardown while the document still exists and cleans up after it is gone', async () => {
     const deps = makeDeps()
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
@@ -387,37 +478,37 @@ describe('wbDocumentDelete document teardown seam', () => {
     } as const
 
     // Recorded from inside the seam, not asserted afterwards: whether the
-    // row was still there AT begin is the whole point — a version's
+    // row was still there ON ENTRY is the whole point — a version's
     // thumbnail is filed under a version id that cascades away with it.
     const index = deps.documentIndex
     const store = deps.documentStore
     deps.documentTeardown = {
-      async begin(input) {
+      async around(input, deleteDocument) {
         const stillIndexed = await index.resolveDocumentById({
           workspaceId: input.workspaceId,
           documentId: input.documentId,
         })
-        events.push(`begin:indexed=${stillIndexed !== null}`)
-        return async () => {
-          events.push(
-            `finalize:indexed=${
-              (await index.resolveDocumentById({
-                workspaceId: input.workspaceId,
-                documentId: input.documentId,
-              })) !== null
-            }`,
-          )
-          events.push(`finalize:snapshot=${(await store.loadSnapshot({ docRef })) !== null}`)
-        }
+        events.push(`enter:indexed=${stillIndexed !== null}`)
+        const result = await deleteDocument()
+        events.push(
+          `cleanup:indexed=${
+            (await index.resolveDocumentById({
+              workspaceId: input.workspaceId,
+              documentId: input.documentId,
+            })) !== null
+          }`,
+        )
+        events.push(`cleanup:snapshot=${(await store.loadSnapshot({ docRef })) !== null}`)
+        return result
       },
     }
 
     await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
 
     expect(events).toEqual([
-      'begin:indexed=true',
-      'finalize:indexed=false',
-      'finalize:snapshot=false',
+      'enter:indexed=true',
+      'cleanup:indexed=false',
+      'cleanup:snapshot=false',
     ])
   })
 
@@ -434,12 +525,13 @@ describe('wbDocumentDelete document teardown seam', () => {
 
     await wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: created.documentId })
 
-    expect(events).toEqual([`begin:ws-1:nested/doc-a:${created.documentId}`, 'finalize'])
+    expect(events).toEqual([`enter:ws-1:nested/doc-a:${created.documentId}`, 'cleanup'])
   })
 
   // A refused delete must not destroy anything. The index refuses while
-  // documents sit below this one, and that refusal happens AFTER begin.
-  it('does not finalize when the index refuses the delete', async () => {
+  // documents sit below this one, and that refusal happens INSIDE the
+  // bracket — it throws past the cleanup rather than being caught by it.
+  it('does not clean up when the index refuses the delete', async () => {
     const deps = makeDeps()
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown
@@ -455,10 +547,10 @@ describe('wbDocumentDelete document teardown seam', () => {
       wbDocumentDelete(deps, { workspaceId: 'ws-1', documentId: parent.documentId }),
     ).rejects.toThrow(DocumentHasDescendantsError)
 
-    expect(events).not.toContain('finalize')
+    expect(events).not.toContain('cleanup')
   })
 
-  it('never begins teardown for a documentId that does not exist', async () => {
+  it('never enters teardown for a documentId that does not exist', async () => {
     const deps = makeDeps()
     const { events, teardown } = makeRecordingTeardown()
     deps.documentTeardown = teardown

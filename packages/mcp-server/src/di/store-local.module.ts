@@ -3,7 +3,11 @@ import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index
 import { ContainerModule } from 'inversify'
 import type { Kysely } from 'kysely'
 import type { DatabaseSchema } from '../server/store/db/schema.js'
-import { cacheBackedWorkspaceDocs } from '../server/store/document-store.js'
+import {
+  CacheCoherentDocumentIndex,
+  cacheBackedWorkspaceDocs,
+  workspaceRegistry,
+} from '../server/store/document-store.js'
 import { FsBlobStore } from '../server/store/fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from '../server/store/libsql/libsql-document-store.js'
 import { WorkspaceRoutedDocumentStore } from '../server/store/workspace-plane.js'
@@ -30,7 +34,11 @@ export function createStoreLocalModule(opts: StoreLocalModuleOptions): Container
     bind(TOKENS.DocumentIndex)
       .toDynamicValue(
         () =>
-          new LoroWorkspaceDocumentIndex(cacheBackedWorkspaceDocs(), new FsBlobStore(opts.blobDir)),
+          new CacheCoherentDocumentIndex(
+            cacheBackedWorkspaceDocs(),
+            new FsBlobStore(opts.blobDir),
+            workspaceRegistry(),
+          ),
       )
       .inSingletonScope()
   })

@@ -39,7 +39,7 @@ vi.mock('../daemon/ensure-daemon.js', () => ({
 const { createApp } = await import('./app.js')
 const { createLocalTokenMcpHttpAuthStrategy } = await import('./security/mcp-auth.js')
 const { clearCache } = await import('./store/doc-cache.js')
-const { clearWorkspaceIdCache } = await import('./mcp/session-resolver.js')
+const { clearWorkspaceIdCache } = await import('./current-workspace.js')
 const { PACKAGE_VERSION } = await import('../shared/package-version.js')
 
 function createRuntimeOptions(

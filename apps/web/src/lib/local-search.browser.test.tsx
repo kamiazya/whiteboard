@@ -11,6 +11,7 @@ import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
+import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 // Body search in local mode, against real IndexedDB: the browser ranks with
 // the same stage-0 core the daemon uses, so a query finds the same
@@ -89,7 +90,6 @@ describe('local body search', () => {
     const doc = new Loro()
     writeDocumentKind(doc, 'markdown')
     writeMarkdownBody(doc, 'rewritten wording')
-    const { seedWorkspaceDocumentContent } = await import('./workspace-content.js')
     expect(await seedWorkspaceDocumentContent(id, doc.export({ mode: 'snapshot' }))).toBe(true)
 
     expect((await source.searchDocuments('rewritten')).map((h) => h.document.path)).toEqual([

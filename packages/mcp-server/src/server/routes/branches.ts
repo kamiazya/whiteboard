@@ -24,7 +24,7 @@ import {
   withDocumentBranchesLock,
 } from '../store/branches-store.js'
 import { corruptStoredDataBody } from '../store/corrupt-stored-data.js'
-import { DocumentNotFoundError } from '../store/db/upsert-workspace.js'
+import { DocumentNotFoundError } from '../store/document-not-found-error.js'
 import {
   validateBranchName,
   validateDocumentPath,

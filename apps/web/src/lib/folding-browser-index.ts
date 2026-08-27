@@ -32,6 +32,7 @@ import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbBlobStore } from './idb-blob-store.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 
 const log = getAppLogger('folding-browser-index')
 
@@ -43,7 +44,16 @@ export class FoldingBrowserIndex implements DocumentIndex {
     this.inner = new LoroWorkspaceDocumentIndex(
       new BrowserWorkspaceDocs(dbName),
       new IdbBlobStore(dbName),
+      // The browser's workspaces registry lives in the same IndexedDB store
+      // the legacy index keeps it in — registration, not placement, so it is
+      // not part of what the fold retires.
+      { listWorkspaces: () => new IdbDocumentIndex(dbName).listWorkspaces() },
     )
+  }
+
+  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+    await this.ensureFolded()
+    return this.inner.listWorkspaces()
   }
 
   private ensureFolded(): Promise<void> {

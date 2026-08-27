@@ -6,12 +6,12 @@ import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createStoreLocalModule } from '../../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
 import { getDataDir } from '../config.js'
+import { ensureWorkspaceId } from '../current-workspace.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
 import { getDb } from '../store/db/index.js'
 import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
-import { ensureWorkspaceId } from './session-resolver.js'
 import {
   buildDrawDiagramPrompt,
   getStandaloneHelpText,

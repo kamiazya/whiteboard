@@ -1,6 +1,6 @@
 import { userInfo } from 'node:os'
 import { corruptStoredDataBody } from '../../store/corrupt-stored-data.js'
-import { DocumentNotFoundError } from '../../store/db/upsert-workspace.js'
+import { DocumentNotFoundError } from '../../store/document-not-found-error.js'
 
 export function defaultHumanDisplayName(): string {
   try {

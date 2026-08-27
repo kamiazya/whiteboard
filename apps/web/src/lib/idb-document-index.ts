@@ -89,6 +89,15 @@ export class IdbDocumentIndex implements DocumentIndex {
     })
   }
 
+  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+    return this.tx([WORKSPACES_STORE], 'readonly', async (tx) => {
+      // The store is keyed by workspaceId, so the KEYS are the answer — no
+      // value read, and nothing to go stale between the two.
+      const keys = await request(tx.objectStore(WORKSPACES_STORE).getAllKeys())
+      return keys.map((key) => ({ workspaceId: String(key) }))
+    })
+  }
+
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {
     const row: IndexRow = {
       workspaceId: input.workspaceId,

@@ -371,8 +371,19 @@ describe('documentSummarySchema', () => {
     expect(result).toEqual(valid)
   })
 
-  it('rejects missing updatedAt', () => {
-    expect(documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x' }).success).toBe(false)
+  // Was `rejects missing updatedAt`. Required stopped being true when the
+  // list route became an adapter over `wbDocumentList`: `DocumentEntry`
+  // leaves the field optional because an index may genuinely not own a
+  // timestamp — apps/web's IndexedDB index reads them from a separate store —
+  // and a response type cannot promise more than the port it reads from.
+  //
+  // Absent is still not the same as arbitrary: a value that IS present must
+  // be a string, which is the half worth keeping.
+  it('leaves updatedAt ABSENT rather than requiring one the port cannot promise', () => {
+    expect(documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x' }).success).toBe(true)
+    expect(
+      documentSummarySchema.safeParse({ path: 'canvas-1', id: 'x', updatedAt: 7 }).success,
+    ).toBe(false)
   })
 
   it('accepts an explicit kind: markdown', () => {
@@ -380,19 +391,19 @@ describe('documentSummarySchema', () => {
     expect(result.kind).toBe('markdown')
   })
 
-  // Every listed document is tree-served: the boot fold deletes pre-kind rows
-  // and every write path records a kind, so a summary withholding `id` or
-  // `kind` no longer describes any state the daemon can be in. Requiring both
-  // is what lets every client bind the workspace-granularity sync contract
-  // without a per-document fallback.
+  // The id is what the workspace-granularity sync contract binds a session's
+  // content by, so a summary without one leaves the client no document to
+  // sync — required. `kind` follows the port's optional promise (the list
+  // route is an adapter over wbDocumentList), though in practice a
+  // workspace-tree entry always carries one.
   it('rejects a summary without an id', () => {
     const { id: _id, ...withoutId } = valid
     expect(documentSummarySchema.safeParse(withoutId).success).toBe(false)
   })
 
-  it('rejects a summary without a kind', () => {
+  it('accepts a summary without a kind — the port leaves it optional', () => {
     const { kind: _kind, ...withoutKind } = valid
-    expect(documentSummarySchema.safeParse(withoutKind).success).toBe(false)
+    expect(documentSummarySchema.safeParse(withoutKind).success).toBe(true)
   })
 
   it('rejects an unknown kind', () => {

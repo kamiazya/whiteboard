@@ -44,7 +44,7 @@ export interface DaemonIndexPageProps {
 interface DocumentRow {
   path: string
   displayName: string
-  updatedAt: string
+  updatedAt: string | undefined
   // Absent when the daemon records no kind for the row (pre-kind documents):
   // the list says nothing rather than claiming spatial.
   kind?: DocumentKind
@@ -56,7 +56,13 @@ function sortRows(rows: DocumentRow[]): DocumentRow[] {
   return [...rows].sort((a, b) => {
     if (a.pinned !== b.pinned) return a.pinned ? -1 : 1
     if (a.pinned && b.pinned) return a.pinOrder - b.pinOrder
-    if (a.updatedAt !== b.updatedAt) return a.updatedAt < b.updatedAt ? 1 : -1
+    // Newest first, and a document with no recorded timestamp sorts last
+    // rather than winning by accident: `undefined` fails every `<`
+    // comparison, so a bare `a.updatedAt < b.updatedAt` would have quietly
+    // ordered it as if it were the newest.
+    const left = a.updatedAt ?? ''
+    const right = b.updatedAt ?? ''
+    if (left !== right) return left < right ? 1 : -1
     return 0
   })
 }
@@ -70,6 +76,11 @@ export function DaemonIndexPage({
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
   const [workspaces, setWorkspaces] = useState<string[]>([])
+  // Whether the workspace LIST has settled, which `workspaces.length === 0`
+  // alone cannot say — it reads the same before the first fetch returns and
+  // after a daemon answers with nothing. Only the second of those is a state
+  // to render; the first is still loading.
+  const [workspacesLoaded, setWorkspacesLoaded] = useState(false)
   const [selectedWorkspace, setSelectedWorkspace] = useState<string | null>(null)
   // One source per (fetch, base, workspace): the panel re-reads whenever the
   // source identity changes, so this memo is also what scopes it to the
@@ -109,28 +120,86 @@ export function DaemonIndexPage({
   const selectedWorkspaceRef = useRef(selectedWorkspace)
   selectedWorkspaceRef.current = selectedWorkspace
 
+  // initialWorkspaceId is fixed for the page's lifetime (set once from the
+  // pairing payload App.tsx resolved at mount), so reading it through a ref
+  // keeps loadWorkspaces stable across renders — the mount effect below stays
+  // load-once, and the retry controls can share the same function.
+  const initialWorkspaceIdRef = useRef(initialWorkspaceId)
+  initialWorkspaceIdRef.current = initialWorkspaceId
+
+  // Orders every list load, so only the newest one may write. The retry
+  // controls can overlap freely — nothing else sequences two presses — and an
+  // older answer landing last does not merely leave a stale message: the
+  // no-workspaces branch keys on `workspaces.length === 0` alone, so the page
+  // reverts to it with a workspace selected and its documents on screen.
+  //
+  // This replaces the `isStale` callback the sibling loaders take, rather than
+  // joining it. That callback asks whether the CALLER still cares, which only
+  // the mount effect can answer; a dep change already bumps the generation
+  // here (the cleanup runs, then the re-run), leaving it covering unmount
+  // alone — a setState no-op since React 18, and nothing a test can tell apart
+  // from its absence. Measured: with it removed, all 46 cases stay green.
+  const listGeneration = useRef(0)
+
+  const loadWorkspaces = useCallback(async () => {
+    const generation = ++listGeneration.current
+    const superseded = () => generation !== listGeneration.current
+    setLoadError(null)
+    try {
+      const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
+      if (superseded()) return
+      const ids = res.workspaces.map((w) => w.workspaceId)
+      setWorkspaces(ids)
+      setWorkspacesLoaded(true)
+      const targeted = initialWorkspaceIdRef.current
+      const wanted = targeted && ids.includes(targeted) ? targeted : undefined
+      setSelectedWorkspace((current) => current ?? wanted ?? ids[0] ?? null)
+    } catch {
+      if (superseded()) return
+      setWorkspacesLoaded(true)
+      setLoadError('Failed to load workspaces.')
+    }
+  }, [daemonFetch, daemonBaseUrl])
+
   useEffect(() => {
-    let cancelled = false
-    listWorkspaces(daemonFetch, daemonBaseUrl)
-      .then((res) => {
-        if (cancelled) return
+    void loadWorkspaces()
+  }, [loadWorkspaces])
+
+  // Re-reads the workspace list and moves off the one that vanished.
+  //
+  // Deliberately picks a workspace OTHER than the stale id even if the server
+  // still lists it: were the two to disagree, selecting it again would send
+  // the page straight back into this path and loop. Choosing a different one
+  // — or nothing — always terminates, and the dropdown still lets a person
+  // pick it by hand.
+  const reselectAfterStale = useCallback(
+    async (staleWorkspaceId: string, isStale: () => boolean) => {
+      try {
+        const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
+        if (isStale()) return
         const ids = res.workspaces.map((w) => w.workspaceId)
         setWorkspaces(ids)
-        const targeted =
-          initialWorkspaceId && ids.includes(initialWorkspaceId) ? initialWorkspaceId : undefined
-        setSelectedWorkspace((current) => current ?? targeted ?? ids[0] ?? null)
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError('Failed to load workspaces.')
-      })
-    return () => {
-      cancelled = true
-    }
-    // initialWorkspaceId is fixed for the page's lifetime (set once from the
-    // pairing payload App.tsx resolved at mount) — it deliberately isn't a
-    // dependency so this effect stays load-once, matching daemonBaseUrl.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daemonBaseUrl])
+        const next = ids.find((id) => id !== staleWorkspaceId)
+        if (next === undefined) {
+          // Nothing to move to — this was the only workspace, or the list and
+          // the documents disagree about it. Re-selecting the same one would
+          // come straight back here forever, and leaving the page in its
+          // loading state would spin without end. Say so instead: the request
+          // that failed is the one the person is waiting on.
+          setLoaded(true)
+          setLoadError('Failed to load documents for this workspace.')
+          return
+        }
+        // A real replacement re-enters the selection effect, which clears
+        // `loaded` itself and owns it from there.
+        setSelectedWorkspace(next)
+      } catch {
+        if (isStale()) return
+        setLoadError('Failed to load workspaces.')
+      }
+    },
+    [daemonFetch, daemonBaseUrl],
+  )
 
   const loadWorkspace = useCallback(
     async (workspaceId: string, isStale: () => boolean) => {
@@ -160,16 +229,34 @@ export function DaemonIndexPage({
       } catch (err) {
         if (isStale()) return
         setRows([])
-        setLoaded(true)
-        // A 404 is a workspace with no document tree yet — a calm empty
-        // workspace (the onboarding state can create into it), not a broken
-        // page. Anything else is a genuine failure and keeps the alert.
-        if (!(err instanceof DaemonApiError && err.status === 404)) {
-          setLoadError('Failed to load documents for this workspace.')
+        // A 404 means the workspace is GONE, not empty. An existing workspace
+        // with no documents answers 200 with an empty array; only an absent
+        // one 404s. And `selectedWorkspace` is only ever set from
+        // `GET /api/workspaces`, so the sole way to arrive here is that the
+        // workspace was deleted AFTER that list was taken — by an agent,
+        // another tab, or the CLI.
+        //
+        // So the selection is what went stale, and re-listing is the repair.
+        // Rendering the empty create-into-it state instead would hide a real
+        // anomaly, and a create issued against a workspace that no longer
+        // exists would silently make a DIFFERENT one (the route passes
+        // `createWorkspace: true`).
+        if (err instanceof DaemonApiError && err.status === 404) {
+          // Deliberately NOT `setLoaded(true)` here. The load is not over —
+          // the page is still deciding what it is showing. Marking it
+          // complete renders the onboarding empty state for the workspace
+          // that just vanished, with a live Create button that passes
+          // `createWorkspace: true`, so a click inside this window would
+          // silently make a DIFFERENT workspace. `reselectAfterStale` sets it
+          // only once there is nothing left to choose.
+          void reselectAfterStale(workspaceId, isStale)
+          return
         }
+        setLoaded(true)
+        setLoadError('Failed to load documents for this workspace.')
       }
     },
-    [daemonFetch, daemonBaseUrl],
+    [daemonFetch, daemonBaseUrl, reselectAfterStale],
   )
 
   useEffect(() => {
@@ -354,17 +441,60 @@ export function DaemonIndexPage({
           // deliberately has no create control — deriving a path from rows
           // that are still in flight invites a collision the loaded states
           // cannot produce.
+          //
+          // Which failed decides which recovery is real. Creating needs a
+          // workspace to create INTO, so when the WORKSPACE list is what
+          // failed there is nothing selected and `handleCreate` returns at its
+          // first line — the button would sit there doing nothing. Offer the
+          // request that failed instead.
           <div className="flex flex-col items-start gap-3">
             <div role="alert" className="text-sm text-destructive">
               {loadError}
             </div>
+            {selectedWorkspace ? (
+              <button
+                type="button"
+                disabled={creating}
+                onClick={() => void handleCreate('spatial')}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Create a canvas
+              </button>
+            ) : (
+              <button
+                type="button"
+                onClick={() => void loadWorkspaces()}
+                className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
+              >
+                Try again
+              </button>
+            )}
+          </div>
+        ) : workspacesLoaded && workspaces.length === 0 ? (
+          // A daemon that holds no workspaces at all. Nothing is selected, so
+          // the documents fetch that ends the loading state never runs and the
+          // skeleton below would spin for as long as the page stays open.
+          //
+          // There is no create control here on purpose: every create path
+          // addresses a (workspace, path) pair, and this page has no way to
+          // name a workspace the daemon would agree with — the daemon keeps
+          // its own current workspace id and does not publish it. So the one
+          // honest action is to look again, because the write that fixes this
+          // is someone else's.
+          <div className="flex flex-col items-start gap-3">
+            <div>
+              <p className="text-sm font-medium">This daemon has no workspaces.</p>
+              <p className="text-sm text-muted-foreground">
+                A workspace appears once something creates a document in it — an agent over MCP, or
+                the whiteboard CLI.
+              </p>
+            </div>
             <button
               type="button"
-              disabled={creating}
-              onClick={() => void handleCreate('spatial')}
+              onClick={() => void loadWorkspaces()}
               className="rounded-md border px-3 py-1.5 text-sm font-medium transition-colors hover:bg-accent"
             >
-              Create a canvas
+              Check again
             </button>
           </div>
         ) : !loaded ? (

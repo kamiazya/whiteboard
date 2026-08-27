@@ -8,6 +8,7 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { createLocalFilesSource } from './local-files-source.js'
@@ -54,7 +55,6 @@ describe('createLocalFilesSource', () => {
     // IdbDocumentIndex would silently list a DIFFERENT store than the app
     // writes to — exactly the split the injectable parameter exists to
     // close, reopened by the default.
-    const { FoldingBrowserIndex } = await import('./folding-browser-index.js')
     const production = new FoldingBrowserIndex()
     await production.createWorkspace({ workspaceId: 'local' }).catch(() => {})
     await production.createDocument({

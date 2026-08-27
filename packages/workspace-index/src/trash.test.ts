@@ -78,7 +78,7 @@ describe('deleting a document', () => {
   beforeEach(async () => {
     blobs = inMemoryBlobStore()
     docs = inMemoryWorkspaceDocs()
-    index = new LoroWorkspaceDocumentIndex(docs, blobs)
+    index = new LoroWorkspaceDocumentIndex(docs, blobs, { listWorkspaces: async () => [] })
     await index.createWorkspace({ workspaceId: WS })
   })
 

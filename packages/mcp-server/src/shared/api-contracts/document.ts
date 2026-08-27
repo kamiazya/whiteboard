@@ -166,13 +166,18 @@ export const documentSummarySchema = z.object({
   // `[[Name]]` reference reads the name from the same response it renders
   // the list from — the split is what let the two disagree.
   displayName: z.string().min(1).optional(),
-  updatedAt: z.string(),
-  // Required: every write path records a kind and the boot fold deletes
-  // pre-kind rows, so an absent kind no longer describes any state the
-  // daemon can be in. (It was optional while pre-kind rows existed, so a
-  // client could tell "stored as spatial" from "never recorded" instead of
-  // being handed a guess.)
-  kind: documentKindSchema,
+  // Optional, matching `DocumentEntry`, which is optional because an index
+  // may genuinely not own a timestamp — apps/web's IndexedDB index reads them
+  // from a separate store. The daemon's SQL index always has one, so this
+  // surface still reports it in practice; what changed is that the TYPE no
+  // longer claims a guarantee the port cannot make. Every UI site that
+  // renders it already treated absence as "no age to show".
+  updatedAt: z.string().optional(),
+  // Optional to match `DocumentEntry`, which this adapter reads from. In
+  // practice every listed document carries one — a workspace-tree entry
+  // cannot be kindless (the node meta schema requires it) — but the type
+  // follows the port's promise rather than claiming more.
+  kind: documentKindSchema.optional(),
 })
 
 export const listDocumentsResponseSchema = z.object({

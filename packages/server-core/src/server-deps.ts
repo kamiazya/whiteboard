@@ -119,7 +119,7 @@ export interface ServerDeps {
    * ever covers the dependencies somebody remembered to write one for.
    *
    * A test whose subject is elsewhere passes `unusedDocumentTeardown()`,
-   * whose `begin` throws — the same idiom as `unusedDocumentIndex`, and for
+   * whose `around` throws — the same idiom as `unusedDocumentIndex`, and for
    * the same reason: a no-op double would let a delete test pass while
    * asserting nothing about the cleanup, which is the state this repo was
    * in before the seam existed.
@@ -157,21 +157,32 @@ export type DocumentWritten = (input: {
 }) => Promise<void>
 
 /**
- * Split in two because the information the cleanup needs stops existing
- * partway through the delete: a version's thumbnail is filed under the
- * version id, and version rows cascade away with the document. `begin` runs
- * while the document is still whole and returns what to run once it is gone.
+ * A BRACKET around the delete, not a pair of hooks, because two separate
+ * things have to be true at once.
  *
- * The finalizer runs only if the delete actually happened — the index
- * refuses while documents sit below this one, and a refused delete must
- * destroy nothing.
+ * The information the cleanup needs stops existing partway through: a
+ * version's thumbnail is filed under the version id, and version rows
+ * cascade away with the document, so what to unlink can only be read while
+ * the document is still whole. And a composition root may need to hold
+ * something across the WHOLE delete — the daemon holds its per-workspace
+ * write lock — which a `begin` that has already returned cannot do.
+ *
+ * A begin/finalize pair gave the first without the second, and the gap was
+ * real: a version saved between the capture and the row delete had its row
+ * cascaded away while its thumbnail was never in the captured set, leaving
+ * the orphaned file this seam exists to prevent.
+ *
+ * `deleteDocument` runs the delete itself. What it throws propagates, and
+ * the cleanup is then skipped — the index refuses while documents sit below
+ * this one, and a refused delete must destroy nothing.
  */
 export interface DocumentTeardown {
-  begin(input: {
-    workspaceId: string
-    documentId: string
-    path: string
-  }): Promise<FinalizeDocumentTeardown>
+  around<T>(
+    input: {
+      workspaceId: string
+      documentId: string
+      path: string
+    },
+    deleteDocument: () => Promise<T>,
+  ): Promise<T>
 }
-
-export type FinalizeDocumentTeardown = () => Promise<void>

@@ -34,12 +34,3 @@ export async function getDocumentIdByPath(
     .executeTakeFirst()
   return row?.id ?? null
 }
-
-/** Thrown by metadata writers handed a path no document lives at. Routes map
- *  it to 404. */
-export class DocumentNotFoundError extends Error {
-  constructor(workspaceId: string, path: string) {
-    super(`No document at "${workspaceId}/${path}".`)
-    this.name = 'DocumentNotFoundError'
-  }
-}

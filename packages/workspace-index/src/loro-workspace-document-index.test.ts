@@ -22,7 +22,9 @@ import type { WorkspaceDocs } from './workspace-docs.js'
  * exported. A real backing store exports and writes there, which is exactly
  * the part this package does not decide.
  */
-function inMemoryWorkspaceDocs(): WorkspaceDocs {
+function inMemoryWorkspaceDocs(): WorkspaceDocs & {
+  listWorkspaces(): Promise<{ workspaceId: string }[]>
+} {
   const docs = new Map<string, LoroDoc>()
   let nextPeer = 1n
   return {
@@ -40,6 +42,9 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs {
     },
     async save() {
       return null
+    },
+    async listWorkspaces() {
+      return [...docs.keys()].map((workspaceId) => ({ workspaceId }))
     },
   }
 }
@@ -73,7 +78,10 @@ function inMemoryBlobStore(): BlobStore {
 
 describe('LoroWorkspaceDocumentIndex', () => {
   describeDocumentIndexConformance(async () => ({
-    index: new LoroWorkspaceDocumentIndex(inMemoryWorkspaceDocs(), inMemoryBlobStore()),
+    index: (() => {
+      const docs = inMemoryWorkspaceDocs()
+      return new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
+    })(),
     dispose: async () => {},
   }))
 })

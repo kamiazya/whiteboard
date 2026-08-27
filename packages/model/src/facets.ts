@@ -22,8 +22,19 @@ export const coreFacetsSchema = z.object({
    */
   resource: z.string().optional(),
   tags: z.array(z.string()).optional(),
-  // Explicit default-View override, used when multiple extension facets
-  // apply to the same canvas and the reader must pick one deterministically.
+  /**
+   * OKF's explicit default-View override: which extension facet a reader
+   * should render when a DOCUMENT carries several. (A canvas is the spatial
+   * surface and carries no facets at all — ADR-0009.)
+   *
+   * **Nothing reads it, and no tool writes it.** It round-trips through
+   * `writeCoreFacets`/`readCoreFacets` and stops there: core facets have no
+   * setter tool, and no renderer selects a template. Whether `view` becomes
+   * the selection key is an open question with a write path attached to it,
+   * so the field stays declared — dropping it would lose an author's value
+   * on the next save — while claiming a mechanism it does not have would be
+   * worse than saying nothing.
+   */
   view: z.string().optional(),
 })
 

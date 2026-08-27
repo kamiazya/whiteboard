@@ -31,6 +31,16 @@ export const documentEntrySchema = z
      * so the absent case has exactly one spelling.
      */
     shadowed: z.literal(true).optional(),
+    /**
+     * When the placement last changed, ISO 8601.
+     *
+     * OPTIONAL because an index may genuinely not own it: a tree entry
+     * written before timestamps landed in the node meta has none, and an
+     * invented timestamp is worse than an absent one because it reads as
+     * fact. Every UI site that renders it already treats absence as "no age
+     * to show".
+     */
+    updatedAt: z.string().optional(),
   })
   .strict()
 export type DocumentEntry = z.infer<typeof documentEntrySchema>
@@ -108,6 +118,23 @@ export function compareDocumentPaths(left: string, right: string): number {
  * workspaceId is otherwise indistinguishable from a new one, and the caller
  * gets a workspace nobody asked for with its data quietly inside.
  */
+/**
+ * Cross-realm-safe guard for `WorkspaceNotFoundError`. `instanceof` alone is
+ * a trap here: this class reaches a consumer through more than one module
+ * graph (a bundler inlining one package while externalizing another, vitest
+ * transforming a workspace dependency a `vi.mock`ing test file pulls in),
+ * and two loads of this file make two class identities that `instanceof`
+ * refuses to relate. The name check is what survives that — measured: a
+ * route's `instanceof` answered false for an error whose constructor name
+ * matched exactly.
+ */
+export function isWorkspaceNotFoundError(error: unknown): error is WorkspaceNotFoundError {
+  return (
+    error instanceof WorkspaceNotFoundError ||
+    (error instanceof Error && error.name === 'WorkspaceNotFoundError')
+  )
+}
+
 export class WorkspaceNotFoundError extends Error {
   constructor(readonly workspaceId: string) {
     super(`Workspace not found: "${workspaceId}". Create it before adding documents to it.`)
@@ -218,6 +245,19 @@ export interface DocumentIndex {
    * refuses an absent workspace rather than conjuring one.
    */
   createWorkspace(input: CreateWorkspaceInput): Promise<void>
+  /**
+   * Every workspace this index holds, INCLUDING the ones with no documents in
+   * them: a workspace is a real, addressable place before anything is put in
+   * it, and hiding the empty ones would make a freshly created one look like
+   * it failed.
+   *
+   * Answers rather than throwing when there are no documents yet — unlike
+   * `listDocuments`, there is no id here that could have been a typo, so
+   * "none" is an answer rather than an ambiguity. Note this does NOT promise
+   * the list is empty on a fresh index: apps/web's writes `local` when its
+   * store is created, because that is the one the browser UI opens.
+   */
+  listWorkspaces(): Promise<{ workspaceId: string }[]>
   /**
    * Fails `WorkspaceNotFoundError` if the workspace does not exist. Fails if
    * the path is taken. Creating never silently adopts an existing

@@ -403,6 +403,7 @@ export function createApp(options: AppOptions) {
   app.route(
     '/',
     createDocumentRouter({
+      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
       // Attach the current HEAD branch name to saved versions when available.
       getHeadBranch: async (sid, path) => {
         try {

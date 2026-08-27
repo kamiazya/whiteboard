@@ -132,6 +132,35 @@ Do not invent a replacement domain in passing. Extension facets round-trip
 unvalidated through the generic bucket, so anything you write will persist and
 quietly become the convention. Agree the schema first.
 
+### Declaring what an issue is about
+
+An issue MAY declare OKF `sources` — the files or documents its claims are
+about. Nothing requires it, and a document without any is simply not judged.
+
+```
+sources:
+  - resource: apps/web/src/components/workspace-files/SearchResults.tsx
+  - resource: packages/server-core/src/tools/document-search.ts
+```
+
+`node .claude/scripts/stale-issues.mjs` then reports the open issues whose
+sources have changed or been deleted since the document's own `generated.at`.
+No new storage: `sources` rides the preserved-root-keys bucket, `generated.at`
+is stamped by the write, and git already knows what moved. It also runs on
+SessionStart, quietly, so a stale issue announces itself rather than waiting to
+be re-read.
+
+What it is worth, measured on the six issues one session read and found
+already resolved: **four** named something that had since changed or been
+deleted. The two it missed share a shape — the fix landed in a file the issue
+never named — and that is the honest ceiling: `sources` says what a document is
+ABOUT, not where a fix will land. It also cannot see the other failure at all,
+a document that was simply wrong when written; the two most expensive
+investigations in that session were of that kind.
+
+So it reports "what this is about moved", never "this is resolved". Re-read
+before closing anything.
+
 ### The other axis: is the write-up still true?
 
 Open-vs-closed is about the WORK. Whether the document's own account is still

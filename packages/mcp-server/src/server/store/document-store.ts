@@ -9,11 +9,11 @@
  * survives only as an identity label for corrupt-data error messages and as
  * the legacy-migration backup path. Any blob file still on disk is swept
  * away by `sweep-imported-fs-blobs.ts` once its bytes are proven to live in
- * Libsql, so `deleteDocument`'s unlink below is a straggler cleanup, not the
+ * Libsql, so `documentTeardown`'s unlink below is a straggler cleanup, not the
  * primary deletion path.
  *
- * `listDocuments`/`deleteDocument` here are NOT `DocumentIndex`'s methods of
- * the same names — that is the agent-facing side of the same split, reached
+ * `listDocuments` here is NOT `DocumentIndex`'s method of the same name —
+ * that is the agent-facing side of the same split, reached
  * as `deps.documentIndex.*` and addressing documents by ULID rather than by
  * `(workspaceId, path)`. The names match because the concept does; the two
  * stores are what do not see each other. Both now write the same
@@ -61,12 +61,9 @@ import {
 import { deleteDocumentRow } from './db/delete-document-row.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import {
-  DocumentNotFoundError,
-  getDocumentIdByPath,
-  upsertWorkspaceRow,
-} from './db/upsert-workspace.js'
+import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
+import { DocumentNotFoundError } from './document-not-found-error.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import type { VersionStore } from './version-store.js'
@@ -352,9 +349,80 @@ export function cacheBackedWorkspaceDocs(): {
   }
 }
 
+/**
+ * The workspaces REGISTRY, read from the daemon's `workspaces` table — the
+ * one row-shaped truth the collapse kept (who this daemon keeps, not what
+ * they contain). `saveWorkspaceDoc` upserts it, so a workspace exists here
+ * exactly when a stored record does.
+ */
+export function workspaceRegistry(): { listWorkspaces(): Promise<{ workspaceId: string }[]> } {
+  return {
+    async listWorkspaces() {
+      const db = await dbReady()
+      const rows = await db.selectFrom('workspaces').select(['id']).execute()
+      return rows.map((row) => ({ workspaceId: row.id }))
+    },
+  }
+}
+
+/**
+ * The tree index, with this composition root's doc-cache kept coherent
+ * around the moves and deletes the port performs. The cache is keyed by
+ * (workspaceId, path); a move leaves every touched path holding a doc filed
+ * under a name that no longer means what it did — the SOURCE half merely
+ * stales, while the DESTINATION half corrupts: `getDoc` lazily creates an
+ * empty doc for any path, so a read that arrived before the move left a
+ * phantom cached there, and the next write through it would persist the
+ * phantom over the moved document's real content. The shared index cannot
+ * know this cache exists, so the composition root wraps it.
+ */
+export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
+  override async moveDocument(input: {
+    workspaceId: string
+    from: string
+    to: string
+  }): Promise<void> {
+    // Under the workspace write lock, like the retired SQL index's move: the
+    // route flows (WS updates, live-doc saves) load-and-save inside this
+    // lock, so a move outside it can land between an update's stalled read
+    // and its write — the update then lazily recreates the source path and a
+    // phantom duplicate survives the rename.
+    return withWorkspaceWriteLock(input.workspaceId, async () => {
+      // Collected BEFORE the move: afterwards the tree is the only record of
+      // the subtree, under its new paths.
+      const workspaceDoc = await openWorkspaceDocIfStored(input.workspaceId)
+      const movedPaths =
+        workspaceDoc === null
+          ? []
+          : readWorkspaceNodes(workspaceDoc)
+              .map((node) => node.path)
+              .filter((path) => path === input.from || path.startsWith(`${input.from}/`))
+      await super.moveDocument(input)
+      for (const from of movedPaths) {
+        evictDoc(input.workspaceId, from)
+        evictDoc(
+          input.workspaceId,
+          from === input.from ? input.to : `${input.to}${from.slice(input.from.length)}`,
+        )
+      }
+    })
+  }
+
+  override async deleteDocument(input: { workspaceId: string; path: string }): Promise<void> {
+    return withWorkspaceWriteLock(input.workspaceId, async () => {
+      await super.deleteDocument(input)
+      evictDoc(input.workspaceId, input.path)
+    })
+  }
+}
+
 /** The tree index delete/rename go through, so a daemon delete evacuates the same way a port delete does. */
 async function workspaceTreeIndex(): Promise<LoroWorkspaceDocumentIndex> {
-  return new LoroWorkspaceDocumentIndex(cacheBackedWorkspaceDocs(), new FsBlobStore(getDataDir()))
+  return new CacheCoherentDocumentIndex(
+    cacheBackedWorkspaceDocs(),
+    new FsBlobStore(getDataDir()),
+    workspaceRegistry(),
+  )
 }
 
 async function documentStoreReady(): Promise<LibsqlDocumentStore> {
@@ -659,15 +727,29 @@ async function unlinkIfExists(path: string): Promise<void> {
  * have to be captured while the document is still whole.
  */
 export const documentTeardown: DocumentTeardown = {
-  async begin({ workspaceId, documentId, path }) {
-    const db = await dbReady()
-    const versionRows = await db
-      .selectFrom('versions')
-      .select(['id'])
-      .where('documentId', '=', documentId)
-      .execute()
+  around({ workspaceId, documentId, path }, deleteDocument) {
+    // The whole delete runs under this workspace's write barrier, capture
+    // included. A version saved between the capture and the row delete
+    // would otherwise have its row cascaded away while its thumbnail was
+    // never in the captured set — an orphaned file, from the one seam that
+    // exists to prevent them.
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await dbReady()
+      const versionRows = await db
+        .selectFrom('versions')
+        .select(['id'])
+        .where('documentId', '=', documentId)
+        .execute()
 
-    return async () => {
+      const result = await deleteDocument()
+
+      // Version/branch rows no longer cascade from a documents row
+      // (migration 0016 dropped the FK — a tree-only document has no row to
+      // cascade from), so delete-completeness for every delete path that
+      // runs through this bracket lives here.
+      await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
+      await db.deleteFrom('branches').where('documentId', '=', documentId).execute()
+
       const blobPath = documentBlobPath(workspaceId, documentId)
       await unlinkIfExists(blobPath)
       await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
@@ -679,22 +761,26 @@ export const documentTeardown: DocumentTeardown = {
       // reload from — a fresh create should not inherit a doc instance that
       // still holds the deleted canvas's history).
       evictDoc(workspaceId, path)
-    }
+
+      return result
+    })
   },
 }
 
 export async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
   validateWorkspaceId(workspaceId)
   validateDocumentPath(path)
-  return withWorkspaceWriteLock(workspaceId, async () => {
-    const db = await dbReady()
-    const documentId = await resolveDocumentIdAtPath(workspaceId, path)
-    if (documentId === null) return false
+  const documentId = await resolveDocumentIdAtPath(workspaceId, path)
+  if (documentId === null) return false
 
-    // Same three steps, in the same order, as wb_document_delete
-    // (server-core's document-crud.ts) — deliberately, because the two used
-    // to be separate implementations and only one of them cleaned up.
-    const finalizeTeardown = await documentTeardown.begin({ workspaceId, documentId, path })
+  // The same bracket wb_document_delete runs in (server-core's
+  // document-crud.ts) — deliberately, because the two used to be separate
+  // implementations and only one of them cleaned up. The bracket takes the
+  // workspace write lock, captures thumbnail ids while the document is
+  // whole, and deletes versions/branches rows after (migration 0016 dropped
+  // the cascade).
+  return documentTeardown.around({ workspaceId, documentId, path }, async () => {
+    const db = await dbReady()
 
     // The tree node goes through the index's delete, which EVACUATES the
     // content into the trash before removing anything — the daemon's delete
@@ -708,21 +794,15 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
       await index.deleteDocument({ workspaceId, path })
     }
 
-    // A legacy mirror row, when one still exists (pre-fold documents only).
+    // A legacy mirror row, when one still exists (pre-fold documents only) —
+    // left behind, the boot fold would resurrect the document.
     await deleteDocumentRow(db, workspaceId, path)
-    // Version/branch rows no longer cascade from a documents row (migration
-    // 0016 dropped the FK — a tree-only document has no row to cascade
-    // from), so delete-completeness lives HERE now.
-    await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
-    await db.deleteFrom('branches').where('documentId', '=', documentId).execute()
 
     // The identity goes first, then the Libsql snapshot/delta/frontier
     // rows, so a crash between the two leaves an orphaned-but-unreachable
     // snapshot rather than a listed canvas with no content.
     const documentStore = await documentStoreReady()
     await documentStore.deleteDoc({ docRef: { kind: 'document', workspaceId, documentId } })
-
-    await finalizeTeardown()
 
     return true
   })

@@ -12,6 +12,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
+import { ensureWorkspaceId } from './current-workspace.js'
 import { normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
@@ -23,6 +24,7 @@ import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { getDb } from './store/db/index.js'
+import { prepareDataDir } from './store/db/prepare.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
 import { validationErrorBody } from './validators.js'
 
@@ -197,6 +199,21 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // (getDb memoizes per dataDir, so this container shares the connection
   // with the per-session MCP containers rather than opening a second one).
   const dataDir = getDataDir()
+  // Migrate BEFORE handing the ports a handle. `getDb` opens the file and
+  // nothing more; migrations have only ever run through `document-store.ts`'s
+  // `dbReady`, which is `prepareDataDir` then `getDb`. Anything reaching the
+  // injected ports instead of the legacy store therefore met an empty schema
+  // on a data dir nothing had touched yet — `/api/v1` answered
+  // `no such table: workspaces` from the day it was mounted. Both are
+  // memoized per data dir, so on an already-prepared dir this costs nothing.
+  await prepareDataDir(dataDir)
+  // And give the daemon its current workspace before anything reads the list.
+  // `ensureWorkspaceId` had only ever run per `/mcp` request, so a daemon a
+  // browser reached first held no workspace at all: `GET /api/workspaces`
+  // answered `{"workspaces":[]}` (measured on a fresh data dir), which is not
+  // a state the document browser can select out of. Memoized per data dir, so
+  // the per-request MCP callers below share this one resolve.
+  await ensureWorkspaceId(dataDir)
   const serverDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
   )

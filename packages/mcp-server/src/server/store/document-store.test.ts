@@ -1,7 +1,11 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
-import { DocumentHasDescendantsError, DocumentMoveIntoSelfError } from '@kamiazya/whiteboard-ports'
+import {
+  DocumentHasDescendantsError,
+  DocumentMoveIntoSelfError,
+  isWorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -24,7 +28,6 @@ const {
   listDocuments,
   listWorkspaces,
   compactDocument,
-  deleteDocument,
   renameDocumentPath,
   ConflictError,
   getDocumentKind,
@@ -38,6 +41,8 @@ const {
   _isDisposingAutoCompactForTests,
 } = await import('./auto-compact.js')
 const { captureLogsForTests } = await import('../log.js')
+const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
+const { wbDocumentDelete } = await import('@kamiazya/whiteboard-server-core')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 
@@ -1349,7 +1354,34 @@ describe('compactDocument', () => {
   })
 })
 
-describe('deleteDocument', () => {
+// `document-store.deleteDocument` is gone: it was a second implementation of
+// `wb_document_delete`, and the HTTP route that called it is now an adapter
+// over the operation (ADR-0018). These cases are storage-level — blobs,
+// thumbnails, rows, the descendant refusal — so they stay at this layer and
+// drive the surviving implementation instead.
+//
+// The local helper is the ROUTE's translation, written once here rather than
+// at each call below: this surface addresses a document by path and answers
+// `false` for one that does not exist, where the operation addresses it by
+// the id the index assigned and throws. Everything else the cases assert is
+// unchanged, which is the point — the implementation moved, the behaviour
+// did not.
+async function deleteDocument(workspaceId: string, path: string): Promise<boolean> {
+  const deps = await getDefaultServerDeps()
+  // The tree index throws for an unknown WORKSPACE where the retired SQL
+  // index answered null; the route's translation treats both as absent.
+  const entry = await deps.documentIndex
+    .resolveDocument({ workspaceId, path })
+    .catch((err: unknown) => {
+      if (isWorkspaceNotFoundError(err)) return null
+      throw err
+    })
+  if (entry === null) return false
+  await wbDocumentDelete(deps, { workspaceId, documentId: entry.documentId })
+  return true
+}
+
+describe('deleting a document', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-delete-test-'))
     await setupIsolatedDb()
@@ -1607,19 +1639,19 @@ describe('deleteDocument', () => {
     await sweepImportedFsBlobs(db, tempDir)
     await expect(access(blobPath)).rejects.toThrow() // pins the sweep precondition itself
 
-    await expect(deleteDocument('session1', 'swept-then-deleted')).resolves.toBe(true)
+    // The dual-plane collapse changed this case's answer: a row-only
+    // pre-fold document is invisible to the delete surface (the tree is the
+    // address book), so the delete reports "already absent" instead of
+    // reaching around the tree — the row is the boot fold's to absorb or,
+    // kindless as here, to remove as this project's own data defect.
+    await expect(deleteDocument('session1', 'swept-then-deleted')).resolves.toBe(false)
 
     const after = await db
       .selectFrom('documents')
       .selectAll()
       .where('id', '=', documentId)
       .executeTakeFirst()
-    expect(after).toBeUndefined()
-    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const libsqlStore = new LibsqlDocumentStore(db)
-    await expect(
-      libsqlStore.loadSnapshot({ docRef: { kind: 'document', documentId } }),
-    ).resolves.toBeNull()
+    expect(after).toBeDefined()
   })
 })
 

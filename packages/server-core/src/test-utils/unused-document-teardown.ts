@@ -1,7 +1,7 @@
 import type { DocumentTeardown } from '../server-deps.js'
 
 /**
- * A `DocumentTeardown` for tests whose subject is elsewhere. `begin` throws,
+ * A `DocumentTeardown` for tests whose subject is elsewhere. `around` throws,
  * so a test that starts deleting documents fails loudly here instead of
  * passing against a double that quietly does nothing — which is exactly the
  * shape of the defect the seam exists to close.
@@ -13,9 +13,9 @@ import type { DocumentTeardown } from '../server-deps.js'
  */
 export function unusedDocumentTeardown(): DocumentTeardown {
   return {
-    begin() {
+    around() {
       throw new Error(
-        'documentTeardown.begin: this test composed a DocumentTeardown it does not exercise. ' +
+        'documentTeardown.around: this test composed a DocumentTeardown it does not exercise. ' +
           'Compose a real one if the behaviour under test now depends on document cleanup.',
       )
     },
@@ -36,8 +36,8 @@ export function unusedDocumentTeardown(): DocumentTeardown {
  */
 export function inMemoryDocumentTeardown(): DocumentTeardown {
   return {
-    async begin() {
-      return async () => undefined
+    around(_input, deleteDocument) {
+      return deleteDocument()
     },
   }
 }

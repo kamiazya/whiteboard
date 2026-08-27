@@ -51,7 +51,9 @@ async function contestedIndex(): Promise<LoroWorkspaceDocumentIndex> {
   })
   doc.import(replica.export({ mode: 'update' }))
 
-  return new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore)
+  return new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
+    listWorkspaces: async () => [],
+  })
 }
 
 describe('contested paths', () => {
@@ -82,7 +84,9 @@ describe('contested paths', () => {
     const { createWorkspaceDocumentAtPath } = await import('@kamiazya/whiteboard-loro-adapter')
     const doc = new LoroDoc()
     createWorkspaceDocumentAtPath(doc, { path: 'solo', documentId: OWNER_ID, kind: 'spatial' })
-    const index = new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore)
+    const index = new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
+      listWorkspaces: async () => [],
+    })
     const entry = await index.resolveDocument({ workspaceId: 'ws', path: 'solo' })
     expect(entry?.documentId).toBe(OWNER_ID)
     expect(entry?.shadowed).toBeUndefined()

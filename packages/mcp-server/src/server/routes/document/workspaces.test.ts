@@ -41,6 +41,33 @@ const { saveDocument } = documentStore
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
 const { createWorkspacesRouter } = await import('./workspaces.js')
 const { createDocumentRouter } = await import('../document.js')
+const { getDb } = await import('../../store/db/index.js')
+const { createContainer, resolveServerDeps } = await import('../../../di/container.js')
+const { createStoreLocalModule } = await import('../../../di/store-local.module.js')
+
+// These routes are adapters over the document index (ADR-0018), so forcing
+// one to fail means making the OPERATION fail, not stubbing a store function
+// the route no longer calls. `Object.create` rather than a spread: the index
+// is a class instance, and spreading one drops every method it inherits from
+// its prototype.
+async function depsWithFailing(method: 'deleteDocument' | 'moveDocument', err: unknown) {
+  const db = await getDb(tmp.dir)
+  const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  // A Proxy that binds every untouched method to the REAL instance:
+  // Object.create is not enough for the tree index, whose private fields
+  // reject a detached receiver ("Receiver must be an instance of class").
+  const inner = deps.documentIndex
+  const index = new Proxy(inner, {
+    get(target, key) {
+      if (key === method) return () => Promise.reject(err)
+      const value = Reflect.get(target, key, target)
+      return typeof value === 'function'
+        ? (value as (...args: unknown[]) => unknown).bind(target)
+        : value
+    },
+  }) as typeof deps.documentIndex
+  return { ...deps, documentIndex: index }
+}
 
 beforeEach(() => {
   clearCache()
@@ -399,34 +426,32 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'canvas-a', new LoroDoc())
-    const spy = vi
-      .spyOn(documentStore, 'deleteDocument')
-      .mockRejectedValueOnce(
+    const corrupt = createDocumentRouter({
+      serverDeps: await depsWithFailing(
+        'deleteDocument',
         corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
-      )
-    const app = createDocumentRouter()
-    try {
-      const res = await app.request('/api/workspaces/session1/documents/canvas-a', {
-        method: 'DELETE',
-      })
-      expect(res.status).toBe(500)
-      await expect(res.json()).resolves.toEqual({
-        error: 'corrupt_stored_data',
-        message: expect.stringContaining('broken canvas blob'),
-      })
+      ),
+    })
+    const res = await corrupt.request('/api/workspaces/session1/documents/canvas-a', {
+      method: 'DELETE',
+    })
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      error: 'corrupt_stored_data',
+      message: expect.stringContaining('broken canvas blob'),
+    })
 
-      // Mutation guard: a non-corruption throw must NOT hit the same
-      // branch — proves the mapping checks the error type, not "any throw".
-      spy.mockRejectedValueOnce(new Error('disk exploded'))
-      const res2 = await app.request('/api/workspaces/session1/documents/canvas-a', {
-        method: 'DELETE',
-      })
-      expect(res2.status).toBe(500)
-      const json2: unknown = await res2.json()
-      expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
-    } finally {
-      spy.mockRestore()
-    }
+    // Mutation guard: a non-corruption throw must NOT hit the same branch —
+    // proves the mapping checks the error type, not "any throw".
+    const plain = createDocumentRouter({
+      serverDeps: await depsWithFailing('deleteDocument', new Error('disk exploded')),
+    })
+    const res2 = await plain.request('/api/workspaces/session1/documents/canvas-a', {
+      method: 'DELETE',
+    })
+    expect(res2.status).toBe(500)
+    const json2: unknown = await res2.json()
+    expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
   })
 
   it('evicts the doc-cache on delete, so re-creating the same path after a warm cache read yields a fresh empty doc', async () => {
@@ -748,38 +773,38 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
 
   it('maps a thrown CorruptStoredDataError to 500 { error: corrupt_stored_data }, and only that error type — a plain throw stays a generic 500', async () => {
     await saveDocument('session1', 'a', new LoroDoc())
-    const spy = vi
-      .spyOn(documentStore, 'renameDocumentPath')
-      .mockRejectedValueOnce(
+    const body = JSON.stringify({ path: 'b' })
+    const headers = { 'Content-Type': 'application/json' }
+    const corrupt = createDocumentRouter({
+      serverDeps: await depsWithFailing(
+        'moveDocument',
         corruptStoredData('/tmp/blobs/session1/document/abc.loro', 'broken canvas blob'),
-      )
-    const app = createDocumentRouter()
-    try {
-      const res = await app.request('/api/workspaces/session1/documents/a/path', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: 'b' }),
-      })
-      expect(res.status).toBe(500)
-      await expect(res.json()).resolves.toEqual({
-        error: 'corrupt_stored_data',
-        message: expect.stringContaining('broken canvas blob'),
-      })
+      ),
+    })
+    const res = await corrupt.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers,
+      body,
+    })
+    expect(res.status).toBe(500)
+    await expect(res.json()).resolves.toEqual({
+      error: 'corrupt_stored_data',
+      message: expect.stringContaining('broken canvas blob'),
+    })
 
-      // Mutation guard: a non-corruption throw must NOT hit the same
-      // branch — proves the mapping checks the error type, not "any throw".
-      spy.mockRejectedValueOnce(new Error('disk exploded'))
-      const res2 = await app.request('/api/workspaces/session1/documents/a/path', {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ path: 'b' }),
-      })
-      expect(res2.status).toBe(500)
-      const json2: unknown = await res2.json()
-      expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
-    } finally {
-      spy.mockRestore()
-    }
+    // Mutation guard: a non-corruption throw must NOT hit the same branch —
+    // proves the mapping checks the error type, not "any throw".
+    const plain = createDocumentRouter({
+      serverDeps: await depsWithFailing('moveDocument', new Error('disk exploded')),
+    })
+    const res2 = await plain.request('/api/workspaces/session1/documents/a/path', {
+      method: 'PUT',
+      headers,
+      body,
+    })
+    expect(res2.status).toBe(500)
+    const json2: unknown = await res2.json()
+    expect(json2).not.toMatchObject({ error: 'corrupt_stored_data' })
   })
 })
 

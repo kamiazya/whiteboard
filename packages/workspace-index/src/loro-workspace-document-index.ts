@@ -60,6 +60,14 @@ import {
 import type { LoroDoc } from 'loro-crdt'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
+/**
+ * Who keeps workspaces — the composition root's registry of them. Split from
+ * `WorkspaceDocs` because a record store opens by id and cannot enumerate.
+ */
+export interface WorkspaceRegistry {
+  listWorkspaces(): Promise<{ workspaceId: string }[]>
+}
+
 /** `a/b/c` -> `a/b/x` when the subtree at `a/b` moves to `a/b/x`. */
 function rewritten(path: string, from: string, to: string): string {
   return path === from ? to : `${to}${path.slice(from.length)}`
@@ -78,7 +86,19 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
   constructor(
     private readonly docs: WorkspaceDocs,
     private readonly blobs: BlobStore,
+    private readonly registry: WorkspaceRegistry,
   ) {}
+
+  /**
+   * Delegated to the composition root's registry: enumerating workspaces is
+   * a property of who KEEPS them (the daemon's `workspaces` table, the
+   * browser's workspaces store), and `WorkspaceDocs` deliberately opens by
+   * id only. Required, not optional — an unwired registry would make every
+   * workspace invisible to the one call that lists them.
+   */
+  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+    return this.registry.listWorkspaces()
+  }
 
   /** A document's containers, for the content bridge. */
   documentContainers(doc: LoroDoc, documentId: string): DocumentContainers {
@@ -185,12 +205,9 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
       // one device — without claiming to be a global invariant.
       if (created === null) throw new DocumentPathTakenError(input.workspaceId, input.path)
       await this.docs.save(input.workspaceId, doc)
-      return {
-        documentId: created.documentId,
-        path: created.path,
-        kind: created.kind,
-        ...(created.name === undefined ? {} : { name: created.name }),
-      }
+      // Through entryOf, so a create answers the same shape a resolve does —
+      // updatedAt included; the conformance suite compares them directly.
+      return entryOf(created)
     })
   }
 
@@ -361,12 +378,20 @@ function entryOf(found: {
   kind: DocumentEntry['kind']
   name?: string
   shadowed?: true
+  createdAt?: number
+  updatedAt?: number
 }): DocumentEntry {
+  // Every tree write stamps updatedAt (falling back to createdAt for a
+  // record written before timestamps landed in the node meta); absent for
+  // one that predates both — the port leaves the field optional for exactly
+  // that record.
+  const stamp = found.updatedAt ?? found.createdAt
   return {
     documentId: found.documentId,
     path: found.path,
     ...(found.kind === undefined ? {} : { kind: found.kind }),
     ...(found.name === undefined ? {} : { name: found.name }),
     ...(found.shadowed === undefined ? {} : { shadowed: found.shadowed }),
+    ...(stamp === undefined ? {} : { updatedAt: new Date(stamp).toISOString() }),
   }
 }

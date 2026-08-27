@@ -70,12 +70,20 @@ export async function wbDocumentCreate(
     }
   }
 
+  // Blank means no name, and that is a NORMALISATION rather than a rejection.
+  // `DocumentEntry.name` is `z.string().min(1).optional()` — absent is the
+  // meaningful "no name" state, where a reader falls back to the path
+  // segment, and an empty string is neither: a name that reads as nothing,
+  // which the port says cannot exist. But ADR-0006 point 3 is the older rule
+  // and outranks tidiness here — naming must never gate creation — so a
+  // caller sending a blank one gets a document, not an error.
+  const name = input.name?.trim()
   const entry = await rethrowWorkspaceNotFound(input.workspaceId, () =>
     deps.documentIndex.createDocument({
       workspaceId: input.workspaceId,
       path: input.path,
       kind: input.kind,
-      ...(input.name === undefined ? {} : { name: input.name }),
+      ...(name === undefined || name === '' ? {} : { name }),
     }),
   )
 
@@ -120,6 +128,12 @@ export async function wbDocumentResolve(
     documentId: entry.documentId,
     path: entry.path,
     ...(entry.name === undefined ? {} : { name: entry.name }),
+    // Same pass-through as the list below. These share `documentDetailSchema`,
+    // so omitting them here would leave resolve DECLARING two fields it never
+    // emits — a schema saying more than the runtime does, which is the drift
+    // this repo keeps a single source of truth to prevent.
+    ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+    ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
   }
 }
 
@@ -138,6 +152,8 @@ export async function wbDocumentList(
       documentId: entry.documentId,
       path: entry.path,
       ...(entry.name === undefined ? {} : { name: entry.name }),
+      ...(entry.kind === undefined ? {} : { kind: entry.kind }),
+      ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
     })),
   }
 }
@@ -153,24 +169,29 @@ export async function wbDocumentDelete(
   if (entry === null) {
     throw new WorkspaceDocumentNotFoundError(input.workspaceId, input.documentId)
   }
-  // Before either delete: what the composition root has to clean up is only
-  // discoverable while the document is still whole (see DocumentTeardown).
-  const finalizeTeardown = await deps.documentTeardown.begin({
-    workspaceId: input.workspaceId,
-    documentId: entry.documentId,
-    path: entry.path,
-  })
-  // Placement first: the index refuses while documents sit below this one, so
-  // the bytes are only discarded once nothing can still be orphaned by it.
-  // That refusal throws past the finalizer, which is what keeps a refused
-  // delete from destroying anything.
-  await deps.documentIndex.deleteDocument({
-    workspaceId: input.workspaceId,
-    path: entry.path,
-  })
-  await deps.documentStore.deleteDoc({
-    docRef: { kind: 'document', workspaceId: input.workspaceId, documentId: entry.documentId },
-  })
-  await finalizeTeardown()
-  return { deleted: true }
+  // Both deletes run inside the composition root's bracket: what it has to
+  // clean up is only discoverable while the document is still whole, and
+  // whatever it holds around the delete (the daemon holds its per-workspace
+  // write lock) has to cover both steps. See DocumentTeardown.
+  return await deps.documentTeardown.around(
+    {
+      workspaceId: input.workspaceId,
+      documentId: entry.documentId,
+      path: entry.path,
+    },
+    async () => {
+      // Placement first: the index refuses while documents sit below this
+      // one, so the bytes are only discarded once nothing can still be
+      // orphaned by it. That refusal throws past the bracket's cleanup,
+      // which is what keeps a refused delete from destroying anything.
+      await deps.documentIndex.deleteDocument({
+        workspaceId: input.workspaceId,
+        path: entry.path,
+      })
+      await deps.documentStore.deleteDoc({
+        docRef: { kind: 'document', workspaceId: input.workspaceId, documentId: entry.documentId },
+      })
+      return { deleted: true }
+    },
+  )
 }

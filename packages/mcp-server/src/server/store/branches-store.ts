@@ -8,7 +8,7 @@ import { getLogger } from '../log.js'
 import { validateBranchName, validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { DocumentNotFoundError } from './db/upsert-workspace.js'
+import { DocumentNotFoundError } from './document-not-found-error.js'
 import { openWorkspaceDocIfStored, saveWorkspaceDoc } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
