@@ -150,6 +150,41 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     ).toBeNull()
   })
 
+  it('delete evacuates into the trash; restore brings the document back under the same id', async () => {
+    const index = new FoldingBrowserIndex()
+    await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    const entry = await index.createDocument({
+      workspaceId: BROWSER_WORKSPACE_ID,
+      path: 'doomed',
+      kind: 'spatial',
+      name: 'Doomed',
+    })
+    const source = new Loro()
+    writeSpatialCanvas(source, canvasWith('to bring back'))
+    await seedWorkspaceDocumentContent(entry.documentId, source.export({ mode: 'snapshot' }))
+
+    await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: 'doomed' })
+    const trash = await index.listTrash({ workspaceId: BROWSER_WORKSPACE_ID })
+    expect(trash.map((row) => row.documentId)).toEqual([entry.documentId])
+    expect(trash[0]?.path).toBe('doomed')
+
+    const restored = await index.restoreDocument({
+      workspaceId: BROWSER_WORKSPACE_ID,
+      documentId: entry.documentId,
+    })
+    expect(restored?.documentId).toBe(entry.documentId)
+    // Identity survives: the id resolves again, at the old path, with content.
+    const back = await index.resolveDocumentById({
+      workspaceId: BROWSER_WORKSPACE_ID,
+      documentId: entry.documentId,
+    })
+    expect(back?.path).toBe('doomed')
+    const content = await loadDocumentContent(entry.documentId)
+    const node = content === null ? null : readSpatialCanvas(content).nodes[0]
+    expect(node?.type === 'text' ? node.text : null).toBe('to bring back')
+    expect(await index.listTrash({ workspaceId: BROWSER_WORKSPACE_ID })).toEqual([])
+  })
+
   it('create, seed, rename and delete all round-trip through the tree', async () => {
     const index = new FoldingBrowserIndex()
     await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })

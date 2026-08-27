@@ -69,6 +69,22 @@ export interface ServerDeps {
    */
   documentIndex: DocumentIndex
   /**
+   * The trash a delete evacuated into: listable, and restorable under the
+   * SAME documentId. OPTIONAL because it is a capability of the tree-backed
+   * index the daemon composition binds, not part of the `DocumentIndex`
+   * port — a deps literal without it simply has no trash surface, and the
+   * routes answer 501 rather than pretending.
+   */
+  trash?: {
+    list(input: {
+      workspaceId: string
+    }): Promise<{ documentId: string; path: string; deletedAt: number }[]>
+    restore(input: {
+      workspaceId: string
+      documentId: string
+    }): Promise<{ documentId: string; path: string } | null>
+  }
+  /**
    * How to measure text when laying a scene out. Optional because
    * server-core is a shared layer forbidden from loading a font itself
    * (architecture-map.md) — absent, the render/digest tools degrade to

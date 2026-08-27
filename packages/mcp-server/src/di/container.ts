@@ -5,6 +5,7 @@ import {
   TOKENS,
 } from '@kamiazya/whiteboard-ports'
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { Container, type ContainerModule } from 'inversify'
 import { createCanvasClientNotifier } from '../server/canvas-client-notifier.js'
 import { createOpentypeMeasureText } from '../server/export/measure-text.js'
@@ -31,10 +32,33 @@ export function resolveServerDeps(container: Container): ServerDeps {
   const documentStore: DocumentStore = container.get(TOKENS.DocumentStore)
   const blobStore: BlobStore = container.get(TOKENS.BlobStore)
   const documentIndex: DocumentIndex = container.get(TOKENS.DocumentIndex)
+  const trashCapable =
+    'listTrash' in documentIndex && 'restoreDocument' in documentIndex
+      ? (documentIndex as DocumentIndex & LoroWorkspaceDocumentIndex)
+      : null
   return {
     documentStore,
     blobStore,
     documentIndex,
+    // The trash seam, present exactly when the bound index is the tree-backed
+    // one (listTrash/restoreDocument are its capability, not the port's).
+    // Structural rather than instanceof: the binding is this composition
+    // root's own choice, and vitest's module-graph split makes instanceof
+    // lie across realms (see ports' isWorkspaceNotFoundError).
+    ...(trashCapable === null
+      ? {}
+      : {
+          trash: {
+            list: async (input: { workspaceId: string }) =>
+              (await trashCapable.listTrash(input)).map((entry) => ({
+                documentId: entry.documentId,
+                path: entry.path,
+                deletedAt: entry.deletedAt,
+              })),
+            restore: (input: { workspaceId: string; documentId: string }) =>
+              trashCapable.restoreDocument(input),
+          },
+        }),
     // The real font metrics, so every tool that lays a scene out measures
     // text the same way an export does. Without this they fall back to a
     // constant-ratio estimate while the PNG exporter — same process, same

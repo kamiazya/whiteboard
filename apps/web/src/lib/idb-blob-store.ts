@@ -47,10 +47,20 @@ import { inTransaction, request } from './idb-tx.js'
  * properties on write, so the stored shape and the port's shape agree without
  * a conversion on either side.
  */
+// Realm-independent, unlike `z.instanceof(Uint8Array)`: structured clone can
+// hand back a Uint8Array minted in another realm (jsdom's fake-indexeddb
+// does), and instanceof then rejects a perfectly stored record — the same
+// class-identity family as ports' isWorkspaceNotFoundError. The toString tag
+// cannot be faked by a plain object and names exactly this type.
+const uint8ArraySchema = z.custom<Uint8Array>(
+  (value) =>
+    value instanceof Uint8Array || Object.prototype.toString.call(value) === '[object Uint8Array]',
+)
+
 const blobRecordSchema = z
   .object({
     v: z.literal(1),
-    bytes: z.instanceof(Uint8Array),
+    bytes: uint8ArraySchema,
     contentType: z.string().min(1).optional(),
   })
   .strict()

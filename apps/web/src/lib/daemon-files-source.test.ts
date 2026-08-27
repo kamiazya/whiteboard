@@ -26,6 +26,38 @@ function fetchStub(handlers: {
   }) as unknown as typeof globalThis.fetch
 }
 
+describe('createDaemonFilesSource trash', () => {
+  it('lists the trash and restores through the daemon routes', async () => {
+    const calls: string[] = []
+    const fetchLike = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = typeof input === 'string' ? input : input.toString()
+      calls.push(`${init?.method ?? 'GET'} ${url}`)
+      if (url.endsWith('/trash')) {
+        return Promise.resolve(
+          jsonResponse({
+            entries: [{ documentId: 'id-gone', path: 'old/plan', deletedAt: 1_700_000 }],
+          }),
+        )
+      }
+      if (url.endsWith('/restore') && init?.method === 'POST') {
+        return Promise.resolve(
+          jsonResponse({ restored: { documentId: 'id-gone', path: 'old/plan' } }),
+        )
+      }
+      return Promise.resolve(jsonResponse({ message: 'unexpected' }, 500))
+    }) as unknown as typeof globalThis.fetch
+    const source = createDaemonFilesSource(fetchLike, BASE, 'ws')
+
+    const entries = await source.listTrash?.()
+    expect(entries).toEqual([{ documentId: 'id-gone', path: 'old/plan', deletedAt: 1_700_000 }])
+
+    await source.restoreFromTrash?.('id-gone')
+    expect(
+      calls.some((line) => line === `POST ${BASE}/api/workspaces/ws/trash/id-gone/restore`),
+    ).toBe(true)
+  })
+})
+
 describe('createDaemonFilesSource setDocumentName', () => {
   function nameFetchStub(calls: Array<{ url: string; body: unknown }>): typeof globalThis.fetch {
     return vi.fn((input: RequestInfo | URL, init?: RequestInit) => {

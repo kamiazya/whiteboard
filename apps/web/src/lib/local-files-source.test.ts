@@ -13,6 +13,7 @@ import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
+import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('local-files-source')
 
@@ -171,5 +172,30 @@ describe('createLocalFilesSource tags', () => {
     const entries = await createLocalFilesSource().listDocuments()
     expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
     expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
+  })
+})
+
+describe('createLocalFilesSource trash', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('exposes the shared index trash: delete lists it, restore brings it back', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: 'local',
+      path: 'doomed',
+      kind: 'spatial',
+    })
+    await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
+    const source = createLocalFilesSource({ index })
+    await index.deleteDocument({ workspaceId: 'local', path: 'doomed' })
+
+    const trash = await source.listTrash?.()
+    expect(trash?.map((row) => row.documentId)).toEqual([entry.documentId])
+
+    await source.restoreFromTrash?.(entry.documentId)
+    const listed = await source.listDocuments()
+    expect(listed.map((row) => row.documentId)).toContain(entry.documentId)
+    expect(await source.listTrash?.()).toEqual([])
   })
 })

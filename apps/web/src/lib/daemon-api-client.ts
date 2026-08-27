@@ -18,14 +18,20 @@ import {
   type LinkifyMentionsResponse,
   type ListDocumentsResponse,
   type ListFontsResponse,
+  type ListTrashResponse,
   type ListWorkspacesResponse,
   linkifyMentionsResponseSchema,
   listDocumentsResponseSchema,
   listFontsResponseSchema,
+  listTrashResponseSchema,
   listWorkspacesResponseSchema,
   type RenameDocumentPathRequest,
   type RenameDocumentPathResponse,
+  type RestoreTrashResponse,
   renameDocumentPathResponseSchema,
+  restoreTrashResponseSchema,
+  trashApiUrl,
+  trashRestoreApiUrl,
   type UpdateDocumentResponse,
   updateDocumentResponseSchema,
   type WorkspaceDocumentTagsResponse,
@@ -211,6 +217,32 @@ export function getWorkspaceNames(
     fetchFn,
     `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(workspaceId)}/names`,
     workspaceNamesSchema,
+  )
+}
+
+export function listTrash(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+): Promise<ListTrashResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${trashApiUrl(workspaceId)}`,
+    listTrashResponseSchema,
+  )
+}
+
+export function restoreFromTrash(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  workspaceId: string,
+  documentId: string,
+): Promise<RestoreTrashResponse> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}${trashRestoreApiUrl(workspaceId, documentId)}`,
+    restoreTrashResponseSchema,
+    { method: 'POST' },
   )
 }
 

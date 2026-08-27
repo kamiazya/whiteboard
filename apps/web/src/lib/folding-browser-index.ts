@@ -161,6 +161,22 @@ export class FoldingBrowserIndex implements DocumentIndex {
     return this.inner.setDocumentName(input)
   }
 
+  /** What deletes evacuated; not on the port — callers hold this class. */
+  async listTrash(input: {
+    workspaceId: string
+  }): ReturnType<LoroWorkspaceDocumentIndex['listTrash']> {
+    await this.ensureFolded()
+    return this.inner.listTrash(input)
+  }
+
+  /** Bring one evacuated document back under the SAME documentId. */
+  async restoreDocument(
+    input: Parameters<LoroWorkspaceDocumentIndex['restoreDocument']>[0],
+  ): ReturnType<LoroWorkspaceDocumentIndex['restoreDocument']> {
+    await this.ensureFolded()
+    return this.inner.restoreDocument(input)
+  }
+
   async deleteDocument(input: DeleteDocumentInput): Promise<void> {
     await this.ensureFolded()
     if ((await this.inner.resolveDocument(input)) !== null) {

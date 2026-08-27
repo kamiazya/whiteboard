@@ -22,6 +22,7 @@ import { newDocumentPathIn } from './new-document-path.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments } from './search-documents.js'
+import { TrashSection } from './TrashSection.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
 
@@ -914,6 +915,19 @@ export function WorkspaceFilesPanel({
           />
         </div>
       </div>
+      {source.listTrash !== undefined && source.restoreFromTrash !== undefined && (
+        <TrashSection
+          listTrash={source.listTrash.bind(source)}
+          restoreFromTrash={source.restoreFromTrash.bind(source)}
+          revision={revision}
+          onRestored={() => {
+            // A restore that landed but whose refresh failed leaves the list
+            // stale, not the restore undone — same rule as every other write
+            // here, so the trash section never invents its own error shape.
+            void readList().then(setDocuments, () => undefined)
+          }}
+        />
+      )}
       <RenameDocumentDialog
         document={renaming}
         busy={renameBusy}

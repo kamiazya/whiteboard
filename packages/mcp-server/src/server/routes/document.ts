@@ -9,6 +9,7 @@ import { createMaintenanceRouter } from './document/maintenance.js'
 import { createDocumentMetadataRouter } from './document/metadata.js'
 import { createRestoreRouter } from './document/restore.js'
 import { createThumbnailsRouter } from './document/thumbnails.js'
+import { createTrashRouter } from './document/trash.js'
 import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
@@ -58,6 +59,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   installAutoCompact(versionStore)
 
   app.route('/', createWorkspacesRouter({ serverDeps: options.serverDeps }))
+  app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
   app.route('/', createLiveDocRouter({ triggerAutoVersion }))
   app.route('/', createWorkspaceDocumentRouter({ triggerAutoVersion }))
