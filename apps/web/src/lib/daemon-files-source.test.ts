@@ -55,6 +55,34 @@ describe('createDaemonFilesSource setDocumentName', () => {
   })
 })
 
+describe('createDaemonFilesSource shadowed mapping', () => {
+  it('carries the shadowed collision marker into the panel entry', async () => {
+    const source = createDaemonFilesSource(
+      fetchStub({
+        documents: () =>
+          jsonResponse({
+            documents: [
+              {
+                path: 'contested',
+                id: 'id-a',
+                updatedAt: '2026-08-01T00:00:00Z',
+                kind: 'spatial',
+                shadowed: true,
+              },
+              { path: 'plain', id: 'id-b', updatedAt: '2026-08-02T00:00:00Z', kind: 'spatial' },
+            ],
+          }),
+      }),
+      BASE,
+      'ws',
+    )
+    const entries = await source.listDocuments()
+    const byPath = new Map(entries.map((e) => [e.path, e.shadowed]))
+    expect(byPath.get('contested')).toBe(true)
+    expect(byPath.get('plain')).toBeUndefined()
+  })
+})
+
 describe('createDaemonFilesSource pinned mapping', () => {
   it('marks entries pinned from the names response, in pin order', async () => {
     const source = createDaemonFilesSource(

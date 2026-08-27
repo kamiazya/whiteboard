@@ -58,7 +58,17 @@ export class FoldingBrowserIndex implements DocumentIndex {
 
   private ensureFolded(): Promise<void> {
     this.folded ??= foldWorkspaceDocuments(this.dbName)
-      .then(() => undefined)
+      .then((report) => {
+        // A skipped document is one the fold left OUT of the tree — from
+        // here on it is invisible to every listing, so the count must reach
+        // a log even though the fold itself succeeded.
+        if (report.skipped > 0) {
+          log.warn('startup fold left documents behind', {
+            folded: report.folded,
+            skipped: report.skipped,
+          })
+        }
+      })
       .catch((err: unknown) => {
         log.warn('startup fold failed; the index serves what the tree holds', err)
         // Cleared so the NEXT call retries — a transient failure must not
@@ -107,4 +117,17 @@ export class FoldingBrowserIndex implements DocumentIndex {
     await this.ensureFolded()
     return this.inner.deleteDocument(input)
   }
+}
+
+// The lazy pages share ONE instance so the startup fold runs once and every
+// listing sees the same tree view. It lives here rather than in App state
+// because App is the ENTRY chunk: a static App.tsx import of this module put
+// loro-crdt's WASM bindings on the first-paint critical path (measured 114 →
+// 158.9 KB gzip; entry-graph-loro-free.test.ts pins the boundary). Every
+// consumer is a React.lazy page, so the class stays in a lazy chunk.
+let shared: FoldingBrowserIndex | null = null
+
+export function sharedFoldingBrowserIndex(): FoldingBrowserIndex {
+  shared ??= new FoldingBrowserIndex()
+  return shared
 }

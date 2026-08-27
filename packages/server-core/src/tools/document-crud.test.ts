@@ -135,6 +135,31 @@ describe('wbDocumentCreate', () => {
   })
 })
 
+describe('wbDocumentList shadowed threading', () => {
+  it('carries a shadowed marker through — the collision signal must survive the tool boundary', async () => {
+    const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
+    ;(deps.documentIndex as InMemoryDocumentIndex).seed({
+      workspaceId: 'ws-1',
+      documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      path: 'a',
+      kind: 'spatial',
+      shadowed: true,
+    })
+
+    const out = await wbDocumentList(deps, { workspaceId: 'ws-1' })
+
+    expect(out.documents).toEqual([
+      {
+        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        path: 'a',
+        kind: 'spatial',
+        shadowed: true,
+      },
+    ])
+  })
+})
+
 describe('wbDocumentResolve', () => {
   // `documentDetailSchema` is shared with the list, so resolve must EMIT what
   // that schema declares. Omitting these left the schema saying more than the

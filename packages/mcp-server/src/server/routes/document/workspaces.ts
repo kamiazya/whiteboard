@@ -95,6 +95,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
           ...(entry.name === undefined ? {} : { displayName: entry.name }),
           ...(entry.kind === undefined ? {} : { kind: entry.kind }),
           ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+          ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
         })),
       }
       return c.json(response)

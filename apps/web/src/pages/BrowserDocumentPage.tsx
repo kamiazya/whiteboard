@@ -42,6 +42,7 @@ import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
@@ -79,7 +80,8 @@ const TOP_BAR_FALLBACK_HEIGHT = 'h-12'
 const log = getAppLogger('browser-document-page')
 
 interface BrowserDocumentPageProps {
-  store: DocumentIndex
+  /** Defaults to the shared production index; injected by tests. */
+  store?: DocumentIndex
   /**
    * The two app-side concerns `DocumentIndex` does not own. Defaulted inside
    * the controller, so production passes neither; a jsdom test passes both,
@@ -116,7 +118,10 @@ function titleOf(name: string | null, path: string | null): string {
 }
 
 export function BrowserDocumentPage({
-  store,
+  // Stable across renders (the shared accessor memoizes). Living here rather
+  // than in App keeps loro-crdt off the entry chunk
+  // (entry-graph-loro-free.test.ts).
+  store = sharedFoldingBrowserIndex(),
   loro,
   capabilities = BROWSER_CAPABILITIES,
   initialPath,

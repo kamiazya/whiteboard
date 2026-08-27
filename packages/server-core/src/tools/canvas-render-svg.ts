@@ -8,10 +8,11 @@ import type { ServerDeps } from '../server-deps.js'
 import { loadDocument } from './document-io.js'
 
 /**
- * `DocumentStore.loadSnapshot`'s `DocRef` (`{ kind: 'document', documentId }`)
- * carries no `workspaceId` — this field is accepted for API symmetry with
- * workspace-scoped tools and as a future authorization-scoping hook, not
- * passed to the store.
+ * `DocRef`'s document arm carries `workspaceId` (the record a consumer
+ * reaches through the ref), but the derived STORAGE key deliberately omits
+ * it — see doc-ref-key.ts — so this field never selects different bytes;
+ * it is accepted for API symmetry with workspace-scoped tools and as a
+ * future authorization-scoping hook.
  */
 export const canvasRenderSvgInputSchema = z
   .object({

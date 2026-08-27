@@ -134,6 +134,7 @@ export async function wbDocumentResolve(
     // this repo keeps a single source of truth to prevent.
     ...(entry.kind === undefined ? {} : { kind: entry.kind }),
     ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+    ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
   }
 }
 
@@ -154,6 +155,7 @@ export async function wbDocumentList(
       ...(entry.name === undefined ? {} : { name: entry.name }),
       ...(entry.kind === undefined ? {} : { kind: entry.kind }),
       ...(entry.updatedAt === undefined ? {} : { updatedAt: entry.updatedAt }),
+      ...(entry.shadowed === undefined ? {} : { shadowed: entry.shadowed }),
     })),
   }
 }

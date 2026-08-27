@@ -16,6 +16,7 @@ import {
   requireDocumentAtPath,
   saveWorkspaceDoc,
 } from './document-store.js'
+import { withWorkspaceWriteLock } from './workspace-lock.js'
 
 export type { WorkspaceNames }
 
@@ -95,15 +96,19 @@ export async function setDocumentDisplayName(
   const trimmed = name.trim()
   const documentId = await requireDocumentAtPath(workspaceId, path)
   // The workspace record is the only home this write has (S7): the rows are
-  // no longer maintained, so a failure here surfaces to the caller.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
-    setWorkspaceDocumentName(workspaceDoc, {
-      documentId,
-      ...(trimmed.length > 0 ? { name: trimmed } : {}),
-    })
-    await saveWorkspaceDoc(workspaceId, workspaceDoc)
-  }
+  // no longer maintained, so a failure here surfaces to the caller. Under
+  // the workspace write lock like every other read-modify-write of the
+  // record — the open and the save must see no concurrent tree write.
+  await withWorkspaceWriteLock(workspaceId, async () => {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null && resolveWorkspaceDocument(workspaceDoc, path) !== null) {
+      setWorkspaceDocumentName(workspaceDoc, {
+        documentId,
+        ...(trimmed.length > 0 ? { name: trimmed } : {}),
+      })
+      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    }
+  })
   return loadWorkspaceNames(workspaceId)
 }
 
@@ -118,11 +123,14 @@ export async function setDocumentPinned(
   validateDocumentPath(path)
   const documentId = await requireDocumentAtPath(workspaceId, path)
   // The workspace record's pinned list is the only home this write has
-  // (S7): the rows are no longer maintained, so a failure surfaces.
-  const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc !== null) {
-    setWorkspacePinned(workspaceDoc, documentId, pinned)
-    await saveWorkspaceDoc(workspaceId, workspaceDoc)
-  }
+  // (S7): the rows are no longer maintained, so a failure surfaces. Locked
+  // for the same reason as setDocumentDisplayName above.
+  await withWorkspaceWriteLock(workspaceId, async () => {
+    const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
+    if (workspaceDoc !== null) {
+      setWorkspacePinned(workspaceDoc, documentId, pinned)
+      await saveWorkspaceDoc(workspaceId, workspaceDoc)
+    }
+  })
   return loadWorkspaceNames(workspaceId)
 }

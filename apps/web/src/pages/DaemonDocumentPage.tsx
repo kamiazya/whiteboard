@@ -51,6 +51,7 @@ import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
+import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import type { ContentClock } from '../lib/local-document-summary.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
@@ -86,11 +87,11 @@ export interface DaemonDocumentPageProps {
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
-  // Optional: when provided (the real App.tsx wiring always provides it),
-  // renders a collapsed "Import from this browser" disclosure so a user who
-  // previously worked in the browser can copy those documents onto this
-  // daemon workspace. Absent in tests/embedders that don't need the flow.
-  browserStore?: DocumentIndex
+  // Defaults to the shared browser index, which renders a collapsed
+  // "Import from this browser" disclosure so a user who previously worked in
+  // the browser can copy those documents onto this daemon workspace. Tests /
+  // embedders inject a fake; `null` hides the flow entirely.
+  browserStore?: DocumentIndex | null
   browserClock?: ContentClock
   // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the
@@ -105,7 +106,9 @@ export function DaemonDocumentPage({
   token,
   capabilities = DAEMON_CAPABILITIES,
   createBackend,
-  browserStore,
+  // Resolved here, not in App: App is the entry chunk and the concrete index
+  // drags loro-crdt with it (entry-graph-loro-free.test.ts).
+  browserStore = sharedFoldingBrowserIndex(),
   browserClock,
   onNavigateBack,
 }: DaemonDocumentPageProps) {

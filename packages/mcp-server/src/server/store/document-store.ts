@@ -377,6 +377,34 @@ export function workspaceRegistry(): { listWorkspaces(): Promise<{ workspaceId: 
  * know this cache exists, so the composition root wraps it.
  */
 export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
+  // Every mutator holds the workspace write lock, not only the two that
+  // need cache eviction: the base class's own per-instance serialiser is a
+  // DIFFERENT mutex from the one saveDocument/saveSnapshot hold, and two
+  // disjoint mutexes over the same workspace record allow the lost-update
+  // interleaving workspace-lock.ts's doc comment describes. Re-entrant, so
+  // a caller already inside the lock (routes, teardown) is unaffected.
+  override async createWorkspace(input: { workspaceId: string }): Promise<void> {
+    return withWorkspaceWriteLock(input.workspaceId, () => super.createWorkspace(input))
+  }
+
+  override async createDocument(
+    input: Parameters<LoroWorkspaceDocumentIndex['createDocument']>[0],
+  ): ReturnType<LoroWorkspaceDocumentIndex['createDocument']> {
+    return withWorkspaceWriteLock(input.workspaceId, () => super.createDocument(input))
+  }
+
+  override async setDocumentName(
+    input: Parameters<LoroWorkspaceDocumentIndex['setDocumentName']>[0],
+  ): Promise<void> {
+    return withWorkspaceWriteLock(input.workspaceId, () => super.setDocumentName(input))
+  }
+
+  override async restoreDocument(
+    input: Parameters<LoroWorkspaceDocumentIndex['restoreDocument']>[0],
+  ): ReturnType<LoroWorkspaceDocumentIndex['restoreDocument']> {
+    return withWorkspaceWriteLock(input.workspaceId, () => super.restoreDocument(input))
+  }
+
   override async moveDocument(input: {
     workspaceId: string
     from: string
@@ -723,8 +751,13 @@ async function unlinkIfExists(path: string): Promise<void> {
  * of leaving stale files and a stale cache entry behind.
  *
  * Two phases because a thumbnail is filed under a VERSION id, and the
- * versions rows cascade away the instant the document row goes: the ids
- * have to be captured while the document is still whole.
+ * versions rows are deleted right after the document goes (explicitly,
+ * since 0016 dropped the cascade FK): the ids have to be captured while
+ * the document is still whole. The row delete and the two sweeps are
+ * separate statements, not one transaction — a crash between them leaves
+ * orphaned versions/branches rows.
+ * ponytail: acceptable while nothing lists rows by dangling documentId;
+ * a boot-time orphan sweep is the upgrade path if they ever show up.
  */
 export const documentTeardown: DocumentTeardown = {
   around({ workspaceId, documentId, path }, deleteDocument) {
@@ -868,12 +901,15 @@ async function retainedHistoryCut(
     .select(['tipFrontiers', 'name', 'documentId'])
     .where('workspaceId', '=', workspaceId)
     .execute()
-  const pins: Frontiers[] = [earliestVersion]
+  const pins: { frontiers: Frontiers; branch: string }[] = []
   for (const row of rows) {
     // An empty tip is a branch nothing has written to yet — it pins nothing.
     if (row.tipFrontiers.length === 0) continue
     try {
-      pins.push(decodeFrontiers(new Uint8Array(Buffer.from(row.tipFrontiers, 'base64'))))
+      pins.push({
+        frontiers: decodeFrontiers(new Uint8Array(Buffer.from(row.tipFrontiers, 'base64'))),
+        branch: `${row.documentId}#${row.name}`,
+      })
     } catch (error) {
       throw corruptStoredData(
         `${workspaceId}/branches/${row.documentId}#${row.name}`,
@@ -881,8 +917,25 @@ async function retainedHistoryCut(
       )
     }
   }
-  if (pins.length === 1) return earliestVersion
-  const vvs = pins.map((f) => doc.frontiersToVV(f).toJSON())
+  if (pins.length === 0) return earliestVersion
+  const vvs = [doc.frontiersToVV(earliestVersion).toJSON()]
+  for (const pin of pins) {
+    try {
+      vvs.push(doc.frontiersToVV(pin.frontiers).toJSON())
+    } catch {
+      // A frontier the workspace record's oplog does not contain: a branch
+      // tip captured on the retired per-document plane, whose ops the boot
+      // fold copied by VALUE rather than importing. Such a branch cannot be
+      // checked out on the workspace record no matter what the cut keeps, so
+      // it pins nothing — and it must not disable compaction for the whole
+      // workspace by throwing here.
+      getLogger('document-store').warning(
+        { workspaceId, branch: pin.branch },
+        'branch tip frontier is foreign to the workspace record; not pinning history',
+      )
+    }
+  }
+  if (vvs.length === 1) return earliestVersion
   const min = new Map(vvs[0])
   for (const vv of vvs.slice(1)) {
     for (const [peer, counter] of [...min]) {

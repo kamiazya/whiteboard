@@ -193,15 +193,65 @@ it('DELETES a pre-kind row instead of leaving it on a plane nothing serves anymo
   // the fold removes it (row + content record) rather than keeping a legacy
   // read path alive for it.
   const documentId = await seedLegacy('ws-a', 'no-kind', 'kindless', null)
+  // Migration 0016 dropped the documents FK, so versions/branches rows no
+  // longer cascade — this delete path must sweep them explicitly, exactly
+  // like documentTeardown's bracket does. Seed one of each to prove it.
+  const db = await getDb(tempDir)
+  await db
+    .insertInto('branches')
+    .values({
+      documentId,
+      workspaceId: 'ws-a',
+      name: 'main',
+      tipFrontiers: '',
+      color: null,
+      sourceBranchName: null,
+      sourceVersionId: null,
+      createdAt: Date.now(),
+    })
+    .execute()
+  await db
+    .insertInto('versions')
+    .values({
+      id: 'v-prekind',
+      documentId,
+      workspaceId: 'ws-a',
+      branchName: 'main',
+      auto: 0,
+      label: 'stale',
+      operatorKind: 'system',
+      operatorPeerId: 'peer-1',
+      operatorDisplayName: null,
+      operatorAgentId: null,
+      operatorWorkspaceId: null,
+      elementCount: 0,
+      frontiers: 'AAECAw==',
+      hasThumbnail: 0,
+      createdAt: Date.now(),
+    })
+    .execute()
 
   const report = await foldWorkspaceDocuments()
   expect(report).toEqual({ folded: 0, skipped: 0, deleted: 1 })
 
-  const db = await getDb(tempDir)
   expect(
     await db.selectFrom('documents').select(['id']).where('id', '=', documentId).executeTakeFirst(),
   ).toBeUndefined()
   expect(await legacyRecord(documentId)).toBeNull()
+  expect(
+    await db
+      .selectFrom('branches')
+      .select(['name'])
+      .where('documentId', '=', documentId)
+      .executeTakeFirst(),
+  ).toBeUndefined()
+  expect(
+    await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('documentId', '=', documentId)
+      .executeTakeFirst(),
+  ).toBeUndefined()
 })
 
 it('sweeps the legacy content record once a document is folded onto the tree', async () => {

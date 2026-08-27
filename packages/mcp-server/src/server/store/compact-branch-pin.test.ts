@@ -109,6 +109,37 @@ it('a branch tip older than every version row survives compaction and still chec
   expect(projected).not.toBeNull()
 })
 
+it('a pre-fold branch tip from a foreign oplog is skipped, not fatal to compaction', async () => {
+  // Before the collapse, a branch tip was captured from the per-document
+  // LoroDoc — its frontiers name peers the workspace record's oplog has
+  // never seen. The boot fold copies content by VALUE, so those frontiers
+  // stay foreign forever, and `frontiersToVV` on the workspace doc throws
+  // "Frontiers not found" for them. A row like that must not disable
+  // compaction for the whole workspace: the branch it names cannot be
+  // checked out on the workspace record regardless of what the cut keeps.
+  const WS = 'ws-foreign-tip'
+  await saveDocument(WS, 'doc', canvasDoc('current era'), { kind: 'spatial' })
+
+  const legacyPerDocumentDoc = canvasDoc('legacy per-document era')
+  legacyPerDocumentDoc.commit()
+  await createBranch(WS, 'doc', {
+    name: 'pre-fold',
+    initialTipFrontiers: base64(encodeFrontiers(legacyPerDocumentDoc.frontiers())),
+  })
+
+  for (let i = 0; i < 30; i++) {
+    await saveDocument(WS, 'doc', canvasDoc(`later ${'x'.repeat(200)} ${i}`), {
+      kind: 'spatial',
+      overwrite: true,
+    })
+  }
+  const versionStore = new FileVersionStore()
+  await versionStore.save(WS, 'doc', canvasDoc('later'), { auto: false, label: 'only' })
+
+  const result = await compactDocument(WS, 'doc', versionStore)
+  expect(result.reason).toBe('ok')
+})
+
 it('an empty tipFrontiers (a branch never written to) does not block compaction', async () => {
   const WS = 'ws-empty-tip'
   await saveDocument(WS, 'doc', canvasDoc('v1'), { kind: 'spatial' })

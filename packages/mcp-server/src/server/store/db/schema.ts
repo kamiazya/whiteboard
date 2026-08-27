@@ -47,7 +47,8 @@ interface BranchesTable {
 
 interface VersionsTable {
   id: string
-  // Kept as the FK that cascades a document delete to its versions; reads
+  // No FK since migration 0016 — delete paths sweep these rows explicitly
+  // (documentTeardown's bracket, fold-workspace's pre-kind delete). Reads
   // key on workspaceId, whose oplog the frontiers point into.
   documentId: string
   workspaceId: string

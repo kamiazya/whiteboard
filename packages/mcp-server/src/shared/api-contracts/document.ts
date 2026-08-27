@@ -178,6 +178,10 @@ export const documentSummarySchema = z.object({
   // cannot be kindless (the node meta schema requires it) — but the type
   // follows the port's promise rather than claiming more.
   kind: documentKindSchema.optional(),
+  // The losing side of a converged path collision, carried from the port's
+  // DocumentEntry so the daemon-connected file browser can badge it the way
+  // the browser-kept one does.
+  shadowed: z.literal(true).optional(),
 })
 
 export const listDocumentsResponseSchema = z.object({

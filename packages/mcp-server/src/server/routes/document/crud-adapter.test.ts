@@ -150,6 +150,31 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     expect(typeof body.documents[0]?.updatedAt).toBe('string')
   })
 
+  it('carries a shadowed marker into the response — the collision badge is dead without it', async () => {
+    const { deps } = await depsRecordingCreate()
+    const app = createWorkspacesRouter({
+      serverDeps: {
+        ...deps,
+        documentIndex: spyIndex(deps.documentIndex, {
+          listDocuments: async () => [
+            {
+              documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+              path: 'a',
+              kind: 'spatial' as const,
+              shadowed: true as const,
+            },
+          ],
+        }),
+      },
+    })
+
+    const res = await app.request('/api/workspaces/ws-1/documents')
+
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { documents: Record<string, unknown>[] }
+    expect(body.documents[0]).toMatchObject({ path: 'a', shadowed: true })
+  })
+
   // "Empty" and "never registered" are different answers, and conflating them
   // is what let a stale pairing render as an empty workspace with a Create
   // button. The operation raises it; this surface translates it.

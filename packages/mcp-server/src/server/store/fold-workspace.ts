@@ -95,6 +95,12 @@ export async function foldWorkspaceDocuments(): Promise<FoldReport> {
       }
       if (!kind.success) {
         await db.deleteFrom('documents').where('id', '=', row.id).execute()
+        // Migration 0016 dropped the documents FK, so nothing cascades:
+        // every path that deletes a documents row sweeps the dependent rows
+        // itself, this one included (documentTeardown's bracket is the
+        // other).
+        await db.deleteFrom('versions').where('documentId', '=', row.id).execute()
+        await db.deleteFrom('branches').where('documentId', '=', row.id).execute()
         await sweepLegacy(workspaceId, row.id)
         getLogger('fold-workspace').notice(
           { workspaceId, path: row.path },

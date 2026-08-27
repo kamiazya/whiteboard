@@ -5,6 +5,7 @@ import { DeleteDocumentDialog } from '../components/document-list/DeleteDocument
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
+import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import {
   BROWSER_WORKSPACE_ID,
@@ -21,7 +22,8 @@ import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { createSeededDocument, type LoroStoreLike } from './use-browser-document-controller.js'
 
 export interface BrowserIndexPageProps {
-  index: DocumentIndex
+  /** Defaults to the shared production index; injected by tests. */
+  index?: DocumentIndex
   /** Seeds a content record for a newly created document; see handleCreate. */
   loro?: LoroStoreLike
   pointer?: DefaultDocumentPointer
@@ -45,7 +47,11 @@ const defaultPointer: DefaultDocumentPointer = /* @__PURE__ */ new IdbDefaultDoc
 const defaultClock: ContentClock = /* @__PURE__ */ idbContentClock()
 
 export function BrowserIndexPage({
-  index,
+  // Safe as a parameter default (unlike the clocks below): the shared
+  // accessor memoizes, so every render sees the same identity. The concrete
+  // index lives behind this lazy page, not in App, to keep loro-crdt off the
+  // entry chunk (entry-graph-loro-free.test.ts).
+  index = sharedFoldingBrowserIndex(),
   loro = defaultLoroStore,
   pointer = defaultPointer,
   clock = defaultClock,
