@@ -58,6 +58,11 @@ export function BrowserIndexPage({
   onOpenDocument,
 }: BrowserIndexPageProps) {
   const [snapshots, setSnapshots] = useState<DocumentSnapshot[] | null>(null)
+  // Consulted only for the onboarding decision below: a workspace whose list
+  // is empty but whose trash is not must keep the PANEL, because the Trash
+  // section is the one affordance that undoes the delete that just emptied
+  // the list. Failure degrades to 0 — onboarding — never to an error.
+  const [trashCount, setTrashCount] = useState(0)
   const [error, setError] = useState<string | null>(null)
   // The `disabled` attribute (via createDisabled) is the whole double-press
   // mechanism: React flushes this state before a second click can dispatch,
@@ -89,10 +94,16 @@ export function BrowserIndexPage({
       .catch(() => {
         if (!cancelled) setError('Failed to load documents from this browser.')
       })
+    filesSource
+      .listTrash?.()
+      .then((rows) => {
+        if (!cancelled) setTrashCount(rows.length)
+      })
+      .catch(() => undefined)
     return () => {
       cancelled = true
     }
-  }, [index, clock])
+  }, [index, clock, filesSource])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
@@ -125,6 +136,10 @@ export function BrowserIndexPage({
         await pointer.clear()
       }
       setSnapshots(await listLocalDocuments(index, clock))
+      // The delete just moved a document INTO the trash — re-count so the
+      // onboarding decision below sees it before choosing what to render.
+      const trashRows = await filesSource.listTrash?.().catch(() => null)
+      if (trashRows != null) setTrashCount(trashRows.length)
       // The tree view holds its own copy of the list; this identity change is
       // its signal to re-read, same contract as the daemon page's `revision`.
       setFilesRevision((revision) => revision + 1)
@@ -134,7 +149,7 @@ export function BrowserIndexPage({
     } finally {
       setDeleting(false)
     }
-  }, [index, clock, pointer, pendingDelete])
+  }, [index, clock, pointer, pendingDelete, filesSource])
 
   const { folder: routedFolder, setFolder: setRoutedFolder } = useRoutedFolder()
 
@@ -186,7 +201,7 @@ export function BrowserIndexPage({
             </div>
           ))}
         </div>
-      ) : snapshots !== null && snapshots.length === 0 ? (
+      ) : snapshots !== null && snapshots.length === 0 && trashCount === 0 ? (
         // The onboarding state renders INSTEAD of the panel: a three-pane
         // browser of nothing teaches less than one sentence and one button,
         // and this button also OPENS what it creates.
