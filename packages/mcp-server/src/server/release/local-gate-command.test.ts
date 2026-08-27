@@ -50,7 +50,7 @@ async function checkJobCommands(): Promise<string[]> {
   if (check === undefined) throw new Error('ci.yml has no `check` job')
   return check.steps
     .map((step) => step.run)
-    .filter((run): run is string => run !== null && run.startsWith('pnpm '))
+    .filter((run): run is string => run?.startsWith('pnpm '))
     .filter((run) => !NOT_A_GATE.has(run))
 }
 

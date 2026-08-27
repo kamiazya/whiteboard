@@ -1,5 +1,4 @@
 import { TOKENS } from '@kamiazya/whiteboard-ports'
-import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { ContainerModule } from 'inversify'
 import type { Kysely } from 'kysely'
 import type { DatabaseSchema } from '../server/store/db/schema.js'

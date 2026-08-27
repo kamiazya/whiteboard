@@ -1,3 +1,8 @@
+---
+paths:
+  - "packages/workspace-index/**"
+---
+
 # workspace-index — the DocumentIndex port over a workspace's Loro tree
 
 ## Why it is its own package

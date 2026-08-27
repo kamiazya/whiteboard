@@ -66,7 +66,7 @@ async function depsRecordingTeardown(): Promise<{
 // instance of class". The Proxy leaves the receiver as the instance.
 function spyIndex<T extends object>(inner: T, overrides: Partial<T>): T {
   return new Proxy(inner, {
-    get(target, key, receiver) {
+    get(target, key, _receiver) {
       if (key in overrides) return overrides[key as keyof T]
       const value = Reflect.get(target, key, target)
       return typeof value === 'function'

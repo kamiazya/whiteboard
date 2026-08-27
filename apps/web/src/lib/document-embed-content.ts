@@ -49,7 +49,8 @@ async function loadDocumentName(documentId: string): Promise<string | undefined>
     // The workspace tree owns naming; the production index's fold gate is
     // what makes a legacy record (row + content, not yet in the tree)
     // answer too — one read path, no second store of its own.
-    const entry = await (embedIndex ??= new FoldingBrowserIndex()).resolveDocumentById({
+    embedIndex ??= new FoldingBrowserIndex()
+    const entry = await embedIndex.resolveDocumentById({
       workspaceId: BROWSER_WORKSPACE_ID,
       documentId,
     })
