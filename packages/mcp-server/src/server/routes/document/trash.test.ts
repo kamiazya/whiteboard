@@ -52,6 +52,10 @@ async function appWithRealDeps() {
   await prepareDataDir(tmp.dir)
   const db = await getDb(tmp.dir)
   const deps = resolveServerDeps(createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })))
+  // The store-local composition is the trash-capable one — pinned here so a
+  // regression in the DI's structural capability detection fails loudly,
+  // rather than as a cascade of 501s in the tests below.
+  expect(deps.trash).toBeDefined()
   return createDocumentRouter({ serverDeps: deps })
 }
 
@@ -89,6 +93,35 @@ describe('trash routes', () => {
       await (await app.request(`/api/workspaces/${WS}/trash`)).json(),
     )
     expect(after.entries).toEqual([])
+  })
+
+  it('an invalid workspaceId is a 400 request error, not a 500 server error', async () => {
+    const app = await appWithRealDeps()
+
+    const listed = await app.request('/api/workspaces/bad%20id/trash')
+    expect(listed.status).toBe(400)
+    const restored = await app.request(
+      '/api/workspaces/bad%20id/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV/restore',
+      { method: 'POST' },
+    )
+    expect(restored.status).toBe(400)
+  })
+
+  it('a composition without the trash capability answers 501 on both routes', async () => {
+    // The default (in-memory) module binds an index with no listTrash /
+    // restoreDocument, so resolveServerDeps leaves deps.trash undefined.
+    const deps = resolveServerDeps(createContainer())
+    expect(deps.trash).toBeUndefined()
+    const app = createDocumentRouter({ serverDeps: deps })
+
+    expect((await app.request('/api/workspaces/ws/trash')).status).toBe(501)
+    expect(
+      (
+        await app.request('/api/workspaces/ws/trash/01ARZ3NDEKTSV4RRFFQ69G5FAV/restore', {
+          method: 'POST',
+        })
+      ).status,
+    ).toBe(501)
   })
 
   it('unknown workspace answers 404 on list; unknown documentId answers 404 on restore', async () => {

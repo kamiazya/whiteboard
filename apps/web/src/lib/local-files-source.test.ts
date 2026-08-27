@@ -198,4 +198,24 @@ describe('createLocalFilesSource trash', () => {
     expect(listed.map((row) => row.documentId)).toContain(entry.documentId)
     expect(await source.listTrash?.()).toEqual([])
   })
+
+  it('rejects a restore that brought nothing back, so the UI can say so', async () => {
+    // The index answers null for an id that is not in the trash; swallowing
+    // that resolves the button's promise and the section reloads with the
+    // row still there — a silent no-op. The daemon path already rejects
+    // (its route 404s); the browser path must agree.
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const source = createLocalFilesSource({ index })
+
+    await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow()
+  })
+
+  it('stays capability-less over an index that keeps no trash', async () => {
+    // The legacy row-plane index has no listTrash/restoreDocument, so the
+    // source must not offer the affordance it could not honour.
+    const source = createLocalFilesSource({ index: new IdbDocumentIndex() })
+    expect(source.listTrash).toBeUndefined()
+    expect(source.restoreFromTrash).toBeUndefined()
+  })
 })

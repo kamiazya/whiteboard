@@ -251,10 +251,17 @@ export function createLocalFilesSource(
             }))
           },
           async restoreFromTrash(documentId: string) {
-            await (index as FoldingBrowserIndex).restoreDocument({
+            const restored = await (index as FoldingBrowserIndex).restoreDocument({
               workspaceId: BROWSER_WORKSPACE_ID,
               documentId,
             })
+            // null means nothing came back — surfacing it is what lets the
+            // section show its restore error instead of silently reloading
+            // with the row still there. The daemon path already rejects here
+            // (its route answers 404); the two keepers must agree.
+            if (restored === null) {
+              throw new Error(`Nothing restorable for "${documentId}"`)
+            }
           },
         }
       : {}),

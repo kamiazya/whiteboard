@@ -13,6 +13,7 @@ import {
   getDocumentSnapshot,
   getWorkspaceNames,
   listDocuments,
+  listTrash,
   listWorkspaces,
   setDocumentDisplayName,
   updateDocument,
@@ -93,6 +94,12 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, selectedWorkspace],
   )
   const [rows, setRows] = useState<DocumentRow[]>([])
+  // Consulted only for the onboarding decision: a workspace whose list is
+  // empty but whose trash is not must keep the PANEL, because the Trash
+  // section is the one affordance that undoes the delete that just emptied
+  // the list. Failure degrades to 0 — onboarding — never to an error. The
+  // same rule BrowserIndexPage keeps for the browser keeper.
+  const [trashCount, setTrashCount] = useState(0)
   // False from the moment a workspace switch clears rows until its documents
   // fetch settles — rows=[] alone cannot distinguish "still loading" from
   // "genuinely empty", and rendering an empty state during the gap reads as
@@ -205,11 +212,17 @@ export function DaemonIndexPage({
     async (workspaceId: string, isStale: () => boolean) => {
       setLoadError(null)
       try {
-        const [documentsRes, names] = await Promise.all([
+        const [documentsRes, names, trashEntries] = await Promise.all([
           listDocuments(daemonFetch, daemonBaseUrl, workspaceId),
           // Failure degrades to "nothing named, nothing pinned", never to a
           // failed list.
           getWorkspaceNames(daemonFetch, daemonBaseUrl, workspaceId).catch(() => null),
+          // Loaded HERE because this runs after every delete too (the dialog
+          // dismiss re-invokes it), which is exactly when the count decides
+          // whether onboarding may replace the panel.
+          listTrash(daemonFetch, daemonBaseUrl, workspaceId)
+            .then((res) => res.entries.length)
+            .catch(() => 0),
         ])
         if (isStale()) return
         const pinIndex = new Map((names?.pinned ?? []).map((path, i) => [path, i]))
@@ -225,6 +238,7 @@ export function DaemonIndexPage({
           }
         })
         setRows(sortRows(nextRows))
+        setTrashCount(trashEntries)
         setLoaded(true)
       } catch (err) {
         if (isStale()) return
@@ -266,6 +280,7 @@ export function DaemonIndexPage({
     // workspace's rows visible during the switch lets a click pair the new
     // workspace id with an old workspace's path — a mismatched identity.
     setRows([])
+    setTrashCount(0)
     setLoaded(false)
     setLoadError(null)
     void loadWorkspace(selectedWorkspace, () => cancelled)
@@ -510,7 +525,7 @@ export function DaemonIndexPage({
               </div>
             ))}
           </div>
-        ) : rows.length === 0 ? (
+        ) : rows.length === 0 && trashCount === 0 ? (
           // The onboarding state renders INSTEAD of the panel: a three-pane
           // browser of nothing teaches less than one sentence and one
           // button, and this button also OPENS what it creates (ADR-0006 —

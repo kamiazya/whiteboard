@@ -6,7 +6,7 @@
  * document and wants it back, and any other moment it would only push the
  * list up. Collapsed by default for the same reason.
  */
-import { useCallback, useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import type { TrashRow } from './files-source.js'
 import { formatRelative } from './format-relative.js'
 
@@ -29,11 +29,22 @@ export function TrashSection({
   const [busy, setBusy] = useState<string | null>(null)
   const [error, setError] = useState<string | null>(null)
 
+  // Only the NEWEST read may write: a slow pre-restore list resolving after
+  // the post-restore reload would put the restored row back in the section.
+  const readSeq = useRef(0)
   const reload = useCallback(() => {
+    const seq = ++readSeq.current
     // A failed trash read degrades to an absent section, never to an error
     // banner: the list above is the primary surface and must not inherit a
     // failure from an auxiliary one.
-    listTrash().then(setRows, () => setRows([]))
+    listTrash().then(
+      (next) => {
+        if (seq === readSeq.current) setRows(next)
+      },
+      () => {
+        if (seq === readSeq.current) setRows([])
+      },
+    )
   }, [listTrash])
 
   useEffect(reload, [reload, revision])

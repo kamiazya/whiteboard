@@ -17,7 +17,7 @@ import type {
 } from '../../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
-import { validateWorkspaceId } from '../../validators.js'
+import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 
 export interface TrashRouterOptions {
   serverDeps?: ServerDeps
@@ -30,8 +30,16 @@ export function createTrashRouter(options: TrashRouterOptions = {}): Hono {
 
   app.get('/api/workspaces/:workspaceId/trash', async (c) => {
     const workspaceId = c.req.param('workspaceId')
+    // A malformed address is the caller's error, not this server's — kept
+    // outside the try below so it cannot fall through to the 500 arm.
     try {
       validateWorkspaceId(workspaceId)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    try {
       const deps = await depsOf()
       if (deps.trash === undefined) {
         return c.json({ title: 'This composition has no trash.' } satisfies ApiErrorBody, 501)
@@ -62,6 +70,12 @@ export function createTrashRouter(options: TrashRouterOptions = {}): Hono {
     const documentId = c.req.param('documentId')
     try {
       validateWorkspaceId(workspaceId)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    try {
       const deps = await depsOf()
       if (deps.trash === undefined) {
         return c.json({ title: 'This composition has no trash.' } satisfies ApiErrorBody, 501)

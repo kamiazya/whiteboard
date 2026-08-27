@@ -9,6 +9,8 @@
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { fakeFilesSource } from '../../test-utils/fake-files-source.js'
+import type { TrashRow } from './files-source.js'
+import { TrashSection } from './TrashSection.js'
 import { WorkspaceFilesPanel } from './WorkspaceFilesPanel.js'
 
 afterEach(cleanup)
@@ -45,6 +47,64 @@ describe('WorkspaceFilesPanel trash section', () => {
     await waitFor(() => {
       expect(screen.queryByText('old/plan')).toBeNull()
     })
+  })
+
+  it('announces a failed restore and keeps the row, instead of silently reloading', async () => {
+    const source = fakeFilesSource({
+      listDocuments: async () => [
+        { documentId: 'd-live', path: 'live', kind: 'markdown' as const },
+      ],
+    })
+    source.listTrash = vi.fn(async () => [ENTRY])
+    source.restoreFromTrash = vi.fn(async () => {
+      throw new Error('nothing restorable')
+    })
+    render(<WorkspaceFilesPanel source={source} />)
+
+    fireEvent.click(await screen.findByText(/^Trash/))
+    fireEvent.click(await screen.findByRole('button', { name: /restore/i }))
+
+    const alert = await screen.findByRole('alert')
+    expect(alert.textContent).toContain('Could not restore')
+    expect(screen.getByText('old/plan')).toBeTruthy()
+  })
+
+  it('ignores a trash read superseded by a newer reload', async () => {
+    // The mount-time list is slow; a revision bump (a delete landing, say)
+    // starts a second read that answers first. When the FIRST finally
+    // resolves, its stale rows must not overwrite the newer answer — that is
+    // how a restored row climbs back into the section.
+    let resolveFirst: (rows: readonly TrashRow[]) => void = () => undefined
+    const first = new Promise<readonly TrashRow[]>((resolve) => {
+      resolveFirst = resolve
+    })
+    let calls = 0
+    const listTrash = vi.fn(() => {
+      calls += 1
+      return calls === 1 ? first : Promise.resolve<readonly TrashRow[]>([])
+    })
+    const { rerender } = render(
+      <TrashSection
+        listTrash={listTrash}
+        restoreFromTrash={async () => undefined}
+        onRestored={() => undefined}
+        revision={0}
+      />,
+    )
+    rerender(
+      <TrashSection
+        listTrash={listTrash}
+        restoreFromTrash={async () => undefined}
+        onRestored={() => undefined}
+        revision={1}
+      />,
+    )
+    await waitFor(() => expect(listTrash).toHaveBeenCalledTimes(2))
+
+    resolveFirst([ENTRY])
+    // Give the stale resolution a chance to (wrongly) apply itself.
+    await new Promise((r) => setTimeout(r, 0))
+    expect(screen.queryByText('old/plan')).toBeNull()
   })
 
   it('renders no trash section when the trash is empty', async () => {
