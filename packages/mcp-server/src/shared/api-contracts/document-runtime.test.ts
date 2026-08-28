@@ -1,20 +1,9 @@
 import { describe, expect, it } from 'vitest'
-import { z } from 'zod'
-
-const viewportResponseSchema = z.object({
-  ok: z.literal(true),
-})
-
-const viewportErrorBodySchema = z.object({
-  error: z.string().optional(),
-  message: z.string().optional(),
-  hint: z.string().optional(),
-})
-
-const clientCountResponseSchema = z.object({
-  count: z.number().int().nonnegative(),
-  readyCount: z.number().int().nonnegative(),
-})
+import {
+  clientCountResponseSchema,
+  viewportErrorBodySchema,
+  viewportResponseSchema,
+} from './document-runtime.js'
 
 describe('viewportResponseSchema', () => {
   it('accepts { ok: true }', () => {
@@ -31,17 +20,26 @@ describe('viewportResponseSchema', () => {
 })
 
 describe('viewportErrorBodySchema', () => {
-  it('accepts all fields present', () => {
+  // Every route branch is pinned here so the schema keeps matching what the
+  // sole producer (server/routes/viewport.ts) actually sends.
+  it('accepts the no_client body (hint present)', () => {
     const input = { error: 'no_client', message: 'No browser connected', hint: 'Open the canvas' }
     expect(viewportErrorBodySchema.parse(input)).toEqual(input)
   })
 
-  it('accepts empty object (all fields optional)', () => {
-    expect(viewportErrorBodySchema.parse({})).toEqual({})
+  it('accepts the timeout/internal bodies (no hint)', () => {
+    const input = { error: 'timeout', message: 'Viewport update timed out after 5s.' }
+    expect(viewportErrorBodySchema.parse(input)).toEqual(input)
+  })
+
+  it('rejects a body missing error or message — no producer emits one', () => {
+    expect(() => viewportErrorBodySchema.parse({})).toThrow()
+    expect(() => viewportErrorBodySchema.parse({ error: 'timeout' })).toThrow()
+    expect(() => viewportErrorBodySchema.parse({ message: 'lonely message' })).toThrow()
   })
 
   it('rejects non-string error', () => {
-    expect(() => viewportErrorBodySchema.parse({ error: 42 })).toThrow()
+    expect(() => viewportErrorBodySchema.parse({ error: 42, message: 'x' })).toThrow()
   })
 })
 
