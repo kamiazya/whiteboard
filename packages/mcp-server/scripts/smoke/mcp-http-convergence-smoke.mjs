@@ -32,6 +32,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { WebSocket } from 'ws'
+import { listWorkspacesResponseSchema } from '../../src/shared/api-contracts/document.js'
 import { documentApiUrl } from '../../src/shared/api-contracts/document-url.js'
 import { buildWhiteboardWsProtocols, buildWhiteboardWsUrl } from '../../src/shared/ws-protocol.js'
 import { waitForEventWithTimeout } from './lib/wait-for-event.mjs'
@@ -273,6 +274,32 @@ async function main() {
   }
   const documentId = created.documentId
   log(`[e2e] wb_document_create → ${documentId}`)
+
+  // ── Step 2b: ADR-0019 — GET /api/workspaces serves the displayName a
+  //    plain HTTP PUT set, through the published listWorkspacesResponseSchema.
+  //    (segment has no accepting MCP/HTTP input surface yet — that half is
+  //    verified at the store/route-test level, not here.) ──
+  const WORKSPACE_DISPLAY_NAME = 'Convergence E2E'
+  const putNameRes = await fetch(`http://127.0.0.1:${port}/api/workspaces/${WORKSPACE_ID}/name`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${TOKEN}` },
+    body: JSON.stringify({ name: WORKSPACE_DISPLAY_NAME }),
+  })
+  if (!putNameRes.ok) {
+    throw new Error(`PUT workspace name failed: HTTP ${putNameRes.status}`)
+  }
+  const listWorkspacesRes = await fetch(`http://127.0.0.1:${port}/api/workspaces`, {
+    headers: { Authorization: `Bearer ${TOKEN}` },
+  })
+  if (!listWorkspacesRes.ok) {
+    throw new Error(`GET /api/workspaces failed: HTTP ${listWorkspacesRes.status}`)
+  }
+  const listWorkspacesBody = listWorkspacesResponseSchema.parse(await listWorkspacesRes.json())
+  const ourWorkspace = listWorkspacesBody.workspaces.find((w) => w.workspaceId === WORKSPACE_ID)
+  if (ourWorkspace?.displayName !== WORKSPACE_DISPLAY_NAME) {
+    throw new Error(`GET /api/workspaces did not echo displayName: ${JSON.stringify(ourWorkspace)}`)
+  }
+  log('[e2e] GET /api/workspaces → displayName echoed through the published schema')
 
   const NODE_A = {
     id: 'node-a',

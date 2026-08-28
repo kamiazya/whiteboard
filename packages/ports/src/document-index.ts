@@ -62,9 +62,15 @@ export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
  * optional: shape-validated here via the model schemas, but their PERSISTENCE
  * and — for `segment` — their per-keeper UNIQUENESS are the registry
  * implementation's job, not this contract's. An implementation is free to
- * accept and currently ignore both fields; today every implementation does
- * (serving them is the follow-up slice: mcp-server's `workspaceSummarySchema`
- * + `workspaces` table columns + `smoke:e2e`).
+ * accept and currently ignore both fields — the conformance suite's base
+ * case stays satisfiable that way, which is what apps/web's browser registry
+ * and the in-memory double still rely on. mcp-server's daemon
+ * (`CacheCoherentDocumentIndex`) is the first implementation that actually
+ * PERSISTS and SERVES them: the `workspaces` table carries a `segment`
+ * column with a unique index (a collision throws
+ * `WorkspaceSegmentTakenError`, below), and `workspaceSummarySchema` serves
+ * both fields through the published `@kamiazya/whiteboard-mcp/api-contracts`
+ * subpath.
  *
  * No `canonicalId` field: ADR-0019's canonical layer already IS
  * `workspaceId`. Its schema tightens from `workspaceIdSchema` to the
@@ -197,6 +203,33 @@ export class DocumentPathTakenError extends Error {
   ) {
     super(`Document path "${path}" already exists in workspace "${workspaceId}"`)
     this.name = 'DocumentPathTakenError'
+  }
+}
+
+/**
+ * Cross-realm-safe guard for `WorkspaceSegmentTakenError`, on the same
+ * reasoning as `isWorkspaceNotFoundError` above.
+ */
+export function isWorkspaceSegmentTakenError(error: unknown): error is WorkspaceSegmentTakenError {
+  return (
+    error instanceof WorkspaceSegmentTakenError ||
+    (error instanceof Error && error.name === 'WorkspaceSegmentTakenError')
+  )
+}
+
+/**
+ * Thrown when a `createWorkspace` segment (ADR-0019's user-facing layer) is
+ * already held by another workspace in the same keeper's registry.
+ *
+ * A registry-level refusal, not a `DocumentPathTakenError`-shaped collision:
+ * a segment names a WORKSPACE, not a document inside one, and uniqueness is
+ * enforced by whichever registry persists it (mcp-server's `workspaces`
+ * table, today) rather than by this contract.
+ */
+export class WorkspaceSegmentTakenError extends Error {
+  constructor(readonly segment: string) {
+    super(`Workspace segment "${segment}" is already taken`)
+    this.name = 'WorkspaceSegmentTakenError'
   }
 }
 

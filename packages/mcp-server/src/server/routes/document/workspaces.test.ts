@@ -6,6 +6,7 @@ import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   deleteDocumentResponseSchema,
+  listWorkspacesResponseSchema,
   renameDocumentPathResponseSchema,
 } from '../../../shared/api-contracts/document.js'
 import { withTempDataDir } from '../_test-helpers.js'
@@ -94,6 +95,39 @@ describe('GET /api/workspaces', () => {
       workspaces: Array<{ workspaceId: string }>
     }
     expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a' }])
+  })
+
+  // ADR-0019: segment/displayName flow from the registry row through this
+  // route, and a workspace with neither omits the keys rather than serving
+  // null/undefined — the same "absent, not invented" contract the port uses.
+  it('serves segment/displayName for a workspace that has them, and omits the keys for one that does not', async () => {
+    const db = await getDb(tmp.dir)
+    const deps = resolveServerDeps(
+      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
+    )
+    await deps.documentIndex.createWorkspace({
+      workspaceId: 'workspace-named',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    })
+    await deps.documentIndex.createWorkspace({ workspaceId: 'workspace-bare' })
+
+    const app = createDocumentRouter()
+    const res = await app.request('/api/workspaces')
+    expect(res.status).toBe(200)
+    const json = await res.json()
+    const parsed = listWorkspacesResponseSchema.parse(json)
+
+    const named = parsed.workspaces.find((w) => w.workspaceId === 'workspace-named')
+    expect(named).toEqual({
+      workspaceId: 'workspace-named',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    })
+    const bare = parsed.workspaces.find((w) => w.workspaceId === 'workspace-bare')
+    expect(bare).toEqual({ workspaceId: 'workspace-bare' })
+    expect('segment' in (bare ?? {})).toBe(false)
+    expect('displayName' in (bare ?? {})).toBe(false)
   })
 })
 

@@ -333,6 +333,35 @@ describe('workspaceSummarySchema', () => {
   it('rejects missing workspaceId', () => {
     expect(workspaceSummarySchema.safeParse({}).success).toBe(false)
   })
+
+  // ADR-0019: old daemons and pre-minting workspaces answer {workspaceId}
+  // alone — the widened schema must keep accepting that shape so an old
+  // daemon's response and a new client stay compatible.
+  it('accepts a bare workspaceId with no segment/displayName', () => {
+    expect(workspaceSummarySchema.safeParse({ workspaceId: 'ws-abc' }).success).toBe(true)
+  })
+
+  it('accepts segment and displayName when the daemon serves them', () => {
+    const full: WorkspaceSummary = {
+      workspaceId: 'ws-abc',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    }
+    const result: WorkspaceSummary = workspaceSummarySchema.parse(full)
+    expect(result).toEqual(full)
+  })
+
+  // The refinement is model's, not a restated copy — this only proves the
+  // widened field actually delegates to workspaceSegmentSchema rather than a
+  // bare z.string().
+  it('rejects a ULID-shaped segment', () => {
+    expect(
+      workspaceSummarySchema.safeParse({
+        workspaceId: 'ws-abc',
+        segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }).success,
+    ).toBe(false)
+  })
 })
 
 describe('listWorkspacesResponseSchema', () => {

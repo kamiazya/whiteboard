@@ -1,4 +1,4 @@
-import { act, cleanup, fireEvent, render, screen, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { celebrate } from '@/lib/celebrate'
@@ -224,7 +224,11 @@ describe('SettingsPage — Data & app setup journey', () => {
     const mobile = screen.getByTestId('settings-mobile')
     fireEvent.click(await within(mobile).findByRole('button', { name: 'Protect' }))
     expect(await within(mobile).findByText('granted')).toBeTruthy()
-    expect(celebrate).toHaveBeenCalledTimes(1)
+    // celebrate fires from a passive effect on the same commit that renders
+    // "granted", and the handler's promise chain runs outside act — so a
+    // synchronous assertion here races the effect flush under load. Wait for
+    // the call; the exactly-once claim is unchanged.
+    await waitFor(() => expect(celebrate).toHaveBeenCalledTimes(1))
   })
 
   it('never celebrates a step that was already complete when the page opened', async () => {

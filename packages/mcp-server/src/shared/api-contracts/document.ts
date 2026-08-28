@@ -1,4 +1,8 @@
-import { documentKindSchema } from '@kamiazya/whiteboard-model'
+import {
+  documentKindSchema,
+  workspaceDisplayNameSchema,
+  workspaceSegmentSchema,
+} from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
 // Request/response schemas for the canvas / workspace mutation endpoints.
@@ -163,8 +167,18 @@ export const canvasExistsResponseSchema = z.object({
 
 // Workspace + canvas listings consumed by IndexPage to render the
 // "open workspaces" grid.
+//
+// ADR-0019's user-facing (`segment`) and naming (`displayName`) layers, both
+// optional: a workspace minted before that migration, or served by an
+// implementation that has not adopted it yet (apps/web's browser registry,
+// today), has neither, and an invented value would read as fact where there
+// is none. Both fields are additive to keep an old daemon's response and a
+// new client — and a new daemon's response and an old client — mutually
+// parseable.
 export const workspaceSummarySchema = z.object({
   workspaceId: z.string(),
+  segment: workspaceSegmentSchema.optional(),
+  displayName: workspaceDisplayNameSchema.optional(),
 })
 
 export const listWorkspacesResponseSchema = z.object({

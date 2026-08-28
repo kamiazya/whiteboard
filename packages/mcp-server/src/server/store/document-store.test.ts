@@ -5,6 +5,7 @@ import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   isWorkspaceNotFoundError,
+  isWorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -906,6 +907,118 @@ describe('listWorkspaces', () => {
 
   // listWorkspaces is now backed by the workspaces table, so the previous
   // "non-directory DATA_DIR" corruption check no longer applies.
+})
+
+// ADR-0019: the daemon's own DocumentIndex (CacheCoherentDocumentIndex) is
+// the first implementation that PERSISTS and SERVES segment/displayName —
+// the shared ports conformance suite deliberately stays accept-and-ignore,
+// so this echo/validation/conflict/non-clobber coverage lives here.
+describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-identity-test-'))
+    await setupIsolatedDb()
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('echoes stored segment and displayName back through listWorkspaces', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({
+      workspaceId: 'ws-echo',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    })
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    const row = rows.find((r) => r.workspaceId === 'ws-echo')
+    expect(row).toEqual({
+      workspaceId: 'ws-echo',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    })
+  })
+
+  it('a legacy workspace with no identity lists with the keys absent, not null', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-legacy' })
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    const row = rows.find((r) => r.workspaceId === 'ws-legacy')
+    expect(row).toEqual({ workspaceId: 'ws-legacy' })
+  })
+
+  it('a bare re-create (the wb_document_create createWorkspace:true path) does not clobber stored identity', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({
+      workspaceId: 'ws-preserved',
+      segment: 'kept',
+      displayName: 'Kept',
+    })
+
+    // Every wbDocumentCreate({ createWorkspace: true }) call reaches this
+    // bare shape — the identity claimed above must survive it.
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-preserved' })
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    const row = rows.find((r) => r.workspaceId === 'ws-preserved')
+    expect(row).toEqual({ workspaceId: 'ws-preserved', segment: 'kept', displayName: 'Kept' })
+  })
+
+  it('re-creating with identical fields is idempotent', async () => {
+    const deps = await getDefaultServerDeps()
+    const input = { workspaceId: 'ws-idem', segment: 'idem', displayName: 'Idem' }
+    await deps.documentIndex.createWorkspace(input)
+    await expect(deps.documentIndex.createWorkspace(input)).resolves.toBeUndefined()
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'ws-idem')).toEqual(input)
+  })
+
+  it('a second workspace claiming an already-taken segment is refused, and neither row is left partial', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-first', segment: 'contested' })
+
+    const err = await deps.documentIndex
+      .createWorkspace({ workspaceId: 'ws-second', segment: 'contested' })
+      .catch((e: unknown) => e)
+    expect(isWorkspaceSegmentTakenError(err)).toBe(true)
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'ws-second')).toBeUndefined()
+    expect(rows.find((r) => r.workspaceId === 'ws-first')).toEqual({
+      workspaceId: 'ws-first',
+      segment: 'contested',
+    })
+  })
+
+  // The inbound half of zod-schema-discipline: what listWorkspaces serves
+  // was validated on write, so the strict outbound workspaceSummarySchema
+  // never meets a poisoned row.
+  it('rejects a ULID-shaped segment at the boundary, before any row is written', async () => {
+    const deps = await getDefaultServerDeps()
+    await expect(
+      deps.documentIndex.createWorkspace({
+        workspaceId: 'ws-rejected',
+        segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }),
+    ).rejects.toThrow()
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'ws-rejected')).toBeUndefined()
+  })
+
+  it('rejects an empty displayName at the boundary, before any row is written', async () => {
+    const deps = await getDefaultServerDeps()
+    await expect(
+      deps.documentIndex.createWorkspace({ workspaceId: 'ws-rejected-2', displayName: '' }),
+    ).rejects.toThrow()
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'ws-rejected-2')).toBeUndefined()
+  })
 })
 
 describe('compactDocument', () => {

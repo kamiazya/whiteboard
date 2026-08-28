@@ -434,11 +434,14 @@ export function describeDocumentIndexConformance(
     })
 
     // ADR-0019's identity layers ride along on createWorkspace/listWorkspaces
-    // without being SERVED yet: every implementation accepts segment and
-    // displayName and currently ignores them, so this deliberately does NOT
-    // assert echo-back. Serving stored values is the follow-up slice
-    // (mcp-server: widen workspaceSummarySchema + workspaces table columns +
-    // smoke:e2e).
+    // without every implementation SERVING them: this base case only proves
+    // segment/displayName do not break an implementation that accepts and
+    // ignores them (apps/web's browser registry, the in-memory double), so
+    // it deliberately does NOT assert echo-back. mcp-server's daemon DOES
+    // persist and serve these fields now — that echo is pinned by its own
+    // tests (document-store.test.ts), not by this shared suite, because
+    // adding the assertion here would fail the implementations that still
+    // legitimately ignore them.
     it('accepts a createWorkspace carrying segment and displayName, currently ignored', async () => {
       await withIndex(async (index) => {
         await index.createWorkspace({

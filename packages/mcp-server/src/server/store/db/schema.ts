@@ -8,6 +8,11 @@ type Bool = ColumnType<number, number, number>
 interface WorkspacesTable {
   id: string
   displayName: string | null
+  // ADR-0019's user-facing handle: unique per keeper (enforced by the
+  // `workspaces_segment_unique` index added in migration 0018), nullable
+  // because a workspace minted before that migration has none until Wave-2
+  // backfill/minting.
+  segment: string | null
   createdAt: Timestamp
   updatedAt: Timestamp
 }

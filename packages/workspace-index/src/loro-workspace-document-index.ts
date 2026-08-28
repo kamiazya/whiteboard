@@ -46,6 +46,7 @@ import type {
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
+  WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import {
   compareDocumentPaths,
@@ -65,7 +66,7 @@ import type { WorkspaceDocs } from './workspace-docs.js'
  * `WorkspaceDocs` because a record store opens by id and cannot enumerate.
  */
 export interface WorkspaceRegistry {
-  listWorkspaces(): Promise<{ workspaceId: string }[]>
+  listWorkspaces(): Promise<WorkspaceEntry[]>
 }
 
 /** `a/b/c` -> `a/b/x` when the subtree at `a/b` moves to `a/b/x`. */
@@ -96,7 +97,7 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
    * id only. Required, not optional — an unwired registry would make every
    * workspace invisible to the one call that lists them.
    */
-  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+  async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return this.registry.listWorkspaces()
   }
 
