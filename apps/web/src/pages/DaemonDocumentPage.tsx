@@ -503,7 +503,10 @@ export function DaemonDocumentPage({
   // and a latched chip would keep claiming one.
   useEffect(() => {
     setShellConnection({
-      state: authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting',
+      state: {
+        keeper: 'daemon',
+        session: authError ? 'sync-off' : syncStatus === 'connected' ? 'synced' : 'reconnecting',
+      },
       daemonBaseUrl,
     })
     return () => setShellConnection(null)

@@ -728,7 +728,10 @@ describe('App daemon provider state', () => {
     // and the chip's popover carries the way out. Driving it from here is
     // what proves App still wires the branch switch behind it.
     act(() => {
-      setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
+      setShellConnection({
+        state: { keeper: 'daemon', session: 'sync-off' },
+        daemonBaseUrl: 'http://127.0.0.1:3099',
+      })
     })
     fireEvent.click(await screen.findByTestId('connection-chip'))
     fireEvent.click(await screen.findByRole('button', { name: /work in this browser instead/i }))
@@ -1015,7 +1018,10 @@ describe('App shell (single instance above the routed pages)', () => {
       await waitFor(() => expect(screen.queryByTestId('settings-nudge')).toBeNull())
 
       act(() => {
-        setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
+        setShellConnection({
+          state: { keeper: 'daemon', session: 'sync-off' },
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+        })
       })
       expect(screen.getByTestId('settings-nudge')).toBeTruthy()
       // The chip is the shell's now, so the state a page reports reaches the

@@ -74,7 +74,10 @@ describe('AppShell', () => {
     })
     // Sync off IS the auth error: re-pairing is the only way out of it, so it
     // counts as disconnected for the attention dot. Transient reconnects do not.
-    setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
+    setShellConnection({
+      state: { keeper: 'daemon', session: 'sync-off' },
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+    })
     renderShell(true)
     expect(await screen.findByTestId('settings-nudge')).toBeTruthy()
   })
@@ -107,22 +110,30 @@ describe('AppShell — the connection chip', () => {
   })
 
   it.each([
-    ['browser', /browser/i],
-    ['synced', /synced/i],
-    ['reconnecting', /reconnecting/i],
-    ['sync-off', /sync off/i],
-  ] as const)('renders the %s state the page published', async (state, label) => {
+    ['browser-kept', { keeper: 'browser' }, /browser/i],
+    ['synced', { keeper: 'daemon', session: 'synced' }, /synced/i],
+    ['reconnecting', { keeper: 'daemon', session: 'reconnecting' }, /reconnecting/i],
+    ['sync-off', { keeper: 'daemon', session: 'sync-off' }, /sync off/i],
+  ] as const)('renders the %s state the page published', async (_name, state, label) => {
     setShellConnection({ state, daemonBaseUrl: 'http://127.0.0.1:3099' })
-    renderShell(state !== 'browser')
+    renderShell(state.keeper === 'daemon')
     expect((await screen.findByTestId('connection-chip')).textContent).toMatch(label)
   })
 
   it('follows the page as its session changes, without a remount', async () => {
-    setShellConnection({ state: 'synced', daemonBaseUrl: 'http://127.0.0.1:3099' })
+    setShellConnection({
+      state: { keeper: 'daemon', session: 'synced' },
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+    })
     renderShell(true)
     expect((await screen.findByTestId('connection-chip')).textContent).toMatch(/synced/i)
 
-    act(() => setShellConnection({ state: 'reconnecting', daemonBaseUrl: 'http://127.0.0.1:3099' }))
+    act(() =>
+      setShellConnection({
+        state: { keeper: 'daemon', session: 'reconnecting' },
+        daemonBaseUrl: 'http://127.0.0.1:3099',
+      }),
+    )
     expect(screen.getByTestId('connection-chip').textContent).toMatch(/reconnecting/i)
 
     // Leaving the document takes the claim with it: nothing on an index page
@@ -132,7 +143,7 @@ describe('AppShell — the connection chip', () => {
   })
 
   it('carries the capability CTA inside the Local popover, not in page chrome', async () => {
-    setShellConnection({ state: 'browser' })
+    setShellConnection({ state: { keeper: 'browser' } })
     renderShell(false)
     expect(screen.queryByText(CTA)).toBeNull()
 
@@ -145,7 +156,10 @@ describe('AppShell — the connection chip', () => {
 
   it('offers the escape to the browser from the sync-off popover', async () => {
     const onWorkInBrowser = vi.fn()
-    setShellConnection({ state: 'sync-off', daemonBaseUrl: 'http://127.0.0.1:3099' })
+    setShellConnection({
+      state: { keeper: 'daemon', session: 'sync-off' },
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+    })
     renderShell(true, '/w/ws/document/a.canvas', onWorkInBrowser)
 
     fireEvent.click(await screen.findByTestId('connection-chip'))
@@ -156,7 +170,10 @@ describe('AppShell — the connection chip', () => {
   // The management action moved to Settings (see SettingsPage.test.tsx). What
   // the shell keeps is the report and the pointer to where the action lives.
   it('points at Settings rather than carrying the management action itself', async () => {
-    setShellConnection({ state: 'synced', daemonBaseUrl: 'http://127.0.0.1:3099' })
+    setShellConnection({
+      state: { keeper: 'daemon', session: 'synced' },
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+    })
     renderShell(true)
     fireEvent.click(await screen.findByTestId('connection-chip'))
     await waitFor(() => expect(screen.getByTestId('connection-popover')).toBeTruthy())

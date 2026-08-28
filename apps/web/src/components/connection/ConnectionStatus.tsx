@@ -3,21 +3,22 @@
  * chip signals the state; every sentence-shaped explanation and recovery
  * action lives in its popover — no standing banners.
  *
- * States:
- * - `synced`   — daemon-backed page with live sync running.
- * - `browser`  — the workspace is kept in this browser and nowhere else.
- *                `children` hosts page-supplied extras (daemon detection,
- *                capability hint) inside the popover.
+ * Keeper `browser` — the workspace is kept in this browser and nowhere else.
+ * `children` hosts page-supplied extras (daemon detection, capability hint)
+ * inside the popover.
+ *
+ * Keeper `daemon` reports the live session's health on top:
+ * - `synced`   — live sync running.
  * - `reconnecting` — live sync is not running: the transport has not come up
  *                yet, dropped, or failed. Edits made meanwhile are not lost:
  *                the session re-sends the whole document when the transport
  *                returns, which is what makes that claim true — a backend
  *                whose socket is closed drops the delta it was handed.
- * - `sync-off` — daemon-backed page whose session was rejected. The chip
- *                turns attention-colored and the popover carries the two
- *                ways forward (re-pair / work in the browser). A polite
- *                sr-only live region announces the transition so dropping
- *                the old role="alert" banner loses no assistive-tech signal.
+ * - `sync-off` — the session was rejected. The chip turns attention-colored
+ *                and the popover carries the two ways forward (re-pair / work
+ *                in the browser). A polite sr-only live region announces the
+ *                transition so dropping the old role="alert" banner loses no
+ *                assistive-tech signal.
  */
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
@@ -26,14 +27,29 @@ import { cn } from '@/lib/utils'
 import { StateDot, type StateDotTone } from '../StateDot.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
+/** Health of the live document session a daemon-kept page runs. */
+export type SessionHealth = 'synced' | 'reconnecting' | 'sync-off'
+
 /**
- * Two different questions share this type, and only one of them survives
- * navigation: `browser` names WHO KEEPS the workspace, while the other three
- * report whether a live session is healthy. Splitting them is its own slice;
- * this one only stops the keeper from being called "local", which a daemon
- * running on the same machine is too.
+ * Two axes, not one enum: WHO KEEPS the workspace, and — daemon-kept only —
+ * whether the live session is healthy. They used to share one four-value
+ * union, which made `browser` and `reconnecting` alternatives of each other
+ * and so could not say "daemon-kept, but the daemon is unreachable while the
+ * browser holds the live replica" — the resting state promotion (a browser
+ * workspace merged into a daemon) leaves behind. A browser-kept workspace has
+ * no daemon session, so the browser arm carries no health field at all.
  */
-export type ConnectionState = 'synced' | 'browser' | 'reconnecting' | 'sync-off'
+export type ConnectionState =
+  | { readonly keeper: 'browser' }
+  | { readonly keeper: 'daemon'; readonly session: SessionHealth }
+
+/**
+ * The one state whose only exit is re-pairing — what the shell's attention
+ * dot keys on. A transient reconnect is not it: that recovers on its own.
+ */
+export function isSyncOff(state: ConnectionState): boolean {
+  return state.keeper === 'daemon' && state.session === 'sync-off'
+}
 
 export interface ConnectionStatusProps {
   readonly state: ConnectionState
@@ -47,20 +63,14 @@ export interface ConnectionStatusProps {
   readonly children?: ReactNode
 }
 
-const CHIP_LABEL: Record<ConnectionState, string> = {
-  synced: 'Synced',
-  browser: 'Browser',
-  reconnecting: 'Reconnecting',
-  'sync-off': 'Sync off',
+// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
+const SESSION_CHIP: Record<SessionHealth, { label: string; tone: StateDotTone }> = {
+  synced: { label: 'Synced', tone: 'safe' },
+  reconnecting: { label: 'Reconnecting', tone: 'attention' },
+  'sync-off': { label: 'Sync off', tone: 'attention' },
 }
 
-// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
-const DOT_TONE: Record<ConnectionState, StateDotTone> = {
-  synced: 'safe',
-  browser: 'neutral',
-  reconnecting: 'attention',
-  'sync-off': 'attention',
-}
+const BROWSER_CHIP = { label: 'Browser', tone: 'neutral' } as const
 
 export function ConnectionStatus({
   state,
@@ -69,9 +79,11 @@ export function ConnectionStatus({
   onWorkInBrowser,
   children,
 }: ConnectionStatusProps) {
+  const chip = state.keeper === 'browser' ? BROWSER_CHIP : SESSION_CHIP[state.session]
+  const syncOff = isSyncOff(state)
   // Empty while sync is on: the region has to exist BEFORE the message, but
   // an empty one must not claim a name either.
-  const syncOffAnnouncement = state === 'sync-off' ? 'Live sync off' : ''
+  const syncOffAnnouncement = syncOff ? 'Live sync off' : ''
 
   return (
     <Popover>
@@ -88,22 +100,22 @@ export function ConnectionStatus({
           className={cn(
             'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent',
             'duration-(--motion-duration-normal) ease-(--motion-ease-out)',
-            state === 'sync-off' && 'border-amber-500/40 bg-amber-500/10 text-amber-700',
+            syncOff && 'border-amber-500/40 bg-amber-500/10 text-amber-700',
           )}
         >
           <StateDot
-            tone={DOT_TONE[state]}
+            tone={chip.tone}
             // One-shot attention echo behind the dot: mounts exactly when the
             // chip enters sync-off, pulses twice, then rests. Finite by
             // design — a standing ping would be noise, not guidance.
-            pulse={state === 'sync-off'}
+            pulse={syncOff}
             pulseTestId="connection-chip-pulse"
           />
-          {CHIP_LABEL[state]}
+          {chip.label}
         </button>
       </PopoverTrigger>
       <PopoverContent data-testid="connection-popover">
-        {state === 'synced' && (
+        {state.keeper === 'daemon' && state.session === 'synced' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>
             <p className="text-muted-foreground">
@@ -129,7 +141,7 @@ export function ConnectionStatus({
             </Link>
           </div>
         )}
-        {state === 'reconnecting' && (
+        {state.keeper === 'daemon' && state.session === 'reconnecting' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is not running</p>
             <p className="text-muted-foreground">
@@ -138,7 +150,7 @@ export function ConnectionStatus({
             </p>
           </div>
         )}
-        {state === 'browser' && (
+        {state.keeper === 'browser' && (
           <div className="flex flex-col gap-2 text-sm">
             <p className="font-medium">Kept in this browser</p>
             <p className="text-muted-foreground">
@@ -148,7 +160,7 @@ export function ConnectionStatus({
             {children}
           </div>
         )}
-        {state === 'sync-off' && (
+        {syncOff && (
           <div className="flex flex-col gap-2 text-sm">
             <p className="font-medium">Live sync is off</p>
             <p className="text-muted-foreground">

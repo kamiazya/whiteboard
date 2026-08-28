@@ -8,7 +8,7 @@ import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import HomeMark from '../brand/home-mark.svg?react'
-import { ConnectionStatus } from './connection/ConnectionStatus.js'
+import { ConnectionStatus, isSyncOff } from './connection/ConnectionStatus.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -49,7 +49,7 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
   // Sync off means the daemon rejected the session and re-pairing is the only
   // way out, so it counts as disconnected for the attention dot. A transient
   // reconnect does not — it recovers on its own.
-  const nudge = useSettingsNudge(daemon && connection?.state !== 'sync-off')
+  const nudge = useSettingsNudge(daemon && !(connection !== null && isSyncOff(connection.state)))
   const daemonBaseUrl = connection?.daemonBaseUrl
 
   return (
@@ -108,7 +108,7 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
           }
           onWorkInBrowser={onWorkInBrowser}
         >
-          {connection.state === 'browser' && (
+          {connection.state.keeper === 'browser' && (
             <>
               <p className="text-muted-foreground">
                 Connect a daemon (MCP) for version history, workspaces, variations and merging.
