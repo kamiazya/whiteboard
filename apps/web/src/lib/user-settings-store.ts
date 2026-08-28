@@ -116,6 +116,15 @@ const storageSettingsSchema = z
 const promotionResultSchema = z
   .object({
     at: z.string(),
+    /**
+     * The daemon the move targeted. The result surface renders a stored
+     * result as actionable only while connected to this same daemon —
+     * without the binding, a result from daemon A (and its reload offer)
+     * would keep showing after connecting to daemon B. Optional because
+     * records persisted before the field existed lack it; those simply
+     * never match and age out on the next move.
+     */
+    daemonBaseUrl: httpUrl.optional(),
     /** The TARGET daemon workspace the record merged into. */
     workspaceId: z.string(),
     ok: z.boolean(),

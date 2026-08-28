@@ -136,39 +136,55 @@ export function PromoteWorkspaceSection({
     async (targetId: string) => {
       if (!daemon) return
       setFlow({ step: 'running', phase: 'record' })
-      const fetchImpl = createDaemonFetch(
-        daemon.baseUrl,
-        daemon.token ?? undefined,
-        baseFetch ?? globalThis.fetch.bind(globalThis),
-      )
-      const [{ promoteWorkspace }, { BrowserWorkspaceDocs }] = await Promise.all([
-        import('../../lib/promote-workspace.js'),
-        import('../../lib/browser-workspace-docs.js'),
-      ])
-      const outcome = await promoteWorkspace({
-        fetch: fetchImpl,
-        daemonBaseUrl: daemon.baseUrl,
-        workspaceId: targetId,
-        workspaceDocs: new BrowserWorkspaceDocs(),
-        onProgress: (phase) => setFlow({ step: 'running', phase }),
-      })
-      const record: PromotionResultRecord =
-        outcome.kind === 'ok'
-          ? {
-              at: new Date().toISOString(),
-              workspaceId: targetId,
-              ok: true,
-              promotedCount: outcome.promotedDocumentIds.length,
-              shadowedPaths: outcome.shadowedPaths,
-              blobsMissing: outcome.blobs.missing,
-              blobsFailed: outcome.blobs.failed,
-            }
-          : {
-              at: new Date().toISOString(),
-              workspaceId: targetId,
-              ok: false,
-              reason: outcome.reason,
-            }
+      let record: PromotionResultRecord
+      try {
+        const fetchImpl = createDaemonFetch(
+          daemon.baseUrl,
+          daemon.token ?? undefined,
+          baseFetch ?? globalThis.fetch.bind(globalThis),
+        )
+        const [{ promoteWorkspace }, { BrowserWorkspaceDocs }] = await Promise.all([
+          import('../../lib/promote-workspace.js'),
+          import('../../lib/browser-workspace-docs.js'),
+        ])
+        const outcome = await promoteWorkspace({
+          fetch: fetchImpl,
+          daemonBaseUrl: daemon.baseUrl,
+          workspaceId: targetId,
+          workspaceDocs: new BrowserWorkspaceDocs(),
+          onProgress: (phase) => setFlow({ step: 'running', phase }),
+        })
+        record =
+          outcome.kind === 'ok'
+            ? {
+                at: new Date().toISOString(),
+                daemonBaseUrl: daemon.baseUrl,
+                workspaceId: targetId,
+                ok: true,
+                promotedCount: outcome.promotedDocumentIds.length,
+                shadowedPaths: outcome.shadowedPaths,
+                blobsMissing: outcome.blobs.missing,
+                blobsFailed: outcome.blobs.failed,
+              }
+            : {
+                at: new Date().toISOString(),
+                daemonBaseUrl: daemon.baseUrl,
+                workspaceId: targetId,
+                ok: false,
+                reason: outcome.reason,
+              }
+      } catch {
+        // promoteWorkspace itself never throws — this net is for the dynamic
+        // imports (an offline chunk load). Without it the flow would stay
+        // 'running' forever, dialog open, trigger disabled, with no way out.
+        record = {
+          at: new Date().toISOString(),
+          daemonBaseUrl: daemon.baseUrl,
+          workspaceId: targetId,
+          ok: false,
+          reason: 'Part of the app failed to load. Reload the page and try again.',
+        }
+      }
       settingsStore.update((current) => ({
         ...current,
         migration: { ...current.migration, promotion: record },
@@ -208,29 +224,34 @@ export function PromoteWorkspaceSection({
       </Button>
 
       {/* Mounted whenever there is anything to report, so the outcome reads
-          here on every later visit — the persistent surface, not a toast. */}
+          here on every later visit — the persistent surface, not a toast.
+          Bound to the daemon it happened against: a result recorded under
+          daemon A (and its reload offer) must not read as actionable while
+          connected to daemon B. */}
       {flow.step === 'unavailable' && (
         <p data-testid="promote-unavailable" className="text-xs text-muted-foreground">
           {flow.reason}
         </p>
       )}
-      {lastResult !== undefined && flow.step !== 'running' && (
-        <div data-testid="promote-last-result" className="rounded-md border px-3 py-2 text-xs">
-          <p>{describeResult(lastResult)}</p>
-          {lastResult.ok && (
-            <Button
-              type="button"
-              variant="outline"
-              size="sm"
-              className="mt-2"
-              data-testid="promote-reload"
-              onClick={() => (reload ?? (() => window.location.assign('/')))()}
-            >
-              Reload and continue from the daemon
-            </Button>
-          )}
-        </div>
-      )}
+      {lastResult !== undefined &&
+        lastResult.daemonBaseUrl === daemon?.baseUrl &&
+        flow.step !== 'running' && (
+          <div data-testid="promote-last-result" className="rounded-md border px-3 py-2 text-xs">
+            <p>{describeResult(lastResult)}</p>
+            {lastResult.ok && (
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="mt-2"
+                data-testid="promote-reload"
+                onClick={() => (reload ?? (() => window.location.assign('/')))()}
+              >
+                Reload and continue from the daemon
+              </Button>
+            )}
+          </div>
+        )}
 
       <Dialog
         open={flow.step === 'confirm' || flow.step === 'running'}

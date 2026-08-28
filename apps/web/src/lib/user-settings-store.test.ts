@@ -200,6 +200,9 @@ describe('promotion result persistence', () => {
   it('round-trips a success result under migration.promotion', () => {
     const result = {
       at: '2026-08-28T12:00:00.000Z',
+      // The origin binding: the result surface shows a stored result as
+      // actionable only while connected to this same daemon.
+      daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws-a',
       ok: true,
       promotedCount: 3,
@@ -217,6 +220,7 @@ describe('promotion result persistence', () => {
   it('round-trips a failure result carrying the reason', () => {
     const result = {
       at: '2026-08-28T12:00:00.000Z',
+      daemonBaseUrl: 'http://127.0.0.1:3099',
       workspaceId: 'ws-a',
       ok: false,
       reason: 'Could not reach the daemon (network error).',

@@ -281,6 +281,35 @@ describe('PromoteWorkspaceSection', () => {
     expect(reload).toHaveBeenCalledTimes(1)
   })
 
+  it("a result recorded under one daemon is not shown as another daemon's", async () => {
+    await seedTwoDocuments()
+    const view = render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc())}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    await screen.findByTestId('promote-last-result')
+    view.unmount()
+
+    // Same browser, different daemon: the stored result (and its reload
+    // offer) belongs to the first daemon and must not read as this one's.
+    render(
+      <PromoteWorkspaceSection
+        daemon={{ baseUrl: 'http://127.0.0.1:4200', token: 'tok-2' }}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc())}
+        reload={vi.fn()}
+      />,
+    )
+    expect(screen.queryByTestId('promote-last-result')).toBeNull()
+    expect(screen.queryByTestId('promote-reload')).toBeNull()
+  })
+
   it('stays discoverable but disabled with no daemon connected', async () => {
     render(<PromoteWorkspaceSection settingsStore={createUserSettingsStore()} />)
     const trigger = screen.getByTestId('promote-workspace-open')
