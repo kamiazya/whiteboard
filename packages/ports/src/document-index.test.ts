@@ -1,5 +1,10 @@
 import { describe, expect, it } from 'vitest'
-import { compareDocumentPaths, documentEntrySchema } from './document-index.js'
+import {
+  compareDocumentPaths,
+  createWorkspaceInputSchema,
+  documentEntrySchema,
+  workspaceEntrySchema,
+} from './document-index.js'
 import { fc, fcTest } from './test-utils/fast-check.js'
 
 describe('compareDocumentPaths', () => {
@@ -73,5 +78,91 @@ describe('documentEntrySchema', () => {
       kind: 'spatial',
     })
     expect(parsed.success).toBe(false)
+  })
+})
+
+// ADR-0019's identity layers, their first consumer in this package. See
+// document-index.ts's doc comment for why canonicalId is not a separate
+// field: workspaceId already IS the canonical layer.
+describe('createWorkspaceInputSchema (ADR-0019 segment/displayName widening)', () => {
+  it('accepts a bare legacy workspaceId with neither field, as before', () => {
+    expect(createWorkspaceInputSchema.safeParse({ workspaceId: 'ws-conformance' }).success).toBe(
+      true,
+    )
+  })
+
+  it('accepts a workspaceId carrying a valid segment and displayName', () => {
+    const parsed = createWorkspaceInputSchema.safeParse({
+      workspaceId: 'ws-conformance',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects a ULID-shaped segment, case-insensitively', () => {
+    expect(
+      createWorkspaceInputSchema.safeParse({
+        workspaceId: 'ws',
+        segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }).success,
+    ).toBe(false)
+    expect(
+      createWorkspaceInputSchema.safeParse({
+        workspaceId: 'ws',
+        segment: '01arz3ndektsv4rrffq69g5fav',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a segment containing a path separator', () => {
+    expect(
+      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', segment: 'a/b' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an untrimmed or empty displayName', () => {
+    expect(
+      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', displayName: ' x ' }).success,
+    ).toBe(false)
+    expect(
+      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', displayName: '' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an unknown key', () => {
+    expect(
+      createWorkspaceInputSchema.safeParse({ workspaceId: 'ws', displayname: 'typo' }).success,
+    ).toBe(false)
+  })
+})
+
+describe('workspaceEntrySchema', () => {
+  it('accepts a bare legacy row (Wave-2-unminted rows carry neither field)', () => {
+    expect(workspaceEntrySchema.safeParse({ workspaceId: 'ws-conformance' }).success).toBe(true)
+  })
+
+  it('accepts a row carrying a valid segment and displayName', () => {
+    const parsed = workspaceEntrySchema.safeParse({
+      workspaceId: 'ws-conformance',
+      segment: 'team-notes',
+      displayName: 'Team notes',
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects a ULID-shaped segment', () => {
+    expect(
+      workspaceEntrySchema.safeParse({
+        workspaceId: 'ws',
+        segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }).success,
+    ).toBe(false)
+  })
+
+  it('rejects an unknown key', () => {
+    expect(workspaceEntrySchema.safeParse({ workspaceId: 'ws', displayname: 'typo' }).success).toBe(
+      false,
+    )
   })
 })

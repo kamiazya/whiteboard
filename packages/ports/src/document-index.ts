@@ -2,7 +2,9 @@ import {
   documentIdSchema,
   documentKindSchema,
   documentPathSchema,
+  workspaceDisplayNameSchema,
   workspaceIdSchema,
+  workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import { z } from 'zod'
 
@@ -55,8 +57,45 @@ export const createDocumentInputSchema = z
   .strict()
 export type CreateDocumentInput = z.infer<typeof createDocumentInputSchema>
 
-export const createWorkspaceInputSchema = z.object({ workspaceId: workspaceIdSchema }).strict()
+/**
+ * ADR-0019's user-facing (`segment`) and naming (`displayName`) layers, both
+ * optional: shape-validated here via the model schemas, but their PERSISTENCE
+ * and — for `segment` — their per-keeper UNIQUENESS are the registry
+ * implementation's job, not this contract's. An implementation is free to
+ * accept and currently ignore both fields; today every implementation does
+ * (serving them is the follow-up slice: mcp-server's `workspaceSummarySchema`
+ * + `workspaces` table columns + `smoke:e2e`).
+ *
+ * No `canonicalId` field: ADR-0019's canonical layer already IS
+ * `workspaceId`. Its schema tightens from `workspaceIdSchema` to the
+ * stricter `workspaceCanonicalIdSchema` only after both keepers' minting
+ * migrations land (tightening first would reject live data such as
+ * `'default'`/`'local'`) — a separate `canonicalId` field would just be a
+ * second spelling of the same layer racing that migration.
+ */
+export const createWorkspaceInputSchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    segment: workspaceSegmentSchema.optional(),
+    displayName: workspaceDisplayNameSchema.optional(),
+  })
+  .strict()
 export type CreateWorkspaceInput = z.infer<typeof createWorkspaceInputSchema>
+
+/**
+ * A `listWorkspaces` row. `segment`/`displayName` are OPTIONAL for the same
+ * reason `DocumentEntry`'s `name` is: a workspace created before ADR-0019's
+ * minting migration lands has neither, and an invented value would read as
+ * fact where there is none.
+ */
+export const workspaceEntrySchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    segment: workspaceSegmentSchema.optional(),
+    displayName: workspaceDisplayNameSchema.optional(),
+  })
+  .strict()
+export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
 
 export const resolveDocumentByIdInputSchema = z
   .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
@@ -257,7 +296,7 @@ export interface DocumentIndex {
    * the list is empty on a fresh index: apps/web's writes `local` when its
    * store is created, because that is the one the browser UI opens.
    */
-  listWorkspaces(): Promise<{ workspaceId: string }[]>
+  listWorkspaces(): Promise<WorkspaceEntry[]>
   /**
    * Fails `WorkspaceNotFoundError` if the workspace does not exist. Fails if
    * the path is taken. Creating never silently adopts an existing
