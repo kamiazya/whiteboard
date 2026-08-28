@@ -104,7 +104,6 @@ export const workspaceCanonicalIdSchema = z.string().regex(ULID_PATTERN, 'must b
  */
 export const workspaceSegmentSchema = z
   .string()
-  .min(1)
   .regex(
     DOCUMENT_PATH_SEGMENT_PATTERN,
     'workspace segment must be ASCII letters, digits and interior hyphens',

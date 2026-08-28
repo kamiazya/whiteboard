@@ -1,4 +1,5 @@
 import { RESERVED_ROOT_KEYS } from '../facets.js'
+import { DOCUMENT_PATH_SEGMENT_PATTERN } from '../ids.js'
 import type {
   MdastCellPhrasingContent,
   MdastFlowContent,
@@ -24,9 +25,6 @@ export const canonicalUlidArbitrary: fc.Arbitrary<string> = fc
 
 const nodeIdArbitrary: fc.Arbitrary<string> = fc.string({ minLength: 1, maxLength: 24 })
 
-const SEGMENT_ALNUM_CHARS = 'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789'
-const SEGMENT_INTERIOR_CHARS = `${SEGMENT_ALNUM_CHARS}-`
-
 // Mirrors workspaceSegmentSchema's own `.refine` (ids.ts): a canonical ULID
 // is exactly 26 Crockford base32 chars with a leading [0-7], matched
 // case-insensitively since Crockford decoding ignores case. Duplicated here
@@ -35,33 +33,19 @@ const SEGMENT_INTERIOR_CHARS = `${SEGMENT_ALNUM_CHARS}-`
 // shape the schema itself rejects, not to define the contract.
 const ULID_SHAPE_PATTERN = new RegExp(`^[${ULID_FIRST_CHARS}][${CROCKFORD_CHARS}]{25}$`, 'i')
 
-// Ordinary segment shape: one alnum char, or alnum-hyphen-interior bounded by
-// alnum on both ends (DOCUMENT_PATH_SEGMENT_PATTERN's grammar).
-const rawWorkspaceSegmentArbitrary: fc.Arbitrary<string> = fc.oneof(
-  fc.constantFrom(...SEGMENT_ALNUM_CHARS.split('')),
-  fc
-    .tuple(
-      fc.constantFrom(...SEGMENT_ALNUM_CHARS.split('')),
-      fc.array(fc.constantFrom(...SEGMENT_INTERIOR_CHARS.split('')), { maxLength: 30 }),
-      fc.constantFrom(...SEGMENT_ALNUM_CHARS.split('')),
-    )
-    .map(([first, middle, last]) => `${first}${middle.join('')}${last}`),
+// Ordinary segment shape, generated straight from the schema's own exported
+// grammar so the two cannot drift.
+const rawWorkspaceSegmentArbitrary: fc.Arbitrary<string> = fc.stringMatching(
+  DOCUMENT_PATH_SEGMENT_PATTERN,
 )
 
 // Deliberately mixed in at meaningful weight (not left to arise by chance
-// from the charset above, which would make a mutated exclusion filter pass
+// from the grammar above, which would make a mutated exclusion filter pass
 // vacuously): candidates shaped exactly like a canonical ULID, upper- and
 // lower-cased, so the exclusion filter below is actually exercised.
 const ulidShapedCandidateArbitrary: fc.Arbitrary<string> = fc
-  .tuple(
-    fc.constantFrom(...ULID_FIRST_CHARS.split('')),
-    fc.array(fc.constantFrom(...CROCKFORD_CHARS.split('')), { minLength: 25, maxLength: 25 }),
-    fc.boolean(),
-  )
-  .map(([first, rest, lower]) => {
-    const candidate = first + rest.join('')
-    return lower ? candidate.toLowerCase() : candidate
-  })
+  .tuple(canonicalUlidArbitrary, fc.boolean())
+  .map(([ulid, lower]) => (lower ? ulid.toLowerCase() : ulid))
 
 /**
  * Generates workspace segments valid-by-construction against
