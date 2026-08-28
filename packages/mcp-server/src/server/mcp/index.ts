@@ -13,6 +13,11 @@ import { registerDocumentTools } from './document-tools.js'
 import { wireMcpLogging } from './logging.js'
 import { registerMcpAppsExtension } from './mcp-apps.js'
 import {
+  type PairingLinkContext,
+  type PairingUnavailableReason,
+  registerPairingLinkTool,
+} from './pairing-link.js'
+import {
   buildDrawDiagramPrompt,
   getStandaloneHelpText,
   WHITEBOARD_DRAW_PROMPT,
@@ -20,7 +25,20 @@ import {
 } from './standalone-help.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 
-export async function createMcpServer() {
+export interface CreateMcpServerOptions {
+  /** Daemon origin + bootstrap token for wb_pairing_link_create. Absent on
+   *  the stdio entrypoint, which has no HTTP listener of its own to embed in
+   *  a pairing link — the tool stays registered there too (so tools/list is
+   *  one authoritative list across transports) but answers isError. */
+  pairing?: PairingLinkContext
+  /** Why `pairing` is absent, so the tool's refusal message names the real
+   *  cause instead of assuming stdio. Defaults to 'stdio' since that is this
+   *  module's own standalone entrypoint's reason — http-server.ts overrides
+   *  it per authMode when pairing is absent for an HTTP-connected caller. */
+  pairingUnavailableReason?: PairingUnavailableReason
+}
+
+export async function createMcpServer(options: CreateMcpServerOptions = {}) {
   // ensureWorkspaceId memoizes the resolve+save sequence per getDataDir() so the
   // HTTP /mcp handler does not race concurrent requests on the marker file.
   // Called for its prepareDataDir migration side effect ahead of the DB use
@@ -103,6 +121,7 @@ export async function createMcpServer() {
   )
 
   registerMcpAppsExtension(server)
+  registerPairingLinkTool(server, options.pairing, options.pairingUnavailableReason)
 
   const dataDir = getDataDir()
   const db = await getDb(dataDir)

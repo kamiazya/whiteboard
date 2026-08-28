@@ -152,6 +152,7 @@ const EXPECTED_TOOLS = [
   'wb_document_delete',
   'wb_document_resolve',
   'wb_document_list',
+  'wb_pairing_link_create',
 ]
 
 async function main() {
@@ -181,6 +182,18 @@ async function main() {
     throw new Error(lines.join('\n'))
   }
   console.log(`[e2e] tools/list → ${names.length} tools match expected set`)
+
+  // wb_pairing_link_create is registered on this stdio entrypoint too (one
+  // authoritative tools/list across transports), but stdio has no HTTP
+  // daemon of its own to embed in a pairing link — the success path is
+  // covered elsewhere (pairing-link.test.ts's in-process MCP client, and the
+  // HTTP-daemon verification recorded outside this offline smoke).
+  await expectToolError(
+    'wb_pairing_link_create',
+    {},
+    'over stdio with no HTTP daemon to pair with',
+    'standalone over stdio',
+  )
 
   // Unknown-workspace guard: without createWorkspace the create must fail
   // (workspaces never materialize implicitly from a typo'd workspaceId).

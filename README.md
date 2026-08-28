@@ -152,10 +152,12 @@ In your agent session, ask it to call `wb_document_create({ workspaceId: "defaul
 ## Pair with your local daemon
 
 Already have the browser canvas open (see [Get started](docs/tutorials/getting-started.md))
-and a local daemon running? Ask your AI agent to call the `create_pairing_link`
-MCP tool. It mints a `#wb=` link that carries a short-lived bootstrap token —
-open it in your browser to connect that tab to the daemon's workspaces,
-version history, branches, and merge, with live sync over WebSocket.
+and a local daemon running? Ask your AI agent to call the `wb_pairing_link_create`
+MCP tool. It mints a `#wb=` link that carries the daemon's bootstrap token —
+the same full-authority credential that authenticates every `/api/*` request,
+valid until it is rotated, not a short-lived or single-use token — open it in
+your browser to connect that tab to the daemon's workspaces, version history,
+branches, and merge, with live sync over WebSocket.
 
 - Loopback web origins (`http://127.0.0.1:...`) need no extra configuration.
 - The official hosted web app (`https://kamiazya-whiteboard.pages.dev`) can

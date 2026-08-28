@@ -1,8 +1,10 @@
 import { createHash } from 'node:crypto'
 import { request } from 'node:http'
 import { createServer } from 'node:net'
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
+import { decodeBase64UrlText } from '../shared/api-contracts/pairing-link.js'
 import {
   buildWhiteboardWsProtocolsWithTicket,
   WHITEBOARD_WS_PROTOCOL,
@@ -197,6 +199,42 @@ describe('startHttpServer oauth client registry', () => {
 
     const res = await fetch(`http://127.0.0.1:${port}/token`, { method: 'POST' })
     expect(res.status).toBe(404)
+  })
+})
+
+// The wiring this covers: http-server.ts composes daemonBaseUrl from the
+// bound host/port and threads it into createApp -> pairingLinkContext ->
+// wb_pairing_link_create. app.test.ts only feeds createApp a hand-built
+// daemonBaseUrl string, so a wrong interpolation in http-server.ts's own
+// composition (wrong variable, dropped port, mismatched host) would pass
+// every existing test green. This starts the real server via
+// startHttpServer and calls the tool over the real socket to confirm the
+// minted link's baseUrl actually matches the address the server bound.
+describe('startHttpServer daemonBaseUrl -> wb_pairing_link_create wiring', () => {
+  let running: RunningServer | undefined
+
+  afterEach(async () => {
+    await running?.close()
+    running = undefined
+  })
+
+  it('embeds the real bound host:port in the minted pairing link', async () => {
+    const port = await findAvailablePort(4650)
+    running = await startHttpServer({ port, host: '127.0.0.1' })
+
+    const client = new Client({ name: 'http-server-pairing-test', version: '1.0.0' })
+    const transport = new StreamableHTTPClientTransport(new URL(`http://127.0.0.1:${port}/mcp`))
+    await client.connect(transport)
+    try {
+      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
+      expect(res.isError, JSON.stringify(res)).not.toBe(true)
+      const result = res.structuredContent as { url: string }
+      const fragment = result.url.split('#wb=')[1]
+      const decoded = JSON.parse(decodeBase64UrlText(fragment ?? '')) as { baseUrl: string }
+      expect(decoded.baseUrl).toBe(`http://127.0.0.1:${port}`)
+    } finally {
+      await transport.close()
+    }
   })
 })
 

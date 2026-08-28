@@ -65,4 +65,11 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
   // plane on purpose: it is a UI contract with the host, not a tool a model
   // reads data through.
   canvas_view: { profile: READ_ONLY, title: 'Show a canvas inline in the chat' },
+  // Deliberately MUTATING rather than READ_ONLY despite touching no stored
+  // state: the result embeds a live daemon credential (a bootstrap token),
+  // so it must never be a candidate for an auto-run/read-only approval path.
+  wb_pairing_link_create: {
+    profile: MUTATING,
+    title: 'Mint a daemon-pairing link for the whiteboard web app',
+  },
 }

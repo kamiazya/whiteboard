@@ -13,7 +13,7 @@ import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
-import { normalizeBindHost } from './daemon-auth-binding.js'
+import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
 import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
@@ -231,6 +231,10 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     wsTicketStore,
     pairing,
     serverDeps,
+    // host is the bare form normalizeBindHost produced for server.listen();
+    // pairing-link.ts parses this string with `new URL(...)`, which needs
+    // an IPv6 literal bracketed.
+    daemonBaseUrl: buildDaemonBaseUrl(host, options.port),
   })
 
   setRuntimeTouchFn(touch)

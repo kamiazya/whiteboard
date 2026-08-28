@@ -81,7 +81,7 @@ What the UI does about it:
   not lend its own trust to an unproven claim.
 - Approving a grant is always an explicit click on the responding daemon's
   own consent page, which shows the requesting origin.
-- The trusted-direction bootstraps — the `create_pairing_link` MCP tool, or
+- The trusted-direction bootstraps — the `wb_pairing_link_create` MCP tool, or
   opening the hosted app from the daemon itself — carry the base URL and
   credential from the real daemon, so they avoid this exposure entirely.
   Prefer them when available.

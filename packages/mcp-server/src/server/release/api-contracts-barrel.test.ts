@@ -47,6 +47,10 @@ describe('api-contracts barrel scope', () => {
       // what keeps a URL out of the request (ADR-0012).
       './fonts.js',
       './pairing.js',
+      // pairing-link: the daemon-pairing-link `#wb=` fragment contract,
+      // exported so apps/web parses the same schema wb_pairing_link_create
+      // writes instead of a hand-written mirror that can silently drift.
+      './pairing-link.js',
       './runtime.js',
     ])
   })

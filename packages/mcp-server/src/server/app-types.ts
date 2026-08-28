@@ -56,6 +56,12 @@ interface LocalDaemonAppOptions {
   /** Daemon signing identity (security/daemon-identity.ts). Injectable for
    *  tests; when omitted, createApp loads-or-creates it from the data dir. */
   identity?: DaemonIdentity
+  /** This daemon's own bare origin (e.g. `http://127.0.0.1:3099`), threaded
+   *  into wb_pairing_link_create so the tool embeds the daemon's real
+   *  address instead of reading it from process.env. Absent in ad-hoc/test
+   *  callers with no real listener — the tool still registers and answers
+   *  isError, the same standalone behavior the stdio entrypoint gets. */
+  daemonBaseUrl?: string
 }
 
 export interface ServerModeAppOptions {
