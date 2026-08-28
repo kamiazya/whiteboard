@@ -188,6 +188,25 @@ no operator action is needed, and no CLI command exists to inspect or revoke
 individual entries any more. If you are auditing the data directory after an
 upgrade and the file is gone, this is why.
 
+## Move this workspace to the daemon
+
+Once a daemon is connected, you can move everything this browser keeps in
+one step from **Settings → Connections → This workspace**:
+
+1. Open **Settings → Connections** and find the **This workspace** section.
+2. Click **Move to daemon…**, choose the daemon workspace to move into, and
+   confirm.
+3. When the move finishes, the result stays visible in that section. Use
+   **Reload and continue from the daemon** to switch to working from the
+   daemon, or keep working in the browser.
+
+The move carries your documents, their full edit history, and the images
+they reference. Documents keep their identity, so links between them keep
+working on the daemon. If a path already exists in the chosen daemon
+workspace, both versions are kept and the pre-existing one is marked
+*shadowed* — nothing is renamed or overwritten. Your documents also stay in
+this browser; moving again later is safe and simply re-merges.
+
 ## Copy-first import
 
 If you have canvases stored only in this browser (from before a daemon was

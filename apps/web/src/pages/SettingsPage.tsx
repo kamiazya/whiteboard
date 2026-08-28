@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AppVersionRow } from '@/components/settings/AppVersionRow'
+import { PromoteWorkspaceSection } from '@/components/settings/PromoteWorkspaceSection'
 import type { PersistStepState } from '@/components/settings/SetupJourney'
 import { findVisibleJourneyBadge, SetupJourney } from '@/components/settings/SetupJourney'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
@@ -199,12 +200,17 @@ function ConnectionsSection({
 }) {
   if (!daemon) {
     return (
-      <section>
-        <p className="text-sm">Daemon — Not connected</p>
-        <p className="mt-1 text-xs text-muted-foreground">
-          A daemon on this machine holds durable storage and the AI agent connection for this app.
-        </p>
-      </section>
+      <div className="space-y-6">
+        <section>
+          <p className="text-sm">Daemon — Not connected</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            A daemon on this machine holds durable storage and the AI agent connection for this app.
+          </p>
+        </section>
+        {/* Discoverable while disabled: the move exists before its
+            precondition is met, so its condition can be read here. */}
+        <PromoteWorkspaceSection settingsStore={settingsStore} />
+      </div>
     )
   }
   const daemonFetch = createDaemonFetch(daemon.baseUrl, daemon.token ?? undefined)
@@ -217,6 +223,7 @@ function ConnectionsSection({
         <section aria-label="Storage">
           <StorageReportCard />
         </section>
+        <PromoteWorkspaceSection daemon={daemon} settingsStore={settingsStore} />
         {/* Management, not status: the chip reports which daemon keeps this
             workspace, and changing that is an intent you arrive here with. */}
         <section aria-label="This daemon" className="flex flex-col gap-1.5">

@@ -188,6 +188,53 @@ describe('createUserSettingsStore', () => {
   })
 })
 
+describe('promotion result persistence', () => {
+  beforeEach(() => {
+    localStorage.clear()
+  })
+
+  // The promote UI's result surface is persistent (never toast-only): the
+  // outcome must survive navigating away from Settings and back, and a full
+  // reload — so it lives here, beside the other browser-to-daemon migration
+  // state.
+  it('round-trips a success result under migration.promotion', () => {
+    const result = {
+      at: '2026-08-28T12:00:00.000Z',
+      workspaceId: 'ws-a',
+      ok: true,
+      promotedCount: 3,
+      shadowedPaths: ['contested'],
+      blobsMissing: [],
+      blobsFailed: [],
+    }
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      migration: { ...current.migration, promotion: result },
+    }))
+    expect(createUserSettingsStore().load().migration.promotion).toEqual(result)
+  })
+
+  it('round-trips a failure result carrying the reason', () => {
+    const result = {
+      at: '2026-08-28T12:00:00.000Z',
+      workspaceId: 'ws-a',
+      ok: false,
+      reason: 'Could not reach the daemon (network error).',
+    }
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      migration: { ...current.migration, promotion: result },
+    }))
+    expect(createUserSettingsStore().load().migration.promotion).toEqual(result)
+  })
+
+  it('parses a stored payload from before the promotion field existed', () => {
+    const store = createUserSettingsStore()
+    store.save(defaultUserSettings())
+    expect(createUserSettingsStore().load().migration.promotion).toBeUndefined()
+  })
+})
+
 describe('createUserSettingsStore — beta banner dismissal', () => {
   beforeEach(() => {
     localStorage.clear()
