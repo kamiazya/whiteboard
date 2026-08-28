@@ -18,10 +18,16 @@
  * surface must run after the startup fold (any FoldingBrowserIndex read
  * performs it) — the same ordering every other record consumer relies on.
  */
-import { readWorkspaceDocuments } from '@kamiazya/whiteboard-loro-adapter'
-import { apiErrorReason } from '@kamiazya/whiteboard-mcp/api-contracts'
+import {
+  documentContainers,
+  readSpatialCanvas,
+  readWorkspaceDocuments,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { apiErrorReason, documentFileApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
+import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { listDocuments } from './daemon-api-client.js'
+import { DocumentFileStore } from './document-file-store.js'
 import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 
 export interface PromoteWorkspaceOptions {
@@ -40,8 +46,17 @@ export type PromoteWorkspaceResult =
       promotedDocumentIds: string[]
       /** Paths the merge left contested; surfaced, never auto-resolved. */
       shadowedPaths: string[]
-      /** File/image bytes live outside the record; their transfer is its own increment. */
-      blobsPending: true
+      /**
+       * Image bytes live OUTSIDE the record (the content-addressed file
+       * store), so each referenced image travels separately through the
+       * daemon's file route. Per-file outcomes, because one unreadable image
+       * must not fail — or silently hollow out — the whole promotion:
+       * `missing` are references whose bytes are already gone in the browser
+       * (the promoted document was equally broken before), `failed` are
+       * uploads the daemon refused or the network dropped — safe to re-run,
+       * the whole promotion is an idempotent merge.
+       */
+      blobs: { transferred: string[]; missing: string[]; failed: string[] }
     }
   | { kind: 'failed'; reason: string }
 
@@ -69,10 +84,36 @@ export async function promoteWorkspace(
   }
 }
 
+/**
+ * The image references the record's spatial documents carry, each mapped to
+ * its owning document's path (the address the daemon's file route wants).
+ * The walk mirrors the daemon-side GC's live-state pass: a 'file' node whose
+ * value carries the asset prefix is a reference; markdown documents embed
+ * images only through those spatial nodes.
+ */
+function collectImageRefs(
+  record: Parameters<typeof readWorkspaceDocuments>[0],
+  entries: ReturnType<typeof readWorkspaceDocuments>,
+): Map<string, string> {
+  const refs = new Map<string, string>()
+  for (const entry of entries) {
+    if (entry.kind !== 'spatial') continue
+    for (const node of readSpatialCanvas(documentContainers(record, entry.documentId)).nodes) {
+      if (node.type !== 'file' || !isImageRef(node.file)) continue
+      const fileId = imageRefId(node.file)
+      if (!refs.has(fileId)) refs.set(fileId, entry.path)
+    }
+  }
+  return refs
+}
+
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
   const { fetch, daemonBaseUrl, workspaceId, workspaceDocs } = options
+  // The keeper's own store, like BrowserWorkspaceDocs above: both address
+  // the same claimed database, so tests seed through the production path.
+  const fileStore = new DocumentFileStore()
 
   const record = await workspaceDocs.open(BROWSER_WORKSPACE_ID)
   if (record === null) {
@@ -81,7 +122,8 @@ async function promoteWorkspaceUnsafe(
   // Read from the record ITSELF, not echoed back from the daemon: identity
   // preservation means these exact ids resolve on the other side, and the
   // acceptance tests hold the route to that.
-  const promotedDocumentIds = readWorkspaceDocuments(record).map((entry) => entry.documentId)
+  const entries = readWorkspaceDocuments(record)
+  const promotedDocumentIds = entries.map((entry) => entry.documentId)
 
   const res = await fetch(
     `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/update`,
@@ -105,5 +147,25 @@ async function promoteWorkspaceUnsafe(
     )
     .catch(() => [])
 
-  return { kind: 'ok', promotedDocumentIds, shadowedPaths, blobsPending: true }
+  // The record is on the daemon now, so its documents already resolve there;
+  // the images travel last, and per-file — a single unreadable or refused
+  // upload lands in the report instead of failing the merge that already
+  // happened.
+  const blobs = { transferred: [] as string[], missing: [] as string[], failed: [] as string[] }
+  for (const [fileId, path] of collectImageRefs(record, entries)) {
+    const blob = await fileStore.get(fileId)
+    if (blob === null) {
+      blobs.missing.push(fileId)
+      continue
+    }
+    const res = await fetch(`${daemonBaseUrl}${documentFileApiUrl(workspaceId, path, fileId)}`, {
+      method: 'PUT',
+      headers: { 'Content-Type': blob.type || 'image/png' },
+      body: blob,
+    }).catch(() => null)
+    if (res?.ok) blobs.transferred.push(fileId)
+    else blobs.failed.push(fileId)
+  }
+
+  return { kind: 'ok', promotedDocumentIds, shadowedPaths, blobs }
 }
