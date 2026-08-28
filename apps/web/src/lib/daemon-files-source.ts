@@ -12,7 +12,9 @@ import {
   getWorkspaceDocumentTags,
   getWorkspaceNames,
   listDocuments,
+  listTrash,
   renameDocumentPath,
+  restoreFromTrash,
   searchWorkspaceDocuments,
   setDocumentDisplayName,
   setDocumentPinned,
@@ -113,6 +115,14 @@ export function createDaemonFilesSource(
 
     loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {
       return getDocumentSnapshot(daemonFetch, daemonBaseUrl, workspaceId, entry.path)
+    },
+
+    async listTrash() {
+      return (await listTrash(daemonFetch, daemonBaseUrl, workspaceId)).entries
+    },
+
+    async restoreFromTrash(documentId: string): Promise<void> {
+      await restoreFromTrash(daemonFetch, daemonBaseUrl, workspaceId, documentId)
     },
   }
 }

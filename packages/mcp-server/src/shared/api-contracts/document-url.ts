@@ -39,6 +39,15 @@ export function documentsApiUrl(workspaceId: string, path: string, suffix = ''):
   return suffix === '' ? base : `${base}/${suffix}`
 }
 
+/** The workspace trash listing; restore appends /:documentId/restore. */
+export function trashApiUrl(workspaceId: string): string {
+  return `/api/workspaces/${encodeURIComponent(workspaceId)}/trash`
+}
+
+export function trashRestoreApiUrl(workspaceId: string, documentId: string): string {
+  return `${trashApiUrl(workspaceId)}/${encodeURIComponent(documentId)}/restore`
+}
+
 /**
  * Splits a request path in the shape above into its parts, or null when it
  * is not one. Written by hand rather than as a Hono `{.+}` param: Hono's

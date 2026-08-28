@@ -71,6 +71,8 @@ interface MockRoutes {
    *  default. Consulted per call, so a test can answer 404 once and then
    *  behave normally — a workspace deleted out from under the page. */
   onListDocuments?: (workspaceId: string) => Response | undefined
+  /** Rows the trash GET answers with; defaults to an empty trash. */
+  trashByWorkspace?: Record<string, Array<{ documentId: string; path: string; deletedAt: number }>>
 }
 
 function installFetchMock(routes: MockRoutes) {
@@ -106,6 +108,13 @@ function installFetchMock(routes: MockRoutes) {
       const path = decodeURIComponent(canvasDeleteMatch[2])
       const override = routes.onDeleteCanvas?.(workspaceId, path)
       return Promise.resolve(override ?? jsonResponse({ ok: true }))
+    }
+    const trashMatch = url.match(/\/api\/workspaces\/([^/]+)\/trash$/)
+    if (trashMatch && (!init || init.method === undefined)) {
+      const workspaceId = decodeURIComponent(trashMatch[1])
+      return Promise.resolve(
+        jsonResponse({ entries: routes.trashByWorkspace?.[workspaceId] ?? [] }),
+      )
     }
     const namesMatch = url.match(/\/api\/workspaces\/([^/]+)\/names$/)
     if (namesMatch) {
@@ -1495,6 +1504,26 @@ describe('DaemonIndexPage', () => {
     // the result, same as the toolbar's "New canvas" control.
     await waitFor(() => expect(onOpenDocument).toHaveBeenCalledWith('ws-a', 'untitled'))
     expect(created).toEqual([['ws-a', 'untitled']])
+  })
+
+  it('keeps the panel when the workspace lists nothing but its trash is not empty', async () => {
+    // Deleting the last document just filled the trash; swapping to the
+    // onboarding state would hide the one affordance that undoes it — the
+    // same rule BrowserIndexPage keeps for the browser keeper.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }],
+      documentsByWorkspace: { 'ws-a': [] },
+      trashByWorkspace: {
+        'ws-a': [
+          { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'doomed', deletedAt: 1_700_000 },
+        ],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    expect(await screen.findByTestId('trash-section')).toBeTruthy()
+    expect(screen.queryByText('What will you make first?')).toBeNull()
   })
 
   it('the empty state also offers a markdown note, sending its kind and opening it', async () => {

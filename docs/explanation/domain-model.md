@@ -123,6 +123,12 @@ That split is **gone**, in four steps recorded in the migration log:
   by the listing contract. Rows recorded before kinds existed were this
   project's own pre-release data and are deleted at startup, so "kind never
   recorded" is no longer a state a surface has to render.
+- A delete **evacuates before it removes**: the document's subtree is
+  exported into content-addressed blob storage and recorded in the
+  workspace's trash, so the file browser can list what went and restore it
+  under the **same `documentId`** — anything that named the document (a
+  share link, an embed) resolves to it again after a restore. The trash
+  section appears only when it holds something.
 - Because placement is CRDT state, two replicas can merge into **one path
   holding two documents**. Nothing is auto-renamed: the earlier document
   keeps the path, later ones are listed as *shadowed* (the gallery badges

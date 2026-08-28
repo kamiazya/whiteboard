@@ -38,6 +38,25 @@ import { BLOBS_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 
 /**
+ * Realm-independent, unlike `z.instanceof(Uint8Array)`: structured clone can
+ * hand back a Uint8Array minted in another realm (jsdom's fake-indexeddb
+ * does), and instanceof then rejects a perfectly stored record — the same
+ * class-identity family as ports' isWorkspaceNotFoundError. The toString tag
+ * names the type but IS spoofable by a plain object carrying
+ * `Symbol.toStringTag`, so `ArrayBuffer.isView` — which reads the internal
+ * typed-array slot and also holds across realms — is what proves the value
+ * is a genuine view rather than an object wearing the name.
+ */
+export function isStoredUint8Array(value: unknown): value is Uint8Array {
+  return (
+    value instanceof Uint8Array ||
+    (ArrayBuffer.isView(value) && Object.prototype.toString.call(value) === '[object Uint8Array]')
+  )
+}
+
+const uint8ArraySchema = z.custom<Uint8Array>(isStoredUint8Array)
+
+/**
  * A stored blob. `v` is the envelope version: a record written by a future
  * shape reads as a MISS rather than a crash, matching how every other store
  * in this app treats an envelope it does not recognise.
@@ -50,7 +69,7 @@ import { inTransaction, request } from './idb-tx.js'
 const blobRecordSchema = z
   .object({
     v: z.literal(1),
-    bytes: z.instanceof(Uint8Array),
+    bytes: uint8ArraySchema,
     contentType: z.string().min(1).optional(),
   })
   .strict()

@@ -129,7 +129,9 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     )
 
     // Back to the browser, then delete both documents through the preview
-    // pane's Delete and the real AlertDialog: the onboarding state returns.
+    // pane's Delete and the real AlertDialog. Deleting the LAST document must
+    // NOT swap to onboarding: the deletes just filled the trash, and the
+    // Trash section is the one affordance that undoes them.
     await router.navigate(-1)
     await screen.findAllByTestId('card-title', undefined, { timeout: 15_000 })
     for (let remaining = 2; remaining > 0; remaining--) {
@@ -147,6 +149,14 @@ describe('browser list landing (browser — real IndexedDB)', () => {
         },
       )
     }
-    await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
+    const trash = await screen.findByTestId('trash-section', undefined, { timeout: 15_000 })
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+
+    // Restore one from the trash: the card returns to the list.
+    await userEvent.click(within(trash).getByText(/^Trash \(2\)/))
+    await userEvent.click((await within(trash).findAllByRole('button', { name: 'Restore' }))[0]!)
+    await waitFor(() => expect(screen.queryAllByTestId('card-title')).toHaveLength(1), {
+      timeout: 15_000,
+    })
   })
 })

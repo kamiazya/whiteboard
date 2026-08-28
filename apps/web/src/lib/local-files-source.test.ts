@@ -13,6 +13,7 @@ import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { createLocalFilesSource } from './local-files-source.js'
 import { LoroStore } from './loro-store.js'
+import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('local-files-source')
 
@@ -171,5 +172,50 @@ describe('createLocalFilesSource tags', () => {
     const entries = await createLocalFilesSource().listDocuments()
     expect(entries.find((e) => e.path === 'tagged')?.tags).toEqual(['release', 'q3'])
     expect(entries.find((e) => e.path === 'plain')?.tags).toBeUndefined()
+  })
+})
+
+describe('createLocalFilesSource trash', () => {
+  beforeEach(clearWhiteboardDb)
+
+  it('exposes the shared index trash: delete lists it, restore brings it back', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const entry = await index.createDocument({
+      workspaceId: 'local',
+      path: 'doomed',
+      kind: 'spatial',
+    })
+    await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
+    const source = createLocalFilesSource({ index })
+    await index.deleteDocument({ workspaceId: 'local', path: 'doomed' })
+
+    const trash = await source.listTrash?.()
+    expect(trash?.map((row) => row.documentId)).toEqual([entry.documentId])
+
+    await source.restoreFromTrash?.(entry.documentId)
+    const listed = await source.listDocuments()
+    expect(listed.map((row) => row.documentId)).toContain(entry.documentId)
+    expect(await source.listTrash?.()).toEqual([])
+  })
+
+  it('rejects a restore that brought nothing back, so the UI can say so', async () => {
+    // The index answers null for an id that is not in the trash; swallowing
+    // that resolves the button's promise and the section reloads with the
+    // row still there — a silent no-op. The daemon path already rejects
+    // (its route 404s); the browser path must agree.
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const source = createLocalFilesSource({ index })
+
+    await expect(source.restoreFromTrash?.('01ARZ3NDEKTSV4RRFFQ69G5FAV')).rejects.toThrow()
+  })
+
+  it('stays capability-less over an index that keeps no trash', async () => {
+    // The legacy row-plane index has no listTrash/restoreDocument, so the
+    // source must not offer the affordance it could not honour.
+    const source = createLocalFilesSource({ index: new IdbDocumentIndex() })
+    expect(source.listTrash).toBeUndefined()
+    expect(source.restoreFromTrash).toBeUndefined()
   })
 })

@@ -47,6 +47,38 @@ async function selectCard(title: string) {
 }
 
 describe('BrowserIndexPage', () => {
+  it('an empty list with a non-empty trash keeps the panel — restore must stay reachable', async () => {
+    // Deleting the LAST document must not swap to onboarding: the Trash
+    // section lives in the panel, and onboarding would hide the one
+    // affordance that undoes the delete right when it is needed.
+    const store = await seededStore([])
+    const indexWithTrash = store.index as typeof store.index & {
+      listTrash?: () => Promise<{ documentId: string; path: string; deletedAt: number }[]>
+      restoreDocument?: (input: unknown) => Promise<null>
+    }
+    indexWithTrash.listTrash = async () => [
+      { documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', path: 'gone', deletedAt: 1_700_000 },
+    ]
+    indexWithTrash.restoreDocument = async () => null
+    renderPage(store)
+
+    await screen.findByTestId('trash-section')
+    expect(screen.queryByText('What will you make first?')).toBeNull()
+  })
+
+  it('an empty list with an empty trash still onboards', async () => {
+    const store = await seededStore([])
+    const indexWithTrash = store.index as typeof store.index & {
+      listTrash?: () => Promise<{ documentId: string; path: string; deletedAt: number }[]>
+      restoreDocument?: (input: unknown) => Promise<null>
+    }
+    indexWithTrash.listTrash = async () => []
+    indexWithTrash.restoreDocument = async () => null
+    renderPage(store)
+
+    await screen.findByText('What will you make first?')
+  })
+
   it('lists documents in the folder pane with name and kind marker', async () => {
     const store = await seededStore([
       {

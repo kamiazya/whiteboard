@@ -66,6 +66,21 @@ export interface WorkspaceFilesSource {
    * of a document the user is not looking at.
    */
   loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array>
+  /**
+   * What a delete evacuated, restorable. OPTIONAL like `setPinned`: the
+   * capability belongs to a keeper whose index keeps a trash, and the panel
+   * omits the section rather than offering a restore that cannot happen.
+   */
+  listTrash?(): Promise<readonly TrashRow[]>
+  /** Bring one evacuated document back under the SAME documentId. */
+  restoreFromTrash?(documentId: string): Promise<void>
+}
+
+/** One trash row, as the panel shows it: where it was, and when it went. */
+export interface TrashRow {
+  readonly documentId: string
+  readonly path: string
+  readonly deletedAt: number
 }
 
 /**

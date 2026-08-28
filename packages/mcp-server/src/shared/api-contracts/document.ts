@@ -116,6 +116,30 @@ export const updateDocumentResponseSchema = z.object({
 })
 
 // DELETE /api/workspaces/:workspaceId/documents/:path — success body.
+// The trash: what a delete evacuated, listed for a human and restorable by
+// documentId. Metadata only — blob digests are the store's business and
+// never cross this boundary.
+export const trashEntrySummarySchema = z
+  .object({
+    documentId: z.string().min(1),
+    path: z.string().min(1),
+    deletedAt: z.number().int().nonnegative(),
+  })
+  .strict()
+
+export const listTrashResponseSchema = z.object({
+  entries: z.array(trashEntrySummarySchema),
+})
+
+export const restoreTrashResponseSchema = z.object({
+  restored: z
+    .object({
+      documentId: z.string().min(1),
+      path: z.string().min(1),
+    })
+    .strict(),
+})
+
 export const deleteDocumentResponseSchema = z.object({
   ok: z.literal(true),
 })
@@ -205,6 +229,9 @@ export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
 export type CreateDocumentResponse = z.infer<typeof createDocumentResponseSchema>
 export type UpdateDocumentResponse = z.infer<typeof updateDocumentResponseSchema>
 export type DeleteDocumentResponse = z.infer<typeof deleteDocumentResponseSchema>
+export type TrashEntrySummary = z.infer<typeof trashEntrySummarySchema>
+export type ListTrashResponse = z.infer<typeof listTrashResponseSchema>
+export type RestoreTrashResponse = z.infer<typeof restoreTrashResponseSchema>
 export type RenameDocumentPathRequest = z.infer<typeof renameDocumentPathRequestSchema>
 export type RenameDocumentPathResponse = z.infer<typeof renameDocumentPathResponseSchema>
 export type DocumentExistsResponse = z.infer<typeof canvasExistsResponseSchema>

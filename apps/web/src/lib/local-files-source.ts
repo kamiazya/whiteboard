@@ -234,5 +234,36 @@ export function createLocalFilesSource(
     async loadSpatialSnapshot(entry: WorkspaceDocumentEntry): Promise<Uint8Array> {
       return (await loadCurrentDoc(entry)).export({ mode: 'snapshot' })
     },
+
+    // Present exactly when the index keeps a trash (the tree index does; the
+    // port does not promise one). Structural rather than instanceof, for the
+    // same cross-realm reason ports' isWorkspaceNotFoundError exists.
+    ...('listTrash' in index && 'restoreDocument' in index
+      ? {
+          async listTrash() {
+            const rows = await (index as FoldingBrowserIndex).listTrash({
+              workspaceId: BROWSER_WORKSPACE_ID,
+            })
+            return rows.map((row) => ({
+              documentId: row.documentId,
+              path: row.path,
+              deletedAt: row.deletedAt,
+            }))
+          },
+          async restoreFromTrash(documentId: string) {
+            const restored = await (index as FoldingBrowserIndex).restoreDocument({
+              workspaceId: BROWSER_WORKSPACE_ID,
+              documentId,
+            })
+            // null means nothing came back — surfacing it is what lets the
+            // section show its restore error instead of silently reloading
+            // with the row still there. The daemon path already rejects here
+            // (its route answers 404); the two keepers must agree.
+            if (restored === null) {
+              throw new Error(`Nothing restorable for "${documentId}"`)
+            }
+          },
+        }
+      : {}),
   }
 }
