@@ -6,6 +6,7 @@ import {
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
+  workspaceEntrySchema,
 } from '../index.js'
 
 /**
@@ -430,6 +431,43 @@ export function describeDocumentIndexConformance(
       } finally {
         await dispose()
       }
+    })
+
+    // ADR-0019's identity layers ride along on createWorkspace/listWorkspaces
+    // without being SERVED yet: every implementation accepts segment and
+    // displayName and currently ignores them, so this deliberately does NOT
+    // assert echo-back. Serving stored values is the follow-up slice
+    // (mcp-server: widen workspaceSummarySchema + workspaces table columns +
+    // smoke:e2e).
+    it('accepts a createWorkspace carrying segment and displayName, currently ignored', async () => {
+      await withIndex(async (index) => {
+        await index.createWorkspace({
+          workspaceId: 'ws-identity',
+          segment: 'team-notes',
+          displayName: 'Team notes',
+        })
+        // Idempotent, same as the bare-id case: re-creating is not an error.
+        await index.createWorkspace({
+          workspaceId: 'ws-identity',
+          segment: 'team-notes',
+          displayName: 'Team notes',
+        })
+
+        const ids = (await index.listWorkspaces()).map((w) => w.workspaceId)
+        expect(ids).toContain('ws-identity')
+      })
+    })
+
+    it('every listWorkspaces row parses against workspaceEntrySchema', async () => {
+      await withIndex(async (index) => {
+        const rows = await index.listWorkspaces()
+        // A guard that never reaches its subject passes vacuously — the
+        // shared fixture creates two workspaces, so this cannot be empty.
+        expect(rows.length).toBeGreaterThan(0)
+        for (const row of rows) {
+          expect(workspaceEntrySchema.safeParse(row).success).toBe(true)
+        }
+      })
     })
   })
 }

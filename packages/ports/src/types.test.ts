@@ -9,6 +9,7 @@ import type {
   BlobPutResult,
   BlobStore,
 } from './blob-store.js'
+import type { CreateWorkspaceInput, DocumentIndex, WorkspaceEntry } from './document-index.js'
 import type {
   AppendDeltasInput,
   AppendDeltasResult,
@@ -63,6 +64,17 @@ it('BlobStore: every method param/return is exactly its named DTO', () => {
 
   expectTypeOf<Parameters<BlobStore['delete']>[0]>().toEqualTypeOf<BlobDeleteInput>()
   expectTypeOf<Awaited<ReturnType<BlobStore['delete']>>>().toEqualTypeOf<void>()
+})
+
+it('DocumentIndex: createWorkspace/listWorkspaces param/return are exactly their named DTOs', () => {
+  expectTypeOf<
+    Parameters<DocumentIndex['createWorkspace']>[0]
+  >().toEqualTypeOf<CreateWorkspaceInput>()
+  expectTypeOf<Awaited<ReturnType<DocumentIndex['createWorkspace']>>>().toEqualTypeOf<void>()
+
+  expectTypeOf<Awaited<ReturnType<DocumentIndex['listWorkspaces']>>>().toEqualTypeOf<
+    WorkspaceEntry[]
+  >()
 })
 
 it('PresenceChannel: publish param and subscribe callback param are PresenceState; subscribe return is control-plane (not a DTO)', () => {

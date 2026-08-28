@@ -11,6 +11,7 @@ import type {
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
+  WorkspaceEntry,
 } from '../index.js'
 import {
   compareDocumentPaths,
@@ -64,7 +65,7 @@ export class InMemoryDocumentIndex implements DocumentIndex {
     this.#workspaces.add(workspaceId)
   }
 
-  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+  async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return [...this.#workspaces].map((workspaceId) => ({ workspaceId }))
   }
 
