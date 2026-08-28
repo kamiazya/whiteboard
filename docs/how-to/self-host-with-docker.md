@@ -19,8 +19,9 @@ tokens with server JWT authentication.
 # 1. Copy the env template and fill in your values.
 cp .env.server.example .env
 
-# 2. Build and start the container.
-docker compose -f docker-compose.server.yml up -d
+# 2. Build and start the container. NODE_VERSION is a required build
+#    argument — the image pins the same Node release the repo develops on.
+NODE_VERSION="$(cat .node-version)" docker compose -f docker-compose.server.yml up -d --build
 
 # 3. Check the server is healthy.
 docker compose -f docker-compose.server.yml ps
