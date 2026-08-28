@@ -16,11 +16,16 @@ human reads. Nothing separates them:
   workspace id across the keeper boundary (the daemon pins `'local'` as
   unmintable and answers 404), and that stopgap cannot survive the browser
   holding more than one workspace.
-- Daemon workspace ids are user-chosen visible strings (`default`,
-  `dev-check`). Two daemons both holding `default` are two different
-  workspaces under one name, which any future cross-daemon or sync feature
-  would trip over — and renaming one is impossible, because the "name" is
-  also the storage key everything else is keyed on.
+- Daemon workspace ids come from two allocators, and neither separates the
+  layers. A fresh install's current workspace is minted by `nanoid()`
+  (`current-workspace.ts`) — machine-random, so unreadable as a handle, yet
+  still unrenameable because it is the storage key. Additional workspaces
+  take caller-chosen strings (`default`, `dev-check`), which read well but
+  collide across daemons: two daemons both holding `default` are two
+  different workspaces under one name, which any future cross-daemon or
+  sync feature would trip over. The single string forces that choice —
+  readable-but-colliding or unique-but-opaque — because it carries all
+  three roles at once.
 - `workspaceSummarySchema` carries `{ workspaceId }` and nothing else, so
   the promote dialog's workspace selector shows raw ids — exactly what
   `apps/web/DESIGN.md`'s "Raw identifiers are not chrome" rule exists to
@@ -83,6 +88,18 @@ Decisions taken with the words they were taken in (user decisions,
   explicitly. The switch must settle the outgoing workspace's in-flight
   writes before the incoming one mounts (flush-before-switch); the switch
   slice pins that invariant with a test.
+- **Promotion neither preserves nor mints a workspace identity.** The
+  whole-workspace move keeps its shape: it merges the browser record's
+  CONTENT into an existing daemon workspace the user chooses, and the
+  target's canonical id, segment, and display name are the target's own,
+  untouched by the move. The source browser workspace's identity metadata
+  never crosses the keeper boundary, so a move can violate no registry
+  uniqueness and split no `DocRef` — document identity carries (that is the
+  point of promotion), workspace identity does not, and document-path
+  collisions inside the merged record keep surfacing as shadowed (ADR-0007
+  addendum). A future "promote as a NEW daemon workspace" would mint a fresh
+  daemon-side canonical id at creation like any other workspace, and is out
+  of scope here.
 - **Names and segments are per-keeper registry metadata, not CRDT state.**
   The daemon already keeps `workspaces.displayName` in the registry row —
   `names-store.ts` states the rationale in place ("it names the container,
