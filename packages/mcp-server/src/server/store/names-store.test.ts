@@ -93,6 +93,19 @@ describe('names-store', () => {
     expect(names.documents).toEqual({})
   })
 
+  // Pins that PUT /api/workspaces/:id/name (setWorkspaceName) writes the
+  // SAME `workspaces.displayName` column GET /api/workspaces
+  // (workspaceRegistry().listWorkspaces()) serves — one column, two routes.
+  it('setWorkspaceName writes the column workspaceRegistry().listWorkspaces() serves', async () => {
+    const { workspaceRegistry } = await import('./document-store.js')
+    await setWorkspaceName('sess-1', 'My Workspace')
+    const rows = await workspaceRegistry().listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'sess-1')).toEqual({
+      workspaceId: 'sess-1',
+      displayName: 'My Workspace',
+    })
+  })
+
   it('setDocumentDisplayName stores names per path', async () => {
     await setDocumentDisplayName('sess-1', 'arch/overview', 'Architecture Overview')
     await setDocumentDisplayName('sess-1', 'notes/meeting', 'Team meeting notes')

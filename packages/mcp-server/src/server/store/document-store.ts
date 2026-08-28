@@ -31,7 +31,13 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { chunkSnapshot, DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
+import {
+  type CreateWorkspaceInput,
+  chunkSnapshot,
+  createWorkspaceInputSchema,
+  DocumentPathTakenError,
+  type WorkspaceEntry,
+} from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
   DocumentStoreWorkspaceDocs,
@@ -314,13 +320,24 @@ export function cacheBackedWorkspaceDocs(): {
  * one row-shaped truth the collapse kept (who this daemon keeps, not what
  * they contain). `saveWorkspaceDoc` upserts it, so a workspace exists here
  * exactly when a stored record does.
+ *
+ * Serves ADR-0019's `segment`/`displayName` identity layers when the row
+ * carries them — absent, never `null`/`''`, for a legacy workspace that
+ * predates migration 0018 or was never given either.
  */
-export function workspaceRegistry(): { listWorkspaces(): Promise<{ workspaceId: string }[]> } {
+export function workspaceRegistry(): { listWorkspaces(): Promise<WorkspaceEntry[]> } {
   return {
     async listWorkspaces() {
       const db = await dbReady()
-      const rows = await db.selectFrom('workspaces').select(['id']).execute()
-      return rows.map((row) => ({ workspaceId: row.id }))
+      const rows = await db
+        .selectFrom('workspaces')
+        .select(['id', 'segment', 'displayName'])
+        .execute()
+      return rows.map((row) => ({
+        workspaceId: row.id,
+        ...(row.segment === null ? {} : { segment: row.segment }),
+        ...(row.displayName === null ? {} : { displayName: row.displayName }),
+      }))
     },
   }
 }
@@ -343,8 +360,26 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
   // disjoint mutexes over the same workspace record allow the lost-update
   // interleaving workspace-lock.ts's doc comment describes. Re-entrant, so
   // a caller already inside the lock (routes, teardown) is unaffected.
-  override async createWorkspace(input: { workspaceId: string }): Promise<void> {
-    return withWorkspaceWriteLock(input.workspaceId, () => super.createWorkspace(input))
+  /**
+   * Validated at this boundary (createWorkspaceInputSchema.parse) BEFORE any
+   * write, so a rejected segment/displayName leaves no half-created
+   * workspace. The registry identity (segment/displayName) is claimed
+   * FIRST, inside the write lock, ahead of the tree record `super` creates —
+   * a refused segment must not leave a workspace with a tree record and no
+   * registry row. `upsertWorkspaceRow` translates a segment collision into
+   * `WorkspaceSegmentTakenError`; `super.createWorkspace`'s own bare
+   * `upsertWorkspaceRow` call then no-ops on the `id` conflict, so it cannot
+   * clobber what was just claimed.
+   */
+  override async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
+    const parsed = createWorkspaceInputSchema.parse(input)
+    return withWorkspaceWriteLock(parsed.workspaceId, async () => {
+      await upsertWorkspaceRow(await dbReady(), parsed.workspaceId, {
+        ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
+        ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
+      })
+      await super.createWorkspace(parsed)
+    })
   }
 
   override async createDocument(

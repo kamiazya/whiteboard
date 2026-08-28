@@ -62,7 +62,11 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // here would forward no arguments and add a name.
       const workspaces = await deps.documentIndex.listWorkspaces()
       const response: ListWorkspacesResponse = {
-        workspaces: workspaces.map(({ workspaceId }) => ({ workspaceId })),
+        workspaces: workspaces.map(({ workspaceId, segment, displayName }) => ({
+          workspaceId,
+          ...(segment === undefined ? {} : { segment }),
+          ...(displayName === undefined ? {} : { displayName }),
+        })),
       }
       return c.json(response)
     } catch (err) {
