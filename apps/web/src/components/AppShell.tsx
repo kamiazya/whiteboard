@@ -19,6 +19,42 @@ const DaemonDetectedBanner = lazy(() =>
   })),
 )
 
+/**
+ * The honest-detach floor for a moved workspace: a cold load whose silent
+ * daemon renewal fails lands in the browser flow with the stored daemon
+ * still configured. For a workspace that was MOVED to that daemon, resuming
+ * browser keeper duties silently would hide that edits made here diverge
+ * from the daemon copy — so the browser popover discloses the move. Only
+ * when the recorded move targets the SAME daemon the browser still points
+ * at: a move to a daemon this browser no longer uses is not this
+ * connection's story. Reachability is unknown from here and deliberately
+ * not claimed.
+ */
+function PromotedElsewhereNotice({
+  settingsStore,
+}: {
+  settingsStore: ReturnType<typeof createUserSettingsStore>
+}) {
+  const settings = settingsStore.load()
+  const promotion = settings.migration.promotion
+  const storedDaemon = settings.storage.daemonBaseUrl
+  if (
+    promotion === undefined ||
+    !promotion.ok ||
+    storedDaemon === undefined ||
+    promotion.daemonBaseUrl !== storedDaemon
+  ) {
+    return null
+  }
+  return (
+    <p data-testid="promoted-elsewhere-notice" className="text-muted-foreground">
+      This workspace has been moved to the daemon at{' '}
+      <span className="font-mono text-xs">{storedDaemon.replace(/^https?:\/\//, '')}</span>. Changes
+      made here stay in this browser until you move it again from Settings.
+    </p>
+  )
+}
+
 export interface AppShellProps {
   readonly daemon: boolean
   /**
@@ -115,6 +151,7 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
                 connected, you can move this workspace to it from Settings — documents, their
                 history and images together.
               </p>
+              <PromotedElsewhereNotice settingsStore={settingsStore} />
               <Suspense fallback={null}>
                 <DaemonDetectedBanner
                   settingsStore={settingsStore}

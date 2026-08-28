@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
 import { resetShellStatusForTests, setShellConnection } from '@/lib/shell-status-store'
+import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
 import { AppShell } from './AppShell.js'
 
@@ -153,6 +154,59 @@ describe('AppShell — the connection chip', () => {
     // only reports and nudges) — whole-workspace promotion is implemented,
     // so the old "import them one at a time" disclaimer would now be false.
     expect(screen.getByText(CTA_LIMIT)).toBeTruthy()
+  })
+
+  // Slice 8's honest-detach floor: a cold load whose silent renewal fails
+  // falls back to the browser flow with the stored daemon still configured.
+  // For a workspace that was MOVED to that daemon, resuming keeper duties
+  // silently would hide that edits made here diverge from the daemon copy —
+  // so the browser popover discloses the move instead of claiming nothing.
+  it('the browser popover discloses a recorded move to the still-configured daemon', async () => {
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
+      migration: {
+        ...current.migration,
+        promotion: {
+          at: '2026-08-28T12:00:00.000Z',
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          workspaceId: 'ws-a',
+          ok: true,
+          promotedCount: 2,
+        },
+      },
+    }))
+    setShellConnection({ state: { keeper: 'browser' } })
+    renderShell(false)
+    fireEvent.click(await screen.findByTestId('connection-chip'))
+    const notice = await screen.findByTestId('promoted-elsewhere-notice')
+    expect(notice.textContent).toMatch(/moved to the daemon/i)
+    expect(notice.textContent).toMatch(/stay in this browser/i)
+    // Reachability is unknown from here, so the copy must not claim it.
+    expect(notice.textContent).not.toMatch(/unreachable|offline|cannot be reached/i)
+  })
+
+  it('no move disclosure without a matching promotion record', async () => {
+    // A promotion recorded against a daemon the browser no longer uses (or
+    // none at all) is not this connection's story to tell.
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
+      migration: {
+        ...current.migration,
+        promotion: {
+          at: '2026-08-28T12:00:00.000Z',
+          daemonBaseUrl: 'http://127.0.0.1:4200',
+          workspaceId: 'ws-a',
+          ok: true,
+        },
+      },
+    }))
+    setShellConnection({ state: { keeper: 'browser' } })
+    renderShell(false)
+    fireEvent.click(await screen.findByTestId('connection-chip'))
+    await screen.findByText(CTA)
+    expect(screen.queryByTestId('promoted-elsewhere-notice')).toBeNull()
   })
 
   it('offers the escape to the browser from the sync-off popover', async () => {
