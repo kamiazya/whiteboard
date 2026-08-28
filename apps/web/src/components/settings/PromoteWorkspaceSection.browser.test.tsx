@@ -38,6 +38,7 @@ interface StubOptions {
   updateDelayMs?: number
   putDelayMs?: number
   failUpdateStatus?: number
+  workspaces?: { workspaceId: string; displayName?: string }[]
 }
 
 /** The three daemon routes the flow touches, answering from `target`. */
@@ -45,7 +46,9 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/api/workspaces') && (init?.method ?? 'GET') === 'GET') {
-      return Response.json({ workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }] })
+      return Response.json({
+        workspaces: opts.workspaces ?? [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      })
     }
     if (url.endsWith('/workspace-document/update') && init?.method === 'POST') {
       if (opts.updateDelayMs) await new Promise((r) => setTimeout(r, opts.updateDelayMs))
@@ -332,6 +335,56 @@ describe('PromoteWorkspaceSection', () => {
     )
     expect(screen.queryByTestId('promote-last-result')).toBeNull()
     expect(screen.queryByTestId('promote-reload')).toBeNull()
+  })
+
+  // DESIGN.md: "Raw identifiers are not chrome." A named daemon workspace
+  // shows its name in the target selector; only an unnamed one falls back to
+  // its identifier, the same fallback a document without a display name uses.
+  it('the target selector shows workspace names, and an id only as the unnamed fallback', async () => {
+    const { roadmapId } = await seedTwoDocuments()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target, {
+          workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }, { workspaceId: 'ws-b' }],
+        })}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    const select = await screen.findByTestId('promote-target')
+    const labels = [...select.querySelectorAll('option')].map((o) => o.textContent)
+    expect(labels).toEqual(['Team notes', 'ws-b'])
+    // The value stays the identifier: names are chrome, ids are the address.
+    await userEvent.selectOptions(select, 'Team notes')
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    await screen.findByTestId('promote-last-result')
+    expect(resolveWorkspaceDocumentById(target, roadmapId)).not.toBeNull()
+  })
+
+  // The other half of the same DESIGN.md sentence: a single-choice selector
+  // renders nothing at all — one workspace is a fact, not a decision.
+  it('a single daemon workspace renders as its name, not a one-option selector', async () => {
+    await seedTwoDocuments()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), {
+          workspaces: [{ workspaceId: 'ws-a', displayName: 'Team notes' }],
+        })}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await screen.findByTestId('promote-dialog')
+    expect(screen.queryByTestId('promote-target')).toBeNull()
+    const single = screen.getByTestId('promote-target-single')
+    expect(single.textContent).toMatch(/team notes/i)
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(/moved 2/i)
   })
 
   // The section can be a session's FIRST surface (deep-link/reload straight
