@@ -108,9 +108,12 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 - **Name the keeper, never the locality.** A workspace is kept by the
   **Browser** or by a **Daemon**; both are on the user's machine, so "Local"
   named neither and collided with "local daemon" in its own popover. See
-  `.claude/rules/vocabulary.md`'s keeper section — including the rule that
-  copy may use the keeper framing but must not promise the source-of-truth
-  promotion, which is not implemented.
+  `.claude/rules/vocabulary.md`'s keeper section — including the line copy
+  may now cross and the one it may not: the whole-workspace MOVE to a daemon
+  is implemented (Settings > Connections, "This workspace"), but the browser
+  does not become a replica afterwards, so copy promises the move and never a
+  silent source-of-truth swap. Continuing from the daemon is a narrated
+  reload the user takes.
 - **Dialogs**: `max-h` + `overflow-y-auto` when content can grow; page-width
   cards must wrap (`min-w-0`, `break-all` for unbreakable strings) before
   entering a dialog.

@@ -106,6 +106,38 @@ const storageSettingsSchema = z
   })
   .strict()
 
+/**
+ * The last whole-workspace promotion's outcome. Persisted (not component
+ * state) because the promote UI's result surface is a standing report, never
+ * a toast: it must survive navigating away from Settings and a full reload.
+ * One slot, overwritten by the next run — promotion is an idempotent merge,
+ * so only the latest outcome is actionable.
+ */
+const promotionResultSchema = z
+  .object({
+    at: z.string(),
+    /**
+     * The daemon the move targeted. The result surface renders a stored
+     * result as actionable only while connected to this same daemon —
+     * without the binding, a result from daemon A (and its reload offer)
+     * would keep showing after connecting to daemon B. Optional because
+     * records persisted before the field existed lack it; those simply
+     * never match and age out on the next move.
+     */
+    daemonBaseUrl: httpUrl.optional(),
+    /** The TARGET daemon workspace the record merged into. */
+    workspaceId: z.string(),
+    ok: z.boolean(),
+    promotedCount: z.number().optional(),
+    shadowedPaths: z.array(z.string()).optional(),
+    blobsMissing: z.array(z.string()).optional(),
+    blobsFailed: z.array(z.string()).optional(),
+    reason: z.string().optional(),
+  })
+  .strict()
+
+export type PromotionResultRecord = z.infer<typeof promotionResultSchema>
+
 const migrationSettingsSchema = z
   .object({
     browserToDaemon: z
@@ -116,6 +148,7 @@ const migrationSettingsSchema = z
       })
       .strict()
       .optional(),
+    promotion: promotionResultSchema.optional(),
   })
   .strict()
 

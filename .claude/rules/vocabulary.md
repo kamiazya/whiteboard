@@ -115,13 +115,20 @@ whiteboard daemon, later a self-hosted or SaaS backend. **`Browser` and
 the intended model is that connecting a daemon PROMOTES a workspace's source
 of truth to it, with everything below becoming a replica.
 
-That model is **not implemented**. What ships is a per-document, one-way
-import (`components/migration/import-from-browser.ts`) whose request carries
-`{ path, kind }` and no document id, so the daemon mints a new one and the
-document's identity does not survive. Copy may use the keeper vocabulary —
-"Kept in this browser" is true today — but must not promise the promotion:
-the capability CTA says outright that documents already in the browser stay
-there and are imported one at a time.
+The MOVE half of that model is implemented: Settings > Connections'
+"This workspace" section (`components/settings/PromoteWorkspaceSection.tsx`
+over `lib/promote-workspace.ts`) transfers the browser's whole workspace
+record into a daemon workspace as a CRDT merge — identity, history and
+referenced images survive, and path collisions surface as shadowed. What is
+still NOT implemented is the automatic demotion below it: after the move the
+browser record remains its own store rather than a subscribed replica, and
+continuing from the daemon is a narrated reload the user takes, never a
+silent source-of-truth swap. Copy may therefore promise the MOVE ("move this
+workspace to the daemon") but must not claim the browser has become a
+replica. The older per-document import
+(`components/migration/import-from-browser.ts`), which preserves no document
+identity, still exists and is scheduled for deletion — user decision,
+2026-08-28 — now that the whole-workspace move supersedes it.
 
 `local` was the wrong word for this axis and could never have been the right
 one, because **a daemon is local too**. Two names spelled it that way and

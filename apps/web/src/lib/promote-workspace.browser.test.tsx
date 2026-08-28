@@ -22,7 +22,7 @@ import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
-import { promoteWorkspace } from './promote-workspace.js'
+import { countBrowserWorkspaceDocuments, promoteWorkspace } from './promote-workspace.js'
 import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('promote-workspace')
@@ -132,14 +132,22 @@ describe('promoteWorkspace', () => {
       ),
     ).toBe(true)
 
+    // The confirmation UI states the document count BEFORE promoting, from
+    // the same record the transfer will read.
+    expect(await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())).toBe(2)
+
     const target = targetDaemonRecord()
     const putFiles: Array<{ url: string; contentType: string; bytes: Uint8Array }> = []
+    const phases: string[] = []
     const result = await promoteWorkspace({
       fetch: daemonStub(target, putFiles),
       daemonBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
+      onProgress: (phase) => phases.push(phase),
     })
+    // Real progress, not staged: the record phase precedes the blob phase.
+    expect(phases).toEqual(['record', 'blobs'])
 
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return

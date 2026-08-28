@@ -37,6 +37,25 @@ export interface PromoteWorkspaceOptions {
   workspaceId: string
   /** The browser keeper's records (production: `new BrowserWorkspaceDocs()`). */
   workspaceDocs: WorkspaceDocs
+  /**
+   * Called as each real phase starts — 'record' before the CRDT merge POST,
+   * 'blobs' before the image uploads. The progress UI narrates from these
+   * instead of inventing a timeline.
+   */
+  onProgress?: (phase: 'record' | 'blobs') => void
+}
+
+/**
+ * How many documents a promotion would move, read from the same record the
+ * transfer reads — the confirmation dialog's number, computed before any
+ * request leaves the browser. 0 both for an empty record and for no record.
+ */
+export async function countBrowserWorkspaceDocuments(
+  workspaceDocs: WorkspaceDocs,
+): Promise<number> {
+  const record = await workspaceDocs.open(BROWSER_WORKSPACE_ID)
+  if (record === null) return 0
+  return readWorkspaceDocuments(record).length
 }
 
 export type PromoteWorkspaceResult =
@@ -110,7 +129,7 @@ function collectImageRefs(
 async function promoteWorkspaceUnsafe(
   options: PromoteWorkspaceOptions,
 ): Promise<PromoteWorkspaceResult> {
-  const { fetch, daemonBaseUrl, workspaceId, workspaceDocs } = options
+  const { fetch, daemonBaseUrl, workspaceId, workspaceDocs, onProgress } = options
   // The keeper's own store, like BrowserWorkspaceDocs above: both address
   // the same claimed database, so tests seed through the production path.
   const fileStore = new DocumentFileStore()
@@ -125,6 +144,7 @@ async function promoteWorkspaceUnsafe(
   const entries = readWorkspaceDocuments(record)
   const promotedDocumentIds = entries.map((entry) => entry.documentId)
 
+  onProgress?.('record')
   const res = await fetch(
     `${daemonBaseUrl}/api/w/${encodeURIComponent(workspaceId)}/workspace-document/update`,
     {
@@ -151,6 +171,7 @@ async function promoteWorkspaceUnsafe(
   // the images travel last, and per-file — a single unreadable or refused
   // upload lands in the report instead of failing the merge that already
   // happened.
+  onProgress?.('blobs')
   const blobs = { transferred: [] as string[], missing: [] as string[], failed: [] as string[] }
   for (const [fileId, path] of collectImageRefs(record, entries)) {
     const blob = await fileStore.get(fileId)

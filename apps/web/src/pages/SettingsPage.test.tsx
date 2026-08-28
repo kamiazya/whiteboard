@@ -371,6 +371,35 @@ describe('SettingsPage — Connections', () => {
     expect(await within(mobile).findByRole('button', { name: 'Install Noto Sans JP' })).toBeTruthy()
   })
 
+  // Discoverable before its precondition is met: the move to a daemon is
+  // something the user should be able to find and read about while still
+  // unpaired, not a control that materialises only once it is usable.
+  it('offers the workspace move disabled until a daemon is connected', () => {
+    renderAt('/settings/connections')
+    const mobile = screen.getByTestId('settings-mobile')
+    const button = within(mobile).getByTestId('promote-workspace-open')
+    expect(button.hasAttribute('disabled')).toBe(true)
+    expect(within(mobile).getByText(/connect a daemon to move/i)).toBeTruthy()
+  })
+
+  it('enables the workspace move when a daemon is connected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/pairing/grants')) return jsonResponse({ grants: [] })
+        if (url.includes('/api/runtime/storage')) {
+          return jsonResponse({ totalBytes: 0, fileCount: 0, byCategory: {} })
+        }
+        return jsonResponse({}, 404)
+      }),
+    )
+    renderAt('/settings/connections', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    const mobile = screen.getByTestId('settings-mobile')
+    const button = await within(mobile).findByTestId('promote-workspace-open')
+    expect(button.hasAttribute('disabled')).toBe(false)
+  })
+
   it('renders the paired-origins and storage cards when a daemon is provided', async () => {
     vi.stubGlobal(
       'fetch',

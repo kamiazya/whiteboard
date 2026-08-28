@@ -102,7 +102,7 @@ describe('AppShell — the connection chip', () => {
   // Matched loosely: the CTA is two sentences across JSX lines, so an exact
   // string match would be asserting the source's line breaks, not the copy.
   const CTA = /Connect a daemon \(MCP\) for version history/i
-  const CTA_LIMIT = /Documents already in this browser stay here/i
+  const CTA_LIMIT = /move this workspace to it from Settings/i
 
   it('shows no chip until a page publishes a live session', () => {
     renderShell(true)
@@ -149,8 +149,9 @@ describe('AppShell — the connection chip', () => {
 
     fireEvent.click(await screen.findByTestId('connection-chip'))
     expect(await screen.findByText(CTA)).toBeTruthy()
-    // The CTA names what connecting does NOT do today: documents already in
-    // this browser are not carried over, they are imported one at a time.
+    // The CTA points at where the move lives (Settings manages; the chip
+    // only reports and nudges) — whole-workspace promotion is implemented,
+    // so the old "import them one at a time" disclaimer would now be false.
     expect(screen.getByText(CTA_LIMIT)).toBeTruthy()
   })
 
