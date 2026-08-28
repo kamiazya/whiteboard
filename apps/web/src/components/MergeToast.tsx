@@ -19,7 +19,7 @@ const log = getAppLogger('merge-toast')
 // - Auto-dismiss: 5 seconds by default; pause while hovered
 // - Undo hides the toast immediately and restores preMergeVersionId
 //
-// MergeDialog dispatches excalidraw:merge_committed, and DocumentPage mounts this so it stays local to the canvas view.
+// MergeDialog dispatches whiteboard:merge_committed, and DocumentPage mounts this so it stays local to the canvas view.
 
 export interface MergeToastProps {
   workspaceId: string

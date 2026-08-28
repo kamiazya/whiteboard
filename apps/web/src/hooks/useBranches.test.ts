@@ -323,7 +323,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     consoleErrorSpy.mockRestore()
   })
 
-  it('does not register a window "excalidraw:head_changed" listener', async () => {
+  it('does not register a window "whiteboard:head_changed" listener', async () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
 
     renderHook(() => useBranches('sess_1', 'canvas-a'))
@@ -332,7 +332,7 @@ describe('useBranches hook (callback model, no window event subscription)', () =
     })
 
     const headChangedCalls = addSpy.mock.calls.filter(
-      (args) => args[0] === 'excalidraw:head_changed',
+      (args) => args[0] === 'whiteboard:head_changed',
     )
     expect(headChangedCalls).toHaveLength(0)
 

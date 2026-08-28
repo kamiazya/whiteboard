@@ -1,11 +1,11 @@
 import { z } from 'zod'
 import { getAppLogger } from './app-logger.js'
 
-// Single source of truth for the `excalidraw:merge_committed` window CustomEvent
+// Single source of truth for the `whiteboard:merge_committed` window CustomEvent
 // contract. MergeDialog dispatches; MergeToast subscribes. A schema here
 // instead of independently hand-written detail shapes on each side avoids the
 // drift pattern flagged in AGENTS.md's Zod Schema Discipline section.
-export const MERGE_COMMITTED_EVENT = 'excalidraw:merge_committed'
+export const MERGE_COMMITTED_EVENT = 'whiteboard:merge_committed'
 
 // Non-strict: unknown fields are stripped rather than rejected so the
 // dispatcher can grow the detail shape without a lockstep parser change.

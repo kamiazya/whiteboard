@@ -52,7 +52,7 @@ export function useSaveVersion({
         // Manual save can bypass the server's version_created websocket path; a later WS event becomes a no-op.
         if (typeof window !== 'undefined') {
           const detail: DirtyEventDetail = { workspaceId, path }
-          window.dispatchEvent(new CustomEvent('excalidraw:wb_version_saved', { detail }))
+          window.dispatchEvent(new CustomEvent('whiteboard:wb_version_saved', { detail }))
         }
         const id = parsed.data.version.id
         if (id && getThumbnailBlob) {

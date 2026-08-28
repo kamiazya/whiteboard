@@ -1,4 +1,4 @@
-export const WHITEBOARD_WS_PROTOCOL = 'excalidraw-v1'
+export const WHITEBOARD_WS_PROTOCOL = 'whiteboard-v1'
 export const DAEMON_TOKEN_WS_PROTOCOL_PREFIX = 'daemon-token.'
 // ADR-0005: a hosted-origin caller authorizes a WS upgrade with a short-lived,
 // single-use connection ticket (minted via POST /api/ws-ticket) rather than

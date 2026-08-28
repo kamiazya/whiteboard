@@ -97,11 +97,11 @@ describe('HeaderBranchBanner', () => {
     expect(screen.queryByTestId('header-branch-banner')).toBeNull()
   })
 
-  it('does NOT register an excalidraw:head_changed listener (callback model, not window bus)', () => {
+  it('does NOT register an whiteboard:head_changed listener (callback model, not window bus)', () => {
     const addSpy = vi.spyOn(window, 'addEventListener')
     render(<HeaderBranchBanner workspaceId="s1" path="c1" />)
     const registeredEvents = addSpy.mock.calls.map((call) => call[0])
-    expect(registeredEvents).not.toContain('excalidraw:head_changed')
+    expect(registeredEvents).not.toContain('whiteboard:head_changed')
     addSpy.mockRestore()
   })
 
@@ -150,7 +150,7 @@ describe('HeaderBranchBanner', () => {
 
     await act(async () => {
       window.dispatchEvent(
-        new CustomEvent('excalidraw:merge_committed', { detail: { not: 'valid' } }),
+        new CustomEvent('whiteboard:merge_committed', { detail: { not: 'valid' } }),
       )
       await Promise.resolve()
     })

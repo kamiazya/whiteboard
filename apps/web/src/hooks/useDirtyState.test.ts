@@ -4,11 +4,11 @@ import { useDirtyState } from './useDirtyState.js'
 
 // Thin CustomEvent helpers; jsdom can dispatch these directly.
 function dispatchDocChanged(workspaceId: string, path: string): void {
-  window.dispatchEvent(new CustomEvent('excalidraw:doc_changed', { detail: { workspaceId, path } }))
+  window.dispatchEvent(new CustomEvent('whiteboard:doc_changed', { detail: { workspaceId, path } }))
 }
 function dispatchVersionSaved(workspaceId: string, path: string): void {
   window.dispatchEvent(
-    new CustomEvent('excalidraw:wb_version_saved', { detail: { workspaceId, path } }),
+    new CustomEvent('whiteboard:wb_version_saved', { detail: { workspaceId, path } }),
   )
 }
 
@@ -91,7 +91,7 @@ describe('useDirtyState', () => {
   it('ignores events where detail is missing', () => {
     const { result } = renderHook(() => useDirtyState('s1', 'c1'))
     act(() => {
-      window.dispatchEvent(new CustomEvent('excalidraw:doc_changed', { detail: null }))
+      window.dispatchEvent(new CustomEvent('whiteboard:doc_changed', { detail: null }))
     })
     expect(result.current.isDirty).toBe(false)
   })

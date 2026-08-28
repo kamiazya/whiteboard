@@ -72,7 +72,7 @@ describe('DaemonBackend WS credential selection', () => {
     })
     backend.connect(HANDLERS)
     expect(FakeWebSocket.instances[0]?.protocols).toEqual([
-      'excalidraw-v1',
+      'whiteboard-v1',
       'daemon-token.pairing-session-token',
     ])
   })
@@ -88,7 +88,7 @@ describe('DaemonBackend WS credential selection', () => {
     })
     backend.connect(HANDLERS)
     expect(FakeWebSocket.instances[0]?.protocols).toEqual([
-      'excalidraw-v1',
+      'whiteboard-v1',
       'daemon-token.bootstrap-token',
     ])
   })
@@ -104,7 +104,7 @@ describe('DaemonBackend WS credential selection', () => {
     backend.disconnect()
     backend.connect(HANDLERS)
     expect(FakeWebSocket.instances[1]?.protocols).toEqual([
-      'excalidraw-v1',
+      'whiteboard-v1',
       'daemon-token.rotated-token',
     ])
   })
@@ -114,6 +114,6 @@ describe('DaemonBackend WS credential selection', () => {
       fetch: globalThis.fetch,
     })
     backend.connect(HANDLERS)
-    expect(FakeWebSocket.instances[0]?.protocols).toEqual(['excalidraw-v1'])
+    expect(FakeWebSocket.instances[0]?.protocols).toEqual(['whiteboard-v1'])
   })
 })
