@@ -222,3 +222,42 @@ As built:
 Decisions 1–3 and 5 still stand; decision 2's rename is now the tree
 index's `moveDocument`, one operation with the collision rules in one
 place.
+
+## Addendum (2026-08-28): browser-to-daemon promotion — identity crosses the keeper boundary
+
+The Context's original observation — "documents kept in the browser cross
+into daemon mode only by an explicit, user-initiated copy, which re-creates
+the document under a new path" — no longer holds, and the change is the
+workspace-document design paying off once more rather than a new mechanism.
+
+As built (whole-workspace move, Settings → Connections → "This workspace"):
+
+- **The move is a CRDT merge of the whole workspace record.** The browser
+  exports its `workspace-tree` record as one snapshot and POSTs it to the
+  daemon's existing `workspace-document/update` route; nothing new was
+  added server-side. Every ULID `documentId`, every display name, and the
+  full edit history arrive intact, so references between documents keep
+  resolving on the daemon.
+- **Referenced images travel beside the record**, per file through the
+  existing document-file route, with per-file outcomes (`missing` /
+  `failed`) that never fail the merge that already landed. Re-running the
+  move is an idempotent merge.
+- **Collisions are surfaced, never auto-resolved** — the same shadowed
+  rule as the dual-plane collapse above: a path both sides hold lists both
+  documents, the pre-existing one marked shadowed.
+- **Chunking was measured out, not built.** A 300-document record measured
+  ≈0.88 MiB against the route's 16 MiB body cap, so whole-record import
+  ships and a chunked transfer stays unbuilt until a real corpus needs it.
+- **The browser does not become a replica.** After the move its record
+  remains an independent store; continuing from the daemon is a narrated
+  reload the user takes (backend mode is decided at page load, ADR-0004),
+  and when the app later runs in browser mode with that daemon still
+  configured, the connection popover discloses the move and that browser
+  edits stay local. A dedicated demote action is deliberately absent: the
+  browser record surviving by construction is the rollback.
+- **The per-document copy import is deleted.** It preserved no identity —
+  the daemon minted a new id per copy — and keeping it beside the move
+  would have left users a worse path to the same outcome.
+
+Decisions 1–3 and 5 still stand; this addendum updates only the Context's
+account of how browser-kept documents reach a daemon.

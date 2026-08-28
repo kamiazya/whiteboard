@@ -143,9 +143,15 @@ That split is **gone**, in four steps recorded in the migration log:
   Deleting old versions (or the automatic version pruning) is therefore
   what lets compaction reclaim space; a branch left on an old state keeps
   the history its checkout needs for as long as the branch exists.
-- Documents kept in the browser still cross into daemon mode only by an explicit,
-  user-initiated copy, which re-creates the document under a new path — no
-  identifier carries over. That half of ADR-0007 is unchanged.
+- Documents kept in the browser cross to a daemon by an explicit,
+  user-initiated **move of the whole workspace** (Settings → Connections →
+  "This workspace"): the browser's workspace record merges into the chosen
+  daemon workspace, so every `documentId`, the full edit history, and
+  referenced images carry over, and a path both sides hold is surfaced as
+  shadowed rather than renamed. The browser's own copy remains — the two
+  copies do not sync on their own, and continuing from the daemon is a
+  reload the user takes. The old per-document copy (which re-created
+  documents under new identities) is deleted.
 
 The identity decision itself — `(workspaceId, path)` as the canonical
 user-facing identity — is still
