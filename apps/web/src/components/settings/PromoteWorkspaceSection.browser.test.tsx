@@ -20,7 +20,9 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
-import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
+import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
+import { BROWSER_WORKSPACE_ID, ensureLocalWorkspace } from '../../lib/local-document-summary.js'
+import { LoroStore } from '../../lib/loro-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
 import { clearWhiteboardDb } from '../../test-utils/browser-document.js'
@@ -109,6 +111,28 @@ async function seedImageOnSketch(sketchId: string): Promise<void> {
       new Uint8Array(content.export({ mode: 'snapshot' })),
     ),
   ).toBe(true)
+}
+
+/**
+ * A document as an older build left it: an index row plus per-document Loro
+ * bytes, never absorbed into the workspace record. Exactly what a session
+ * that deep-links straight to Settings sees before any page ran the fold.
+ */
+async function seedPreFoldDocument(path: string): Promise<string> {
+  const index = new IdbDocumentIndex()
+  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  const entry = await index.createDocument({
+    workspaceId: BROWSER_WORKSPACE_ID,
+    path,
+    kind: 'spatial',
+  })
+  const doc = new LoroDoc()
+  doc
+    .getMap('nodes')
+    .set('n1', { id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'pre-fold' })
+  doc.commit()
+  await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
+  return entry.documentId
 }
 
 const NO_INTERNAL_VOCABULARY = /loro|crdt|oplog|snapshot/i
@@ -308,6 +332,30 @@ describe('PromoteWorkspaceSection', () => {
     )
     expect(screen.queryByTestId('promote-last-result')).toBeNull()
     expect(screen.queryByTestId('promote-reload')).toBeNull()
+  })
+
+  // The section can be a session's FIRST surface (deep-link/reload straight
+  // to Settings): no browser page has run the startup fold, so the workspace
+  // record does not hold pre-fold legacy documents yet. The count and the
+  // transfer must still include them — silently omitting a document from a
+  // data-migration UI is the data-loss shape this pins.
+  it('counts and moves a document held only by pre-fold records, with no page mounted first', async () => {
+    const legacyId = await seedPreFoldDocument('legacy/roadmap')
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target)}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    const dialog = await screen.findByTestId('promote-dialog')
+    expect(dialog.textContent).toMatch(/all 1 document\b/i)
+    await userEvent.click(screen.getByTestId('promote-confirm'))
+    await screen.findByTestId('promote-last-result')
+    expect(resolveWorkspaceDocumentById(target, legacyId)).not.toBeNull()
   })
 
   it('stays discoverable but disabled with no daemon connected', async () => {

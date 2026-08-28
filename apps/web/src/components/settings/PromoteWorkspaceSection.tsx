@@ -27,8 +27,11 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { getAppLogger } from '@/lib/app-logger'
 import { createDaemonFetch, listWorkspaces } from '@/lib/daemon-api-client'
 import type { PromotionResultRecord, UserSettings } from '@/lib/user-settings-store'
+
+const log = getAppLogger('promote-workspace-section')
 
 export interface PromoteWorkspaceSectionProps {
   daemon?: { baseUrl: string; token: string | null }
@@ -102,12 +105,29 @@ export function PromoteWorkspaceSection({
       baseFetch ?? globalThis.fetch.bind(globalThis),
     )
     try {
-      const [{ countBrowserWorkspaceDocuments }, { BrowserWorkspaceDocs }, workspaces] =
-        await Promise.all([
-          import('../../lib/promote-workspace.js'),
-          import('../../lib/browser-workspace-docs.js'),
-          listWorkspaces(fetchImpl, daemon.baseUrl),
-        ])
+      const [
+        { countBrowserWorkspaceDocuments },
+        { BrowserWorkspaceDocs },
+        { foldWorkspaceDocuments },
+        workspaces,
+      ] = await Promise.all([
+        import('../../lib/promote-workspace.js'),
+        import('../../lib/browser-workspace-docs.js'),
+        import('../../lib/fold-workspace.js'),
+        listWorkspaces(fetchImpl, daemon.baseUrl),
+      ])
+      // Settings can be a session's first surface (deep-link/reload), so the
+      // startup fold may not have run yet — and this count reads the
+      // workspace record, which without the fold silently omits an older
+      // build's per-document records. Non-fatal, and its OWN catch: a fold
+      // failure degrades to the pre-fold view (undercounted but open) and is
+      // a storage-side problem, so it must not read as the outer catch's
+      // "could not reach the daemon".
+      try {
+        await foldWorkspaceDocuments()
+      } catch (err) {
+        log.warn('startup fold failed; continuing without it', err)
+      }
       const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
       const workspaceIds = workspaces.workspaces.map((ws) => ws.workspaceId)
       if (documentCount === 0) {
