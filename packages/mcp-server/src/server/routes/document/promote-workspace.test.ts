@@ -82,7 +82,13 @@ async function listDocuments(app: ReturnType<typeof createDocumentRouter>) {
   const res = await app.request('/api/workspaces/session1/documents')
   expect(res.status).toBe(200)
   const body = (await res.json()) as {
-    documents: Array<{ path: string; id: string; kind: string; shadowed?: boolean }>
+    documents: Array<{
+      path: string
+      id: string
+      kind: string
+      displayName?: string
+      shadowed?: boolean
+    }>
   }
   return body.documents
 }
@@ -108,12 +114,15 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
   expect(res.status).toBe(200)
 
   const documents = await listDocuments(app)
-  // Presence first: the fixture must actually hold the merged surface —
-  // 3 browser documents plus the daemon's own — before any per-row claim.
-  expect(documents.length).toBeGreaterThanOrEqual(4)
+  // Presence first: exactly the merged surface — 3 browser documents plus
+  // the daemon's own, no duplicates — before any per-row claim.
+  expect(documents).toHaveLength(4)
   const byId = new Map(documents.map((d) => [d.id, d]))
   expect(byId.get(ROADMAP_ID)?.path).toBe('notes/roadmap')
   expect(byId.get(ROADMAP_ID)?.kind).toBe('markdown')
+  // The workspace-kept display name crossed with the identity (the list
+  // publishes it as `displayName`).
+  expect(byId.get(ROADMAP_ID)?.displayName).toBe('Roadmap')
   expect(byId.get(SKETCH_ID)?.kind).toBe('spatial')
   // The collision keeps BOTH documents at the path; exactly one row wins the
   // address and the other carries the shadowed marker.
@@ -128,6 +137,18 @@ it('a browser record promotes through workspace-document/update: ids, kinds, nam
   const daemonView = new LoroDoc()
   daemonView.import(new Uint8Array(await snapshotRes.arrayBuffer()))
   expect(readMarkdownBody(documentContainers(daemonView, ROADMAP_ID))).toBe('# roadmap v1')
+})
+
+it('workspace-document/update answers 404 for a workspace the daemon never registered', async () => {
+  // Promotion cannot mint a workspace as a side effect — the browser's fixed
+  // 'local' id must never leak through as a new daemon workspace.
+  const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+  const res = await app.request('/api/w/unregistered/workspace-document/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: new Uint8Array(browserRecord().export({ mode: 'snapshot' })),
+  })
+  expect(res.status).toBe(404)
 })
 
 it('an edit made after the promotion export still lands as an incremental delta — the replica plane', async () => {
