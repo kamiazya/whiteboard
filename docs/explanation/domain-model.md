@@ -95,15 +95,14 @@ That split is **gone**, in four steps recorded in the migration log:
   document by the same identifier — one table, one id space.
 - The byte store converged next: `loadDocument`/`saveDocument` read and write
   the same Libsql snapshot rows the MCP tools use. Migration `0011` imported
-  the pre-existing filesystem blobs, the daemon re-runs that import at every
-  startup to catch anything written in between, and a blob file is deleted
-  only once its bytes are proven byte-identical to the stored rows.
+  the pre-existing filesystem blobs once, and a blob file was deleted only
+  once its bytes were proven byte-identical to the stored rows.
 - Finally the **workspace record became the address book itself**: placement,
   names, pins, kinds and branch HEAD live on the workspace tree's nodes as
   shared CRDT state, versions and branches are keyed on the workspace
-  (migrations `0015`/`0016`), and the `documents` table survives only as a
-  frozen legacy inbox the startup fold reads — nothing else reads or writes
-  it, and the daemon works with it empty.
+  (migrations `0015`/`0016`), and migration `0017` dropped the `documents`
+  table outright (approved plain break, pre-1.0 disposable-DB policy) — the
+  workspace record is the store, full stop.
 
 ## Practical consequences today
 

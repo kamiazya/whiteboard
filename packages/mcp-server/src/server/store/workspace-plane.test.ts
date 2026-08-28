@@ -149,14 +149,13 @@ it('readFrontier answers for a tree-served document, and the stamp moves when it
 
 it('routes a document ref by ITS OWN workspace, with no documents-table lookup (S6)', async () => {
   // The ref carries the workspace since W3, so the route needs no reverse
-  // row lookup — and must keep serving even when the row is gone, because
-  // the rows are a mirror on their way out, not an address book.
-  const { db, routed } = await stores()
+  // row lookup — and migration 0017 dropped the documents table outright,
+  // so there is no mirror row to fall back to even in principle.
+  const { routed } = await stores()
   await saveDocument('ws-a', 'design', canvasDoc('tree-truth'), { kind: 'spatial' })
   const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
   if (rowId === null) throw new Error('document missing from the tree')
   const row = { id: rowId }
-  await db.deleteFrom('documents').where('id', '=', row.id).execute()
 
   const ref = { kind: 'document', workspaceId: 'ws-a', documentId: row.id } as const
   const loaded = await routed.loadSnapshot({ docRef: ref })
@@ -180,9 +179,10 @@ it('workspace-tree refs pass straight through to the inner store', async () => {
 })
 
 it('an index create lists and resolves with NO documents row anywhere (S7)', async () => {
-  // The tree is the whole record of what exists: nothing writes the
-  // documents table for a created document anymore.
-  const { db, index } = await stores()
+  // The tree is the whole record of what exists: migration 0017 dropped the
+  // documents table outright, so there is nothing for a create to write to
+  // it even in principle.
+  const { index } = await stores()
   await index.createWorkspace({ workspaceId: 'ws-flip' })
   const entry = await index.createDocument({
     workspaceId: 'ws-flip',
@@ -190,9 +190,6 @@ it('an index create lists and resolves with NO documents row anywhere (S7)', asy
     kind: 'spatial',
   })
 
-  expect(
-    await db.selectFrom('documents').select(['id']).where('id', '=', entry.documentId).execute(),
-  ).toEqual([])
   const listing = await index.listDocuments({ workspaceId: 'ws-flip' })
   expect(listing.map((e) => e.path)).toEqual(['truth'])
   const resolved = await index.resolveDocument({ workspaceId: 'ws-flip', path: 'truth' })
@@ -251,11 +248,4 @@ it('the index creates, renames and deletes on the tree', async () => {
   if (tree === null) return
   expect(resolveWorkspaceDocumentById(tree, entry.documentId)).toBeNull()
   expect(readTrashEntries(tree).map((t) => t.documentId)).toContain(entry.documentId)
-  expect(
-    await db
-      .selectFrom('documents')
-      .select(['id'])
-      .where('id', '=', entry.documentId)
-      .executeTakeFirst(),
-  ).toBeUndefined()
 })

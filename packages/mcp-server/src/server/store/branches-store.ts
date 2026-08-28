@@ -58,9 +58,7 @@ export async function loadDocumentBranches(
   validateDocumentPath(path)
   const db = await dbReady()
   // The document and its HEAD resolve from the workspace record (S7); the
-  // branch ROWS stay in sqlite, keyed by the id the tree answers. The boot
-  // fold carries a pre-fold row's HEAD into the tree before this can be
-  // asked, so no rows fallback for the pointer is needed.
+  // branch ROWS stay in sqlite, keyed by the id the tree answers.
   const target = await resolveDocumentForBranches(workspaceId, path)
   if (target === null) {
     return { branches: [defaultMain()], head: 'main' }
@@ -92,33 +90,19 @@ export async function loadDocumentBranches(
   return { branches, head }
 }
 
-/**
- * The documentId + HEAD for a path: the tree answers when it holds the
- * document; a pre-fold legacy document (rows only) answers from its row so
- * branch state survives until the boot fold relocates it.
- */
+/** The documentId + HEAD for a path, answered from the workspace tree; null when the tree does not serve it. */
 async function resolveDocumentForBranches(
   workspaceId: string,
   path: string,
 ): Promise<{ documentId: string; currentBranch?: string } | null> {
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc !== null) {
-    const entry = resolveWorkspaceDocument(workspaceDoc, path)
-    if (entry !== null) {
-      return {
-        documentId: entry.documentId,
-        ...(entry.currentBranch === undefined ? {} : { currentBranch: entry.currentBranch }),
-      }
-    }
+  if (workspaceDoc === null) return null
+  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  if (entry === null) return null
+  return {
+    documentId: entry.documentId,
+    ...(entry.currentBranch === undefined ? {} : { currentBranch: entry.currentBranch }),
   }
-  const db = await dbReady()
-  const row = await db
-    .selectFrom('documents')
-    .select(['id', 'currentBranch'])
-    .where('workspaceId', '=', workspaceId)
-    .where('path', '=', path)
-    .executeTakeFirst()
-  return row === undefined ? null : { documentId: row.id, currentBranch: row.currentBranch }
 }
 
 // The actual write, assuming the workspace write lock is already held by

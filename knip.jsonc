@@ -54,7 +54,13 @@
         // type rather than the tuple) are both real, independently-consumed
         // exports — not dead code. Knip's "duplicates" check only sees they
         // share one runtime array reference.
-        "src/server/security/auth-strategy.ts": ["duplicates"]
+        "src/server/security/auth-strategy.ts": ["duplicates"],
+        // readDirSafe is exported for sweep-imported-fs-blobs.ts, which was
+        // retired along with the per-boot re-import (2026-08-28). It stays
+        // exported anyway: migration 0011 is recorded history and must stay
+        // byte-identical (see its own doc comment), so the `export` keyword
+        // cannot be dropped even though this file is now its only caller.
+        "src/server/store/db/migrations/0011-import-fs-blobs.ts": ["exports"]
       }
     },
     "packages/model": {

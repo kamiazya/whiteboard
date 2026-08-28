@@ -139,7 +139,10 @@ describe('0016-drop-documents-fk', () => {
     await seedDocument(handle.db)
     await seedVersionAndBranch(handle.db)
 
-    await handle.migrateToHead()
+    // This is 0016's own migration test: migrate to exactly the stage it
+    // introduces, not head — 0017 (a later, unrelated migration) drops the
+    // documents table this test still deletes a row from below.
+    await handle.migrateTo('0016-drop-documents-fk')
 
     expect(await handle.db.selectFrom('versions').select(['id', 'workspaceId']).execute()).toEqual([
       { id: 'v-a', workspaceId: 'ws-1' },

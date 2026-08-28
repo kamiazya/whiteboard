@@ -27,21 +27,8 @@ export function isMissingFileError(error: unknown): error is NodeJS.ErrnoExcepti
   )
 }
 
-// `locationKind` defaults to 'file': most callers (thumbnails, uploaded
-// files, blob-store envelopes) pass a real FS path an operator can go
-// inspect. 'identity' is for callers passing a label that is stable and
-// traceable but is NOT where the corrupt bytes actually live (e.g.
-// document-store.ts's canvas snapshots, which moved into Libsql rows but
-// keep their old blob path as an id) — the wording must not send an
-// operator looking for a file that no longer exists.
-export function corruptStoredData(
-  path: string,
-  detail: string,
-  options?: { locationKind?: 'file' | 'identity' },
-): CorruptStoredDataError {
-  const phrase =
-    options?.locationKind === 'identity'
-      ? `Stored canvas data identified by "${path}" is corrupt`
-      : `Stored data at "${path}" is corrupt`
-  return new CorruptStoredDataError(`${phrase}: ${detail}`)
+// `path` is a real FS path an operator can go inspect (thumbnails, uploaded
+// files, blob-store envelopes).
+export function corruptStoredData(path: string, detail: string): CorruptStoredDataError {
+  return new CorruptStoredDataError(`Stored data at "${path}" is corrupt: ${detail}`)
 }

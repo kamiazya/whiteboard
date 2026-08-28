@@ -197,7 +197,10 @@ describe('0012-ulid-remaining-document-ids', () => {
       path: 'blobless-doc',
     })
 
-    await handle.migrateToHead()
+    // Migrated only up to the last stage that still has a documents table
+    // (0017 drops it): this test is pinning 0012's own tolerance of a
+    // missing blob, not head-of-log behavior.
+    await handle.migrateTo('0016-drop-documents-fk')
 
     const row = (await handle.db
       .selectFrom('documents')
@@ -217,10 +220,12 @@ describe('0012-ulid-remaining-document-ids', () => {
       path: 'modern-doc',
     })
 
-    await handle.migrateToHead()
-    // Re-running migrateToLatest is a no-op once the log already records
-    // 0012 (kysely will not re-apply it), so call the migration function a
-    // second time directly to pin idempotence of its own logic.
+    // Migrated only up to the last stage that still has a documents table
+    // (0017 drops it) — re-running migrateToLatest is a no-op once the log
+    // already records 0012 (kysely will not re-apply it) anyway, so call
+    // the migration function a second time directly to pin idempotence of
+    // its own logic.
+    await handle.migrateTo('0016-drop-documents-fk')
     const { migration } = await import('./0012-ulid-remaining-document-ids.js')
     await migration.up(handle.db as never)
 

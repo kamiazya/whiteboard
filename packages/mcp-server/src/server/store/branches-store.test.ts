@@ -158,37 +158,6 @@ describe('branches-store', () => {
       expect(resolveWorkspaceDocument(doc, 'canvas-x')?.currentBranch).toBe('feature')
     })
 
-    // S7: the HEAD answers from the tree meta, not the rows column.
-    it('loadDocumentBranches reads the HEAD from the tree, not the rows', async () => {
-      await saveDocumentBranches('sess-a', 'canvas-x', {
-        head: 'feature',
-        branches: [
-          {
-            name: 'main',
-            color: DEFAULT_MAIN_COLOR,
-            tipFrontiers: '',
-            createdAt: '2026-04-23T00:00:00.000Z',
-          },
-          {
-            name: 'feature',
-            color: '#9333ea',
-            tipFrontiers: '',
-            createdAt: '2026-04-23T00:00:00.000Z',
-          },
-        ],
-      })
-      const { getDb } = await import('./db/index.js')
-      const db = await getDb(tempDir)
-      await db
-        .updateTable('documents')
-        .set({ currentBranch: 'main' })
-        .where('workspaceId', '=', 'sess-a')
-        .execute()
-
-      const state = await loadDocumentBranches('sess-a', 'canvas-x')
-      expect(state.head).toBe('feature')
-    })
-
     it('round-trips every BranchMeta field through save/load', async () => {
       const state = {
         head: 'feature-x',

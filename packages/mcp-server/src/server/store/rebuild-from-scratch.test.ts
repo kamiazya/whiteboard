@@ -1,12 +1,12 @@
 /**
  * The dual-plane collapse's permanent acceptance test (S8): the workspace
  * tree is the address book, so the ENTIRE document surface — listing,
- * content, names, pins, branches, versions, rename, delete — must work with
- * ZERO rows in the `documents` table, across a restart.
+ * content, names, pins, branches, versions, rename, delete — must work
+ * across a restart with no `documents` table at all.
  *
- * The table survives only as a frozen legacy inbox the boot fold reads;
- * nothing here may need it. If a future change quietly reintroduces a row
- * read or write, this file is what goes red.
+ * Migration 0017 dropped the table outright; nothing here may need it. If a
+ * future change quietly reintroduces a row read or write, this file is what
+ * goes red.
  */
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
@@ -40,7 +40,6 @@ const { loadWorkspaceNames, setDocumentDisplayName, setDocumentPinned } = await 
 )
 const { createBranch, loadDocumentBranches } = await import('./branches-store.js')
 const { FileVersionStore } = await import('./version-store.js')
-const { foldWorkspaceDocuments } = await import('./fold-workspace.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { getDb } = await import('./db/index.js')
 
@@ -66,12 +65,19 @@ function canvasDoc(text: string): LoroDoc {
   return doc
 }
 
-async function documentRowCount(): Promise<number> {
+/** Migration 0017 dropped the documents table outright: the tree is the whole address book. */
+async function documentsTableExists(): Promise<boolean> {
   const db = await getDb(tempDir)
-  return (await db.selectFrom('documents').select(['id']).execute()).length
+  const row = await db
+    .selectFrom('sqlite_master' as never)
+    .select(['name' as never])
+    .where('type', '=', 'table')
+    .where('name', '=', 'documents')
+    .executeTakeFirst()
+  return row !== undefined
 }
 
-it('the whole document surface works with zero documents rows, across a restart', async () => {
+it('the whole document surface works with no documents table at all, across a restart', async () => {
   const WS = 'ws-scratch'
 
   // ── Build a world through the real surfaces ──
@@ -86,16 +92,13 @@ it('the whole document surface works with zero documents rows, across a restart'
     label: 'checkpoint',
   })
 
-  // The address book is the tree: nothing above wrote a documents row.
-  expect(await documentRowCount()).toBe(0)
+  // The address book is the tree: no documents table exists at all.
+  expect(await documentsTableExists()).toBe(false)
 
-  // ── Restart: drop every in-memory cache and run the boot fold, exactly
-  //    as a fresh daemon process would over this data dir ──
+  // ── Restart: drop every in-memory cache, exactly as a fresh daemon
+  //    process would over this data dir ──
   clearCache()
   _clearWorkspaceDocCacheForTests()
-  const report = await foldWorkspaceDocuments()
-  // An empty inbox: the fold has no legacy rows to absorb.
-  expect(report).toEqual({ folded: 0, skipped: 0, deleted: 0 })
 
   // ── Everything answers from the stored workspace records alone ──
   expect(await workspaceExists(WS)).toBe(true)
@@ -121,10 +124,10 @@ it('the whole document surface works with zero documents rows, across a restart'
   const versions = await versionStore.list(WS, 'boards/main')
   expect(versions.map((v) => v.id)).toContain(version.id)
 
-  // Mutations keep working — and keep the table empty.
+  // Mutations keep working — with no documents table to keep in sync.
   await renameDocumentPath(WS, 'notes/readme', 'notes/README')
   expect((await listDocuments(WS)).map((d) => d.path)).toEqual(['boards/main', 'notes/README'])
   expect(await deleteDocument(WS, 'notes/README')).toBe(true)
   expect((await listDocuments(WS)).map((d) => d.path)).toEqual(['boards/main'])
-  expect(await documentRowCount()).toBe(0)
+  expect(await documentsTableExists()).toBe(false)
 })

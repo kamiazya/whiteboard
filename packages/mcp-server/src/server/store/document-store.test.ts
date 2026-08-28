@@ -1,6 +1,6 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
-import { dirname, join } from 'node:path'
+import { join } from 'node:path'
 import {
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
@@ -56,44 +56,6 @@ async function teardownIsolatedDb(): Promise<void> {
   await handle.dispose()
 }
 
-// Identity-convergence flip: loadDocument/saveDocument must read/write
-// through the SAME LibsqlDocumentStore rows the MCP tool surface uses,
-// instead of a separate FS blob tree the two paths cannot see into each
-// other's writes. RED today: loadDocument still reads only the FS blob, so
-// content seeded directly into the Libsql snapshot tables reads back empty.
-// Insert a raw pre-fold documents row (no tree node, no kind) the way
-// legacy data actually looks on disk. Production writers refuse to mint
-// rows now, so legacy fixtures are seeded directly.
-async function seedLegacyRow(
-  db: Awaited<ReturnType<typeof import('./db/index.js')['getDb']>>,
-  workspaceId: string,
-  path: string,
-): Promise<string> {
-  const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
-  const now = Date.now()
-  await db
-    .insertInto('workspaces')
-    .values({ id: workspaceId, displayName: null, createdAt: now, updatedAt: now })
-    .onConflict((oc) => oc.column('id').doNothing())
-    .execute()
-  const id = generateDocumentId()
-  await db
-    .insertInto('documents')
-    .values({
-      id,
-      workspaceId,
-      path,
-      displayName: null,
-      isPinned: 0,
-      pinOrder: null,
-      currentBranch: 'main',
-      createdAt: now,
-      updatedAt: now,
-    })
-    .execute()
-  return id
-}
-
 describe('loadDocument reads through LibsqlDocumentStore (identity-convergence flip)', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-flip-test-'))
@@ -103,34 +65,6 @@ describe('loadDocument reads through LibsqlDocumentStore (identity-convergence f
   afterEach(async () => {
     await teardownIsolatedDb()
     await rm(tempDir, { recursive: true, force: true })
-  })
-
-  it('returns real content seeded directly into the Libsql snapshot tables, not an empty doc', async () => {
-    const { getDb } = await import('./db/index.js')
-    const { getDataDir } = await import('../config.js')
-    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
-
-    const db = await getDb(getDataDir())
-    // A raw pre-fold row: no tree node, content only on the legacy plane.
-    // Inserted directly because production writers no longer mint rows —
-    // this fixture IS the legacy state the upgrade path exists to read.
-    const documentId = await seedLegacyRow(db, 'session1', 'seeded')
-
-    const seedDoc = new LoroDoc()
-    seedDoc.getText('content').insert(0, 'real content')
-    seedDoc.commit()
-    const { manifest, chunks } = chunkSnapshot(seedDoc.export({ mode: 'snapshot' }), 1_000_000)
-    const store = new LibsqlDocumentStore(db)
-    await store.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: 'session1', documentId },
-      manifest,
-      chunks,
-      frontier: seedDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    })
-
-    const loaded = await loadDocument('session1', 'seeded')
-    expect(loaded.getText('content').toString()).toBe('real content')
   })
 
   it('a saveDocument write is immediately durable in the stored workspace record', async () => {
@@ -272,71 +206,6 @@ describe('route saves and tool writes serialize on the workspace document', () =
     await routeWrite('merge-race', 'web')
     const reloaded = await loadDocument('session1', 'merge-race')
     expect(reloaded.getMap('nodes').keys().sort()).toEqual(['agent', 'base', 'web'])
-  })
-})
-
-describe('legacy LoroList -> MovableList migration reads and persists through Libsql (identity-convergence flip)', () => {
-  beforeEach(async () => {
-    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-legacy-migrate-test-'))
-    await setupIsolatedDb()
-  })
-
-  afterEach(async () => {
-    await teardownIsolatedDb()
-    await rm(tempDir, { recursive: true, force: true })
-  })
-
-  it('migrates a legacy LoroList doc seeded directly in Libsql, persists the movable list back through saveDocument, and backs up the pre-migration bytes', async () => {
-    const { getDb } = await import('./db/index.js')
-    const { getDataDir } = await import('../config.js')
-    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
-    const { chunkSnapshot } = await import('@kamiazya/whiteboard-ports')
-    const { access } = await import('node:fs/promises')
-
-    const db = await getDb(getDataDir())
-    const documentId = await seedLegacyRow(db, 'session1', 'legacy')
-
-    // Build a legacy doc: elements stored in a plain LoroList, the shape
-    // migrateLegacyListToMovable repairs on load. No production code writes
-    // this shape any more, so it is constructed directly here.
-    const legacyDoc = new LoroDoc()
-    const list = legacyDoc.getList('elements')
-    const item = list.insertContainer(0, new LoroMap())
-    item.set('id', 'legacy-elem')
-    item.set('type', 'rectangle')
-    legacyDoc.commit()
-    const legacyBytes = legacyDoc.export({ mode: 'snapshot' })
-    const { manifest, chunks } = chunkSnapshot(legacyBytes, 1_000_000)
-    const store = new LibsqlDocumentStore(db)
-    await store.saveSnapshot({
-      docRef: { kind: 'document', workspaceId: 'session1', documentId },
-      manifest,
-      chunks,
-      frontier: legacyDoc.oplogVersion().encode() as Uint8Array<ArrayBuffer>,
-    })
-
-    const loaded = await loadDocument('session1', 'legacy')
-    const movable = loaded.getMovableList('elements').toJSON() as { id: string; type: string }[]
-    expect(movable).toHaveLength(1)
-    expect(movable[0].id).toBe('legacy-elem')
-    expect(loaded.getList('elements').length).toBe(0)
-
-    // Persisted back through saveDocument (the migration's own side effect):
-    // a fresh load must see the movable list, not the legacy shape again.
-    const reloaded = await loadDocument('session1', 'legacy')
-    const reloadedMovable = reloaded.getMovableList('elements').toJSON() as { id: string }[]
-    expect(reloadedMovable).toEqual(movable)
-
-    // Pre-migration bytes were backed up next to the (otherwise unused)
-    // blob path, fixing the cwd-relative bak-path bug in the pre-flip code.
-    const bakPath = join(
-      tempDir,
-      'blobs',
-      'session1',
-      'canvas',
-      `${documentId}.loro.pre-migrate-bak`,
-    )
-    await expect(access(bakPath)).resolves.toBeUndefined()
   })
 })
 
@@ -701,37 +570,6 @@ describe('listDocuments', () => {
     expect(paths).not.toContain('exports')
   })
 
-  it('answers from the workspace tree only — a legacy documents row never appears', async () => {
-    // Post-collapse the documents table is a frozen inbox only the boot fold
-    // reads: the listing is a tree walk, so a row with no tree entry (the
-    // pre-fold legacy shape) must not leak into the summary. The old
-    // "kindless row is corrupt" guard retired with the row read itself —
-    // a tree entry cannot be kindless, the meta schema requires the kind.
-    await saveDocument('session1', 'in-tree', new LoroDoc())
-    const { getDb } = await import('./db/index.js')
-    const { getDataDir } = await import('../config.js')
-    const db = await getDb(getDataDir())
-    await db
-      .insertInto('documents')
-      .values({
-        id: '01JQZ00000000000000LEGACY0',
-        workspaceId: 'session1',
-        path: 'row-only',
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
-        createdAt: Date.now(),
-        updatedAt: Date.now(),
-        kind: 'spatial',
-      })
-      .execute()
-
-    const paths = (await listDocuments('session1')).map((c) => c.path)
-    expect(paths).toContain('in-tree')
-    expect(paths).not.toContain('row-only')
-  })
-
   it('reports a recorded kind unchanged', async () => {
     await saveDocument('session1', 'a-note', new LoroDoc(), { kind: 'markdown' })
     const [entry] = await listDocuments('session1')
@@ -889,37 +727,6 @@ describe('getDocumentKind', () => {
   it('returns the persisted kind for an existing canvas', async () => {
     await saveDocument('session1', 'note', new LoroDoc(), { kind: 'markdown' })
     expect(await getDocumentKind('session1', 'note')).toBe('markdown')
-  })
-
-  it('reports an unrecorded kind as unknown rather than guessing spatial', async () => {
-    // saveDocument can no longer produce a kind-less row, so the null case
-    // is seeded raw — the defect shape the fold deletes at boot, still
-    // answered honestly by a read that happens first.
-    const { getDb } = await import('./db/index.js')
-    const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
-    const db = await getDb(tempDir)
-    const now = Date.now()
-    await db
-      .insertInto('workspaces')
-      .values({ id: 'session1', createdAt: now, updatedAt: now })
-      .onConflict((oc) => oc.column('id').doNothing())
-      .execute()
-    await db
-      .insertInto('documents')
-      .values({
-        id: generateDocumentId(),
-        workspaceId: 'session1',
-        path: 'canvas-a',
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
-        createdAt: now,
-        updatedAt: now,
-        kind: null,
-      })
-      .execute()
-    expect(await getDocumentKind('session1', 'canvas-a')).toBeNull()
   })
 })
 
@@ -1442,12 +1249,6 @@ describe('deleting a document', () => {
 
     await expect(deleteDocument('session1', 'canvas-a')).resolves.toBe(true)
 
-    const canvasAfter = await db
-      .selectFrom('documents')
-      .selectAll()
-      .where('id', '=', documentId)
-      .executeTakeFirst()
-    expect(canvasAfter).toBeUndefined()
     const branchesAfter = await db
       .selectFrom('branches')
       .selectAll()
@@ -1539,29 +1340,6 @@ describe('deleting a document', () => {
     expect(await resolveDocumentIdAtPath('session1', 'agent-deleted')).toBeNull()
   })
 
-  it('removes the .pre-migrate-bak file the legacy migration leaves beside the blob', async () => {
-    const { getDb } = await import('./db/index.js')
-    const { mkdir, stat, writeFile } = await import('node:fs/promises')
-
-    await saveDocument('session1', 'migrated', new LoroDoc())
-    const _db = await getDb(tempDir)
-    const rowId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
-      'session1',
-      'migrated',
-    )
-    if (rowId === null) throw new Error('document missing from the tree')
-    const row = { id: rowId }
-    const bakPath = join(tempDir, 'blobs', 'session1', 'canvas', `${row.id}.loro.pre-migrate-bak`)
-    // saveDocument no longer creates the blob directory (no FS blob is
-    // written on the happy path), so the bak file's parent has to be made
-    // explicitly here.
-    await mkdir(dirname(bakPath), { recursive: true })
-    await writeFile(bakPath, new Uint8Array([9, 9, 9]))
-
-    await expect(deleteDocument('session1', 'migrated')).resolves.toBe(true)
-    await expect(stat(bakPath)).rejects.toThrow()
-  })
-
   it('returns false for a missing canvas without throwing; deleting the same canvas twice returns true then false', async () => {
     await expect(deleteDocument('session1', 'ghost')).resolves.toBe(false)
 
@@ -1570,88 +1348,15 @@ describe('deleting a document', () => {
     await expect(deleteDocument('session1', 'once')).resolves.toBe(false)
   })
 
-  it('deletes a canvas whose FS blob was never written (unlinkIfExists ignores ENOENT so Libsql-only documents still delete)', async () => {
-    const { getDb } = await import('./db/index.js')
-
-    // saveDocument no longer writes an FS blob at all — this is the normal
-    // case post-flip, not a simulated failure, but deleteDocument's
-    // unconditional unlinkIfExists(blobPath) call must still no-op cleanly.
+  it('deletes a canvas that never had an FS blob (nothing writes one post-collapse)', async () => {
+    // saveDocument never writes an FS blob — content lives entirely in the
+    // workspace record's Libsql-backed bytes.
     await saveDocument('session1', 'row-only', new LoroDoc())
-    const db = await getDb(tempDir)
-    const rowId = await (await import('./document-store.js')).resolveDocumentIdAtPath(
-      'session1',
-      'row-only',
-    )
-    if (rowId === null) throw new Error('document missing from the tree')
-    const row = { id: rowId }
 
     await expect(deleteDocument('session1', 'row-only')).resolves.toBe(true)
-    const after = await db
-      .selectFrom('documents')
-      .selectAll()
-      .where('id', '=', row.id)
-      .executeTakeFirst()
-    expect(after).toBeUndefined()
-  })
-
-  it('deletes cleanly a document whose FS blob was already removed by sweepImportedFsBlobs', async () => {
-    const { generateDocumentId } = await import('@kamiazya/whiteboard-model')
-    const { importFsBlobs } = await import('./db/migrations/0011-import-fs-blobs.js')
-    const { DOCUMENT_DOC_KEY_PREFIX } = await import('@kamiazya/whiteboard-ports')
-    const { sweepImportedFsBlobs } = await import('./db/sweep-imported-fs-blobs.js')
-    const { mkdir, writeFile, access } = await import('node:fs/promises')
-    const { getDb } = await import('./db/index.js')
-    const { upsertWorkspaceRow } = await import('./db/upsert-workspace.js')
-
-    const db = await getDb(tempDir)
-    await upsertWorkspaceRow(db, 'session1')
-    const documentId = generateDocumentId()
-    const now = Date.now()
-    await db
-      .insertInto('documents')
-      .values({
-        id: documentId,
-        workspaceId: 'session1',
-        path: 'swept-then-deleted',
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
-        createdAt: now,
-        updatedAt: now,
-        kind: null,
-      })
-      .execute()
-
-    const blobDoc = new LoroDoc()
-    blobDoc.getText('content').insert(0, 'legacy FS blob, later imported and swept')
-    blobDoc.commit()
-    const blobDir = join(tempDir, 'blobs', 'session1', 'canvas')
-    await mkdir(blobDir, { recursive: true })
-    const blobPath = join(blobDir, `${documentId}.loro`)
-    await writeFile(blobPath, blobDoc.export({ mode: 'snapshot' }))
-
-    await importFsBlobs(
-      db as unknown as Parameters<typeof importFsBlobs>[0],
-      tempDir,
-      DOCUMENT_DOC_KEY_PREFIX,
-    )
-    await sweepImportedFsBlobs(db, tempDir)
-    await expect(access(blobPath)).rejects.toThrow() // pins the sweep precondition itself
-
-    // The dual-plane collapse changed this case's answer: a row-only
-    // pre-fold document is invisible to the delete surface (the tree is the
-    // address book), so the delete reports "already absent" instead of
-    // reaching around the tree — the row is the boot fold's to absorb or,
-    // kindless as here, to remove as this project's own data defect.
-    await expect(deleteDocument('session1', 'swept-then-deleted')).resolves.toBe(false)
-
-    const after = await db
-      .selectFrom('documents')
-      .selectAll()
-      .where('id', '=', documentId)
-      .executeTakeFirst()
-    expect(after).toBeDefined()
+    expect(
+      await (await import('./document-store.js')).resolveDocumentIdAtPath('session1', 'row-only'),
+    ).toBeNull()
   })
 })
 
