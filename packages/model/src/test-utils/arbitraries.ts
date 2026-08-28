@@ -1,4 +1,5 @@
 import { RESERVED_ROOT_KEYS } from '../facets.js'
+import { DOCUMENT_PATH_SEGMENT_PATTERN } from '../ids.js'
 import type {
   MdastCellPhrasingContent,
   MdastFlowContent,
@@ -23,6 +24,43 @@ export const canonicalUlidArbitrary: fc.Arbitrary<string> = fc
   .map(([first, rest]) => first + rest.join(''))
 
 const nodeIdArbitrary: fc.Arbitrary<string> = fc.string({ minLength: 1, maxLength: 24 })
+
+// Mirrors workspaceSegmentSchema's own `.refine` (ids.ts): a canonical ULID
+// is exactly 26 Crockford base32 chars with a leading [0-7], matched
+// case-insensitively since Crockford decoding ignores case. Duplicated here
+// rather than imported because ULID_PATTERN is private to ids.ts — this
+// generator-side copy exists only to steer the arbitrary away from the
+// shape the schema itself rejects, not to define the contract.
+const ULID_SHAPE_PATTERN = new RegExp(`^[${ULID_FIRST_CHARS}][${CROCKFORD_CHARS}]{25}$`, 'i')
+
+// Ordinary segment shape, generated straight from the schema's own exported
+// grammar so the two cannot drift.
+const rawWorkspaceSegmentArbitrary: fc.Arbitrary<string> = fc.stringMatching(
+  DOCUMENT_PATH_SEGMENT_PATTERN,
+)
+
+// Deliberately mixed in at meaningful weight (not left to arise by chance
+// from the grammar above, which would make a mutated exclusion filter pass
+// vacuously): candidates shaped exactly like a canonical ULID, upper- and
+// lower-cased, so the exclusion filter below is actually exercised.
+const ulidShapedCandidateArbitrary: fc.Arbitrary<string> = fc
+  .tuple(canonicalUlidArbitrary, fc.boolean())
+  .map(([ulid, lower]) => (lower ? ulid.toLowerCase() : ulid))
+
+/**
+ * Generates workspace segments valid-by-construction against
+ * `workspaceSegmentSchema` (ADR-0019): the document-path-segment grammar,
+ * with the schema's own ULID-shape disjointness refinement re-applied as a
+ * generator-side filter. Its "valid-by-construction" claim is pinned by the
+ * generator-validity property in `properties.test.ts`, not merely asserted
+ * here in a comment.
+ */
+export const workspaceSegmentArbitrary: fc.Arbitrary<string> = fc
+  .oneof(
+    { weight: 3, arbitrary: rawWorkspaceSegmentArbitrary },
+    { weight: 1, arbitrary: ulidShapedCandidateArbitrary },
+  )
+  .filter((segment) => !ULID_SHAPE_PATTERN.test(segment))
 
 export const documentKindArbitrary = fc.constantFrom('markdown' as const, 'spatial' as const)
 
