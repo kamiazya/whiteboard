@@ -829,7 +829,7 @@ describe('BrowserDocumentPage', () => {
       // App-mounted shell draws it (and hosts the CTA in its popover) from
       // the state this page publishes.
       expect(screen.queryByTestId('connection-chip')).toBeNull()
-      expect(getShellConnection()).toEqual({ state: 'browser' })
+      expect(getShellConnection()).toEqual({ state: { keeper: 'browser' } })
 
       cleanup()
       expect(getShellConnection()).toBeNull()

@@ -154,7 +154,7 @@ export function BrowserDocumentPage({
   // the data lives in this browser and nowhere else. Cleared on unmount so an
   // index page makes no claim of its own.
   useEffect(() => {
-    setShellConnection({ state: 'browser' })
+    setShellConnection({ state: { keeper: 'browser' } })
     return () => setShellConnection(null)
   }, [])
 

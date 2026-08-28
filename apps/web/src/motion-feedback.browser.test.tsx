@@ -34,7 +34,7 @@ describe('feedback micro-motion', () => {
   })
 
   it('connection chip transitions colors on the token duration', () => {
-    render(<ConnectionStatus state="synced" />)
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'synced' }} />)
     const chip = document.querySelector('[data-testid="connection-chip"]') as HTMLElement
     const cs = getComputedStyle(chip)
     expect(cs.transitionProperty).toContain('color')
@@ -42,7 +42,9 @@ describe('feedback micro-motion', () => {
   })
 
   it('sync-off shows a finite attention pulse on the chip dot', () => {
-    render(<ConnectionStatus state="sync-off" onRepair={vi.fn()} />)
+    render(
+      <ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} onRepair={vi.fn()} />,
+    )
     const echo = document.querySelector('[data-testid="connection-chip-pulse"]') as HTMLElement
     expect(echo).not.toBeNull()
     const cs = getComputedStyle(echo)
@@ -53,7 +55,7 @@ describe('feedback micro-motion', () => {
   })
 
   it('synced chip has no attention pulse', () => {
-    render(<ConnectionStatus state="synced" />)
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'synced' }} />)
     expect(document.querySelector('[data-testid="connection-chip-pulse"]')).toBeNull()
   })
 })

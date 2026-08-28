@@ -397,19 +397,22 @@ describe('DaemonDocumentPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(getShellConnection()).toEqual({ state: 'synced', daemonBaseUrl: DAEMON_BASE_URL })
+    expect(getShellConnection()).toEqual({
+      state: { keeper: 'daemon', session: 'synced' },
+      daemonBaseUrl: DAEMON_BASE_URL,
+    })
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onDisconnected?.()
     })
-    expect(getShellConnection()?.state).toBe('reconnecting')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'reconnecting' })
 
     // …and back, so a recovered stream clears it rather than latching.
     await act(async () => {
       backend.handlers?.onConnected()
     })
-    expect(getShellConnection()?.state).toBe('synced')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
   })
 
   it('reports "sync-off" on WS auth failure (close 1008 -> onAuthError) without replacing the page', async () => {
@@ -424,14 +427,14 @@ describe('DaemonDocumentPage', () => {
     // docks in Select mode, so tests exercising it switch first.
     fireEvent.click(await screen.findByTestId('select-tool-button'))
     // Healthy session.
-    expect(getShellConnection()?.state).toBe('synced')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
 
     const backend = createdBackends[0]!
     await act(async () => {
       backend.handlers?.onAuthError?.()
     })
 
-    expect(getShellConnection()?.state).toBe('sync-off')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
     // D1: no standing role=alert banner anywhere on the page — the shell's
     // chip carries the state and its own live region announces it.
     expect(screen.queryByRole('alert')).toBeNull()
@@ -447,14 +450,14 @@ describe('DaemonDocumentPage', () => {
       )
     })
     await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    expect(getShellConnection()?.state).toBe('synced')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
 
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
     // The App-mounted shell reads this to draw the chip and to light the
     // gear's attention dot.
-    expect(getShellConnection()?.state).toBe('sync-off')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
 
     // Cleared on unmount: an index page holds no session, and a latched chip
     // would keep claiming one.
@@ -477,14 +480,14 @@ describe('DaemonDocumentPage', () => {
     await act(async () => {
       createdBackends[0]?.handlers?.onAuthError?.()
     })
-    expect(getShellConnection()?.state).toBe('sync-off')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'sync-off' })
 
     await act(async () => {
       await switchDocumentViaConnections('Second board')
     })
 
     // The stale sync-off state must not outlive the backend that produced it.
-    expect(getShellConnection()?.state).toBe('synced')
+    expect(getShellConnection()?.state).toEqual({ keeper: 'daemon', session: 'synced' })
   })
 
   it('shows a structural skeleton while workspace/canvas resolution is pending', async () => {

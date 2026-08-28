@@ -21,9 +21,15 @@ describe('ConnectionStatus chip', () => {
   // something you go looking for with an intent; sync dropping is not, and
   // sending someone to Settings mid-failure adds a step at the worst moment.
   it('carries no management action while sync is on — that lives in Settings', () => {
-    render(<ConnectionStatus state="synced" daemonBaseUrl="http://127.0.0.1:3099" />, {
-      container: document.body,
-    })
+    render(
+      <ConnectionStatus
+        state={{ keeper: 'daemon', session: 'synced' }}
+        daemonBaseUrl="http://127.0.0.1:3099"
+      />,
+      {
+        container: document.body,
+      },
+    )
     fireEvent.click(screen.getByTestId('connection-chip'))
 
     const popover = screen.getByTestId('connection-popover')
@@ -37,8 +43,12 @@ describe('ConnectionStatus chip', () => {
 
   it('explains the reconnecting state instead of opening an empty popover', () => {
     // The chip can reach this state, so the popover must have something to
-    // say; a state with no branch renders an empty box on click.
-    render(<ConnectionStatus state="reconnecting" />, { container: document.body })
+    // say; a state with no branch renders an empty box on click. Reconnecting
+    // is SESSION health on a daemon-kept document — the keeper axis cannot
+    // say it, which is the point of the two-axis state.
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'reconnecting' }} />, {
+      container: document.body,
+    })
     fireEvent.click(screen.getByTestId('connection-chip'))
 
     const popover = screen.getByTestId('connection-popover')
@@ -50,7 +60,12 @@ describe('ConnectionStatus chip', () => {
   })
 
   it('synced state shows a quiet chip and explains where data lives in the popover', async () => {
-    render(<ConnectionStatus state="synced" daemonBaseUrl="http://127.0.0.1:3099" />)
+    render(
+      <ConnectionStatus
+        state={{ keeper: 'daemon', session: 'synced' }}
+        daemonBaseUrl="http://127.0.0.1:3099"
+      />,
+    )
 
     const chip = screen.getByRole('button', { name: /synced/i })
     expect(chip).toBeTruthy()
@@ -66,7 +81,7 @@ describe('ConnectionStatus chip', () => {
 
   it('browser state explains browser-only storage and hosts extra content (daemon detection)', async () => {
     render(
-      <ConnectionStatus state="browser">
+      <ConnectionStatus state={{ keeper: 'browser' }}>
         <button type="button">Use here</button>
       </ConnectionStatus>,
     )
@@ -81,7 +96,11 @@ describe('ConnectionStatus chip', () => {
     const onRepair = vi.fn()
     const onWorkInBrowser = vi.fn()
     render(
-      <ConnectionStatus state="sync-off" onRepair={onRepair} onWorkInBrowser={onWorkInBrowser} />,
+      <ConnectionStatus
+        state={{ keeper: 'daemon', session: 'sync-off' }}
+        onRepair={onRepair}
+        onWorkInBrowser={onWorkInBrowser}
+      />,
     )
 
     const chip = screen.getByRole('button', { name: /sync off/i })
@@ -97,7 +116,9 @@ describe('ConnectionStatus chip', () => {
   })
 
   it('sync-off announces itself to assistive tech without a visual banner', () => {
-    render(<ConnectionStatus state="sync-off" onRepair={vi.fn()} />)
+    render(
+      <ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} onRepair={vi.fn()} />,
+    )
     // A polite live region replaces the old role="alert" banner.
     expect(screen.getByRole('status', { name: /live sync off/i })).toBeTruthy()
   })
