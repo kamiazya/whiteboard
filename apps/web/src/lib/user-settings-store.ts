@@ -140,6 +140,11 @@ export type PromotionResultRecord = z.infer<typeof promotionResultSchema>
 
 const migrationSettingsSchema = z
   .object({
+    // Written by the retired per-document import panel; nothing produces or
+    // reads it any more. Kept parse-only because every schema level is
+    // `.strict()` and the loader falls back to defaults on ANY failure — so
+    // dropping the key would discard the whole stored payload of anyone who
+    // ever used the old import. Removable only with a v3 migration.
     browserToDaemon: z
       .object({
         lastExportedAt: z.string().optional(),

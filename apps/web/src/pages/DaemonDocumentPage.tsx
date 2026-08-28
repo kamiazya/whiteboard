@@ -5,8 +5,7 @@ import { DaemonBackend } from '@kamiazya/whiteboard-mcp/daemon-backend'
 import { selectDocumentTransport } from '@kamiazya/whiteboard-mcp/select-document-transport'
 import { SseBackend } from '@kamiazya/whiteboard-mcp/sse-backend'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
@@ -16,7 +15,6 @@ import { DocumentEditorSurface } from '../components/document-editor/DocumentEdi
 import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
-import { ErrorBoundary } from '../components/ErrorBoundary.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
@@ -51,9 +49,7 @@ import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
-import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
-import type { ContentClock } from '../lib/local-document-summary.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -63,15 +59,6 @@ import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
 const log = getAppLogger('daemon-document-page')
-
-// Lazy so IndexedDB/Loro code (pulled in by ImportFromBrowserPanel's store
-// dependencies) only loads once a canvas is selected and this migration-time
-// disclosure is actually mounted, not on every daemon-page load.
-const LazyImportSection = lazy(() =>
-  import('./daemon-document-import-section.js').then((m) => ({
-    default: m.DaemonDocumentImportSection,
-  })),
-)
 
 export interface DaemonDocumentPageProps {
   daemonBaseUrl: string
@@ -87,12 +74,6 @@ export interface DaemonDocumentPageProps {
   // Injectable so tests can avoid real WebSocket networking; production
   // callers rely on the default DaemonBackend + createDaemonFetch wiring.
   createBackend?: (workspaceId: string, path: string, daemonFetch: typeof fetch) => DocumentBackend
-  // Defaults to the shared browser index, which renders a collapsed
-  // "Import from this browser" disclosure so a user who previously worked in
-  // the browser can copy those documents onto this daemon workspace. Tests /
-  // embedders inject a fake; `null` hides the flow entirely.
-  browserStore?: DocumentIndex | null
-  browserClock?: ContentClock
   // Wired to WorkspaceTopBar's own "Back to documents" button. Absent
   // (the default) hides that button — callers that own an index view (the
   // daemon gallery) pass this to return there.
@@ -106,10 +87,6 @@ export function DaemonDocumentPage({
   token,
   capabilities = DAEMON_CAPABILITIES,
   createBackend,
-  // Resolved here, not in App: App is the entry chunk and the concrete index
-  // drags loro-crdt with it (entry-graph-loro-free.test.ts).
-  browserStore = sharedFoldingBrowserIndex(),
-  browserClock,
   onNavigateBack,
 }: DaemonDocumentPageProps) {
   // Stable across the page's lifetime: daemonBaseUrl/token come from a fixed
@@ -167,7 +144,6 @@ export function DaemonDocumentPage({
     kind: 'success' | 'error'
     text: string
   } | null>(null)
-  const [importSectionOpen, setImportSectionOpen] = useState(false)
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -750,43 +726,6 @@ export function DaemonDocumentPage({
               )}
               {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
             </div>
-          )}
-          {canvas && browserStore && (
-            <details
-              className="border-b bg-background px-4 py-2 text-sm"
-              onToggle={(event) => setImportSectionOpen(event.currentTarget.open)}
-            >
-              <summary className="cursor-pointer text-xs font-medium text-muted-foreground">
-                Import from this browser
-              </summary>
-              {/* <details> only hides collapsed children visually — React still
-                mounts them. Gate on the open state so the lazy chunk and its
-                IndexedDB read are deferred until the user expands the section. */}
-              {importSectionOpen && (
-                <div className="pt-2">
-                  {/* Local boundary: a chunk-load or render failure in this
-                    optional disclosure must degrade the section alone, not
-                    take the whole editor to the app-level boundary. */}
-                  <ErrorBoundary
-                    fallback={() => (
-                      <p role="alert" className="text-xs text-destructive">
-                        Import is unavailable right now. Reopen this section to retry.
-                      </p>
-                    )}
-                  >
-                    <Suspense fallback={null}>
-                      <LazyImportSection
-                        workspaceId={canvas.workspaceId}
-                        daemonFetch={daemonFetch}
-                        daemonBaseUrl={daemonBaseUrl}
-                        browserStore={browserStore}
-                        browserClock={browserClock}
-                      />
-                    </Suspense>
-                  </ErrorBoundary>
-                </div>
-              )}
-            </details>
           )}
         </div>
         {canvas !== null &&
