@@ -29,6 +29,7 @@ import type { AppOptions } from './app-types.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { getLogger, getLogLevel, setLogLevel } from './log.js'
 import { createMcpServer } from './mcp/index.js'
+import type { PairingUnavailableReason } from './mcp/pairing-link.js'
 import { tracingMiddleware } from './observability/http-tracing.js'
 import { createCspNonce, pairPageCsp } from './pair-page-csp.js'
 import { createDaemonAuthMiddleware } from './routes/auth.js'
@@ -109,6 +110,33 @@ export function createApp(options: AppOptions) {
   const app = new Hono()
 
   const instanceId = options.instanceId ?? randomUUID()
+  // wb_pairing_link_create's daemon context — undefined in server-mode (no
+  // single daemon origin to embed the way local-daemon has) and in any
+  // local-daemon caller that supplies no daemonBaseUrl (ad-hoc/test
+  // callers); the tool itself treats "no context" as the standalone case.
+  const pairingLinkContext =
+    options.authMode === 'local-daemon' && options.daemonBaseUrl !== undefined
+      ? {
+          daemonBaseUrl: options.daemonBaseUrl,
+          bootstrapToken: options.token,
+          // The raw provider (not a resolved snapshot) so the tool's
+          // allowlist check re-reads the SAME live set CORS/mcp-origin/WS
+          // consult on every call — options.allowedWebOrigins is itself a
+          // function backed by pairing grants approved at runtime, and
+          // resolving it once here would freeze the tool's advisory text
+          // stale for the rest of the process the moment a grant is
+          // approved after startup.
+          allowedWebOrigins: options.allowedWebOrigins,
+        }
+      : undefined
+  // Only consulted by wb_pairing_link_create when pairingLinkContext above is
+  // undefined, so it only has to distinguish the two ways THAT happens here
+  // (server-mode has no pairing concept at all; local-daemon with no
+  // daemonBaseUrl is an ad-hoc/test caller with no real HTTP listener) — the
+  // stdio-entrypoint reason lives in mcp/index.ts's own default, since this
+  // module is never on that path.
+  const pairingUnavailableReason: PairingUnavailableReason =
+    options.authMode === 'server-mode' ? 'server-mode' : 'no-daemon-base-url'
   // The signing identity behind /api/runtime/ping's `identity`,
   // /api/runtime/verify, and pairing-token response signatures.
   const identity = options.identity ?? createDaemonIdentity({ dataDir: getDataDir() })
@@ -270,12 +298,15 @@ export function createApp(options: AppOptions) {
   // `enableJsonResponse: true`, which the entry's built-in legacy fallback
   // does not set, and changing legacy clients' response framing (JSON body →
   // SSE) would break the stdio proxy and the web app's daemon client.
-  const modernMcpHandler = createMcpHandler(() => createMcpServer(), {
-    legacy: 'reject',
-    onerror: (error) => {
-      httpLog.warning({ err: error }, 'mcp-http:modern-error')
+  const modernMcpHandler = createMcpHandler(
+    () => createMcpServer({ pairing: pairingLinkContext, pairingUnavailableReason }),
+    {
+      legacy: 'reject',
+      onerror: (error) => {
+        httpLog.warning({ err: error }, 'mcp-http:modern-error')
+      },
     },
-  })
+  )
 
   app.all('/mcp', async (c) => {
     const startedAt = Date.now()
@@ -333,7 +364,10 @@ export function createApp(options: AppOptions) {
     let response: Response | undefined
     try {
       const constructStartedAt = debug ? Date.now() : 0
-      const server = await createMcpServer()
+      const server = await createMcpServer({
+        pairing: pairingLinkContext,
+        pairingUnavailableReason,
+      })
       if (debug) {
         httpLog.info({ durationMs: Date.now() - constructStartedAt }, 'mcp-http:construct')
       }

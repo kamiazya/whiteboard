@@ -1,73 +1,25 @@
-import { z } from 'zod'
-import { bareOriginSchema } from '../runtime-config.js'
+import {
+  type DaemonConnectionPayload,
+  daemonConnectionPayloadSchema,
+  decodeBase64UrlText,
+  encodeBase64UrlText,
+  DAEMON_CONNECTION_FRAGMENT_KEY as FRAGMENT_KEY,
+} from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { z } from 'zod'
 
-// URL hash key carrying the daemon-pairing payload: `#wb=<base64url-json>`.
-const FRAGMENT_KEY = 'wb'
-
-// Minimum bootstrapToken length is a defense-in-depth floor, not the real security
-// boundary — the daemon itself decides whether a bootstrapToken is valid and
-// exchanges it for a short-lived sessionToken (see ADR-0002).
-const MIN_BOOTSTRAP_TOKEN_LENGTH = 8
-
-// bareOriginSchema alone permits any URL scheme (ws:, file:, etc.); daemon pairing is
-// restricted to http(s) since that is the only transport ADR-0002 defines.
-const daemonBaseUrlSchema = bareOriginSchema.refine(
-  (v) => v.startsWith('http://') || v.startsWith('https://'),
-  { message: 'baseUrl must use http or https' },
-)
-
-// authMode is a literal union rather than a bare string so new modes require an
-// explicit schema change instead of silently round-tripping unknown values.
-export const daemonConnectionPayloadSchema = z
-  .object({
-    baseUrl: daemonBaseUrlSchema,
-    workspaceId: z.string().min(1).optional(),
-    path: z.string().min(1).optional(),
-    bootstrapToken: z.string().min(MIN_BOOTSTRAP_TOKEN_LENGTH).optional(),
-    authMode: z.enum(['bootstrap', 'none']),
-    fullscreen: z.boolean().optional(),
-  })
-  .strict()
-  // ADR-0002's bootstrap pairing exchange has no meaning without a token to
-  // exchange, so the schema — not just the docs — enforces the pairing.
-  .refine((payload) => payload.authMode !== 'bootstrap' || payload.bootstrapToken !== undefined, {
-    message: 'bootstrapToken is required when authMode is "bootstrap"',
-    path: ['bootstrapToken'],
-  })
-  // A canvas is addressed by the (workspaceId, path) pair, so a path is
-  // meaningless without a workspaceId. workspaceId alone is a valid
-  // workspace-level target, so the constraint is one-directional.
-  .refine((payload) => payload.path === undefined || payload.workspaceId !== undefined, {
-    message: 'workspaceId is required when path is set',
-    path: ['workspaceId'],
-  })
-
-export type DaemonConnectionPayload = z.infer<typeof daemonConnectionPayloadSchema>
+export type { DaemonConnectionPayload }
+// The payload schema and its base64url fragment codec are declared ONCE in
+// mcp-server's shared api-contracts, not here: the tool that mints a pairing
+// link (wb_pairing_link_create) and this parser used to keep two
+// independently hand-written copies, which is exactly the shape that drifts
+// silently. Re-exported so existing importers of this module keep working.
+export { daemonConnectionPayloadSchema }
 
 export type ParseDaemonConnectionFragmentResult =
   | { status: 'ok'; payload: DaemonConnectionPayload }
   | { status: 'not-present' }
   | { status: 'malformed'; stage: 'base64' | 'json'; message: string }
   | { status: 'invalid'; issues: z.ZodIssue[] }
-
-// Decodes a base64url string to its original UTF-8 text.
-// Throws on invalid base64url input (surfaced by the caller as a 'malformed' result).
-function decodeBase64Url(value: string): string {
-  const base64 = value.replace(/-/g, '+').replace(/_/g, '/')
-  const paddingLength = (4 - (base64.length % 4)) % 4
-  const padded = base64 + '='.repeat(paddingLength)
-  const binary = atob(padded)
-  const bytes = Uint8Array.from(binary, (char) => char.charCodeAt(0))
-  return new TextDecoder().decode(bytes)
-}
-
-// Encodes UTF-8 text to a base64url string (no padding), matching the `#wb=` fragment format.
-function encodeBase64Url(value: string): string {
-  const bytes = new TextEncoder().encode(value)
-  let binary = ''
-  for (const byte of bytes) binary += String.fromCharCode(byte)
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '')
-}
 
 // Extracts the raw `wb` fragment value from a location.hash-shaped string, tolerant of
 // a missing leading '#' and of other unrelated fragment params sharing the hash.
@@ -101,7 +53,7 @@ export function parseDaemonConnectionFragment(hash: string): ParseDaemonConnecti
 
   let decoded: string
   try {
-    decoded = decodeBase64Url(raw)
+    decoded = decodeBase64UrlText(raw)
   } catch (err) {
     return {
       status: 'malformed',
@@ -133,7 +85,7 @@ export function parseDaemonConnectionFragment(hash: string): ParseDaemonConnecti
 // leading '#'. Primarily a test/dev helper for round-tripping parseDaemonConnectionFragment.
 export function encodeDaemonConnectionFragment(payload: DaemonConnectionPayload): string {
   const json = JSON.stringify(daemonConnectionPayloadSchema.parse(payload))
-  return `#${FRAGMENT_KEY}=${encodeBase64Url(json)}`
+  return `#${FRAGMENT_KEY}=${encodeBase64UrlText(json)}`
 }
 
 // Removes only the `wb=...` segment from a location.hash-shaped string, leaving any

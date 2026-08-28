@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import type { AppOptions, ServerModeAppOptions } from './app.js'
@@ -405,6 +406,40 @@ describe('app — server-mode composition', () => {
         body: JSON.stringify({ jsonrpc: '2.0', method: 'ping', id: 1 }),
       })
       expect(res.status).toBe(403)
+    })
+  })
+
+  // Regression: app.ts's pairingLinkContext is undefined for server-mode
+  // exactly as it is for the stdio entrypoint, so without a threaded
+  // unavailableReason the tool's refusal message wrongly told an
+  // already-connected server-mode HTTP caller to "connect through its HTTP
+  // /mcp endpoint instead" — which it is already doing.
+  describe('server-mode wb_pairing_link_create over the real /mcp endpoint', () => {
+    it('answers isError naming server-mode, never the stdio-standalone message', async () => {
+      const app = createApp(makeServerModeOptions(['mcp:call']))
+      const client = new Client({ name: 'server-mode-pairing-test', version: '1.0.0' })
+      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+        fetch: (input, init) => {
+          const headers = new Headers(init?.headers)
+          headers.set('Authorization', BEARER)
+          headers.set('Origin', PUBLIC_URL)
+          return app.request(input instanceof URL ? input.toString() : String(input), {
+            ...init,
+            headers,
+          })
+        },
+      })
+      await client.connect(transport)
+      try {
+        const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
+        expect(res.isError).toBe(true)
+        const text = (res.content as Array<{ text: string }>)[0]?.text ?? ''
+        expect(text).toMatch(/server-mode/i)
+        expect(text).not.toMatch(/standalone over stdio/i)
+        expect(text).not.toMatch(/connect through its HTTP/i)
+      } finally {
+        await transport.close()
+      }
     })
   })
 

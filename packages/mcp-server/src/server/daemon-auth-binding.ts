@@ -15,6 +15,26 @@ export function normalizeBindHost(host: string): string {
   return host
 }
 
+// The inverse of normalizeBindHost: a bare IPv6 literal (what server.listen()
+// wants, and what normalizeBindHost produces) is not valid inside a URL
+// authority — `new URL('http://::1:3099')` throws Invalid URL because the
+// colons are indistinguishable from a port separator. RFC 3986 §3.2.2
+// requires the bracketed form there. A colon-free host (IPv4 or a hostname)
+// never needs bracketing.
+export function formatHostForUrl(host: string): string {
+  return host.includes(':') ? `[${host}]` : host
+}
+
+// The one place http-server.ts composes wb_pairing_link_create's
+// daemonBaseUrl, pulled out of that call site so the exact expression
+// (including the formatHostForUrl bracketing) is reachable from a unit test
+// without needing a real socket bind — startHttpServer's own IPv6 bind is
+// unavailable on hosts/containers with IPv6 disabled, which this function
+// does not depend on.
+export function buildDaemonBaseUrl(host: string, port: number): string {
+  return `http://${formatHostForUrl(host)}:${port}`
+}
+
 export type LoopbackBindGuardResult = { ok: true } | { ok: false; code: 'bind_host_not_loopback' }
 
 // Pre-startup guard: called before the HTTP server binds, so a local-daemon

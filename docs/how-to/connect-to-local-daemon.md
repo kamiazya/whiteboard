@@ -111,12 +111,14 @@ the daemon's own page — there is no silent grant path.
 ## Connect with an agent-minted link
 
 1. Ask your AI agent (Claude, Codex, or any MCP client connected to the
-   whiteboard daemon) to call the `create_pairing_link` MCP tool. Optionally
+   whiteboard daemon) to call the `wb_pairing_link_create` MCP tool. Optionally
    pass `workspaceId` / `path` to target a specific canvas, or `webOrigin` to
    point at a non-default web app deployment.
-2. The tool returns a URL carrying a `#wb=` fragment with a short-lived
+2. The tool returns a URL carrying a `#wb=` fragment with the daemon's
    bootstrap token (see [ADR-0002](../contributing/adr/0002-browser-to-daemon-transport.md)
-   for the transport design). Open that URL in your browser.
+   for the transport design) — the same full-authority credential that
+   authenticates every `/api/*` request, valid until it is rotated, not a
+   short-lived or single-use token. Open that URL in your browser.
 3. On a hosted `https:` origin, the browser's Local Network Access permission
    prompt appears — grant it to let the page reach your loopback daemon.
 4. The web app consumes the fragment and connects to the paired workspace.
@@ -140,7 +142,7 @@ must also be configured to accept that origin via
 as an exact match or via a `https://*.example.com` wildcard subdomain pattern
 that covers it (see
 [Configuration → Wildcard subdomain patterns](../reference/configuration.md#wildcard-subdomain-patterns)).
-`create_pairing_link` cannot confirm that allowlist coverage on its own, so
+`wb_pairing_link_create` cannot confirm that allowlist coverage on its own, so
 verify it yourself before sharing a hosted pairing link. Loopback origins
 need no allowlist entry.
 

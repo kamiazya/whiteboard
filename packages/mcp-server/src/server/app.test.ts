@@ -1530,6 +1530,118 @@ describe('createApp daemon mutation auth', () => {
     })
   })
 
+  describe('wb_pairing_link_create daemonBaseUrl wiring (createApp -> pairingLinkContext)', () => {
+    // Exercises the real composition path — createApp's daemonBaseUrl option
+    // through to the tool's actual /mcp response — rather than
+    // registerPairingLinkTool called directly with a hand-built context
+    // (pairing-link.test.ts), which cannot see a wiring regression in app.ts
+    // or http-server.ts (wrong host/port composition, or the
+    // authMode/daemonBaseUrl condition silently never true).
+    it('embeds the daemonBaseUrl passed into createApp in the minted pairing link', async () => {
+      const { decodeBase64UrlText } = await import('../shared/api-contracts/pairing-link.js')
+      // Longer than MIN_BOOTSTRAP_TOKEN_LENGTH — 'secret' alone is 6 chars,
+      // which the tool refuses to embed as too short.
+      const token = 'secret-daemon-token'
+      const app = createApp({
+        ...createRuntimeOptions(token),
+        daemonBaseUrl: 'http://127.0.0.1:3099',
+      })
+      const client = new Client({ name: 'app-test-client', version: '1.0.0' })
+      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+        fetch: (input, init) => {
+          const headers = new Headers(init?.headers)
+          headers.set('Authorization', `Bearer ${token}`)
+          headers.set('Origin', 'http://127.0.0.1:6274')
+          return app.request(input instanceof URL ? input.toString() : String(input), {
+            ...init,
+            headers,
+          })
+        },
+      })
+      await client.connect(transport)
+
+      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
+      expect(res.isError, JSON.stringify(res)).not.toBe(true)
+      const result = res.structuredContent as { url: string; authMode: string }
+      expect(result.authMode).toBe('bootstrap')
+
+      const fragment = result.url.split('#wb=')[1]
+      const decoded = JSON.parse(decodeBase64UrlText(fragment)) as { baseUrl: string }
+      expect(decoded.baseUrl).toBe('http://127.0.0.1:3099')
+
+      await transport.close()
+    })
+
+    it('answers isError over the real /mcp endpoint when createApp received no daemonBaseUrl', async () => {
+      const app = createApp(createRuntimeOptions('secret'))
+      const client = new Client({ name: 'app-test-client', version: '1.0.0' })
+      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+        fetch: (input, init) => {
+          const headers = new Headers(init?.headers)
+          headers.set('Authorization', 'Bearer secret')
+          headers.set('Origin', 'http://127.0.0.1:6274')
+          return app.request(input instanceof URL ? input.toString() : String(input), {
+            ...init,
+            headers,
+          })
+        },
+      })
+      await client.connect(transport)
+
+      const res = await client.callTool({ name: 'wb_pairing_link_create', arguments: {} })
+      expect(res.isError).toBe(true)
+
+      await transport.close()
+    })
+
+    it('re-reads a live allowedWebOrigins() provider on every call rather than snapshotting it once at createApp time', async () => {
+      // options.allowedWebOrigins in local-daemon mode is a FUNCTION backed
+      // by pairing grants approved at runtime (see http-server.ts), so /api
+      // CORS, /mcp origin, and WS upgrade all read it live. This exercises
+      // the real createApp -> pairingLinkContext wiring to confirm the
+      // pairing-link tool's own advisory text tracks the same live set
+      // instead of freezing whatever the provider returned at construction.
+      const token = 'secret-daemon-token'
+      let origins: readonly string[] = []
+      const app = createApp({
+        ...createRuntimeOptions(token),
+        daemonBaseUrl: 'http://127.0.0.1:3099',
+        allowedWebOrigins: () => origins,
+      })
+      const client = new Client({ name: 'app-test-client', version: '1.0.0' })
+      const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
+        fetch: (input, init) => {
+          const headers = new Headers(init?.headers)
+          headers.set('Authorization', `Bearer ${token}`)
+          headers.set('Origin', 'http://127.0.0.1:6274')
+          return app.request(input instanceof URL ? input.toString() : String(input), {
+            ...init,
+            headers,
+          })
+        },
+      })
+      await client.connect(transport)
+
+      const before = await client.callTool({
+        name: 'wb_pairing_link_create',
+        arguments: { webOrigin: 'https://granted-later.example.com' },
+      })
+      const beforeText = (before.content as Array<{ text: string }>)[0]?.text ?? ''
+      expect(beforeText).toContain('would be rejected by CORS/origin checks')
+
+      origins = ['https://granted-later.example.com']
+
+      const after = await client.callTool({
+        name: 'wb_pairing_link_create',
+        arguments: { webOrigin: 'https://granted-later.example.com' },
+      })
+      const afterText = (after.content as Array<{ text: string }>)[0]?.text ?? ''
+      expect(afterText).not.toContain('would be rejected by CORS/origin checks')
+
+      await transport.close()
+    })
+  })
+
   describe('/api/runtime/ping Zod schema', () => {
     it('ping response parses via daemonPingResponseSchema', async () => {
       const { daemonPingResponseSchema } = await import('../shared/api-contracts/runtime.js')

@@ -38,6 +38,10 @@ const ENTITIES = [
   // document in it, so `document` would be the wrong noun rather than a
   // shorter one.
   'workspace',
+  // wb_pairing_link_create: an agent asking the DAEMON to mint its own
+  // pairing handoff — a daemon concern, not stored document content, so it
+  // belongs beside 'viewport' rather than the document-model nouns above.
+  'pairing',
 ] as const
 
 /**

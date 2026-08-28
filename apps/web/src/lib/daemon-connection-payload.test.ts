@@ -1,4 +1,5 @@
 import { fc, test as fcTest } from '@fast-check/vitest'
+import { daemonConnectionPayloadSchema as sharedDaemonConnectionPayloadSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { beforeEach, describe, expect, it } from 'vitest'
 import {
   consumeDaemonConnectionFragment,
@@ -8,6 +9,10 @@ import {
 } from './daemon-connection-payload.js'
 
 describe('daemonConnectionPayloadSchema', () => {
+  it('is the exact schema object re-exported from @kamiazya/whiteboard-mcp/api-contracts, not a mirror', () => {
+    expect(daemonConnectionPayloadSchema).toBe(sharedDaemonConnectionPayloadSchema)
+  })
+
   it('accepts a minimal valid payload', () => {
     const result = daemonConnectionPayloadSchema.safeParse({
       baseUrl: 'http://127.0.0.1:3099',

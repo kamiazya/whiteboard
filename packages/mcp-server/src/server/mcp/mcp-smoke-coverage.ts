@@ -62,6 +62,7 @@ export const ALL_REGISTERED_TOOLS = [
   'wb_document_resolve',
   'wb_document_list',
   'canvas_view',
+  'wb_pairing_link_create',
 ] as const satisfies readonly string[]
 
 export const COVERED_TOOLS = [
@@ -84,9 +85,13 @@ export const COVERED_TOOLS = [
   'wb_document_list',
 ] as const
 
-// Empty since the seeding batch gives every later step something to act on: every tool
-// either reaches its success path in the smoke or is listed below.
-export const ERROR_PATH_ONLY_TOOLS = [] as const
+// wb_pairing_link_create's smoke coverage is deliberately its error path
+// only: the offline stdio smoke has no HTTP daemon to pair with, so it can
+// only exercise the standalone-stdio refusal. The success path (a real
+// daemon origin threaded in) is covered at the unit layer
+// (pairing-link.test.ts, a real MCP client over an in-memory transport) and
+// by the HTTP-daemon verification recorded outside this repeatable smoke.
+export const ERROR_PATH_ONLY_TOOLS = ['wb_pairing_link_create'] as const
 
 // MCP Apps (SEP-1865) UI-linked tools: their registered definition carries
 // `_meta.ui.resourceUri` pointing at CANVAS_VIEW_RESOURCE_URI (mcp-apps.ts).
