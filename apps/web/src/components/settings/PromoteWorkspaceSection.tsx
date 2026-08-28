@@ -50,7 +50,12 @@ export interface PromoteWorkspaceSectionProps {
 
 type PromoteFlow =
   | { step: 'idle' }
-  | { step: 'confirm'; documentCount: number; workspaceIds: string[]; targetId: string }
+  | {
+      step: 'confirm'
+      documentCount: number
+      targets: { workspaceId: string; displayName?: string }[]
+      targetId: string
+    }
   | { step: 'running'; phase: 'record' | 'blobs' }
   | { step: 'unavailable'; reason: string }
 
@@ -129,12 +134,15 @@ export function PromoteWorkspaceSection({
         log.warn('startup fold failed; continuing without it', err)
       }
       const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
-      const workspaceIds = workspaces.workspaces.map((ws) => ws.workspaceId)
+      const targets = workspaces.workspaces.map((ws) => ({
+        workspaceId: ws.workspaceId,
+        ...(ws.displayName === undefined ? {} : { displayName: ws.displayName }),
+      }))
       if (documentCount === 0) {
         setFlow({ step: 'unavailable', reason: 'This browser keeps no documents to move.' })
         return
       }
-      if (workspaceIds.length === 0) {
+      if (targets.length === 0) {
         setFlow({
           step: 'unavailable',
           reason: 'The daemon has no workspace to move into yet. Open one on the daemon first.',
@@ -144,8 +152,8 @@ export function PromoteWorkspaceSection({
       setFlow({
         step: 'confirm',
         documentCount,
-        workspaceIds,
-        targetId: workspaceIds[0] as string,
+        targets,
+        targetId: (targets[0] as { workspaceId: string }).workspaceId,
       })
     } catch {
       setFlow({ step: 'unavailable', reason: 'Could not reach the daemon to prepare the move.' })
@@ -304,22 +312,37 @@ export function PromoteWorkspaceSection({
                 </DialogDescription>
               </DialogHeader>
               <div className="flex flex-col gap-1.5">
-                <label htmlFor={targetSelectId} className="text-xs font-medium">
-                  Daemon workspace
-                </label>
-                <select
-                  id={targetSelectId}
-                  data-testid="promote-target"
-                  value={flow.targetId}
-                  onChange={(event) => setFlow({ ...flow, targetId: event.target.value })}
-                  className="rounded-md border bg-background px-2 py-1.5 text-sm"
-                >
-                  {flow.workspaceIds.map((id) => (
-                    <option key={id} value={id}>
-                      {id}
-                    </option>
-                  ))}
-                </select>
+                {/* Names are chrome, ids are the address (DESIGN.md): an
+                    option shows the display name and falls back to the
+                    identifier only when the workspace is unnamed — and a
+                    single choice renders as plain text, not a selector. */}
+                {flow.targets.length === 1 ? (
+                  <p className="text-xs">
+                    <span className="font-medium">Daemon workspace: </span>
+                    <span data-testid="promote-target-single">
+                      {flow.targets[0]?.displayName ?? flow.targets[0]?.workspaceId}
+                    </span>
+                  </p>
+                ) : (
+                  <>
+                    <label htmlFor={targetSelectId} className="text-xs font-medium">
+                      Daemon workspace
+                    </label>
+                    <select
+                      id={targetSelectId}
+                      data-testid="promote-target"
+                      value={flow.targetId}
+                      onChange={(event) => setFlow({ ...flow, targetId: event.target.value })}
+                      className="rounded-md border bg-background px-2 py-1.5 text-sm"
+                    >
+                      {flow.targets.map((target) => (
+                        <option key={target.workspaceId} value={target.workspaceId}>
+                          {target.displayName ?? target.workspaceId}
+                        </option>
+                      ))}
+                    </select>
+                  </>
+                )}
               </div>
               <DialogFooter>
                 <Button type="button" variant="ghost" onClick={() => setFlow({ step: 'idle' })}>
