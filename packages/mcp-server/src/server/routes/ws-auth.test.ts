@@ -189,7 +189,7 @@ describe('authorizeWsUpgrade', () => {
         {
           host: '127.0.0.1:3099',
           origin: 'http://localhost:5173',
-          'sec-websocket-protocol': 'excalidraw-v1, daemon-token.secret-token',
+          'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret-token',
         },
         'secret-token',
         [],

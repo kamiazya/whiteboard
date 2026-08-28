@@ -11,11 +11,11 @@ describe('document-sync event name constants', () => {
   // useBranches, merge-committed-event) still match on the raw string and are
   // out of this slice's scope, so a rename here must not change the wire value.
   it('keeps the doc_changed event name unchanged', () => {
-    expect(DOCUMENT_SYNC_CHANGED_EVENT).toBe('excalidraw:doc_changed')
+    expect(DOCUMENT_SYNC_CHANGED_EVENT).toBe('whiteboard:doc_changed')
   })
 
   it('keeps the wb_version_saved event name unchanged', () => {
-    expect(DOCUMENT_SYNC_VERSION_SAVED_EVENT).toBe('excalidraw:wb_version_saved')
+    expect(DOCUMENT_SYNC_VERSION_SAVED_EVENT).toBe('whiteboard:wb_version_saved')
   })
 
   it('dispatchIdentityEvent fires the constant event name it is called with', () => {

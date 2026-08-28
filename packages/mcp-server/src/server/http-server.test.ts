@@ -29,24 +29,24 @@ describe('authorizeWsUpgrade', () => {
       authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
-          'sec-websocket-protocol': 'excalidraw-v1, daemon-token.nope',
+          'sec-websocket-protocol': 'whiteboard-v1, daemon-token.nope',
         },
         'secret',
       ),
     ).toEqual({ accept: false, statusCode: 401 })
   })
 
-  it('accepts websocket upgrade with the daemon subprotocol token and selects excalidraw-v1', () => {
+  it('accepts websocket upgrade with the daemon subprotocol token and selects whiteboard-v1', () => {
     expect(
       authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
           origin: 'http://127.0.0.1:5173',
-          'sec-websocket-protocol': 'excalidraw-v1, daemon-token.secret',
+          'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret',
         },
         'secret',
       ),
-    ).toEqual({ accept: true, protocol: 'excalidraw-v1', scopes: ALL_AUTH_SCOPES })
+    ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
   })
 
   it('keeps websocket auth disabled when daemon token is unset', () => {
@@ -66,18 +66,18 @@ describe('authorizeWsUpgrade', () => {
         {
           host: '127.0.0.1:3099',
           origin: 'http://localhost:5173',
-          'sec-websocket-protocol': 'excalidraw-v1, daemon-token.secret',
+          'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret',
         },
         'secret',
       ),
-    ).toEqual({ accept: true, protocol: 'excalidraw-v1', scopes: ALL_AUTH_SCOPES })
+    ).toEqual({ accept: true, protocol: 'whiteboard-v1', scopes: ALL_AUTH_SCOPES })
 
     expect(
       authorizeWsUpgrade(
         {
           host: '127.0.0.1:3099',
           origin: 'https://example.com',
-          'sec-websocket-protocol': 'excalidraw-v1, daemon-token.secret',
+          'sec-websocket-protocol': 'whiteboard-v1, daemon-token.secret',
         },
         'secret',
       ),

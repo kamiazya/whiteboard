@@ -124,11 +124,11 @@ afterEach(async () => {
 })
 
 describe('WorkspaceTopBar browser mode', () => {
-  it('does not dispatch excalidraw:wb_version_saved when POST /versions returns invalid schema', async () => {
+  it('does not dispatch whiteboard:wb_version_saved when POST /versions returns invalid schema', async () => {
     // The default beforeEach mock returns { ok: true } for POST /versions,
     // which does not match saveVersionResponseSchema (missing version.id, branchName, etc.).
     const versionSavedFired = vi.fn()
-    window.addEventListener('excalidraw:wb_version_saved', versionSavedFired)
+    window.addEventListener('whiteboard:wb_version_saved', versionSavedFired)
 
     renderTopBar()
 
@@ -153,7 +153,7 @@ describe('WorkspaceTopBar browser mode', () => {
 
     expect(versionSavedFired).not.toHaveBeenCalled()
 
-    window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
+    window.removeEventListener('whiteboard:wb_version_saved', versionSavedFired)
   })
 
   it('dispatches wb_version_saved on a conforming save, clearing HeaderVersionDot', async () => {
@@ -175,14 +175,14 @@ describe('WorkspaceTopBar browser mode', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const versionSavedFired = vi.fn()
-    window.addEventListener('excalidraw:wb_version_saved', versionSavedFired)
+    window.addEventListener('whiteboard:wb_version_saved', versionSavedFired)
 
     renderTopBar()
 
     // Mark the doc dirty first (as useWhiteboardSync would on a real edit) so
     // HeaderVersionDot's dot is visible before the save clears it.
     window.dispatchEvent(
-      new CustomEvent('excalidraw:doc_changed', {
+      new CustomEvent('whiteboard:doc_changed', {
         detail: { workspaceId: 'sess_1', path: 'design/login-flow' },
       }),
     )
@@ -209,7 +209,7 @@ describe('WorkspaceTopBar browser mode', () => {
       expect(screen.queryByRole('button', { name: /save/i })).toBeNull()
     })
 
-    window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
+    window.removeEventListener('whiteboard:wb_version_saved', versionSavedFired)
   })
 
   it('issues PUT /versions/:id/thumbnail after a valid save when getThumbnailBlob returns a Blob', async () => {
@@ -276,7 +276,7 @@ describe('WorkspaceTopBar browser mode', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     const versionSavedFired = vi.fn()
-    window.addEventListener('excalidraw:wb_version_saved', versionSavedFired)
+    window.addEventListener('whiteboard:wb_version_saved', versionSavedFired)
 
     renderTopBar({ getThumbnailBlob })
 
@@ -287,7 +287,7 @@ describe('WorkspaceTopBar browser mode', () => {
       expect(versionSavedFired).toHaveBeenCalledTimes(1)
     })
 
-    window.removeEventListener('excalidraw:wb_version_saved', versionSavedFired)
+    window.removeEventListener('whiteboard:wb_version_saved', versionSavedFired)
   })
 
   // RED-first: the ~400px collapse is a new UX decision, not part of the

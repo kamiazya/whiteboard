@@ -13,7 +13,7 @@ import { MergeDialog } from './MergeDialog'
 // - Refresh whenever HEAD or branches change; failures stay silent and simply hide the banner
 //
 // Unlike the packages/mcp-server original, this component does not subscribe to an
-// "excalidraw:head_changed" window event: apps/web's useBranches has no such
+// "whiteboard:head_changed" window event: apps/web's useBranches has no such
 // broadcast, so external HEAD changes reach this component passively through
 // its own hook state (a future caller wires useDocumentSync.onHeadChanged ->
 // branches.refetch()). merge_committed stays a window event, but is parsed

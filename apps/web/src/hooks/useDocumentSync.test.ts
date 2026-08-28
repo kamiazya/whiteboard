@@ -572,7 +572,7 @@ describe('useDocumentSync', () => {
 
     it('does not dispatch doc_changed for the initial snapshot import', async () => {
       const backend = makeFakeBackend()
-      const docChanged = listenFor('excalidraw:doc_changed')
+      const docChanged = listenFor('whiteboard:doc_changed')
       renderHook(() => useDocumentSync(backend, { identity }))
 
       await hydrate(backend)
@@ -582,7 +582,7 @@ describe('useDocumentSync', () => {
 
     it('dispatches doc_changed on a local scene edit commit', async () => {
       const backend = makeFakeBackend()
-      const docChanged = listenFor('excalidraw:doc_changed')
+      const docChanged = listenFor('whiteboard:doc_changed')
       const { result } = renderHook(() => useDocumentSync(backend, { identity }))
 
       await hydrate(backend, TEXT_CANVAS)
@@ -594,7 +594,7 @@ describe('useDocumentSync', () => {
 
     it('dispatches wb_version_saved with identity detail when a version_created broadcast arrives', () => {
       const backend = makeFakeBackend()
-      const versionSaved = listenFor('excalidraw:wb_version_saved')
+      const versionSaved = listenFor('whiteboard:wb_version_saved')
       renderHook(() => useDocumentSync(backend, { identity }))
 
       act(() => {
@@ -607,8 +607,8 @@ describe('useDocumentSync', () => {
 
     it('does not dispatch any identity events when identity is absent', async () => {
       const backend = makeFakeBackend()
-      const docChanged = listenFor('excalidraw:doc_changed')
-      const versionSaved = listenFor('excalidraw:wb_version_saved')
+      const docChanged = listenFor('whiteboard:doc_changed')
+      const versionSaved = listenFor('whiteboard:wb_version_saved')
       renderHook(() => useDocumentSync(backend))
 
       await hydrate(backend)

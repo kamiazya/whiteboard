@@ -1457,7 +1457,7 @@ describe('DaemonDocumentPage', () => {
   describe('MergeToast integration', () => {
     const dispatchMergeCommitted = (overrides: Partial<Record<string, unknown>> = {}) => {
       window.dispatchEvent(
-        new CustomEvent('excalidraw:merge_committed', {
+        new CustomEvent('whiteboard:merge_committed', {
           detail: {
             workspaceId: 'w1',
             path: 'main',

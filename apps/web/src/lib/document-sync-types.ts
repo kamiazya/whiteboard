@@ -32,8 +32,8 @@ export type SyncStatus = 'idle' | 'connected' | 'reconnecting' | 'error'
 // merge-committed-event) still match on the raw string and are out of this
 // slice's scope, so changing the constant's NAME here must never change its
 // VALUE.
-export const DOCUMENT_SYNC_CHANGED_EVENT = 'excalidraw:doc_changed'
-export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'excalidraw:wb_version_saved'
+export const DOCUMENT_SYNC_CHANGED_EVENT = 'whiteboard:doc_changed'
+export const DOCUMENT_SYNC_VERSION_SAVED_EVENT = 'whiteboard:wb_version_saved'
 
 // Daemon-only callback seam. Every member is read via optionsRef in
 // useDocumentSync (see there) so passing a fresh inline object on every render
@@ -57,8 +57,8 @@ export interface UseDocumentSyncOptions {
   // can surface a dedicated banner instead of the generic error state.
   onAuthError?: () => void
   // When set, drives the window-event contract that useDirtyState/HeaderSaveDot
-  // listen for: 'excalidraw:doc_changed' on local/remote doc edits and
-  // 'excalidraw:wb_version_saved' on a version_created broadcast. Read via
+  // listen for: 'whiteboard:doc_changed' on local/remote doc edits and
+  // 'whiteboard:wb_version_saved' on a version_created broadcast. Read via
   // optionsRef (never in the connect effect's dep array) so passing a fresh
   // identity object every render never forces a reconnect. Only dispatched
   // when both fields are present — a browser caller that never sets

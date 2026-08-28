@@ -9,20 +9,21 @@ import { z } from 'zod'
 // padding / animate / scrollX / scrollY / zoom) with no server-side schema —
 // the canonical shape lives in shared/ws-messages.ts as
 // viewportRequestMessageSchema.
-const viewportResponseSchema = z.object({
+export const viewportResponseSchema = z.object({
   ok: z.literal(true),
 })
 
 // Shared error body. The route emits this for no_client (503), timeout (504),
-// and internal (500). Optional fields cover legacy payloads.
-const viewportErrorBodySchema = z.object({
-  error: z.string().optional(),
-  message: z.string().optional(),
+// and internal (500). Every branch sets error and message; only no_client
+// carries a hint, so that is the one genuinely optional field.
+export const viewportErrorBodySchema = z.object({
+  error: z.string(),
+  message: z.string(),
   hint: z.string().optional(),
 })
 
 // ── GET /api/w/:workspaceId/document/<path>/client-count ────────────────────
-const clientCountResponseSchema = z.object({
+export const clientCountResponseSchema = z.object({
   count: z.number().int().nonnegative(),
   readyCount: z.number().int().nonnegative(),
 })

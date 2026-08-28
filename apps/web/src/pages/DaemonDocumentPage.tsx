@@ -540,7 +540,7 @@ export function DaemonDocumentPage({
       // and other peers' saves), so this button must dispatch the same
       // identity-scoped event useDocumentSync fires on a broadcast — otherwise
       // HeaderSaveDot never learns this save happened and stays dirty.
-      dispatchIdentityEvent('excalidraw:wb_version_saved', canvas ?? undefined)
+      dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
     } catch {
       setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
     } finally {
