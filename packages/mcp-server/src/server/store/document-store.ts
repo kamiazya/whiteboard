@@ -1,16 +1,11 @@
 /**
  * The daemon's document store: a Loro snapshot per document, persisted
  * through the same `LibsqlDocumentStore` the MCP tool surface writes
- * (`document:<documentId>` rows), plus the `documents` row that gives it a
- * workspace and a path. Everything the web app shows and edits goes through
- * here (ADR-0007's workspace/path store), and now reads/writes the SAME
- * bytes a `wb_document_*` tool call would — the FS `.loro` blob tree
- * `documentBlobPath` still computes is no longer read or written here; it
- * survives only as an identity label for corrupt-data error messages and as
- * the legacy-migration backup path. Any blob file still on disk is swept
- * away by `sweep-imported-fs-blobs.ts` once its bytes are proven to live in
- * Libsql, so `documentTeardown`'s unlink below is a straggler cleanup, not the
- * primary deletion path.
+ * (`document:<documentId>` rows), addressed through the workspace tree —
+ * the tree is the whole address book (migration 0017 dropped the legacy
+ * `documents` row-plane it used to fold in at startup). Everything the web
+ * app shows and edits goes through here (ADR-0007's workspace/path store),
+ * and reads/writes the SAME bytes a `wb_document_*` tool call would.
  *
  * `listDocuments` here is NOT `DocumentIndex`'s method of the same name —
  * that is the agent-facing side of the same split, reached
@@ -20,8 +15,7 @@
  * `LibsqlDocumentStore` rows, which is why `saveDocument`/`compactDocument`
  * additionally take `withDocumentWriteLock` — see their comments.
  */
-import { access, mkdir, unlink, writeFile } from 'node:fs/promises'
-import { dirname, join } from 'node:path'
+import { unlink } from 'node:fs/promises'
 import {
   createWorkspaceDocumentAtPath,
   projectWorkspaceDocument,
@@ -37,31 +31,26 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import {
-  chunkSnapshot,
-  DocumentPathTakenError,
-  reassembleSnapshot,
-} from '@kamiazya/whiteboard-ports'
+import { chunkSnapshot, DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
   DocumentStoreWorkspaceDocs,
   LoroWorkspaceDocumentIndex,
 } from '@kamiazya/whiteboard-workspace-index'
-import type { Frontiers, Value } from 'loro-crdt'
-import { decodeFrontiers, encodeFrontiers, LoroDoc, LoroMap, VersionVector } from 'loro-crdt'
+import type { Frontiers } from 'loro-crdt'
+import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
-import { validateDocumentId, validateDocumentPath, validateWorkspaceId } from '../validators.js'
+import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
 import {
   corruptStoredData,
   isCorruptStoredDataError,
   isMissingFileError,
 } from './corrupt-stored-data.js'
-import { deleteDocumentRow } from './db/delete-document-row.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { getDocumentIdByPath, upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
 import { DocumentNotFoundError } from './document-not-found-error.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
@@ -82,29 +71,6 @@ export class ConflictError extends Error {
     super(message)
     this.name = 'ConflictError'
   }
-}
-
-// ── blob path helpers ──
-// Legacy snapshots live under {dataDir}/blobs/{workspaceId}/canvas/{documentId}.loro.
-// The documentId is the stable row PK from the `documents` table, so renaming
-// a document's path does not move blobs around.
-//
-// The `canvas/` segment names the CONTAINER, which ADR-0009 calls a Document,
-// and it deliberately stays: this tree is being RETIRED, not corrected.
-// `0011-import-fs-blobs` reads it as a frozen literal and
-// `sweep-imported-fs-blobs.ts` deletes each file — then the directory — once
-// its bytes are proven to live in Libsql. A migration that renamed the
-// segment would move every legacy blob out from under that sweep, leaving it
-// neither verified nor cleaned up. There is nothing here to rename once the
-// last file is gone.
-function blobsRoot(): string {
-  return join(getDataDir(), 'blobs')
-}
-
-function documentBlobPath(workspaceId: string, documentId: string): string {
-  validateWorkspaceId(workspaceId)
-  validateDocumentId(documentId)
-  return join(blobsRoot(), workspaceId, 'canvas', `${documentId}.loro`)
 }
 
 function errorMessage(error: unknown): string {
@@ -154,21 +120,15 @@ function workspaceDocCacheKey(workspaceId: string): string {
  * a projection's frontiers die with the process, the workspace record's
  * outlive it.
  */
-/**
- * The documentId at `path` — the tree answers; a pre-fold legacy row is the
- * only fallback (the boot fold is the one consumer that still needs it).
- */
+/** The documentId at `path`, or null when the workspace tree does not serve it. */
 export async function resolveDocumentIdAtPath(
   workspaceId: string,
   path: string,
 ): Promise<string | null> {
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc !== null) {
-    const entry = resolveWorkspaceDocument(workspaceDoc, path)
-    if (entry !== null) return entry.documentId
-  }
-  const db = await dbReady()
-  return getDocumentIdByPath(db, workspaceId, path)
+  if (workspaceDoc === null) return null
+  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  return entry === null ? null : entry.documentId
 }
 
 /** `resolveDocumentIdAtPath` that throws the routes' 404-mapped error instead of answering null. */
@@ -513,8 +473,7 @@ export async function saveDocument(
     await upsertWorkspaceRow(db, workspaceId)
     const workspaceDoc = await getWorkspaceDoc(workspaceId)
     const existingEntry = resolveWorkspaceDocument(workspaceDoc, path)
-    const existingDocumentId =
-      existingEntry?.documentId ?? (await getDocumentIdByPath(db, workspaceId, path))
+    const existingDocumentId = existingEntry?.documentId ?? null
     if (existingDocumentId !== null && !overwrite) {
       throw new ConflictError(
         `Canvas "${workspaceId}/${path}" already exists. Pass { overwrite: true } to replace it.`,
@@ -567,94 +526,11 @@ export async function loadDocument(workspaceId: string, path: string): Promise<L
   // if its mirror row is skewed or gone. The projection is a VALUE copy
   // with its own oplog.
   const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
-  if (workspaceDoc !== null) {
-    const entry = resolveWorkspaceDocument(workspaceDoc, path)
-    if (entry !== null) {
-      const projected = projectWorkspaceDocument(workspaceDoc, entry.documentId)
-      if (projected !== null) {
-        return projected
-      }
-    }
-  }
-  // Below: the LEGACY plane — a pre-fold document the boot fold has not
-  // absorbed yet (or skipped as unreadable). Only the rows know those, so
-  // the row lookup is correct here and nowhere else.
-  const db = await dbReady()
-  const documentId = await getDocumentIdByPath(db, workspaceId, path)
-  if (!documentId) return new LoroDoc()
-  // Purely a stable identity label for corrupt-data error messages and the
-  // legacy-migration backup file below — no longer an FS path this function
-  // reads from.
-  const blobPath = documentBlobPath(workspaceId, documentId)
-  const documentStore = await documentStoreReady()
-  let doc: LoroDoc
-  let originalBytes: Uint8Array
-  try {
-    const snapshot = await documentStore.loadSnapshot({
-      docRef: { kind: 'document', workspaceId, documentId },
-    })
-    if (snapshot === null) return new LoroDoc()
-    try {
-      originalBytes = reassembleSnapshot(snapshot.manifest, snapshot.chunks)
-    } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot chunks (${errorMessage(error)})`, {
-        locationKind: 'identity',
-      })
-    }
-    try {
-      doc = LoroDoc.fromSnapshot(originalBytes)
-    } catch (error) {
-      throw corruptStoredData(blobPath, `invalid canvas snapshot (${errorMessage(error)})`, {
-        locationKind: 'identity',
-      })
-    }
-    // The snapshot is the BASE, not the document. Since saves append rather
-    // than rewrite, everything written since the last fold is in the log, and
-    // a read that stopped at the snapshot would serve a document missing its
-    // most recent edits — the newest ones, which is the worst half to lose.
-    const { updates } = await documentStore.loadDeltas({
-      docRef: { kind: 'document', workspaceId, documentId },
-      sinceFrontier: new Uint8Array(),
-    })
-    for (const update of updates) {
-      try {
-        doc.import(update)
-      } catch (error) {
-        throw corruptStoredData(blobPath, `invalid canvas delta (${errorMessage(error)})`, {
-          locationKind: 'identity',
-        })
-      }
-    }
-  } catch (error) {
-    if (isCorruptStoredDataError(error)) {
-      throw error
-    }
-    throw corruptStoredData(blobPath, `failed to read canvas snapshot (${errorMessage(error)})`, {
-      locationKind: 'identity',
-    })
-  }
-  // One-shot legacy container migration. Older data stored "elements" in
-  // LoroList; current code uses LoroMovableList. Repair on load and rewrite.
-  const migrated = migrateLegacyListToMovable(doc)
-  if (migrated) {
-    try {
-      const bakPath = `${blobPath}.pre-migrate-bak`
-      const bakExists = await access(bakPath)
-        .then(() => true)
-        .catch(() => false)
-      if (!bakExists) {
-        await mkdir(dirname(bakPath), { recursive: true })
-        await writeFile(bakPath, originalBytes)
-      }
-      await saveDocument(workspaceId, path, doc, { overwrite: true })
-    } catch (err) {
-      getLogger('document-store').warning(
-        { workspaceId, path, err: err as Error },
-        'legacy list→movable migration persist failed',
-      )
-    }
-  }
-  return doc
+  if (workspaceDoc === null) return new LoroDoc()
+  const entry = resolveWorkspaceDocument(workspaceDoc, path)
+  if (entry === null) return new LoroDoc()
+  const projected = projectWorkspaceDocument(workspaceDoc, entry.documentId)
+  return projected ?? new LoroDoc()
 }
 
 /**
@@ -672,25 +548,6 @@ export async function getDoc(workspaceId: string, path: string): Promise<LoroDoc
   // plane — replaying that other oplog into a projection resurrected
   // pre-fold state over current content.
   return getOrLoad(workspaceId, path, () => loadDocument(workspaceId, path))
-}
-
-function migrateLegacyListToMovable(doc: LoroDoc): boolean {
-  const list = doc.getList('elements')
-  const movable = doc.getMovableList('elements')
-  if (list.length === 0) return false
-  if (movable.length > 0) return false
-  for (let i = 0; i < list.length; i++) {
-    const item = list.get(i)
-    if (!(item instanceof LoroMap)) continue
-    const json = item.toJSON() as Record<string, unknown>
-    const dst = movable.insertContainer(movable.length, new LoroMap())
-    for (const [k, v] of Object.entries(json)) {
-      if (v !== undefined) dst.set(k, v as Value)
-    }
-  }
-  list.delete(0, list.length)
-  doc.commit()
-  return true
 }
 
 /**
@@ -734,21 +591,21 @@ async function unlinkIfExists(path: string): Promise<void> {
 // should.
 //
 // Order matters for the crash-safety story: the DB row goes first, so a
-// crash between the row delete and the file unlinks below leaves orphan
-// blob/thumbnail files (invisible — nothing lists the deleted documentId
+// crash between the row delete and the thumbnail unlinks below leaves
+// orphan thumbnail files (invisible — nothing lists the deleted documentId
 // anymore) rather than the reverse — a listed canvas whose content is
 // already gone.
 // ponytail: orphaned files from that crash window are not swept by
 // file-gc (its collectReferencedFileIds targets uploaded images, not these
-// canvas/version blobs); revisit if orphan blobs start showing up in the
+// version thumbnails); revisit if orphan blobs start showing up in the
 // storage report.
 /**
- * Everything about a document that is neither its `documents` row nor its
- * Libsql bytes: the FS blob, its pre-migration backup, one thumbnail per
- * version, and the cached doc instance. server-core cannot name any of it,
- * so it reaches this through `ServerDeps.documentTeardown` — which is what
- * makes `wb_document_delete` clean up the way the HTTP DELETE does instead
- * of leaving stale files and a stale cache entry behind.
+ * Everything about a document that is neither Libsql bytes nor a workspace
+ * tree node: one thumbnail per version, and the cached doc instance.
+ * server-core cannot name any of it, so it reaches this through
+ * `ServerDeps.documentTeardown` — which is what makes `wb_document_delete`
+ * clean up the way the HTTP DELETE does instead of leaving stale files and a
+ * stale cache entry behind.
  *
  * Two phases because a thumbnail is filed under a VERSION id, and the
  * versions rows are deleted right after the document goes (explicitly,
@@ -783,9 +640,6 @@ export const documentTeardown: DocumentTeardown = {
       await db.deleteFrom('versions').where('documentId', '=', documentId).execute()
       await db.deleteFrom('branches').where('documentId', '=', documentId).execute()
 
-      const blobPath = documentBlobPath(workspaceId, documentId)
-      await unlinkIfExists(blobPath)
-      await unlinkIfExists(`${blobPath}.pre-migrate-bak`)
       for (const { id: versionId } of versionRows) {
         await unlinkIfExists(thumbnailPath(workspaceId, versionId))
       }
@@ -813,12 +667,11 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
   // whole, and deletes versions/branches rows after (migration 0016 dropped
   // the cascade).
   return documentTeardown.around({ workspaceId, documentId, path }, async () => {
-    const db = await dbReady()
-
     // The tree node goes through the index's delete, which EVACUATES the
     // content into the trash before removing anything — the daemon's delete
-    // keeps the same recoverability promise the agent-facing port makes. A
-    // document the tree does not hold (legacy plane) skips this cleanly.
+    // keeps the same recoverability promise the agent-facing port makes.
+    // `documentId` came from the tree above, so the node is guaranteed to
+    // still be there unless a concurrent delete already removed it.
     const workspaceDoc = await openWorkspaceDocIfStored(workspaceId)
     if (workspaceDoc !== null && resolveWorkspaceDocumentById(workspaceDoc, documentId) !== null) {
       // Cache-backed, so the index deletes on the same live instance every
@@ -826,10 +679,6 @@ export async function deleteDocument(workspaceId: string, path: string): Promise
       const index = await workspaceTreeIndex()
       await index.deleteDocument({ workspaceId, path })
     }
-
-    // A legacy mirror row, when one still exists (pre-fold documents only) —
-    // left behind, the boot fold would resurrect the document.
-    await deleteDocumentRow(db, workspaceId, path)
 
     // The identity goes first, then the Libsql snapshot/delta/frontier
     // rows, so a crash between the two leaves an orphaned-but-unreachable

@@ -94,53 +94,36 @@ describe('getDb / closeDb', () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
 
-    // The documents table FKs workspaces.id with ON DELETE CASCADE — the one
-    // FK pair still in the schema now that 0016 dropped the documents FK
-    // from versions/branches. Inserting a legacy documents row whose
-    // workspaceId does not exist must throw, and deleting a workspace must
-    // also delete its rows.
-    const now = Date.now()
+    // documentSnapshotChunks.docKey FKs documentSnapshots.docKey with ON
+    // DELETE CASCADE — untouched by 0016/0017 (those only touched the
+    // documents-row FK pair, since dropped along with the table).
     await db
-      .insertInto('workspaces')
-      .values({ id: 'ws-fk', displayName: null, createdAt: now, updatedAt: now })
+      .insertInto('documentSnapshots')
+      .values({
+        docKey: 'document:doc-fk',
+        chunkCount: 1,
+        totalBytes: 3,
+        maxChunkBytes: 1_000_000,
+        frontier: new Uint8Array(),
+      })
       .execute()
     await db
-      .insertInto('documents')
-      .values({
-        id: 'cv-fk',
-        workspaceId: 'ws-fk',
-        path: 'main',
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
-        createdAt: now,
-        updatedAt: now,
-      })
+      .insertInto('documentSnapshotChunks')
+      .values({ docKey: 'document:doc-fk', chunkIndex: 0, bytes: new Uint8Array([1, 2, 3]) })
       .execute()
 
     await expect(
       db
-        .insertInto('documents')
-        .values({
-          id: 'cv-orphan',
-          workspaceId: 'ws-does-not-exist',
-          path: 'orphan',
-          displayName: null,
-          isPinned: 0,
-          pinOrder: null,
-          currentBranch: 'main',
-          createdAt: now,
-          updatedAt: now,
-        })
+        .insertInto('documentSnapshotChunks')
+        .values({ docKey: 'document:does-not-exist', chunkIndex: 0, bytes: new Uint8Array([1]) })
         .execute(),
     ).rejects.toThrow(/FOREIGN KEY/i)
 
-    await db.deleteFrom('workspaces').where('id', '=', 'ws-fk').execute()
+    await db.deleteFrom('documentSnapshots').where('docKey', '=', 'document:doc-fk').execute()
     const remaining = await db
-      .selectFrom('documents')
+      .selectFrom('documentSnapshotChunks')
       .selectAll()
-      .where('workspaceId', '=', 'ws-fk')
+      .where('docKey', '=', 'document:doc-fk')
       .execute()
     expect(remaining).toEqual([])
   })

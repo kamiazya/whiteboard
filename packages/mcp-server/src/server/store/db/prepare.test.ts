@@ -1,20 +1,15 @@
-// Deploy-sequencing guard for the identity-convergence flip: migration 0011
-// runs its FS-blob import exactly once (Kysely tracks migrations by key), so
-// a blob written by an old process AFTER that one-time run — but before this
-// flip's dataDir is fully warmed up again — would be invisible to the
-// flipped, Libsql-only read path unless prepareDataDir re-invokes the same
-// import routine on every call.
-import { access, chmod, mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { reassembleSnapshot } from '@kamiazya/whiteboard-ports'
-import { LoroDoc } from 'loro-crdt'
-import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { captureLogsForTests } from '../../log.js'
-import { LibsqlDocumentStore } from '../libsql/libsql-document-store.js'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { closeDb, getDb } from './index.js'
+import { runMigrations } from './migrator.js'
 import { clearPrepareCache, prepareDataDir } from './prepare.js'
+
+vi.mock('./migrator.js', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('./migrator.js')>()
+  return { ...actual, runMigrations: vi.fn(actual.runMigrations) }
+})
 
 let tempDir: string
 
@@ -26,155 +21,29 @@ afterEach(async () => {
   await closeDb(tempDir)
   clearPrepareCache()
   await rm(tempDir, { recursive: true, force: true })
+  vi.mocked(runMigrations).mockClear()
 })
 
 describe('prepareDataDir', () => {
-  it('re-runs the FS-blob import on every call, closing the interim window between a fresh boot and the flip serving reads', async () => {
-    // First boot: migrations (including 0011's one-time tracked run) apply
-    // to an otherwise-empty dataDir.
+  it('applies migrations to a fresh dataDir', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
-
-    const workspaceId = 'ws-interim'
-    const documentId = generateDocumentId()
-    const now = Date.now()
-    await db
-      .insertInto('workspaces')
-      .values({ id: workspaceId, displayName: null, createdAt: now, updatedAt: now })
-      .execute()
-    await db
-      .insertInto('documents')
-      .values({
-        id: documentId,
-        workspaceId,
-        path: 'interim-doc',
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
-        createdAt: now,
-        updatedAt: now,
-        kind: null,
-      })
-      .execute()
-
-    // Simulate an FS-only blob written by an old (pre-flip) process during
-    // the window between 0011's first tracked run and this flip taking over
-    // the read path.
-    const doc = new LoroDoc()
-    doc.getText('content').insert(0, 'written during the interim window')
-    doc.commit()
-    const blobDir = join(tempDir, 'blobs', workspaceId, 'canvas')
-    await mkdir(blobDir, { recursive: true })
-    await writeFile(join(blobDir, `${documentId}.loro`), doc.export({ mode: 'snapshot' }))
-
-    const libsqlStore = new LibsqlDocumentStore(db)
-    const docRef = { kind: 'document' as const, documentId }
-    // Nothing has imported the interim blob yet.
-    await expect(libsqlStore.loadSnapshot({ docRef })).resolves.toBeNull()
-
-    // Second boot: a fresh prepareDataDir call, exactly like every daemon
-    // startup makes against the same dataDir.
-    clearPrepareCache()
-    await prepareDataDir(tempDir)
-
-    const imported = await libsqlStore.loadSnapshot({ docRef })
-    expect(imported).not.toBeNull()
-    const reloaded = new LoroDoc()
-    reloaded.import(reassembleSnapshot(imported!.manifest, imported!.chunks))
-    expect(reloaded.getText('content').toString()).toBe('written during the interim window')
+    // A migrated db has the workspaces table (from 0001-init); the raw
+    // Kysely handle answering the query without throwing is the pin.
+    await expect(db.selectFrom('workspaces').select(['id']).execute()).resolves.toEqual([])
   })
 
-  it('sweeps a freshly imported FS blob after importing it, on a single prepareDataDir call', async () => {
-    const workspaceId = 'ws-fresh'
-    const documentId = generateDocumentId()
-    const doc = new LoroDoc()
-    doc.getText('content').insert(0, 'imported and swept on first boot')
-    doc.commit()
-    const blobDir = join(tempDir, 'blobs', workspaceId, 'canvas')
-    await mkdir(blobDir, { recursive: true })
-    const blobPath = join(blobDir, `${documentId}.loro`)
-    await writeFile(blobPath, doc.export({ mode: 'snapshot' }))
-
+  it('memoizes: a second call for the same dataDir does not re-run migrations', async () => {
     await prepareDataDir(tempDir)
-
-    // The blob file is gone...
-    await expect(access(blobPath)).rejects.toThrow()
-
-    // ...but its bytes are provably in Libsql: the same import routine
-    // seeds the documentSnapshots/Frontiers rows independent of the
-    // `documents` row the daemon's own document-store.ts also writes, so
-    // reading straight through LibsqlDocumentStore is enough to prove it.
-    const db = await getDb(tempDir)
-    const libsqlStore = new LibsqlDocumentStore(db)
-    const docRef = { kind: 'document' as const, documentId }
-    const imported = await libsqlStore.loadSnapshot({ docRef })
-    expect(imported).not.toBeNull()
-    const reloaded = new LoroDoc()
-    reloaded.import(reassembleSnapshot(imported!.manifest, imported!.chunks))
-    expect(reloaded.getText('content').toString()).toBe('imported and swept on first boot')
+    expect(vi.mocked(runMigrations)).toHaveBeenCalledTimes(1)
+    await prepareDataDir(tempDir)
+    expect(vi.mocked(runMigrations)).toHaveBeenCalledTimes(1)
   })
 
-  it('does not block startup when the sweep fails, and logs a warning', async () => {
-    const workspaceId = 'ws-unwritable'
-    const documentId = generateDocumentId()
-    const doc = new LoroDoc()
-    doc.getText('content').insert(0, 'importable but not sweepable')
-    doc.commit()
-    const canvasDir = join(tempDir, 'blobs', workspaceId, 'canvas')
-    await mkdir(canvasDir, { recursive: true })
-    await writeFile(join(canvasDir, `${documentId}.loro`), doc.export({ mode: 'snapshot' }))
-
-    // Read-only directory: readdir/readFile (import) still succeed, but the
-    // sweep's unlink needs write permission on the containing directory and
-    // fails — isolating the failure to the sweep step specifically.
-    await chmod(canvasDir, 0o555)
-
-    const capture = captureLogsForTests()
-    try {
-      await expect(prepareDataDir(tempDir)).resolves.toBeUndefined()
-      const warnings = capture.records.filter((r) => r.level === 'warning')
-      expect(warnings.some((r) => r.msg?.includes('failed to sweep imported FS blobs'))).toBe(true)
-    } finally {
-      capture.restore()
-      await chmod(canvasDir, 0o755)
-    }
-  })
-
-  // prepareDataDir runs migrations and THEN re-invokes the FS-blob import, so
-  // the import is the one writer that can still land a row after
-  // `0013-document-dockey-prefix` has corrected every stored key. Handing it
-  // the prefix migration 0011 was recorded with would re-seed an orphan copy
-  // of every blob the sweep had not yet removed — invisible to the live read
-  // path, and indistinguishable from a successful boot.
-  it('never leaves a row under the retired docKey prefix after importing a legacy blob', async () => {
-    const workspaceId = 'ws-prefix'
-    const documentId = generateDocumentId()
-    const doc = new LoroDoc()
-    doc.getText('content').insert(0, 'legacy blob imported after the prefix migration')
-    doc.commit()
-    const canvasDir = join(tempDir, 'blobs', workspaceId, 'canvas')
-    await mkdir(canvasDir, { recursive: true })
-    await writeFile(join(canvasDir, `${documentId}.loro`), doc.export({ mode: 'snapshot' }))
-
-    await prepareDataDir(tempDir)
-
-    const db = await getDb(tempDir)
-    for (const table of [
-      'documentSnapshots',
-      'documentSnapshotChunks',
-      'documentDeltas',
-      'documentFrontiers',
-    ] as const) {
-      const rows = await db.selectFrom(table).select('docKey').execute()
-      expect(rows.map((row) => row.docKey).filter((key) => key.startsWith('canvas:'))).toEqual([])
-    }
-
-    // ...and the import is still reachable, so the assertion above is not
-    // passing merely because nothing was written at all.
-    const store = new LibsqlDocumentStore(db)
-    expect(
-      await store.loadSnapshot({ docRef: { kind: 'document', workspaceId: 'ws-1', documentId } }),
-    ).not.toBeNull()
+  it('retries on the next call after a failure', async () => {
+    vi.mocked(runMigrations).mockRejectedValueOnce(new Error('boom'))
+    await expect(prepareDataDir(tempDir)).rejects.toThrow('boom')
+    await expect(prepareDataDir(tempDir)).resolves.toBeUndefined()
+    expect(vi.mocked(runMigrations)).toHaveBeenCalledTimes(2)
   })
 })

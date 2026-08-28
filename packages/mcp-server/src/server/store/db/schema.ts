@@ -1,4 +1,3 @@
-import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { ColumnType } from 'kysely'
 
 // Unix milliseconds.
@@ -11,27 +10,6 @@ interface WorkspacesTable {
   displayName: string | null
   createdAt: Timestamp
   updatedAt: Timestamp
-}
-
-interface DocumentsTable {
-  // Stable ULID that survives path renames. PK so child tables can FK on it.
-  id: string
-  workspaceId: string
-  // Mutable display path; UNIQUE within (workspaceId, path).
-  path: string
-  displayName: string | null
-  isPinned: Bool
-  pinOrder: number | null
-  currentBranch: string
-  createdAt: Timestamp
-  updatedAt: Timestamp
-  // Last time the Loro op-log was successfully compacted via shallow-snapshot.
-  // Null for documents that have never been compacted; consumed by the auto-
-  // Optimize loop to skip documents that have not changed since last run.
-  lastCompactedAt: Timestamp | null
-  // Which editor opens this canvas. Null for rows created before this column
-  // existed; the application layer maps null to 'spatial'.
-  kind: DocumentKind | null
 }
 
 interface BranchesTable {
@@ -48,8 +26,8 @@ interface BranchesTable {
 interface VersionsTable {
   id: string
   // No FK since migration 0016 — delete paths sweep these rows explicitly
-  // (documentTeardown's bracket, fold-workspace's pre-kind delete). Reads
-  // key on workspaceId, whose oplog the frontiers point into.
+  // (documentTeardown's bracket). Reads key on workspaceId, whose oplog the
+  // frontiers point into.
   documentId: string
   workspaceId: string
   branchName: string
@@ -112,7 +90,6 @@ interface DocumentFrontiersTable {
 
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
-  documents: DocumentsTable
   branches: BranchesTable
   versions: VersionsTable
   runtime: RuntimeTable

@@ -66,9 +66,16 @@ async function openWorkspace(workspaceId: string) {
   return new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(workspaceId)
 }
 
-async function documentRowCount(): Promise<number> {
+/** Migration 0017 dropped the documents table outright: the tree is the whole address book. */
+async function documentsTableExists(): Promise<boolean> {
   const db = await getDb(tempDir)
-  return (await db.selectFrom('documents').select(['id']).execute()).length
+  const row = await db
+    .selectFrom('sqlite_master' as never)
+    .select(['name' as never])
+    .where('type', '=', 'table')
+    .where('name', '=', 'documents')
+    .executeTakeFirst()
+  return row !== undefined
 }
 
 it('a save with a kind lands on the workspace tree node and writes no per-document record and no row', async () => {
@@ -84,8 +91,8 @@ it('a save with a kind lands on the workspace tree node and writes no per-docume
   const canvas = readSpatialCanvas(documentContainers(workspace, entry.documentId))
   expect(canvas.nodes[0]?.type === 'text' ? canvas.nodes[0].text : null).toBe('tree-borne')
 
-  // The tree is the address book: no documents row, no per-document record.
-  expect(await documentRowCount()).toBe(0)
+  // The tree is the address book: no documents table exists at all, no per-document record.
+  expect(await documentsTableExists()).toBe(false)
   const db = await getDb(tempDir)
   const store = new LibsqlDocumentStore(db)
   expect(
@@ -120,7 +127,7 @@ it('a kindless save of a NEW document lands on the tree as spatial — nothing w
   expect(entry).not.toBeNull()
   if (entry === null) return
   expect(entry.kind).toBe('spatial')
-  expect(await documentRowCount()).toBe(0)
+  expect(await documentsTableExists()).toBe(false)
   const db = await getDb(tempDir)
   const store = new LibsqlDocumentStore(db)
   expect(

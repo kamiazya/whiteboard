@@ -4,6 +4,7 @@ import { join } from 'node:path'
 import { Kysely, type MigrationProvider, Migrator, SqliteDialect, sql } from 'kysely'
 import LibsqlNativeDatabase from 'libsql'
 import { expect, it, vi } from 'vitest'
+import { captureLogsForTests } from '../../log.js'
 import { migrations } from './migrations/index.js'
 
 let dataDir = ''
@@ -63,16 +64,39 @@ it('the REAL migrator upgrades a pre-0008 data dir: nanoid row -> ULID, blob fol
   await mkdir(blobDir, { recursive: true })
   await writeFile(join(blobDir, 'uH6qTx6Ai2hl.loro'), new Uint8Array([9]))
 
-  // What the next boot does.
-  await runMigrations(db as never)
-
-  // Read back through the CURRENT name, so this also pins that 0009 carried
-  // the row across the rename rather than leaving it behind.
+  // Historical pins first, at the last stage that still has a documents
+  // table (0017 drops it): read back through the CURRENT name, so this also
+  // pins that 0009 carried the row across the rename rather than leaving it
+  // behind.
+  const { error: toPreDropError } = await new Migrator({ db: db as never, provider }).migrateTo(
+    '0016-drop-documents-fk',
+  )
+  expect(toPreDropError).toBeUndefined()
   const row = (await db.selectFrom('documents').selectAll().executeTakeFirstOrThrow()) as {
     id: string
   }
   expect(row.id).toMatch(ULID)
   expect(await readdir(blobDir)).toEqual([`${row.id}.loro`])
+
+  // What the next boot does — the rest of the chain, ending with 0017
+  // discarding the (now-folded-in-spirit) row and dropping the table.
+  const capture = captureLogsForTests()
+  try {
+    await runMigrations(db as never)
+    const warnings = capture.records.filter((r) => r.level === 'warning')
+    expect(warnings.some((r) => typeof r.msg === 'string' && r.msg.includes('discarded'))).toBe(
+      true,
+    )
+  } finally {
+    capture.restore()
+  }
+  await expect(
+    db
+      .selectFrom('sqlite_master' as never)
+      .select(['name' as never])
+      .where('name', '=', 'documents')
+      .executeTakeFirst(),
+  ).resolves.toBeUndefined()
   await db.destroy()
 })
 
@@ -177,8 +201,12 @@ it('the REAL migrator upgrades a third-site nanoid row that postdates 0008: zero
   await mkdir(blobDir, { recursive: true })
   await writeFile(join(blobDir, 'uH6qTx6Ai2hl.loro'), new Uint8Array([9]))
 
-  // What the next boot does.
-  await runMigrations(db as never)
+  // Historical pins first, at the last stage that still has a documents
+  // table (0017 drops it).
+  const { error: toPreDropError } = await new Migrator({ db: db as never, provider }).migrateTo(
+    '0016-drop-documents-fk',
+  )
+  expect(toPreDropError).toBeUndefined()
 
   const documentRows = (await db.selectFrom('documents').selectAll().execute()) as { id: string }[]
   for (const documentRow of documentRows) {
@@ -209,5 +237,25 @@ it('the REAL migrator upgrades a third-site nanoid row that postdates 0008: zero
   }
 
   expect(await readdir(blobDir)).toEqual([`${newRow?.id}.loro`])
+
+  // What the next boot does — the rest of the chain, ending with 0017
+  // discarding the row and dropping the table.
+  const capture = captureLogsForTests()
+  try {
+    await runMigrations(db as never)
+    const warnings = capture.records.filter((r) => r.level === 'warning')
+    expect(warnings.some((r) => typeof r.msg === 'string' && r.msg.includes('discarded'))).toBe(
+      true,
+    )
+  } finally {
+    capture.restore()
+  }
+  await expect(
+    db
+      .selectFrom('sqlite_master' as never)
+      .select(['name' as never])
+      .where('name', '=', 'documents')
+      .executeTakeFirst(),
+  ).resolves.toBeUndefined()
   await db.destroy()
 })

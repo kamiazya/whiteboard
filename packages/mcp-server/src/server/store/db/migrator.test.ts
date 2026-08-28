@@ -129,37 +129,38 @@ describe('runMigrations', () => {
     }
   })
 
-  it('exposes the expected canvas + branches + versions schema after init', async () => {
+  it('exposes the expected workspaces + branches + versions schema after init, with no documents row required (0016/0017)', async () => {
     await prepareDataDir(tempDir)
     const db = await getDb(tempDir)
     await db
       .insertInto('workspaces')
       .values({ id: 'ws1', displayName: null, createdAt: 1, updatedAt: 1 })
       .execute()
+    // No documents row: migration 0016 dropped its FK from branches/versions
+    // and 0017 dropped the table outright, so a tree-only document's rows
+    // must insert cleanly on their own.
     await db
-      .insertInto('documents')
+      .insertInto('branches')
       .values({
-        id: 'cv1',
+        documentId: 'cv1',
         workspaceId: 'ws1',
-        path: 'main',
-        displayName: null,
-        isPinned: 0,
-        pinOrder: null,
-        currentBranch: 'main',
+        name: 'main',
+        tipFrontiers: '',
+        color: null,
+        sourceBranchName: null,
+        sourceVersionId: null,
         createdAt: 1,
-        updatedAt: 1,
       })
       .execute()
     const row = await db
-      .selectFrom('documents')
-      .select(['id', 'workspaceId', 'path', 'currentBranch'])
-      .where('id', '=', 'cv1')
+      .selectFrom('branches')
+      .select(['documentId', 'workspaceId', 'name'])
+      .where('documentId', '=', 'cv1')
       .executeTakeFirst()
     expect(row).toEqual({
-      id: 'cv1',
+      documentId: 'cv1',
       workspaceId: 'ws1',
-      path: 'main',
-      currentBranch: 'main',
+      name: 'main',
     })
   })
 })
