@@ -207,24 +207,4 @@ workspace, both versions are kept and the pre-existing one is marked
 *shadowed* — nothing is renamed or overwritten. Your documents also stay in
 this browser; moving again later is safe and simply re-merges.
 
-## Copy-first import
-
-If you have canvases stored only in this browser (from before a daemon was
-paired, or from a device that never had one) and want them on a daemon
-workspace, use the import panel on the canvas page kept in your browser:
-
-1. Open the canvas list kept in your browser.
-2. Select the canvases you want to move.
-3. Click **Import**.
-
-Each canvas is copied to the daemon workspace one at a time: its full Loro
-history (snapshot plus any deltas) is merged into a single snapshot and
-pushed as a new canvas. If two canvases would collide on the same name, the
-import appends `-2`, `-3`, and so on. Import reports success or failure per
-canvas.
-
-This is deliberately **copy-first**: nothing is deleted from this browser's
-IndexedDB storage during or after import. If an import fails partway
-through, your original data in the browser is untouched and you can retry.
-
 ← Back to [How-to guides](README.md)

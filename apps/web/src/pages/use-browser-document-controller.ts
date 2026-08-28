@@ -1,7 +1,6 @@
 import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { mergeToSnapshot } from '../components/migration/import-from-browser.js'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
@@ -16,6 +15,7 @@ import {
   loadLocalDocument,
 } from '../lib/local-document-summary.js'
 import { LoroStore, type LoroStoreLike } from '../lib/loro-store.js'
+import { mergeToSnapshot } from '../lib/merge-to-snapshot.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { seedWorkspaceDocumentContent, touchIfWorkspaceBacked } from '../lib/workspace-content.js'
 
@@ -532,11 +532,10 @@ export function useBrowserDocumentController(
     [flushSave],
   )
 
-  // Reads the source canvas's Loro record through mergeToSnapshot (the same
-  // snapshot+delta-log -> single-snapshot collapse the browser ->
-  // daemon copy-first import path already uses) so the duplicate is a true
-  // deep copy: a fresh Uint8Array with no shared reference to the source's
-  // bytes, deltas, or underlying LoroDoc.
+  // Reads the source canvas's Loro record through mergeToSnapshot (the
+  // snapshot+delta-log -> single-snapshot collapse) so the duplicate is a
+  // true deep copy: a fresh Uint8Array with no shared reference to the
+  // source's bytes, deltas, or underlying LoroDoc.
   const duplicateDocument = useCallback(async (): Promise<DocumentSnapshot> => {
     const flushed = await flushSave()
     if (!flushed) throw new Error('Failed to save pending changes before duplicating.')

@@ -15,9 +15,7 @@ import type { ReactElement, ReactNode } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import * as daemonApiClient from '../lib/daemon-api-client.js'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import { getShellConnection } from '../lib/shell-status-store.js'
-import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { DaemonDocumentPage } from './DaemonDocumentPage.js'
 
 function MemoryRouterWrapper({ children }: { children: ReactNode }) {
@@ -1818,99 +1816,6 @@ describe('DaemonDocumentPage', () => {
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
       const wsUrl = new URL(FakeWebSocket.instances[0]!.url)
       expect(wsUrl.origin).toBe(new URL(DAEMON_BASE_URL).origin.replace('http:', 'ws:'))
-    })
-  })
-
-  describe('browser import panel', () => {
-    it('renders the import-from-this-browser disclosure and lists a local canvas once opened', async () => {
-      const browserStore = new LocalStoreDouble()
-      await browserStore.save({
-        documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
-        workspaceId: BROWSER_WORKSPACE_ID,
-        path: 'my-local-canvas',
-        name: 'My local canvas',
-        updatedAt: '2026-01-01T00:00:00Z',
-        kind: 'spatial' as const,
-      })
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            browserStore={browserStore.index}
-            browserClock={browserStore.clock}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      const summary = await screen.findByText('Import from this browser')
-      fireEvent.click(summary)
-
-      await waitFor(() => expect(screen.getByText('My local canvas')).toBeTruthy(), {
-        timeout: 5000,
-      })
-    })
-
-    it('does not touch the browser store until the disclosure is opened', async () => {
-      const browserStore = new LocalStoreDouble()
-      const listSpy = vi.spyOn(browserStore.index, 'listDocuments')
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            browserStore={browserStore.index}
-            browserClock={browserStore.clock}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-      await screen.findByText('Import from this browser')
-
-      // <details> only hides collapsed content visually; the section (and its
-      // IndexedDB read) must not mount until the user actually expands it.
-      // Settle any pending dynamic imports first so an eagerly-mounted lazy
-      // section cannot hide behind unresolved import timing.
-      await act(async () => {
-        await vi.dynamicImportSettled()
-      })
-      expect(listSpy).not.toHaveBeenCalled()
-
-      fireEvent.click(screen.getByText('Import from this browser'))
-      await waitFor(() => expect(listSpy).toHaveBeenCalled())
-    })
-
-    it('does not render the import disclosure when browserStore is null', async () => {
-      // Omitting the prop now means "use the shared production index" (the
-      // default moved out of App so loro stays off the entry chunk); an
-      // embedder that wants NO import flow says so with null.
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            browserStore={null}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      expect(screen.queryByText('Import from this browser')).toBeNull()
     })
   })
 })
