@@ -11,15 +11,19 @@ import {
   createWorkspaceDocumentAtPath,
   readWorkspaceDocuments,
   resolveWorkspaceDocumentById,
+  writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { newImageRef } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { promoteWorkspace } from './promote-workspace.js'
+import { seedWorkspaceDocumentContent } from './workspace-content.js'
 
 claimIsolatedWhiteboardDb('promote-workspace')
 
@@ -38,12 +42,16 @@ function targetDaemonRecord(): LoroDoc {
 }
 
 /**
- * A daemon standing in as two fetch routes: the update POST imports the
- * posted bytes into `target` (the verification, not a mock of it), and the
- * documents list answers from the merged target with the collision's loser
- * marked shadowed — the same projection the real route serves.
+ * A daemon standing in as three fetch routes: the update POST imports the
+ * posted bytes into `target` (the verification, not a mock of it), the file
+ * PUT records what arrived, and the documents list answers from the merged
+ * target with the collision's loser marked shadowed — the same projection
+ * the real route serves.
  */
-function daemonStub(target: LoroDoc): typeof globalThis.fetch {
+function daemonStub(
+  target: LoroDoc,
+  putFiles?: Array<{ url: string; contentType: string; bytes: Uint8Array }>,
+): typeof globalThis.fetch {
   return (async (input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/workspace-document/update') && init?.method === 'POST') {
@@ -52,6 +60,15 @@ function daemonStub(target: LoroDoc): typeof globalThis.fetch {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
+    }
+    if (url.includes('/file/') && init?.method === 'PUT') {
+      const headers = init.headers as Record<string, string>
+      putFiles?.push({
+        url,
+        contentType: headers['Content-Type'] ?? '',
+        bytes: new Uint8Array(await new Response(init.body as BodyInit).arrayBuffer()),
+      })
+      return new Response(null, { status: 204 })
     }
     if (url.endsWith('/documents')) {
       const seen = new Set<string>()
@@ -78,7 +95,7 @@ function daemonStub(target: LoroDoc): typeof globalThis.fetch {
 describe('promoteWorkspace', () => {
   beforeEach(clearWhiteboardDb)
 
-  it('posts the record; ids resolve on the target and the collision reports shadowed', async () => {
+  it('posts the record; ids resolve on the target, the collision shadows, and referenced image bytes travel', async () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
     const roadmap = await index.createDocument({
@@ -91,10 +108,34 @@ describe('promoteWorkspace', () => {
       path: 'contested',
       kind: 'spatial',
     })
-    const target = targetDaemonRecord()
+    // The spatial document references a stored image — its bytes live in the
+    // browser's file store, OUTSIDE the record, so promotion must move them
+    // through the daemon's file route.
+    const imageBytes = new Uint8Array([137, 80, 78, 71, 1, 2, 3])
+    const FILE_ID = 'promoted-image-1'
+    await new DocumentFileStore().put(FILE_ID, {
+      mimeType: 'image/png',
+      blob: new Blob([imageBytes], { type: 'image/png' }),
+      created: Date.now(),
+    })
+    const content = new LoroDoc()
+    writeSpatialCanvas(content, {
+      nodes: [
+        { id: 'img', type: 'file', file: newImageRef(FILE_ID), x: 0, y: 0, width: 10, height: 10 },
+      ],
+      edges: [],
+    })
+    expect(
+      await seedWorkspaceDocumentContent(
+        contested.documentId,
+        new Uint8Array(content.export({ mode: 'snapshot' })),
+      ),
+    ).toBe(true)
 
+    const target = targetDaemonRecord()
+    const putFiles: Array<{ url: string; contentType: string; bytes: Uint8Array }> = []
     const result = await promoteWorkspace({
-      fetch: daemonStub(target),
+      fetch: daemonStub(target, putFiles),
       daemonBaseUrl: BASE,
       workspaceId: 'ws-a',
       workspaceDocs: new BrowserWorkspaceDocs(),
@@ -110,7 +151,54 @@ describe('promoteWorkspace', () => {
     expect(resolveWorkspaceDocumentById(target, contested.documentId)).not.toBeNull()
     expect(resolveWorkspaceDocumentById(target, DAEMON_OWN_ID)).not.toBeNull()
     expect(result.shadowedPaths).toEqual(['contested'])
-    expect(result.blobsPending).toBe(true)
+    // The image crossed: same bytes, right mime, addressed to the daemon's
+    // file route under the owning document's path.
+    expect(result.blobs).toEqual({ transferred: [FILE_ID], missing: [], failed: [] })
+    expect(putFiles).toHaveLength(1)
+    expect(putFiles[0]?.url).toContain(`/file/${FILE_ID}`)
+    expect(putFiles[0]?.contentType).toBe('image/png')
+    expect([...(putFiles[0]?.bytes ?? [])]).toEqual([...imageBytes])
+  })
+
+  it('a referenced image whose bytes are gone is reported missing, never a failed promotion', async () => {
+    const index = new FoldingBrowserIndex()
+    await ensureLocalWorkspace(index)
+    const sketch = await index.createDocument({
+      workspaceId: 'local',
+      path: 'sketch',
+      kind: 'spatial',
+    })
+    const content = new LoroDoc()
+    writeSpatialCanvas(content, {
+      nodes: [
+        {
+          id: 'img',
+          type: 'file',
+          file: newImageRef('gone-image'),
+          x: 0,
+          y: 0,
+          width: 5,
+          height: 5,
+        },
+      ],
+      edges: [],
+    })
+    expect(
+      await seedWorkspaceDocumentContent(
+        sketch.documentId,
+        new Uint8Array(content.export({ mode: 'snapshot' })),
+      ),
+    ).toBe(true)
+
+    const result = await promoteWorkspace({
+      fetch: daemonStub(new LoroDoc()),
+      daemonBaseUrl: BASE,
+      workspaceId: 'ws-a',
+      workspaceDocs: new BrowserWorkspaceDocs(),
+    })
+    expect(result.kind).toBe('ok')
+    if (result.kind !== 'ok') return
+    expect(result.blobs).toEqual({ transferred: [], missing: ['gone-image'], failed: [] })
   })
 
   it('a 404 target is a structured failure naming the missing daemon workspace', async () => {
