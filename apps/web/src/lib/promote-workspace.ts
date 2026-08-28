@@ -16,7 +16,9 @@
  * The caller owns the fold: a legacy row-plane document that has not been
  * absorbed into the tree yet is not in the record this reads, so the promote
  * surface must run after the startup fold (any FoldingBrowserIndex read
- * performs it) — the same ordering every other record consumer relies on.
+ * performs it; the Settings section folds explicitly before counting, since
+ * it can be a session's first surface) — the same ordering every other
+ * record consumer relies on.
  */
 import {
   documentContainers,
