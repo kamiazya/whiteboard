@@ -6,7 +6,7 @@ import {
   facetsRawSchema,
   RESERVED_ROOT_KEYS,
 } from './facets.js'
-import { documentIdSchema } from './ids.js'
+import { documentIdSchema, workspaceCanonicalIdSchema, workspaceSegmentSchema } from './ids.js'
 import { markdownDocumentSchema } from './markdown.js'
 import {
   mdastFlowContentSchema,
@@ -31,6 +31,7 @@ import {
   mdastPhrasingContentArbitrary,
   mdastRootArbitrary,
   spatialNodeArbitrary,
+  workspaceSegmentArbitrary,
   xWhiteboardArbitrary,
 } from './test-utils/arbitraries.js'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
@@ -70,6 +71,20 @@ describe('arbitrary-conformance: every generator agrees with its schema', () => 
 
   fcTest.prop([canonicalUlidArbitrary], withDefaults())('documentIdSchema', (value) => {
     expect(documentIdSchema.safeParse(value).success).toBe(true)
+  })
+
+  fcTest.prop([canonicalUlidArbitrary], withDefaults())('workspaceCanonicalIdSchema', (value) => {
+    expect(workspaceCanonicalIdSchema.safeParse(value).success).toBe(true)
+  })
+
+  // The must-fix property: pins workspaceSegmentArbitrary's own claim to be
+  // valid-by-construction against the schema it feeds, so a generator drift
+  // (a stray leading hyphen, an un-excluded ULID shape) fails HERE even
+  // though the disjointness property below stays green regardless — that
+  // one only ever checks canonicalIdSchema's rejection, never the segment
+  // schema's acceptance.
+  fcTest.prop([workspaceSegmentArbitrary], withDefaults())('workspaceSegmentSchema', (value) => {
+    expect(workspaceSegmentSchema.safeParse(value).success).toBe(true)
   })
 
   fcTest.prop(
@@ -268,6 +283,29 @@ describe('documentIdSchema ULID mutations always reject', () => {
     (ulid, firstChar) => {
       const mutated = firstChar + ulid.slice(1)
       expect(documentIdSchema.safeParse(mutated).success).toBe(false)
+    },
+  )
+})
+
+describe('workspace identity: segment/canonical-id disjointness (ADR-0019)', () => {
+  // THE load-bearing invariant: URLs resolve segment-first with
+  // canonical-id fallback in one position, so the value sets accepted by
+  // workspaceCanonicalIdSchema and workspaceSegmentSchema must never
+  // overlap. Mutation-checked: dropping workspaceSegmentSchema's `.refine`
+  // turns both cases below red (every generated ULID is a counterexample,
+  // since every one satisfies the charset regex on its own).
+  fcTest.prop([canonicalUlidArbitrary], withDefaults())(
+    'a canonical ULID is never accepted as a workspace segment, uppercase or lowercase',
+    (ulid) => {
+      expect(workspaceSegmentSchema.safeParse(ulid).success).toBe(false)
+      expect(workspaceSegmentSchema.safeParse(ulid.toLowerCase()).success).toBe(false)
+    },
+  )
+
+  fcTest.prop([workspaceSegmentArbitrary], withDefaults())(
+    'a valid workspace segment is never accepted as a workspace canonical id',
+    (segment) => {
+      expect(workspaceCanonicalIdSchema.safeParse(segment).success).toBe(false)
     },
   )
 })
