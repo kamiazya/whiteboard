@@ -18,7 +18,10 @@ import {
   createWorkspaceDocumentAtPath,
   documentContainers,
   readMarkdownBody,
+  readSpatialCanvas,
+  resolveWorkspaceDocument,
   writeMarkdownBody,
+  writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
@@ -35,7 +38,9 @@ vi.mock('../../config.js', () => ({
 
 const { createDocumentRouter } = await import('../document.js')
 const { clearCache } = await import('../../store/doc-cache.js')
-const { _clearWorkspaceDocCacheForTests } = await import('../../store/document-store.js')
+const { _clearWorkspaceDocCacheForTests, onWorkspaceDocUpdated } = await import(
+  '../../store/document-store.js'
+)
 const { createIsolatedDb } = await import('../../store/db/test-helpers.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
@@ -193,4 +198,118 @@ it('an edit made after the promotion export still lands as an incremental delta 
   expect(readMarkdownBody(documentContainers(daemonView, ROADMAP_ID))).toBe(
     '# roadmap v2 — offline edit',
   )
+})
+
+// --- Slice 2: targeting, idempotency, and the live-session blast radius ---
+
+async function daemonSnapshot(app: ReturnType<typeof createDocumentRouter>): Promise<LoroDoc> {
+  const res = await app.request('/api/w/session1/workspace-document/snapshot')
+  expect(res.status).toBe(200)
+  const doc = new LoroDoc()
+  doc.import(new Uint8Array(await res.arrayBuffer()))
+  return doc
+}
+
+it('promotion lands as ONE fan-out frame under a live subscriber, whose pending edit then merges instead of being overwritten', async () => {
+  const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+  const created = await app.request('/api/workspaces/session1/documents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'daemon-own' }),
+  })
+  expect(created.status).toBe(200)
+
+  // A live daemon-mode session: its own replica of the workspace record,
+  // with an UNCOMMITTED local edit pending when the promotion arrives.
+  const replica = await daemonSnapshot(app)
+  const preMerge = replica.export({ mode: 'snapshot' })
+  const preEditVersion = replica.version()
+  const own = resolveWorkspaceDocument(replica, 'daemon-own')
+  expect(own).not.toBeNull()
+  if (own === null) return
+  writeSpatialCanvas(documentContainers(replica, own.documentId), {
+    nodes: [{ id: 'live-edit', type: 'text', text: 'live', x: 0, y: 0, width: 10, height: 10 }],
+    edges: [],
+  })
+  replica.commit()
+  const pendingDelta = new Uint8Array(replica.export({ mode: 'update', from: preEditVersion }))
+
+  const frames: Uint8Array[] = []
+  const unsubscribe = onWorkspaceDocUpdated((workspaceId, update) => {
+    if (workspaceId === 'session1') frames.push(update)
+  })
+  try {
+    const res = await app.request('/api/w/session1/workspace-document/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: new Uint8Array(browserRecord().export({ mode: 'snapshot' })),
+    })
+    expect(res.status).toBe(200)
+  } finally {
+    unsubscribe()
+  }
+
+  // One import, one frame — the fan-out runs after the write settles, never
+  // as interleaved partial writes mid-import.
+  expect(frames).toHaveLength(1)
+  // The frame is well-formed and carries the WHOLE merge: importing it onto
+  // a pre-merge copy resolves the promoted documents.
+  const observer = new LoroDoc()
+  observer.import(new Uint8Array(preMerge))
+  observer.import(frames[0] as Uint8Array)
+  expect(readMarkdownBody(documentContainers(observer, ROADMAP_ID))).toBe('# roadmap v1')
+
+  // The pending local edit now lands — a commutative merge, not a clobber:
+  // the daemon ends up holding BOTH the promoted content and the live edit.
+  const pushed = await app.request('/api/w/session1/workspace-document/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: pendingDelta,
+  })
+  expect(pushed.status).toBe(200)
+  const final = await daemonSnapshot(app)
+  expect(readMarkdownBody(documentContainers(final, ROADMAP_ID))).toBe('# roadmap v1')
+  const canvas = readSpatialCanvas(documentContainers(final, own.documentId))
+  expect(canvas.nodes.map((n) => n.id)).toEqual(['live-edit'])
+})
+
+it('promoting the same snapshot twice is idempotent — no duplicate documents, no error', async () => {
+  const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+  const created = await app.request('/api/workspaces/session1/documents', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path: 'daemon-own' }),
+  })
+  expect(created.status).toBe(200)
+
+  // The retry case: a promotion whose response was lost re-sends the SAME
+  // snapshot. Loro import of already-known ops is a no-op, so the second
+  // POST must neither fail nor duplicate anything.
+  const snapshot = new Uint8Array(browserRecord().export({ mode: 'snapshot' }))
+  for (const _round of [1, 2]) {
+    const res = await app.request('/api/w/session1/workspace-document/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: snapshot,
+    })
+    expect(res.status).toBe(200)
+  }
+
+  const documents = await listDocuments(app)
+  expect(documents).toHaveLength(4)
+  expect(new Set(documents.map((d) => d.id)).size).toBe(4)
+})
+
+it("the literal workspace id 'local' cannot be minted by a promotion", async () => {
+  // 'local' is the browser keeper's FIXED stored id (vocabulary.md's keeper
+  // axis). A promotion that let it through would resurrect the retired
+  // browser-local sense as a daemon workspace. The route already refuses
+  // every unregistered id; this pins that 'local' gets no special pass.
+  const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+  const res = await app.request('/api/w/local/workspace-document/update', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/octet-stream' },
+    body: new Uint8Array(browserRecord().export({ mode: 'snapshot' })),
+  })
+  expect(res.status).toBe(404)
 })
