@@ -207,4 +207,9 @@ workspace, both versions are kept and the pre-existing one is marked
 *shadowed* — nothing is renamed or overwritten. Your documents also stay in
 this browser; moving again later is safe and simply re-merges.
 
+If the app later opens in browser mode while that daemon is unavailable,
+the connection chip's popover notes that the workspace has been moved and
+that changes made in the browser stay there until you move it again — the
+two copies do not sync on their own.
+
 ← Back to [How-to guides](README.md)
