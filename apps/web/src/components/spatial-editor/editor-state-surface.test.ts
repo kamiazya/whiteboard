@@ -62,14 +62,19 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
   marquee:
     'not modelled: a drag from empty space that resolves to set-members on pointerup. Real selection state, reached by no command here',
 
+  // The four id-pinned entries. Each resolves its element IN THE RENDER
+  // and shows nothing when it is missing, so a stale id here is inert
+  // rather than invisible — the opposite of `selectedEdgeId`, whose read
+  // sites all filtered by what was laid out while a verb still acted on
+  // it. The two dialogs only gained that gate after this table was
+  // written; see dialog-target-vanishes.browser.test.tsx.
   edgeLabelEditId:
-    'not modelled: pinned to an edge id. Same shape as selectedEdgeId was — pruned alongside it when a replacement drops the edge, but nothing drives the editor itself here',
-  groupLabelEditId:
-    'not modelled: pinned to a node id, and NOT pruned when a replacement drops that node. The one entry in this table that names a known gap rather than an untested feature',
+    'not modelled: pinned to an edge id, gated on finding that edge in the render. Nothing here drives the label editor itself',
+  groupLabelEditId: 'not modelled: pinned to a node id, gated on finding that group in the render',
   linkDialog:
-    'not modelled: carries a nodeId in edit mode, so it has the id-pinned shape too. Its submit path writes set-node-url, itself unmodelled',
+    'not modelled: carries a nodeId in edit mode, gated on finding that node. Its submit writes set-node-url, itself unmodelled',
   canvasPicker:
-    'not modelled: document-picker dialog; its submit writes set-node-file, itself unmodelled',
+    'not modelled: carries a nodeId in retarget mode, gated on finding that node. Its submit writes set-node-file, itself unmodelled',
 
   livePoint:
     'view only: the current pointer position during a gesture, replaced every frame and cleared when the gesture leaves flight. No verb reads it',
