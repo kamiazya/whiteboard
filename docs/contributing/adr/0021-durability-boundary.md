@@ -217,6 +217,13 @@ nothing was ever collectable. The guard is now the arrangement itself
   consulted first and the environment remains the fallback for a deployment
   that has never opened one, so no existing install is made worse.
 
+  Restore does not get the symmetric check, though writing one is the obvious
+  move. It only ever writes into an empty or missing target, so a target
+  cannot be holding a record to read — the check would be unreachable, and
+  would pass a test suite that mocks the restore where the emptiness
+  rejection lives. `server-restore.test.ts` pins that reason rather than
+  leaving the asymmetry to look like an oversight.
+
   It carries no connection string. The file sits in the directory a backup
   copies wholesale, a URL can carry userinfo, and one boolean answers the only
   question asked of it. Widening it to describe blob and version stores is

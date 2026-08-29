@@ -6,7 +6,6 @@ import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
-import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
 export interface RunServerRestoreOptions {
@@ -93,18 +92,21 @@ export async function runServerRestore(
     return { kind: 'error', message: 'restore failed' }
   }
 
-  // The mirror of the backup guard, and it splits the same way. Whether the
-  // TARGET deployment will read a restored file is the target's own recorded
-  // answer when it has one — restore is documented as a host-side command
-  // too, so the environment here may not be the deployment's — falling back
-  // to the environment for a directory that has never been opened, which is
-  // every fresh restore. Whether the BACKUP can supply rows at all stays the
-  // artifact's answer: a backup directory holding no database cannot put rows
-  // back, and succeeding would leave the operator starting a server against
-  // blobs alone.
-  const recorded = await readDatabaseLocationRecord(targetDir)
-  const targetReadsDirectory = recorded?.inDataDir ?? databaseIsInsideDataDir(targetDir, env)
-  if (!targetReadsDirectory || !(await dataDirHasDatabaseFile(backupDir))) {
+  // The mirror of the backup guard, asked of the artifact for the same reason:
+  // restore is also documented as a host-side command, so the environment here
+  // may not be the deployment's. A backup directory holding no database cannot
+  // put rows back, and succeeding would leave the operator starting a server
+  // against blobs alone.
+  //
+  // The location record does NOT belong on this side, though it is the
+  // obvious symmetry to reach for. Restore requires the target to be empty or
+  // missing (`restoreDataDir`), so a target can never be holding a record to
+  // read — a check for one is unreachable in production and passes its own
+  // tests only because they mock the restore that would have rejected the
+  // non-empty directory. The backup directory's copy of the record is no use
+  // either: backup refuses to produce one unless it said "inside", so it is
+  // `true` in every backup this code can create.
+  if (!databaseIsInsideDataDir(targetDir, env) || !(await dataDirHasDatabaseFile(backupDir))) {
     return { kind: 'external-database' }
   }
 

@@ -158,11 +158,13 @@ provide the operator-facing surface for data backup and restore.
   data directory, neither of the checks above can see it: the environment is
   this shell's, and a directory cannot tell a live database from a fossil. So
   the server writes `storage.json` in the data directory each time it opens
-  its database, recording whether the rows are in the directory, and both
-  commands read it first. It is deliberately never deleted — being readable
-  after the server is stopped is the whole point — and it holds no connection
-  string. A data directory that predates this file, or one no server has ever
-  opened, falls back to the environment-and-directory checks above.
+  its database, recording whether the rows are in the directory, and `backup`
+  reads it first. It is deliberately never deleted — being readable after the
+  server is stopped is the whole point — and it holds no connection string. A
+  data directory that predates this file, or one no server has ever opened,
+  falls back to the environment-and-directory checks above. (`restore` has no
+  equivalent, and needs none: it only ever writes into an empty or missing
+  target, which by definition holds no record.)
 - Restore only into a missing or empty target directory. A non-empty target
   is rejected to prevent silent merging of stale state with the backup.
 - After restore, `server-mode.json` is removed from the target. The
