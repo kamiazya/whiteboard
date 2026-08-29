@@ -6,7 +6,7 @@ import type { ServerModeRecordReadResult } from '../server/security/server-mode-
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
-import { databaseIsInsideDataDir } from '../server/store/db/location.js'
+import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import type { ServerBackupArgs } from './server-backup-args.js'
 
 export interface RunServerBackupOptions {
@@ -63,10 +63,6 @@ export async function runServerBackup(
   // copies a directory, so a database configured to live anywhere else is
   // simply absent from the result — and reporting success over blobs alone
   // hands the operator a backup they will trust and cannot restore from.
-  if (!databaseIsInsideDataDir(dataDir, env)) {
-    return { kind: 'external-database' }
-  }
-
   // Reject if the output path itself is a symlink or a plain file.
   try {
     const st = await lstat(outputDir)
@@ -101,6 +97,16 @@ export async function runServerBackup(
     }
   } catch {
     return { kind: 'error', message: 'backup failed' }
+  }
+
+  // Both questions, because either alone can be answered from the wrong
+  // place: the environment may not be this shell's (the documented Docker
+  // flow runs host-side, where the container's env-file is not loaded), and
+  // the directory alone cannot say a local-looking file is stale. A copy is
+  // only known to carry the rows when the config says "inside" AND the file
+  // is there.
+  if (!databaseIsInsideDataDir(dataDir, env) || !(await dataDirHasDatabaseFile(dataDir))) {
+    return { kind: 'external-database' }
   }
 
   try {

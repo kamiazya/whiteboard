@@ -146,6 +146,12 @@ provide the operator-facing surface for data backup and restore.
   libSQL server or any other path, both commands refuse rather than copy blobs
   alone and report success — back that database up where it lives, using the
   facilities of whatever hosts it.
+- **The refusal does not depend on this shell's environment.** These commands
+  run host-side, where the container's `--env-file` is not loaded, so
+  `WHITEBOARD_DATABASE_URL` is usually absent here even when the deployment
+  sets it. Both commands therefore also check the directory itself: one with
+  no `whiteboard.db` in it is refused, because a copy of it cannot carry rows
+  no matter what any environment says.
 - Restore only into a missing or empty target directory. A non-empty target
   is rejected to prevent silent merging of stale state with the backup.
 - After restore, `server-mode.json` is removed from the target. The

@@ -36,6 +36,9 @@ describe('runServerBackup', () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(dataDir)
+    // A data directory with no database is refused now (see the host-shell
+    // case at the bottom of this file), so the happy paths seed one.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const capturedCalls: [string, string, BackupRestoreOptions][] = []
     const mockDoBackup = vi.fn(async (src: string, dest: string, opts: BackupRestoreOptions) => {
@@ -77,6 +80,9 @@ describe('runServerBackup', () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'new-backup')
     await mkdir(dataDir)
+    // A data directory with no database is refused now (see the host-shell
+    // case at the bottom of this file), so the happy paths seed one.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
@@ -114,6 +120,9 @@ describe('runServerBackup', () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'non-empty')
     await mkdir(dataDir)
+    // A data directory with no database is refused now (see the host-shell
+    // case at the bottom of this file), so the happy paths seed one.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
     await mkdir(outputDir)
     await writeFile(join(outputDir, 'canary.txt'), 'content')
 
@@ -213,6 +222,9 @@ describe('runServerBackup', () => {
   it('non-leak: outcome does not contain raw dataDir path', async () => {
     const dataDir = join(tmpRoot, 'src')
     await mkdir(dataDir)
+    // A data directory with no database is refused now (see the host-shell
+    // case at the bottom of this file), so the happy paths seed one.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
     const outputDir = join(tmpRoot, 'out')
 
     const outcome = await runServerBackup({
@@ -249,6 +261,9 @@ describe('runServerBackup with the database outside the data directory', () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(dataDir)
+    // A data directory with no database is refused now (see the host-shell
+    // case at the bottom of this file), so the happy paths seed one.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const mockDoBackup = vi.fn(async () => {})
     const outcome = await runServerBackup({
@@ -269,11 +284,71 @@ describe('runServerBackup with the database outside the data directory', () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(dataDir)
+    // A data directory with no database is refused now (see the host-shell
+    // case at the bottom of this file), so the happy paths seed one.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
     const mockDoBackup = vi.fn(async () => {})
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: { WHITEBOARD_DATABASE_URL: `file:${join(dataDir, 'whiteboard.db')}` },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * The guard must not depend on the invoking shell's environment.
+ *
+ * `docs/how-to/self-host-with-docker.md` tells the operator to stop the
+ * container and run this command HOST-side. `WHITEBOARD_DATABASE_URL` lives
+ * in the container's --env-file, so the host shell does not have it: an
+ * env-only check reads a clean environment, concludes the database is local,
+ * and copies a directory that has no database in it.
+ *
+ * Measured before this test existed, with the env deliberately empty:
+ *
+ *     outcome: {"ok":true,"operation":"backup"}   backup: [ 'blobs' ]
+ *
+ * — the exact failure this whole change set out to remove, reached through
+ * the documented workflow. So the decision is made from the ARTIFACT: if the
+ * directory holds no database file, the copy cannot hold rows, whatever any
+ * environment says.
+ */
+describe('runServerBackup judges from the directory, not the invoking shell', () => {
+  it('refuses when the data directory holds no database, even with a clean env', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(join(dataDir, 'blobs'), { recursive: true })
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoBackup).not.toHaveBeenCalled()
+  })
+
+  it('proceeds when the database file is actually there', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,

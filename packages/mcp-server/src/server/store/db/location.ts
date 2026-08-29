@@ -1,3 +1,4 @@
+import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -100,6 +101,31 @@ export function databaseIsInsideDataDir(
   } catch {
     // A relative or otherwise non-path file: URL. Whatever it names, this
     // function cannot show it is inside.
+    return false
+  }
+}
+
+/**
+ * Whether `dir` actually holds a database file.
+ *
+ * `databaseIsInsideDataDir` answers what the ENVIRONMENT says, which is only
+ * as good as the environment the question is asked in. The self-hosting guide
+ * tells operators to stop the container and run `whiteboard server backup`
+ * host-side, where `WHITEBOARD_DATABASE_URL` — set in the container's
+ * env-file — is simply absent: the env-only check then reads a clean shell,
+ * concludes the database is local, and copies a directory with no database in
+ * it. Measured: `{"ok":true,"operation":"backup"}` over `[ 'blobs' ]`.
+ *
+ * So the directory is asked as well. A directory with no database file cannot
+ * produce a copy containing rows, whatever any environment claims, and that
+ * holds whether the rows live in a libSQL server or the server has simply
+ * never run.
+ */
+export async function dataDirHasDatabaseFile(dir: string): Promise<boolean> {
+  try {
+    const stats = await stat(join(dir, DB_FILENAME))
+    return stats.isFile()
+  } catch {
     return false
   }
 }

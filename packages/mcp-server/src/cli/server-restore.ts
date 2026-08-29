@@ -5,7 +5,7 @@ import type { ServerModeRecordReadResult } from '../server/security/server-mode-
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
-import { databaseIsInsideDataDir } from '../server/store/db/location.js'
+import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
 export interface RunServerRestoreOptions {
@@ -58,13 +58,6 @@ export async function runServerRestore(
     return { kind: 'running-target' }
   }
 
-  // The mirror of the backup guard: putting a directory back cannot restore
-  // rows that live outside it, so succeeding here would leave the operator
-  // starting a server against blobs alone.
-  if (!databaseIsInsideDataDir(targetDir, env)) {
-    return { kind: 'external-database' }
-  }
-
   // Reject if the target path itself is a symlink or a plain file.
   try {
     const st = await lstat(targetDir)
@@ -97,6 +90,15 @@ export async function runServerRestore(
     }
   } catch {
     return { kind: 'error', message: 'restore failed' }
+  }
+
+  // The mirror of the backup guard, asked of the artifact for the same reason:
+  // restore is also documented as a host-side command, so the environment here
+  // may not be the deployment's. A backup directory holding no database cannot
+  // put rows back, and succeeding would leave the operator starting a server
+  // against blobs alone.
+  if (!databaseIsInsideDataDir(targetDir, env) || !(await dataDirHasDatabaseFile(backupDir))) {
+    return { kind: 'external-database' }
   }
 
   try {
