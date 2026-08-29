@@ -8,7 +8,10 @@ Runtime environment variables and sandbox quirks.
 understood aborts startup.** Setting a value is how you state a requirement,
 so falling back to a default would answer that requirement with behaviour you
 did not ask for and tell you nowhere. A blank or whitespace value counts as
-unset, not as a mistake. Every offending variable is named in one startup
+unset, not as a mistake — with one documented exception: for
+`WHITEBOARD_ALLOWED_WEB_ORIGINS` an empty string is a deliberate opt-out that
+restores loopback-only admission, so there it means something rather than
+nothing. Every offending variable is named in one startup
 failure, so a single restart is enough to fix them all — and the message names
 variables only, never their values, since a database URL can carry a
 credential.

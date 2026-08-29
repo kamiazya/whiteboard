@@ -388,6 +388,12 @@ describe('purgeDanglingFiles', () => {
    * Measured across plausible spellings before the fix:
    * `1h` -> 1ms, `30m` -> 30ms, `2s` -> 2ms, `1e3` -> 1ms.
    *
+   * `' 500'` is deliberately NOT in this list: the shared parser trims, so it
+   * is a valid 500ms window rather than a rejected value — and as a 500ms
+   * grace it would purge the freshly-seeded file whenever the scan ran longer
+   * than that, making this test flaky for a reason unrelated to what it
+   * checks.
+   *
    * The sibling `WHITEBOARD_FILE_GC_INTERVAL_MS` already parsed strictly for
    * exactly this reason. The two were written to different conventions, and
    * only the lenient one guards data.
@@ -395,7 +401,7 @@ describe('purgeDanglingFiles', () => {
   it('falls back to the default rather than reading a unit suffix as a millisecond count', async () => {
     const previous = process.env.WHITEBOARD_FILE_GC_GRACE_MS
     try {
-      for (const raw of ['1h', '30m', '2s', '1e3', ' 500', '-1', '1.5']) {
+      for (const raw of ['1h', '30m', '2s', '1e3', '-1', '1.5']) {
         process.env.WHITEBOARD_FILE_GC_GRACE_MS = raw
         await seedFreshFile(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`, 'fresh', '.png', 8)
         const result = await purgeDanglingFiles(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`)

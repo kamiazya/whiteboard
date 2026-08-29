@@ -38,6 +38,8 @@ interface World {
   written: string[]
   /** How far the mirror has copied. Blobs before this index are in `backup`. */
   mirrored: number
+  /** Where blobs live now. File-GC deletes from here and only here. */
+  store: Set<string>
   /** The blob backup: append-only except through the retention pass. */
   backup: Set<string>
   /** What the live document references right now. */
@@ -54,6 +56,7 @@ function freshWorld(): World {
   return {
     written: [],
     mirrored: 0,
+    store: new Set(),
     backup: new Set(),
     liveRefs: new Set(),
     pending: [],
@@ -102,6 +105,7 @@ class WriteBlobCommand implements fc.Command<World, World> {
   run(world: World): void {
     const blobId = `blob-${world.nextBlob++}`
     world.written.push(blobId)
+    world.store.add(blobId)
     world.liveRefs.add(blobId)
     assertOfferedAreRestorable(world)
   }
@@ -250,6 +254,7 @@ class CompleteBackupCycleCommand implements fc.Command<World, World> {
     }
     const blobId = `blob-${world.nextBlob++}`
     world.written.push(blobId)
+    world.store.add(blobId)
     world.liveRefs.add(blobId)
     for (let i = world.mirrored; i < world.written.length; i++) {
       const queued = world.written[i]
@@ -271,21 +276,27 @@ class CompleteBackupCycleCommand implements fc.Command<World, World> {
 }
 
 /**
- * File-GC, over the blob STORE. It is in this model for one reason: to assert
- * it never reaches the backup. ADR-0021 decision 5 keeps the two apart so
- * garbage collection's fencing is not reopened, and a model in which GC
- * touched nothing would not be testing that separation at all.
+ * File-GC, over the blob STORE.
+ *
+ * It deletes from `store` and asserts `backup` is untouched — ADR-0021
+ * decision 5's separation, stated as something that can actually fail. The
+ * first version of this command mutated nothing at all, which made its
+ * assertion vacuous; the deletion is what gives it a subject.
  */
 class FileGcCommand implements fc.Command<World, World> {
   check(world: World): boolean {
-    return world.written.length > 0
+    return world.store.size > 0
   }
   run(world: World): void {
     const backupBefore = new Set(world.backup)
-    const collectable = world.written.filter((blobId) => !world.liveRefs.has(blobId))
+    const collectable = [...world.store].filter((blobId) => !world.liveRefs.has(blobId))
+    // GC really deletes, and only from the store. Without the deletion this
+    // command mutated nothing, so the assertion below compared `backup` with
+    // a clone taken two lines earlier and could not fail — a guard reading as
+    // coverage while having no subject at all.
+    for (const blobId of collectable) world.store.delete(blobId)
     reached.gcDeletes += collectable.length
-    // GC deletes from the store. The backup is not its business, and this
-    // assertion is the whole point of the command.
+    // The backup is not GC's business. THIS is what decision 5 asks of it.
     expect([...world.backup].sort()).toEqual([...backupBefore].sort())
     assertOfferedAreRestorable(world)
   }
