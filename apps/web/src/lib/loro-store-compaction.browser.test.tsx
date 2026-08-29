@@ -10,6 +10,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { COMPACT_DELTA_BYTES } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
+import { resolveBrowserWorkspaceId } from './browser-workspace-id.js'
 import { LoroStore } from './loro-store.js'
 
 function canvasWith(n: number, nudge = 0): SpatialCanvas {
@@ -32,6 +33,11 @@ function totalBytes(deltas: readonly Uint8Array[] | undefined): number {
 }
 
 it('folds the delta log once it passes the budget, keeping the content', async () => {
+  // Shared 'whiteboard' db, no isolation helper: `LoroStore` reads
+  // `getBrowserWorkspaceId()` to build a `DocRef` (unused for `document:`
+  // keys, but still read), so it has to be resolved once against whichever
+  // single workspace this shared database already holds.
+  await resolveBrowserWorkspaceId()
   const store = new LoroStore()
   const id = `doc-${Math.trunc(performance.now() * 1000)}`
 
@@ -75,6 +81,7 @@ it('folds the delta log once it passes the budget, keeping the content', async (
 // snapshot or the deltas already there, and the repo's own loro-store tests
 // seed a v:1 envelope carrying invalid Loro bytes.
 it('keeps a log it cannot replay rather than dropping the edits', async () => {
+  await resolveBrowserWorkspaceId()
   const store = new LoroStore()
   const id = `unfoldable-${Math.trunc(performance.now() * 1000)}`
 

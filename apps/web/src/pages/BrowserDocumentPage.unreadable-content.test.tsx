@@ -13,6 +13,7 @@ import { cleanup, render as rtlRender, screen, waitFor } from '@testing-library/
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { ensureLocalWorkspace, IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
@@ -45,7 +46,7 @@ async function seedDocumentWithContent(
   const index = new IdbDocumentIndex()
   await ensureLocalWorkspace(index)
   const entry = await index.createDocument({
-    workspaceId: 'local',
+    workspaceId: getBrowserWorkspaceId(),
     path: 'unreadable',
     name: 'Unreadable',
     kind: 'spatial',
@@ -92,14 +93,14 @@ describe('a document this build cannot read', () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const broken = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'broken',
       name: 'Broken',
       kind: 'spatial',
     })
     await seedSyncDocument(broken.documentId, { raw: { v: 99 } }, DB)
     const sound = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'sound',
       name: 'Sound',
       kind: 'spatial',

@@ -1,6 +1,17 @@
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { cleanup } from '@testing-library/react'
 import { afterEach, expect, vi } from 'vitest'
+import { setBrowserWorkspaceIdForTests } from './src/lib/browser-workspace-id.js'
 import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
+
+// jsdom page/hook tests read `getBrowserWorkspaceId()` at their existing
+// production call sites (the id an IndexedDB-backed or in-memory double is
+// seeded under) without going through the real boot resolver. A fixed
+// per-file id — minted once here rather than per test — is what every such
+// call site sees; a test exercising the accessor's own unresolved/failed
+// states resets and restores it explicitly (see browser-workspace-id.test.ts
+// and boot.test.ts).
+setBrowserWorkspaceIdForTests(generateDocumentId())
 
 // jsdom ships no ResizeObserver; Radix popper-positioned surfaces
 // (DropdownMenu/Popover content) observe their anchor on mount and throw

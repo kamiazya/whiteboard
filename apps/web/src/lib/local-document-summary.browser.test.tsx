@@ -8,11 +8,12 @@
  * than bending the contract around them.
  */
 
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
-  BROWSER_WORKSPACE_ID,
   IdbDefaultDocumentPointer,
   idbContentClock,
   listLocalDocuments,
@@ -30,8 +31,13 @@ async function clearDb(): Promise<void> {
 }
 
 async function seedWorkspace(): Promise<IdbDocumentIndex> {
+  // This file's DB is claimed by literal name rather than through
+  // `claimIsolatedWhiteboardDb` (it predates that helper), so the
+  // `getBrowserWorkspaceId()` seam is not set for it automatically — set it
+  // fresh per test instead, matching what the seam-owning helper does.
+  setBrowserWorkspaceIdForTests(generateDocumentId())
   const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   return index
 }
 
@@ -48,7 +54,7 @@ describe('local document summary', () => {
   it('carries the index entry plus the time its content was last written', async () => {
     const index = await seedWorkspace()
     const entry = await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'notes',
       kind: 'markdown',
       name: 'Notes',
@@ -70,7 +76,7 @@ describe('local document summary', () => {
     // a title. Choosing the fallback is this layer's job, not the port's.
     const index = await seedWorkspace()
     const entry = await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'archive/untitled',
       kind: 'spatial',
     })
@@ -87,7 +93,7 @@ describe('local document summary', () => {
     // the sort puts it last rather than first.
     const index = await seedWorkspace()
     await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'contentless',
       kind: 'spatial',
     })

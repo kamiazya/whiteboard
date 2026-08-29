@@ -10,6 +10,7 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { loadMarkdownEmbedSource, resetEmbedIndexForTests } from './document-embed-content.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
@@ -26,9 +27,9 @@ describe('loadMarkdownEmbedSource', () => {
 
   it('resolves the name of a document the workspace tree holds', async () => {
     const index = new FoldingBrowserIndex()
-    await index.createWorkspace({ workspaceId: 'local' }).catch(() => {})
+    await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() }).catch(() => {})
     const entry = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'notes/spec',
       kind: 'markdown',
       name: 'The Spec',
@@ -42,7 +43,7 @@ describe('loadMarkdownEmbedSource', () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const entry = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'notes/old',
       kind: 'markdown',
       name: 'Old Note',

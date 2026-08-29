@@ -15,9 +15,28 @@
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
+import {
+  adoptWorkspaceDocument,
+  resolveWorkspaceDocumentById,
+} from '@kamiazya/whiteboard-loro-adapter'
+import { chunkSnapshot, type SnapshotChunk } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { DB_VERSION, openWhiteboardDb, SYNC_DOCUMENTS_STORE } from './browser-idb.js'
+import {
+  DB_VERSION,
+  DOCUMENT_INDEX_STORE,
+  openWhiteboardDb,
+  rekeyBrowserWorkspace,
+  SYNC_DOCUMENTS_STORE,
+  SYNC_SNAPSHOT_CHUNKS_STORE,
+  WORKSPACES_STORE,
+} from './browser-idb.js'
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import {
+  getBrowserWorkspaceId,
+  resetBrowserWorkspaceIdForTests,
+  resolveBrowserWorkspaceId,
+} from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
@@ -41,19 +60,45 @@ import { purgeLegacyReconnectCredentials } from './purge-legacy-reconnect-creden
  */
 const MIGRATION_DB = 'whiteboard-migration-test'
 
+// Every test in this file re-seeds MIGRATION_DB from scratch (see `clearDb`
+// below), so the id `getBrowserWorkspaceId()` would answer is different on
+// every run — a v13 fixture's rekey step mints a fresh ULID each time the
+// database is torn down and rebuilt. Resetting the accessor's cache before
+// each test (rather than relying on the shared jsdom-only seam, which this
+// browser-mode file has none of) is what keeps `migratedLocal()` reading the
+// id THIS test's database actually holds instead of the previous test's.
+beforeEach(resetBrowserWorkspaceIdForTests)
+
 /**
  * The migrated database read back through the production wiring, rather than
  * through a test double: what this file asserts is what a real user's next
  * session would see after the upgrade ran.
+ *
+ * `listDocuments`/`load` resolve the workspace id fresh (idempotent once
+ * resolved for this test) before delegating, rather than assuming it is
+ * already resolved — production makes that same resolve part of the boot
+ * chain (`boot.ts`), which nothing in this file drives.
  */
 function migratedLocal() {
   const index = new IdbDocumentIndex(MIGRATION_DB)
   const clock = idbContentClock(MIGRATION_DB)
+  const ready = () => resolveBrowserWorkspaceId(MIGRATION_DB)
   return {
-    listDocuments: () => listLocalDocuments(index, clock),
-    load: (documentId: string) => loadLocalDocument(index, documentId, clock),
+    listDocuments: () => ready().then(() => listLocalDocuments(index, clock)),
+    load: (documentId: string) => ready().then(() => loadLocalDocument(index, documentId, clock)),
     getDefaultDocumentId: () => new IdbDefaultDocumentPointer(MIGRATION_DB).get(),
   }
+}
+
+/**
+ * `LoroStore` builds a `DocRef` that reads `getBrowserWorkspaceId()` (unused
+ * for `document:` keys, but still read — see `docRefKey`'s comment). A raw
+ * construction in these fixtures has to resolve it explicitly, the way
+ * production's boot chain always has by the time anything calls this.
+ */
+async function loroStore(): Promise<LoroStore> {
+  await resolveBrowserWorkspaceId(MIGRATION_DB)
+  return new LoroStore(MIGRATION_DB)
 }
 
 /**
@@ -305,6 +350,306 @@ async function metaKeys(): Promise<string[]> {
   })
 }
 
+/**
+ * Seeds a v13-shaped fixture via raw IDB: the current store layout (v9-v12
+ * additive changes already landed), keyed under the literal `'local'`
+ * workspace the v13->v14 rekey step exists to move off of. Every store this
+ * touches already existed by v13 — only the registry's KEY changes at v14 —
+ * so this creates them directly rather than replaying the intermediate
+ * upgrades the earlier fixtures above exercise.
+ */
+async function seedV13Fixture(input: {
+  documentId: string
+  path: string
+  kind?: string
+  name?: string
+  contentSnapshot: Uint8Array
+  workspaceTreeSnapshot?: Uint8Array
+  defaultDocumentId?: string
+}): Promise<void> {
+  function writeEnvelope(tx: IDBTransaction, key: string, snapshot: Uint8Array): void {
+    const { manifest, chunks } = chunkSnapshot(snapshot, 1_000_000)
+    tx.objectStore(SYNC_DOCUMENTS_STORE).put(
+      { v: 2, snapshot: { manifest }, frontier: new Uint8Array(), deltas: [] },
+      key,
+    )
+    const chunkStore = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+    for (const chunk of chunks as SnapshotChunk[]) chunkStore.put(chunk, [key, chunk.index])
+  }
+
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(MIGRATION_DB, 13)
+    req.onupgradeneeded = (event) => {
+      const db = (event.target as IDBOpenDBRequest).result
+      if (!db.objectStoreNames.contains('meta')) db.createObjectStore('meta')
+      if (!db.objectStoreNames.contains(WORKSPACES_STORE)) db.createObjectStore(WORKSPACES_STORE)
+      if (!db.objectStoreNames.contains(DOCUMENT_INDEX_STORE)) {
+        const idx = db.createObjectStore(DOCUMENT_INDEX_STORE, { keyPath: ['workspaceId', 'path'] })
+        idx.createIndex('byId', ['workspaceId', 'documentId'], { unique: true })
+      }
+      if (!db.objectStoreNames.contains('documentFiles')) db.createObjectStore('documentFiles')
+      if (!db.objectStoreNames.contains('blobs')) db.createObjectStore('blobs')
+      if (!db.objectStoreNames.contains(SYNC_DOCUMENTS_STORE))
+        db.createObjectStore(SYNC_DOCUMENTS_STORE)
+      if (!db.objectStoreNames.contains(SYNC_SNAPSHOT_CHUNKS_STORE)) {
+        db.createObjectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+      }
+      if (!db.objectStoreNames.contains('contentTimestamps'))
+        db.createObjectStore('contentTimestamps')
+    }
+    req.onsuccess = () => {
+      const db = req.result
+      letFixtureStepAside(db)
+      const tx = db.transaction(
+        [
+          'meta',
+          WORKSPACES_STORE,
+          DOCUMENT_INDEX_STORE,
+          SYNC_DOCUMENTS_STORE,
+          SYNC_SNAPSHOT_CHUNKS_STORE,
+        ],
+        'readwrite',
+      )
+      tx.objectStore(WORKSPACES_STORE).put({ workspaceId: 'local' }, 'local')
+      tx.objectStore(DOCUMENT_INDEX_STORE).add({
+        workspaceId: 'local',
+        documentId: input.documentId,
+        path: input.path,
+        kind: input.kind ?? 'spatial',
+        ...(input.name === undefined ? {} : { name: input.name }),
+      })
+      if (input.defaultDocumentId !== undefined) {
+        tx.objectStore('meta').put(input.defaultDocumentId, 'defaultDocumentId')
+      }
+      writeEnvelope(tx, `document:${input.documentId}`, input.contentSnapshot)
+      if (input.workspaceTreeSnapshot !== undefined) {
+        writeEnvelope(tx, 'workspace-tree:local', input.workspaceTreeSnapshot)
+      }
+      tx.oncomplete = () => {
+        db.close()
+        resolve()
+      }
+      tx.onerror = () => {
+        db.close()
+        reject(tx.error)
+      }
+    }
+    req.onerror = () => reject(req.error)
+  })
+}
+
+/** Every key currently stored under the literal `'local'` workspace, across
+ *  all three stores the rekey touches — the "zero remnants" assertion. */
+/**
+ * Opens the database at whatever version it currently holds, rather than
+ * `openWhiteboardDb`'s pinned `DB_VERSION` — the one caller that needs this
+ * (`two-bump idempotence`, below) deliberately forces the database past
+ * `DB_VERSION`, and `openWhiteboardDb` would then reject with `VersionError`
+ * ("requested version is less than the existing version").
+ */
+async function openAtCurrentVersion(dbName: string): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(dbName)
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+async function legacyLocalKeys(): Promise<{
+  workspaces: string[]
+  index: unknown[]
+  syncTree: string[]
+}> {
+  const db = await openAtCurrentVersion(MIGRATION_DB)
+  return new Promise((resolve, reject) => {
+    const tx = db.transaction(
+      [WORKSPACES_STORE, DOCUMENT_INDEX_STORE, SYNC_DOCUMENTS_STORE],
+      'readonly',
+    )
+    const workspacesReq = tx.objectStore(WORKSPACES_STORE).getAllKeys()
+    const range = IDBKeyRange.bound(['local'], ['local', []])
+    const indexReq = tx.objectStore(DOCUMENT_INDEX_STORE).getAll(range)
+    const syncReq = tx.objectStore(SYNC_DOCUMENTS_STORE).getAllKeys()
+    tx.onerror = () => reject(tx.error)
+    tx.oncomplete = () => {
+      db.close()
+      resolve({
+        workspaces: workspacesReq.result.map(String).filter((key) => key === 'local'),
+        index: indexReq.result,
+        syncTree: syncReq.result.map(String).filter((key) => key === 'workspace-tree:local'),
+      })
+    }
+  })
+}
+
+const V13_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+describe("IndexedDB v13 -> v14 (re-keys the 'local' workspace)", () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('current DB_VERSION is 14 or higher', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(14)
+  })
+
+  it('moves registry, index and tree rows onto one ULID, zero local rows left', async () => {
+    const contentDoc = new Loro()
+    contentDoc.getMovableList('elements').push('one')
+    const contentSnapshot = contentDoc.export({ mode: 'snapshot' })
+
+    // A folded workspace document holding the SAME document as a tree node —
+    // real Loro bytes, not a placeholder, so "the workspace tree opens under
+    // the new key" is an actual read, not a shape assertion.
+    const workspaceDoc = new Loro()
+    adoptWorkspaceDocument(
+      workspaceDoc,
+      { path: 'design/login', documentId: V13_DOCUMENT_ID, kind: 'spatial', name: 'Login' },
+      contentDoc,
+    )
+    const workspaceTreeSnapshot = workspaceDoc.export({ mode: 'snapshot' })
+
+    await seedV13Fixture({
+      documentId: V13_DOCUMENT_ID,
+      path: 'design/login',
+      name: 'Login',
+      contentSnapshot,
+      workspaceTreeSnapshot,
+      defaultDocumentId: V13_DOCUMENT_ID,
+    })
+
+    const ulid = await resolveBrowserWorkspaceId(MIGRATION_DB)
+    expect(ulid).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+
+    // Documents list/load byte-identical through production wiring.
+    const local = migratedLocal()
+    expect((await local.listDocuments()).map((d) => d.documentId)).toEqual([V13_DOCUMENT_ID])
+    const loaded = await new LoroStore(MIGRATION_DB).load(V13_DOCUMENT_ID)
+    expect(loaded.kind).toBe('ok')
+    if (loaded.kind === 'ok') expect([...loaded.snapshot]).toEqual([...contentSnapshot])
+    expect(await local.getDefaultDocumentId()).toBe(V13_DOCUMENT_ID)
+
+    // The workspace tree opens under the new key and holds the same node.
+    const tree = await new BrowserWorkspaceDocs(MIGRATION_DB).open(ulid)
+    expect(tree).not.toBeNull()
+    if (tree !== null) {
+      expect(resolveWorkspaceDocumentById(tree, V13_DOCUMENT_ID)).not.toBeNull()
+    }
+
+    // The registry holds exactly one ULID-keyed row.
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    const workspaceKeys = await new Promise<string[]>((resolveKeys, rejectKeys) => {
+      const tx = db.transaction(WORKSPACES_STORE, 'readonly')
+      const req = tx.objectStore(WORKSPACES_STORE).getAllKeys()
+      req.onerror = () => rejectKeys(req.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolveKeys(req.result.map(String))
+      }
+    })
+    expect(workspaceKeys).toEqual([ulid])
+
+    // Zero 'local'-keyed rows anywhere.
+    const remnants = await legacyLocalKeys()
+    expect(remnants).toEqual({ workspaces: [], index: [], syncTree: [] })
+  })
+
+  it("two-bump idempotence: same id both passes, re-put 'local' absorbed not stray", async () => {
+    const contentDoc = new Loro()
+    contentDoc.getMovableList('elements').push('stable')
+    await seedV13Fixture({
+      documentId: V13_DOCUMENT_ID,
+      path: 'stable-doc',
+      contentSnapshot: contentDoc.export({ mode: 'snapshot' }),
+    })
+
+    const firstUlid = await resolveBrowserWorkspaceId(MIGRATION_DB)
+
+    // Simulates what a REAL future migration bump would do — re-fire
+    // `onupgradeneeded` and let `backfillDocumentIndex` re-put
+    // `{workspaceId:'local'}` unconditionally — without replaying the whole
+    // upgrade chain (which reads stores like `documents`/`loroDocuments`
+    // that no longer exist by v14). Manually re-seeding the exact remnant
+    // `backfillDocumentIndex` would produce, then invoking the REAL exported
+    // `rekeyBrowserWorkspace` against it inside a genuine versionchange
+    // transaction, tests the actual convergence logic rather than a
+    // re-implementation of it.
+    resetBrowserWorkspaceIdForTests()
+    const secondPassKeys = await new Promise<string[]>((resolveOpen, rejectOpen) => {
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
+      req.onupgradeneeded = () => {
+        const tx = req.transaction
+        if (!tx) return
+        tx.objectStore(WORKSPACES_STORE).put({ workspaceId: 'local' }, 'local')
+        rekeyBrowserWorkspace(tx, () => {})
+      }
+      req.onsuccess = async () => {
+        const db = req.result
+        const keys = await new Promise<string[]>((resolveKeys, rejectKeys) => {
+          const readTx = db.transaction(WORKSPACES_STORE, 'readonly')
+          const keysReq = readTx.objectStore(WORKSPACES_STORE).getAllKeys()
+          keysReq.onerror = () => rejectKeys(keysReq.error)
+          readTx.oncomplete = () => resolveKeys(keysReq.result.map(String))
+        })
+        db.close()
+        resolveOpen(keys)
+      }
+      req.onerror = () => rejectOpen(req.error)
+    })
+
+    // Asserted as a whole array, not `keys[0]`: a naive re-mint leaves the
+    // OLD target row behind (nothing deletes it) alongside a fresh one, and
+    // ULIDs sort roughly chronologically, so `keys[0]` after ascending
+    // `getAllKeys()` would silently read back the correct-looking old id even
+    // under that bug. Exactly one row, and it is the SAME one, is the real
+    // invariant.
+    expect(secondPassKeys).toEqual([firstUlid])
+    const secondUlid = secondPassKeys[0] as string
+
+    const remnants = await legacyLocalKeys()
+    expect(remnants).toEqual({ workspaces: [], index: [], syncTree: [] })
+
+    // The document is still reachable under the SAME id after both passes.
+    // Read raw (not through `migratedLocal()`/`openWhiteboardDb`, both
+    // pinned to `DB_VERSION`): this test forced the database past it with a
+    // bare `indexedDB.open`, exactly as a genuine future migration bump
+    // would in production — but unlike production, nothing here also moved
+    // `DB_VERSION` forward, so the pinned opener would VersionError on it.
+    const db = await openAtCurrentVersion(MIGRATION_DB)
+    const rowsUnderSecondUlid = await new Promise<unknown[]>((resolveRows, rejectRows) => {
+      const tx = db.transaction(DOCUMENT_INDEX_STORE, 'readonly')
+      const range = IDBKeyRange.bound([secondUlid], [secondUlid, []])
+      const req = tx.objectStore(DOCUMENT_INDEX_STORE).getAll(range)
+      req.onerror = () => rejectRows(req.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolveRows(req.result)
+      }
+    })
+    expect(rowsUnderSecondUlid).toEqual([
+      expect.objectContaining({ documentId: V13_DOCUMENT_ID, workspaceId: secondUlid }),
+    ])
+  })
+
+  it('fresh install: v0 -> 14 yields one ULID workspace, zero local rows', async () => {
+    const ulid = await resolveBrowserWorkspaceId(MIGRATION_DB)
+    expect(ulid).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+    expect(await migratedLocal().listDocuments()).toEqual([])
+
+    const db = await openWhiteboardDb(MIGRATION_DB)
+    const workspaceKeys = await new Promise<string[]>((resolveKeys, rejectKeys) => {
+      const tx = db.transaction(WORKSPACES_STORE, 'readonly')
+      const req = tx.objectStore(WORKSPACES_STORE).getAllKeys()
+      req.onerror = () => rejectKeys(req.error)
+      tx.oncomplete = () => {
+        db.close()
+        resolveKeys(req.result.map(String))
+      }
+    })
+    expect(workspaceKeys).toEqual([ulid])
+    expect(getBrowserWorkspaceId()).toBe(ulid)
+  })
+})
+
 describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)', () => {
   beforeEach(clearDb)
   afterEach(clearDb)
@@ -362,7 +707,7 @@ describe('whiteboard IndexedDB v6 -> v7 upgrade (renames the container stores)',
     expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
     // The bytes go with it rather than lingering as storage nothing names.
-    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
+    expect((await (await loroStore()).load(documentId)).kind).toBe('not-found')
   })
 
   it('renames the meta pointer key, then clears it because v8 discarded its target', async () => {
@@ -434,7 +779,7 @@ describe('IndexedDB v5 -> v6 (removes reconnectKeypairs)', () => {
     expect(fileCount).toBe(1)
 
     // Discarded with its document — see the note below.
-    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
+    expect((await (await loroStore()).load(documentId)).kind).toBe('not-found')
 
     const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
@@ -504,7 +849,7 @@ describe('IndexedDB v4 -> v5', () => {
     expect(fileCount).toBe(1)
 
     // Discarded with its document — see the note below.
-    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
+    expect((await (await loroStore()).load(documentId)).kind).toBe('not-found')
 
     const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
@@ -538,7 +883,7 @@ describe('whiteboard IndexedDB v3 -> v4 upgrade', () => {
     db.close()
 
     // Discarded with its document — see the note below.
-    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
+    expect((await (await loroStore()).load(documentId)).kind).toBe('not-found')
 
     const metaStore = migratedLocal()
     // The row does not survive: v8 DISCARDS a document with no workspace and
@@ -582,7 +927,7 @@ describe('whiteboard IndexedDB v2 -> v3 upgrade', () => {
     expect(await migratedLocal().load(documentId)).toBeNull()
     expect(await metaStore.load(documentId)).toBeNull()
     expect(await metaStore.listDocuments()).toEqual([])
-    expect((await new LoroStore(MIGRATION_DB).load(documentId)).kind).toBe('not-found')
+    expect((await (await loroStore()).load(documentId)).kind).toBe('not-found')
     expect(await migratedLocal().getDefaultDocumentId()).toBeNull()
   })
 
@@ -759,8 +1104,16 @@ describe('whiteboard IndexedDB v7 -> v8 upgrade (discards pre-path documents)', 
       defaultDocumentId: POST_PATH_ID,
     })
 
+    // `workspaceId` is the one field that changes: the seeded row still
+    // spells the pre-rekey `'local'` (that is the v7 shape this fixture is
+    // pinning), but `listDocuments()` reads it back through the v14+ index,
+    // which reports the canonical id the rekey moved it onto.
     expect(await migratedLocal().listDocuments()).toEqual([
-      { ...row, updatedAt: expect.any(String) },
+      {
+        ...row,
+        workspaceId: await resolveBrowserWorkspaceId(MIGRATION_DB),
+        updatedAt: expect.any(String),
+      },
     ])
     expect(await storeKeys(SYNC_DOCUMENTS_STORE)).toEqual([`document:${POST_PATH_ID}`])
     expect(await migratedLocal().getDefaultDocumentId()).toBe(POST_PATH_ID)
@@ -947,7 +1300,9 @@ describe('IndexedDB v9 -> v10 (backfills the index)', () => {
     expect(await local.listDocuments()).toEqual([
       {
         documentId: POST_PATH_ID,
-        workspaceId: 'local',
+        // Reported through the v14+ index: the canonical id, not the seeded
+        // pre-rekey `'local'` literal (see the comment on the previous test).
+        workspaceId: await resolveBrowserWorkspaceId(MIGRATION_DB),
         path: 'design/login',
         name: 'Login',
         // The content record's stamp ('x', what the fixture wrote there), not
@@ -1008,7 +1363,7 @@ describe('IndexedDB v11 -> v12 (carries content to the port)', () => {
       ],
     })
 
-    const store = new LoroStore(MIGRATION_DB)
+    const store = await loroStore()
     const loaded = await store.load(POST_PATH_ID)
     expect(loaded.kind).toBe('ok')
     if (loaded.kind === 'ok') {
@@ -1032,7 +1387,7 @@ describe('IndexedDB v11 -> v12 (carries content to the port)', () => {
       loroRecord: [POST_PATH_ID, { v: 99, fromTheFuture: true }],
     })
 
-    const result = await new LoroStore(MIGRATION_DB).load(POST_PATH_ID)
+    const result = await (await loroStore()).load(POST_PATH_ID)
     expect(result.kind).toBe('unsupported-version')
   })
 

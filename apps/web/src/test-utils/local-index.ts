@@ -1,6 +1,6 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import {
-  BROWSER_WORKSPACE_ID,
   type ContentClock,
   InMemoryDefaultDocumentPointer,
   listLocalDocuments,
@@ -73,11 +73,11 @@ export function seedLocal(
   // `LocalStoreDouble` read before its first `save` would answer
   // `WorkspaceNotFoundError` where production answers an empty list, which is
   // the one case a test of the empty state most wants to reach.
-  void index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  void index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const stamps = new Map<string, string>()
   for (const snapshot of snapshots) {
     index.seed({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: snapshot.documentId,
       path: snapshot.path,
       kind: snapshot.kind,
@@ -122,12 +122,12 @@ export class LocalStoreDouble {
     // See `seedLocal` above: an unseeded double must still LIST, not throw.
     // The in-memory index registers the workspace synchronously, so the
     // promise is complete before any caller can observe it.
-    void this.index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    void this.index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   }
 
   async save(snapshot: DocumentSnapshot): Promise<void> {
     this.index.seed({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: snapshot.documentId,
       path: snapshot.path,
       kind: snapshot.kind,
@@ -159,10 +159,10 @@ export class LocalStoreDouble {
 
   async removeDocument(documentId: string): Promise<void> {
     const entry = await this.index.resolveDocumentById({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId,
     })
     if (entry === null) return
-    await this.index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: entry.path })
+    await this.index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: entry.path })
   }
 }

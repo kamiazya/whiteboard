@@ -2,7 +2,7 @@
 import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
@@ -383,7 +383,7 @@ describe('BrowserIndexPage', () => {
     const store = await seededStore([
       {
         documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         path: 'diagrams/structure',
         name: '構成図',
         updatedAt: '2026-08-02T00:00:00Z',
@@ -391,7 +391,7 @@ describe('BrowserIndexPage', () => {
       },
       {
         documentId: '0KPSWZ258BEHMQTX0369CFJNRV',
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         path: 'notes/design',
         name: '設計メモ',
         updatedAt: '2026-08-01T00:00:00Z',

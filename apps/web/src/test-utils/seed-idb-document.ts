@@ -1,5 +1,6 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -24,9 +25,9 @@ export async function seedIdbDocument(
     makeDefault = false,
   }: { path: string; name?: string; kind?: DocumentKind; makeDefault?: boolean },
 ): Promise<string> {
-  await index.createWorkspace({ workspaceId: 'local' })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const entry = await index.createDocument({
-    workspaceId: 'local',
+    workspaceId: getBrowserWorkspaceId(),
     path,
     kind,
     ...(name === undefined ? {} : { name }),

@@ -25,9 +25,9 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { CONTENT_TIMESTAMPS_STORE } from './browser-idb.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentStore } from './idb-document-store.js'
 import { inTransaction, request } from './idb-tx.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 
 /**
  * Narrow surface consumers need to seed, read back, and persist a document's
@@ -65,7 +65,7 @@ const EMPTY_FRONTIER = new Uint8Array()
 
 function refOf(documentId: string): DocRef {
   // Every document this store keeps lives in the browser's own workspace.
-  return { kind: 'document', workspaceId: BROWSER_WORKSPACE_ID, documentId }
+  return { kind: 'document', workspaceId: getBrowserWorkspaceId(), documentId }
 }
 
 /**

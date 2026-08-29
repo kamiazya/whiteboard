@@ -38,9 +38,9 @@ import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
 
@@ -135,7 +135,7 @@ async function openWorkspaceHost(documentId: string): Promise<ContentHost | null
     log.warn('startup fold failed; continuing without it', err)
   }
   const docs = new BrowserWorkspaceDocs()
-  const workspace = await docs.open(BROWSER_WORKSPACE_ID).catch(() => null)
+  const workspace = await openWorkspaceOrNull(docs)
   if (workspace === null) return null
   if (resolveWorkspaceDocumentById(workspace, documentId) === null) return null
   return {
@@ -143,7 +143,7 @@ async function openWorkspaceHost(documentId: string): Promise<ContentHost | null
     doc: workspace,
     containers: documentContainers(workspace, documentId),
     save: async () => {
-      await docs.save(BROWSER_WORKSPACE_ID, workspace)
+      await docs.save(getBrowserWorkspaceId(), workspace)
       await touchContentTimestamp(documentId)
     },
   }

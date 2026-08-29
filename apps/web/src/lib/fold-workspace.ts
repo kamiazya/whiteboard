@@ -22,8 +22,8 @@ import { documentKindSchema } from '@kamiazya/whiteboard-model'
 import { WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
 export interface FoldReport {
@@ -37,7 +37,7 @@ export async function foldWorkspaceDocuments(dbName?: string): Promise<FoldRepor
   const index = new IdbDocumentIndex(dbName)
   let entries: Awaited<ReturnType<IdbDocumentIndex['listDocuments']>>
   try {
-    entries = await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })
+    entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
   } catch (error) {
     // A browser that never created the workspace has nothing to fold. Every
     // other failure is real and stays loud.
@@ -46,7 +46,7 @@ export async function foldWorkspaceDocuments(dbName?: string): Promise<FoldRepor
   }
 
   const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await docs.create(BROWSER_WORKSPACE_ID)
+  const workspace = await docs.create(getBrowserWorkspaceId())
   const loroStore = new LoroStore(dbName)
 
   let folded = 0
@@ -84,7 +84,7 @@ export async function foldWorkspaceDocuments(dbName?: string): Promise<FoldRepor
     )
     // Saved PER DOCUMENT, so a crash mid-fold loses at most the one in
     // flight — the next startup derives it as still-pending and retries.
-    await docs.save(BROWSER_WORKSPACE_ID, workspace)
+    await docs.save(getBrowserWorkspaceId(), workspace)
     folded += 1
   }
   return { folded, skipped }

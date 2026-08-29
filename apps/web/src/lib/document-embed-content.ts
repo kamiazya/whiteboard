@@ -18,9 +18,9 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { isImageRef, newImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentFileAdapter, LoadedFileDocument } from '../hooks/use-document-file-seams.js'
 import { getAppLogger } from './app-logger.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { loadDocumentContent } from './workspace-content.js'
 
 const log = getAppLogger('document-embed-content')
@@ -51,7 +51,7 @@ async function loadDocumentName(documentId: string): Promise<string | undefined>
     // answer too — one read path, no second store of its own.
     embedIndex ??= new FoldingBrowserIndex()
     const entry = await embedIndex.resolveDocumentById({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId,
     })
     // A document with no name of its own reports one as ABSENT rather than as

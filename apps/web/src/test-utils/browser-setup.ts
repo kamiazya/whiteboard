@@ -14,8 +14,24 @@
  * without it is testing a layout no user ever sees. Loading it here removes
  * the per-file decision entirely.
  */
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { configure } from '@testing-library/react'
 import '../index.css'
+import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
+
+/**
+ * A browser test renders production code that reads `getBrowserWorkspaceId()`
+ * at its ordinary call sites, but no test runs the boot chain that resolves
+ * it — so without a seed here the accessor's unresolved-state throw reaches
+ * any test whose fixture is purely in-memory (a `LocalStoreDouble`, say)
+ * rather than an IndexedDB one, where `claimIsolatedWhiteboardDb` seeds it.
+ * A fixed per-file id, minted once, is what those call sites see; the same
+ * default the jsdom setup installs, for the same reason.
+ *
+ * A test exercising the accessor's own unresolved/failed states resets it
+ * explicitly.
+ */
+setBrowserWorkspaceIdForTests(generateDocumentId())
 
 /**
  * Testing Library's `findBy*`/`waitFor` default is 1000ms, which is a
