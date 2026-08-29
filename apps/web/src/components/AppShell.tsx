@@ -75,10 +75,13 @@ export interface AppShellProps {
    * the browser's IndexedDB index and the daemon's HTTP client into every
    * page's chrome.
    */
-  readonly workspaces?: {
-    readonly source: WorkspaceSwitcherSource
-    readonly onSwitch: (handle: string) => void
-  }
+  readonly workspaces?: AppShellWorkspaces
+}
+
+/** The keeper's half of the switcher, named so a composition root can hold one. */
+export interface AppShellWorkspaces {
+  readonly source: WorkspaceSwitcherSource
+  readonly onSwitch: (handle: string) => void
 }
 
 /**

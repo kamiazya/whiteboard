@@ -16,6 +16,10 @@ function source(
   }
 }
 
+function listOnly(workspaces: WorkspaceEntry[]): WorkspaceSwitcherSource {
+  return { list: () => Promise.resolve(workspaces) }
+}
+
 function open() {
   fireEvent.click(screen.getByTestId('workspace-switcher-trigger'))
 }
@@ -172,6 +176,30 @@ describe('WorkspaceSwitcher', () => {
     )
     expect(screen.getByTestId('workspace-switcher-trigger').textContent).toContain('design')
   })
+  it('offers no creation when the keeper has no way to create one', async () => {
+    // DESIGN.md's standing rule: never offer what the keeper cannot honour.
+    // The daemon has no create surface yet — only `GET /api/workspaces` —
+    // so a button there would be a promise the app cannot keep. Absent, not
+    // disabled: a disabled control says "not right now", and this is "not
+    // here".
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={listOnly([
+          { workspaceId: DESIGN, segment: 'design', displayName: 'Design team' },
+          { workspaceId: NOTES, segment: 'notes', displayName: 'Notes' },
+        ])}
+        onSwitch={vi.fn()}
+      />,
+    )
+    open()
+    // The subject is PRESENT — the menu really rendered — so the absence
+    // below is a decision this control made and not a popover that never
+    // opened.
+    expect(await screen.findByRole('menuitem', { name: /notes/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /new workspace/i })).toBeNull()
+  })
+
   it('renders nothing while the address has not resolved a workspace', () => {
     // A subject the shell cannot name is not one to invent a placeholder
     // for. Asserting the trigger is ABSENT is only meaningful because the

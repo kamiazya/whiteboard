@@ -1,6 +1,7 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import type { AppShellWorkspaces } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
 
 // Lazy: the not-found page renders on rare, dead-end navigations only —
@@ -367,6 +368,75 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonView, navigate, isPairRoute, daemonKept])
 
+  // Which daemon the SHELL is talking to, resolved once from the same three
+  // sources the render branches below each resolve for themselves: a #wb=
+  // pairing payload, a completed grant exchange, or the configured provider
+  // state. Hoisted above the branches because a hook cannot live inside one,
+  // and the switcher has to work on the pairing-link path too — that branch
+  // renders the same index page, so leaving it out would have taken the
+  // deleted select away with nothing in its place.
+  const grantPaired = grantConnection?.status === 'paired' ? grantConnection : null
+  const shellDaemonBaseUrl =
+    daemonConnection.status === 'paired'
+      ? daemonConnection.payload.baseUrl
+      : grantPaired !== null
+        ? grantPaired.daemonBaseUrl
+        : effectiveState.kind === 'daemon'
+          ? effectiveState.daemonBaseUrl
+          : undefined
+  const shellDaemonToken =
+    daemonConnection.status === 'paired'
+      ? daemonConnection.payload.authMode === 'bootstrap'
+        ? daemonConnection.payload.bootstrapToken
+        : undefined
+      : grantPaired !== null
+        ? grantPaired.token
+        : (daemonToken ?? undefined)
+  // Memoised on the two SCALARS rather than on the connection objects: those
+  // are rebuilt per render, and the switcher reads its list in an effect keyed
+  // on this source — a fresh object each render is a fetch each render.
+  const daemonShellTarget = useMemo(
+    () =>
+      forcedBrowser || shellDaemonBaseUrl === undefined
+        ? undefined
+        : { baseUrl: shellDaemonBaseUrl, token: shellDaemonToken },
+    [forcedBrowser, shellDaemonBaseUrl, shellDaemonToken],
+  )
+
+  // The daemon keeper's switcher source, built from whichever daemon this
+  // branch is talking to. Dynamic import for the same reason the browser's
+  // is: the shell is lazy, App is not.
+  //
+  // No `create`: the daemon publishes `GET /api/workspaces` and nothing that
+  // writes one, so the switcher offers no creation there. DESIGN.md's
+  // standing rule — never offer what the keeper cannot honour — and absent
+  // rather than disabled, because a disabled control says "not right now"
+  // about something that is not there at all.
+  //
+  // Switching is an in-app navigation, unlike the browser's: this keeper has
+  // no synchronous singleton to re-point, so setting the view is enough. The
+  // address follows from it, and the index page follows the address.
+  const daemonWorkspaces = useMemo(
+    (): AppShellWorkspaces | undefined =>
+      daemonShellTarget === undefined
+        ? undefined
+        : {
+            source: {
+              list: () =>
+                import('./lib/daemon-api-client.js').then((m) =>
+                  m
+                    .listWorkspaces(
+                      m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                      daemonShellTarget.baseUrl,
+                    )
+                    .then((res) => res.workspaces),
+                ),
+            },
+            onSwitch: (workspace: string) => setDaemonView({ kind: 'index', workspace }),
+          },
+    [daemonShellTarget],
+  )
+
   // The browser keeper's switcher source. Both halves reach their module
   // through a dynamic import so the workspace registry — and the create path
   // behind it — stay off the critical path; the shell is lazy, but App is
@@ -569,7 +639,6 @@ export function App({ providerState }: AppProps) {
     // Both pairing paths converge here: the legacy #wb= fragment carries
     // its token inline; the grant flow resolved its token via the POST
     // exchange above. Either way the daemon pages just get baseUrl+token.
-    const grantPaired = grantConnection?.status === 'paired' ? grantConnection : null
     if (daemonConnection.status === 'paired' || grantPaired !== null) {
       const payload =
         daemonConnection.status === 'paired'
@@ -591,7 +660,11 @@ export function App({ providerState }: AppProps) {
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <div className="flex h-dvh flex-col">
-            <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowser(true)} />
+            <AppShellLazy
+              daemon={true}
+              workspaces={daemonWorkspaces}
+              onWorkInBrowser={() => setForcedBrowser(true)}
+            />
             <div className="min-h-0 flex-1">
               <Suspense
                 fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -600,7 +673,7 @@ export function App({ providerState }: AppProps) {
                   <DaemonIndexPage
                     daemonBaseUrl={payload.baseUrl}
                     token={pairedToken}
-                    initialWorkspaceId={daemonView.workspace}
+                    workspace={daemonView.workspace}
                     onWorkspaceResolved={(workspace) => setDaemonView({ kind: 'index', workspace })}
                     onOpenDocument={(workspace, path) =>
                       setDaemonView({ kind: 'document', workspace, path })
@@ -664,7 +737,11 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowser(true)} />
+          <AppShellLazy
+            daemon={true}
+            workspaces={daemonWorkspaces}
+            onWorkInBrowser={() => setForcedBrowser(true)}
+          />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -673,7 +750,7 @@ export function App({ providerState }: AppProps) {
                 <DaemonIndexPage
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
-                  initialWorkspaceId={daemonView.workspace}
+                  workspace={daemonView.workspace}
                   onWorkspaceResolved={(workspace) => setDaemonView({ kind: 'index', workspace })}
                   onOpenDocument={(workspace, path) =>
                     setDaemonView({ kind: 'document', workspace, path })

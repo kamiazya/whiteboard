@@ -26,10 +26,13 @@ import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
-import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
+import { workspaceHandle } from '../lib/workspace-handle.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
-// time — the workspace selector picks which workspace the panel shows.
+// time — the one the ADDRESS names. Choosing which is the shell switcher's,
+// not this page's: the workspace is the outermost layer of
+// `/w/:workspace/d/:path`, so it is present on the document page too, and a
+// control only reachable from this list could not change it from there.
 // Modeled on the original daemon-served UI's IndexPage filter/sort/pin logic
 // (since retired), but single-workspace rather than the all-workspace flat
 // list that IndexPage rendered (see the design note for why).
@@ -38,10 +41,19 @@ export interface DaemonIndexPageProps {
   daemonBaseUrl: string
   token?: string
   capabilities?: WhiteboardCapabilities
-  // A workspace-level pairing link (#wb= with workspaceId but no path) names
-  // a specific workspace to land on; falls back to the daemon's first-listed
-  // workspace when absent, or when the named workspace isn't in the list.
-  initialWorkspaceId?: string
+  /**
+   * The workspace the ADDRESS names, in either of ADR-0019's resolvable
+   * layers. Absent when the address names none — `/`, or a workspace-level
+   * pairing link without one — and the page then falls back to the daemon's
+   * first-listed workspace and reports what it settled on.
+   *
+   * Not `initialWorkspaceId` any more, and the rename is the change: this
+   * page used to OWN the choice through a select of its own, so the prop was
+   * read once at mount. The one switcher is the shell's, and it moves the
+   * address — so the prop changes under a mounted page, and the page follows
+   * it.
+   */
+  workspace?: string
   /**
    * The workspace this page settled on — the initial resolve as well as every
    * later switch. The address bar is App's to write, and until this existed it
@@ -81,7 +93,7 @@ function sortRows(rows: DocumentRow[]): DocumentRow[] {
 export function DaemonIndexPage({
   daemonBaseUrl,
   token,
-  initialWorkspaceId,
+  workspace,
   onWorkspaceResolved,
   onOpenDocument,
 }: DaemonIndexPageProps) {
@@ -138,12 +150,12 @@ export function DaemonIndexPage({
   const selectedWorkspaceRef = useRef(selectedWorkspace)
   selectedWorkspaceRef.current = selectedWorkspace
 
-  // initialWorkspaceId is fixed for the page's lifetime (set once from the
-  // pairing payload App.tsx resolved at mount), so reading it through a ref
-  // keeps loadWorkspaces stable across renders — the mount effect below stays
-  // load-once, and the retry controls can share the same function.
-  const initialWorkspaceIdRef = useRef(initialWorkspaceId)
-  initialWorkspaceIdRef.current = initialWorkspaceId
+  // Read through a ref so `loadWorkspaces` stays stable across renders — the
+  // mount effect below stays load-once, and the retry controls can share the
+  // same function. The effect that FOLLOWS this prop is separate, below,
+  // precisely so a changing address does not re-list the daemon.
+  const addressedWorkspaceRef = useRef(workspace)
+  addressedWorkspaceRef.current = workspace
 
   // Orders every list load, so only the newest one may write. The retry
   // controls can overlap freely — nothing else sequences two presses — and an
@@ -168,7 +180,7 @@ export function DaemonIndexPage({
       if (superseded()) return
       setWorkspaces(res.workspaces)
       setWorkspacesLoaded(true)
-      const targeted = initialWorkspaceIdRef.current
+      const targeted = addressedWorkspaceRef.current
       // Through `resolveWorkspaceHandle`, not an `includes`: the URL may carry
       // EITHER layer — the segment a person reads, or the canonical id that
       // survives a rename — and an id-form address matched against segments
@@ -193,8 +205,33 @@ export function DaemonIndexPage({
     void loadWorkspaces()
   }, [loadWorkspaces])
 
+  // The address moved, so the page moves.
+  //
+  // Resolved through the LIST, not set verbatim, and both guards below are a
+  // workspace the page would otherwise lose:
+  //
+  // - `undefined` is not a move. `/` names no workspace, and the answer is
+  //   whatever the list load picked; running on undefined would unselect it
+  //   and leave the page with nothing on screen.
+  // - A handle the list does not hold is a STALE address — a bookmark of a
+  //   deleted workspace — and the standing behaviour is to fall back to
+  //   first-listed rather than to select something the daemon will 404. Set
+  //   verbatim, this effect overrode that fallback, which is what its test
+  //   caught.
+  //
+  // `resolveWorkspaceHandle` because the address may carry either of
+  // ADR-0019's layers, and matching segments alone would miss the canonical
+  // id form and silently open a different workspace.
+  useEffect(() => {
+    if (workspace === undefined || !workspacesLoaded) return
+    const wanted = resolveWorkspaceHandle(workspaces, workspace)
+    if (wanted === null) return
+    const handle = workspaceHandle(wanted)
+    setSelectedWorkspace((current) => (current === handle ? current : handle))
+  }, [workspace, workspaces, workspacesLoaded])
+
   // Keyed on the SETTLED value, not on the act of choosing: the initial
-  // resolve and a dropdown switch reach the address bar the same way, because
+  // resolve and a switch reach the address bar the same way, because
   // to a reader they are the same fact — this is the workspace you are
   // looking at. A re-render that did not move it reports nothing.
   const reportedWorkspaceRef = useRef<string | null>(null)
@@ -453,23 +490,6 @@ export function DaemonIndexPage({
     <DaemonApiContext.Provider value={daemonFetch}>
       <div className="flex h-full flex-col overflow-y-auto p-4">
         <h1 className="sr-only">Documents</h1>
-        <div className="mb-4 flex flex-wrap items-center gap-2 border-b pb-2">
-          {workspaces.length > 1 && (
-            <select
-              aria-label="Workspace"
-              value={selectedWorkspace ?? ''}
-              onChange={(event) => setSelectedWorkspace(event.target.value)}
-              className="rounded-md border bg-background px-2 py-1 text-sm"
-            >
-              {workspaces.map((w) => (
-                <option key={w.workspaceId} value={workspaceHandle(w)}>
-                  {workspaceLabel(w)}
-                </option>
-              ))}
-            </select>
-          )}
-        </div>
-
         {createError && (
           <div role="alert" className="mb-2 text-sm text-destructive">
             {createError}

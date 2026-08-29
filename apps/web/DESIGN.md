@@ -129,9 +129,15 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   blank or a spinner in a 40px row is not an improvement on one.
 
   It is shown even when there is exactly one workspace. That is the
-  difference between a switcher and a filter: the daemon list control hid
-  itself below two, which is right for narrowing rows and wrong for the only
-  door out of one workspace.
+  difference between a switcher and a filter: the daemon list control it
+  replaced hid itself below two, which is right for narrowing rows and wrong
+  for the only door out of one workspace.
+
+  What it OFFERS follows the keeper. Creation appears only where the keeper
+  can actually create — the browser mints its own workspaces, the daemon
+  publishes no write surface for them yet — which is the standing rule below
+  applied to this control. Absent, not disabled: a disabled control says "not
+  right now" about something that is not there at all.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over

@@ -657,7 +657,7 @@ describe('App daemon provider state', () => {
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 
-  it('preserves the opened canvas workspaceId as initialWorkspaceId when navigating back to the index', async () => {
+  it('preserves the opened canvas workspaceId as the addressed workspace when navigating back to the index', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={DAEMON_STATE} />
@@ -677,7 +677,7 @@ describe('App daemon provider state', () => {
       onNavigateBack()
     })
     await screen.findByTestId('daemon-index-page')
-    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
   })
 
   it('remounts DaemonDocumentPage cleanly when opening a different canvas after returning to the index', async () => {
@@ -787,6 +787,40 @@ describe('App daemon provider state', () => {
     // REPLACE for the same reason the daemon does it: the app is finishing a
     // sentence the person started, not taking a step on their behalf.
     expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('switching workspace from the shell moves the address and the daemon page with it', async () => {
+    // The switcher is the ONE carrier now — the index page's own select is
+    // gone — so this is the whole path: the shell changes the view, the view
+    // writes the address, and the page follows the address.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              workspaces: [
+                { workspaceId: 'w1', segment: 'design' },
+                { workspaceId: 'w2', segment: 'sandbox' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    )
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+      { initialEntries: ['/w/design'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('daemon-index-page')
+
+    fireEvent.click(await screen.findByTestId('workspace-switcher-trigger'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /sandbox/i }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('sandbox')
   })
 
   it('mounts the document once the workspace identity settles after first paint', async () => {
@@ -957,7 +991,49 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 
-  it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no path', async () => {
+  it('gives the pairing-link branch the same switcher, built from the payload daemon', async () => {
+    // Two daemon branches render the same index page, and deleting that
+    // page's own select took the switch away from BOTH. Only the
+    // provider-state branch is covered above; without this, removing the
+    // wiring from this one stays green — measured, before this test existed.
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'design',
+        path: undefined,
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              workspaces: [
+                { workspaceId: 'w1', segment: 'design' },
+                { workspaceId: 'w2', segment: 'sandbox' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    )
+    render(
+      <MemoryRouter initialEntries={['/w/design']}>
+        <App providerState={BROWSER_STATE} />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('daemon-index-page')
+
+    fireEvent.click(await screen.findByTestId('workspace-switcher-trigger'))
+    expect(await screen.findByRole('menuitem', { name: /sandbox/i })).toBeTruthy()
+  })
+
+  it('forwards the payload workspaceId as the addressed workspace when the #wb= payload has a workspace but no path', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
@@ -974,7 +1050,7 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
   })
 })
 
@@ -1037,7 +1113,7 @@ describe('App URL routing', () => {
   it('cold-loads a /w/:workspaceId deep link into the gallery pre-scoped to that workspace', async () => {
     renderAppWithRouter(DAEMON_STATE, '/w/workspace-b')
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
   })
 
   it('updates the URL when in-app navigation opens a canvas from the gallery', async () => {

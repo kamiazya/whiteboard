@@ -39,8 +39,18 @@ import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
  */
 export interface WorkspaceSwitcherSource {
   list(): Promise<readonly WorkspaceEntry[]>
-  /** Answers the workspace that was created — including the handle it was actually given. */
-  create(displayName: string): Promise<WorkspaceEntry>
+  /**
+   * Answers the workspace that was created — including the handle it was
+   * actually given.
+   *
+   * OPTIONAL, because a keeper can genuinely have no way to create one: the
+   * daemon publishes `GET /api/workspaces` and nothing that writes. Absent
+   * here means the control offers no creation at all, which is DESIGN.md's
+   * standing rule — never offer what the keeper cannot honour — rather than
+   * a disabled button, which would say "not right now" about something that
+   * is not there.
+   */
+  create?(displayName: string): Promise<WorkspaceEntry>
 }
 
 export interface WorkspaceSwitcherProps {
@@ -100,13 +110,13 @@ export function WorkspaceSwitcher({ current, source, onSwitch }: WorkspaceSwitch
   const active = workspaces.find((w) => workspaceHandle(w) === current)
   const label = active === undefined ? current : workspaceLabel(active)
 
+  const create = source.create
   const submit = () => {
     const displayName = name.trim()
-    if (displayName === '' || busy) return
+    if (create === undefined || displayName === '' || busy) return
     setBusy(true)
     setError(null)
-    source
-      .create(displayName)
+    create(displayName)
       .then((created) => {
         // The handle CREATE answered with, never the name that was typed: a
         // segment is derived from the name and may be suffixed past a
@@ -158,58 +168,60 @@ export function WorkspaceSwitcher({ current, source, onSwitch }: WorkspaceSwitch
             )
           })}
         </div>
-        <div className="mt-1 border-t pt-1">
-          {creating ? (
-            <div className="flex flex-col gap-1.5 p-1">
-              <label htmlFor={nameId} className="text-xs text-muted-foreground">
-                Workspace name
-              </label>
-              <input
-                id={nameId}
-                ref={nameRef}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
-                onKeyDown={(event) => {
-                  if (event.key === 'Enter') submit()
-                }}
-                className="rounded-md border bg-background px-2 py-1 text-sm"
-              />
-              {error && (
-                <p role="alert" className="text-xs text-destructive">
-                  {error}
-                </p>
-              )}
-              <div className="flex gap-1.5">
-                <button
-                  type="button"
-                  disabled={busy || name.trim() === ''}
-                  onClick={submit}
-                  className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
-                >
-                  Create
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setCreating(false)
-                    setError(null)
+        {create !== undefined && (
+          <div className="mt-1 border-t pt-1">
+            {creating ? (
+              <div className="flex flex-col gap-1.5 p-1">
+                <label htmlFor={nameId} className="text-xs text-muted-foreground">
+                  Workspace name
+                </label>
+                <input
+                  id={nameId}
+                  ref={nameRef}
+                  value={name}
+                  onChange={(event) => setName(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === 'Enter') submit()
                   }}
-                  className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
-                >
-                  Cancel
-                </button>
+                  className="rounded-md border bg-background px-2 py-1 text-sm"
+                />
+                {error && (
+                  <p role="alert" className="text-xs text-destructive">
+                    {error}
+                  </p>
+                )}
+                <div className="flex gap-1.5">
+                  <button
+                    type="button"
+                    disabled={busy || name.trim() === ''}
+                    onClick={submit}
+                    className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
+                  >
+                    Create
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setCreating(false)
+                      setError(null)
+                    }}
+                    className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
+                  >
+                    Cancel
+                  </button>
+                </div>
               </div>
-            </div>
-          ) : (
-            <button
-              type="button"
-              onClick={() => setCreating(true)}
-              className="w-full rounded-md px-2 py-1.5 text-left hover:bg-accent"
-            >
-              New workspace
-            </button>
-          )}
-        </div>
+            ) : (
+              <button
+                type="button"
+                onClick={() => setCreating(true)}
+                className="w-full rounded-md px-2 py-1.5 text-left hover:bg-accent"
+              >
+                New workspace
+              </button>
+            )}
+          </div>
+        )}
       </PopoverContent>
     </Popover>
   )
