@@ -13,8 +13,16 @@ import {
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from './browser-workspace-id.js'
+import { IdbDocumentIndex } from './idb-document-index.js'
 
 const DB_NAME = 'whiteboard-workspace-id-test'
+
+// Fixed rather than minted: two ULIDs created inside one millisecond order
+// randomly, so a test that mints them asserts a coincidence — and passes
+// alone while failing under a full parallel run, which is the worst way to
+// learn it. These two differ in the timestamp half.
+const EARLIER_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const LATER_ULID = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
@@ -79,6 +87,68 @@ describe('browser workspace id accessor', () => {
     })
     // The id accessor is unchanged — every existing caller reads through it.
     expect(getBrowserWorkspaceId()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('a second workspace does not break the resolve', async () => {
+    // The blocker this slice exists to remove: the resolver asserted the
+    // registry held EXACTLY one row and rejected otherwise, so creating a
+    // second browser workspace did not degrade anything — it stopped the app
+    // from booting at all. Not resolving to a PARTICULAR one here: which one
+    // an address-less resolve picks is the next case's subject, and asserting
+    // it from a minted id would be asserting a ULID-ordering coincidence.
+    const first = await resolveBrowserWorkspaceId(DB_NAME)
+    await new IdbDocumentIndex(DB_NAME).createWorkspace({
+      workspaceId: LATER_ULID,
+      segment: 'second',
+    })
+
+    resetBrowserWorkspaceIdForTests()
+    await expect(resolveBrowserWorkspaceId(DB_NAME)).resolves.toEqual(
+      expect.stringMatching(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/),
+    )
+    expect([first, LATER_ULID]).toContain(getBrowserWorkspaceId())
+  })
+
+  it('an address-less resolve takes the oldest workspace, by id order', async () => {
+    // The chain's last rung. A canonical id is a ULID, so id order IS
+    // creation order at any timescale a person creates workspaces on —
+    // within ONE millisecond two ULIDs order randomly, which is why this
+    // fixes both ids rather than minting them.
+    await new IdbDocumentIndex(DB_NAME).createWorkspace({
+      workspaceId: LATER_ULID,
+      segment: 'later',
+    })
+    await new IdbDocumentIndex(DB_NAME).createWorkspace({
+      workspaceId: EARLIER_ULID,
+      segment: 'earlier',
+    })
+
+    resetBrowserWorkspaceIdForTests()
+    expect(await resolveBrowserWorkspaceId(DB_NAME)).toBe(EARLIER_ULID)
+  })
+
+  it('resolves the workspace the address names, not merely the first row', async () => {
+    // Which one is ACTIVE is the address's to say (ADR-0019). Without the
+    // handle the resolver can only pick, and picking is what made a switch
+    // invisible to everything downstream.
+    await resolveBrowserWorkspaceId(DB_NAME)
+    await new IdbDocumentIndex(DB_NAME).createWorkspace({
+      workspaceId: LATER_ULID,
+      segment: 'second',
+    })
+
+    resetBrowserWorkspaceIdForTests()
+    expect(await resolveBrowserWorkspaceId(DB_NAME, 'second')).toBe(LATER_ULID)
+    expect(getBrowserWorkspaceIdentity()).toEqual({ workspaceId: LATER_ULID, segment: 'second' })
+  })
+
+  it('falls back to the sole workspace when the address names one it does not have', async () => {
+    // A stale bookmark, or a hand-typed handle. Answering the workspace that
+    // exists beats refusing to boot; the ROUTE layer is where a name nothing
+    // matches becomes not-found, with a page to say so.
+    const only = await resolveBrowserWorkspaceId(DB_NAME)
+    resetBrowserWorkspaceIdForTests()
+    expect(await resolveBrowserWorkspaceId(DB_NAME, 'no-such-workspace')).toBe(only)
   })
 
   it('the handle is the segment when there is one, the id when there is not', () => {

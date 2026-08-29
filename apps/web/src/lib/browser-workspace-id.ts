@@ -1,6 +1,6 @@
 /**
- * The browser's own workspace id — a synchronous accessor over an id that
- * can only be discovered asynchronously (an IndexedDB open + read).
+ * The browser's ACTIVE workspace — a synchronous accessor over an identity
+ * that can only be discovered asynchronously (an IndexedDB open + read).
  *
  * The split exists because most of this app's browser-workspace call sites
  * are synchronous with respect to the id itself (they build a request object
@@ -10,15 +10,24 @@
  * boot chain — see `boot.ts`), and every later read is this cheap
  * synchronous accessor.
  *
+ * It used to mean "the ONLY one", and enforced it: a registry holding more
+ * than one row was rejected outright, so a second browser workspace did not
+ * degrade the app, it stopped it booting. What decides which one is active is
+ * the ADDRESS (ADR-0019), which is why the resolver takes a handle — the
+ * accessor stays a singleton because the alternative is the ripple its own
+ * rationale above rejects, and because a workspace switch settles the
+ * outgoing workspace's writes before the incoming one mounts.
+ *
  * Three states, matching what a caller can actually be told:
  * - unresolved: nobody has awaited `resolveBrowserWorkspaceId()` yet.
- * - resolved: the canonical ULID a v14+ database's `workspaces` store holds.
+ * - resolved: a canonical ULID this database's `workspaces` store holds.
  * - failed: the resolve attempt rejected (a stale tab blocking the upgrade,
  *   a quota failure, Safari private browsing). Retryable — the failure is
  *   surfaced, not remembered forever, because closing the offending tab or
  *   freeing quota is a normal recovery a reload should not be required for.
  */
 import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
+import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 
 type ResolutionState =
@@ -82,54 +91,57 @@ export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
   }
 }
 
-async function readSoleWorkspaceIdentity(
+async function readWorkspaceIdentity(
   dbName: string | undefined,
+  handle: string | undefined,
 ): Promise<BrowserWorkspaceIdentity> {
   const db = await openWhiteboardDb(dbName)
   try {
     return await new Promise<BrowserWorkspaceIdentity>((resolve, reject) => {
       const tx = db.transaction(WORKSPACES_STORE, 'readonly')
       const store = tx.objectStore(WORKSPACES_STORE)
-      const req = store.getAllKeys()
-      req.onsuccess = () => {
-        const keys = req.result
-        // The v14 migration converges on exactly one row (see browser-idb.ts's
-        // rekeyBrowserWorkspace); anything else means the migration did not
-        // run or did not converge, which is a bug this should surface loudly
-        // rather than silently guess a key.
-        if (keys.length !== 1) {
-          reject(new Error(`expected exactly one browser workspace, found ${keys.length}`))
-          return
-        }
-        // The SHAPE is checked too, not only the count. A single row keyed
-        // `'local'` is exactly what a rekey that silently did not run leaves
-        // behind, and caching it would put every later read and write under
-        // an id ADR-0019 says cannot exist — indistinguishable from working,
-        // until a keeper comparison or a promotion reads it.
-        const sole = String(keys[0])
-        const canonical = workspaceCanonicalIdSchema.safeParse(sole)
-        if (!canonical.success) {
-          reject(new Error(`browser workspace is not keyed by a canonical id: ${sole}`))
-          return
-        }
-        // A second read, rather than `getAll()` alone: the shape check above
-        // is on the KEY, and that is deliberate — a row keyed `'local'` is
-        // exactly what a rekey that never ran leaves behind, and its VALUE
-        // says `'local'` too, so validating the value would pass the check
-        // for the same reason it should fail.
-        const valueReq = store.get(sole)
-        valueReq.onsuccess = () => {
-          const row = valueReq.result as { segment?: unknown } | undefined
-          const segment = typeof row?.segment === 'string' ? row.segment : undefined
-          resolve({
-            workspaceId: canonical.data,
-            ...(segment === undefined ? {} : { segment }),
-          })
-        }
-        valueReq.onerror = () => reject(valueReq.error)
-      }
-      req.onerror = () => reject(req.error)
+      // Keys AND values, in one transaction. The values carry the segment an
+      // address resolves through; the KEYS are what the shape check below has
+      // to read, because a row keyed `'local'` says `'local'` in its value
+      // too — validating the value would pass the check for precisely the
+      // reason it should fail.
+      const keysReq = store.getAllKeys()
+      const rowsReq = store.getAll()
       tx.onerror = () => reject(tx.error)
+      tx.oncomplete = () => {
+        const keys = keysReq.result.map(String)
+        if (keys.length === 0) {
+          reject(new Error('no browser workspace exists'))
+          return
+        }
+        const rows = rowsReq.result as { segment?: unknown }[]
+        const entries = keys.map((workspaceId, i) => {
+          const segment = rows[i]?.segment
+          return {
+            workspaceId,
+            ...(typeof segment === 'string' ? { segment } : {}),
+          }
+        })
+        // The address decides which workspace is ACTIVE (ADR-0019), through
+        // ports' one definition of segment-first-then-id. A handle naming
+        // nothing falls back rather than refusing: a stale bookmark should
+        // still open the app, and turning an unmatched name into not-found is
+        // the ROUTE layer's job, where there is a page to say so.
+        const chosen =
+          (handle === undefined ? null : resolveWorkspaceHandle(entries, handle)) ?? entries[0]
+        if (chosen === undefined) {
+          reject(new Error('no browser workspace exists'))
+          return
+        }
+        const canonical = workspaceCanonicalIdSchema.safeParse(chosen.workspaceId)
+        if (!canonical.success) {
+          reject(
+            new Error(`browser workspace is not keyed by a canonical id: ${chosen.workspaceId}`),
+          )
+          return
+        }
+        resolve(chosen)
+      }
     })
   } finally {
     db.close()
@@ -142,10 +154,10 @@ async function readSoleWorkspaceIdentity(
  * one boot path or consumer — a resolved id is served from cache, and
  * concurrent unresolved calls share one open.
  */
-export async function resolveBrowserWorkspaceId(dbName?: string): Promise<string> {
+export async function resolveBrowserWorkspaceId(dbName?: string, handle?: string): Promise<string> {
   if (state.kind === 'resolved') return state.identity.workspaceId
   if (inFlight !== null) return inFlight
-  const attempt = readSoleWorkspaceIdentity(dbName)
+  const attempt = readWorkspaceIdentity(dbName, handle)
     .then((identity) => {
       state = { kind: 'resolved', identity }
       inFlight = null
