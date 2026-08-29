@@ -6,7 +6,7 @@
  *
  * The editor creates and switches nothing itself any more — both are the
  * document browser's job, and the browser drives the editor by navigating to
- * `/w/default/document/:path`. So B is created the way that page creates it
+ * `/w/default/d/:path`. So B is created the way that page creates it
  * (`createSeededDocument`) and the switch is a route change, which is the
  * real mechanism rather than a stand-in for one.
  *

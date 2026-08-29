@@ -2,7 +2,7 @@
 // functions (no React Router import) so the shape is unit-testable without a
 // router context and has exactly one place that can drift from
 // DaemonDetectedBanner's deep link (which builds the same
-// `/w/:workspace/document/*` shape independently, since it runs on a
+// `/w/:workspace/d/*` shape independently, since it runs on a
 // different origin — the daemon's — and cannot import a client-side route
 // table).
 //
@@ -31,7 +31,7 @@ export function workspacePath(workspace: string): string {
 // the hierarchy the workspace shows into one opaque URL segment.
 export function documentPath(workspace: string, path: string): string {
   const tail = path.split('/').map(encodeURIComponent).join('/')
-  return `${workspacePath(workspace)}/document/${tail}`
+  return `${workspacePath(workspace)}/d/${tail}`
 }
 
 export type WorkspaceRoute =
@@ -43,10 +43,10 @@ export type WorkspaceRoute =
 // tree exists to match against), and keeping it framework-agnostic lets it
 // be unit-tested without a Router context.
 export function parseWorkspaceRoute(pathname: string): WorkspaceRoute | null {
-  // The document branch is checked first: `/w/:ws` and `/w/:ws/document/...`
+  // The document branch is checked first: `/w/:ws` and `/w/:ws/d/...`
   // share a prefix, and the workspace pattern below is anchored so it cannot
   // swallow a document URL either way.
-  const documentMatch = pathname.match(/^\/w\/([^/]+)\/document\/(.+?)\/?$/)
+  const documentMatch = pathname.match(/^\/w\/([^/]+)\/d\/(.+?)\/?$/)
   if (documentMatch) {
     const workspace = decodeSegment(documentMatch[1])
     const segments = (documentMatch[2] as string).split('/').map(decodeSegment)
@@ -67,7 +67,7 @@ export function parseWorkspaceRoute(pathname: string): WorkspaceRoute | null {
 }
 
 // decodeURIComponent throws URIError on a malformed percent sequence
-// (`/w/w%1/document/main`). These parsers run inside render-phase lazy
+// (`/w/w%1/d/main`). These parsers run inside render-phase lazy
 // initializers, so a throw here takes down the whole app; an unparseable URL
 // is a not-a-route, not a crash.
 function decodeSegment(segment: string): string | null {

@@ -1,5 +1,5 @@
 /**
- * A stale /w/:workspace/document/:path deep link (bookmark to a deleted document) must not
+ * A stale /w/:workspace/d/:path deep link (bookmark to a deleted document) must not
  * dead-end: the page falls back to the default document, the URL is replaced
  * with the real path, and no degraded screen hides the editor. Two entry
  * points reach it and they are different code — the initial mount goes
@@ -53,7 +53,7 @@ const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 afterEach(cleanup)
 
-describe('stale /w/:workspace/document/:path deep link', () => {
+describe('stale /w/:workspace/d/:path deep link', () => {
   it('falls back to the default canvas and replaces the URL', async () => {
     const store = new LocalStoreDouble()
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
@@ -71,7 +71,7 @@ describe('stale /w/:workspace/document/:path deep link', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/w/:workspace/document/*',
+          path: '/w/:workspace/d/*',
           element: (
             <BrowserDocumentPage
               store={store.index}
@@ -83,7 +83,7 @@ describe('stale /w/:workspace/document/:path deep link', () => {
           ),
         },
       ],
-      { initialEntries: ['/w/default/document/gone-123'] },
+      { initialEntries: ['/w/default/d/gone-123'] },
     )
     await act(async () => {
       render(<RouterProvider router={router} />)
@@ -93,14 +93,14 @@ describe('stale /w/:workspace/document/:path deep link', () => {
       expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Real canvas')
     })
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/w/default/document/real-canvas')
+      expect(router.state.location.pathname).toBe('/w/default/d/real-canvas')
     })
     // No degraded dead-end screen.
     expect(screen.queryByText('The canvas could not be switched.')).toBeNull()
   })
 
   it('repairs the address bar when a mid-session navigation names a path this workspace does not have', async () => {
-    // The mounted page never remounts across /w/:workspace/document/:path changes (see
+    // The mounted page never remounts across /w/:workspace/d/:path changes (see
     // App.tsx's routing comment), so the effect below is the ONLY thing that
     // can answer a Back onto a document that has since been deleted. It
     // resolves the requested path against the in-memory list, and a path that
@@ -120,7 +120,7 @@ describe('stale /w/:workspace/document/:path deep link', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/w/:workspace/document/*',
+          path: '/w/:workspace/d/*',
           element: (
             <BrowserDocumentPage
               store={store.index}
@@ -132,7 +132,7 @@ describe('stale /w/:workspace/document/:path deep link', () => {
           ),
         },
       ],
-      { initialEntries: ['/w/default/document/real-canvas'] },
+      { initialEntries: ['/w/default/d/real-canvas'] },
     )
     await act(async () => {
       render(<RouterProvider router={router} />)
@@ -142,11 +142,11 @@ describe('stale /w/:workspace/document/:path deep link', () => {
     })
 
     await act(async () => {
-      await router.navigate('/w/default/document/gone-123')
+      await router.navigate('/w/default/d/gone-123')
     })
 
     await waitFor(() => {
-      expect(router.state.location.pathname).toBe('/w/default/document/real-canvas')
+      expect(router.state.location.pathname).toBe('/w/default/d/real-canvas')
     })
     // The loaded document is untouched — a dead link costs the address bar, not
     // the editor.
@@ -202,7 +202,7 @@ describe('stale /w/:workspace/document/:path deep link', () => {
     const router = createMemoryRouter(
       [
         {
-          path: '/w/:workspace/document/*',
+          path: '/w/:workspace/d/*',
           element: (
             <BrowserDocumentPage
               store={store.index}
@@ -214,7 +214,7 @@ describe('stale /w/:workspace/document/:path deep link', () => {
           ),
         },
       ],
-      { initialEntries: ['/w/default/document/real-canvas'] },
+      { initialEntries: ['/w/default/d/real-canvas'] },
     )
     await act(async () => {
       render(<RouterProvider router={router} />)
@@ -224,9 +224,9 @@ describe('stale /w/:workspace/document/:path deep link', () => {
     })
 
     await act(async () => {
-      await router.navigate('/w/default/document/other-canvas')
+      await router.navigate('/w/default/d/other-canvas')
     })
-    expect(router.state.location.pathname).toBe('/w/default/document/other-canvas')
+    expect(router.state.location.pathname).toBe('/w/default/d/other-canvas')
     // The scaffold is IN the window, asserted rather than assumed. The page
     // still shows the document it loaded, which is what "the list has not
     // arrived" looks like from here — `switcherOptions` holds that document
@@ -239,6 +239,6 @@ describe('stale /w/:workspace/document/:path deep link', () => {
     await act(async () => {
       await Promise.resolve()
     })
-    expect(router.state.location.pathname).toBe('/w/default/document/other-canvas')
+    expect(router.state.location.pathname).toBe('/w/default/d/other-canvas')
   })
 })

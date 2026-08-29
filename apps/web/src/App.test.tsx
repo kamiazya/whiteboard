@@ -44,7 +44,7 @@ afterEach(() => {
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
 // Captures the initialPath prop so a test can assert App derives it from
-// the /w/:workspace/document/:path URL (parseBrowserRoute) rather than merely
+// the /w/:workspace/d/:path URL (parseBrowserRoute) rather than merely
 // mounting the page.
 let receivedInitialPath: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
@@ -388,7 +388,7 @@ describe('App capability wiring', () => {
 
   it('passes the browser capabilities down to BrowserDocumentPage', async () => {
     render(
-      <MemoryRouter initialEntries={['/w/default/document/c1']}>
+      <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -396,10 +396,10 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_STATE.capabilities)
   })
 
-  it('derives initialPath from a /w/:workspace/document/:path cold-load URL, folders and all', async () => {
+  it('derives initialPath from a /w/:workspace/d/:path cold-load URL, folders and all', async () => {
     receivedInitialPath = undefined
     render(
-      <MemoryRouter initialEntries={['/w/default/document/design/login%20flow']}>
+      <MemoryRouter initialEntries={['/w/default/d/design/login%20flow']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -861,8 +861,8 @@ describe('App URL routing', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('cold-loads a /w/:workspaceId/document/:path deep link straight into DaemonDocumentPage', async () => {
-    renderAppWithRouter(DAEMON_STATE, '/w/w1/document/main')
+  it('cold-loads a /w/:workspaceId/d/:path deep link straight into DaemonDocumentPage', async () => {
+    renderAppWithRouter(DAEMON_STATE, '/w/w1/d/main')
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
@@ -871,7 +871,7 @@ describe('App URL routing', () => {
   it('cold-loads a NESTED document path deep link, path intact', async () => {
     // The tail is the document's path since the data layer converged on
     // paths; the page must receive it verbatim, separators and all.
-    renderAppWithRouter(DAEMON_STATE, '/w/w1/document/notes/2026/plan')
+    renderAppWithRouter(DAEMON_STATE, '/w/w1/d/notes/2026/plan')
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('notes/2026/plan')
@@ -894,11 +894,11 @@ describe('App URL routing', () => {
       onOpenDocument('w1', 'main')
     })
     await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/document/main')
+    expect(router.state.location.pathname).toBe('/w/w1/d/main')
   })
 
   it('updates the URL back to the gallery when onNavigateBack fires', async () => {
-    const router = renderAppWithRouter(DAEMON_STATE, '/w/w1/document/main')
+    const router = renderAppWithRouter(DAEMON_STATE, '/w/w1/d/main')
     await screen.findByTestId('daemon-document-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
@@ -945,7 +945,7 @@ describe('App URL routing', () => {
     }
     const router = renderAppWithRouter(BROWSER_STATE, '/')
     await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/document/main')
+    expect(router.state.location.pathname).toBe('/w/w1/d/main')
     // The replace must not have added a new history entry: going back from
     // here should leave the SPA (nothing left to land on inside this test's
     // single-entry history), not bounce to a stale pre-pairing '/' entry.
@@ -1163,7 +1163,7 @@ describe('App error boundary', () => {
     throwInBrowserDocumentPage = true
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
-      <MemoryRouter initialEntries={['/w/default/document/c1']}>
+      <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -1231,7 +1231,7 @@ describe('App not-found route', () => {
 
   it('keeps known routes on their normal pages', () => {
     render(
-      <MemoryRouter initialEntries={['/w/default/document/c9']}>
+      <MemoryRouter initialEntries={['/w/default/d/c9']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )

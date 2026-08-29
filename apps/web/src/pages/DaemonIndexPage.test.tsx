@@ -649,7 +649,7 @@ describe('DaemonIndexPage', () => {
   it('opens a document under the workspace segment, not its canonical id', async () => {
     // ADR-0019: the visible URL carries the human-readable segment. This page
     // is where a daemon URL is born — `onOpenDocument` is what App.tsx turns
-    // into `/w/:handle/document/:path` — so a raw ULID handed over here is a
+    // into `/w/:handle/d/:path` — so a raw ULID handed over here is a
     // raw ULID in the address bar.
     installFetchMock({
       workspaces: [{ workspaceId: WS_ULID, segment: 'design-team' }],

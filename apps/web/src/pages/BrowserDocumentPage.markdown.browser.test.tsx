@@ -524,9 +524,7 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
       () => {
         // The link names the target by ID (so it survives a move); the address
         // bar names it by PATH. Following one crosses that boundary.
-        expect(screen.getByTestId('location-probe').textContent).toBe(
-          '/w/default/document/target-note',
-        )
+        expect(screen.getByTestId('location-probe').textContent).toBe('/w/default/d/target-note')
       },
       { timeout: 10_000 },
     )

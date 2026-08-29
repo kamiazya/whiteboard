@@ -152,7 +152,7 @@ describe('BrowserDocumentPage browser Back/Forward (browser — real IndexedDB)'
     const pathB = seededB.path
     expect(pathB).not.toBe(pathA)
     await act(async () => {
-      await router.navigate(`/w/default/document/${pathB}`)
+      await router.navigate(`/w/default/d/${pathB}`)
     })
 
     const idB = await waitFor(async () => {
@@ -160,7 +160,7 @@ describe('BrowserDocumentPage browser Back/Forward (browser — real IndexedDB)'
       expect(id).not.toBe(idA)
       return id as string
     })
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/w/default/document/${pathB}`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/w/default/d/${pathB}`))
 
     const nodeB = textNodeCanvas('history-nav-node-b', 20, 20)
     await waitFor(
@@ -180,7 +180,7 @@ describe('BrowserDocumentPage browser Back/Forward (browser — real IndexedDB)'
       await router.navigate(-1)
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/w/default/document/${pathA}`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/w/default/d/${pathA}`))
     await waitFor(async () => {
       expect(await new IdbDefaultDocumentPointer().get()).toBe(idA)
     })
@@ -196,7 +196,7 @@ describe('BrowserDocumentPage browser Back/Forward (browser — real IndexedDB)'
       await router.navigate(1)
     })
 
-    await waitFor(() => expect(router.state.location.pathname).toBe(`/w/default/document/${pathB}`))
+    await waitFor(() => expect(router.state.location.pathname).toBe(`/w/default/d/${pathB}`))
     await waitFor(async () => {
       expect(await new IdbDefaultDocumentPointer().get()).toBe(idB)
     })

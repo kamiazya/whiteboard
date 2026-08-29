@@ -214,7 +214,7 @@ export function App({ providerState }: AppProps) {
   // starts on the gallery pre-scoped to that workspace rather than
   // whichever workspace the daemon happens to list first. Absent a fragment
   // (the daemon's runtime-config path, or a same-origin cold load of a
-  // `/w/:workspaceId/document/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
+  // `/w/:workspaceId/d/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
   // a shared link, or R3's "Open the local app" deep link), the URL itself
   // seeds the view. Lazy initializer: both the payload and the pathname at
   // mount time are fixed for the life of the mount.
@@ -242,7 +242,7 @@ export function App({ providerState }: AppProps) {
   // grammar means a daemon address parses under the browser keeper too, and
   // it names a workspace this keeper does not have — reachable by hand, and
   // reached for real by the 'Work in this browser instead' escape, which
-  // leaves a `/w/<daemon-ws>/document/...` address behind as it switches
+  // leaves a `/w/<daemon-ws>/d/...` address behind as it switches
   // keeper. Treating that as a browser document would open a path in a
   // workspace that does not exist here; the index is the honest answer, and
   // is what this shell already showed while the two grammars kept them apart.
