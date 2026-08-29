@@ -219,6 +219,18 @@ nothing was ever collectable. The guard is now the arrangement itself
 
 ### Not addressed here
 
+- **A stale `whiteboard.db` left behind by a migration.** The narrow guard
+  asks the environment and the directory, and both answer "local" when an
+  operator has moved the rows to a libSQL server but left the old file in
+  place — so a host-side backup copies pre-migration rows and reports success.
+  Nothing available at that moment can contradict it: the environment is the
+  invoking shell's, not the deployment's, and the server-mode record is
+  deleted on graceful shutdown, which the documented flow performs first.
+  Decision 1's per-store record is what closes this — a marker that survives
+  shutdown and states where each store's data actually lives — and it is the
+  first thing to build when this ADR is implemented. Until then the
+  self-hosting guide tells operators to delete the leftover file.
+
 - **Restore across a configuration change** — restoring a backup taken with an
   embedded database into a deployment using a libSQL server, or vice versa. It
   is a real operator need and this ADR does not answer it.

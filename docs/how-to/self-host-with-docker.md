@@ -152,6 +152,18 @@ provide the operator-facing surface for data backup and restore.
   sets it. Both commands therefore also check the directory itself: one with
   no `whiteboard.db` in it is refused, because a copy of it cannot carry rows
   no matter what any environment says.
+- **One case is still not caught: a STALE `whiteboard.db`.** If you once ran
+  with the embedded database, later pointed `WHITEBOARD_DATABASE_URL` at a
+  libSQL server, and left the old file in the data directory, a host-side
+  backup sees a database file, finds nothing in its environment to contradict
+  it, and copies that old file. The result looks like a complete backup and
+  holds rows from before the migration. **Delete the leftover `whiteboard.db`
+  when you move the database out of the data directory** — that is what turns
+  this case into the refusal above. The durable fix is a per-store record of
+  where each store actually lives ([ADR-0021](../contributing/adr/0021-durability-boundary.md)
+  decision 1), which does not exist yet; the server-mode record cannot serve,
+  because it is deleted on graceful shutdown and this flow stops the container
+  first.
 - Restore only into a missing or empty target directory. A non-empty target
   is rejected to prevent silent merging of stale state with the backup.
 - After restore, `server-mode.json` is removed from the target. The
