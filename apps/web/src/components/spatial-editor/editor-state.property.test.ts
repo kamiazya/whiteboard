@@ -16,8 +16,25 @@
  * that a hand-written example does not.
  *
  * The oracle is the invariant block, not a shadow model: every command
- * re-checks C1/G1/S1/T1 against the real state, so a violation is reported
- * at the step that introduced it with the whole trail attached.
+ * re-checks C1/G1/S1/T1/L1 against the real state, so a violation is
+ * reported at the step that introduced it with the whole trail attached.
+ *
+ * What the command set covers, and what it does not. Pointer and touch:
+ * press, drag, resize by a handle (single and multi), connect, marquee-
+ * clearing empty press, double-click-to-create, pointercancel. Keyboard:
+ * every binding in `shortcuts.ts` that can move canvas, gesture or
+ * selection state — Delete/Backspace, Escape, arrows (nudge), Cmd+A,
+ * Cmd+D, the four z-order brackets, Cmd+Shift+L. Plus the context menu's
+ * "Edit text", shift-click membership, and the controlled canvas swap.
+ *
+ * Deliberately outside it: the viewport bindings (zoom in/out/to-fit/to-
+ * selection, space-pan), which cannot touch these three values and have
+ * their own property test in `viewport.property.test.ts`; and the
+ * clipboard family (Cmd+C/X/V), whose behaviour lives in an in-app
+ * fragment slot, a pending-cut hold and the OS clipboard — three more
+ * pieces of state that belong in this model but are a separate increment,
+ * not a line item. Their absence is why `deletes` counts only what the
+ * delete paths produce.
  *
  * `dispatch` mirrors `applyResult` in SpatialEditor.tsx: set the gesture
  * state, fold `selectedId` through `reduceSelection` as `set-primary`, then
@@ -30,8 +47,9 @@
  */
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { afterAll, describe, expect, it } from 'vitest'
+import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { applyCommand, type EditorCommand } from './commands.js'
+import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import { createIdleState, type GestureEvent, type GestureState, reduceGesture } from './gestures.js'
 import {
@@ -73,12 +91,25 @@ interface Stats {
   pendingTextHandoffs: number
   externalReplacementsMidGesture: number
   multiSelections: number
+  nudges: number
+  duplicates: number
+  reorders: number
+  locksApplied: number
+  selectAlls: number
 }
 
 interface Real {
   canvas: SpatialCanvas
   gesture: GestureState
   selection: SelectionState
+  /**
+   * Lock is HOST state, not part of the canvas — `onToggleNodeLock`
+   * reports out and the document never records it. Modelled here anyway
+   * because the editor's lock effect reaches back into both of the other
+   * two: it cancels a gesture on a node that just got locked, and drops
+   * locked ids from the selection.
+   */
+  lockedNodeIds: Set<string>
   nextId: number
   trail: string[]
   stats: Stats
@@ -140,6 +171,52 @@ function checkInvariants(real: Real): void {
   for (const id of selectionMembers(selection)) {
     expect(live.has(id), `S1 selected ${id} ${at}`).toBe(true)
   }
+
+  // L1: once the lock effect has settled, a locked node is neither
+  // selected nor under a move/resize gesture. Both halves are that
+  // effect's whole job, and both are the kind of thing that decays into
+  // "every verb re-checks isLocked itself".
+  for (const id of selectionMembers(selection)) {
+    expect(real.lockedNodeIds.has(id), `L1 locked ${id} still selected ${at}`).toBe(false)
+  }
+  if (gesture.kind === 'moving' || gesture.kind === 'resizing') {
+    expect(real.lockedNodeIds.has(gesture.nodeId), `L1 ${gesture.kind} a locked node ${at}`).toBe(
+      false,
+    )
+  }
+}
+
+/**
+ * The editor's lock effect, run to settlement, then the invariants.
+ *
+ * The effect is keyed on `[lockEnabled, lockedNodeIds, selectedId,
+ * extraIds, gestureState]` — every one of the values this model moves — so
+ * it runs after EVERY step, not only after a lock toggle. That ordering is
+ * the design and not an accident: pressing a locked node is allowed to
+ * start a move and allowed to select it (the hit-test deliberately still
+ * sees locked nodes, or Unlock would be unreachable from the context
+ * menu), and this effect is what takes both back on the next render. A
+ * model that settled only on the toggle reports that transient as an L1
+ * violation, which is how this function ended up here rather than inside
+ * `ToggleLock`.
+ */
+function settle(real: Real): void {
+  if (
+    (real.gesture.kind === 'moving' || real.gesture.kind === 'resizing') &&
+    real.lockedNodeIds.has(real.gesture.nodeId)
+  ) {
+    real.gesture = createIdleState()
+  }
+  const lockedMembers = new Set(
+    selectionMembers(real.selection).filter((id) => real.lockedNodeIds.has(id)),
+  )
+  if (lockedMembers.size > 0) {
+    real.selection = reduceSelection(real.selection, {
+      type: 'drop-locked',
+      lockedIds: lockedMembers,
+    })
+  }
+  checkInvariants(real)
 }
 
 /**
@@ -219,7 +296,20 @@ function dispatch(real: Real, event: GestureEvent, label: string): void {
   real.trail.push(label)
   recordStats(real, before, result.commands)
   checkPendingTextSurvives(real, before, event, result.commands)
-  checkInvariants(real)
+  settle(real)
+}
+
+/**
+ * The keyboard paths that emit commands WITHOUT going through the gesture
+ * reducer — nudge, duplicate, reorder — which in SpatialEditor call
+ * `applyResult` with a hand-built result carrying no `selectedId`.
+ */
+function dispatchCommands(real: Real, commands: readonly EditorCommand[], label: string): void {
+  const before = real.gesture
+  for (const command of commands) real.canvas = applyCommand(real.canvas, command)
+  real.trail.push(label)
+  recordStats(real, before, commands)
+  settle(real)
 }
 
 /** A command whose whole body is one gesture event. */
@@ -236,14 +326,29 @@ abstract class GestureCommand implements fc.Command<Model, Real> {
   abstract toString(): string
 }
 
-/** Resolves a generated index against whatever nodes are still live. */
+/**
+ * Resolves a generated index against the nodes a pointer can actually
+ * reach: live, and not locked.
+ *
+ * The lock filter is not defensive tidying — `selectableBoxes` is what
+ * every pointer path hit-tests against, and it excludes locked nodes, so a
+ * command that pressed one would be driving an editor that does not exist.
+ * (The context MENU deliberately hit-tests locked nodes so Unlock stays
+ * reachable, but a locked node's menu offers only Unlock — no verb this
+ * model dispatches.) That leaves the lock effect's gesture-cancel half
+ * reachable only the way production needs it: a lock ARRIVING while a
+ * gesture is already in flight.
+ */
 function pick(real: Real, index: number): SpatialNode | undefined {
-  if (real.canvas.nodes.length === 0) return undefined
-  return real.canvas.nodes[index % real.canvas.nodes.length]
+  const selectable = real.canvas.nodes.filter((node) => !real.lockedNodeIds.has(node.id))
+  if (selectable.length === 0) return undefined
+  return selectable[index % selectable.length]
 }
 
 function pickText(real: Real, index: number): SpatialNode | undefined {
-  const texts = real.canvas.nodes.filter((node) => node.type === 'text')
+  const texts = real.canvas.nodes.filter(
+    (node) => node.type === 'text' && !real.lockedNodeIds.has(node.id),
+  )
   if (texts.length === 0) return undefined
   return texts[index % texts.length]
 }
@@ -421,9 +526,15 @@ class CommitTextEdit extends GestureCommand {
   }
 }
 
+/**
+ * Escape. It routes to `cancel-text-edit` only while a gesture is in
+ * flight — on an idle editor the key does not reach the reducer at all,
+ * and notably does NOT clear the selection (the catalog's description says
+ * it does; the handler is the truth).
+ */
 class CancelTextEdit extends GestureCommand {
-  event(): GestureEvent {
-    return { type: 'cancel-text-edit' }
+  event(real: Real): GestureEvent | undefined {
+    return real.gesture.kind === 'idle' ? undefined : { type: 'cancel-text-edit' }
   }
   toString(): string {
     return 'cancelTextEdit'
@@ -456,7 +567,7 @@ class DeleteSelection implements fc.Command<Model, Real> {
       for (const command of result.commands) real.canvas = applyCommand(real.canvas, command)
       real.trail.push(this.toString())
       recordStats(real, before, result.commands)
-      checkInvariants(real)
+      settle(real)
       return
     }
     dispatch(real, { type: 'delete-selection', nodeId: members[0] }, this.toString())
@@ -478,7 +589,7 @@ class ToggleMember implements fc.Command<Model, Real> {
     real.selection = reduceSelection(real.selection, { type: 'toggle-member', id: node.id })
     real.trail.push(this.toString())
     if (real.selection.extraIds.size > 0) real.stats.multiSelections += 1
-    checkInvariants(real)
+    settle(real)
   }
   toString(): string {
     return `toggleMember(#${this.index})`
@@ -535,7 +646,7 @@ class ReplaceCanvas implements fc.Command<Model, Real> {
       { type: 'canvas-replaced', canvas: replacement },
       result.commands,
     )
-    checkInvariants(real)
+    settle(real)
   }
   toString(): string {
     return `replaceCanvas(${this.external ? 'external' : 'local'},keep=${this.keep.map((k) => (k === false ? '0' : '1')).join('')})`
@@ -629,12 +740,206 @@ class ConnectNodes implements fc.Command<Model, Real> {
   }
 }
 
+/**
+ * The keyboard half of the surface. `shortcuts.ts` is the single catalog
+ * and declares eighteen bindings; the ones below are those that can move
+ * canvas, gesture or selection state. The rest are viewport-only
+ * (zoom-in/out/to-fit/to-selection, space-pan — covered by
+ * viewport.property.test.ts) or clipboard (copy/cut/paste, whose fragment
+ * slot and OS-clipboard half are deliberately out of this model's scope;
+ * see the note on the describe block).
+ *
+ * Each mirrors its handler in SpatialEditor, guards included — the guards
+ * ARE the behaviour under test, so a command that skipped them would be
+ * asserting against an editor that does not exist.
+ */
+
+/** Cmd+A. Locked nodes are excluded, as `selectAllNodes` excludes them. */
+class SelectAll implements fc.Command<Model, Real> {
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const ids = real.canvas.nodes.map((node) => node.id).filter((id) => !real.lockedNodeIds.has(id))
+    if (ids.length === 0) return
+    real.selection = reduceSelection(real.selection, { type: 'set-members', ids })
+    real.trail.push(this.toString())
+    real.stats.selectAlls += 1
+    if (real.selection.extraIds.size > 0) real.stats.multiSelections += 1
+    settle(real)
+  }
+  toString(): string {
+    return 'selectAll'
+  }
+}
+
+/**
+ * An arrow key. Nudges the WHOLE selection as ONE batch, from positions
+ * read live rather than from a render snapshot, and only while the gesture
+ * is idle and the primary still exists.
+ */
+class Nudge implements fc.Command<Model, Real> {
+  constructor(
+    private readonly delta: { readonly dx: number; readonly dy: number },
+    private readonly large: boolean,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection)
+    if (members.length === 0 || real.gesture.kind !== 'idle') return
+    if (nodeById(real.canvas, members[0]) === undefined) return
+    const step = this.large ? 32 : 8
+    const moves = members.flatMap((id) => {
+      const node = nodeById(real.canvas, id)
+      return node === undefined
+        ? []
+        : [
+            {
+              kind: 'move-node' as const,
+              id: node.id,
+              x: node.x + this.delta.dx * step,
+              y: node.y + this.delta.dy * step,
+            },
+          ]
+    })
+    if (moves.length === 0) return
+    dispatchCommands(real, [{ kind: 'batch', commands: moves }], this.toString())
+    real.stats.nudges += 1
+  }
+  toString(): string {
+    return `nudge(${this.delta.dx},${this.delta.dy}${this.large ? ',large' : ''})`
+  }
+}
+
+/** Cmd+D. Reminted copies become the new selection. */
+class Duplicate implements fc.Command<Model, Real> {
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection)
+    if (members.length === 0) return
+    const fragment = extractClipboardFragment(real.canvas, new Set(members))
+    const command = buildFragmentInsertCommand(real.canvas, fragment, () => `dup-${real.nextId++}`)
+    if (command === undefined) return
+    const before = real.canvas
+    dispatchCommands(real, [command], this.toString())
+    if (real.canvas === before) return
+    const reminted =
+      command.kind === 'batch'
+        ? command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : []))
+        : []
+    if (reminted.length > 0) {
+      real.selection = reduceSelection(real.selection, { type: 'set-members', ids: reminted })
+      real.stats.duplicates += 1
+      settle(real)
+    }
+  }
+  toString(): string {
+    return 'duplicate'
+  }
+}
+
+/** The bracket keys: bring forward / send backward / to front / to back. */
+class Reorder implements fc.Command<Model, Real> {
+  constructor(private readonly placement: 'forward' | 'backward' | 'front' | 'back') {}
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection)
+    if (members.length === 0) return
+    dispatchCommands(
+      real,
+      [{ kind: 'reorder-nodes', ids: members, placement: this.placement }],
+      this.toString(),
+    )
+    real.stats.reorders += 1
+  }
+  toString(): string {
+    return `reorder(${this.placement})`
+  }
+}
+
+/**
+ * Cmd+Shift+L. The primary's current state decides the direction for the
+ * whole selection, and LOCKING clears it — then the lock effect settles,
+ * which is where the coupling back into gesture and selection lives.
+ */
+class ToggleLock implements fc.Command<Model, Real> {
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection)
+    if (members.length === 0) return
+    const next = !real.lockedNodeIds.has(members[0])
+    for (const id of members) {
+      if (next) real.lockedNodeIds.add(id)
+      else real.lockedNodeIds.delete(id)
+    }
+    if (next) {
+      real.selection = reduceSelection(real.selection, { type: 'clear' })
+      real.stats.locksApplied += 1
+    }
+    real.trail.push(this.toString())
+    settle(real)
+  }
+  toString(): string {
+    return 'toggleLock'
+  }
+}
+
+/**
+ * Press a node, then replace the canvas out from under the resulting
+ * gesture — the exact arrangement the S1 defect needed, drawn directly
+ * instead of stumbled into.
+ *
+ * It earns its own command because the pool keeps growing: with fifteen
+ * command kinds a mid-gesture replacement happened 9-19 times per 300
+ * runs, and adding the keyboard half diluted that to 4-13. The
+ * arrangement that found a real bug must not get rarer every time the
+ * model learns a new operation.
+ */
+class PressThenReplace implements fc.Command<Model, Real> {
+  constructor(
+    private readonly index: number,
+    private readonly keep: readonly boolean[],
+    private readonly external: boolean,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    const node = pick(real, this.index)
+    if (node === undefined) return
+    dispatch(
+      real,
+      { type: 'pointerdown', nodeId: node.id, point: { x: node.x, y: node.y } },
+      this.toString(),
+    )
+    new ReplaceCanvas(this.keep, this.external).run(model, real)
+  }
+  toString(): string {
+    return `pressThenReplace(#${this.index},${this.external ? 'external' : 'local'})`
+  }
+}
+
 const indexArb = fc.nat({ max: 3 })
 const pointArb: fc.Arbitrary<Point> = fc.record({
   x: fc.integer({ min: -40, max: 300 }),
   y: fc.integer({ min: -40, max: 240 }),
 })
 const handleArb = fc.constantFrom<ResizeHandleKind>('nw', 'n', 'ne', 'e', 'se', 's', 'sw', 'w')
+const arrowArb = fc.constantFrom(
+  { dx: 0, dy: -1 },
+  { dx: 0, dy: 1 },
+  { dx: -1, dy: 0 },
+  { dx: 1, dy: 0 },
+)
+
 /** Never (0, 0): a zero-delta drag is a select, and commits nothing. */
 const nonZeroDeltaArb: fc.Arbitrary<Point> = fc
   .tuple(fc.integer({ min: -60, max: 60 }), fc.integer({ min: -60, max: 60 }))
@@ -670,6 +975,16 @@ const allCommands = [
     .tuple(indexArb, handleArb, pointArb, nonZeroDeltaArb)
     .map(([i, h, from, delta]) => new ResizeNode(i, h, from, delta)),
   fc.tuple(indexArb, indexArb).map(([a, b]) => new ConnectNodes(a, b)),
+  fc.constant(new SelectAll()),
+  fc.tuple(arrowArb, fc.boolean()).map(([d, large]) => new Nudge(d, large)),
+  fc.constant(new Duplicate()),
+  fc
+    .constantFrom<'forward' | 'backward' | 'front' | 'back'>('forward', 'backward', 'front', 'back')
+    .map((p) => new Reorder(p)),
+  fc.constant(new ToggleLock()),
+  fc
+    .tuple(indexArb, fc.array(fc.boolean(), { minLength: 4, maxLength: 4 }), fc.boolean())
+    .map(([i, keep, external]) => new PressThenReplace(i, keep, external)),
 ]
 
 describe('editor composite state (command-based)', () => {
@@ -682,6 +997,11 @@ describe('editor composite state (command-based)', () => {
     pendingTextHandoffs: 0,
     externalReplacementsMidGesture: 0,
     multiSelections: 0,
+    nudges: 0,
+    duplicates: 0,
+    reorders: 0,
+    locksApplied: 0,
+    selectAlls: 0,
   }
 
   /**
@@ -693,26 +1013,38 @@ describe('editor composite state (command-based)', () => {
   afterAll(() => {
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each floor sits well under the minimum measured across seven
-    // consecutive runs — moves 74-107, resizes 70-117, connects 50-75,
-    // deletes 21-42, text edits opened 131-162, pending-text handoffs
-    // 40-56, mid-gesture external replacements 9-19, multi-selections
-    // 59-83 — so ordinary seed variance never trips them, and a drift big
-    // enough to hollow the property out fails here before the invariants
-    // start passing vacuously.
-    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(30)
-    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(30)
+    // reject. Each floor sits well under the minimum measured across five
+    // consecutive runs of the full command set — moves 57-84, resizes
+    // 53-77, connects 35-47, deletes 23-37, text edits opened 92-117,
+    // pending-text handoffs 25-39, mid-gesture external replacements
+    // 35-50, multi-selections 152-209, nudges 10-19, duplicates 14-26,
+    // reorders 17-29, locks applied 15-26, select-alls 48-66 — so ordinary
+    // seed variance never trips them, and a drift big enough to hollow the
+    // property out fails here before the invariants start passing
+    // vacuously.
+    //
+    // Re-measure when adding a command: every new kind dilutes every
+    // existing one. Adding the keyboard half took mid-gesture external
+    // replacements from 9-19 down to 4-13, which is why that arrangement
+    // now has a command of its own rather than a lowered floor.
+    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(25)
+    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(25)
     expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(20)
-    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(8)
+    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(10)
     expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(50)
     expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(
-      15,
+      12,
     )
     expect(
       stats.externalReplacementsMidGesture,
       'external replacements barely landed mid-gesture',
-    ).toBeGreaterThan(3)
-    expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(20)
+    ).toBeGreaterThan(15)
+    expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(50)
+    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(4)
+    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(8)
+    expect(stats.reorders, 'z-order keys barely reached').toBeGreaterThan(6)
+    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(8)
+    expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(25)
   })
 
   fcTest.prop([fc.commands(allCommands, { maxCommands: 24 })], withDefaults({ numRuns: 300 }))(
@@ -725,6 +1057,7 @@ describe('editor composite state (command-based)', () => {
             canvas: initialCanvas(),
             gesture: createIdleState(),
             selection: EMPTY_SELECTION,
+            lockedNodeIds: new Set<string>(),
             nextId: 0,
             trail: [],
             stats,
