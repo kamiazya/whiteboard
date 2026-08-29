@@ -30,7 +30,7 @@ describe('ConnectionStatus chip', () => {
         container: document.body,
       },
     )
-    fireEvent.click(screen.getByTestId('connection-chip'))
+    fireEvent.click(screen.getByTestId('shell-mark-trigger'))
 
     const popover = screen.getByTestId('connection-popover')
     expect(screen.queryByTestId('connection-disconnect')).toBeNull()
@@ -49,7 +49,7 @@ describe('ConnectionStatus chip', () => {
     render(<ConnectionStatus state={{ keeper: 'daemon', session: 'reconnecting' }} />, {
       container: document.body,
     })
-    fireEvent.click(screen.getByTestId('connection-chip'))
+    fireEvent.click(screen.getByTestId('shell-mark-trigger'))
 
     const popover = screen.getByTestId('connection-popover')
     expect(popover.textContent).toMatch(/not running/i)

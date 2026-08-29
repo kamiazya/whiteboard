@@ -33,6 +33,7 @@ and each appears only where it earns its keep:
 | PWA launcher icon | no | no | At launcher size, inside a mask, the frame only costs stroke weight and safe-zone space | `public/icon-192.png`, `public/icon-512.png` |
 | README hero | yes | yes | A document context: the image needs containment to read as an object | `docs/assets/readme-mark.svg` (repo root `docs/`) |
 | OG / social card | yes | yes | Same document logic, plus the card must carry the name on foreign surfaces | `public/og-image.png` |
+| App header | no | no | The one brand surface that is also a CONTROL: it names the workspace you are in and reports whether your work is safe, so it carries state (see below) and opens the connection popover. No frame — a 40px row is containment enough; no wordmark — the name is already in the tab title | `src/components/shell/ShellMark.tsx` |
 | Onboarding chooser (empty workspace) | no | yes | The first page arrivals meet; the viewport is the board (no frame), and the name is not in the surrounding chrome, so the lockup introduces the product. The full splash story plays here (draw, sketch, the spark tidies, the signature returns and breathes) — reused via `<img>` so the asset stays the story's single source | `public/boot-splash.svg` |
 
 The rule in one line: **the squiggle is the signature everywhere; the frame
@@ -57,6 +58,23 @@ Brand surfaces are mid-gray on any ground, plus exactly one accent:
   semantic family as the AI acting. The dashed frame is the load-bearing
   metaphor: the frame is the connection, and offline breaks it. Legible
   even at 16px.
+- **The app-header mark carries state too**, and takes its tones from the
+  app's `StateDot` set rather than from the favicon's — the header sits
+  inside the themed page, where `emerald-500` / `amber-500` already mean
+  "safe" / "attention" on three other carriers, while the favicon renders
+  outside the theme and needs its own fixed hues. Same idea, two palettes,
+  for a reason that is about where each one is painted.
+
+  That the signature can hold a state at all is not new: the favicon has
+  done it since the beginning, dot and dashed frame together. What the
+  header adds is MOTION as a second channel — `reconnecting` travels, using
+  the loader's own dash on the same path, and `sync-off` sits broken and
+  dimmed. It has to: those two share the amber tone, and on a mark with no
+  room for a word, colour alone cannot separate them.
+
+  This is the one departure from "the signature is static", and it is
+  deliberate rather than drift. The resting mark is still the plain
+  squiggle; nothing moves until the session does.
 
 In-app chrome state colors are DESIGN.md's domain and use a different
 palette (emerald/amber on the connection chip — picked against chrome
@@ -134,7 +152,8 @@ All commands run from `apps/web/`.
 
 | Asset | Source of truth | Regenerate |
 | --- | --- | --- |
-| in-app marks (error / not-found / home / welcome-static) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
+| in-app marks (error / not-found / welcome-static / loader) | `src/brand/*.svg`, imported as React components via SVGR (`?react`) | edit the .svg directly |
+| app-header mark | `src/components/shell/ShellMark.tsx` — the signature drawn in code, because it carries state | code |
 | ALPHA chip (AppShell) | `src/components/AppShell.tsx` — amber chip + honesty popover; the durable home of "data durability is not guaranteed" | code |
 | `public/boot-splash.svg` | hand-authored (this is the source) | edit directly; contract tests pin its grammar |
 | `docs/assets/readme-mark.svg` | hand-authored framed+captioned variant | edit directly |

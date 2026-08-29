@@ -37,7 +37,7 @@ function renderApp() {
   )
 }
 
-describe('shell connection chip over a real document kept in this browser', () => {
+describe('shell mark over a real document kept in this browser', () => {
   beforeEach(async () => {
     resetShellStatusForTests()
     await clearDb()
@@ -57,16 +57,20 @@ describe('shell connection chip over a real document kept in this browser', () =
       },
     )
 
-    const chip = await waitFor(() => screen.getByTestId('connection-chip'), { timeout: 5000 })
-    expect(chip.textContent).toMatch(/browser/i)
-    // The chip sits in the shell's own row, not inside the document's top bar
+    const mark = await waitFor(() => screen.getByTestId('shell-mark-trigger'), { timeout: 5000 })
+    // The mark carries the keeper as a tone, so the WORD lives in the
+    // accessible name rather than in chrome — which is what makes the state
+    // readable to assistive tech that cannot see a colour.
+    expect(mark.getAttribute('aria-label')).toMatch(/browser/i)
+    expect(screen.getByTestId('shell-mark-cap').getAttribute('data-tone')).toBe('neutral')
+    // The mark sits in the shell's own row, not inside the document's top bar
     // — that separation is the whole point of the move, and a DOM assertion is
     // the only thing that can tell the two rows apart.
-    expect(chip.closest('header')?.querySelector('[data-testid="shell-settings"]')).toBeTruthy()
+    expect(mark.closest('header')?.querySelector('[data-testid="shell-settings"]')).toBeTruthy()
 
     // Sentence-length copy stays out of chrome: it appears only once opened.
     expect(screen.queryByText(/other browsers cannot see them/i)).toBeNull()
-    fireEvent.click(chip)
+    fireEvent.click(mark)
     expect(await screen.findByText(/other browsers cannot see them/i)).toBeInTheDocument()
     expect(
       await screen.findByText(/Connect a daemon \(MCP\) for version history/i),
@@ -81,19 +85,20 @@ describe('shell connection chip over a real document kept in this browser', () =
         timeout: 5000,
       },
     )
-    await waitFor(() => expect(screen.getByTestId('connection-chip')).toBeInTheDocument(), {
+    await waitFor(() => expect(screen.getByTestId('shell-mark-trigger')).toBeInTheDocument(), {
       timeout: 5000,
     })
 
     // The shell outlives the page in production, so the page unmounting is
-    // exactly what must clear the chip — a latched one would keep telling an
-    // index page it is holding a session.
+    // exactly what must clear the state — a latched mark would keep telling
+    // an index page it is holding a session.
     cleanup()
     rtlRender(
       <MemoryRouter initialEntries={['/']}>
         <AppShell daemon={false} />
       </MemoryRouter>,
     )
-    expect(screen.queryByTestId('connection-chip')).toBeNull()
+    expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
+    expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBeNull()
   })
 })

@@ -1,7 +1,14 @@
 /**
- * The ONE connection-state affordance. A small header
- * chip signals the state; every sentence-shaped explanation and recovery
- * action lives in its popover — no standing banners.
+ * The ONE connection-state affordance. The SIGNATURE MARK signals the state;
+ * every sentence-shaped explanation and recovery action lives in its popover
+ * — no standing banners.
+ *
+ * The mark, and not a chip beside it, because the row had no subject: the
+ * mark meant "home" and nothing else while a separate chip on the right
+ * answered "is my work safe" about a workspace nothing on screen named. One
+ * carrier now answers both, and the row reads left to right as "this
+ * workspace" rather than as two unrelated widgets. `ShellMark` owns the paint
+ * and the motion; this file owns what the popover says and offers.
  *
  * Keeper `browser` — the workspace is kept in this browser and nowhere else.
  * `children` hosts page-supplied extras (daemon detection, capability hint)
@@ -23,8 +30,7 @@
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { settingsPath } from '@/lib/app-routes'
-import { cn } from '@/lib/utils'
-import { StateDot, type StateDotTone } from '../StateDot.js'
+import { ShellMark } from '../shell/ShellMark.js'
 import { Popover, PopoverContent, PopoverTrigger } from '../ui/popover.js'
 
 /** Health of the live document session a daemon-kept page runs. */
@@ -63,14 +69,21 @@ export interface ConnectionStatusProps {
   readonly children?: ReactNode
 }
 
-// Meaning, not paint — StateDot owns the palette (DESIGN.md's closed set).
-const SESSION_CHIP: Record<SessionHealth, { label: string; tone: StateDotTone }> = {
-  synced: { label: 'Synced', tone: 'safe' },
-  reconnecting: { label: 'Reconnecting', tone: 'attention' },
-  'sync-off': { label: 'Sync off', tone: 'attention' },
+/**
+ * The word the mark cannot say.
+ *
+ * A chip carried its label beside its dot; a 26x16 signature has room for
+ * neither. The label therefore moves into the accessible name and the
+ * popover's header — which is load-bearing rather than tidy, because
+ * `reconnecting` and `sync-off` share the `attention` tone and the chip's
+ * word was what told them apart for a sighted reader. The mark separates
+ * them by motion instead; assistive tech reads this.
+ */
+const SESSION_LABEL: Record<SessionHealth, string> = {
+  synced: 'Synced',
+  reconnecting: 'Reconnecting',
+  'sync-off': 'Sync off',
 }
-
-const BROWSER_CHIP = { label: 'Browser', tone: 'neutral' } as const
 
 export function ConnectionStatus({
   state,
@@ -79,7 +92,7 @@ export function ConnectionStatus({
   onWorkInBrowser,
   children,
 }: ConnectionStatusProps) {
-  const chip = state.keeper === 'browser' ? BROWSER_CHIP : SESSION_CHIP[state.session]
+  const label = state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
   const syncOff = isSyncOff(state)
   // Empty while sync is on: the region has to exist BEFORE the message, but
   // an empty one must not claim a name either.
@@ -96,25 +109,21 @@ export function ConnectionStatus({
       <PopoverTrigger asChild>
         <button
           type="button"
-          data-testid="connection-chip"
-          className={cn(
-            'flex items-center gap-1.5 rounded-full border px-2.5 py-1 text-xs font-medium transition-colors hover:bg-accent',
-            'duration-(--motion-duration-normal) ease-(--motion-ease-out)',
-            syncOff && 'border-amber-500/40 bg-amber-500/10 text-amber-700',
-          )}
+          data-testid="shell-mark-trigger"
+          // The state has no word on screen, so the accessible name carries
+          // it — the one place a colour-and-motion signal must not be the
+          // only signal.
+          aria-label={`Workspace — ${label}`}
+          title={label}
+          className="flex shrink-0 items-center justify-center rounded-md p-1 text-foreground/70 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground"
         >
-          <StateDot
-            tone={chip.tone}
-            // One-shot attention echo behind the dot: mounts exactly when the
-            // chip enters sync-off, pulses twice, then rests. Finite by
-            // design — a standing ping would be noise, not guidance.
-            pulse={syncOff}
-            pulseTestId="connection-chip-pulse"
-          />
-          {chip.label}
+          <ShellMark state={state} />
         </button>
       </PopoverTrigger>
-      <PopoverContent data-testid="connection-popover">
+      <PopoverContent align="start" data-testid="connection-popover">
+        {/* The state's word, stated once at the top for every branch below:
+            the mark cannot say it, and two of the four states share a tone. */}
+        <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
         {state.keeper === 'daemon' && state.session === 'synced' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>
@@ -188,6 +197,16 @@ export function ConnectionStatus({
             </div>
           </div>
         )}
+        {/* Going home was the mark's whole job before it became this
+            trigger. It keeps it, one level in, rather than leaving the shell
+            with no way back to the index. */}
+        <Link
+          to="/"
+          data-testid="shell-mark-home"
+          className="mt-3 block border-t pt-2 text-xs font-medium text-primary hover:underline"
+        >
+          Home
+        </Link>
       </PopoverContent>
     </Popover>
   )

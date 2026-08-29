@@ -7,8 +7,8 @@ import { settingsPath } from '@/lib/app-routes'
 import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
-import HomeMark from '../brand/home-mark.svg?react'
 import { ConnectionStatus, isSyncOff } from './connection/ConnectionStatus.js'
+import { ShellMark } from './shell/ShellMark.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -66,12 +66,18 @@ export interface AppShellProps {
 }
 
 /**
- * The app-level chrome, deliberately minimal: brand (= go home) + the alpha
- * honesty chip on the left, the connection chip and the settings gear (+
- * attention dot) on the right. Nothing else ever moves in here — context and
- * tools stay in the page's own surface, always visible (see DESIGN.md's shell
- * rule). Pages mount this shared component instead of owning any brand,
- * connection or settings chrome themselves.
+ * The app-level chrome, deliberately minimal: the signature mark and the
+ * alpha honesty chip on the left, the settings gear (+ attention dot) on the
+ * right. Nothing else ever moves in here — context and tools stay in the
+ * page's own surface, always visible (see DESIGN.md's shell rule). Pages
+ * mount this shared component instead of owning any brand, connection or
+ * settings chrome themselves.
+ *
+ * The mark is the row's SUBJECT and its one state carrier. Left of the
+ * spacer is "what you are working in"; right of it is the app and its own
+ * state. There is no connection chip any more — a workspace's keeper and its
+ * session are things about the workspace, so they belong on the thing that
+ * names it rather than on a second widget at the other end of the row.
  */
 export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
   const navigate = useNavigate()
@@ -90,40 +96,8 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
-      <Link
-        to="/"
-        aria-label="Home"
-        className="shrink-0 rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
-      >
-        <HomeMark className="h-[16px] w-[26px]" />
-      </Link>
-      <Popover>
-        <PopoverTrigger asChild>
-          <button
-            type="button"
-            aria-label="Alpha preview notes"
-            className="shrink-0 rounded-full border border-amber-600/55 px-1.5 font-mono text-[10px] leading-4 tracking-wide text-amber-600 hover:bg-amber-600/10 dark:border-amber-500/55 dark:text-amber-500"
-          >
-            ALPHA
-          </button>
-        </PopoverTrigger>
-        <PopoverContent align="start" className="w-72 text-sm">
-          <p className="font-medium">Alpha preview</p>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Data durability is not guaranteed yet. Browser storage can be evicted by the device —
-            export what matters, or protect it with persistent storage and a daemon.
-          </p>
-          <Link
-            to={settingsPath('data')}
-            className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
-          >
-            Protect your data
-          </Link>
-        </PopoverContent>
-      </Popover>
-      <span className="min-w-0 flex-1" />
-      {connection && (
-        // The ONE connection affordance: the chip signals the state and its
+      {connection ? (
+        // The ONE connection affordance: the mark signals the state and its
         // popover carries the explanation and every recovery path. Re-pairing
         // navigates top-level to the daemon's own /pair consent page, the
         // same trust anchor first-time pairing uses.
@@ -161,7 +135,43 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
             </>
           )}
         </ConnectionStatus>
+      ) : (
+        // No page holds a live session, so there is no state to carry and
+        // nothing for a popover to say. The mark is then what it has always
+        // been — the way home — rather than a menu with one item in it.
+        <Link
+          to="/"
+          aria-label="Home"
+          className="shrink-0 rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
+        >
+          <ShellMark />
+        </Link>
       )}
+      <Popover>
+        <PopoverTrigger asChild>
+          <button
+            type="button"
+            aria-label="Alpha preview notes"
+            className="shrink-0 rounded-full border border-amber-600/55 px-1.5 font-mono text-[10px] leading-4 tracking-wide text-amber-600 hover:bg-amber-600/10 dark:border-amber-500/55 dark:text-amber-500"
+          >
+            ALPHA
+          </button>
+        </PopoverTrigger>
+        <PopoverContent align="start" className="w-72 text-sm">
+          <p className="font-medium">Alpha preview</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Data durability is not guaranteed yet. Browser storage can be evicted by the device —
+            export what matters, or protect it with persistent storage and a daemon.
+          </p>
+          <Link
+            to={settingsPath('data')}
+            className="mt-2 inline-block text-xs font-semibold text-primary hover:underline"
+          >
+            Protect your data
+          </Link>
+        </PopoverContent>
+      </Popover>
+      <span className="min-w-0 flex-1" />
       <button
         type="button"
         // The dot is the only thing on the shell that can read as an alarm.
