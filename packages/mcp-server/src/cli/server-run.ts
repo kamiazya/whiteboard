@@ -22,7 +22,7 @@ import {
   SERVER_MODE_RECORD_SCHEMA_VERSION,
   writeServerModeRecord,
 } from '../server/security/server-mode-record.js'
-import { collectStorageEnvIssues } from '../server/store/storage-env.js'
+import { collectStartupEnvIssues } from '../server/startup-env.js'
 import type { ServerRunArgs } from './server-run-args.js'
 
 const SERVER_RUN_SCHEMA_VERSION = 1 as const
@@ -115,21 +115,21 @@ export async function runServerRun(options: RunServerRunOptions): Promise<Server
     return { kind: 'config-error', code: parsed.code, field: parsed.field }
   }
 
-  // A storage setting the operator configured and this process cannot honour
-  // stops the server, rather than starting it on a default nobody asked for.
+  // A setting the operator configured and this process cannot honour stops
+  // the server, rather than starting it on a default nobody asked for.
   // Same posture the daemon already takes for a malformed allowed-origins
   // list: a silent fallback looks identical to never having configured it.
   // The first issue is reported as the field, and the rest ride along in the
   // code, so one restart teaches the operator about every bad variable.
-  const storageIssues = collectStorageEnvIssues(
+  const startupIssues = collectStartupEnvIssues(
     resolve(parsed.config.dataDir ?? resolveDefaultDataDir(env)),
     env,
   )
-  const firstIssue = storageIssues[0]
+  const firstIssue = startupIssues[0]
   if (firstIssue !== undefined) {
     return {
       kind: 'config-error',
-      code: `storage_env.${storageIssues.map((issue) => issue.variable).join(',')}`,
+      code: `startup_env.${startupIssues.map((issue) => issue.variable).join(',')}`,
       field: firstIssue.variable,
     }
   }

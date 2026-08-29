@@ -3,6 +3,7 @@ import { mkdirSync, openSync } from 'node:fs'
 import { join } from 'node:path'
 import { nanoid } from 'nanoid'
 import { DATA_DIR, WHITEBOARD_ROOT } from '../shared/data-dir-secure.js'
+import { parseOptionalMilliseconds } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { withDaemonStartupLock } from './daemon-lock.js'
 import {
@@ -125,18 +126,34 @@ async function pingDaemon(port: number, host: string): Promise<boolean> {
   }
 }
 
+export const DAEMON_STARTUP_TIMEOUT_ENV = 'WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS'
+
 // Packaged daemon cold-start (native modules, WASM, first-run migrations) can
 // exceed the 10s default on slow CI runners. WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS
-// lets such environments wait longer; an explicit option always wins, and
-// invalid values fall back to the default.
+// lets such environments wait longer; an explicit option always wins.
+//
+// A value that is present and unusable THROWS rather than falling back, per
+// `shared/env-setting.ts`: whoever set it had a slow environment in mind, and
+// silently waiting the default 10s instead answers that with the very failure
+// they were trying to avoid — and the timeout that follows names the daemon,
+// not the setting, so nothing points at the real cause. `ensureDaemon`
+// already throws on an unusable `startPort`, so this is the same shape.
+//
+// Zero is an error here rather than a meaning. Unlike the GC sweeps, where 0
+// disables the pass, a zero timeout would mean "give up before looking",
+// which nobody wants and which used to silently become 10s.
 export function resolveStartupTimeoutMs(env: NodeJS.ProcessEnv, override?: number): number {
   if (override !== undefined) return override
-  const raw = env.WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS
-  if (raw !== undefined && /^\d+$/.test(raw)) {
-    const parsed = Number(raw)
-    if (parsed > 0) return parsed
+  const parsed = parseOptionalMilliseconds(env[DAEMON_STARTUP_TIMEOUT_ENV], null)
+  if (!parsed.ok) {
+    // The value is not echoed, matching how every other setting reports.
+    throw new Error(`${DAEMON_STARTUP_TIMEOUT_ENV} ${parsed.reason}`)
   }
-  return 10_000
+  if (parsed.value === null) return 10_000
+  if (parsed.value === 0) {
+    throw new Error(`${DAEMON_STARTUP_TIMEOUT_ENV} must be greater than zero`)
+  }
+  return parsed.value
 }
 
 async function waitForDaemon(port: number, host: string, timeoutMs: number): Promise<void> {

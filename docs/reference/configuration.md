@@ -15,9 +15,16 @@ credential.
 
 This applies to the storage and durability settings
 (`WHITEBOARD_FILE_GC_INTERVAL_MS`, `WHITEBOARD_FILE_GC_GRACE_MS`,
-`WHITEBOARD_WORKSPACE_TAIL_MS`, `WHITEBOARD_DATABASE_URL`) and to
-`WHITEBOARD_ALLOWED_WEB_ORIGINS` and `WHITEBOARD_OAUTH_CLIENT_REGISTRY`, which
-already behaved this way.
+`WHITEBOARD_WORKSPACE_TAIL_MS`, `WHITEBOARD_DATABASE_URL`), to
+`WHITEBOARD_LOG_LEVEL`, to `WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS` (which fails
+the `ensureDaemon` call rather than a server boot, since that is the moment it
+is read), and to `WHITEBOARD_ALLOWED_WEB_ORIGINS` and
+`WHITEBOARD_OAUTH_CLIENT_REGISTRY`, which already behaved this way.
+
+`0` is not a blanket "off": it disables the two GC sweeps, because that is how
+you stop one without removing the variable, but it is an error for
+`WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS`, where it would mean "give up before
+looking".
 
 | Variable | Purpose | Default |
 |---|---|---|
@@ -27,6 +34,8 @@ already behaved this way.
 | `WHITEBOARD_MCP_AUTHORIZATION_SERVER(S)` | Authorization Server URL exposed in MCP Protected Resource Metadata, in preparation for remote OAuth 2.1. | unset |
 | `WHITEBOARD_MCP_RESOURCE` | Canonical MCP resource URL exposed in metadata. If unset, `/mcp` is derived from the incoming request URL. | unset |
 | `WHITEBOARD_MCP_SCOPES_SUPPORTED` | Comma-separated list of scopes exposed in metadata. | unset |
+| `WHITEBOARD_LOG_LEVEL` | Minimum severity the server emits, using the RFC 5424 names (`debug`, `info`, `notice`, `warning`, `error`, `critical`, `alert`, `emergency`). `warn` is accepted for `warning`, matching the wider Node ecosystem, and the value is case-insensitive with surrounding whitespace trimmed. Any other value **aborts startup**: it used to become `warning` silently, so an operator who set `debug` to investigate an incident got no debug output and no reason. `MCP_HTTP_DEBUG=1` lowers this to `info` on its own. Clients can also adjust their own view at runtime via MCP `logging/setLevel`. | `warning` |
+| `WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS` | How long `ensureDaemon` waits for a freshly spawned daemon to answer. Packaged cold start (native modules, WASM, first-run migrations) can exceed the default on slow CI runners. Must be a bare positive base-10 integer; a present value that is anything else — including `0`, which would mean "give up before looking" — **throws** instead of falling back, since whoever set it had a slow environment in mind and silently waiting the default would deliver the very failure they were avoiding. An explicit caller-supplied option always wins. | `10000` (10s) |
 | `MCP_HTTP_DEBUG` | When set to `1`, the HTTP MCP server logs `[mcp-http:init]` / `[mcp-http]` events to help diagnose request flow. | unset |
 | `WHITEBOARD_ALLOWED_WEB_ORIGINS` | Comma-separated list of extra hosted origins admitted alongside the fixed loopback set (`localhost`, `127.0.0.1`, `::1`) on `/api/*` CORS, `/mcp`, and WS upgrade — **local-daemon mode only**. Each entry must be an exact `https://` origin (no path/query/fragment/credentials) **or** a `https://*.example.com` wildcard subdomain pattern (see below); bare `*` is rejected. Matching is case-insensitive on the host and normalizes the default `:443` port, but any other port is significant. An invalid entry aborts daemon startup with a logged error naming the offending entry's index (the raw value is never echoed). Can also be set via a [config file](#config-file-local-daemon)'s `allowedWebOrigins` key; this env var always wins. Setting the variable — even to an empty string — replaces the default below entirely; the empty string is the explicit opt-out that restores loopback-only admission. | `https://kamiazya-whiteboard.pages.dev` (the official hosted web app) |
 | `WHITEBOARD_FILE_GC_INTERVAL_MS` | How often the background file-GC sweeper runs `purgeDanglingFiles` across every workspace (DB-registered plus upload-only workspaces found on disk). Must be a bare non-negative base-10 integer string (`/^\d+$/`); a present value that is anything else (`1.5`, `1x`, negative, scientific notation, or beyond `Number.MAX_SAFE_INTEGER`) **aborts startup** rather than silently becoming the default; blank counts as unset. Surrounding whitespace is trimmed, since it is a transport artifact of compose files and shell quoting rather than an intent. Accepted values above `2147483647` (the `setTimeout` maximum, ~24.8 days) are clamped down to that maximum. `0` disables the periodic sweep entirely — dangling files then accumulate until purged manually via the purge route. | `86400000` (24h) |

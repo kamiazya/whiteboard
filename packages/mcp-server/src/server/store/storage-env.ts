@@ -1,62 +1,24 @@
+import type { EnvIssue, ParsedSetting } from '../../shared/env-setting.js'
+import { parseOptionalMilliseconds } from '../../shared/env-setting.js'
 import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
 
 /**
- * The storage and durability settings, held to one rule.
+ * The storage and durability settings, held to the rule stated in
+ * `shared/env-setting.ts`: an unset setting takes its default, a setting that
+ * is present and cannot be understood aborts startup.
  *
- * **An unset setting takes its default; a SET setting that cannot be
- * understood aborts startup.**
- *
- * Setting a value is how an operator states a requirement. Falling back to
- * the default answers that requirement with behaviour they did not ask for,
- * and says so nowhere — the operator goes on believing the retention window
- * they configured is in force. `WHITEBOARD_FILE_GC_GRACE_MS` made the cost
- * concrete: parsed with `Number.parseInt`, `1h` meant one millisecond, and
- * the window protecting an in-flight upload was gone with no error anywhere.
- *
- * This is not a new posture for this codebase — it is the one `server/index.ts`
- * already takes for `WHITEBOARD_ALLOWED_WEB_ORIGINS` and the OAuth client
- * registry, for the reason its own comment gives: a silent fallback "would
- * look identical to 'the operator never configured it'". The storage settings
- * were never held to it and drifted into four different answers for a
- * malformed value — default, `Number.parseInt` prefix, off, and abort.
- *
- * Blank is NOT a mistake. An empty or whitespace value reads as "not
- * configured", the same way the daemon already reads an empty
- * `WHITEBOARD_DATABASE_AUTH_TOKEN`; only a non-blank value that cannot be
- * understood is an issue.
+ * This is not a new posture for this codebase — it is the one
+ * `server/index.ts` already takes for `WHITEBOARD_ALLOWED_WEB_ORIGINS` and the
+ * OAuth client registry, for the reason its own comment gives: a silent
+ * fallback "would look identical to 'the operator never configured it'". The
+ * storage settings were never held to it and had drifted into four different
+ * answers for a malformed value — default, `Number.parseInt` prefix, off, and
+ * abort.
  */
 
 export const FILE_GC_INTERVAL_ENV = 'WHITEBOARD_FILE_GC_INTERVAL_MS'
 export const FILE_GC_GRACE_ENV = 'WHITEBOARD_FILE_GC_GRACE_MS'
 export const WORKSPACE_TAIL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
-
-export type ParsedSetting<T> = { ok: true; value: T } | { ok: false; reason: string }
-
-/**
- * A setting an operator configured that this process cannot honour.
- *
- * Carries the variable NAME and a reason, never the value: these are rendered
- * to stderr and logs at startup, and a database URL can hold a credential.
- */
-export interface StorageEnvIssue {
-  variable: string
-  reason: string
-}
-
-const INTEGER_REASON = 'must be a whole number of milliseconds, with no unit suffix'
-
-/** A bare non-negative base-10 integer, or nothing at all. */
-function parseOptionalMilliseconds(
-  raw: string | undefined,
-  fallback: number | null,
-): ParsedSetting<number | null> {
-  const trimmed = raw?.trim()
-  if (trimmed === undefined || trimmed === '') return { ok: true, value: fallback }
-  if (!/^\d+$/.test(trimmed)) return { ok: false, reason: INTEGER_REASON }
-  const parsed = Number(trimmed)
-  if (!Number.isSafeInteger(parsed)) return { ok: false, reason: 'is too large to be a duration' }
-  return { ok: true, value: parsed }
-}
 
 /** How often the file-GC sweeper runs. `0` disables it. */
 export function parseFileGcIntervalMs(
@@ -96,8 +58,8 @@ export function parseWorkspaceTailMs(
 export function collectStorageEnvIssues(
   dataDir: string,
   env: NodeJS.ProcessEnv = process.env,
-): StorageEnvIssue[] {
-  const issues: StorageEnvIssue[] = []
+): EnvIssue[] {
+  const issues: EnvIssue[] = []
 
   for (const [variable, parse] of [
     [FILE_GC_INTERVAL_ENV, parseFileGcIntervalMs],
@@ -123,9 +85,4 @@ export function collectStorageEnvIssues(
   }
 
   return issues
-}
-
-/** One line per issue, safe to print: names the variable, never the value. */
-export function describeStorageEnvIssues(issues: readonly StorageEnvIssue[]): string {
-  return issues.map((issue) => `${issue.variable} ${issue.reason}`).join('; ')
 }
