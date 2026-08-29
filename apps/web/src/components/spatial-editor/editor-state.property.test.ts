@@ -69,7 +69,15 @@ import {
   type EditorCommand,
 } from './commands.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
-import { createIdleState, type GestureEvent, type GestureState, reduceGesture } from './gestures.js'
+import { carriedByGesture } from './gesture-view.js'
+import {
+  createIdleState,
+  type GestureEvent,
+  type GestureResult,
+  type GestureState,
+  reduceGesture,
+} from './gestures.js'
+import { groupEnclosure } from './node-factories.js'
 import {
   EMPTY_SELECTION,
   reduceSelection,
@@ -305,8 +313,7 @@ const COMMAND_COVERAGE = {
   'set-node-facet': 'not modelled: facet panel, a plugin-owned payload with its own tests',
   'set-node-file': 'not modelled: file picker dialog, single-field write',
   'set-node-url': 'not modelled: link URL dialog, single-field write',
-  'create-group':
-    'not modelled: group creation is geometry-derived from the selection and has its own browser tests',
+  'create-group': 'covered',
   'set-group-label': 'not modelled: group label editor, single-field write',
   'set-group-background': 'not modelled: group inspector, single-field write',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>
@@ -426,6 +433,12 @@ interface Stats {
   handEntries: number
   connectArms: number
   toolSwitches: number
+  /** Move commits that carried at least one node besides the grabbed one. */
+  carriedMoves: number
+  groupOrMultiDrags: number
+  /** Drags of a GROUP frame that carried at least one contained node. */
+  groupFrameDrags: number
+  groupsCreated: number
   /**
    * Per-member tallies behind the three ledgers above. Emissions, not
    * effects — the question these answer is "does the model ever produce
@@ -715,12 +728,24 @@ function recordStats(real: Real, before: GestureState, commands: readonly Editor
  * One editor step, composed exactly as `applyResult` composes it — see this
  * file's header for what of that function is deliberately not mirrored.
  */
-function dispatch(real: Real, event: GestureEvent, label: string): void {
+function dispatch(
+  real: Real,
+  event: GestureEvent,
+  label: string,
+  /**
+   * `handlePointerUp`'s commit-time expansion, threaded in rather than
+   * applied afterwards so a result and its followers reach `applyResult`
+   * as ONE list — which is what makes them one undo step.
+   */
+  expand?: (real: Real, before: GestureState, result: GestureResult) => readonly EditorCommand[],
+): void {
   real.stats.eventTypes[event.type] += 1
   const before = real.gesture
-  const result = reduceGesture(real.gesture, real.canvas, event, {
+  const raw = reduceGesture(real.gesture, real.canvas, event, {
     createId: () => `made-${real.nextId++}`,
   })
+  const result: GestureResult =
+    expand === undefined ? raw : { ...raw, commands: expand(real, before, raw) }
   real.gesture = result.state
   if (result.selectedId !== undefined) {
     real.selection = reduceSelection(real.selection, { type: 'set-primary', id: result.selectedId })
@@ -1027,7 +1052,59 @@ function releasePointer(real: Real, point: Point, overIndex: number | null, labe
     real,
     { type: 'pointerup', point, ...(over === undefined ? {} : { targetNodeId: over.id }) },
     label,
+    expandCarriedMoves,
   )
+}
+
+/**
+ * The reducer keeps a single-node contract, so a move that carries other
+ * nodes is expanded HERE, at commit time, exactly as `handlePointerUp`
+ * does — through the same `carriedByGesture` the ghost, the snapping and
+ * the live layers already share. Two things ride on that set: a
+ * multi-selection's extras, and a grabbed GROUP frame's geometrically
+ * contained members, minus any that are locked.
+ *
+ * The model went without this for a long time and was wrong for it: a
+ * dragged multi-selection moved only the node under the pointer, so every
+ * arrangement built on "drag a group of things" was really testing a
+ * single-node drag.
+ */
+function expandCarriedMoves(
+  real: Real,
+  before: GestureState,
+  result: GestureResult,
+): readonly EditorCommand[] {
+  const moved = result.commands.find((command) => command.kind === 'move-node')
+  if (moved === undefined || before.kind !== 'moving') return result.commands
+  const dx = moved.x - before.startX
+  const dy = moved.y - before.startY
+  const carried = carriedByGesture(real.canvas, before, real.selection.extraIds, (id) =>
+    real.lockedNodeIds.has(id),
+  )
+  const followers = [...carried]
+    .filter((id) => id !== moved.id)
+    .flatMap((id) => {
+      const node = nodeById(real.canvas, id)
+      return node === undefined
+        ? []
+        : [{ kind: 'move-node' as const, id, x: node.x + dx, y: node.y + dy }]
+    })
+  if (followers.length === 0) return result.commands
+  real.stats.carriedMoves += 1
+  if (carried.size > 1) real.stats.groupOrMultiDrags += 1
+  // Counted separately, and with its own floor, because G2 cannot see
+  // this rule break: G2 says the carried set moves rigidly, and a
+  // containment test that stopped finding members would shrink that set,
+  // which still moves rigidly.
+  //
+  // It has to count what CONTAINMENT contributed, not what the frame
+  // carried. The first version of this counter fired whenever a group was
+  // dragged with anything else selected, so the selection extras kept it
+  // green with containment disabled outright — measured, and the reason
+  // the subtraction below is here rather than a `type === 'group'` check.
+  const fromExtras = new Set([moved.id, ...real.selection.extraIds])
+  if ([...carried].some((id) => !fromExtras.has(id))) real.stats.groupFrameDrags += 1
+  return [...result.commands, ...followers]
 }
 
 class Cancel extends GestureCommand {
@@ -1255,6 +1332,30 @@ class ReplaceCanvas implements fc.Command<Model, Real> {
  * commit paths were barely being reached at all. Composing the sequence
  * into one draw is what raises those into the hundreds.
  */
+/**
+ * G2: a drag is a RIGID motion of everything it carries. Whatever
+ * `carriedByGesture` names — the grabbed node, the selection extras, a
+ * group frame's contained members — lands at exactly one shared delta.
+ *
+ * Stated over the commit rather than the preview, because the two are
+ * separate code (`liveNodesFor` draws, `expandCarriedMoves` writes) and
+ * the failure this guards is them disagreeing: the ghost showing a group
+ * travelling and the drop leaving half of it behind.
+ */
+function checkRigidMotion(
+  real: Real,
+  before: SpatialCanvas,
+  carried: ReadonlySet<string>,
+  label: string,
+): void {
+  const deltas = [...carried].flatMap((id) => {
+    const was = before.nodes.find((n) => n.id === id)
+    const now = nodeById(real.canvas, id)
+    return was === undefined || now === undefined ? [] : [`${now.x - was.x},${now.y - was.y}`]
+  })
+  expect(new Set(deltas).size, `G2 carried set did not move rigidly after ${label}`).toBeLessThan(2)
+}
+
 class DragNode implements fc.Command<Model, Real> {
   constructor(
     private readonly index: number,
@@ -1269,8 +1370,17 @@ class DragNode implements fc.Command<Model, Real> {
     if (node === undefined) return
     const to = { x: this.from.x + this.delta.x, y: this.from.y + this.delta.y }
     pressNode(real, node.id, this.from, this.toString())
+    const gesture = real.gesture
+    const carried =
+      gesture.kind === 'moving'
+        ? carriedByGesture(real.canvas, gesture, real.selection.extraIds, (id) =>
+            real.lockedNodeIds.has(id),
+          )
+        : new Set<string>()
+    const before = real.canvas
     dispatch(real, { type: 'pointermove', point: to }, `${this.toString()}:move`)
     releasePointer(real, to, null, `${this.toString()}:up`)
+    if (carried.size > 0) checkRigidMotion(real, before, carried, this.toString())
   }
   toString(): string {
     return `drag(#${this.index},+${this.delta.x},+${this.delta.y})`
@@ -1447,6 +1557,13 @@ class Reorder implements fc.Command<Model, Real> {
     if (!inSelectTool(real)) return
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
+    // The ledger tally goes with the KEY PRESS, not with the effect. The
+    // two answer different questions and this one had them crossed:
+    // pressing `]` on a block already at the front exercises the binding
+    // even though the canvas does not move, and tallying after the
+    // early-return made one of the four placements read as uncovered in
+    // one run of four. The effect counters below stay where they are.
+    tallyShortcut(real, `reorder-${this.placement}`)
     const before = real.canvas
     dispatchCommands(
       real,
@@ -1454,7 +1571,6 @@ class Reorder implements fc.Command<Model, Real> {
       this.toString(),
     )
     if (real.canvas === before) return
-    tallyShortcut(real, `reorder-${this.placement}`)
     real.stats.reordersEffective += 1
     if (this.placement === 'forward' || this.placement === 'backward') {
       real.stats.stepReordersEffective += 1
@@ -1945,6 +2061,88 @@ class WithTool implements fc.Command<Model, Real> {
   }
 }
 
+/**
+ * Frame the current selection: a group node at the enclosing box plus
+ * padding, which becomes the selection. The frame therefore CONTAINS what
+ * it was made from, so a later drag of it carries them — the one
+ * arrangement in which the containment rule has anything to do, and one a
+ * random sequence would otherwise have to build by luck out of a palette
+ * frame and nodes that happened to land inside it.
+ */
+class GroupSelection implements fc.Command<Model, Real> {
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection).flatMap((id) => {
+      const node = nodeById(real.canvas, id)
+      return node === undefined ? [] : [node]
+    })
+    const frame = groupEnclosure(members)
+    if (frame === undefined) return
+    const id = `group-${real.nextId++}`
+    dispatchCommands(
+      real,
+      [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
+      this.toString(),
+    )
+    real.selection = reduceSelection(real.selection, { type: 'set-primary', id })
+    real.selectedEdgeId = null
+    real.selection = reduceSelection(real.selection, { type: 'collapse-extras' })
+    real.stats.groupsCreated += 1
+    settle(real)
+  }
+  toString(): string {
+    return 'groupSelection'
+  }
+}
+
+/**
+ * A drag that CARRIES something — the only kind in which the commit-time
+ * expansion runs at all.
+ *
+ * Both routes to it are conjunctions a uniform draw does not reach: the
+ * multi route needs the pressed node to already be a member (a press on a
+ * non-member collapses the set, so a random index almost always drags
+ * alone), and the group route needs the grabbed node to be a frame that
+ * geometrically contains others. Measured: 0 carried moves per 300 runs
+ * before this command existed, with the expansion freshly written and
+ * every other counter healthy — which is exactly the arrangement the
+ * effect counters exist to expose.
+ */
+class DragCarrying implements fc.Command<Model, Real> {
+  constructor(
+    private readonly mode: 'multi' | 'group',
+    private readonly delta: Point,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    new SwitchTool('select').run(model, real)
+    new SelectAll().run(model, real)
+    if (this.mode === 'group') new GroupSelection().run(model, real)
+    const members = selectionMembers(real.selection)
+    const grabbed = members[0] === undefined ? undefined : nodeById(real.canvas, members[0])
+    if (grabbed === undefined) return
+    const from = { x: grabbed.x, y: grabbed.y }
+    const to = { x: from.x + this.delta.x, y: from.y + this.delta.y }
+    pressNode(real, grabbed.id, from, this.toString())
+    const gesture = real.gesture
+    if (gesture.kind !== 'moving') return
+    const carried = carriedByGesture(real.canvas, gesture, real.selection.extraIds, (id) =>
+      real.lockedNodeIds.has(id),
+    )
+    const before = real.canvas
+    dispatch(real, { type: 'pointermove', point: to }, `${this.toString()}:move`)
+    releasePointer(real, to, null, `${this.toString()}:up`)
+    checkRigidMotion(real, before, carried, this.toString())
+  }
+  toString(): string {
+    return `dragCarrying(${this.mode},+${this.delta.x},+${this.delta.y})`
+  }
+}
+
 const indexArb = fc.nat({ max: 3 })
 const pointArb: fc.Arbitrary<Point> = fc.record({
   x: fc.integer({ min: -40, max: 300 }),
@@ -2061,6 +2259,10 @@ const allCommands = [
   fc
     .tuple(fc.constantFrom<'hand' | 'connect'>('hand', 'connect'), indexArb, indexArb)
     .map(([t, from, to]) => new WithTool(t, from, to)),
+  fc.constant(new GroupSelection()),
+  fc
+    .tuple(fc.constantFrom<'multi' | 'group'>('multi', 'group'), nonZeroDeltaArb)
+    .map(([mode, delta]) => new DragCarrying(mode, delta)),
 ]
 
 describe('editor composite state (command-based)', () => {
@@ -2091,6 +2293,10 @@ describe('editor composite state (command-based)', () => {
     handEntries: 0,
     connectArms: 0,
     toolSwitches: 0,
+    carriedMoves: 0,
+    groupOrMultiDrags: 0,
+    groupFrameDrags: 0,
+    groupsCreated: 0,
     commandKinds: emptyTally(COMMAND_COVERAGE),
     eventTypes: emptyTally(GESTURE_EVENT_COVERAGE),
     shortcutIds: emptyTally(SHORTCUT_COVERAGE),
@@ -2122,68 +2328,87 @@ describe('editor composite state (command-based)', () => {
 
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each sits well under the minimum measured across five
-    // consecutive runs — moves 25-47, resizes 34-55, connects 37-52,
-    // deletes 20-56, text edits opened 73-87, pending-text handoffs
-    // 18-35, mid-gesture external replacements 20-30, multi-selections
-    // 124-204, nudges 39-73, duplicates 12-20, effective reorders 20-33
-    // (of which forward/backward 8-13), locks applied 12-19, select-alls
-    // 35-49, edge selections 42-66, edge deletes 10-21, copies 23-29,
-    // cuts 38-61, cut-moves 6-17, paste-inserts 27-44, reconnections 5-7,
-    // marquee selections 12-19, hand-swallowed presses 37-53, hand
-    // entries 33-43, connect arms 23-59, tool switches 88-122.
+    // reject. Each sits at roughly a third of the minimum measured across
+    // five consecutive runs — moves 296-404, resizes 49-68, connects
+    // 56-89, deletes 50-82, text edits opened 117-129, pending-text
+    // handoffs 33-44, mid-gesture external replacements 39-54,
+    // multi-selections 430-515, nudges 70-98, duplicates 18-30, effective
+    // reorders 43-54 (of which forward/backward 16-24), locks applied
+    // 15-28, select-alls 119-139, edge selections 83-95, edge deletes
+    // 19-34, copies 33-46, cuts 53-72, cut-moves 13-20, paste-inserts
+    // 38-59, reconnections 8-13, marquee selections 23-30,
+    // hand-swallowed presses 53-70, hand entries 43-56, connect arms
+    // 44-68, tool switches 185-220, carried moves 57-80, group-or-multi
+    // drags 57-80, group-frame drags 27-40, groups created 53-65.
     //
-    // Two rules, both learned by getting them wrong here.
+    // Three rules, all learned by getting them wrong here.
     //
-    // Count EFFECTS, not attempts. `reorders` counted attempts and read
-    // as green while forward/backward were doing nothing at all, because
-    // the fixture's nodes never overlapped.
+    // Count EFFECTS, not attempts, for "did this code run" — `reorders`
+    // counted attempts and read as green while forward/backward were
+    // doing nothing at all, because the fixture's nodes never overlapped.
+    // But count ATTEMPTS for "does the model press this key": the
+    // reorder shortcut tally was effect-gated and one of its four
+    // placements read as uncovered in one run of four.
+    //
+    // Count the RIGHT effect. `groupFrameDrags` first counted any frame
+    // dragged alongside a selection, which the extras kept green with
+    // production containment disabled outright.
     //
     // Re-measure when adding a command, widening the document generator,
     // or making the model MORE faithful, because all three dilute every
-    // existing counter. The keyboard half took mid-gesture external
-    // replacements from 9-19 to 4-13; four generated node types quartered
-    // the text-node share T1 feeds on; and gating the select-only
-    // shortcuts on the tool cut every one of them again. Nine
-    // arrangements proved dilute enough to need a command of their own
-    // rather than a lowered floor, and two needed a biased pick as well.
-    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(12)
+    // existing counter. `numRuns` went 300 -> 500 when the command set
+    // reached thirty kinds and two counters started landing ON their
+    // floor: the arrangements were still being reached, so that was
+    // variance rather than vacuity, and more runs is the honest lever for
+    // variance. It costs about three seconds.
+    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(100)
     expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(18)
     expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(20)
-    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(8)
-    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(35)
-    expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(8)
+    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(18)
+    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(40)
+    expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(
+      12,
+    )
     expect(
       stats.externalReplacementsMidGesture,
       'external replacements barely landed mid-gesture',
-    ).toBeGreaterThan(10)
-    expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(50)
-    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(18)
-    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(5)
-    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(8)
+    ).toBeGreaterThan(14)
+    expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(150)
+    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(25)
+    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(6)
+    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(15)
     expect(
       stats.stepReordersEffective,
       'forward/backward never stepped over an overlapping node',
-    ).toBeGreaterThan(4)
+    ).toBeGreaterThan(5)
     expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(5)
-    expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(15)
-    expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(20)
-    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(4)
-    expect(stats.copies, 'Cmd+C barely reached').toBeGreaterThan(10)
-    expect(stats.cuts, 'Cmd+X barely reached').toBeGreaterThan(15)
-    expect(stats.cutMoves, 'no paste resolved as a same-canvas move').toBeGreaterThan(3)
+    expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(40)
+    expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(28)
+    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(6)
+    expect(stats.copies, 'Cmd+C barely reached').toBeGreaterThan(11)
+    expect(stats.cuts, 'Cmd+X barely reached').toBeGreaterThan(18)
+    expect(stats.cutMoves, 'no paste resolved as a same-canvas move').toBeGreaterThan(4)
     expect(stats.pasteInserts, 'no paste inserted a copy').toBeGreaterThan(12)
-    expect(stats.reconnections, 'no cut surface was ever reconnected').toBeGreaterThan(1)
-    expect(stats.marqueeSelections, 'no marquee ever gathered a node').toBeGreaterThan(5)
-    expect(stats.handPressesIgnored, 'hand mode never swallowed a press').toBeGreaterThan(12)
-    expect(stats.handEntries, 'hand mode was never entered').toBeGreaterThan(12)
-    expect(stats.connectArms, 'the connect tool never armed').toBeGreaterThan(10)
-    expect(stats.toolSwitches, 'the tool never changed').toBeGreaterThan(30)
+    expect(stats.reconnections, 'no cut surface was ever reconnected').toBeGreaterThan(2)
+    expect(stats.marqueeSelections, 'no marquee ever gathered a node').toBeGreaterThan(7)
+    expect(stats.handPressesIgnored, 'hand mode never swallowed a press').toBeGreaterThan(17)
+    expect(stats.handEntries, 'hand mode was never entered').toBeGreaterThan(14)
+    expect(stats.connectArms, 'the connect tool never armed').toBeGreaterThan(14)
+    expect(stats.toolSwitches, 'the tool never changed').toBeGreaterThan(60)
+    expect(stats.carriedMoves, 'no drag ever carried a second node').toBeGreaterThan(18)
+    expect(stats.groupOrMultiDrags, 'no group or multi-selection was ever dragged').toBeGreaterThan(
+      18,
+    )
+    expect(
+      stats.groupFrameDrags,
+      'a dragged group frame never carried anything it contained',
+    ).toBeGreaterThan(9)
+    expect(stats.groupsCreated, 'no group frame was ever made from a selection').toBeGreaterThan(17)
   })
 
   fcTest.prop(
     [initialCanvasArb, fc.commands(allCommands, { maxCommands: 24 })],
-    withDefaults({ numRuns: 300 }),
+    withDefaults({ numRuns: 500 }),
   )(
     'canvas, gesture and selection stay mutually coherent under any operation sequence',
     (startCanvas, commands) => {
