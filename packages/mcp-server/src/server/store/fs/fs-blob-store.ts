@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, readFile, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import type {
   BlobDeleteInput,
@@ -13,6 +13,7 @@ import type {
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
+import { writeFileAtomic } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
 import { corruptStoredData, isMissingFileError } from '../corrupt-stored-data.js'
 import { assertPathWithinDir } from '../path-guard.js'
@@ -46,8 +47,10 @@ function errorMessage(error: unknown): string {
  */
 export class FsBlobStore implements BlobStore {
   private readonly blobsDir: string
+  private readonly baseDir: string
 
   constructor(baseDir: string) {
+    this.baseDir = baseDir
     this.blobsDir = join(baseDir, 'blobs')
   }
 
@@ -69,7 +72,13 @@ export class FsBlobStore implements BlobStore {
       contentType: input.contentType,
     }
     await mkdir(this.shardDirForRef(ref), { recursive: true })
-    await writeFile(filePath, JSON.stringify(envelope), 'utf8')
+    // Atomic, because `put` is idempotent by design: the store is
+    // content-addressed, so rewriting an existing blob is ordinary — a
+    // re-uploaded image, or two people uploading the same file. A plain
+    // write leaves it short for the duration, and `get` correctly refuses a
+    // truncated envelope. Measured on a 6 MiB blob: 8 reads during 8
+    // re-puts, every one threw.
+    await writeFileAtomic(this.baseDir, filePath, JSON.stringify(envelope))
     return { ref }
   }
 

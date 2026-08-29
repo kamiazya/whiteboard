@@ -1,42 +1,62 @@
 import { lstat } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { hasAncestorSymlink } from '../server/backup-restore.js'
-import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
-import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
-import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
+import { withBackupMarker } from '../server/store/backup-in-progress.js'
+import {
+  DB_FILENAME,
+  databaseIsInsideDataDir,
+  dataDirHasDatabaseFile,
+} from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { snapshotDatabaseInto } from '../server/store/db/snapshot.js'
 import type { ServerBackupArgs } from './server-backup-args.js'
 
 export interface RunServerBackupOptions {
   args: ServerBackupArgs & { kind: 'ok' }
   env?: NodeJS.ProcessEnv
-  isPidAlive?: (pid: number) => boolean
-  doReadRecord?: (dataDir: string) => ServerModeRecordReadResult
   doBackup?: (src: string, dest: string, opts: BackupRestoreOptions) => Promise<void>
+  doSnapshot?: (dataDir: string, destPath: string) => Promise<void>
 }
 
 export type ServerBackupOutcome =
   | { kind: 'ok'; result: ServerBackupResult }
-  | { kind: 'running-server' }
-  | { kind: 'external-database' }
+  | { kind: 'missing-database' }
   | { kind: 'invalid-output-path' }
   | { kind: 'error'; message: string }
 
+/**
+ * What one store can say about a backup that has just been taken.
+ *
+ * `hosted-elsewhere` is a real answer rather than a failure (ADR-0021
+ * decision 2). When the rows live in a libSQL server, that server's operator
+ * already has point-in-time recovery, replicas and a retention policy;
+ * reimplementing those would be worse than what it duplicates and would have
+ * to be maintained against every provider. Saying so plainly is what stops
+ * the operator trusting a copy that cannot restore them.
+ */
+type StoreDurability = { captured: true } | { captured: false; reason: 'hosted-elsewhere' }
+
 interface ServerBackupResult {
-  schemaVersion: 1
+  schemaVersion: 2
   ok: true
   operation: 'backup'
-}
-
-function defaultIsPidAlive(pid: number): boolean {
-  try {
-    process.kill(pid, 0)
-    return true
-  } catch {
-    return false
+  /**
+   * Per store, because one boolean cannot answer this once a deployment can
+   * keep its stores in different places. The previous shape reported
+   * `ok: true` for a directory copy and had no way to say that the rows were
+   * somewhere else — which is exactly how a backup of blobs alone was once
+   * reported as a success.
+   *
+   * `ok` remains, and remains true here: the operation did what it is
+   * responsible for. What it no longer claims is COMPLETENESS, which is what
+   * `stores` is for.
+   */
+  stores: {
+    database: StoreDurability
+    blobs: StoreDurability
   }
 }
 
@@ -46,20 +66,23 @@ export async function runServerBackup(
   const {
     args,
     env = process.env,
-    isPidAlive = defaultIsPidAlive,
-    doReadRecord = readServerModeRecord,
     doBackup = backupServerModeDataDir,
+    doSnapshot = snapshotDatabaseInto,
   } = options
 
   const dataDir = resolve(args.dataDir ?? resolveDefaultDataDir(env))
   const outputDir = resolve(args.outputDir)
 
-  // Refuse to backup a live server's data directory.
-  const record = doReadRecord(dataDir)
-  if (record.kind === 'ok' && isPidAlive(record.record.pid)) {
-    return { kind: 'running-server' }
-  }
-
+  // A running server is no longer a refusal (ADR-0021 decision 3). "A backup
+  // requiring downtime is one an operator takes rarely or never, and the
+  // interval between backups is the data they lose."
+  //
+  // Two things had to be true first, and both are. The rows are captured
+  // through the database (`VACUUM INTO`) rather than by reading its bytes out
+  // from under a writer, and every write into the data directory now lands
+  // atomically, so a copy cannot pick up a half-written blob or upload. The
+  // third — that nothing DELETES while the copy runs — is the marker below.
+  //
   // Refuse when the rows are not in the directory being copied. This command
   // copies a directory, so a database configured to live anywhere else is
   // simply absent from the result — and reporting success over blobs alone
@@ -115,22 +138,72 @@ export async function runServerBackup(
   // sitting there, so the artifact check stays in force underneath it.
   const recorded = await readDatabaseLocationRecord(dataDir)
   const configuredInside = recorded?.inDataDir ?? databaseIsInsideDataDir(dataDir, env)
-  if (!configuredInside || !(await dataDirHasDatabaseFile(dataDir))) {
-    return { kind: 'external-database' }
+  const databaseFilePresent = await dataDirHasDatabaseFile(dataDir)
+
+  // The two answers together classify the deployment, and only one of the
+  // four combinations is a refusal.
+  //
+  // Rows here and present, or rows elsewhere (with or without a fossil left
+  // behind), are all deployments this command can serve — it simply captures
+  // a different set of stores. But "the rows belong in this directory" and
+  // "this directory has no rows" cannot both hold for a working deployment,
+  // so that pair is a broken data directory rather than a partial backup, and
+  // copying it would produce something restore could not use.
+  if (configuredInside && !databaseFilePresent) {
+    return { kind: 'missing-database' }
   }
 
-  try {
-    await doBackup(dataDir, outputDir, {
-      // dirname is non-tautological: the helper's assertWithinAllowed verifies
-      // outputDir against its parent, not against itself.
-      allowedRoots: [dataDir, dirname(outputDir)],
-    })
-  } catch {
-    return { kind: 'error', message: 'backup failed' }
-  }
+  // Held across BOTH steps, because a backup is a snapshot plus a copy and
+  // those are two moments. A file-GC pass unlinking between them removes a
+  // file the snapshot still references, and the backup restores to a document
+  // pointing at nothing — silently, since every step reported success. That
+  // is ADR-0021 decision 6's far end in the shape this system has today.
+  return withBackupMarker(dataDir, async () => {
+    try {
+      await doBackup(dataDir, outputDir, {
+        // dirname is non-tautological: the helper's assertWithinAllowed verifies
+        // outputDir against its parent, not against itself.
+        allowedRoots: [dataDir, dirname(outputDir)],
+        // The database never travels as FILES, whoever owns it.
+        //
+        // When it is ours the snapshot below carries it, and carries it better:
+        // a copy would have to take `whiteboard.db`, `-wal` and `-shm` as one
+        // artifact, while a snapshot is a single file with the WAL already
+        // folded in. When it is not ours, any file of that name is a fossil
+        // from before the move, and copying it would put pre-migration rows in
+        // the backup for restore to put back as current.
+        excludeDatabaseFile: true,
+      })
+    } catch {
+      return { kind: 'error', message: 'backup failed' }
+    }
 
-  return {
-    kind: 'ok',
-    result: { schemaVersion: 1, ok: true, operation: 'backup' },
-  }
+    // Ordered after the copy because the copy requires an empty destination,
+    // and `VACUUM INTO` refuses to overwrite. Neither can go first twice.
+    if (configuredInside) {
+      try {
+        await doSnapshot(dataDir, join(outputDir, DB_FILENAME))
+      } catch {
+        // A snapshot that failed must fail the BACKUP. Reporting success over a
+        // directory holding blobs and no rows is precisely the defect this area
+        // exists to remove, and it would arrive by simply not checking.
+        return { kind: 'error', message: 'backup failed' }
+      }
+    }
+
+    return {
+      kind: 'ok',
+      result: {
+        schemaVersion: 2,
+        ok: true,
+        operation: 'backup',
+        stores: {
+          database: configuredInside
+            ? { captured: true }
+            : { captured: false, reason: 'hosted-elsewhere' },
+          blobs: { captured: true },
+        },
+      },
+    }
+  })
 }

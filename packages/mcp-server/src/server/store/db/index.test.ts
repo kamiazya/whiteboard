@@ -1,6 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { createClient } from '@libsql/client'
 import { sql } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -352,5 +353,94 @@ describe('the database location record getDb leaves behind', () => {
     } finally {
       vi.unstubAllEnvs()
     }
+  })
+})
+
+/**
+ * ADR-0021 decision 3 wants the rows captured by a hot snapshot, so a backup
+ * stops requiring downtime — "a backup requiring downtime is one an operator
+ * takes rarely or never, and the interval between backups is the data they
+ * lose."
+ *
+ * That decision has an unstated prerequisite. `whiteboard server backup` runs
+ * as a SEPARATE process from the daemon, host-side, so it opens its own
+ * connection to the same file. Under SQLite's default rollback journal a
+ * writer holds an exclusive lock and that second connection cannot read at
+ * all. Measured cross-process, three snapshot attempts during a writing loop:
+ *
+ *     journal_mode=delete -> SQLITE_BUSY: database is locked   (3 of 3)
+ *     journal_mode=wal    -> ok in 9/17/22 ms, integrity ok    (3 of 3)
+ *
+ * The ADR's own measurement was taken on the writing connection itself, where
+ * the locks are already held and nothing contends. So WAL is what decision 3
+ * actually rests on, and this is where it is turned on.
+ *
+ * The trade it makes is one this deployment has already accepted: WAL does
+ * not work over a network filesystem, and neither does the SQLite locking
+ * this store depends on regardless (ADR-0020 sends multi-instance deployments
+ * to a libSQL server instead).
+ */
+describe('the journal mode a database is opened in', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-journal-test-'))
+    clearDbCache()
+    clearPrepareCache()
+  })
+
+  afterEach(async () => {
+    await closeDb(tempDir).catch(() => {})
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('keeps serving writes while a second connection holds a snapshot open', async () => {
+    // getDb creates the file, and the journal mode lives in the file.
+    const db = await getDb(tempDir)
+    await sql`create table probe (i integer primary key, v text)`.execute(db)
+
+    const dbPath = join(tempDir, 'whiteboard.db')
+    const backup = createClient({ url: `file:${dbPath}` })
+    const server = createClient({ url: `file:${dbPath}` })
+    try {
+      // A backup reading the database: a read transaction held open for as
+      // long as the snapshot takes.
+      await backup.execute('begin')
+      await backup.execute('select count(*) from probe')
+
+      // The daemon, meanwhile, serving somebody's edit. Under a rollback
+      // journal this raises SQLITE_BUSY — the reader's SHARED lock blocks the
+      // EXCLUSIVE the commit needs, so taking a backup stops the product
+      // working. Under WAL readers and writers do not block each other.
+      await server.execute('begin immediate')
+      await server.execute({ sql: 'insert into probe (v) values (?)', args: ['served'] })
+      await server.execute('commit')
+
+      await backup.execute('commit')
+      const after = await server.execute('select count(*) as n from probe')
+      expect(Number(after.rows[0].n)).toBe(1)
+    } finally {
+      backup.close()
+      server.close()
+    }
+  })
+
+  /**
+   * Asserted directly as well as through the behaviour above, because the
+   * behaviour test cannot reach the OTHER half of what WAL buys: a host-side
+   * backup process taking `VACUUM INTO` while the daemon writes. That is
+   * genuinely cross-process and timing-dependent — measured with a tight
+   * writing loop in a separate process, three attempts each way:
+   *
+   *     journal_mode=delete -> SQLITE_BUSY: database is locked   (3 of 3)
+   *     journal_mode=wal    -> ok in 9/17/22 ms, integrity ok    (3 of 3)
+   *
+   * An in-process version of that proves nothing and looks identical: one
+   * event loop serialises the two, so the snapshot slips between writes and
+   * never meets a held lock. That version of this test passed against the
+   * unfixed code.
+   */
+  it('records WAL in the file, which is what a separate process reads', async () => {
+    const db = await getDb(tempDir)
+    const mode = await sql<{ journal_mode: string }>`pragma journal_mode`.execute(db)
+    expect(mode.rows[0]?.journal_mode).toBe('wal')
   })
 })
