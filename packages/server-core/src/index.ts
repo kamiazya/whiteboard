@@ -49,6 +49,7 @@ export {
 export {
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundError,
+  WorkspaceSegmentUnusableError,
 } from './tools/document-crud.errors.js'
 export {
   wbDocumentCreate,

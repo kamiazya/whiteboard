@@ -1,26 +1,7 @@
 import {
   createServer,
-  createWorkspaceEditTool,
   type ServerDeps,
   setLogSink as setServerCoreLogSink,
-  WB_DOCUMENT_CREATE_DESCRIPTION,
-  WB_DOCUMENT_DELETE_DESCRIPTION,
-  WB_DOCUMENT_LIST_DESCRIPTION,
-  WB_DOCUMENT_RESOLVE_DESCRIPTION,
-  wbDocumentCreate,
-  wbDocumentCreateInputSchema,
-  wbDocumentCreateOutputSchema,
-  wbDocumentDelete,
-  wbDocumentDeleteInputSchema,
-  wbDocumentDeleteOutputSchema,
-  wbDocumentList,
-  wbDocumentListInputSchema,
-  wbDocumentListOutputSchema,
-  wbDocumentResolve,
-  wbDocumentResolveInputSchema,
-  wbDocumentResolveOutputSchema,
-  workspaceEditInputSchema,
-  workspaceEditOutputSchema,
 } from '@kamiazya/whiteboard-server-core'
 import type { McpServer } from '@modelcontextprotocol/server'
 import { getLogger } from '../log.js'
@@ -308,77 +289,79 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
   // have to be wrapped in an ops array to happen.
   registerToolWithAnnotations(
     server,
-    'wb_workspace_edit',
+    tools.workspaceEdit.name,
     {
-      description: createWorkspaceEditTool(deps).description,
-      inputSchema: workspaceEditInputSchema,
-      outputSchema: workspaceEditOutputSchema,
+      description: tools.workspaceEdit.description,
+      inputSchema: tools.workspaceEdit.inputSchema,
+      outputSchema: tools.workspaceEdit.outputSchema,
     },
     async (args) => {
-      const result = await createWorkspaceEditTool(deps).execute(
-        workspaceEditInputSchema.parse(args),
+      const result = await tools.workspaceEdit.execute(tools.workspaceEdit.inputSchema.parse(args))
+      return structuredJsonResult(result)
+    },
+  )
+
+  // Document CRUD. These have no Hono route counterpart registered here, but
+  // they still come from `createServer`'s tool record rather than from the
+  // bare operations, so the handle resolution that record carries applies.
+  registerToolWithAnnotations(
+    server,
+    tools.documentCreate.name,
+    {
+      description: tools.documentCreate.description,
+      inputSchema: tools.documentCreate.inputSchema,
+      outputSchema: tools.documentCreate.outputSchema,
+    },
+    async (args) => {
+      const result = await tools.documentCreate.execute(
+        tools.documentCreate.inputSchema.parse(args),
       )
       return structuredJsonResult(result)
     },
   )
 
-  // Canvas CRUD (wired as standalone MCP tools, not through createServer's Hono routes)
   registerToolWithAnnotations(
     server,
-    'wb_document_create',
+    tools.documentList.name,
     {
-      description: WB_DOCUMENT_CREATE_DESCRIPTION,
-      inputSchema: wbDocumentCreateInputSchema,
-      outputSchema: wbDocumentCreateOutputSchema,
+      description: tools.documentList.description,
+      inputSchema: tools.documentList.inputSchema.shape,
+      outputSchema: tools.documentList.outputSchema,
     },
     async (args) => {
-      const parsed = wbDocumentCreateInputSchema.parse(args)
-      const result = await wbDocumentCreate(deps, parsed)
+      const result = await tools.documentList.execute(tools.documentList.inputSchema.parse(args))
       return structuredJsonResult(result)
     },
   )
 
   registerToolWithAnnotations(
     server,
-    'wb_document_list',
+    tools.documentResolve.name,
     {
-      description: WB_DOCUMENT_LIST_DESCRIPTION,
-      inputSchema: wbDocumentListInputSchema.shape,
-      outputSchema: wbDocumentListOutputSchema,
+      description: tools.documentResolve.description,
+      inputSchema: tools.documentResolve.inputSchema.shape,
+      outputSchema: tools.documentResolve.outputSchema,
     },
     async (args) => {
-      const parsed = wbDocumentListInputSchema.parse(args)
-      const result = await wbDocumentList(deps, parsed)
+      const result = await tools.documentResolve.execute(
+        tools.documentResolve.inputSchema.parse(args),
+      )
       return structuredJsonResult(result)
     },
   )
 
   registerToolWithAnnotations(
     server,
-    'wb_document_resolve',
+    tools.documentDelete.name,
     {
-      description: WB_DOCUMENT_RESOLVE_DESCRIPTION,
-      inputSchema: wbDocumentResolveInputSchema.shape,
-      outputSchema: wbDocumentResolveOutputSchema,
+      description: tools.documentDelete.description,
+      inputSchema: tools.documentDelete.inputSchema.shape,
+      outputSchema: tools.documentDelete.outputSchema,
     },
     async (args) => {
-      const parsed = wbDocumentResolveInputSchema.parse(args)
-      const result = await wbDocumentResolve(deps, parsed)
-      return structuredJsonResult(result)
-    },
-  )
-
-  registerToolWithAnnotations(
-    server,
-    'wb_document_delete',
-    {
-      description: WB_DOCUMENT_DELETE_DESCRIPTION,
-      inputSchema: wbDocumentDeleteInputSchema.shape,
-      outputSchema: wbDocumentDeleteOutputSchema,
-    },
-    async (args) => {
-      const parsed = wbDocumentDeleteInputSchema.parse(args)
-      const result = await wbDocumentDelete(deps, parsed)
+      const result = await tools.documentDelete.execute(
+        tools.documentDelete.inputSchema.parse(args),
+      )
       return structuredJsonResult(result)
     },
   )

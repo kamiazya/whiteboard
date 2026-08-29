@@ -228,7 +228,7 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   // makes it an explicit flag, and a flag nothing exercises is a flag that
   // gets dropped — removing `createWorkspace: true` left every other case in
   // this file green.
-  it('creates the workspace on the way past, as this surface always has', async () => {
+  it('creates the workspace on the way past, keyed canonically with the posted handle as its segment', async () => {
     const { deps } = await depsRecordingCreate(false)
     const app = createWorkspacesRouter({ serverDeps: deps })
 
@@ -239,7 +239,18 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
     })
 
     expect(res.status).toBe(200)
-    const entries = await deps.documentIndex.listDocuments({ workspaceId: 'ws-1' })
+    // This surface has always created the workspace on the way past. What
+    // ADR-0019 changes is WHICH id it gets: the server mints a canonical one
+    // and files `ws-1` as the segment, so the caller's address keeps working
+    // through segment-first resolution while the id underneath is canonical.
+    const workspaces = await deps.documentIndex.listWorkspaces()
+    expect(workspaces).toHaveLength(1)
+    expect(workspaces[0]?.workspaceId).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+    expect(workspaces[0]?.segment).toBe('ws-1')
+
+    const entries = await deps.documentIndex.listDocuments({
+      workspaceId: workspaces[0]?.workspaceId ?? '',
+    })
     expect(entries.map((e) => e.path)).toEqual(['first-ever'])
   })
 

@@ -238,14 +238,23 @@ try {
 
   // /api/workspaces only returns workspace rows the daemon has
   // observed. After the canvas POST above the workspace row is
-  // present, so the listing must include our seeded id.
+  // present, so the listing must include the workspace we seeded.
+  //
+  // Found by its SEGMENT, not by `WORKSPACE_ID` as an id: under ADR-0019's
+  // mint boundary the POST above filed that string as the new workspace's
+  // segment and keyed the row by a canonical ULID the daemon chose. The
+  // canonical id is captured here because the backup/restore assertions
+  // below are about the ROW surviving, which is an id-level claim — while
+  // every request in this smoke keeps addressing the workspace by the same
+  // segment, which is the half that must not change.
   const wsListA = await (await authedFetch(daemonA, '/api/workspaces')).json()
-  const workspaceIdsA = (wsListA?.workspaces ?? []).map((w) => w.workspaceId)
-  if (!workspaceIdsA.includes(WORKSPACE_ID)) {
+  const seededA = (wsListA?.workspaces ?? []).find((w) => w.segment === WORKSPACE_ID)
+  if (seededA === undefined) {
     throw new Error(
-      `seeded workspaceId not present in daemon A list: ${JSON.stringify(workspaceIdsA)}`,
+      `no workspace with segment ${WORKSPACE_ID} in daemon A list: ${JSON.stringify(wsListA?.workspaces ?? [])}`,
     )
   }
+  const seededWorkspaceId = seededA.workspaceId
 
   const seededList = await (
     await authedFetch(daemonA, `/api/workspaces/${encodeURIComponent(WORKSPACE_ID)}/documents`)
@@ -254,7 +263,9 @@ try {
   if (!seededPaths.includes(SEED_CANVAS_PATH)) {
     throw new Error(`seeded canvas not present after POST: ${JSON.stringify(seededPaths)}`)
   }
-  console.log(`[packaged-daemon-backup-restore-smoke] seeded workspaceId → ${WORKSPACE_ID}`)
+  console.log(
+    `[packaged-daemon-backup-restore-smoke] seeded workspaceId → ${seededWorkspaceId} (segment ${WORKSPACE_ID})`,
+  )
 
   // Capture the canvas Loro snapshot through daemon A's HTTP route
   // BEFORE stopping it. The route reads from
@@ -372,12 +383,16 @@ try {
     throw new Error(`daemon B status pid ${statusB.pid} !== spawned ${daemonB.child.pid}`)
   }
 
-  // The restored DB must surface the same workspace + canvas.
+  // The restored DB must surface the same workspace + canvas. Asserted on
+  // the CANONICAL id daemon A minted, not merely on the segment: a restore
+  // that re-created the workspace under a fresh id would satisfy a
+  // segment-only check while having lost the row this smoke exists to
+  // round-trip.
   const wsListB = await (await authedFetch(daemonB, '/api/workspaces')).json()
   const workspaceIdsB = (wsListB?.workspaces ?? []).map((w) => w.workspaceId)
-  if (!workspaceIdsB.includes(WORKSPACE_ID)) {
+  if (!workspaceIdsB.includes(seededWorkspaceId)) {
     throw new Error(
-      `restored daemon does not surface seeded workspaceId ${WORKSPACE_ID}: ${JSON.stringify(workspaceIdsB)}`,
+      `restored daemon does not surface seeded workspaceId ${seededWorkspaceId}: ${JSON.stringify(workspaceIdsB)}`,
     )
   }
   const restoredCanvases = await (
@@ -388,7 +403,7 @@ try {
     throw new Error(`restored daemon missing seeded canvas: ${JSON.stringify(restoredPaths)}`)
   }
   console.log(
-    `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${WORKSPACE_ID}, canvas=${SEED_CANVAS_PATH})`,
+    `[packaged-daemon-backup-restore-smoke] restored data round-tripped (workspace=${seededWorkspaceId}, canvas=${SEED_CANVAS_PATH})`,
   )
 
   // Loro snapshot CONTENT equality. Without this assertion a regression
