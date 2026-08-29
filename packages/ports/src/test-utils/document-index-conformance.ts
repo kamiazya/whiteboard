@@ -513,7 +513,7 @@ export function describeDocumentIndexConformance(
             (w) => w.workspaceId === 'ws-segmented',
           )
           expect(stored?.segment).toBe('design')
-          await body(index, seedWorkspace)
+          await body(index)
         })
       }
 
