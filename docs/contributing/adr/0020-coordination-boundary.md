@@ -167,13 +167,31 @@ Easier:
 - A later SaaS control plane is an ordinary relational schema — tenants,
   quotas, billing — with no replicated state machine to operate.
 
-- The claim itself is checkable. `multi-instance-convergence.test.ts`
-  generates command sequences over N instances sharing one store, each
-  holding its own doc, and asserts that no acknowledged write is lost and
-  that every instance agrees on re-read. It runs against the in-memory store
-  and the real libSQL one, and it asserts in `afterAll` that the sequences
-  actually reached a fold and a refused fold — a generator that drifts away
-  from the interesting arrangements fails rather than passing vacuously.
+- The claim itself is checkable. `multi-instance-convergence.test.ts` is a
+  `fc.commands` model over N instances sharing one store, each holding its
+  own doc, asserting after EVERY command that no acknowledged write is lost
+  and that the record holds nothing no save reported. It runs against the
+  in-memory store and the real libSQL one.
+
+  Two of its commands exist because the arrangements they produce cannot be
+  reached by chance, and both facts were measured rather than reasoned:
+
+  - **Plain `Promise.all` concurrency does not exercise the fence.** In
+    microtask lockstep the second writer's snapshot read lands after the
+    first writer's write, so its fold already contains the other's ops.
+    Disabling the fence left every convergence assertion green. Real
+    processes have no such lockstep, so `foldsStraddled` reproduces the
+    ordering deterministically.
+  - **A straddled APPEND is already safe** — `supersededDeltaCount` drops
+    exactly the prefix the folder folded. Only a straddled FOLD loses an op,
+    so that command supplies both large edits itself instead of waiting for
+    the generator to pair them.
+
+  `afterAll` asserts the run actually reached a fold, a refused fold, and a
+  straddle. That guard is not decoration: an earlier uniform generator missed
+  the partial-view fold entirely at 40 runs and found it at 300, and the fix
+  was a denser generator — a seeded record so every instance starts stale,
+  and weights favouring the arrangements — not more runs.
 
 Harder, or deliberately given up:
 
