@@ -53,8 +53,15 @@ export async function wbDocumentCreate(
   // workspaceId must fail loudly rather than silently writing data into a
   // workspace nobody asked for. `createWorkspace: true` is the explicit
   // opt-in that bootstraps a genuinely new workspace.
+  //
+  // Everything below reads `workspaceId` rather than `input.workspaceId`.
+  // Today they are the same string; ADR-0019's mint boundary lands here
+  // next, at which point a create decides the canonical id and these two
+  // stop being interchangeable. Threading it now keeps that change to the
+  // one branch that causes it.
+  const workspaceId = input.workspaceId
   if (input.createWorkspace === true) {
-    await deps.documentIndex.createWorkspace({ workspaceId: input.workspaceId })
+    await deps.documentIndex.createWorkspace({ workspaceId })
   }
 
   // Parsed before anything is written, and AFTER the workspace bootstrap so
@@ -78,9 +85,9 @@ export async function wbDocumentCreate(
   // and outranks tidiness here — naming must never gate creation — so a
   // caller sending a blank one gets a document, not an error.
   const name = input.name?.trim()
-  const entry = await rethrowWorkspaceNotFound(input.workspaceId, () =>
+  const entry = await rethrowWorkspaceNotFound(workspaceId, () =>
     deps.documentIndex.createDocument({
-      workspaceId: input.workspaceId,
+      workspaceId,
       path: input.path,
       kind: input.kind,
       ...(name === undefined || name === '' ? {} : { name }),
@@ -93,7 +100,7 @@ export async function wbDocumentCreate(
   // document yet to ask. The kind is written once, at birth.
   const doc = new LoroDoc()
   writeDocumentKind(doc, input.kind)
-  await saveDocumentSnapshot(deps, input.workspaceId, entry.documentId, doc)
+  await saveDocumentSnapshot(deps, workspaceId, entry.documentId, doc)
 
   // A body is written by DELEGATING to `wb_document_set` rather than by
   // repeating what it does. Its write is not a one-liner — it parses OKF,
@@ -103,14 +110,14 @@ export async function wbDocumentCreate(
   // either changes.
   if (input.kind === 'markdown' && input.markdown !== undefined) {
     await createDocumentSetTool(deps).execute({
-      workspaceId: input.workspaceId,
+      workspaceId,
       documentId: entry.documentId,
       markdown: input.markdown,
       ...(input.actor === undefined ? {} : { actor: input.actor }),
     })
   }
 
-  return { documentId: entry.documentId, path: entry.path }
+  return { workspaceId, documentId: entry.documentId, path: entry.path }
 }
 
 export async function wbDocumentResolve(
