@@ -51,6 +51,43 @@ describe('createBackupScheduler', () => {
     }
   })
 
+  /**
+   * "3am in whose zone" is the question a schedule silently gets wrong, so
+   * the answer is said out loud once, at startup: the zone that was
+   * resolved, and the absolute instant the next pass falls on. The instant
+   * is what makes it checkable — a zone name alone still needs the reader to
+   * do the arithmetic.
+   */
+  it('says which zone it resolved and when the next backup falls', async () => {
+    const capture = captureLogsForTests()
+    try {
+      const scheduler = createBackupScheduler({
+        dataDir: join(root, 'data'),
+        backupDir: join(root, 'backups'),
+        schedule: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
+        now: () => new Date('2026-03-04T05:06:07.000Z'),
+        runBackup: async () => ({ kind: 'ok' as const }),
+      })
+      scheduler.start()
+      await scheduler.stop()
+
+      const armed = capture.records.find(
+        (r) => r.scope === 'backup-scheduler' && r.level === 'info',
+      )
+      expect(armed?.data).toMatchObject({
+        timezone: 'Asia/Tokyo',
+        schedule: '0 3 * * *',
+        // It is already 14:06 JST when this starts, so the next 03:00 JST
+        // is the 5th — 18:00 UTC on the 4th. An operator reading this can
+        // tell at a glance whether it is their quiet hour, which a zone name
+        // on its own does not let them do.
+        nextRun: '2026-03-04T18:00:00.000Z',
+      })
+    } finally {
+      capture.restore()
+    }
+  })
+
   it('writes each backup into its own timestamped directory', async () => {
     const backupDir = join(root, 'backups')
     const taken: string[] = []

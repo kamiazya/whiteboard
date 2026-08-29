@@ -1,3 +1,4 @@
+import { Cron } from 'croner'
 import { describe, expect, it } from 'vitest'
 import {
   collectStorageEnvIssues,
@@ -8,6 +9,24 @@ import {
   parseFileGcIntervalMs,
   parseWorkspaceTailMs,
 } from './storage-env.js'
+
+/**
+ * Node reads `TZ` from `process.env` on every `Intl` call, so the process
+ * zone is settable from within a test — measured on Node 22, where setting it
+ * mid-run changes `resolvedOptions().timeZone` immediately. Restored on the
+ * way out, the unset case included, since a leftover zone would silently
+ * re-date every later test in this file.
+ */
+function withProcessTz(tz: string, body: () => void): void {
+  const before = process.env.TZ
+  process.env.TZ = tz
+  try {
+    body()
+  } finally {
+    if (before === undefined) delete process.env.TZ
+    else process.env.TZ = before
+  }
+}
 
 const DATA_DIR = '/var/lib/whiteboard'
 
@@ -174,7 +193,86 @@ describe('the scheduled-backup settings', () => {
      */
     it('defaults to a nightly window rather than a start-relative interval', () => {
       const parsed = parseBackupSchedule({})
-      expect(parsed).toEqual({ ok: true, value: { expression: '0 3 * * *', timezone: null } })
+      expect(parsed.ok).toBe(true)
+      if (!parsed.ok) return
+      expect(parsed.value.expression).toBe('0 3 * * *')
+    })
+
+    /**
+     * `TZ` is the POSIX standard and Node already honours it, so an operator
+     * who has set it for the whole deployment — logs, timestamps, everything
+     * — should not have to say it a second time here. Measured: with `TZ`
+     * unset the schedule resolves in UTC; with `TZ=Asia/Tokyo` the same
+     * expression fires at 18:00 UTC, which is 03:00 JST.
+     *
+     * The zone is RESOLVED rather than left implicit, because "3am in whose
+     * zone" being invisible is the failure this setting exists to prevent —
+     * the scheduler reports the zone it actually used, and it can only report
+     * a zone that has a name.
+     *
+     * `Intl` rather than reading `TZ` directly: Windows has no such variable
+     * and takes its zone from the OS, which is exactly the "can it be pulled
+     * from an environment variable on every OS" question — it cannot, and
+     * `Intl.DateTimeFormat().resolvedOptions().timeZone` is the portable
+     * answer that reflects `TZ` where there is one.
+     */
+    it('falls back to the system zone rather than leaving it unstated', () => {
+      withProcessTz('Asia/Tokyo', () => {
+        const parsed = parseBackupSchedule({})
+        expect(parsed).toEqual({
+          ok: true,
+          value: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
+        })
+      })
+    })
+
+    it('lets the explicit setting override the system zone', () => {
+      withProcessTz('Asia/Tokyo', () => {
+        const parsed = parseBackupSchedule({ WHITEBOARD_BACKUP_TZ: 'Europe/Berlin' })
+        expect(parsed.ok).toBe(true)
+        if (!parsed.ok) return
+        expect(parsed.value.timezone).toBe('Europe/Berlin')
+      })
+    })
+
+    /**
+     * A zone the operator did not choose must not abort their startup.
+     *
+     * Both of these are real: a blank `TZ` resolves through ICU to the
+     * sentinel `Etc/Unknown`, which croner refuses outright, and a POSIX
+     * offset like `JST-9` — which Node honours for every date it formats —
+     * names no IANA zone at all, so `resolvedOptions().timeZone` comes back
+     * `undefined`. Neither is a misconfiguration of THIS setting, so neither
+     * is refused: the schedule falls back to `null`, which is the process's
+     * own local time.
+     */
+    it('degrades to local time when the system zone has no usable name', () => {
+      for (const tz of ['', 'JST-9']) {
+        withProcessTz(tz, () => {
+          expect(parseBackupSchedule({})).toEqual({
+            ok: true,
+            value: { expression: '0 3 * * *', timezone: null },
+          })
+        })
+      }
+    })
+
+    /**
+     * And `null` has to MEAN local time, not UTC — otherwise the fallback
+     * above would silently move an operator's 3am. Under `TZ=JST-9` the
+     * process is nine hours ahead, so `0 3 * * *` read with no zone must
+     * land at 18:00 the previous day in UTC.
+     */
+    it('reads a null zone as the process own time, not as UTC', () => {
+      withProcessTz('JST-9', () => {
+        const parsed = parseBackupSchedule({})
+        expect(parsed.ok).toBe(true)
+        if (!parsed.ok) return
+        const cron = new Cron(parsed.value.expression, { paused: true })
+        const next = cron.nextRun(new Date('2026-03-04T00:00:00Z'))
+        cron.stop()
+        expect(next?.toISOString()).toBe('2026-03-04T18:00:00.000Z')
+      })
     })
 
     it('takes an expression and a timezone', () => {

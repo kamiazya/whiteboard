@@ -101,36 +101,89 @@ export function parseBackupDir(env: NodeJS.ProcessEnv = process.env): ParsedSett
  */
 export interface BackupSchedule {
   expression: string
-  /** `null` means the host's own zone, which in a container is usually UTC. */
+  /**
+   * The zone the expression is read in, RESOLVED — the explicit setting when
+   * there is one, otherwise the system's own zone, so the scheduler can
+   * report which 3am it means.
+   *
+   * `null` only when the system zone has no IANA name to report (see
+   * `systemTimezone`), and means the process's own local time, which is what
+   * cron does with no zone anyway. So `null` never changes WHEN a backup
+   * runs, only whether the answer can be named.
+   */
   timezone: string | null
 }
+
+/**
+ * The zone this process is already keeping time in, or `null` if it has no
+ * name worth reporting.
+ *
+ * `Intl` rather than reading `TZ`: `TZ` is POSIX and Windows has none, taking
+ * its zone from the OS instead — so an environment variable is not a
+ * cross-platform way to ask this question, while `resolvedOptions()` is, and
+ * still reflects `TZ` on the platforms that have it.
+ *
+ * A POSIX offset such as `JST-9` — which Node honours for every date it
+ * formats — names no IANA zone at all, so this comes back `undefined`. That
+ * is not a misconfiguration of anything the operator set here, so it costs
+ * the name and nothing else; the schedule falls back to unnamed local time,
+ * which is the same instant.
+ */
+function systemTimezone(): string | null {
+  try {
+    return Intl.DateTimeFormat().resolvedOptions().timeZone ?? null
+  } catch {
+    return null
+  }
+}
+
+const NEVER_FIRES = 'describes a time that can never occur, so no backup would ever run'
 
 export function parseBackupSchedule(
   env: NodeJS.ProcessEnv = process.env,
 ): ParsedSetting<BackupSchedule> {
   const expression = env[BACKUP_CRON_ENV]?.trim() || '0 3 * * *'
-  const timezone = env[BACKUP_TZ_ENV]?.trim() || null
+  const explicitTimezone = env[BACKUP_TZ_ENV]?.trim() || null
+  const timezone = explicitTimezone ?? systemTimezone()
 
-  let next: Date | null
-  try {
-    // Constructed paused and stopped immediately: this is a validity check,
-    // not a scheduler. The daemon keeps its own timer loop.
-    const probe = new Cron(expression, { ...(timezone ? { timezone } : {}), paused: true })
-    next = probe.nextRun()
-    probe.stop()
-  } catch {
+  // Constructed paused and stopped immediately: this is a validity check, not
+  // a scheduler. The daemon keeps its own timer loop.
+  const probe = (zone: string | null): Date | null | 'refused' => {
+    try {
+      const cron = new Cron(expression, { ...(zone ? { timezone: zone } : {}), paused: true })
+      try {
+        return cron.nextRun()
+      } finally {
+        cron.stop()
+      }
+    } catch {
+      return 'refused'
+    }
+  }
+
+  const next = probe(timezone)
+  if (next === 'refused' && explicitTimezone === null && timezone !== null) {
+    // The system named a zone that croner will not read — a blank `TZ`
+    // resolves through ICU to the sentinel `Etc/Unknown`, which is refused
+    // outright. That is the host's business, not this setting's, so it costs
+    // the NAME rather than the startup. The expression is re-checked without
+    // the zone rather than assumed innocent, since it may be the expression
+    // that is wrong.
+    const withoutZone = probe(null)
+    if (withoutZone !== 'refused') {
+      return withoutZone === null
+        ? { ok: false, reason: NEVER_FIRES }
+        : { ok: true, value: { expression, timezone: null } }
+    }
+  }
+  if (next === 'refused') {
     // The thrown message quotes the value, so it is not reused here.
     return {
       ok: false,
-      reason: `must be a 5- or 6-field cron expression${timezone ? ', and the timezone must be a real IANA zone' : ''}`,
+      reason: `must be a 5- or 6-field cron expression${explicitTimezone ? ', and the timezone must be a real IANA zone' : ''}`,
     }
   }
-  if (next === null) {
-    return {
-      ok: false,
-      reason: 'describes a time that can never occur, so no backup would ever run',
-    }
-  }
+  if (next === null) return { ok: false, reason: NEVER_FIRES }
   return { ok: true, value: { expression, timezone } }
 }
 

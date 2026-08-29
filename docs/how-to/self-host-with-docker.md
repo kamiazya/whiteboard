@@ -143,10 +143,16 @@ volume, and the daemon takes a backup on a schedule — the same pass
 `WHITEBOARD_BACKUP_KEEP` older ones retained.
 
 `WHITEBOARD_BACKUP_CRON` puts it in a window you choose (default `0 3 * * *`,
-daily at 03:00), and `WHITEBOARD_BACKUP_TZ` says whose 03:00 — a container's
-clock is usually UTC, so without it the quiet hour you picked may be someone
-else's afternoon. A backup is a database snapshot plus a copy of every blob,
-so putting it where the load is low is worth the two settings. The explicit command keeps its
+daily at 03:00). Whose 03:00 is your container's own clock — set `TZ` (or
+Compose's `environment: [TZ=Asia/Tokyo]`) and the schedule follows it along
+with every timestamp in your logs. A container with no `TZ` runs on UTC, so
+the quiet hour you picked may be someone else's afternoon.
+`WHITEBOARD_BACKUP_TZ` overrides the zone for this schedule alone, for when
+backups should run on a different clock from the rest of the deployment. The
+daemon logs the zone it resolved and the exact instant the next pass falls on
+when it starts, so you can check which 03:00 you got rather than infer it. A
+backup is a database snapshot plus a copy of every blob, so putting it where
+the load is low is worth the setting. The explicit command keeps its
 value for a migration, a support copy, or a snapshot before a risky change,
 but it stops being the only way anything gets backed up. A backup you have to
 remember to take is one taken rarely or never, and the interval between

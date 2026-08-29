@@ -197,6 +197,20 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
       }
       stopped = false
       scheduleNext()
+      // Said once, at startup, because "3am in whose zone" is the question a
+      // schedule silently gets wrong. The zone here is already RESOLVED —
+      // the operator's setting, or the system's own — and the absolute
+      // instant is what makes it checkable without arithmetic.
+      log.info(
+        {
+          backupDir,
+          schedule: schedule.expression,
+          timezone: schedule.timezone,
+          nextRun: nextRun(now())?.toISOString() ?? null,
+          keep,
+        },
+        'scheduled backups are on',
+      )
     },
     async stop(): Promise<void> {
       stopped = true
