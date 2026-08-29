@@ -1,6 +1,11 @@
 # ADR-0021: Durability is a property of each store, not an operation on a directory
 
-**Status:** Proposed
+**Status:** Accepted — decisions 2 and 3 implemented (a database we do not
+host is reported out of scope rather than refused wholesale; the rows are
+captured by a hot snapshot, so backup no longer requires stopping the
+server), plus the first slice of decision 1's per-store record. Decisions
+4, 5 and 6 are not: `backup-retention.ts` and its property hold decision
+6's invariant but nothing wires them yet.
 
 ## Context
 
