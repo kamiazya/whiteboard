@@ -42,6 +42,13 @@ export interface DaemonIndexPageProps {
   // a specific workspace to land on; falls back to the daemon's first-listed
   // workspace when absent, or when the named workspace isn't in the list.
   initialWorkspaceId?: string
+  /**
+   * The workspace this page settled on — the initial resolve as well as every
+   * later switch. The address bar is App's to write, and until this existed it
+   * had nothing to write WITH: `/` names no workspace, the page picked one
+   * anyway, and the two disagreed for the rest of the session.
+   */
+  onWorkspaceResolved?: (workspace: string) => void
   onOpenDocument: (workspaceId: string, path: string) => void
 }
 
@@ -75,6 +82,7 @@ export function DaemonIndexPage({
   daemonBaseUrl,
   token,
   initialWorkspaceId,
+  onWorkspaceResolved,
   onOpenDocument,
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
@@ -184,6 +192,18 @@ export function DaemonIndexPage({
   useEffect(() => {
     void loadWorkspaces()
   }, [loadWorkspaces])
+
+  // Keyed on the SETTLED value, not on the act of choosing: the initial
+  // resolve and a dropdown switch reach the address bar the same way, because
+  // to a reader they are the same fact — this is the workspace you are
+  // looking at. A re-render that did not move it reports nothing.
+  const reportedWorkspaceRef = useRef<string | null>(null)
+  useEffect(() => {
+    if (selectedWorkspace === null) return
+    if (reportedWorkspaceRef.current === selectedWorkspace) return
+    reportedWorkspaceRef.current = selectedWorkspace
+    onWorkspaceResolved?.(selectedWorkspace)
+  }, [selectedWorkspace, onWorkspaceResolved])
 
   // Re-reads the workspace list and moves off the one that vanished.
   //

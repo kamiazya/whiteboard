@@ -322,7 +322,23 @@ export function App({ providerState }: AppProps) {
     }
     if (lastNavigatedPathRef.current === path) return
     lastNavigatedPathRef.current = path
-    navigate(path, { replace: isFirstSync })
+    // Naming an address that named nothing is a REPLACE. `/` does not say
+    // which workspace is on screen; the page resolves one and this writes it
+    // down, which is the app finishing a sentence rather than a step the
+    // person took. Pushed, it would put `/` behind them — and going back
+    // there resolves again and pushes again, a trap of our own making.
+    // Changing a workspace the address already named is a real step and
+    // pushes, so back returns to the one before.
+    //
+    // Narrow to index -> index deliberately. Opening a DOCUMENT from `/` also
+    // leaves an address that named no workspace, and it is a step: replacing
+    // there costs the back button the list you came from.
+    const currentRoute = parseWorkspaceRoute(location.pathname)
+    const namingTheSameIndex =
+      daemonView.kind === 'index' &&
+      currentRoute?.kind === 'index' &&
+      currentRoute.workspace === undefined
+    navigate(path, { replace: isFirstSync || namingTheSameIndex })
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.
@@ -502,6 +518,7 @@ export function App({ providerState }: AppProps) {
                     daemonBaseUrl={payload.baseUrl}
                     token={pairedToken}
                     initialWorkspaceId={daemonView.workspace}
+                    onWorkspaceResolved={(workspace) => setDaemonView({ kind: 'index', workspace })}
                     onOpenDocument={(workspace, path) =>
                       setDaemonView({ kind: 'document', workspace, path })
                     }
@@ -574,6 +591,7 @@ export function App({ providerState }: AppProps) {
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
                   initialWorkspaceId={daemonView.workspace}
+                  onWorkspaceResolved={(workspace) => setDaemonView({ kind: 'index', workspace })}
                   onOpenDocument={(workspace, path) =>
                     setDaemonView({ kind: 'document', workspace, path })
                   }

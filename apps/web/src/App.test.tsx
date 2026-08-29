@@ -709,6 +709,57 @@ describe('App daemon provider state', () => {
     expect(receivedDaemonPageProps?.path).toBe('canvas-b')
   })
 
+  it('names the workspace it resolved, replacing the address that named none', async () => {
+    // `/` says nothing about which workspace is on screen. The index picks
+    // one anyway — first-listed, or whatever the chain decides — and until it
+    // said so, the address bar and the page disagreed: a bookmark of `/`
+    // meant "whichever one this resolves to next time", and a reload could
+    // land somewhere else.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+      { initialEntries: ['/'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('daemon-index-page')
+
+    act(() => {
+      const onWorkspaceResolved = receivedDaemonIndexPageProps?.onWorkspaceResolved as (
+        workspace: string,
+      ) => void
+      onWorkspaceResolved('design-team')
+    })
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/design-team'))
+    // REPLACED, not pushed: naming what was already on screen is not a step a
+    // person took, and a back button that returns to `/` would resolve again
+    // and push again — a trap of the app's own making.
+    expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('switching workspace is a history step, so back returns to the previous one', async () => {
+    // The other half. Once the address names a workspace, changing it IS a
+    // navigation the person made, and back has to undo it.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+      { initialEntries: ['/w/design-team'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('daemon-index-page')
+
+    act(() => {
+      const onWorkspaceResolved = receivedDaemonIndexPageProps?.onWorkspaceResolved as (
+        workspace: string,
+      ) => void
+      onWorkspaceResolved('sandbox')
+    })
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
+
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(router.state.location.pathname).toBe('/w/design-team')
+  })
+
   it('escapes to the browser with BROWSER_CAPABILITIES', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
