@@ -64,6 +64,12 @@ const mockDocumentExists = vi.fn<(workspaceId: string, path: string) => Promise<
 )
 vi.mock('../store/document-store.js', () => ({
   documentExists: (workspaceId: string, path: string) => mockDocumentExists(workspaceId, path),
+  // The route family resolves an ADDRESS before it reaches the store
+  // (ADR-0019), and that read goes through this same module — so a double
+  // that omits it makes every export 500 on a TypeError rather than on
+  // anything the case is about. Empty registry: these tests address
+  // workspaces by id, which resolution leaves alone.
+  workspaceRegistry: () => ({ listWorkspaces: async () => [] }),
 }))
 
 // Spies on the real implementation so most tests exercise genuine random

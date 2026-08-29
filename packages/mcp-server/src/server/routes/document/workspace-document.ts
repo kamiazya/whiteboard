@@ -14,6 +14,7 @@ import {
 import type { VersionEntry } from '../../store/version-store.js'
 import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
 // Same ceiling as the per-document update path: a workspace-granularity
 // update carries the same kind of Loro delta, just scoped wider.
@@ -38,14 +39,15 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
   const app = new Hono()
 
   app.get('/api/w/:workspaceId/workspace-document/snapshot', async (c) => {
-    const workspaceId = c.req.param('workspaceId')
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json({ title: body.message }, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     // Same honesty rule as the per-document snapshot: an unregistered
     // workspace is a refusal, not a phantom. Inside a registered workspace,
     // a missing workspace document is minted empty — the workspace is real,
@@ -72,14 +74,15 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         ),
     }),
     async (c) => {
-      const workspaceId = c.req.param('workspaceId')
+      const handle = c.req.param('workspaceId')
       try {
-        validateWorkspaceId(workspaceId)
+        validateWorkspaceId(handle)
       } catch (err) {
         const body = validationErrorBody(err)
         if (body) return c.json({ title: body.message }, 400)
         throw err
       }
+      const workspaceId = await workspaceIdFromHandle(c, handle)
       if (!(await workspaceExists(workspaceId))) {
         return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
       }

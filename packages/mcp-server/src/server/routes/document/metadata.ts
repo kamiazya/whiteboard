@@ -10,6 +10,7 @@ import {
   setWorkspaceName,
 } from '../../store/names-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { handleCorruptStoredData, handleDocumentNotFound } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -24,14 +25,15 @@ export function createDocumentMetadataRouter() {
   const app = new Hono()
 
   app.get('/api/workspaces/:workspaceId/names', async (c) => {
-    const { workspaceId } = c.req.param()
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
       const names = await loadWorkspaceNames(workspaceId)
       return c.json(names)
@@ -45,14 +47,15 @@ export function createDocumentMetadataRouter() {
   })
 
   app.put('/api/workspaces/:workspaceId/name', async (c) => {
-    const { workspaceId } = c.req.param()
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     const parsed = setNameRequestSchema.safeParse(await c.req.json().catch(() => null))
     if (!parsed.success) {
       return c.json({ error: 'invalid_body' }, 400)
