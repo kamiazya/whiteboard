@@ -264,6 +264,11 @@ function initialCanvas(): SpatialCanvas {
  * `not modelled` requires a reason, for the same purpose `blastRadius:
  * none:` does — a bare exemption is the omission with a word in front of
  * it.
+ *
+ * A fourth ledger lives in `editor-state-surface.test.ts`, covering the
+ * one surface that is not a union: every piece of React state
+ * `SpatialEditor` holds. It scans the source instead of riding on the
+ * type system, but carries the same both-sides contract.
  */
 type SurfaceCoverage = 'covered' | `not modelled: ${string}`
 

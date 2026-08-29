@@ -42,6 +42,12 @@ all four directions. `not modelled` takes a reason for the same purpose `blastRa
 Note that these assertions live in `afterAll`, which vitest reports as a failed suite while the
 summary line still reads "N passed" — the exit code is the truth.
 
+A surface with no union behind it — the React state a component holds, say — takes the same
+ledger with a source scan pinning the key set instead of the type system (`?raw` glob, never
+`node:fs` in apps/web). `editor-state-surface.test.ts` is the worked example. Assert the scan
+found a plausible COUNT in its own case: a regex that stops matching otherwise reports itself as
+"every entry is stale", which sends the reader to the wrong file.
+
 Prefer example/browser tests for UI wiring, one-off integrations, and anything without a clean
 invariant to state. When a property finds a real bug, pin the shrunk counterexample as an example
 test before fixing the implementation — the example is the regression guard, the property is the
