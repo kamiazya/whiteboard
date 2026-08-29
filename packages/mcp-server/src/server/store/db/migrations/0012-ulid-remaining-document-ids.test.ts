@@ -168,11 +168,17 @@ describe('0012-ulid-remaining-document-ids', () => {
       .executeTakeFirstOrThrow()) as { documentId: string }
     expect(branch.documentId).toBe(row.id)
 
-    await handle.migrateToHead()
+    // Pinned at 0013, the last migration these assertions are ABOUT, rather
+    // than at head: 0019 re-keys the workspace and renames `blobs/ws-1`
+    // out from under the blob assertion below. Spelling "run my migration"
+    // as `migrateToHead()` is what drifts — this file has already been
+    // caught by it once, when 0013 landed.
+    //
+    // 0013 rewrites the prefix 0012 wrote. The SEED above stays `canvas:` —
+    // it reproduces a pre-0013 database, and rewriting it would leave 0013
+    // untested.
+    await handle.migrateTo('0013-document-dockey-prefix')
 
-    // migrateToHead now runs 0013 too, which rewrites the prefix this
-    // migration wrote. The SEED above stays `canvas:` — it reproduces a
-    // pre-0013 database, and rewriting it would leave 0013 untested.
     const newDocKey = `document:${row.id}`
     for (const table of [
       'documentSnapshots',
