@@ -144,7 +144,9 @@ describe('0015-versions-branches-workspace-id', () => {
     await seedBranchRow(handle.db, DOC_A, 'main')
     await seedBranchRow(handle.db, DOC_B, 'feature')
 
-    await handle.migrateToHead()
+    // At 0015, not at head: the backfill this asserts writes `ws-1`/`ws-2`,
+    // and 0019 later re-keys those workspaces onto canonical ULIDs.
+    await handle.migrateTo0015()
 
     const versions = await handle.db
       .selectFrom('versions')
