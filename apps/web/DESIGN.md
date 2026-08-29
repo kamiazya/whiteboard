@@ -112,9 +112,32 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   exception gets documented here.
 - **What belongs in the shell is what does not change when you open a
   different document.** Which workspace you are in, and who keeps it, are
-  such facts, so the mark is the shell's; the document's own title, actions
-  and history are the page's. The dividing question is not importance, it is
-  whether the answer survives navigation.
+  such facts, so the mark and the workspace switcher beside it are the
+  shell's; the document's own title, actions and history are the page's. The
+  dividing question is not importance, it is whether the answer survives
+  navigation.
+- **The switcher reads the address; it never holds a second opinion about
+  it.** `WorkspaceSwitcher` takes the workspace it names from
+  `parseWorkspaceRoute(location.pathname)`, because the workspace is the
+  outermost layer of `/w/:workspace/d/:path` and the URL is what decides
+  which one is active. That is also why it sits in the shell rather than on
+  the document list: the layer is present on every page, and a control
+  reachable only from the list could not change it from a document.
+
+  Until the list of workspaces answers, the trigger shows the handle the
+  address carries. A handle is a true statement about where you are, and a
+  blank or a spinner in a 40px row is not an improvement on one.
+
+  It is shown even when there is exactly one workspace. That is the
+  difference between a switcher and a filter: the daemon list control it
+  replaced hid itself below two, which is right for narrowing rows and wrong
+  for the only door out of one workspace.
+
+  What it OFFERS follows the keeper. Creation appears only where the keeper
+  can actually create — the browser mints its own workspaces, the daemon
+  publishes no write surface for them yet — which is the standing rule below
+  applied to this control. Absent, not disabled: a disabled control says "not
+  right now" about something that is not there at all.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over
@@ -155,8 +178,13 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 - **Dialogs**: `max-h` + `overflow-y-auto` when content can grow; page-width
   cards must wrap (`min-w-0`, `break-all` for unbreakable strings) before
   entering a dialog.
-- **Raw identifiers are not chrome.** Ids appear in detail surfaces only;
-  single-choice selectors (one workspace) render nothing at all.
+- **Raw identifiers are not chrome.** Ids appear in detail surfaces only. A
+  control that would have nothing but an id to show is the case to look at:
+  two workspace selects rendered canonical ids as their own option labels
+  before the switcher replaced them, and one of those was on the document
+  page's header row. What a control falls back to when a name is missing is
+  part of its design, not an afterthought — `workspaceLabel` is where that
+  precedence lives.
 - **Both themes always.** Any new color must be defined for `:root` and
   `.dark`, and respect the WCAG 1.4.3/1.4.11 floors the contrast tests pin.
 - **Motion**: every animation must serve hierarchy, feedback, or

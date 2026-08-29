@@ -302,19 +302,19 @@ describe('DaemonDocumentPage', () => {
       expect(screen.getByRole('button', { name: 'Back to documents' })).toBeTruthy()
     })
 
-    it('keeps the row select in the empty state, which is the only place with no canvas to go back from', async () => {
+    it('leaves the empty state with creation, and no switcher of its own', async () => {
+      // An empty workspace used to be the one place this page kept a
+      // workspace select, because there was no canvas to go "back" from. That
+      // select showed raw canonical ids and is gone; the shell names and
+      // switches the workspace on every page, this one included, so the way
+      // out is above the page rather than inside it (covered in App.test.tsx,
+      // where the shell is actually mounted).
+      //
+      // What the PAGE still owes an empty workspace is a way to fill it.
       mockListWorkspaces.mockResolvedValue({
         workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
       })
-      mockListDocuments.mockImplementation((_fetch, _base, workspaceId) =>
-        workspaceId === 'w1'
-          ? Promise.resolve({ documents: [] })
-          : Promise.resolve({
-              documents: [
-                { path: 'main', id: 'id-main', updatedAt: '2026-01-01', kind: 'spatial' },
-              ],
-            }),
-      )
+      mockListDocuments.mockResolvedValue({ documents: [] })
 
       await act(async () => {
         render(
@@ -329,34 +329,8 @@ describe('DaemonDocumentPage', () => {
         expect(screen.getByText('This workspace has no documents yet.')).toBeTruthy(),
       )
 
-      const select = screen.getByLabelText('Workspaces') as HTMLSelectElement
-      expect(Array.from(select.options).map((o) => o.value)).toEqual(['w1', 'w2'])
-      await act(async () => {
-        select.value = 'w2'
-        select.dispatchEvent(new Event('change', { bubbles: true }))
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-    })
-
-    it('shows the static disabled teaser when capabilities.workspaces is false', async () => {
-      mockListWorkspaces.mockResolvedValue({
-        workspaces: [{ workspaceId: 'w1' }, { workspaceId: 'w2' }],
-      })
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            capabilities={{ workspaces: false, versions: true, branches: true, merge: true }}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-
+      expect(screen.getByRole('button', { name: 'Create a canvas' })).toBeTruthy()
       expect(screen.queryByLabelText('Workspaces')).toBeNull()
-      expect(screen.getByText('Workspaces').getAttribute('aria-disabled')).toBe('true')
     })
   })
 
@@ -855,7 +829,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: false,
               branches: true,
               merge: true,
@@ -1069,7 +1042,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: false,
               branches: true,
               merge: true,
@@ -1266,7 +1238,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: true,
               branches: false,
               merge: false,
@@ -1434,7 +1405,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: true,
               branches: false,
               merge: false,
@@ -1506,7 +1476,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: true,
               branches: true,
               merge: false,

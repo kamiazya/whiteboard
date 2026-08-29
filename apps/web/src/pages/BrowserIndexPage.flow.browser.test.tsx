@@ -82,10 +82,10 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     // Fresh store: the list's empty state, not an auto-opened editor.
     await screen.findByText('What will you make first?', undefined, { timeout: 15_000 })
 
-    // Empty-state create opens a spatial canvas at /local/:id.
+    // Empty-state create opens a spatial canvas at /w/:workspace/d/:id.
     await userEvent.click(screen.getByRole('button', { name: 'Create a canvas' }))
     await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
-    expect(router.state.location.pathname).toMatch(/^\/local\//)
+    expect(router.state.location.pathname).toMatch(/^\/w\/default\/d\//)
 
     // Back: the boundary crossing returns to the browser, which now has the
     // row in its folder pane.
@@ -101,7 +101,7 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     // it rather than to the workspace root.
     await userEvent.click(screen.getByRole('button', { name: 'New document' }))
     await userEvent.click(await screen.findByTestId('new-document-markdown'))
-    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/local\//), {
+    await waitFor(() => expect(router.state.location.pathname).toMatch(/^\/w\/default\/d\//), {
       timeout: 15_000,
     })
     const editable = await waitFor(

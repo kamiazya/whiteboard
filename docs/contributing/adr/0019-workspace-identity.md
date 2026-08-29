@@ -105,8 +105,8 @@ Decisions taken with the words they were taken in (user decisions,
   `names-store.ts` states the rationale in place ("it names the container,
   not any document, and the registry row is its home") — and the browser
   mirrors that with an IndexedDB registry row. Promotion merges a
-  workspace's *content* record; identity metadata travels as plain fields
-  of the transfer, not as mergeable state.
+  workspace's *content* record and carries no identity metadata at all; the
+  bullet above says why.
 - **Auth scope is untouched, as a named non-goal.** Daemon grants remain
   resource-type-scoped; no slice of this initiative narrows or widens a
   grant to specific workspace ids. Workspace-scoped auth is a separate
@@ -144,6 +144,122 @@ workspace is kept. The word itself stays correct in its network sense
   `connect-to-local-daemon.md`) are **not** updated by this ADR: docs
   describe shipped behavior, and each statement changes in the slice that
   ships the behavior it describes.
+
+## Addendum (2026-08-29): the address grammar, and what shipped
+
+Everything above decided what a workspace's identity IS. Implementing it
+forced three questions the Decision did not answer, and left one place where
+the code does not yet do what the Decision says.
+
+### One URL grammar, for both keepers, at `/w/:workspace/d/:path`
+
+The two keepers had two grammars — the browser's `/canvas/:path` and the
+daemon's `/w/:workspaceId/document/:path` — which was not a decision anyone
+took. It was two features growing separately, and it cost something real:
+the "Work in this browser instead" escape leaves a daemon address behind, and
+under two grammars that address parsed as nothing here, so the app silently
+showed the index for a URL it could not read.
+
+Both keepers now use `/w/:workspace/d/:path`, resolved segment-first with the
+canonical-id fallback the Decision already fixed.
+
+- **The workspace is in the PATH, not the fragment or a query parameter.** A
+  path segment is what identifies a resource; a query parameter is a
+  parameter *over* a resource; a fragment (RFC 3986 §3.5) is a secondary
+  resource *within* the primary one. A workspace is none of the latter two —
+  it is the outermost part of what a document address identifies. That a
+  browser-kept workspace is unreachable from another machine is a fact about
+  the KEEPER, not about the address: in a single-page app the path is already
+  interpreted entirely on the client, so "client-only" argues for the
+  fragment no more than it argues against the path.
+- **`d` rather than `document`, matching `w`.** The two positions in one
+  address should read the same way.
+- **The keeper is ambient, and stays out of the URL.** ADR-0004 decides
+  browser-vs-daemon once at page load, so the address names a workspace *of
+  whichever keeper this session runs*. Putting the keeper in the path would
+  put a session-level fact in a document-level address.
+
+The removal test settles what else belongs in a path: take a part out, and
+ask whether what is left still identifies a resource. Take the workspace out
+and the path names nothing; take a zoom level or an open panel out and it
+still does. The first is address, the rest is view state.
+
+### Branch and version addresses (decided, not implemented)
+
+Worth fixing now because the answer is not the obvious one, and because a
+later feature would otherwise invent a different shape.
+
+Branches and versions are DOCUMENT-scoped in the schema — `branches` keys on
+`(documentId, workspaceId, name)` and `versions` on
+`(id, documentId, workspaceId, branchName)`, the `workspaceId` present
+because a version's frontier points into that workspace's oplog. So the ref
+sits AFTER the document, unlike git, where a branch scopes a whole tree:
+
+```text
+/w/:workspace/d/:path/@:ref
+```
+
+`@` is unambiguous in that position because a document path segment is ASCII
+letters, digits and interior hyphens, so nothing a path can hold starts with
+it. A ref resolves branch-name-first, then version id — the same
+readable-first, durable-second shape the workspace position already uses.
+
+**Not implemented, and the reason matters:** the browser keeper has no
+versions and no branches (`BROWSER_CAPABILITIES` says so in three separate
+flags), so this address has one keeper to serve and no user waiting for it.
+It is recorded so the daemon's history UI adopts this shape rather than
+minting another.
+
+### What shipped, and the two rules building it produced
+
+- **The browser workspace switch is in-SPA, as decided.** It shipped as a
+  document load first, and what closed the gap was a second door rather than
+  a redesign: the accessor still resolves ONCE — that is what makes the
+  synchronous read at some twenty call sites possible — and
+  `switchBrowserWorkspace` re-points it explicitly. React learns through a
+  `useSyncExternalStore` subscription, so App and the index page follow a
+  switch without either being rebuilt.
+
+  Two rules came out of building it, and both are the kind that would be
+  wrong if guessed:
+
+  - **The switch resolve is STRICT where the boot resolve is lenient.** Boot
+    falls back to first-listed because a stale bookmark should still open the
+    app and there is no previous state worth keeping. A switch has one, so
+    answering "go here" by going somewhere else — and then rewriting the
+    address to match a place nobody asked for — is worse than declining. The
+    address rewrite is what a declined switch falls back to, which is only
+    distinguishable from a successful one because the resolve is strict.
+  - **The address moves first and the runtime follows.** Same direction as
+    everything else here: the switcher navigates, and an effect re-points the
+    active workspace to whatever the address names. The rewrite guard added
+    earlier in this initiative had to learn the difference — before this it
+    read any unmatched address as a leftover and rewrote it, which would have
+    fought every switch.
+
+  **Flush-before-switch was already pinned**, and by the in-SPA path rather
+  than the shipped one. Two `browser-backend.browser.test.tsx` cases hold it:
+  a write still on the queue when `disconnect()` runs reaches storage, and a
+  write in flight while the active workspace is RE-POINTED lands in the
+  workspace it was made in rather than the one being switched to. The second
+  simulates exactly what `switchBrowserWorkspace` now does in production.
+  Both found real defects — `_doWrite` returned early on a nulled doc, and
+  read the workspace id at execution time — so the invariant is guarded by
+  tests that went red, not by a load that happened to make the hazard
+  unreachable.
+- **Rename is not in the v1 that shipped.** The Decision's v1 is create +
+  switch + rename; `DocumentIndex` has no `renameWorkspace`, so rename needs
+  the port, three implementations, the conformance suite, a daemon route and
+  a client — its own increment rather than a corner of the switcher's.
+- **Creation is browser-only.** The daemon publishes `GET /api/workspaces`
+  and nothing that writes one, so the switcher offers creation only where a
+  keeper can honour it. The daemon's create surface is its own increment too.
+- **`workspaces` stopped being a capability.** The Consequences above
+  predicted the flag would flip to `true` for the browser. It did not flip —
+  it was deleted. Once both keepers set it the same way it gated nothing, and
+  the copy built on it promised a difference that is not there.
+  `provider.capability-reach.test.ts` now fails on any capability both
+  keepers agree on, so the next one cannot linger.
 
 ## Alternatives considered
 

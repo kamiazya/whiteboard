@@ -20,20 +20,14 @@ describe('resolveProviderState', () => {
     expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser capabilities: workspaces and versions are false', () => {
+  it('browser capabilities: versions is false', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({
-      kind: 'browser',
-      capabilities: { workspaces: false, versions: false },
-    })
+    expect(state).toMatchObject({ kind: 'browser', capabilities: { versions: false } })
   })
 
-  it('daemon capabilities: workspaces and versions are true', () => {
+  it('daemon capabilities: versions is true', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    expect(state).toMatchObject({
-      kind: 'daemon',
-      capabilities: { workspaces: true, versions: true },
-    })
+    expect(state).toMatchObject({ kind: 'daemon', capabilities: { versions: true } })
   })
 
   it('browser capabilities: branches and merge are false', () => {

@@ -5,6 +5,12 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
+import {
+  getBrowserWorkspaceId,
+  resetBrowserWorkspaceIdForTests,
+  setBrowserWorkspaceIdForTests,
+} from './lib/browser-workspace-id.js'
+
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once its
 // dynamic import resolves — and under a full-suite run that resolution can
@@ -44,7 +50,7 @@ afterEach(() => {
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
 // Captures the initialPath prop so a test can assert App derives it from
-// the /local/:path URL (parseBrowserRoute) rather than merely
+// the /w/:workspace/d/:path URL (parseBrowserRoute) rather than merely
 // mounting the page.
 let receivedInitialPath: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
@@ -131,7 +137,6 @@ vi.mock('./pages/DaemonIndexPage.js', () => ({
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
   capabilities: {
-    workspaces: false,
     versions: false,
     branches: false,
     merge: false,
@@ -142,7 +147,6 @@ const DAEMON_STATE: ProviderState = {
   kind: 'daemon',
   daemonBaseUrl: 'http://127.0.0.1:3000',
   capabilities: {
-    workspaces: true,
     versions: true,
     branches: true,
     merge: true,
@@ -388,7 +392,7 @@ describe('App capability wiring', () => {
 
   it('passes the browser capabilities down to BrowserDocumentPage', async () => {
     render(
-      <MemoryRouter initialEntries={['/local/c1']}>
+      <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -396,10 +400,10 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_STATE.capabilities)
   })
 
-  it('derives initialPath from a /local/:path cold-load URL, folders and all', async () => {
+  it('derives initialPath from a /w/:workspace/d/:path cold-load URL, folders and all', async () => {
     receivedInitialPath = undefined
     render(
-      <MemoryRouter initialEntries={['/local/design/login%20flow']}>
+      <MemoryRouter initialEntries={['/w/default/d/design/login%20flow']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -652,7 +656,7 @@ describe('App daemon provider state', () => {
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 
-  it('preserves the opened canvas workspaceId as initialWorkspaceId when navigating back to the index', async () => {
+  it('preserves the opened canvas workspaceId as the addressed workspace when navigating back to the index', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
         <App providerState={DAEMON_STATE} />
@@ -672,7 +676,7 @@ describe('App daemon provider state', () => {
       onNavigateBack()
     })
     await screen.findByTestId('daemon-index-page')
-    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
   })
 
   it('remounts DaemonDocumentPage cleanly when opening a different canvas after returning to the index', async () => {
@@ -707,6 +711,209 @@ describe('App daemon provider state', () => {
     })
     await screen.findByTestId('daemon-document-page')
     expect(receivedDaemonPageProps?.path).toBe('canvas-b')
+  })
+
+  it('names the workspace it resolved, replacing the address that named none', async () => {
+    // `/` says nothing about which workspace is on screen. The index picks
+    // one anyway — first-listed, or whatever the chain decides — and until it
+    // said so, the address bar and the page disagreed: a bookmark of `/`
+    // meant "whichever one this resolves to next time", and a reload could
+    // land somewhere else.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+      { initialEntries: ['/'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('daemon-index-page')
+
+    act(() => {
+      const onWorkspaceResolved = receivedDaemonIndexPageProps?.onWorkspaceResolved as (
+        workspace: string,
+      ) => void
+      onWorkspaceResolved('design-team')
+    })
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/design-team'))
+    // REPLACED, not pushed: naming what was already on screen is not a step a
+    // person took, and a back button that returns to `/` would resolve again
+    // and push again — a trap of the app's own making.
+    expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('switching workspace is a history step, so back returns to the previous one', async () => {
+    // The other half. Once the address names a workspace, changing it IS a
+    // navigation the person made, and back has to undo it.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+      { initialEntries: ['/w/design-team'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('daemon-index-page')
+
+    act(() => {
+      const onWorkspaceResolved = receivedDaemonIndexPageProps?.onWorkspaceResolved as (
+        workspace: string,
+      ) => void
+      onWorkspaceResolved('sandbox')
+    })
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
+
+    await act(async () => {
+      await router.navigate(-1)
+    })
+    expect(router.state.location.pathname).toBe('/w/design-team')
+  })
+
+  it('names the browser workspace in the address, replacing the "/" that named none', async () => {
+    // The daemon half of this rule has been in place since the index page
+    // learned to report what it resolved. The browser stayed at `/`, which
+    // was harmless while it kept exactly one workspace and is not any more:
+    // a switcher changes the outermost address layer, and `/` has no layer
+    // to change. It also makes the boot chain's own read real — `boot.ts`
+    // resolves from `parseWorkspaceRoute(location.pathname)?.workspace`, and
+    // at `/` that is always undefined, so a reload fell back to first-listed
+    // regardless of where the person was.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      {
+        initialEntries: ['/'],
+      },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    // REPLACE for the same reason the daemon does it: the app is finishing a
+    // sentence the person started, not taking a step on their behalf.
+    expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('switching workspace from the shell moves the address and the daemon page with it', async () => {
+    // The switcher is the ONE carrier now — the index page's own select is
+    // gone — so this is the whole path: the shell changes the view, the view
+    // writes the address, and the page follows the address.
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              workspaces: [
+                { workspaceId: 'w1', segment: 'design' },
+                { workspaceId: 'w2', segment: 'sandbox' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    )
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={DAEMON_STATE} /> }],
+      { initialEntries: ['/w/design'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('daemon-index-page')
+
+    fireEvent.click(await screen.findByTestId('workspace-switcher-trigger'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /sandbox/i }))
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('sandbox')
+  })
+
+  it('mounts the document once the workspace identity settles after first paint', async () => {
+    // `boot.ts` bounds the identity resolve at 3s and renders DEGRADED past
+    // it — a stale tab blocking the IndexedDB version upgrade is the
+    // realistic way there, and this PR's own v15 migration is exactly such an
+    // upgrade. Past that bound the identity settles while React is already
+    // mounted, and a module-level accessor that nobody subscribes to updates
+    // without re-rendering anything: the deep link stays on the index, and
+    // `browserHandle === null` disables every navigation out of it. Not a
+    // slow start — a permanently unusable app until a reload.
+    const settled = getBrowserWorkspaceId()
+    resetBrowserWorkspaceIdForTests()
+    try {
+      render(
+        <MemoryRouter initialEntries={['/w/default/d/c1']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+      expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
+
+      act(() => setBrowserWorkspaceIdForTests(settled, 'default'))
+
+      expect(await screen.findByTestId('browser-document-page')).toBeTruthy()
+    } finally {
+      setBrowserWorkspaceIdForTests(settled, 'default')
+    }
+  })
+
+  it('rewrites an address naming a workspace the registry cannot resolve', async () => {
+    // The other half, and why the switch resolve is STRICT. A lenient one
+    // would answer any unknown handle with first-listed, and the effect would
+    // then leave the address alone while believing it had switched — an
+    // address naming a workspace nobody has.
+    const settled = getBrowserWorkspaceId()
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      { initialEntries: ['/w/no-such-workspace'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    expect(getBrowserWorkspaceId()).toBe(settled)
+  })
+
+  it('gives the browser shell a workspace switcher naming what the address says', async () => {
+    // The wiring, asserted at the shell rather than at the component: the
+    // switcher's own tests prove it renders, and this proves the browser
+    // branch actually hands it a source — a control nothing mounts passes
+    // every test it has.
+    render(
+      <MemoryRouter initialEntries={['/w/default']}>
+        <App providerState={BROWSER_STATE} />
+      </MemoryRouter>,
+    )
+    const trigger = await screen.findByTestId('workspace-switcher-trigger')
+    expect(trigger.textContent).toContain('default')
+  })
+
+  it('rewrites an address naming a workspace this browser does not keep', async () => {
+    // Left behind by "Work in this browser instead", which switches keeper
+    // under a `/w/<daemon-workspace>/d/...` address. The page already falls
+    // back to the index for it; the ADDRESS kept naming the daemon's
+    // workspace, so the shell would announce a workspace that is not the one
+    // being served, and a reload would resolve against a handle that matches
+    // nothing here.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      {
+        initialEntries: ['/w/some-daemon-workspace/d/main'],
+      },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+  })
+
+  it('opens a browser document addressed by the canonical id, not only the segment', async () => {
+    // The DURABLE form. ADR-0019 keeps the canonical id resolvable in the
+    // same position precisely so a link survives a rename — and the browser
+    // route comparison read one layer, so the moment a segment existed the id
+    // form matched nothing and fell through to the index. The guarantee the
+    // id layer exists to give was absent for this keeper.
+    const canonicalId = getBrowserWorkspaceId()
+    render(
+      <MemoryRouter initialEntries={[`/w/${canonicalId}/d/c1`]}>
+        <App providerState={BROWSER_STATE} />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('browser-document-page')).toBeTruthy()
+    expect(screen.queryByTestId('browser-index-page')).toBeNull()
   })
 
   it('escapes to the browser with BROWSER_CAPABILITIES', async () => {
@@ -800,7 +1007,49 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
   })
 
-  it('forwards the payload workspaceId as initialWorkspaceId when the #wb= payload has a workspace but no path', async () => {
+  it('gives the pairing-link branch the same switcher, built from the payload daemon', async () => {
+    // Two daemon branches render the same index page, and deleting that
+    // page's own select took the switch away from BOTH. Only the
+    // provider-state branch is covered above; without this, removing the
+    // wiring from this one stays green — measured, before this test existed.
+    mockDaemonConnectionResult = {
+      status: 'paired',
+      payload: {
+        baseUrl: 'http://127.0.0.1:3099',
+        workspaceId: 'design',
+        path: undefined,
+        authMode: 'bootstrap',
+        bootstrapToken: 'tok',
+      },
+    }
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(() =>
+        Promise.resolve(
+          new Response(
+            JSON.stringify({
+              workspaces: [
+                { workspaceId: 'w1', segment: 'design' },
+                { workspaceId: 'w2', segment: 'sandbox' },
+              ],
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          ),
+        ),
+      ),
+    )
+    render(
+      <MemoryRouter initialEntries={['/w/design']}>
+        <App providerState={BROWSER_STATE} />
+      </MemoryRouter>,
+    )
+    await screen.findByTestId('daemon-index-page')
+
+    fireEvent.click(await screen.findByTestId('workspace-switcher-trigger'))
+    expect(await screen.findByRole('menuitem', { name: /sandbox/i })).toBeTruthy()
+  })
+
+  it('forwards the payload workspaceId as the addressed workspace when the #wb= payload has a workspace but no path', async () => {
     mockDaemonConnectionResult = {
       status: 'paired',
       payload: {
@@ -817,7 +1066,7 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
       </MemoryRouter>,
     )
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
   })
 })
 
@@ -861,8 +1110,8 @@ describe('App URL routing', () => {
     mockDaemonConnectionResult = { status: 'none' }
   })
 
-  it('cold-loads a /w/:workspaceId/document/:path deep link straight into DaemonDocumentPage', async () => {
-    renderAppWithRouter(DAEMON_STATE, '/w/w1/document/main')
+  it('cold-loads a /w/:workspaceId/d/:path deep link straight into DaemonDocumentPage', async () => {
+    renderAppWithRouter(DAEMON_STATE, '/w/w1/d/main')
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('main')
@@ -871,7 +1120,7 @@ describe('App URL routing', () => {
   it('cold-loads a NESTED document path deep link, path intact', async () => {
     // The tail is the document's path since the data layer converged on
     // paths; the page must receive it verbatim, separators and all.
-    renderAppWithRouter(DAEMON_STATE, '/w/w1/document/notes/2026/plan')
+    renderAppWithRouter(DAEMON_STATE, '/w/w1/d/notes/2026/plan')
     expect(await screen.findByTestId('daemon-document-page')).toBeTruthy()
     expect(receivedDaemonPageProps?.workspaceId).toBe('w1')
     expect(receivedDaemonPageProps?.path).toBe('notes/2026/plan')
@@ -880,7 +1129,7 @@ describe('App URL routing', () => {
   it('cold-loads a /w/:workspaceId deep link into the gallery pre-scoped to that workspace', async () => {
     renderAppWithRouter(DAEMON_STATE, '/w/workspace-b')
     expect(await screen.findByTestId('daemon-index-page')).toBeTruthy()
-    expect(receivedDaemonIndexPageProps?.initialWorkspaceId).toBe('workspace-b')
+    expect(receivedDaemonIndexPageProps?.workspace).toBe('workspace-b')
   })
 
   it('updates the URL when in-app navigation opens a canvas from the gallery', async () => {
@@ -894,11 +1143,11 @@ describe('App URL routing', () => {
       onOpenDocument('w1', 'main')
     })
     await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/document/main')
+    expect(router.state.location.pathname).toBe('/w/w1/d/main')
   })
 
   it('updates the URL back to the gallery when onNavigateBack fires', async () => {
-    const router = renderAppWithRouter(DAEMON_STATE, '/w/w1/document/main')
+    const router = renderAppWithRouter(DAEMON_STATE, '/w/w1/d/main')
     await screen.findByTestId('daemon-document-page')
     const onNavigateBack = receivedDaemonPageProps?.onNavigateBack as () => void
     act(() => {
@@ -945,7 +1194,7 @@ describe('App URL routing', () => {
     }
     const router = renderAppWithRouter(BROWSER_STATE, '/')
     await screen.findByTestId('daemon-document-page')
-    expect(router.state.location.pathname).toBe('/w/w1/document/main')
+    expect(router.state.location.pathname).toBe('/w/w1/d/main')
     // The replace must not have added a new history entry: going back from
     // here should leave the SPA (nothing left to land on inside this test's
     // single-entry history), not bounce to a stale pre-pairing '/' entry.
@@ -974,7 +1223,11 @@ describe('App shell (single instance above the routed pages)', () => {
 
     fireEvent.click(screen.getByTestId('shell-settings'))
     expect(router.state.location.pathname).toBe('/settings')
-    expect((router.state.location.state as { from?: string }).from).toBe('/')
+    // `/w/default`, not `/`: the address names its workspace by the time the
+    // gear is clicked, and the entry point records where the person actually
+    // was. Coming back to `/` would resolve a workspace again rather than
+    // returning to the one they left.
+    expect((router.state.location.state as { from?: string }).from).toBe('/w/default')
     // The settings branch keeps exactly one shell too — the page brings none
     // of its own.
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
@@ -1163,7 +1416,7 @@ describe('App error boundary', () => {
     throwInBrowserDocumentPage = true
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
-      <MemoryRouter initialEntries={['/local/c1']}>
+      <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -1231,7 +1484,7 @@ describe('App not-found route', () => {
 
   it('keeps known routes on their normal pages', () => {
     render(
-      <MemoryRouter initialEntries={['/local/c9']}>
+      <MemoryRouter initialEntries={['/w/default/d/c9']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )

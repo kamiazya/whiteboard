@@ -112,19 +112,35 @@ export class BrowserBackend implements DocumentBackend {
    */
   pushLocalUpdate(bytes: Uint8Array): Promise<void> {
     if (bytes.length === 0) return Promise.resolve()
-    this._writeQueue = this._writeQueue.then(() => this._doWrite(bytes))
+    // Both the document and the WORKSPACE are captured here, at enqueue, not
+    // read again when the queued write runs. What runs later runs after
+    // whatever else happened in between, and two things can happen:
+    //
+    // - `disconnect()` nulls `workspaceDoc` synchronously, so a write still
+    //   on the queue used to find nothing to land on and return — dropping
+    //   the edit the person had just made. A workspace switch unmounts the
+    //   session at exactly that moment.
+    // - The active workspace is re-pointed by the address, so reading
+    //   `getBrowserWorkspaceId()` late filed these bytes under the workspace
+    //   being switched TO. Losing an edit is bad; putting it in another
+    //   workspace is worse.
+    const workspaceDoc = this.workspaceDoc
+    const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
+    this._writeQueue = this._writeQueue.then(() => this._doWrite(bytes, workspaceDoc, workspaceId))
     return this._writeQueue
   }
 
-  private async _doWrite(bytes: Uint8Array): Promise<void> {
-    const workspaceDoc = this.workspaceDoc
-    // A push before the snapshot was delivered has nothing to land on; the
-    // session cannot produce one (its doc exists only after onSnapshot), so
-    // this only guards a disconnected straggler.
-    if (workspaceDoc === null) return
+  private async _doWrite(
+    bytes: Uint8Array,
+    workspaceDoc: LoroDoc | null,
+    workspaceId: string | null,
+  ): Promise<void> {
+    // A push before the snapshot was delivered has nothing to land on — the
+    // session cannot produce one, since its doc exists only after onSnapshot.
+    if (workspaceDoc === null || workspaceId === null) return
     try {
       workspaceDoc.import(bytes)
-      await this.docs.save(getBrowserWorkspaceId(), workspaceDoc)
+      await this.docs.save(workspaceId, workspaceDoc)
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
       await touchContentTimestamp(this.target.documentId)

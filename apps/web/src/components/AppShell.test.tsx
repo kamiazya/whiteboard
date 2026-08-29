@@ -19,7 +19,11 @@ afterEach(() => {
   Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
 })
 
-function renderShell(daemonConnected: boolean, at = '/local/c1', onWorkInBrowser?: () => void) {
+function renderShell(
+  daemonConnected: boolean,
+  at = '/w/default/d/c1',
+  onWorkInBrowser?: () => void,
+) {
   const router = createMemoryRouter(
     [
       {
@@ -55,10 +59,10 @@ describe('AppShell', () => {
   })
 
   it('settings gear navigates to /settings carrying the entry point', () => {
-    const router = renderShell(true, '/local/c1')
+    const router = renderShell(true, '/w/default/d/c1')
     fireEvent.click(screen.getByRole('button', { name: 'Settings' }))
     expect(router.state.location.pathname).toBe('/settings')
-    expect((router.state.location.state as { from?: string }).from).toBe('/local/c1')
+    expect((router.state.location.state as { from?: string }).from).toBe('/w/default/d/c1')
   })
 
   it('names what the dot is about, so it reads as a task and not a warning', () => {
@@ -251,7 +255,7 @@ describe('AppShell — the mark as the connection carrier', () => {
       state: { keeper: 'daemon', session: 'sync-off' },
       daemonBaseUrl: 'http://127.0.0.1:3099',
     })
-    renderShell(true, '/w/ws/document/a.canvas', onWorkInBrowser)
+    renderShell(true, '/w/ws/d/a.canvas', onWorkInBrowser)
 
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     fireEvent.click(await screen.findByRole('button', { name: /work in this browser instead/i }))

@@ -25,7 +25,7 @@ async function clearDb(): Promise<void> {
 function renderApp() {
   return rtlRender(
     <div style={{ height: '100vh' }}>
-      <MemoryRouter initialEntries={['/local/c1']}>
+      <MemoryRouter initialEntries={['/w/default/d/c1']}>
         <div className="flex h-dvh flex-col">
           <AppShell daemon={false} />
           <div className="min-h-0 flex-1">

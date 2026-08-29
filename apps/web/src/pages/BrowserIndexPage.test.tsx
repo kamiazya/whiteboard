@@ -1,8 +1,11 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import {
+  getBrowserWorkspaceId,
+  setBrowserWorkspaceIdForTests,
+} from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
@@ -47,6 +50,38 @@ async function selectCard(title: string) {
 }
 
 describe('BrowserIndexPage', () => {
+  it('re-lists when the active workspace changes under it', async () => {
+    // ADR-0019's switch is an in-SPA route change, so this page stays mounted
+    // across one. Its load effect keyed on the index and the clock, neither of
+    // which moves when the workspace does — so the list kept showing the
+    // documents of the workspace the person just left, under an address
+    // naming the one they went to.
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: 'local',
+        path: 'trip-plan',
+        name: 'Trip Plan',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    const settled = getBrowserWorkspaceId()
+    const listSpy = vi.spyOn(store.index, 'listDocuments')
+    renderPage(store)
+    await screen.findAllByTestId('card-title')
+    const before = listSpy.mock.calls.length
+
+    try {
+      await act(async () => {
+        setBrowserWorkspaceIdForTests('01BX5ZZKBKACTAV9WEVGEMMVRZ', 'second')
+      })
+      await waitFor(() => expect(listSpy.mock.calls.length).toBeGreaterThan(before))
+    } finally {
+      setBrowserWorkspaceIdForTests(settled)
+    }
+  })
+
   it('an empty list with a non-empty trash keeps the panel — restore must stay reachable', async () => {
     // Deleting the LAST document must not swap to onboarding: the Trash
     // section lives in the panel, and onboarding would hide the one

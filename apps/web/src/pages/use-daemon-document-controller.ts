@@ -26,15 +26,8 @@ export interface DaemonDocumentController {
   workspaces: WorkspaceSummary[]
   documents: DocumentSummary[]
   switchDocument: (path: string) => void
-  switchWorkspace: (workspaceId: string) => Promise<void>
   createDocument: (path: string) => Promise<void>
   createError: string | null
-  // Non-fatal: switchWorkspace only commits the new workspaceId/documents
-  // after listDocuments succeeds, so a failure here leaves the previous
-  // selection (and the still-connected editor) valid. Kept separate from
-  // loadError so the page can show an inline error instead of tearing down
-  // the current session.
-  switchError: string | null
 }
 
 function errorMessage(err: unknown): string {
@@ -59,12 +52,12 @@ export function useDaemonDocumentController(
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState<string | null>(null)
   const [createError, setCreateError] = useState<string | null>(null)
-  const [switchError, setSwitchError] = useState<string | null>(null)
 
-  // Monotonic sequence shared by the mount-resolve effect and switchWorkspace
-  // so a slower earlier resolution (mount resolve or a stale switch) can
-  // never clobber a later, already-committed selection.
-  const switchSeqRef = useRef(0)
+  // Monotonic sequence over the mount resolution, so a slower earlier
+  // resolution can never clobber a later, already-committed selection. It was
+  // shared with an in-page workspace switch until the shell became the one
+  // switcher; what remains is the mount path alone.
+  const resolveSeqRef = useRef(0)
 
   // Resolution runs once per mount (daemonBaseUrl/workspaceId/path come from
   // a stable pairing payload for the lifetime of this page). listWorkspaces
@@ -73,12 +66,12 @@ export function useDaemonDocumentController(
   // workspaceId, so gating this fetch behind wid===null left it dead code.
   useEffect(() => {
     let cancelled = false
-    const seq = switchSeqRef.current
+    const seq = resolveSeqRef.current
 
     async function resolve(): Promise<void> {
       try {
         const { workspaces: list } = await listWorkspacesApi(daemonFetch, daemonBaseUrl)
-        if (cancelled || seq !== switchSeqRef.current) return
+        if (cancelled || seq !== resolveSeqRef.current) return
         setWorkspaces(list)
 
         const wid = options.workspaceId ?? list[0]?.workspaceId ?? null
@@ -89,13 +82,13 @@ export function useDaemonDocumentController(
         setWorkspaceId(wid)
 
         const { documents } = await listDocuments(daemonFetch, daemonBaseUrl, wid)
-        if (cancelled || seq !== switchSeqRef.current) return
+        if (cancelled || seq !== resolveSeqRef.current) return
         setDocuments(documents)
         setPath(options.path ?? documents[0]?.path ?? null)
       } catch (err) {
-        if (!cancelled && seq === switchSeqRef.current) setLoadError(errorMessage(err))
+        if (!cancelled && seq === resolveSeqRef.current) setLoadError(errorMessage(err))
       } finally {
-        if (!cancelled && seq === switchSeqRef.current) setLoading(false)
+        if (!cancelled && seq === resolveSeqRef.current) setLoading(false)
       }
     }
 
@@ -112,28 +105,6 @@ export function useDaemonDocumentController(
   const switchDocument = useCallback((nextPath: string) => {
     setPath(nextPath)
   }, [])
-
-  const switchWorkspace = useCallback(
-    async (nextWorkspaceId: string): Promise<void> => {
-      switchSeqRef.current += 1
-      const seq = switchSeqRef.current
-      setCreateError(null)
-      setSwitchError(null)
-      try {
-        const { documents: list } = await listDocuments(daemonFetch, daemonBaseUrl, nextWorkspaceId)
-        if (seq !== switchSeqRef.current) return
-        setWorkspaceId(nextWorkspaceId)
-        setDocuments(list)
-        setPath(list[0]?.path ?? null)
-      } catch (err) {
-        // Deliberately setSwitchError, not setLoadError: the previous
-        // workspace/canvas selection (and its live editor connection) is
-        // still valid, so this must not trip the page's fatal loadError path.
-        if (seq === switchSeqRef.current) setSwitchError(errorMessage(err))
-      }
-    },
-    [daemonFetch, daemonBaseUrl],
-  )
 
   const createDocument = useCallback(
     async (newPath: string): Promise<void> => {
@@ -170,9 +141,7 @@ export function useDaemonDocumentController(
     workspaces,
     documents,
     switchDocument,
-    switchWorkspace,
     createDocument,
     createError,
-    switchError,
   }
 }

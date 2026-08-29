@@ -22,7 +22,11 @@ function toInvalidConfigState(err: unknown): Extract<ProviderState, { kind: 'inv
 // or persisted contract (no negotiation, no wire payload), so this stays a
 // plain type + const map rather than a Zod schema. Deliberate, not an oversight.
 export type WhiteboardCapabilities = {
-  readonly workspaces: boolean
+  // `workspaces` was here, and its removal is the record of ADR-0019
+  // landing: the browser keeper stopped being definitionally
+  // single-workspace, both keepers set the flag the same way, and a flag both
+  // keepers agree on is not a capability — it gates nothing and the copy
+  // built on it promises a difference that is not there.
   readonly versions: boolean
   readonly branches: boolean
   readonly merge: boolean
@@ -38,14 +42,12 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  workspaces: false,
   versions: false,
   branches: false,
   merge: false,
 }
 
 export const DAEMON_CAPABILITIES: WhiteboardCapabilities = {
-  workspaces: true,
   versions: true,
   branches: true,
   merge: true,
