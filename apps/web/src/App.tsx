@@ -43,6 +43,7 @@ import {
   parseSettingsRoute,
   parseWorkspaceRoute,
   type WorkspaceRoute,
+  workspacePath,
   workspaceRoutePath,
 } from './lib/app-routes.js'
 import {
@@ -351,6 +352,39 @@ export function App({ providerState }: AppProps) {
     // which is harmless but noisy. daemonView is the actual trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonView, navigate, isPairRoute, daemonKept])
+
+  // The browser keeper's half of the same rule, and it exists for the same
+  // reason the daemon's does: the address has to NAME the workspace on
+  // screen. It went unwritten while this keeper held exactly one workspace,
+  // where `/` and `/w/default` were the same statement in practice. They are
+  // not once a workspace can be switched — the switcher changes the outermost
+  // address layer, and `/` has no layer to change — and they were never the
+  // same to `boot.ts`, which resolves the active workspace from
+  // `parseWorkspaceRoute(location.pathname)?.workspace`: at `/` that is
+  // always undefined, so a reload took first-listed no matter where the
+  // person was.
+  //
+  // Two addresses get rewritten, and the second is not hypothetical. "Work in
+  // this browser instead" switches keeper under a `/w/<daemon-workspace>/...`
+  // address; the page already falls back to the index for it, but the address
+  // kept naming a workspace this browser does not keep.
+  //
+  // REPLACE, like the daemon's: the app is finishing a sentence the person
+  // started. Pushed, back would return to an address that rewrites itself
+  // again — a trap of our own making.
+  useEffect(() => {
+    if (isPairRoute) return
+    if (daemonKept) return
+    if (browserHandle === null) return
+    if (parseSettingsRoute(location.pathname) !== null) return
+    if (!isKnownAppPath(location.pathname)) return
+    const route = parseWorkspaceRoute(location.pathname)
+    const named = route === null ? undefined : route.workspace
+    if (named !== undefined && browserWorkspaceMatches(named)) return
+    const path = workspacePath(browserHandle)
+    if (location.pathname === path) return
+    navigate(path, { replace: true })
+  }, [location.pathname, browserHandle, daemonKept, isPairRoute, navigate])
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going

@@ -761,6 +761,49 @@ describe('App daemon provider state', () => {
     expect(router.state.location.pathname).toBe('/w/design-team')
   })
 
+  it('names the browser workspace in the address, replacing the "/" that named none', async () => {
+    // The daemon half of this rule has been in place since the index page
+    // learned to report what it resolved. The browser stayed at `/`, which
+    // was harmless while it kept exactly one workspace and is not any more:
+    // a switcher changes the outermost address layer, and `/` has no layer
+    // to change. It also makes the boot chain's own read real — `boot.ts`
+    // resolves from `parseWorkspaceRoute(location.pathname)?.workspace`, and
+    // at `/` that is always undefined, so a reload fell back to first-listed
+    // regardless of where the person was.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      {
+        initialEntries: ['/'],
+      },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    // REPLACE for the same reason the daemon does it: the app is finishing a
+    // sentence the person started, not taking a step on their behalf.
+    expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('rewrites an address naming a workspace this browser does not keep', async () => {
+    // Left behind by "Work in this browser instead", which switches keeper
+    // under a `/w/<daemon-workspace>/d/...` address. The page already falls
+    // back to the index for it; the ADDRESS kept naming the daemon's
+    // workspace, so the shell would announce a workspace that is not the one
+    // being served, and a reload would resolve against a handle that matches
+    // nothing here.
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      {
+        initialEntries: ['/w/some-daemon-workspace/d/main'],
+      },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+  })
+
   it('opens a browser document addressed by the canonical id, not only the segment', async () => {
     // The DURABLE form. ADR-0019 keeps the canonical id resolvable in the
     // same position precisely so a link survives a rename — and the browser
@@ -1043,7 +1086,11 @@ describe('App shell (single instance above the routed pages)', () => {
 
     fireEvent.click(screen.getByTestId('shell-settings'))
     expect(router.state.location.pathname).toBe('/settings')
-    expect((router.state.location.state as { from?: string }).from).toBe('/')
+    // `/w/default`, not `/`: the address names its workspace by the time the
+    // gear is clicked, and the entry point records where the person actually
+    // was. Coming back to `/` would resolve a workspace again rather than
+    // returning to the one they left.
+    expect((router.state.location.state as { from?: string }).from).toBe('/w/default')
     // The settings branch keeps exactly one shell too — the page brings none
     // of its own.
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
