@@ -170,7 +170,11 @@ last two were found by measuring rather than by reading:
    two moments; a file-GC pass unlinking between them removes a file the
    snapshot still references. `backup-in-progress.json` is how the host-side
    backup process tells the daemon's GC to stand down — the filesystem is the
-   only channel between them. It fails OPEN, the opposite of every other guard
+   only channel between them. Its liveness is an EXPIRY the running backup
+   keeps pushing out, never the writer's pid: a pid is meaningful only inside
+   one pid namespace, and once several instances share a volume the reader is
+   routinely in another container, where the number matches nothing or matches
+   something unrelated with no way to tell which. It fails OPEN, the opposite of every other guard
    here: wrongly believing a backup is running means GC never collects again,
    an unbounded disk leak from a file nobody maintains, while wrongly believing
    none is running costs one skipped stand-down in a window of seconds.
