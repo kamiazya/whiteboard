@@ -13,7 +13,7 @@ import { collectStorageEnvIssues } from './store/storage-env.js'
  * silent gap this whole convention exists to close.
  */
 
-export const LOG_LEVEL_ENV = 'WHITEBOARD_LOG_LEVEL'
+const LOG_LEVEL_ENV = 'WHITEBOARD_LOG_LEVEL'
 
 /**
  * `WHITEBOARD_LOG_LEVEL` is checked here rather than in `log.ts`.

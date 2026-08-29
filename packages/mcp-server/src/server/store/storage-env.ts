@@ -16,9 +16,9 @@ import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
  * abort.
  */
 
-export const FILE_GC_INTERVAL_ENV = 'WHITEBOARD_FILE_GC_INTERVAL_MS'
-export const FILE_GC_GRACE_ENV = 'WHITEBOARD_FILE_GC_GRACE_MS'
-export const WORKSPACE_TAIL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
+const FILE_GC_INTERVAL_ENV = 'WHITEBOARD_FILE_GC_INTERVAL_MS'
+const FILE_GC_GRACE_ENV = 'WHITEBOARD_FILE_GC_GRACE_MS'
+const WORKSPACE_TAIL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
 
 /** How often the file-GC sweeper runs. `0` disables it. */
 export function parseFileGcIntervalMs(

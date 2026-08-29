@@ -126,7 +126,7 @@ async function pingDaemon(port: number, host: string): Promise<boolean> {
   }
 }
 
-export const DAEMON_STARTUP_TIMEOUT_ENV = 'WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS'
+const DAEMON_STARTUP_TIMEOUT_ENV = 'WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS'
 
 // Packaged daemon cold-start (native modules, WASM, first-run migrations) can
 // exceed the 10s default on slow CI runners. WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS

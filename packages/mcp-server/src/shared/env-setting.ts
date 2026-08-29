@@ -39,7 +39,7 @@ export interface EnvIssue {
   reason: string
 }
 
-export const MILLISECONDS_REASON = 'must be a whole number of milliseconds, with no unit suffix'
+const MILLISECONDS_REASON = 'must be a whole number of milliseconds, with no unit suffix'
 
 /**
  * A bare non-negative base-10 integer, or nothing at all.
