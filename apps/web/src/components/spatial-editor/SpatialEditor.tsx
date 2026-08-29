@@ -684,6 +684,25 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         previous.nodes.map((node) => node.id).filter((id) => !held.has(id)),
       )
       if (missingIds.size > 0) applySelection({ type: 'drop-missing', missingIds })
+      // The edge selection is the same story with none of the machinery:
+      // no reducer, eighteen hand-maintained writes, and nothing anywhere
+      // comparing it against `canvas.edges`. A selected edge that an undo
+      // or a peer's delete removed still consumes the Delete key — the
+      // edge branch runs first in `handleKeyDown` and returns — so the
+      // keypress does nothing at all. Phrased as what VANISHED, like the
+      // node half above and for the same reason.
+      const heldEdges = new Set(canvas.edges.map((edge) => edge.id))
+      const missingEdges = new Set(
+        previous.edges.map((edge) => edge.id).filter((id) => !heldEdges.has(id)),
+      )
+      if (missingEdges.size > 0) {
+        setSelectedEdgeId((current) =>
+          current !== null && missingEdges.has(current) ? null : current,
+        )
+        setEdgeLabelEditId((current) =>
+          current !== null && missingEdges.has(current) ? null : current,
+        )
+      }
       // Mirror gestures.ts's canvas-replaced abort/continue answer into the
       // preview: an abort (result.state no longer in-flight) must retire the
       // preview too, or it would keep drawing a gesture the reducer already
@@ -1385,6 +1404,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setGestureState(result.state)
       if (result.selectedId !== undefined) {
         applySelection({ type: 'set-primary', id: result.selectedId })
+        // A node becoming primary means no edge is selected. Enforced HERE,
+        // at the one place a gesture result's selection is applied, rather
+        // than by remembering `setSelectedEdgeId(null)` beside every call —
+        // the omission this replaces let a double-click on empty space
+        // create and select a note while an edge stayed selected, and
+        // Delete answers the EDGE first.
+        //
+        // `null` is excluded deliberately: it means the gesture cleared the
+        // node selection, which is the same `pointerdown-empty` the edge
+        // hit-test uses to SELECT an edge. Clearing here would undo that
+        // selection a line after it was made.
+        if (result.selectedId !== null) setSelectedEdgeId(null)
       }
       let running = canvasRef.current
       for (const command of result.commands) {

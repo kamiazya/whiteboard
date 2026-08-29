@@ -258,6 +258,8 @@ interface Stats {
   stepReordersEffective: number
   locksApplied: number
   selectAlls: number
+  edgeSelections: number
+  edgeDeletes: number
 }
 
 interface Real {
@@ -272,6 +274,14 @@ interface Real {
    * locked ids from the selection.
    */
   lockedNodeIds: Set<string>
+  /**
+   * The selected EDGE. Separate state from the node selection, and unlike
+   * it, not behind a reducer: `SpatialEditor` writes this from eighteen
+   * call sites, each responsible for keeping the two coherent by hand.
+   * That is the arrangement `selection.ts` exists to have replaced for
+   * nodes.
+   */
+  selectedEdgeId: string | null
   nextId: number
   trail: string[]
   stats: Stats
@@ -345,6 +355,25 @@ function checkInvariants(real: Real): void {
     expect(real.lockedNodeIds.has(gesture.nodeId), `L1 ${gesture.kind} a locked node ${at}`).toBe(
       false,
     )
+  }
+
+  // E1: node selection and edge selection are mutually exclusive. Stated
+  // as a comment at two call sites — "Delete processes a selected edge
+  // FIRST, so an edge left selected here would be what a Delete on the
+  // node multi-selection actually removes" — and maintained by hand at
+  // all eighteen `setSelectedEdgeId` writes.
+  if (real.selectedEdgeId !== null) {
+    expect(selectionMembers(selection), `E1 both selections non-empty ${at}`).toEqual([])
+  }
+
+  // E2: the selected edge still exists. This is S1 for the other half of
+  // the selection, and unlike S1 there is no effect watching it — nothing
+  // in the component compares `selectedEdgeId` against `canvas.edges`.
+  if (real.selectedEdgeId !== null) {
+    expect(
+      canvas.edges.some((edge) => edge.id === real.selectedEdgeId),
+      `E2 selected edge ${real.selectedEdgeId} is gone ${at}`,
+    ).toBe(true)
   }
 }
 
@@ -453,6 +482,9 @@ function dispatch(real: Real, event: GestureEvent, label: string): void {
   real.gesture = result.state
   if (result.selectedId !== undefined) {
     real.selection = reduceSelection(real.selection, { type: 'set-primary', id: result.selectedId })
+    // A node becoming primary retires any edge selection — see the same
+    // rule in `applyResult`, and its note on why `null` is excluded.
+    if (result.selectedId !== null) real.selectedEdgeId = null
   }
   for (const command of result.commands) real.canvas = applyCommand(real.canvas, command)
   real.trail.push(label)
@@ -487,6 +519,7 @@ function dispatchCommands(real: Real, commands: readonly EditorCommand[], label:
  */
 function pressNode(real: Real, nodeId: string, point: Point, label: string): void {
   real.selection = reduceSelection(real.selection, { type: 'press', id: nodeId })
+  real.selectedEdgeId = null
   dispatch(real, { type: 'pointerdown', nodeId, point }, label)
 }
 
@@ -603,12 +636,30 @@ class PressConnect extends GestureCommand {
   }
 }
 
-class PressEmpty extends GestureCommand {
-  event(): GestureEvent {
-    return { type: 'pointerdown-empty' }
+/**
+ * A press that hits no node. It either lands on an EDGE line — which
+ * selects that edge — or on true empty space, which clears both
+ * selections. Mirrors `handlePointerDown`'s `hitId === undefined` branch,
+ * including its `collapse-extras` before the reducer's own clear.
+ */
+class PressEmpty implements fc.Command<Model, Real> {
+  constructor(private readonly onEdgeIndex: number | null) {}
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const edges = real.canvas.edges
+    const hitEdge =
+      this.onEdgeIndex === null || edges.length === 0
+        ? undefined
+        : edges[this.onEdgeIndex % edges.length]
+    real.selection = reduceSelection(real.selection, { type: 'collapse-extras' })
+    real.selectedEdgeId = hitEdge?.id ?? null
+    if (hitEdge !== undefined) real.stats.edgeSelections += 1
+    dispatch(real, { type: 'pointerdown-empty' }, this.toString())
   }
   toString(): string {
-    return 'pressEmpty'
+    return this.onEdgeIndex === null ? 'pressEmpty' : `pressEdge(#${this.onEdgeIndex})`
   }
 }
 
@@ -733,9 +784,18 @@ class DeleteSelection implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (real.gesture.kind === 'editing-text') return
+    // The edge branch comes FIRST in `handleKeyDown` and returns, so a
+    // selected edge consumes the key whether or not it still exists.
+    if (real.selectedEdgeId !== null) {
+      const edgeId = real.selectedEdgeId
+      real.selectedEdgeId = null
+      dispatchCommands(real, [{ kind: 'delete-edge', id: edgeId }], `deleteEdge(${edgeId})`)
+      real.stats.edgeDeletes += 1
+      return
+    }
     const members = selectionMembers(real.selection).filter((id) => liveIds(real.canvas).has(id))
     if (members.length === 0) return
-    if (real.gesture.kind === 'editing-text') return
     if (real.selection.extraIds.size > 0) {
       const before = real.gesture
       const result = {
@@ -767,6 +827,7 @@ class ToggleMember implements fc.Command<Model, Real> {
   run(_model: Model, real: Real): void {
     const node = pick(real, this.index)
     if (node === undefined) return
+    real.selectedEdgeId = null
     real.selection = reduceSelection(real.selection, { type: 'toggle-member', id: node.id })
     real.trail.push(this.toString())
     if (real.selection.extraIds.size > 0) real.stats.multiSelections += 1
@@ -801,6 +862,10 @@ class ReplaceCanvas implements fc.Command<Model, Real> {
     const missingIds = new Set(
       real.canvas.nodes.map((node) => node.id).filter((id) => !kept.has(id)),
     )
+    const heldEdges = new Set(replacement.edges.map((edge) => edge.id))
+    const missingEdges = new Set(
+      real.canvas.edges.map((edge) => edge.id).filter((id) => !heldEdges.has(id)),
+    )
     if (this.external && real.gesture.kind !== 'idle') {
       real.stats.externalReplacementsMidGesture += 1
     }
@@ -818,6 +883,9 @@ class ReplaceCanvas implements fc.Command<Model, Real> {
     // outlive the node it names.
     if (missingIds.size > 0) {
       real.selection = reduceSelection(real.selection, { type: 'drop-missing', missingIds })
+    }
+    if (real.selectedEdgeId !== null && missingEdges.has(real.selectedEdgeId)) {
+      real.selectedEdgeId = null
     }
     real.trail.push(this.toString())
     recordStats(real, before, result.commands)
@@ -944,6 +1012,7 @@ class SelectAll implements fc.Command<Model, Real> {
     const ids = real.canvas.nodes.map((node) => node.id).filter((id) => !real.lockedNodeIds.has(id))
     if (ids.length === 0) return
     real.selection = reduceSelection(real.selection, { type: 'set-members', ids })
+    real.selectedEdgeId = null
     real.trail.push(this.toString())
     real.stats.selectAlls += 1
     if (real.selection.extraIds.size > 0) real.stats.multiSelections += 1
@@ -1014,6 +1083,7 @@ class Duplicate implements fc.Command<Model, Real> {
         : []
     if (reminted.length > 0) {
       real.selection = reduceSelection(real.selection, { type: 'set-members', ids: reminted })
+      real.selectedEdgeId = null
       real.stats.duplicates += 1
       settle(real)
     }
@@ -1169,6 +1239,39 @@ class PressThenNudge implements fc.Command<Model, Real> {
   }
 }
 
+/**
+ * Select an edge, then do one thing to it — press Delete, or let a canvas
+ * replacement take it away.
+ *
+ * Needed for the same reason as the other composites: an edge selection is
+ * cleared by almost every node-touching command, so drawn uniformly it
+ * survived to a Delete 1-3 times per 300 runs out of 24-43 selections.
+ * The replacement arm is the one that can leave the selection naming an
+ * edge the document no longer holds — nothing watches `selectedEdgeId`
+ * against `canvas.edges`.
+ */
+class PressEdgeThen implements fc.Command<Model, Real> {
+  constructor(
+    private readonly edgeIndex: number,
+    private readonly then: 'delete' | 'replace',
+    private readonly keep: readonly boolean[],
+    private readonly external: boolean,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    if (real.canvas.edges.length === 0) return
+    new PressEmpty(this.edgeIndex).run(model, real)
+    if (real.selectedEdgeId === null) return
+    if (this.then === 'delete') new DeleteSelection().run(model, real)
+    else new ReplaceCanvas(this.keep, this.external).run(model, real)
+  }
+  toString(): string {
+    return `pressEdgeThen${this.then === 'delete' ? 'Delete' : 'Replace'}(#${this.edgeIndex})`
+  }
+}
+
 const indexArb = fc.nat({ max: 3 })
 const pointArb: fc.Arbitrary<Point> = fc.record({
   x: fc.integer({ min: -40, max: 300 }),
@@ -1194,7 +1297,7 @@ const allCommands = [
     .tuple(indexArb, handleArb, pointArb, fc.boolean())
     .map(([i, h, p, multi]) => new PressHandle(i, h, p, multi)),
   indexArb.map((i) => new PressConnect(i)),
-  fc.constant(new PressEmpty()),
+  fc.option(fc.nat({ max: 3 }), { nil: null }).map((i) => new PressEmpty(i)),
   pointArb.map((p) => new Move(p)),
   fc.tuple(pointArb, fc.option(indexArb, { nil: null })).map(([p, over]) => new Release(p, over)),
   fc.constant(new Cancel()),
@@ -1248,6 +1351,14 @@ const allCommands = [
   fc
     .tuple(indexArb, arrowArb, fc.boolean())
     .map(([i, d, large]) => new PressThenNudge(i, d, large)),
+  fc
+    .tuple(
+      indexArb,
+      fc.constantFrom<'delete' | 'replace'>('delete', 'replace'),
+      fc.array(fc.boolean(), { minLength: NODE_IDS.length, maxLength: NODE_IDS.length }),
+      fc.boolean(),
+    )
+    .map(([i, then, keep, external]) => new PressEdgeThen(i, then, keep, external)),
 ]
 
 describe('editor composite state (command-based)', () => {
@@ -1266,6 +1377,8 @@ describe('editor composite state (command-based)', () => {
     stepReordersEffective: 0,
     locksApplied: 0,
     selectAlls: 0,
+    edgeSelections: 0,
+    edgeDeletes: 0,
   }
 
   /**
@@ -1277,13 +1390,13 @@ describe('editor composite state (command-based)', () => {
   afterAll(() => {
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each sits well under the minimum measured across six
-    // consecutive runs — moves 49-80, resizes 55-68, connects 31-39,
-    // deletes 27-46, text edits opened 87-104, pending-text handoffs
-    // 20-33, mid-gesture external replacements 35-48, multi-selections
-    // 163-205, nudges 56-93, duplicates 20-32, effective reorders 28-46
-    // (of which forward/backward 11-23), locks applied 14-28, select-alls
-    // 52-63.
+    // reject. Each sits well under the minimum measured across five
+    // consecutive runs — moves 44-69, resizes 38-61, connects 33-43,
+    // deletes 24-36, text edits opened 87-117, pending-text handoffs
+    // 23-38, mid-gesture external replacements 30-47, multi-selections
+    // 128-201, nudges 56-75, duplicates 13-27, effective reorders 32-43
+    // (of which forward/backward 11-17), locks applied 19-27, select-alls
+    // 49-64, edge selections 69-84, edge deletes 15-28.
     //
     // Two rules, both learned by getting them wrong here. Count EFFECTS,
     // not attempts: `reorders` counted attempts and read as green while
@@ -1291,11 +1404,11 @@ describe('editor composite state (command-based)', () => {
     // adding a command or widening the document generator, because both
     // dilute every existing counter — the keyboard half took mid-gesture
     // external replacements from 9-19 to 4-13, and generating four node
-    // types quartered the text-node share the T1 invariant feeds on.
-    // Three arrangements were dense enough to need a command of their own
-    // rather than a lowered floor.
-    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(25)
-    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(25)
+    // types quartered the text-node share T1 feeds on. Five arrangements
+    // were dilute enough to need a command of their own rather than a
+    // lowered floor.
+    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(20)
+    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(20)
     expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(15)
     expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(10)
     expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(40)
@@ -1305,17 +1418,19 @@ describe('editor composite state (command-based)', () => {
     expect(
       stats.externalReplacementsMidGesture,
       'external replacements barely landed mid-gesture',
-    ).toBeGreaterThan(15)
+    ).toBeGreaterThan(12)
     expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(50)
     expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(25)
-    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(8)
+    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(6)
     expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(12)
     expect(
       stats.stepReordersEffective,
       'forward/backward never stepped over an overlapping node',
     ).toBeGreaterThan(5)
-    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(6)
+    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(8)
     expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(25)
+    expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(30)
+    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(6)
   })
 
   fcTest.prop(
@@ -1332,6 +1447,7 @@ describe('editor composite state (command-based)', () => {
             gesture: createIdleState(),
             selection: EMPTY_SELECTION,
             lockedNodeIds: new Set<string>(),
+            selectedEdgeId: null,
             nextId: 0,
             trail: [],
             stats,
