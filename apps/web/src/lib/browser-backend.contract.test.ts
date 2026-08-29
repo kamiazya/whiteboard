@@ -45,6 +45,18 @@ class InMemoryWorkspaceDocs implements WorkspaceDocs {
     this.stored = new Uint8Array(doc.export({ mode: 'snapshot' }))
     return this.stored
   }
+
+  // This double keeps one snapshot and no log, so there is no position to
+  // hold and nothing to tail. Rejecting rather than answering an empty
+  // cursor: a silent no-op would let a tailing test pass against a double
+  // that cannot tail.
+  async readCursor(): Promise<never> {
+    throw new Error('not implemented')
+  }
+
+  async catchUp(): Promise<never> {
+    throw new Error('not implemented')
+  }
 }
 
 function createStores() {

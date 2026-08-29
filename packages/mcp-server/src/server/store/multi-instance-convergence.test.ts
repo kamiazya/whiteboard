@@ -6,7 +6,10 @@ import type {
   SaveCompactedSnapshotInput,
   SaveCompactedSnapshotResult,
 } from '@kamiazya/whiteboard-ports'
-import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import {
+  DocumentStoreWorkspaceDocs,
+  type WorkspaceDocCursor,
+} from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterAll, describe, expect } from 'vitest'
 import { fc, fcTest } from '../../shared/test-utils/fast-check.js'
@@ -30,13 +33,15 @@ import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
  * instances whose docs are never refreshed, and it shrinks, which a wall-clock
  * race does not.
  *
- * The fence needs one more thing, and it is the whole reason
- * `ConcurrentSaveCommand` exists: a compare-and-swap can only be REFUSED when
- * one writer's read and write straddle another's write. Commands run in order,
- * and an ordered model never straddles — each save completes before the next
- * begins — so a purely sequential model would exercise convergence, leave the
- * fence untouched, and look like it covered both. `afterAll` asserts both
- * actually happened.
+ * Reaching the FENCE takes more than ordering, and measurement rather than
+ * reasoning settled how much. Commands run in order, so a sequential model
+ * never straddles a writer's read and write — but neither does
+ * `ConcurrentSaveCommand`: under microtask lockstep the second writer's
+ * snapshot read still lands after the first writer's write. Only
+ * `StraddledFoldCommand` produces the arrangement, and only because it
+ * supplies both large edits itself. `afterAll` asserts the run reached a
+ * fold, a refused fold, and a straddle, so a distribution that drifts away
+ * from any of them fails instead of looking covered.
  */
 
 const WORKSPACE = 'ws-convergence'
@@ -64,8 +69,13 @@ interface Model {
 }
 
 interface Real {
+  stats: Stats
   docs: DocumentStoreWorkspaceDocs
   instances: LoroDoc[]
+  /** Where each instance believes the record stands. `{null, null}` is the
+   *  honest starting value for a cold instance: no generation it has seen,
+   *  and no seq it has consumed. */
+  cursors: WorkspaceDocCursor[]
   hook: { current: BeforeFoldWrite }
 }
 
@@ -73,6 +83,7 @@ interface Stats {
   folds: number
   refusals: number
   straddles: number
+  catchUps: number
 }
 
 /**
@@ -87,7 +98,7 @@ interface Stats {
  * convergence assertions stayed green and only the reach counters moved.
  *
  * Real processes have no such lockstep; a read can precede another process's
- * write by any amount. `StraddledSaveCommand` reproduces that ordering
+ * write by any amount. `StraddledFoldCommand` reproduces that ordering
  * deterministically instead of hoping for it.
  */
 type BeforeFoldWrite = (() => Promise<void>) | undefined
@@ -276,6 +287,40 @@ class StraddledFoldCommand implements fc.AsyncCommand<Model, Real> {
   }
 }
 
+/**
+ * Follow the record from where this instance left off, WITHOUT dropping its
+ * doc — the read half of multi-instance operation.
+ *
+ * Its assertion is the strongest one in this file: a caught-up instance holds
+ * exactly what the record holds, plus its own unsaved edits and nothing else.
+ * The other commands only ever check the STORE; this checks that an instance
+ * which never restarts stops serving a stale answer.
+ */
+class CatchUpCommand implements fc.AsyncCommand<Model, Real> {
+  constructor(private readonly instance: number) {}
+
+  check(): boolean {
+    return true
+  }
+
+  async run(model: Model, real: Real): Promise<void> {
+    const doc = real.instances[this.instance]
+    const cursor = real.cursors[this.instance]
+    if (doc === undefined || cursor === undefined) return
+    real.cursors[this.instance] = await real.docs.catchUp(WORKSPACE, doc, cursor)
+    real.stats.catchUps += 1
+
+    const held = new Set(Object.keys(doc.getMap('meta').toJSON() as Record<string, unknown>))
+    const expected = new Set([...model.acknowledged, ...(model.pending[this.instance] ?? [])])
+    expect(held).toEqual(expected)
+    await assertRecordMatchesModel(model, real)
+  }
+
+  toString(): string {
+    return `catchUp(instance=${this.instance})`
+  }
+}
+
 /** Drop this instance's doc and re-read the record: a cache eviction, a
  *  restarted process, or a reloaded tab. */
 class ReopenCommand implements fc.AsyncCommand<Model, Real> {
@@ -287,6 +332,7 @@ class ReopenCommand implements fc.AsyncCommand<Model, Real> {
 
   async run(model: Model, real: Real): Promise<void> {
     real.instances[this.instance] = (await real.docs.open(WORKSPACE)) ?? new LoroDoc()
+    real.cursors[this.instance] = await real.docs.readCursor(WORKSPACE)
     // Unsaved edits die with the doc that held them, so they were never
     // acknowledged and the model must stop expecting them.
     model.pending[this.instance]?.clear()
@@ -321,11 +367,14 @@ const allCommands = [
   fc.tuple(instanceArbitrary, instanceArbitrary).map(([a, b]) => new StraddledFoldCommand(a, b)),
   // Rarest on purpose: a reopen REMOVES staleness, which is the very
   // condition under test.
+  instanceArbitrary.map((i) => new CatchUpCommand(i)),
+  // Rarest on purpose: a reopen REMOVES staleness, which is the very
+  // condition under test.
   instanceArbitrary.map((i) => new ReopenCommand(i)),
 ]
 
 describe('multi-instance convergence (ADR-0020)', () => {
-  const stats: Stats = { folds: 0, refusals: 0, straddles: 0 }
+  const stats: Stats = { folds: 0, refusals: 0, straddles: 0, catchUps: 0 }
 
   /**
    * The fixture reached its subject.
@@ -339,6 +388,7 @@ describe('multi-instance convergence (ADR-0020)', () => {
     expect(stats.folds).toBeGreaterThan(0)
     expect(stats.refusals).toBeGreaterThan(0)
     expect(stats.straddles).toBeGreaterThan(0)
+    expect(stats.catchUps).toBeGreaterThan(0)
   })
 
   /**
@@ -369,7 +419,12 @@ describe('multi-instance convergence (ADR-0020)', () => {
       real: {
         docs,
         instances: Array.from({ length: INSTANCE_COUNT }, () => new LoroDoc()),
+        cursors: Array.from({ length: INSTANCE_COUNT }, () => ({
+          generation: null,
+          afterSeq: null,
+        })),
         hook,
+        stats,
       },
     }
   }

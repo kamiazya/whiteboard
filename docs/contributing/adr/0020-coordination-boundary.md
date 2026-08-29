@@ -161,6 +161,14 @@ generation from decision 3 is exactly the signal that the prefix is gone and
 the snapshot must be re-read, so the two compose into one cursor rather than
 needing a second mechanism.
 
+`WorkspaceDocs.catchUp` is that cursor's one consumer: it imports whatever
+the record gained, or re-reads the snapshot when the generation moved, and it
+MERGES rather than replaces so an instance's unsaved local edits survive being
+caught up. Without it `save` was only half the story — several instances could
+write without coordinating and converge perfectly in storage, while a
+long-lived instance never learned what the others wrote and served a stale
+answer until something evicted its doc.
+
 This is also why the frontier's remaining last-write-wins flaw is not
 scheduled: nothing in the propagation path reads it. Making it a version-vector
 join would need a runtime seam threaded through every store — the same seam a

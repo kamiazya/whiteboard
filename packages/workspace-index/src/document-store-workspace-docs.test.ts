@@ -343,3 +343,125 @@ it('a fold does not supersede a delta its own doc never saw', async () => {
   expect(reopened?.getMap('meta').get('appended')).toBe('1')
   expect(reopened?.getMap('meta').get('seed')).toBe('1')
 })
+
+/**
+ * `catchUp`: the read half of multi-instance operation (ADR-0020 decision 5).
+ *
+ * `save` already lets several instances write without coordinating. Nothing
+ * let a long-lived instance LEARN what the others wrote — its doc simply
+ * stayed behind until something evicted it — so a second daemon served stale
+ * reads indefinitely while converging perfectly in storage.
+ */
+it('catches an instance up on another writer\u2019s appends, without reopening', async () => {
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('added', '1')
+  other.commit()
+  await writer.save('ws-a', other)
+
+  expect(held.getMap('meta').get('added')).toBeUndefined()
+  const next = await reader.catchUp('ws-a', held, cursor)
+  expect(held.getMap('meta').get('added')).toBe('1')
+  expect(held.getMap('meta').get('seed')).toBe('1')
+
+  // Resuming from the answered cursor changes nothing further: a tail that
+  // re-delivered its last batch would also pass the assertion above.
+  const before = JSON.stringify(held.getMap('meta').toJSON())
+  const after = await reader.catchUp('ws-a', held, next)
+  expect(JSON.stringify(held.getMap('meta').toJSON())).toBe(before)
+  expect(after.afterSeq).toBe(next.afterSeq)
+})
+
+it('reloads the snapshot when a fold moved the generation out from under the cursor', async () => {
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+
+  // Big enough to FOLD, so the log this cursor points into is superseded and
+  // its seqs may be handed out again. Following the log alone from here
+  // silently skips the folded ops.
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('folded', 'w'.repeat(80 * 1024))
+  other.commit()
+  await writer.save('ws-a', other)
+
+  await reader.catchUp('ws-a', held, cursor)
+  expect((held.getMap('meta').get('folded') as string | undefined)?.length).toBe(80 * 1024)
+  expect(held.getMap('meta').get('seed')).toBe('1')
+})
+
+it('after a reload it still carries the deltas appended since the fold', async () => {
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+
+  // A fold, and then an ordinary append on top of it. The reload has to bring
+  // BOTH — a reload that stopped at the snapshot would pass every assertion
+  // in the case above, where the fold left the log empty.
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('folded', 'w'.repeat(80 * 1024))
+  other.commit()
+  await writer.save('ws-a', other)
+  other.getMap('meta').set('after-fold', '1')
+  other.commit()
+  await writer.save('ws-a', other)
+
+  await reader.catchUp('ws-a', held, cursor)
+  expect(held.getMap('meta').get('after-fold')).toBe('1')
+  expect((held.getMap('meta').get('folded') as string | undefined)?.length).toBe(80 * 1024)
+})
+
+it('keeps a caught-up instance able to write, with both sides surviving the save', async () => {
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+  held.getMap('meta').set('mine', '1')
+  held.commit()
+
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('theirs', '1')
+  other.commit()
+  await writer.save('ws-a', other)
+
+  await reader.catchUp('ws-a', held, cursor)
+  // The catch-up merged rather than replaced, so the unsaved local edit is
+  // still there — and still SAVEABLE, which is the part that matters and the
+  // part an in-place import alone does not demonstrate.
+  await reader.save('ws-a', held)
+
+  const settled = (await writer.open('ws-a')) as LoroDoc
+  expect(settled.getMap('meta').get('mine')).toBe('1')
+  expect(settled.getMap('meta').get('theirs')).toBe('1')
+  expect(settled.getMap('meta').get('seed')).toBe('1')
+})

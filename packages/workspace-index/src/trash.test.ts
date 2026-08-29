@@ -66,6 +66,11 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & { peek: (id: string) => LoroDo
     async save() {
       return null
     },
+    // These doubles serve INDEX tests, which never tail. Rejecting rather than
+    // answering an empty cursor: a silent no-op would let a tailing test pass
+    // against a double that cannot tail.
+    readCursor: () => Promise.reject(new Error('not implemented')),
+    catchUp: () => Promise.reject(new Error('not implemented')),
     peek: (id) => docs.get(id) as LoroDoc,
   }
 }

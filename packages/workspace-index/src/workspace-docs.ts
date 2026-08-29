@@ -1,6 +1,19 @@
 import type { LoroDoc } from 'loro-crdt'
 
 /**
+ * A position in a workspace record, as a tailing reader holds it.
+ *
+ * The PAIR, not the seq alone (ADR-0020 decision 5). `appendDeltas` assigns
+ * from the highest seq present, so a fold that empties the log lets the next
+ * append reuse seqs this reader has already consumed; the generation is what
+ * says the prefix is gone and the snapshot has to be re-read.
+ */
+export interface WorkspaceDocCursor {
+  generation: number | null
+  afterSeq: number | null
+}
+
+/**
  * Where a workspace's Loro document comes from, and where a change to it goes.
  *
  * The one thing this package does not decide. A workspace document is bytes in
@@ -36,4 +49,27 @@ export interface WorkspaceDocs {
    * the write.
    */
   save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null>
+  /**
+   * Where the record stands right now, for a caller that has just opened it
+   * and wants to follow along from here.
+   */
+  readCursor(workspaceId: string): Promise<WorkspaceDocCursor>
+  /**
+   * Imports everything the record has gained since `cursor` into `doc`, and
+   * answers the position to resume from.
+   *
+   * The read half of multi-instance operation. `save` already lets several
+   * instances write without coordinating; without this, a long-lived instance
+   * never LEARNS what the others wrote — its doc stays behind until something
+   * evicts it, so it serves stale reads indefinitely while storage converges
+   * perfectly underneath.
+   *
+   * Merges rather than replaces: `doc` may carry local edits that are not
+   * saved yet, and a catch-up must not be a way to lose them.
+   */
+  catchUp(
+    workspaceId: string,
+    doc: LoroDoc,
+    cursor: WorkspaceDocCursor,
+  ): Promise<WorkspaceDocCursor>
 }

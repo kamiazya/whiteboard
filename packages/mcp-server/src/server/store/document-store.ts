@@ -42,6 +42,7 @@ import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
   DocumentStoreWorkspaceDocs,
   LoroWorkspaceDocumentIndex,
+  type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
@@ -303,15 +304,29 @@ export async function saveWorkspaceDoc(
  * delete/rename, the dual-plane index) shares the same instance the save
  * path diffs against, so no path can leave another holding a stale doc.
  */
-export function cacheBackedWorkspaceDocs(): {
-  open(workspaceId: string): Promise<LoroDoc | null>
-  create(workspaceId: string): Promise<LoroDoc>
-  save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null>
-} {
+export function cacheBackedWorkspaceDocs(): WorkspaceDocs {
   return {
     open: (workspaceId) => openWorkspaceDocIfStored(workspaceId),
     create: (workspaceId) => getWorkspaceDoc(workspaceId),
     save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc),
+    // The tailing half is a STORE concern, so it delegates rather than being
+    // reimplemented against the cache: the cursor describes the record, and
+    // the only thing this wrapper adds is which doc gets caught up.
+    readCursor: async (workspaceId) =>
+      new DocumentStoreWorkspaceDocs(await documentStoreReady()).readCursor(workspaceId),
+    // Under the workspace write barrier, because this MUTATES the live cached
+    // document that every in-process writer is diffing against. Importing
+    // another instance's ops into it while a local save is computing its own
+    // delta is the one way a catch-up could make things worse rather than
+    // better.
+    catchUp: (workspaceId, doc, cursor) =>
+      withWorkspaceWriteLock(workspaceId, async () =>
+        new DocumentStoreWorkspaceDocs(await documentStoreReady()).catchUp(
+          workspaceId,
+          doc,
+          cursor,
+        ),
+      ),
   }
 }
 
