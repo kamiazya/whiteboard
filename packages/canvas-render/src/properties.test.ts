@@ -1,4 +1,4 @@
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { ResolvedDocBundle } from './layout/embed-recursion.js'
 import { resolveEmbeds } from './layout/embed-recursion.js'
 import { sceneBounds } from './scene-bounds.js'
@@ -51,20 +51,94 @@ const bboxArb = fc.record({
   h: fc.integer({ min: 0, max: 100 }),
 })
 
+/**
+ * A scene mixing ADDRESSABLE chrome (a `shape` carrying a document id) with
+ * anonymous nodes. The id is what the digest is for — it reports one entry
+ * per addressable node so a reader can act on what it sees — and a scene of
+ * bare `thematicBreak`s carries none, so every entry fell through to the
+ * `n${index}` fallback: measured 0 of 200 runs reached an addressable entry,
+ * which is the path the digest actually ships.
+ */
+const digestSceneArb: fc.Arbitrary<Scene> = fc
+  .array(fc.record({ bbox: bboxArb, addressable: fc.boolean() }), { maxLength: 8 })
+  .map((entries) => ({
+    nodes: entries.map(
+      ({ bbox, addressable }, index): SceneNode =>
+        addressable
+          ? { kind: 'shape' as const, id: `doc-${index}`, bbox }
+          : { kind: 'thematicBreak' as const, bbox },
+    ),
+  }))
+
 describe('sceneDigest determinism (PBT)', () => {
-  fcTest.prop([fc.array(bboxArb, { maxLength: 8 })], withDefaults())(
+  fcTest.prop([digestSceneArb], withDefaults())(
     'is pure: repeated calls on the same scene yield the same digest',
-    (boxes) => {
-      const scene: Scene = {
-        nodes: boxes.map((bbox) => ({ kind: 'thematicBreak' as const, bbox })),
-      }
+    (scene) => {
       expect(sceneDigest(scene)).toEqual(sceneDigest(scene))
     },
   )
+
+  it('the domain reaches addressable entries, not only the anonymous fallback', () => {
+    const addressable = fc
+      .sample(digestSceneArb, 200)
+      .filter((scene) => sceneDigest(scene).nodes.some((node) => node.id.startsWith('doc-')))
+    // A floor, well under what the generator measures.
+    expect(addressable.length).toBeGreaterThanOrEqual(120)
+  })
 })
 
+/**
+ * Text a serializer's escaping AND character-legality rules have to survive.
+ * `fc.string()` alone draws printable ASCII, so it reached an XML metachar
+ * in 23 of 100 runs and a control character, an astral code point or a lone
+ * surrogate in none at all — while stripping exactly those is half of what
+ * `escapeXmlText` does.
+ */
+const xmlHazardArb = fc.oneof(
+  fc.string({ maxLength: 40 }),
+  fc
+    .array(
+      fc.constantFrom(
+        '<',
+        '&',
+        '>',
+        '"',
+        "'",
+        ']]>',
+        '&amp;',
+        '&#x1;',
+        String.fromCharCode(0),
+        String.fromCharCode(0x0b),
+        String.fromCharCode(0x9f),
+        String.fromCodePoint(0x1f600),
+        String.fromCharCode(0xd800),
+        String.fromCharCode(0xdfff),
+        String.fromCharCode(0xfffe),
+        'ab',
+        ' ',
+      ),
+      { maxLength: 12 },
+    )
+    .map((parts) => parts.join('')),
+)
+
+/**
+ * Independent oracle for XML 1.0 §2.2's CHARACTER rule — the half
+ * `isWellFormedXmlFragment` deliberately does not cover (it balances tags
+ * and checks escaping, and says so). Built with the RegExp constructor so
+ * the control ranges do not trip Biome's noControlCharactersInRegex, the
+ * same reason the production escaper does; a valid surrogate PAIR must
+ * pass, so only unpaired halves are rejected.
+ */
+const XML_ILLEGAL_OUTPUT = new RegExp(
+  '[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F]' +
+    '|[\uD800-\uDBFF](?![\uDC00-\uDFFF])' +
+    '|(?<![\uD800-\uDBFF])[\uDC00-\uDFFF]' +
+    '|[\uFFFE\uFFFF]',
+)
+
 describe('SVG serializer well-formedness (PBT)', () => {
-  fcTest.prop([fc.string({ maxLength: 40 })], withDefaults({ numRuns: 100 }))(
+  fcTest.prop([xmlHazardArb], withDefaults({ numRuns: 100 }))(
     'produces well-formed XML for any text-run content',
     (text) => {
       const scene: Scene = {
@@ -76,7 +150,11 @@ describe('SVG serializer well-formedness (PBT)', () => {
           },
         ],
       }
-      expect(isWellFormedXmlFragment(renderSceneToSvg(scene))).toBe(true)
+      const svg = renderSceneToSvg(scene)
+      expect(isWellFormedXmlFragment(svg)).toBe(true)
+      // The checker balances tags and inspects escaping; it says nothing
+      // about whether a character may appear in an XML document at all.
+      expect(XML_ILLEGAL_OUTPUT.test(svg)).toBe(false)
     },
   )
 })

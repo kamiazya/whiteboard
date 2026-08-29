@@ -33,7 +33,7 @@ import type {
   MdastPhrasingContent,
   MdastRoot,
 } from '@kamiazya/whiteboard-model/mdast'
-import { describe, expect } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import type { Scene, SceneNode, TextRunNode } from '../../scene-graph.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -48,10 +48,27 @@ const wordArb = fc.stringMatching(/^[a-z]{1,9}$/)
 /** Multi-word text is what makes wrapping reachable at all. */
 const proseArb = fc.array(wordArb, { minLength: 1, maxLength: 10 }).map((words) => words.join(' '))
 
+/**
+ * An ATOMIC run is never split, so one longer than `MAX_WIDTH` is cut and
+ * marked `truncated` — which is what `preserves every source word` has to
+ * skip, since a cut document no longer holds every word. Giving inline code
+ * the same multi-word `proseArb` as prose therefore truncated nearly every
+ * document: measured, that property asserted in 12 of 200 runs, and the
+ * skip was explained by an atomic leaf in 200 of 200 of the rest.
+ *
+ * So the two cases are two generators. A short code fits, keeping the
+ * word-preservation domain intact; `truncatingRootArb` below carries the
+ * long one, so the prefix property keeps a subject of its own.
+ */
+const shortCodeArb = fc.stringMatching(/^[a-z]{1,6}$/)
+
 function phrasingArb(depth: number): fc.Arbitrary<MdastPhrasingContent> {
   const leaf = fc.oneof(
-    proseArb.map((value) => ({ type: 'text', value }) as const),
-    proseArb.map((value) => ({ type: 'inlineCode', value }) as const),
+    { arbitrary: proseArb.map((value) => ({ type: 'text', value }) as const), weight: 4 },
+    {
+      arbitrary: shortCodeArb.map((value) => ({ type: 'inlineCode', value }) as const),
+      weight: 1,
+    },
   )
   if (depth <= 0) return leaf
   const children = fc.array(phrasingArb(depth - 1), { minLength: 1, maxLength: 3 })
@@ -117,6 +134,16 @@ const rootOf = (blocks: readonly MdastFlowContent[]): MdastRoot => ({
 
 const proseRootArb = fc.array(proseBlockArb, { minLength: 1, maxLength: 4 }).map(rootOf)
 const anyRootArb = fc.array(anyBlockArb, { minLength: 1, maxLength: 4 }).map(rootOf)
+
+/** A paragraph carrying one atomic run too wide to fit, so a cut is certain. */
+const truncatingRootArb = fc.array(proseArb, { minLength: 1, maxLength: 3 }).map((values) =>
+  rootOf(
+    values.map((value) => ({
+      type: 'paragraph',
+      children: [{ type: 'inlineCode', value: `${value} ${value}` }],
+    })),
+  ),
+)
 
 function layout(root: MdastRoot): Scene {
   return layoutMdastBlocks(root, { measure, maxWidth: MAX_WIDTH, fontFamily: FONT_FAMILY })
@@ -257,9 +284,14 @@ describe('layoutMdastBlocks properties', () => {
   // A TRUNCATED run is the one place text is deliberately dropped, so a
   // document containing one is held to the weaker statement its contract
   // actually makes: what survives is a PREFIX. Stated as two properties
-  // rather than one weakened property, so the un-truncated case — every
-  // document with no atomic overflow in it, which is nearly all of them —
-  // keeps the full strength it had.
+  // rather than one weakened property, so the un-truncated case keeps the
+  // full strength it had.
+  //
+  // That split only pays while un-truncated documents are the common case,
+  // which is a claim about the GENERATOR and was false for a long time —
+  // inline code drew multi-word text, so this property asserted in 12 of
+  // 200 runs. `the two atomic domains reach their own case` below is what
+  // pins it now.
   fcTest.prop([proseRootArb], withDefaults())('preserves every source word, in order', (root) => {
     const runs = textRuns(layout(root))
     if (runs.some(({ run }) => run.truncated === true)) return
@@ -267,14 +299,54 @@ describe('layoutMdastBlocks properties', () => {
     expect(rejoinSplitTokens(rendered, sourceTokens(root))).toStrictEqual(sourceTokens(root))
   })
 
-  fcTest.prop([proseRootArb], withDefaults())('only ever cuts a run to a prefix', (root) => {
-    for (const { run } of textRuns(layout(root))) {
-      if (run.truncated !== true) continue
-      // The WHOLE retained text, not just its first token: a truncator that
-      // corrupts anything after the first word would satisfy a per-token
-      // check while painting text that was never in the document.
-      expect(atomicValues(root).some((value) => value.startsWith(run.text))).toBe(true)
-    }
+  // Both domains: the short-code one for the ordinary document that cuts
+  // nothing, and the long-atomic one that is certain to cut, so the property
+  // always has a subject somewhere in its runs.
+  fcTest.prop([fc.oneof(proseRootArb, truncatingRootArb)], withDefaults())(
+    'only ever cuts a run to a prefix',
+    (root) => {
+      for (const { run } of textRuns(layout(root))) {
+        if (run.truncated !== true) continue
+        // The WHOLE retained text, not just its first token: a truncator that
+        // corrupts anything after the first word would satisfy a per-token
+        // check while painting text that was never in the document.
+        expect(atomicValues(root).some((value) => value.startsWith(run.text))).toBe(true)
+      }
+    },
+  )
+
+  /**
+   * The reachability half of the three properties above, per domain and per
+   * case. Each of them is conditional — on a document not being cut, on one
+   * being cut, on a run overflowing — so a generator that stops reaching its
+   * case turns the property into a no-op that still reports green.
+   *
+   * Getting the un-cut case back was not simply a matter of shortening the
+   * code spans: an atomic run is fitted to what is left of the CURRENT line
+   * (`mdast-blocks.ts`'s `maxWidth - line.x`), never moved to a fresh one, so
+   * even a two-character span is cut when it lands at a full line's end.
+   * Inline code is therefore also weighted down rather than only shortened.
+   *
+   * The numbers are floors, well under what the generators measure
+   * (114 / 193 / 74 of 200 when this was written), so a real loss of reach
+   * fails here and sampling noise does not.
+   */
+  it('each generator reaches the case its property is conditional on', () => {
+    const hasCut = (root: MdastRoot) => textRuns(layout(root)).some(({ run }) => run.truncated)
+    const overflows = (root: MdastRoot) =>
+      textRuns(layout(root)).some(
+        ({ run, offsetX }) => offsetX + run.bbox.x + run.bbox.w > MAX_WIDTH + 0.001,
+      )
+    expect({
+      uncutProseDocuments:
+        fc.sample(proseRootArb, 200).filter((root) => !hasCut(root)).length >= 60,
+      cutAtomicDocuments: fc.sample(truncatingRootArb, 200).filter(hasCut).length >= 180,
+      overflowingDocuments: fc.sample(anyRootArb, 200).filter(overflows).length >= 30,
+    }).toEqual({
+      uncutProseDocuments: true,
+      cutAtomicDocuments: true,
+      overflowingDocuments: true,
+    })
   })
 
   // XML — and therefore an SVG <text> element — strips leading/trailing

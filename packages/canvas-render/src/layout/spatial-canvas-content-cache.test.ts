@@ -27,9 +27,22 @@ const textNode = (
   text,
 })
 
-function mapCache(): SpatialContentCache & { store: Map<string, FittedBlocks> } {
+function mapCache(): SpatialContentCache & {
+  store: Map<string, FittedBlocks>
+  hits: () => number
+} {
   const store = new Map<string, FittedBlocks>()
-  return { store, get: (key) => store.get(key), set: (key, value) => store.set(key, value) }
+  let hits = 0
+  return {
+    store,
+    hits: () => hits,
+    get: (key) => {
+      const value = store.get(key)
+      if (value !== undefined) hits += 1
+      return value
+    },
+    set: (key, value) => store.set(key, value),
+  }
 }
 
 function options(
@@ -129,23 +142,69 @@ const nodeArb = (id: string): fc.Arbitrary<SpatialNode> =>
     })
     .map(({ x, y, w, h, text }) => textNode(id, x, y, text, { w, h }))
 
+/**
+ * An edit APPLIED to a node the cache has already seen. The key is
+ * `[width, height, text, outline]`, so two independently generated nodes
+ * agree on it about never: the earlier shape of this property drew its
+ * second canvas from `nodeArb` and scored 0 cache hits in 200 runs, which
+ * made the `body = cached` branch — the whole subject — unreachable.
+ * Corrupting that branch left the property green while the move example
+ * above went red.
+ *
+ * `move` is the case the key's own contract is about (position is
+ * deliberately absent, so a moved node hits); `resize` and `retext` are the
+ * misses that keep both sides of the branch in the domain.
+ */
+const editArb = fc.oneof(
+  fc.record({
+    kind: fc.constant('move' as const),
+    dx: fc.integer({ min: -300, max: 300 }),
+    dy: fc.integer({ min: -300, max: 300 }),
+  }),
+  fc.record({
+    kind: fc.constant('resize' as const),
+    w: fc.integer({ min: 30, max: 320 }),
+    h: fc.integer({ min: 20, max: 200 }),
+  }),
+  fc.record({ kind: fc.constant('retext' as const), text: bodyArb }),
+)
+
+type Edit =
+  | { kind: 'move'; dx: number; dy: number }
+  | { kind: 'resize'; w: number; h: number }
+  | {
+      kind: 'retext'
+      text: string
+    }
+
+function applyEdit(node: SpatialNode, edit: Edit): SpatialNode {
+  if (edit.kind === 'move') return { ...node, x: node.x + edit.dx, y: node.y + edit.dy }
+  if (edit.kind === 'resize') return { ...node, width: edit.w, height: edit.h }
+  return { ...node, type: 'text', text: edit.text } as SpatialNode
+}
+
 describe('layoutSpatialCanvas content cache (PBT)', () => {
-  fcTest.prop(
-    [fc.array(nodeArb('n'), { minLength: 1, maxLength: 3 }), nodeArb('n')],
-    withDefaults(),
-  )(
+  fcTest.prop([fc.array(nodeArb('n'), { minLength: 1, maxLength: 3 }), editArb], withDefaults())(
     'a shared warm cache never changes any layout across a random edit sequence',
-    (nodes, edited) => {
+    (nodes, edit) => {
       const cache = mapCache()
+      const before = nodes.map((n, i) => ({ ...n, id: `n${i}` }))
+      const after = [applyEdit(before[0] as SpatialNode, edit), ...before.slice(1)]
+      // Back to the first canvas last, so every key is warm however the edit
+      // went — an undo is also the commonest real sequence.
       const canvases: SpatialCanvas[] = [
-        { nodes: nodes.map((n, i) => ({ ...n, id: `n${i}` })), edges: [] },
-        { nodes: [{ ...edited, id: 'n0' }], edges: [] },
+        { nodes: before, edges: [] },
+        { nodes: after, edges: [] },
+        { nodes: before, edges: [] },
       ]
       for (const canvas of canvases) {
         const withCache = layoutSpatialCanvas(canvas, options({ contentCache: cache }))
         const fresh = layoutSpatialCanvas(canvas, options())
         expect(JSON.stringify(withCache)).toBe(JSON.stringify(fresh))
       }
+      // The trigger, asserted beside the outcome: a run that never read a
+      // warm entry has not exercised the branch this property is about.
+      expect(cache.hits()).toBeGreaterThan(0)
     },
   )
 })

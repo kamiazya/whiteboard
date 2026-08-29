@@ -459,8 +459,11 @@ const denseEdgeArb = (index: number): fc.Arbitrary<CanvasEdge> =>
 
 const dragScenarioArb = fc.record({
   nodes: fc.tuple(...denseIds.map(denseNodeArb)),
+  // More edges than the six nodes can keep apart, so paths cross and the
+  // jump geometry the property claims to cover is actually produced: at one
+  // to five edges a jump appeared in 7 of 200 runs.
   edges: fc
-    .array(fc.nat({ max: 4 }), { minLength: 1, maxLength: 5 })
+    .array(fc.nat({ max: 4 }), { minLength: 4, maxLength: 9 })
     .chain((indices) => fc.tuple(...indices.map((_, i) => denseEdgeArb(i)))),
   routing: fc.record({
     style: fc.constantFrom(
@@ -493,6 +496,24 @@ describe('live-drag parity property (PBT)', () => {
       expect(live).toEqual(committed.slice(committed.length - live.length))
     },
   )
+
+  it('the scenario reaches the jump geometry it claims to cover', () => {
+    const options = { measure, parseBody: fakeParseBody, appearance }
+    const withJumps = fc.sample(dragScenarioArb, 200).filter(({ nodes, edges, routing }) =>
+      layoutSpatialEdges(
+        {
+          nodes: [...nodes],
+          edges: [...edges],
+          'x-whiteboard': { edgeRouting: { ...routing, lineJumps: 'arc' } },
+        },
+        options,
+      ).some((node) => node.kind === 'edge' && (node.jumps?.length ?? 0) > 0),
+    )
+    // Jumps are asked for in half the runs and drawn only where two routes
+    // actually cross, so this is a floor on the arrangement, not on the run
+    // count.
+    expect(withJumps.length).toBeGreaterThanOrEqual(20)
+  })
 })
 
 /**
