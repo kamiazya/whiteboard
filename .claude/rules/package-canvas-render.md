@@ -994,6 +994,32 @@ the table alone.
   live in `src/test-utils/routing-metrics.ts` and never call `edge-rules.ts`
   (the `reversal-count.ts` independent-oracle contract); layouts live in
   `src/test-utils/routing-corpus.ts`.
+- `stryker.config.mjs` + `vitest.stryker.config.ts` are the WEEKLY MUTATION
+  lane (`pnpm mutation:render`, `.github/workflows/mutation.yml`), and they
+  answer the question no per-diff gate can: **is a property asserting
+  anything at all?** Two here were not — a cache-hit branch no generated run
+  reached, and a predicate whose false case a uniform generator produced once
+  in a billion draws — and both read as thorough prose while passing under a
+  deliberately broken implementation. A surviving mutant is exactly that
+  fact, found mechanically instead of by suspicion.
+  It is REPORT-ONLY and scheduled, never a gate on a PR: a mutation score is
+  a property of the whole suite, so failing an author's diff on a gap someone
+  else left is a bill sent to the wrong person. Triage a survivor the way a
+  review finding is triaged — most are a generator that never reaches the
+  case, and the fix is a denser domain plus a reachability guard, not more
+  runs.
+  **Verify a survivor by hand before acting on it.** The tool can report one
+  falsely: measured, `src/layout/seed.ts` is imported by its own test and
+  nothing else, so Stryker's related-test selection runs 7 tests against it
+  (`svg/format.ts` gets 458), and in that narrow selection its runtime
+  mutants come back SURVIVED even where the same edit applied by hand fails
+  the suite. That file is excluded from `mutate` for exactly that reason, and
+  the general habit is the one `diagnosis-evidence` already asks for — apply
+  the edit, run the suite, watch it stay green.
+  Two exclusions in the vitest config are about run TIME, not value: the
+  routing and text-wrapping SCOREBOARDS above are re-run once per mutant that
+  touches their code, and `edge-routing-quality.test.ts` alone is ~22s of the
+  project's ~30s.
 
 ## Common mistakes (append as review finds them)
 

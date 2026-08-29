@@ -1,0 +1,58 @@
+# Weekly mutation testing for canvas-render, and it is a REPORT rather than a
+# gate — the job stays green whatever the score, because a survivor is a
+# hypothesis for a human to check, not a build failure.
+#
+# It exists because the per-diff gates cannot see this class of defect at all.
+# A property that asserts nothing passes every run, every lint, every review
+# that reads it as prose; two in this package were found that way by hand
+# (a cache-hit branch no generated run reached, and a predicate whose false
+# case one draw in a billion could produce), and both are exactly what a
+# surviving mutant reports.
+#
+# NOT on pull_request, for two reasons: the run is measured in tens of
+# minutes, and a score is a property of the whole suite rather than of one
+# diff — gating a PR on it makes an unrelated author responsible for a gap
+# somebody else left.
+#
+# ponytail: a full re-run every week. Stryker's `--incremental` cache would
+# cut it to the changed files, and needs actions/cache plus a cache-key
+# policy; worth doing when the run outgrows its timeout, not before.
+name: Mutation
+
+on:
+  schedule:
+    # Monday 04:23 UTC — off the hour, so it does not queue behind everything
+    # else that runs at :00.
+    - cron: '23 4 * * 1'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: mutation-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  canvas-render:
+    runs-on: ubuntu-latest
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - uses: ./.github/actions/setup-pnpm
+
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Mutation test canvas-render
+        run: pnpm mutation:render
+
+      - name: Upload mutation report
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-canvas-render
+          path: packages/canvas-render/tmp/stryker-reports/
+          if-no-files-found: warn
+          retention-days: 30
