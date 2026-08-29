@@ -13,6 +13,7 @@ import {
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from './lib/browser-workspace-id.js'
+import { loadWorkspaceDocumentProjection } from './lib/workspace-content.js'
 
 const REAL_DB_NAME = 'whiteboard-boot-test'
 
@@ -89,13 +90,14 @@ describe('startBootSequence — resolver rejection does not block render', () =>
       expect(() => getBrowserWorkspaceId()).toThrow(/browser workspace unavailable/)
       expect(() => getBrowserWorkspaceId()).toThrow(/another tab/i)
 
-      // A consumer-shaped flow: an accessor read wrapped the way
-      // workspace-content.ts's `.open(...).catch(() => null)` wraps it lands
-      // in the null branch instead of crashing the caller.
-      const consumerResult = await Promise.resolve()
-        .then(() => getBrowserWorkspaceId())
-        .catch(() => null)
-      expect(consumerResult).toBeNull()
+      // The REAL consumer, not a re-enactment of its shape: a hand-written
+      // `.then(accessor).catch(() => null)` absorbs the throw no matter how
+      // the production function is written, so it would stay green against a
+      // consumer that reads the id as a call ARGUMENT — where the throw
+      // precedes the promise and escapes the `.catch` entirely.
+      await expect(
+        loadWorkspaceDocumentProjection('01ARZ3NDEKTSV4RRFFQ69G5FAV'),
+      ).resolves.toBeNull()
     } finally {
       window.removeEventListener('unhandledrejection', onUnhandled)
       stubborn.close()

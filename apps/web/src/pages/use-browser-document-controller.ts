@@ -2,7 +2,7 @@ import { projectWorkspaceDocument } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
-import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import {
@@ -547,9 +547,7 @@ export function useBrowserDocumentController(
     // moment the editor commits. Projection first, old record as the fallback
     // for a document nothing has folded yet (and for jsdom tests, whose
     // injected store is the only storage there is).
-    const workspace = await new BrowserWorkspaceDocs()
-      .open(getBrowserWorkspaceId())
-      .catch(() => null)
+    const workspace = await openWorkspaceOrNull(new BrowserWorkspaceDocs())
     const projected =
       workspace === null ? null : projectWorkspaceDocument(workspace, source.documentId)
     let mergedSnapshot: Uint8Array
