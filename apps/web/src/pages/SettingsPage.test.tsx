@@ -72,7 +72,10 @@ describe('SettingsPage — routing layout', () => {
     // to make "Back" land on the previous settings section instead of
     // leaving settings.
     const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
-      initialEntries: ['/local/abc', { pathname: '/settings', state: { from: '/local/abc' } }],
+      initialEntries: [
+        '/w/default/document/abc',
+        { pathname: '/settings', state: { from: '/w/default/document/abc' } },
+      ],
       initialIndex: 1,
     })
     render(<RouterProvider router={router} />)
@@ -82,12 +85,15 @@ describe('SettingsPage — routing layout', () => {
     fireEvent.click(within(desktop).getByRole('link', { name: /connections/i }))
     fireEvent.click(within(desktop).getByRole('link', { name: /general/i }))
     fireEvent.click(within(desktop).getByRole('button', { name: /back/i }))
-    expect(router.state.location.pathname).toBe('/local/abc')
+    expect(router.state.location.pathname).toBe('/w/default/document/abc')
   })
 
   it('section links replace the history entry so the browser back button exits settings in one step', async () => {
     const router = createMemoryRouter([{ path: '*', element: <SettingsPage /> }], {
-      initialEntries: ['/local/abc', { pathname: '/settings', state: { from: '/local/abc' } }],
+      initialEntries: [
+        '/w/default/document/abc',
+        { pathname: '/settings', state: { from: '/w/default/document/abc' } },
+      ],
       initialIndex: 1,
     })
     render(<RouterProvider router={router} />)
@@ -97,7 +103,7 @@ describe('SettingsPage — routing layout', () => {
     await act(async () => {
       await router.navigate(-1)
     })
-    expect(router.state.location.pathname).toBe('/local/abc')
+    expect(router.state.location.pathname).toBe('/w/default/document/abc')
   })
 })
 

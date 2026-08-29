@@ -6,6 +6,7 @@ import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { BROWSER_DEFAULT_SEGMENT, setWhiteboardDbNameForTests } from './browser-idb.js'
 import {
+  browserWorkspaceHandleOrNull,
   getBrowserWorkspaceId,
   getBrowserWorkspaceIdentity,
   resetBrowserWorkspaceIdForTests,
@@ -78,6 +79,25 @@ describe('browser workspace id accessor', () => {
     })
     // The id accessor is unchanged — every existing caller reads through it.
     expect(getBrowserWorkspaceId()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('the handle is the segment when there is one, the id when there is not', () => {
+    // What an ADDRESS carries. Both arms are live: a v15+ registry row has a
+    // segment, and a row written before that carrier does not.
+    setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'design-team')
+    expect(browserWorkspaceHandleOrNull()).toBe('design-team')
+
+    setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    expect(browserWorkspaceHandleOrNull()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('the handle is null, not a throw, while the workspace is unavailable', () => {
+    // boot.ts deliberately does not gate on the IndexedDB open, so a render
+    // can reach a URL builder before the identity resolves — or after it
+    // failed. A throw in an argument position escapes the caller's own catch;
+    // a null lets it decline to navigate, which is what every URL builder
+    // here does with an address it cannot name.
+    expect(browserWorkspaceHandleOrNull()).toBeNull()
   })
 
   it('a workspace with no segment resolves to an identity carrying none', () => {

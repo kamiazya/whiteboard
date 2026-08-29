@@ -12,6 +12,7 @@ const NotFoundPage = lazy(() =>
 import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
+import { browserWorkspaceHandleOrNull } from './lib/browser-workspace-id.js'
 import {
   consumeGrantFragment,
   type GrantConsumeResult,
@@ -34,13 +35,12 @@ const SettingsPage = lazy(() =>
 )
 
 import {
-  browserDocumentPath,
-  type DaemonRoute,
-  daemonRoutePath,
+  documentPath,
   isKnownAppPath,
-  parseBrowserRoute,
-  parseDaemonRoute,
   parseSettingsRoute,
+  parseWorkspaceRoute,
+  type WorkspaceRoute,
+  workspaceRoutePath,
 } from './lib/app-routes.js'
 import {
   BROWSER_CAPABILITIES,
@@ -87,7 +87,7 @@ const DaemonIndexPage = lazy(() =>
 // transition instead of reusing a previous canvas's identity. Reuses
 // DaemonRoute's shape (rather than a parallel type) since this state IS the
 // route — app-routes.ts's parse/build functions keep the two in sync.
-type DaemonView = DaemonRoute
+type DaemonView = WorkspaceRoute
 
 interface AppProps {
   providerState?: ProviderState
@@ -142,7 +142,7 @@ export function App({ providerState }: AppProps) {
   const navigate = useNavigate()
 
   // The daemon-served consent page is its OWN surface, not a daemon view:
-  // parseDaemonRoute('/pair') is null, so without this guard the
+  // parseWorkspaceRoute('/pair') is null, so without this guard the
   // daemonView -> URL sync effect below immediately navigated to '/',
   // dropping the origin/challenge/state query and dumping the user on the
   // gallery instead of the consent prompt.
@@ -221,19 +221,35 @@ export function App({ providerState }: AppProps) {
   const [daemonView, setDaemonView] = useState<DaemonView>(() => {
     if (daemonConnection.status === 'paired') {
       const { workspaceId, path } = daemonConnection.payload
-      if (workspaceId && path) return { kind: 'document', workspaceId, path }
-      return { kind: 'index', workspaceId }
+      if (workspaceId && path) return { kind: 'document', workspace: workspaceId, path }
+      return { kind: 'index', workspace: workspaceId }
     }
-    return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
+    return parseWorkspaceRoute(location.pathname) ?? { kind: 'index' }
   })
 
-  // Derived per render, not read once at mount: '/' (no id) renders the
-  // canvas list, /local/:documentId mounts the editor. Once mounted, the
-  // editor owns URL<->canvas-id sync for in-editor switching (it reads
-  // initialDocumentId a single time), so App re-routes only when the URL
-  // crosses the list/editor boundary — including browser Back from the
-  // editor to the list.
-  const browserPath = parseBrowserRoute(location.pathname)?.path
+  // Derived per render, not read once at mount: an index route renders the
+  // document list, a document route mounts the editor. Once mounted, the
+  // editor owns URL<->document sync for in-editor switching (it reads
+  // initialPath a single time), so App re-routes only when the URL crosses
+  // the list/editor boundary — including browser Back from the editor to the
+  // list.
+  // Null while the identity has not resolved (or failed to). A URL builder
+  // that cannot name its workspace declines to navigate rather than sending
+  // the session somewhere wrong — see browserWorkspaceHandleOrNull.
+  const browserHandle = browserWorkspaceHandleOrNull()
+  const browserRoute = parseWorkspaceRoute(location.pathname)
+  // Only a route naming THIS browser's workspace opens a document here. One
+  // grammar means a daemon address parses under the browser keeper too, and
+  // it names a workspace this keeper does not have — reachable by hand, and
+  // reached for real by the 'Work in this browser instead' escape, which
+  // leaves a `/w/<daemon-ws>/document/...` address behind as it switches
+  // keeper. Treating that as a browser document would open a path in a
+  // workspace that does not exist here; the index is the honest answer, and
+  // is what this shell already showed while the two grammars kept them apart.
+  const browserPath =
+    browserRoute?.kind === 'document' && browserRoute.workspace === browserHandle
+      ? browserRoute.path
+      : undefined
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -293,7 +309,7 @@ export function App({ providerState }: AppProps) {
     // An unknown path is the not-found page's to keep: rewriting it to the
     // daemon route would swallow the 404 into a silent redirect.
     if (!isKnownAppPath(location.pathname)) return
-    const path = daemonRoutePath(daemonView)
+    const path = workspaceRoutePath(daemonView)
     // Read-then-clear on the FIRST EFFECT RUN regardless of whether it ends
     // up navigating: a no-op first run (URL already matches the initial
     // view) must not leave the very next real navigation still thinking
@@ -330,14 +346,14 @@ export function App({ providerState }: AppProps) {
     if (isPairRoute) return
     if (lastRouteSyncPathRef.current === location.pathname) return
     lastRouteSyncPathRef.current = location.pathname
-    const parsed = parseDaemonRoute(location.pathname)
+    const parsed = parseWorkspaceRoute(location.pathname)
     if (parsed === null) return
     // parseDaemonRoute returns a fresh object every time, and React compares
     // state by reference — so re-set only when the route actually differs,
     // otherwise a back/forward landing on the current view re-renders for
     // nothing.
     setDaemonView((current) =>
-      daemonRoutePath(current) === daemonRoutePath(parsed) ? current : parsed,
+      workspaceRoutePath(current) === workspaceRoutePath(parsed) ? current : parsed,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, isPairRoute])
@@ -485,20 +501,20 @@ export function App({ providerState }: AppProps) {
                   <DaemonIndexPage
                     daemonBaseUrl={payload.baseUrl}
                     token={pairedToken}
-                    initialWorkspaceId={daemonView.workspaceId}
-                    onOpenDocument={(workspaceId, path) =>
-                      setDaemonView({ kind: 'document', workspaceId, path })
+                    initialWorkspaceId={daemonView.workspace}
+                    onOpenDocument={(workspace, path) =>
+                      setDaemonView({ kind: 'document', workspace, path })
                     }
                   />
                 ) : (
                   <DaemonDocumentPage
-                    key={`${daemonView.workspaceId}:${daemonView.path}`}
+                    key={`${daemonView.workspace}:${daemonView.path}`}
                     daemonBaseUrl={payload.baseUrl}
-                    workspaceId={daemonView.workspaceId}
+                    workspaceId={daemonView.workspace}
                     path={daemonView.path}
                     token={pairedToken}
                     onNavigateBack={() =>
-                      setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                      setDaemonView({ kind: 'index', workspace: daemonView.workspace })
                     }
                   />
                 )}
@@ -557,21 +573,21 @@ export function App({ providerState }: AppProps) {
                 <DaemonIndexPage
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
-                  initialWorkspaceId={daemonView.workspaceId}
-                  onOpenDocument={(workspaceId, path) =>
-                    setDaemonView({ kind: 'document', workspaceId, path })
+                  initialWorkspaceId={daemonView.workspace}
+                  onOpenDocument={(workspace, path) =>
+                    setDaemonView({ kind: 'document', workspace, path })
                   }
                 />
               ) : (
                 <DaemonDocumentPage
-                  key={`${daemonView.workspaceId}:${daemonView.path}`}
+                  key={`${daemonView.workspace}:${daemonView.path}`}
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
-                  workspaceId={daemonView.workspaceId}
+                  workspaceId={daemonView.workspace}
                   path={daemonView.path}
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
                   onNavigateBack={() =>
-                    setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                    setDaemonView({ kind: 'index', workspace: daemonView.workspace })
                   }
                 />
               )}
@@ -642,11 +658,15 @@ export function App({ providerState }: AppProps) {
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
             {browserPath === undefined ? (
-              // '/' (and any non-/local path) lands on the canvas list. The
-              // editor mounts only for /local/:path, whose in-editor
-              // canvas switching it keeps owning — App re-routes solely when
-              // the URL crosses the list/editor boundary.
-              <BrowserIndexPage onOpenDocument={(path) => navigate(browserDocumentPath(path))} />
+              // An index route lands on the document list. The editor mounts
+              // only for a document route, whose in-editor switching it keeps
+              // owning — App re-routes solely when the URL crosses the
+              // list/editor boundary.
+              <BrowserIndexPage
+                onOpenDocument={(path) => {
+                  if (browserHandle !== null) navigate(documentPath(browserHandle, path))
+                }}
+              />
             ) : (
               <BrowserDocumentPage
                 capabilities={effectiveState.capabilities}

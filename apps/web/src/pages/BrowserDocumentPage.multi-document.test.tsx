@@ -6,7 +6,7 @@
  *
  * The editor creates and switches nothing itself any more — both are the
  * document browser's job, and the browser drives the editor by navigating to
- * `/local/:path`. So B is created the way that page creates it
+ * `/w/default/document/:path`. So B is created the way that page creates it
  * (`createSeededDocument`) and the switch is a route change, which is the
  * real mechanism rather than a stand-in for one.
  *
@@ -34,7 +34,8 @@ import { useEffect } from 'react'
 import { MemoryRouter, useNavigate } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
-import { browserDocumentPath } from '../lib/app-routes.js'
+import { documentPath } from '../lib/app-routes.js'
+import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import {
   IdbDefaultDocumentPointer,
@@ -110,7 +111,7 @@ async function seedTwoDocuments(store: IdbDocumentIndex): Promise<[string, strin
 
 async function openDocument(path: string): Promise<void> {
   await act(async () => {
-    navigateTo?.(browserDocumentPath(path))
+    navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, path))
   })
 }
 

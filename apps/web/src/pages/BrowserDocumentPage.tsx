@@ -36,8 +36,14 @@ import { useDocumentSync } from '../hooks/useDocumentSync.js'
 import { useFavicon } from '../hooks/useFavicon.js'
 import { useThemeMode } from '../hooks/useThemeMode.js'
 import { getAppLogger } from '../lib/app-logger.js'
-import { browserDocumentPath, browserIndexPath, parseBrowserRoute } from '../lib/app-routes.js'
+import {
+  documentPath as documentRoutePath,
+  indexPath,
+  parseWorkspaceRoute,
+  workspacePath,
+} from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
+import { browserWorkspaceHandleOrNull } from '../lib/browser-workspace-id.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
@@ -319,7 +325,8 @@ export function BrowserDocumentPage({
   const navigateToDocument = useCallback(
     (id: string) => {
       const path = pathOfDocument(id)
-      if (path !== null) navigate(browserDocumentPath(path))
+      const handle = browserWorkspaceHandleOrNull()
+      if (path !== null && handle !== null) navigate(documentRoutePath(handle, path))
     },
     [pathOfDocument, navigate],
   )
@@ -360,7 +367,9 @@ export function BrowserDocumentPage({
   const isFirstCanvasUrlSyncRef = useRef(true)
   useEffect(() => {
     if (documentPath === null) return
-    const path = browserDocumentPath(documentPath)
+    const handle = browserWorkspaceHandleOrNull()
+    if (handle === null) return
+    const path = documentRoutePath(handle, documentPath)
     const isFirstSync = isFirstCanvasUrlSyncRef.current
     isFirstCanvasUrlSyncRef.current = false
     if (location.pathname === path) return
@@ -397,7 +406,8 @@ export function BrowserDocumentPage({
     const lastKnownDocumentId = lastKnownCanvasIdRef.current
     lastKnownCanvasIdRef.current = documentId
 
-    const requestedPath = parseBrowserRoute(location.pathname)?.path
+    const routed = parseWorkspaceRoute(location.pathname)
+    const requestedPath = routed?.kind === 'document' ? routed.path : undefined
     if (requestedPath === undefined) return
     // Compared against the loaded snapshot's OWN path rather than against the
     // list, so this is right before the list has arrived — which is also what
@@ -412,7 +422,11 @@ export function BrowserDocumentPage({
     // document, and both are the same recoverable miss: keep the document and
     // repair the URL. The path resolves to nothing (deleted, or hand-typed),
     // or it resolves and the switch then finds no record.
-    const repair = () => navigate(browserDocumentPath(documentPath), { replace: true })
+    const repairHandle = browserWorkspaceHandleOrNull()
+    const repair = () => {
+      if (repairHandle === null) return
+      navigate(documentRoutePath(repairHandle, documentPath), { replace: true })
+    }
     if (requestedId === null) {
       // ...but only once the list has actually been enumerated. Until then it
       // holds this document alone, so "absent" means "not known yet" and
@@ -801,7 +815,10 @@ export function BrowserDocumentPage({
               // The way out of the editor. This page had none until now —
               // the app-shell brand mark was the only exit, and it says
               // nothing about where it goes.
-              onNavigateBack={() => navigate(browserIndexPath())}
+              onNavigateBack={() => {
+                const handle = browserWorkspaceHandleOrNull()
+                navigate(handle === null ? indexPath() : workspacePath(handle))
+              }}
               isFullscreen={isFullscreen}
               onToggleFullscreen={() => {
                 // Entering hides this whole bar; the floating exit control and

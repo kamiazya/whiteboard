@@ -177,6 +177,30 @@ export function browserWorkspaceIdOrNull(): string | null {
   }
 }
 
+/**
+ * The handle an ADDRESS should carry for this workspace, or null while the
+ * identity is unavailable.
+ *
+ * Null rather than a throw for the reason `browserWorkspaceIdOrNull` exists:
+ * `boot.ts` deliberately does not gate the app on the IndexedDB open, so a
+ * render can reach a URL builder before the resolve lands, or after it
+ * failed. Every caller here reads this in an ARGUMENT position, where a throw
+ * precedes the promise and escapes the catch meant to absorb it.
+ *
+ * A null caller declines to navigate. That is the same rule
+ * `navigateToDocument` already follows for a reference it cannot place — an
+ * address that cannot name its workspace is not an address, and going
+ * somewhere wrong is worse than staying put.
+ */
+export function browserWorkspaceHandleOrNull(): string | null {
+  try {
+    const identity = getBrowserWorkspaceIdentity()
+    return identity.segment ?? identity.workspaceId
+  } catch {
+    return null
+  }
+}
+
 /** Test seam: resolve synchronously to a fixed identity, without opening a database. */
 export function setBrowserWorkspaceIdForTests(workspaceId: string, segment?: string): void {
   state = {

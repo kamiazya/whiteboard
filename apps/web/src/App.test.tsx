@@ -44,7 +44,7 @@ afterEach(() => {
 // real browser (WASM), so it stays mocked.
 let receivedCapabilities: WhiteboardCapabilities | undefined
 // Captures the initialPath prop so a test can assert App derives it from
-// the /local/:path URL (parseBrowserRoute) rather than merely
+// the /w/:workspace/document/:path URL (parseBrowserRoute) rather than merely
 // mounting the page.
 let receivedInitialPath: string | undefined
 // Toggled by the error-boundary test to force the mocked page to throw
@@ -388,7 +388,7 @@ describe('App capability wiring', () => {
 
   it('passes the browser capabilities down to BrowserDocumentPage', async () => {
     render(
-      <MemoryRouter initialEntries={['/local/c1']}>
+      <MemoryRouter initialEntries={['/w/default/document/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -396,10 +396,10 @@ describe('App capability wiring', () => {
     expect(receivedCapabilities).toEqual(BROWSER_STATE.capabilities)
   })
 
-  it('derives initialPath from a /local/:path cold-load URL, folders and all', async () => {
+  it('derives initialPath from a /w/:workspace/document/:path cold-load URL, folders and all', async () => {
     receivedInitialPath = undefined
     render(
-      <MemoryRouter initialEntries={['/local/design/login%20flow']}>
+      <MemoryRouter initialEntries={['/w/default/document/design/login%20flow']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -1163,7 +1163,7 @@ describe('App error boundary', () => {
     throwInBrowserDocumentPage = true
     const reportSpy = vi.spyOn(errorBoundaryLog, 'report').mockImplementation(() => {})
     render(
-      <MemoryRouter initialEntries={['/local/c1']}>
+      <MemoryRouter initialEntries={['/w/default/document/c1']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
@@ -1231,7 +1231,7 @@ describe('App not-found route', () => {
 
   it('keeps known routes on their normal pages', () => {
     render(
-      <MemoryRouter initialEntries={['/local/c9']}>
+      <MemoryRouter initialEntries={['/w/default/document/c9']}>
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
