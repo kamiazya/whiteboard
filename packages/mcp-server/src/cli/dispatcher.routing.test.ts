@@ -59,7 +59,15 @@ vi.mock('./server-run.js', () => ({
 vi.mock('./server-backup.js', () => ({
   runServerBackup: vi.fn(async () => ({
     kind: 'ok',
-    result: { schemaVersion: 1, ok: true, backupDir: '/tmp/backup' },
+    // The real success shape. It carried a `backupDir` the real result has
+    // never returned (the non-leak policy forbids echoing the path), which is
+    // the kind of drift a hand-written mock accumulates unnoticed.
+    result: {
+      schemaVersion: 2,
+      ok: true,
+      operation: 'backup',
+      stores: { database: { captured: true }, blobs: { captured: true } },
+    },
   })),
 }))
 
@@ -325,15 +333,66 @@ describe('dispatcher routing: whiteboard server backup', () => {
     expect(stderr).toMatch(/backup refused: server is running/)
   })
 
-  it('exits 1 and names the database when it is outside the data directory', async () => {
+  it('exits 1 when the rows belong in the directory and are not there', async () => {
     vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
-      kind: 'external-database',
+      kind: 'missing-database',
     })
     const { result: exitCode, stderr } = await captureStdio(() =>
       main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
     )
     expect(exitCode).toBe(1)
-    expect(stderr).toMatch(/backup refused: the database is not in the data directory/)
+    expect(stderr).toMatch(/no database in it/)
+  })
+
+  /**
+   * ADR-0021 decision 2 asks for two things when a store is out of scope: that
+   * it is visible rather than silently absent, and that the operator is told
+   * what they are now responsible for. The JSON carries the first. An operator
+   * reading a terminal needs the second in words, so it goes to stderr —
+   * stdout stays parseable JSON.
+   */
+  it('names what the operator must back up themselves, without dirtying stdout', async () => {
+    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
+      kind: 'ok',
+      result: {
+        schemaVersion: 2,
+        ok: true,
+        operation: 'backup',
+        stores: {
+          database: { captured: false, reason: 'hosted-elsewhere' },
+          blobs: { captured: true },
+        },
+      },
+    })
+    const {
+      result: exitCode,
+      stdout,
+      stderr,
+    } = await captureStdio(() =>
+      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
+    )
+    expect(exitCode).toBe(0)
+    expect(stderr).toMatch(/database was not backed up/i)
+    expect(stderr).toMatch(/WHITEBOARD_DATABASE_URL/)
+    // stdout is still exactly the JSON a script would parse.
+    expect(() => JSON.parse(stdout)).not.toThrow()
+  })
+
+  it('says nothing extra when every store was captured', async () => {
+    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
+      kind: 'ok',
+      result: {
+        schemaVersion: 2,
+        ok: true,
+        operation: 'backup',
+        stores: { database: { captured: true }, blobs: { captured: true } },
+      },
+    })
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
+    )
+    expect(exitCode).toBe(0)
+    expect(stderr).toBe('')
   })
 
   it('exits 1 and writes to stderr when output path is invalid', async () => {
@@ -371,6 +430,24 @@ describe('dispatcher routing: whiteboard server restore', () => {
     )
     expect(exitCode).toBe(0)
     expect(vi.mocked(serverRestoreModule.runServerRestore)).toHaveBeenCalledOnce()
+  })
+
+  /**
+   * The backup half of this refusal has always had a test and the restore
+   * half had none, so its message went stale unnoticed: it still said the
+   * restore "would put back blobs alone" after the condition had become a
+   * disagreement about where the rows live, which is a different thing and
+   * points the operator at the wrong fix.
+   */
+  it('exits 1 and names the disagreement when the shapes do not match', async () => {
+    vi.mocked(serverRestoreModule.runServerRestore).mockResolvedValueOnce({
+      kind: 'external-database',
+    })
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['server', 'restore', '--json', '--backup-dir=/tmp/bk', '--target-dir=/tmp/tg']),
+    )
+    expect(exitCode).toBe(1)
+    expect(stderr).toMatch(/disagree about where the rows live/)
   })
 
   it('USAGE includes `whiteboard server restore`', () => {

@@ -1,5 +1,6 @@
 import { cp, lstat, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
+import { DB_FILENAME } from './store/db/location.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -33,6 +34,12 @@ export interface BackupRestoreOptions {
   // The runtime caller (e.g. a future support-bundle CLI) would pass
   // the user data dir + a sibling backup dir.
   allowedRoots: string[]
+  // Leave `whiteboard.db` out of the copy. Set when the deployment keeps its
+  // rows elsewhere, where any file of that name in the directory is a fossil
+  // from before the move — it looks exactly like a live database, and a
+  // restore would put its pre-migration rows back as though they were
+  // current. Backup only.
+  excludeDatabaseFile?: boolean
 }
 
 // Canonicalize `p` by resolving symlinks on the deepest existing ancestor.
@@ -186,6 +193,12 @@ export async function backupDataDir(
     dereference: false,
     errorOnExist: true,
     force: false,
+    // Filtered rather than deleted afterwards: a fossil that is copied and
+    // then removed exists on disk in between, and a backup interrupted in
+    // that window is one holding rows it was never meant to hold.
+    ...(options.excludeDatabaseFile
+      ? { filter: (src: string) => src !== join(srcDataDir, DB_FILENAME) }
+      : {}),
   })
 }
 

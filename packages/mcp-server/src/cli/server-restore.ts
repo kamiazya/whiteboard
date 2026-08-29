@@ -6,6 +6,7 @@ import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
 import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
+import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
 export interface RunServerRestoreOptions {
@@ -92,21 +93,34 @@ export async function runServerRestore(
     return { kind: 'error', message: 'restore failed' }
   }
 
-  // The mirror of the backup guard, asked of the artifact for the same reason:
-  // restore is also documented as a host-side command, so the environment here
-  // may not be the deployment's. A backup directory holding no database cannot
-  // put rows back, and succeeding would leave the operator starting a server
-  // against blobs alone.
+  // One symmetry: the backup must supply exactly the rows the target needs.
   //
-  // The location record does NOT belong on this side, though it is the
-  // obvious symmetry to reach for. Restore requires the target to be empty or
-  // missing (`restoreDataDir`), so a target can never be holding a record to
-  // read — a check for one is unreachable in production and passes its own
-  // tests only because they mock the restore that would have rejected the
-  // non-empty directory. The backup directory's copy of the record is no use
-  // either: backup refuses to produce one unless it said "inside", so it is
-  // `true` in every backup this code can create.
-  if (!databaseIsInsideDataDir(targetDir, env) || !(await dataDirHasDatabaseFile(backupDir))) {
+  // The BACKUP's own copy of `storage.json` says whether it was ever meant to
+  // hold rows. Since backup stopped refusing outright for a deployment whose
+  // rows live in libSQL, a backup can legitimately contain none — the fossil
+  // is deliberately left out so a restore cannot put pre-migration rows back
+  // as current. Without the record, that legitimate backup is
+  // indistinguishable from a truncated one.
+  //
+  // The record wins over the file, for the same reason it does on the backup
+  // side: a `whiteboard.db` sitting in a backup whose record says the rows
+  // were elsewhere is a fossil, and it supplies nothing.
+  //
+  // The TARGET's need is the environment's to answer, and only the
+  // environment's — `restoreDataDir` requires an empty or missing target, so
+  // a target never carries a record of its own to read.
+  const backupRecord = await readDatabaseLocationRecord(backupDir)
+  // A backup predating the record is assumed to hold rows: that was the only
+  // kind this command could produce, so its file presence is the whole answer.
+  const backupClaimsRows = backupRecord?.inDataDir ?? true
+  const backupSuppliesRows = backupClaimsRows && (await dataDirHasDatabaseFile(backupDir))
+  const targetNeedsRows = databaseIsInsideDataDir(targetDir, env)
+
+  // Unequal in either direction is a restore across a configuration change,
+  // which ADR-0021 explicitly does not answer. Refusing beats half-performing
+  // it: rows-less into a target expecting rows leaves a server pointed at
+  // nothing, and rows into a target reading libSQL writes a file nobody opens.
+  if (backupSuppliesRows !== targetNeedsRows) {
     return { kind: 'external-database' }
   }
 

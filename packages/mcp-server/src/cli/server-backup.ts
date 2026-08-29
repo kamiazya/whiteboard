@@ -21,14 +21,41 @@ export interface RunServerBackupOptions {
 export type ServerBackupOutcome =
   | { kind: 'ok'; result: ServerBackupResult }
   | { kind: 'running-server' }
-  | { kind: 'external-database' }
+  | { kind: 'missing-database' }
   | { kind: 'invalid-output-path' }
   | { kind: 'error'; message: string }
 
+/**
+ * What one store can say about a backup that has just been taken.
+ *
+ * `hosted-elsewhere` is a real answer rather than a failure (ADR-0021
+ * decision 2). When the rows live in a libSQL server, that server's operator
+ * already has point-in-time recovery, replicas and a retention policy;
+ * reimplementing those would be worse than what it duplicates and would have
+ * to be maintained against every provider. Saying so plainly is what stops
+ * the operator trusting a copy that cannot restore them.
+ */
+type StoreDurability = { captured: true } | { captured: false; reason: 'hosted-elsewhere' }
+
 interface ServerBackupResult {
-  schemaVersion: 1
+  schemaVersion: 2
   ok: true
   operation: 'backup'
+  /**
+   * Per store, because one boolean cannot answer this once a deployment can
+   * keep its stores in different places. The previous shape reported
+   * `ok: true` for a directory copy and had no way to say that the rows were
+   * somewhere else — which is exactly how a backup of blobs alone was once
+   * reported as a success.
+   *
+   * `ok` remains, and remains true here: the operation did what it is
+   * responsible for. What it no longer claims is COMPLETENESS, which is what
+   * `stores` is for.
+   */
+  stores: {
+    database: StoreDurability
+    blobs: StoreDurability
+  }
 }
 
 function defaultIsPidAlive(pid: number): boolean {
@@ -115,8 +142,19 @@ export async function runServerBackup(
   // sitting there, so the artifact check stays in force underneath it.
   const recorded = await readDatabaseLocationRecord(dataDir)
   const configuredInside = recorded?.inDataDir ?? databaseIsInsideDataDir(dataDir, env)
-  if (!configuredInside || !(await dataDirHasDatabaseFile(dataDir))) {
-    return { kind: 'external-database' }
+  const databaseFilePresent = await dataDirHasDatabaseFile(dataDir)
+
+  // The two answers together classify the deployment, and only one of the
+  // four combinations is a refusal.
+  //
+  // Rows here and present, or rows elsewhere (with or without a fossil left
+  // behind), are all deployments this command can serve — it simply captures
+  // a different set of stores. But "the rows belong in this directory" and
+  // "this directory has no rows" cannot both hold for a working deployment,
+  // so that pair is a broken data directory rather than a partial backup, and
+  // copying it would produce something restore could not use.
+  if (configuredInside && !databaseFilePresent) {
+    return { kind: 'missing-database' }
   }
 
   try {
@@ -124,6 +162,10 @@ export async function runServerBackup(
       // dirname is non-tautological: the helper's assertWithinAllowed verifies
       // outputDir against its parent, not against itself.
       allowedRoots: [dataDir, dirname(outputDir)],
+      // A fossil must not travel. An operator who moved their rows to libSQL
+      // and left the old file behind would otherwise get a backup carrying
+      // pre-migration rows that restore would put back as though current.
+      excludeDatabaseFile: !configuredInside,
     })
   } catch {
     return { kind: 'error', message: 'backup failed' }
@@ -131,6 +173,16 @@ export async function runServerBackup(
 
   return {
     kind: 'ok',
-    result: { schemaVersion: 1, ok: true, operation: 'backup' },
+    result: {
+      schemaVersion: 2,
+      ok: true,
+      operation: 'backup',
+      stores: {
+        database: configuredInside
+          ? { captured: true }
+          : { captured: false, reason: 'hosted-elsewhere' },
+        blobs: { captured: true },
+      },
+    },
   }
 }

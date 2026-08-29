@@ -317,3 +317,56 @@ describe('backup-restore drill', () => {
     }
   })
 })
+
+/**
+ * A fossil must not travel into a backup.
+ *
+ * An operator who moved their rows to a libSQL server and left the old
+ * `whiteboard.db` in the data directory has a file that looks exactly like a
+ * live database and holds pre-migration rows. Copying it produces a backup
+ * that restore would put back as though it were current — the same silent
+ * data loss this whole area exists to prevent, arriving by a different route.
+ *
+ * Everything else in the directory is still ours and still copied: the blobs
+ * are precisely what no libSQL provider is backing up.
+ */
+describe('backupDataDir with excludeDatabaseFile', () => {
+  it('copies the blobs but leaves the stale database behind', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await mkdir(join(roots.src, 'blobs', 'ab'), { recursive: true })
+      await writeFile(join(roots.src, 'blobs', 'ab', 'cdef'), 'blob bytes')
+      await writeFile(join(roots.src, 'whiteboard.db'), 'pre-migration rows')
+      await writeFile(
+        join(roots.src, 'storage.json'),
+        '{"schemaVersion":1,"database":{"inDataDir":false}}',
+      )
+
+      await backupDataDir(roots.src, roots.backup, {
+        allowedRoots: [roots.root],
+        excludeDatabaseFile: true,
+      })
+
+      expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
+      // The record travels: it is how restore later knows this backup was
+      // never meant to hold rows.
+      expect(await readFile(join(roots.backup, 'storage.json'), 'utf8')).toContain(
+        '"inDataDir":false',
+      )
+      expect(await readdir(roots.backup)).not.toContain('whiteboard.db')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+
+  it('copies the database when the option is absent', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+      expect(await readFile(join(roots.backup, 'whiteboard.db'), 'utf8')).toBe('rows')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+})

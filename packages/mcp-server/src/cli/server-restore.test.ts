@@ -364,3 +364,133 @@ describe('restore does not read a location record from its target', () => {
     )
   })
 })
+
+/**
+ * The round trip has to close.
+ *
+ * A backup taken from a deployment whose rows live in libSQL deliberately
+ * contains no `whiteboard.db` — the fossil is left behind so it cannot be put
+ * back as though current. Restore's artifact check would otherwise refuse
+ * exactly that backup, which would mean the product produced something it
+ * could not consume.
+ *
+ * What tells the two apart is the record the backup carries: the copy of
+ * `storage.json` taken from the source deployment. `inDataDir: false` means
+ * "this backup was never meant to hold rows", which a backup truncated or
+ * assembled by hand cannot claim.
+ */
+describe('runServerRestore with a backup whose rows were hosted elsewhere', () => {
+  it('restores the blobs when the target also keeps its rows elsewhere', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(join(backupDir, 'blobs'), { recursive: true })
+    // No whiteboard.db, by design — and the record that says so.
+    await writeDatabaseLocationRecord(backupDir, false)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoRestore).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * Restoring a rows-less backup into a deployment that expects its rows in
+   * the directory would leave a server pointed at nothing. That is a restore
+   * across a configuration change, which ADR-0021 explicitly does not answer
+   * — so it is refused rather than half-performed.
+   */
+  it('refuses when the target expects its rows in the directory', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(join(backupDir, 'blobs'), { recursive: true })
+    await writeDatabaseLocationRecord(backupDir, false)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoRestore).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The arrangement the record actually decides, and the only one: a backup
+   * that holds a `whiteboard.db` AND a record saying the rows were elsewhere.
+   *
+   * This command cannot produce it — backup leaves the fossil out when the
+   * record says that. An operator's own `cp -r` of a libSQL deployment's data
+   * directory can, and does, because that directory is exactly where a fossil
+   * sits. Without the record, the file alone reads as rows and restore puts
+   * pre-migration state back into a deployment that expects current rows.
+   *
+   * Every other test in this file has no database file at all, where
+   * `claimsRows && hasFile` is false whichever way the record goes — so they
+   * pass identically against a version that never reads it. Measured: with
+   * the record ignored, all seventeen stayed green.
+   */
+  it('treats a fossil inside a backup as supplying nothing, on the record', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(join(backupDir, 'blobs'), { recursive: true })
+    // What a hand-rolled `cp -r` carries over.
+    await writeFile(join(backupDir, 'whiteboard.db'), 'pre-migration rows')
+    await writeDatabaseLocationRecord(backupDir, false)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      // A target that expects its rows in the directory: without the record
+      // this is the pair that restores the fossil as though it were current.
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoRestore).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The refusal above is a SHAPE mismatch, and does not depend on the record:
+   * a backup with no rows cannot serve a target that expects its rows in the
+   * directory, whoever produced it.
+   *
+   * The record is not an integrity check and must not be read as one. A
+   * rows-less backup restored into a target that also keeps its rows
+   * elsewhere is shape-compatible whether or not a record says so, and
+   * refusing it would buy nothing — a copy interrupted halfway has partial
+   * blobs with or without a `storage.json`, so requiring one would be false
+   * comfort rather than protection.
+   */
+  it('refuses a rows-less backup on shape alone, with no record present', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(join(backupDir, 'blobs'), { recursive: true })
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      // A target that expects its rows in the directory.
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoRestore).not.toHaveBeenCalled()
+  })
+})

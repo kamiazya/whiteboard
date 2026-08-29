@@ -140,20 +140,35 @@ provide the operator-facing surface for data backup and restore.
 - Stop the container before taking a backup. Never run backup against a live
   data volume — the CLI checks for a running `server-mode.json` record and
   refuses if the server process is still alive.
-- **These commands cover the data directory only.** They copy a directory, so
-  they capture the database only while it *is* a file in that directory. If
-  you have set [`WHITEBOARD_DATABASE_URL`](../reference/configuration.md) to a
-  libSQL server or any other path, both commands refuse rather than copy blobs
-  alone and report success — back that database up where it lives, using the
-  facilities of whatever hosts it.
+- **These commands answer per store, not with one boolean.** They copy a
+  directory, so they capture the database only while it *is* a file in that
+  directory. If you have set
+  [`WHITEBOARD_DATABASE_URL`](../reference/configuration.md) to a libSQL
+  server, the backup still runs and still saves your blobs — which nothing
+  else is saving — and reports the database as out of scope:
+
+  ```json
+  {"schemaVersion":2,"ok":true,"operation":"backup",
+   "stores":{"database":{"captured":false,"reason":"hosted-elsewhere"},
+             "blobs":{"captured":true}}}
+  ```
+
+  A note naming what is now yours to arrange goes to stderr, so stdout stays
+  parseable. Back that database up where it lives, using the facilities of
+  whatever hosts it — its operator already has point-in-time recovery and a
+  retention policy, and duplicating those badly would be worse than not
+  duplicating them.
+
+  `ok` says the operation did what it is responsible for. It does not say the
+  backup is complete; `stores` says that.
 - **The refusal does not depend on this shell's environment.** These commands
   run host-side, where the container's `--env-file` is not loaded, so
   `WHITEBOARD_DATABASE_URL` is usually absent here even when the deployment
   sets it. Both commands therefore also check the directory itself: one with
   no `whiteboard.db` in it is refused, because a copy of it cannot carry rows
   no matter what any environment says.
-- **A stale `whiteboard.db` is caught too, from a record the server leaves
-  behind.** If you once ran with the embedded database, later pointed
+- **A stale `whiteboard.db` is never copied, thanks to a record the server
+  leaves behind.** If you once ran with the embedded database, later pointed
   `WHITEBOARD_DATABASE_URL` at a libSQL server, and left the old file in the
   data directory, neither of the checks above can see it: the environment is
   this shell's, and a directory cannot tell a live database from a fossil. So
@@ -162,11 +177,23 @@ provide the operator-facing surface for data backup and restore.
   reads it first. It is deliberately never deleted — being readable after the
   server is stopped is the whole point — and it holds no connection string. A
   data directory that predates this file, or one no server has ever opened,
-  falls back to the environment-and-directory checks above. (`restore` has no
-  equivalent, and needs none: it only ever writes into an empty or missing
-  target, which by definition holds no record.)
+  falls back to the environment-and-directory checks above. The fossil is then
+  left OUT of the copy, rather than the whole backup being refused.
+
+  `restore` reads the same record, but from the BACKUP directory rather than
+  the target — a backup carries the copy taken from its source. That is how a
+  legitimately rows-less backup is told apart from a truncated one, and how a
+  fossil that reached a backup by an operator's own `cp -r` is recognised as
+  supplying nothing. The target never has a record of its own to read: restore
+  only ever writes into an empty or missing directory.
 - Restore only into a missing or empty target directory. A non-empty target
   is rejected to prevent silent merging of stale state with the backup.
+- **A backup must supply exactly the rows its target expects.** Restoring a
+  rows-less backup into a deployment that keeps its rows in the data directory
+  would leave a server pointed at nothing, and restoring rows into one reading
+  libSQL would write a file nobody opens. Both are refused rather than
+  half-performed: restoring *across* a configuration change is a real need and
+  is not yet answered.
 - After restore, `server-mode.json` is removed from the target. The
   restored server writes a fresh record on first start, so the source
   server's PID / port identity is never inherited.
