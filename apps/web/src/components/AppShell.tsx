@@ -3,12 +3,13 @@ import { lazy, Suspense, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSettingsNudge } from '@/hooks/useSettingsNudge'
-import { settingsPath } from '@/lib/app-routes'
+import { parseWorkspaceRoute, settingsPath } from '@/lib/app-routes'
 import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { ConnectionStatus, isSyncOff } from './connection/ConnectionStatus.js'
 import { ShellMark } from './shell/ShellMark.js'
+import { WorkspaceSwitcher, type WorkspaceSwitcherSource } from './shell/WorkspaceSwitcher.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -63,6 +64,21 @@ export interface AppShellProps {
    * unset and the chip drops the two actions that depend on it.
    */
   readonly onWorkInBrowser?: () => void
+  /**
+   * The keeper's half of the workspace switcher — where its workspaces come
+   * from and what a switch means for it. Absent on a branch that has no
+   * workspace to name (the invalid-config and pairing-error screens), and the
+   * shell then states no subject rather than an empty one.
+   *
+   * Passed in rather than built here: the two keepers read their registries
+   * from entirely different places, and a shell that knew both would import
+   * the browser's IndexedDB index and the daemon's HTTP client into every
+   * page's chrome.
+   */
+  readonly workspaces?: {
+    readonly source: WorkspaceSwitcherSource
+    readonly onSwitch: (handle: string) => void
+  }
 }
 
 /**
@@ -79,7 +95,7 @@ export interface AppShellProps {
  * session are things about the workspace, so they belong on the thing that
  * names it rather than on a second widget at the other end of the row.
  */
-export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
+export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps) {
   const navigate = useNavigate()
   const location = useLocation()
   // Read fresh rather than cached in state: the store is a thin localStorage
@@ -146,6 +162,17 @@ export function AppShell({ daemon, onWorkInBrowser }: AppShellProps) {
         >
           <ShellMark />
         </Link>
+      )}
+      {workspaces && (
+        // The row's subject, right after the mark that carries its state.
+        // The workspace is the outermost layer of `/w/:workspace/d/:path`,
+        // so the address is where it is read from — the shell states what the
+        // URL says, and never a second opinion about it.
+        <WorkspaceSwitcher
+          current={parseWorkspaceRoute(location.pathname)?.workspace ?? null}
+          source={workspaces.source}
+          onSwitch={workspaces.onSwitch}
+        />
       )}
       <Popover>
         <PopoverTrigger asChild>

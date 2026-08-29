@@ -785,6 +785,20 @@ describe('App daemon provider state', () => {
     expect(router.state.historyAction).toBe('REPLACE')
   })
 
+  it('gives the browser shell a workspace switcher naming what the address says', async () => {
+    // The wiring, asserted at the shell rather than at the component: the
+    // switcher's own tests prove it renders, and this proves the browser
+    // branch actually hands it a source — a control nothing mounts passes
+    // every test it has.
+    render(
+      <MemoryRouter initialEntries={['/w/default']}>
+        <App providerState={BROWSER_STATE} />
+      </MemoryRouter>,
+    )
+    const trigger = await screen.findByTestId('workspace-switcher-trigger')
+    expect(trigger.textContent).toContain('default')
+  })
+
   it('rewrites an address naming a workspace this browser does not keep', async () => {
     // Left behind by "Work in this browser instead", which switches keeper
     // under a `/w/<daemon-workspace>/d/...` address. The page already falls

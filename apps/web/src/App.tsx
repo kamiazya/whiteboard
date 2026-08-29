@@ -1,5 +1,5 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AppShellLazy } from './components/AppShellLazy.js'
 
@@ -353,6 +353,34 @@ export function App({ providerState }: AppProps) {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [daemonView, navigate, isPairRoute, daemonKept])
 
+  // The browser keeper's switcher source. Both halves reach their module
+  // through a dynamic import so the workspace registry — and the create path
+  // behind it — stay off the critical path; the shell is lazy, but App is
+  // not, and a static import here would put IndexedDB index code in the
+  // entry chunk for a control most sessions never open.
+  //
+  // A switch is a document LOAD, not an in-app navigation. This keeper
+  // resolves its active workspace once, into a synchronous accessor whose
+  // whole rationale is that some twenty call sites read it inline; re-pointing
+  // it in place would mean re-reading it at every one of them. A load also
+  // settles the outgoing workspace's writes for free, which is the invariant
+  // a switch has to keep.
+  const browserWorkspaces = useMemo(
+    () => ({
+      source: {
+        list: () => import('./lib/browser-workspaces.js').then((m) => m.listBrowserWorkspaces()),
+        create: (displayName: string) =>
+          import('./lib/browser-workspaces.js').then((m) =>
+            m.createBrowserWorkspaceNamed(displayName),
+          ),
+      },
+      onSwitch: (handle: string) => {
+        window.location.assign(workspacePath(handle))
+      },
+    }),
+    [],
+  )
+
   // The browser keeper's half of the same rule, and it exists for the same
   // reason the daemon's does: the address has to NAME the workspace on
   // screen. It went unwritten while this keeper held exactly one workspace,
@@ -665,7 +693,7 @@ export function App({ providerState }: AppProps) {
   return (
     <ErrorBoundary>
       <div className="flex h-dvh flex-col">
-        <AppShellLazy daemon={false} />
+        <AppShellLazy daemon={false} workspaces={browserWorkspaces} />
         {grantConnection?.status === 'identity-mismatch' && !grantErrorDismissed && (
           // Fail-closed renewal refusal: a PINNED daemon answered with a
           // wrong or missing identity signature. Either the daemon rotated
