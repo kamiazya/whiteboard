@@ -170,6 +170,28 @@ delete inside that interval.** Both ends are enforced explicitly, because both
 failures are silent — the near end produces a backup that cannot be restored,
 the far end produces one that could be restored yesterday and cannot today.
 
+Read as one sentence it is a containment — `snapshot.refs ⊆ backup`, held for
+as long as the snapshot is on offer — and the two rules are the two directions
+that containment can be broken. That is why it is **one** property rather than
+two rules, and it is executable: `backup-retention.ts` holds the two
+predicates, and `backup-retention.property.test.ts` is an `fc.commands` model
+that asserts *every offered snapshot is restorable* after each step of any
+interleaving of writes, mirroring, sealing, GC, retention and expiry. Neither
+boundary is violated by the step that violates it — sealing early is harmless
+until a later expiry removes the evidence, deleting early is harmless until
+someone restores — so only a sequence catches either.
+
+**The property's own first version tested only half of it, and looked
+identical to one that tested both.** A mutation deleting the *entire* blob
+backup went undetected: the generator reached a retention deletion often
+enough for a naive `retentionDeletes > 0` guard to read healthy, but never
+reached one *while a snapshot with real references was on offer*, which is the
+far boundary's only interesting arrangement. Two model defects caused it —
+snapshots were allowed to reference nothing, and the backup cycle only ever
+added references, so every newer snapshot referenced every older blob and
+nothing was ever collectable. The guard is now the arrangement itself
+(`retentionUnderOffer`), not the count of deletions.
+
 ## Consequences
 
 ### Easier
