@@ -42,6 +42,7 @@ import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
   DocumentStoreWorkspaceDocs,
   LoroWorkspaceDocumentIndex,
+  type WorkspaceDocCursor,
   type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
@@ -318,6 +319,34 @@ export async function saveWorkspaceDoc(
  * delete/rename, the dual-plane index) shares the same instance the save
  * path diffs against, so no path can leave another holding a stale doc.
  */
+/**
+ * Bring the cached workspace document up to the stored record, answering the
+ * position it now stands at.
+ *
+ * For a reader that must judge against the RECORD rather than this
+ * instance's view of it — file-GC being the one that matters, since it acts
+ * destructively on what it decides is unreferenced.
+ *
+ * A workspace with nothing cached needs no catch-up: the next open reads the
+ * store. Answering its cursor anyway keeps the two callers of this symmetric,
+ * so a fence taken around a pass compares like with like either way.
+ */
+export async function catchUpWorkspaceDoc(workspaceId: string): Promise<WorkspaceDocCursor> {
+  const docs = cacheBackedWorkspaceDocs()
+  const cached = workspaceDocCache.get(workspaceDocCacheKey(workspaceId))
+  if (cached === undefined) return docs.readCursor(workspaceId)
+  // A COLD cursor, not the record's current one. Nothing tracks where the
+  // cached document stands — it is mutated in place by every local write —
+  // so the only honest answer is "I do not know", which is what
+  // `{null, null}` says. `catchUp` reads that as a generation mismatch and
+  // reconciles from the snapshot, which is the whole point: passing the
+  // record's current cursor instead would say "already up to date" and
+  // import nothing, leaving the caller with exactly the stale view it asked
+  // to be rid of.
+  const { cursor } = await docs.catchUp(workspaceId, cached, { generation: null, afterSeq: null })
+  return cursor
+}
+
 export function cacheBackedWorkspaceDocs(): WorkspaceDocs {
   return {
     open: (workspaceId) => openWorkspaceDocIfStored(workspaceId),
@@ -879,6 +908,13 @@ export async function compactDocument(
   // read that decides the shallow snapshot and the write that persists it
   // see no concurrent tree write in between.
   return withWorkspaceWriteLock(workspaceId, async () => {
+    // Same reason file-GC catches up first (ADR-0020): the fold below exports
+    // a shallow snapshot from the CACHED document, and a cached document that
+    // is behind produces a snapshot missing another instance's ops. The
+    // generation fence does not cover it — a writer that merely APPENDED left
+    // the generation alone, and `supersededDeltaCount` then drops the very
+    // delta that carried those ops.
+    await catchUpWorkspaceDoc(workspaceId)
     const header = await documentStore.readSnapshotManifest({ docRef })
     if (header === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }

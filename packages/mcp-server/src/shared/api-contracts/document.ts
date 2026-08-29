@@ -291,6 +291,17 @@ export type PruneSandwichedVersionsResponse = z.infer<typeof pruneSandwichedVers
 export const purgeResultSchema = z.object({
   purgedCount: z.number().int().nonnegative(),
   purgedBytes: z.number().int().nonnegative(),
+  /**
+   * Why a pass purged nothing, when the reason is not "nothing was
+   * dangling". Absent on an ordinary pass.
+   *
+   * `record-moved`: another instance wrote to this workspace while the pass
+   * was deciding what was referenced, so the decision was made against a
+   * record that no longer exists and the pass stood down (ADR-0020). Purging
+   * is periodic, so standing down costs a cycle and nothing else — which is
+   * the whole reason a fence is affordable here.
+   */
+  skippedReason: z.literal('record-moved').optional(),
 })
 
 export type PurgeResult = z.infer<typeof purgeResultSchema>

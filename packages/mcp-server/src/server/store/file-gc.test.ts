@@ -15,7 +15,7 @@ vi.mock('../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { saveDocument, loadDocument, workspaceFrontiersForPath } = await import(
+const { saveDocument, loadDocument, listDocuments, workspaceFrontiersForPath } = await import(
   './document-store.js'
 )
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
@@ -30,6 +30,33 @@ const { makeSpatialDoc, makeSpatialDocWithImage, setSpatialDocImage, clearSpatia
   await import('../../shared/test-utils/spatial-doc.js')
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
+
+const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+const { createWorkspaceDocumentAtPath, writeWorkspaceDocumentContent } = await import(
+  '@kamiazya/whiteboard-loro-adapter'
+)
+const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+
+/**
+ * A write from ANOTHER instance: straight to the store, never through this
+ * module's cached workspace document.
+ *
+ * That is what a second daemon is — same data directory, its own process,
+ * its own cache — and it is the only way to put this instance's cache
+ * behind the record without reaching into the cache itself.
+ */
+async function writeFromOtherInstance(
+  workspaceId: string,
+  path: string,
+  documentId: string,
+  content: LoroDoc,
+): Promise<void> {
+  const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(handle.db))
+  const workspaceDoc = (await docs.open(workspaceId)) ?? new LoroDoc()
+  createWorkspaceDocumentAtPath(workspaceDoc, { path, documentId, kind: 'spatial' })
+  writeWorkspaceDocumentContent(workspaceDoc, documentId, content)
+  await docs.save(workspaceId, workspaceDoc)
+}
 
 async function seedFile(
   workspaceId: string,
@@ -619,4 +646,116 @@ describe('purgeDanglingFiles', () => {
     const remaining = (await readdir(join(tempDir, 'ws_head_race', 'files'))).sort()
     expect(remaining).toEqual(['about-to-be-captured-on-head-switch.png'])
   })
+})
+
+/**
+ * ADR-0020. GC judges "referenced" from `listDocuments` / `loadDocument`,
+ * which read `openWorkspaceDocIfStored` — and that answers the CACHED
+ * workspace document when there is one. With one daemon the cache is
+ * authoritative, because every write goes through it. With two it is not,
+ * and this is not a narrow race: a pass on instance A cannot see a document
+ * instance B created, so it unlinks B's blobs as dangling. The window is
+ * "however long since A last caught up", which is forever if nothing does.
+ */
+describe('purgeDanglingFiles across instances', () => {
+  it('does not delete a blob referenced only by another instance', async () => {
+    const workspaceId = 'gc-other-instance'
+    // This instance's own document, so the workspace record and its cache
+    // both exist before the other instance writes.
+    await saveDocument(workspaceId, 'mine', makeSpatialDoc({ nodes: [], edges: [] }))
+    await seedFile(workspaceId, 'theirs', '.png', 64)
+
+    await writeFromOtherInstance(
+      workspaceId,
+      'theirs',
+      '01ARZ3NDEKTSV4RRFFQ69G5FB9',
+      makeSpatialDocWithImage('theirs'),
+    )
+
+    // The precondition, asserted rather than assumed: this instance still
+    // serves its stale view, so a pass that trusted it would judge the blob
+    // dangling.
+    expect((await listDocuments(workspaceId)).map((entry) => entry.path)).not.toContain('theirs')
+
+    await purgeDanglingFiles(workspaceId, { graceMs: 0 })
+    expect(await readdir(join(tempDir, workspaceId, 'files'))).toContain('theirs.png')
+  })
+
+  it('still deletes a blob nothing references, after catching up', async () => {
+    const workspaceId = 'gc-other-instance-dangling'
+    await saveDocument(workspaceId, 'mine', makeSpatialDoc({ nodes: [], edges: [] }))
+    await seedFile(workspaceId, 'orphan', '.png', 64)
+
+    await writeFromOtherInstance(
+      workspaceId,
+      'theirs',
+      '01ARZ3NDEKTSV4RRFFQ69G5FBA',
+      makeSpatialDoc({ nodes: [], edges: [] }),
+    )
+
+    const result = await purgeDanglingFiles(workspaceId, { graceMs: 0 })
+    expect(result.purgedCount).toBe(1)
+    expect(await readdir(join(tempDir, workspaceId, 'files'))).not.toContain('orphan.png')
+  })
+})
+
+/**
+ * The FENCE, which the catch-up above does not cover.
+ *
+ * Catching up first fixes what this instance can SEE; it does nothing about a
+ * write that lands while the pass is deciding. Collecting forks and checks
+ * out every branch and version of every document, so it is the longest window
+ * in the pass and the one another instance is most likely to write into — and
+ * a referenced set computed against a record that no longer exists must not
+ * be acted on.
+ *
+ * The write is injected through the version store the collect already calls,
+ * because that is the one seam inside the window. Without a case that reaches
+ * it, removing the fence entirely leaves every other test in this file green
+ * — measured.
+ */
+it('stands down when another instance writes while the pass is deciding', async () => {
+  const workspaceId = 'gc-record-moved'
+  await saveDocument(workspaceId, 'mine', makeSpatialDocWithImage('kept'))
+  await seedFile(workspaceId, 'kept', '.png', 64)
+  await seedFile(workspaceId, 'orphan', '.png', 64)
+
+  let wrote = false
+  const versionStore = {
+    list: async () => {
+      // Inside the collect, exactly once: the window the fence exists for.
+      if (!wrote) {
+        wrote = true
+        await writeFromOtherInstance(
+          workspaceId,
+          'theirs',
+          '01ARZ3NDEKTSV4RRFFQ69G5FBB',
+          makeSpatialDoc({ nodes: [], edges: [] }),
+        )
+      }
+      return []
+    },
+    load: async () => null,
+    save: async () => {
+      throw new Error('not used')
+    },
+    saveThumbnail: async () => {
+      throw new Error('not used')
+    },
+    loadThumbnail: async () => null,
+    getFrontiersBase64: async () => null,
+  }
+
+  const result = await purgeDanglingFiles(workspaceId, {
+    graceMs: 0,
+    versionStore: versionStore as never,
+  })
+  expect(wrote).toBe(true)
+  expect(result.skippedReason).toBe('record-moved')
+  expect(result.purgedCount).toBe(0)
+  // Nothing was unlinked — not even the file that really was dangling. A
+  // stood-down pass acts on nothing, and the next pass decides again.
+  const files = await readdir(join(tempDir, workspaceId, 'files'))
+  expect(files).toContain('orphan.png')
+  expect(files).toContain('kept.png')
 })

@@ -170,9 +170,13 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
   async readCursor(workspaceId: string): Promise<WorkspaceDocCursor> {
     const { lastSeq, generation } = await this.store.loadDeltas({
       docRef: refOf(workspaceId),
-      // The cursor, not the payload: this asks where the record stands, and
-      // the updates it drags along are the caller's own current state.
-      afterSeq: null,
+      // The cursor, not the payload. `lastSeq` reports the whole log's
+      // highest seq whatever was RETURNED — the contract says so precisely
+      // for this caller — so asking from past the end answers the position
+      // and no bytes. `null` here would mean "give me everything", which is
+      // the opposite of what this method is for, and it is called on every
+      // baseline pass of the tail and before every GC pass.
+      afterSeq: Number.MAX_SAFE_INTEGER,
     })
     return { generation, afterSeq: lastSeq }
   }

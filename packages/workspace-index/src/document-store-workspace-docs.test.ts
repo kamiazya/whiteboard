@@ -25,7 +25,7 @@ import type {
 } from '@kamiazya/whiteboard-ports'
 import { docRefKey } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
-import { expect, it } from 'vitest'
+import { expect, it, vi } from 'vitest'
 import { DocumentStoreWorkspaceDocs } from './document-store-workspace-docs.js'
 
 interface StoredDoc {
@@ -127,7 +127,13 @@ class FakeDocumentStore implements DocumentStore {
     return { frontier: stored.frontier }
   }
 
-  async loadDeltas({ docRef, afterSeq }: LoadDeltasInput): Promise<LoadDeltasResult> {
+  loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
+    return this.loadDeltasReal(input)
+  }
+
+  /** The real body, so a spy on `loadDeltas` can observe the call and still
+   *  answer truthfully rather than having to reimplement the store. */
+  async loadDeltasReal({ docRef, afterSeq }: LoadDeltasInput): Promise<LoadDeltasResult> {
     const stored = this.docs.get(docRefKey(docRef))
     if (stored === undefined) {
       return { updates: [], lastSeq: null, generation: null, frontier: new Uint8Array() }
@@ -521,4 +527,42 @@ it('answers bytes a peer can use across a fold, where the tail alone is not enou
   const { updates } = await reader.catchUp('ws-a', held, cursor)
   for (const update of updates) peer.import(update)
   expect(peer.getMap('meta').toJSON()).toEqual(held.getMap('meta').toJSON())
+})
+
+/**
+ * `readCursor` asks where the record STANDS, and must not drag the record
+ * back with it.
+ *
+ * It is called on every baseline pass of the daemon's tail and before every
+ * GC pass, so paying for the whole delta log each time is a cost nobody asked
+ * for. White-box on purpose: the answer is identical either way, so nothing
+ * observable from outside this class can tell the two apart — which is
+ * exactly the shape of cost that creeps back in unnoticed.
+ */
+it('reads the cursor without fetching the log behind it', async () => {
+  const store = new FakeDocumentStore()
+  const docs = new DocumentStoreWorkspaceDocs(store)
+  const doc = new LoroDoc()
+  doc.getMap('meta').set('seed', '1')
+  doc.commit()
+  await docs.save('ws-a', doc)
+  doc.getMap('meta').set('more', '1')
+  doc.commit()
+  await docs.save('ws-a', doc)
+
+  const asked: (number | null)[] = []
+  const spied = vi.spyOn(store, 'loadDeltas')
+  spied.mockImplementation(async (input) => {
+    asked.push(input.afterSeq)
+    return store.loadDeltasReal(input)
+  })
+  const cursor = await docs.readCursor('ws-a')
+  spied.mockRestore()
+
+  expect(asked).toHaveLength(1)
+  expect(asked[0]).not.toBeNull()
+  // And it is still the real position: a cursor that answered null would
+  // make the tail replay the whole log on its next pass.
+  expect(cursor.afterSeq).not.toBeNull()
+  expect(cursor.generation).not.toBeNull()
 })

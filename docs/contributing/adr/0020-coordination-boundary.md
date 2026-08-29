@@ -30,7 +30,7 @@ document cache is therefore a *visibility* problem, not a correctness one —
 which is the opposite of what a first reading suggests, and is why this
 paragraph exists.
 
-### Four places where convergence stops covering, measured
+### Five places where convergence stops covering, measured
 
 1. **Compaction is a read-modify-write that does not append.** In `save()`'s
    `shouldCompact` branch the new ops are folded into a fresh snapshot and
@@ -70,7 +70,20 @@ paragraph exists.
    is not. The fold path now writes the merged version vector; the append path
    does not, and is left that way deliberately (see decision 5).
 
-4. **State outside the CRDT.** Blobs and versions are files
+4. **Two destructive passes judging from a stale cache.** File-GC decides
+   what is unreferenced from `listDocuments` / `loadDocument`, and compaction
+   folds its shallow snapshot out of the live document — both of which read
+   `openWorkspaceDocIfStored`, which answers the CACHED workspace document
+   when there is one. That cache is authoritative for one daemon, because
+   every write goes through it, and simply behind for two. So GC unlinks
+   blobs referenced only by a document another instance created, and
+   compaction writes a snapshot missing ops another instance appended. The
+   generation fence covers neither: nobody replaced the snapshot in either
+   case, so the compare-and-swap legitimately succeeds. Both are systematic
+   rather than narrow — the gap is however long since this instance last
+   caught up.
+
+5. **State outside the CRDT.** Blobs and versions are files
    (`FileVersionStore` writes `<dataDir>/blobs/<workspaceId>/versions/*.png`),
    and `file-gc` computes a referenced set and then unlinks. Neither is a
    CRDT operation, and unlinking is not monotonic: one process's GC can
@@ -143,6 +156,12 @@ discardable work, and when it is, it is rented too (a `leases` table, a
 Postgres advisory lock, or a Kubernetes `Lease` — never a bespoke
 implementation).
 
+**4. Invariants a CRDT cannot preserve are resolved by deterministic
+convergence, not by a uniqueness authority.** Path uniqueness is settled
+after the fact: both creations survive the merge and a deterministic rule
+keyed on Loro's own op identity picks the holder of the path, renaming the
+loser. Routing creation through an authority would violate decision 1.
+
 **5. A tailing reader's cursor is `(generation, afterSeq)`, not a frontier.**
 Cross-instance propagation needs to ask "what has arrived since I last
 looked". The obvious answer is a frontier, and it is the wrong one: comparing
@@ -185,11 +204,26 @@ join would need a runtime seam threaded through every store — the same seam a
 frontier-based tail would have needed — to correct a value whose only job is
 to be reported.
 
-**4. Invariants a CRDT cannot preserve are resolved by deterministic
-convergence, not by a uniqueness authority.** Path uniqueness is settled
-after the fact: both creations survive the merge and a deterministic rule
-keyed on Loro's own op identity picks the holder of the path, renaming the
-loser. Routing creation through an authority would violate decision 1.
+**6. A destructive pass judges from the record, and is fenced on the
+position it judged at.** Both halves are needed and neither substitutes for
+the other. Catching up first fixes what the pass can SEE; the fence covers a
+write that lands while it is deciding, which for file-GC is the longest
+window in the pass — a fork and checkout of every branch and version of every
+document. A pass whose record moved stands down and reports
+`skippedReason: 'record-moved'` rather than acting on a decision about a
+state that no longer exists; purging and compaction are both periodic, so
+standing down costs a cycle and nothing else, which is exactly what makes a
+fence affordable here.
+
+Over a filesystem this NARROWS the window rather than closing it — the span
+between the check and the unlinks remains, and the existing grace period is
+what covers that. Say so rather than claiming a guarantee the design cannot
+make.
+
+This is also why leader election is not the answer for GC, which is the
+intuitive fix and the wrong one: electing a single GC leader removes
+GC-versus-GC races and leaves GC-versus-WRITE untouched, because the write
+barrier is in-process and another instance's write never takes it.
 
 ## Consequences
 

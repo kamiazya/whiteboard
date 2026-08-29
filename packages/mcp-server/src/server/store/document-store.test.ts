@@ -2127,4 +2127,51 @@ describe('auto-compact disposal', () => {
 
     expect(await readLastCompactedAt()).not.toBeNull()
   })
+
+  /**
+   * ADR-0020. Compaction folds a shallow snapshot out of the CACHED workspace
+   * document, so a cache that is behind writes a record missing another
+   * instance's ops — and the generation fence cannot catch it, because a
+   * writer that only APPENDED never touched the generation.
+   * `supersededDeltaCount` then drops exactly the delta that carried them.
+   */
+  it('does not fold away ops another instance appended while this cache was behind', async () => {
+    const { getDb } = await import('./db/index.js')
+    const { LibsqlDocumentStore } = await import('./libsql/libsql-document-store.js')
+    const { DocumentStoreWorkspaceDocs } = await import('@kamiazya/whiteboard-workspace-index')
+
+    // Enough history that a shallow snapshot is actually SMALLER than the
+    // record — otherwise compaction answers `no-gain` and returns without
+    // folding, and this case would pass against the very bug it is about.
+    const doc = new LoroDoc()
+    const elements = doc.getMovableList('elements')
+    for (let i = 0; i < 400; i += 1) {
+      elements.insert(i, `element-${i}-${'p'.repeat(200)}`)
+      doc.commit()
+    }
+    await saveDocument('session1', 'page', doc)
+
+    // Compaction refuses to cut history nothing pins, so the workspace needs
+    // a version before the fold is even attempted.
+    const store = new FileVersionStore()
+    await store.save('session1', 'page', await loadDocument('session1', 'page'), { auto: false })
+
+    // Another instance appends, straight to the store — this instance's
+    // cached workspace document knows nothing about it.
+    const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(await getDb(tempDir)))
+    const theirs = (await docs.open('session1')) as LoroDoc
+    theirs.getMap('meta').set('theirs', 'kept')
+    theirs.commit()
+    await docs.save('session1', theirs)
+
+    const result = await compactDocument('session1', 'page', store)
+    // Asserted, not assumed: a `no-gain` or `no-versions` answer means the
+    // fold never ran and everything below would pass for the wrong reason.
+    expect(result.reason).toBe('ok')
+    expect(result.compacted).toBe(true)
+
+    // The RECORD, not this process's cache: what survived the fold on disk.
+    const settled = (await docs.open('session1')) as LoroDoc
+    expect(settled.getMap('meta').get('theirs')).toBe('kept')
+  })
 })
