@@ -54,6 +54,7 @@ import { cn } from '../lib/utils.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
+import { mergePersistence } from './merge-persistence.js'
 import {
   type LoroStoreLike,
   useBrowserDocumentController,
@@ -736,7 +737,15 @@ export function BrowserDocumentPage({
         <DocumentProperties
           inline
           key={documentId ?? 'no-canvas'}
-          status={<SaveStatusChip state={renderState.persistence} />}
+          // A markdown document has two writers — this page's controller and
+          // the body's own debounced save — and one dot. Showing the
+          // controller alone reported `Saved` over unwritten text, because a
+          // body edit never moves it.
+          status={
+            <SaveStatusChip
+              state={mergePersistence(renderState.persistence, markdownDoc.saveState)}
+            />
+          }
           actions={canvasRowActions}
           title={titleOf(documentName, documentPath)}
           onTitleChange={onTitleChange}
