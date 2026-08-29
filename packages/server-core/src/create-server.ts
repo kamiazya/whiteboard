@@ -4,6 +4,7 @@ import {
 } from '@kamiazya/whiteboard-ports'
 import type { Context } from 'hono'
 import { Hono } from 'hono'
+import type { z } from 'zod'
 import { ContentFactsCache } from './references/content-facts-cache.js'
 import type { ServerDeps } from './server-deps.js'
 import { backlinksInputSchema, computeBacklinks } from './tools/backlinks.js'
@@ -15,6 +16,7 @@ import { createCanvasViewTool } from './tools/canvas-view.js'
 import {
   WorkspaceDocumentNotFoundError,
   WorkspaceNotFoundError,
+  WorkspaceSegmentUnusableError,
 } from './tools/document-crud.errors.js'
 import {
   wbDocumentCreate,
@@ -23,10 +25,18 @@ import {
   wbDocumentResolve,
 } from './tools/document-crud.js'
 import {
+  WB_DOCUMENT_CREATE_DESCRIPTION,
+  WB_DOCUMENT_DELETE_DESCRIPTION,
+  WB_DOCUMENT_LIST_DESCRIPTION,
+  WB_DOCUMENT_RESOLVE_DESCRIPTION,
   wbDocumentCreateInputSchema,
+  wbDocumentCreateOutputSchema,
   wbDocumentDeleteInputSchema,
+  wbDocumentDeleteOutputSchema,
   wbDocumentListInputSchema,
+  wbDocumentListOutputSchema,
   wbDocumentResolveInputSchema,
+  wbDocumentResolveOutputSchema,
 } from './tools/document-crud.schemas.js'
 import { createDocumentGetTool } from './tools/document-get.js'
 import { SnapshotNotFoundError } from './tools/document-io.js'
@@ -45,6 +55,7 @@ import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
 import { createViewportSetTool } from './tools/viewport-set.js'
+import { createWorkspaceEditTool } from './tools/workspace-edit.js'
 import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-handle.js'
 
 export function createServer(deps: ServerDeps) {
@@ -226,6 +237,46 @@ export function createServer(deps: ServerDeps) {
   })
 
   const tools = {
+    // The document CRUD operations are exposed HERE as tool objects, not only
+    // as the bare functions the routes above call. An MCP registration that
+    // reaches for the operation instead sits OUTSIDE the record
+    // `withResolvedWorkspaceHandles` wraps — so it never resolves a segment,
+    // which is invisible for as long as a workspace's id and its handle are
+    // the same string, and becomes "workspace not found" the moment ADR-0019's
+    // mint makes them differ. The routes are unaffected: they resolve once in
+    // the middleware above and pass the canonical id straight to the operation.
+    documentCreate: {
+      name: 'wb_document_create' as const,
+      description: WB_DOCUMENT_CREATE_DESCRIPTION,
+      inputSchema: wbDocumentCreateInputSchema,
+      outputSchema: wbDocumentCreateOutputSchema,
+      execute: (input: z.infer<typeof wbDocumentCreateInputSchema>) =>
+        wbDocumentCreate(deps, input),
+    },
+    documentList: {
+      name: 'wb_document_list' as const,
+      description: WB_DOCUMENT_LIST_DESCRIPTION,
+      inputSchema: wbDocumentListInputSchema,
+      outputSchema: wbDocumentListOutputSchema,
+      execute: (input: z.infer<typeof wbDocumentListInputSchema>) => wbDocumentList(deps, input),
+    },
+    documentResolve: {
+      name: 'wb_document_resolve' as const,
+      description: WB_DOCUMENT_RESOLVE_DESCRIPTION,
+      inputSchema: wbDocumentResolveInputSchema,
+      outputSchema: wbDocumentResolveOutputSchema,
+      execute: (input: z.infer<typeof wbDocumentResolveInputSchema>) =>
+        wbDocumentResolve(deps, input),
+    },
+    documentDelete: {
+      name: 'wb_document_delete' as const,
+      description: WB_DOCUMENT_DELETE_DESCRIPTION,
+      inputSchema: wbDocumentDeleteInputSchema,
+      outputSchema: wbDocumentDeleteOutputSchema,
+      execute: (input: z.infer<typeof wbDocumentDeleteInputSchema>) =>
+        wbDocumentDelete(deps, input),
+    },
+    workspaceEdit: createWorkspaceEditTool(deps),
     facetList: createFacetListTool(deps),
     facetSet: createFacetSetTool(deps),
     bodyPatch: createBodyPatchTool(deps),
@@ -259,6 +310,13 @@ function mapDocumentError(c: Context, err: unknown) {
   }
   if (err instanceof DocumentPathTakenError) {
     return c.json({ error: err.message }, 409)
+  }
+  // The caller asked to create a workspace under a handle that cannot be a
+  // segment (ADR-0019). 400, not 500: the request is well-formed and the
+  // server is fine — the NAME is the problem, and only the caller can pick
+  // another one.
+  if (err instanceof WorkspaceSegmentUnusableError) {
+    return c.json({ error: err.message }, 400)
   }
   throw err
 }

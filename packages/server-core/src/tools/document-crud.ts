@@ -1,10 +1,15 @@
 import { parseOkf } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
+import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
-import { WorkspaceDocumentNotFoundError, WorkspaceNotFoundError } from './document-crud.errors.js'
+import {
+  WorkspaceDocumentNotFoundError,
+  WorkspaceNotFoundError,
+  WorkspaceSegmentUnusableError,
+} from './document-crud.errors.js'
 import type {
   wbDocumentCreateOutputSchema,
   wbDocumentDeleteInputSchema,
@@ -38,6 +43,33 @@ async function rethrowWorkspaceNotFound<T>(
   }
 }
 
+/**
+ * ADR-0019's mint: a new workspace is keyed by a canonical ULID the server
+ * chooses, and the handle the caller sent is filed as its `segment`.
+ *
+ * A handle that cannot BE a segment is refused rather than minted with none
+ * — see `WorkspaceSegmentUnusableError` for why that is not the same choice
+ * migration 0019 makes when backfilling workspaces that already exist.
+ */
+async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> {
+  // The flag has always been an IDEMPOTENT bootstrap — a no-op when the
+  // workspace is already there, which is why a caller can set it on every
+  // request without keeping track. Minting unconditionally would break that:
+  // a second create into the same workspace would mint a rival, and a handle
+  // already resolved to a canonical id would be refused for being
+  // ULID-shaped. So an existing workspace short-circuits, and only a handle
+  // that names nothing reaches the mint.
+  const existing = await deps.documentIndex.resolveWorkspace(handle)
+  if (existing !== null) return existing.workspaceId
+
+  if (!workspaceSegmentSchema.safeParse(handle).success) {
+    throw new WorkspaceSegmentUnusableError(handle)
+  }
+  const workspaceId = generateDocumentId()
+  await deps.documentIndex.createWorkspace({ workspaceId, segment: handle })
+  return workspaceId
+}
+
 export async function wbDocumentCreate(
   deps: ServerDeps,
   rawInput: z.infer<typeof wbDocumentCreateInputSchema>,
@@ -49,33 +81,47 @@ export async function wbDocumentCreate(
   // dropped. A schema only guarantees what something actually runs.
   const input = wbDocumentCreateInputSchema.parse(rawInput)
 
-  // Workspaces never materialize implicitly: a typo'd or hallucinated
-  // workspaceId must fail loudly rather than silently writing data into a
-  // workspace nobody asked for. `createWorkspace: true` is the explicit
-  // opt-in that bootstraps a genuinely new workspace.
+  // Parsed BEFORE anything exists, so a refusal leaves nothing behind. The
+  // body is applied by delegating to `wb_document_set` once the document
+  // exists, so a malformed one used to fail there — leaving an empty
+  // document squatting the requested path while the caller held an error
+  // saying the create had not happened, and the retry then collided with
+  // the ghost.
   //
-  // Everything below reads `workspaceId` rather than `input.workspaceId`.
-  // Today they are the same string; ADR-0019's mint boundary lands here
-  // next, at which point a create decides the canonical id and these two
-  // stop being interchangeable. Threading it now keeps that change to the
-  // one branch that causes it.
-  const workspaceId = input.workspaceId
-  if (input.createWorkspace === true) {
-    await deps.documentIndex.createWorkspace({ workspaceId })
-  }
-
-  // Parsed before anything is written, and AFTER the workspace bootstrap so
-  // a missing workspace still reports itself first. The body is applied by
-  // delegating to `wb_document_set` once the document exists, so a
-  // malformed one used to fail there — leaving an empty document squatting
-  // the requested path while the caller held an error saying the create had
-  // not happened, and the retry then collided with the ghost.
+  // It used to run AFTER the workspace bootstrap, "so a missing workspace
+  // still reports itself first". That order cannot survive the mint below:
+  // bootstrapping first would leave a freshly minted workspace behind every
+  // refused body, and the caller's retry would mint a SECOND one. What the
+  // old order bought was the error a caller gets when their request is
+  // wrong in BOTH ways at once, which no test pins and which is the less
+  // useful of the two — a malformed body has to be fixed either way.
   if (input.kind === 'markdown' && input.markdown !== undefined) {
     const preflight = parseOkf(input.markdown)
     if (!preflight.ok) {
       throw new OkfParseError(preflight.error.stage, preflight.error.message)
     }
   }
+
+  // Workspaces never materialize implicitly: a typo'd or hallucinated
+  // workspaceId must fail loudly rather than silently writing data into a
+  // workspace nobody asked for. `createWorkspace: true` is the explicit
+  // opt-in that bootstraps a genuinely new workspace.
+  //
+  // It is also ADR-0019's MINT BOUNDARY, and the only one on this side: the
+  // SERVER decides the canonical id, and the string the caller sent becomes
+  // the workspace's `segment`. Every later request may keep using that
+  // string — segment-first resolution at the boundary turns it back into
+  // this id — which is why the caller is not asked to change anything, and
+  // why the minted id is REPORTED rather than merely stored.
+  //
+  // Everything below therefore works from `workspaceId`, never from
+  // `input.workspaceId`: after a mint those name two different workspaces,
+  // and reading the input again would file the document under one that does
+  // not exist.
+  const workspaceId =
+    input.createWorkspace === true
+      ? await mintWorkspace(deps, input.workspaceId)
+      : input.workspaceId
 
   // Blank means no name, and that is a NORMALISATION rather than a rejection.
   // `DocumentEntry.name` is `z.string().min(1).optional()` — absent is the

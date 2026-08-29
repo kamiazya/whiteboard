@@ -74,11 +74,14 @@ describe('documentWritten', () => {
     const deps = resolveServerDeps(
       createContainer(createStoreLocalModule({ db, blobDir: tempDir })),
     )
+    // Registered explicitly: `createWorkspace: true` is ADR-0019's MINT
+    // boundary, and a mint would key the workspace by a fresh ULID with
+    // `ws-1` as its segment — leaving the store reads below naming nothing.
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-1' })
     const created = await wbDocumentCreate(deps, {
       workspaceId: 'ws-1',
       path: 'agent-edited',
       kind: 'spatial',
-      createWorkspace: true,
     })
 
     // Creating is a write too, so it has already scheduled one — and a

@@ -9,7 +9,7 @@ import {
   listWorkspacesResponseSchema,
   renameDocumentPathResponseSchema,
 } from '../../../shared/api-contracts/document.js'
-import { withTempDataDir } from '../_test-helpers.js'
+import { seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
 
 const tmp = withTempDataDir('whiteboard-workspaces-test-')
 
@@ -303,6 +303,11 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('writes kind onto the stored Loro doc itself, not only the SQL row', async () => {
+    // Registered up front so the POST below is not the thing that creates it:
+    // that route passes `createWorkspace: true`, which is ADR-0019's mint
+    // boundary, and a mint would key the workspace by a ULID and file `ws1`
+    // as its segment — leaving the store reads further down naming nothing.
+    await seedWorkspaceRow(tmp.dir, 'ws1')
     const app = createDocumentRouter()
 
     const markdownRes = await app.request('/api/workspaces/ws1/documents', {
@@ -325,6 +330,11 @@ describe('POST /api/workspaces/:workspaceId/documents', () => {
   })
 
   it('stamps the schema-defaulted kind onto the doc bytes when kind is omitted', async () => {
+    // Registered up front so the POST below is not the thing that creates it:
+    // that route passes `createWorkspace: true`, which is ADR-0019's mint
+    // boundary, and a mint would key the workspace by a ULID and file `ws1`
+    // as its segment — leaving the store reads further down naming nothing.
+    await seedWorkspaceRow(tmp.dir, 'ws1')
     const app = createDocumentRouter()
     const res = await app.request('/api/workspaces/ws1/documents', {
       method: 'POST',
@@ -489,6 +499,11 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   })
 
   it('evicts the doc-cache on delete, so re-creating the same path after a warm cache read yields a fresh empty doc', async () => {
+    // Registered up front so the POST below is not the thing that creates it:
+    // that route passes `createWorkspace: true`, which is ADR-0019's mint
+    // boundary, and a mint would key the workspace by a ULID and file `ws1`
+    // as its segment — leaving the store reads further down naming nothing.
+    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createDocumentRouter()
     await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
@@ -742,6 +757,11 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   })
 
   it('evicts the doc-cache on rename: updating via the OLD path afterward lazily creates a FRESH canvas rather than resurrecting the warmed doc, while the new path keeps the real content', async () => {
+    // Registered up front so the POST below is not the thing that creates it:
+    // that route passes `createWorkspace: true`, which is ADR-0019's mint
+    // boundary, and a mint would key the workspace by a ULID and file `ws1`
+    // as its segment — leaving the store reads further down naming nothing.
+    await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createDocumentRouter()
     await app.request('/api/workspaces/session1/documents', {
       method: 'POST',
