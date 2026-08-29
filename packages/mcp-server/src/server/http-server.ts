@@ -15,7 +15,12 @@ import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
-import { getConnectionStats, handleWsUpgrade, setRuntimeTouchFn } from './routes/ws.js'
+import {
+  getConnectionStats,
+  handleWsUpgrade,
+  setRuntimeTouchFn,
+  subscribedWorkspaceIds,
+} from './routes/ws.js'
 import { authorizeWsUpgrade } from './routes/ws-auth.js'
 import { parseWsTargetFromRequestUrl } from './routes/ws-validation.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
@@ -25,7 +30,13 @@ import { createPairingCodeStore, createPairingTokenStore } from './security/pair
 import { createWsTicketStore } from './security/ws-ticket-store.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
+import {
+  cacheBackedWorkspaceDocs,
+  emitWorkspaceDocUpdated,
+  getWorkspaceDoc,
+} from './store/document-store.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
+import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
 
 export type RuntimeStatus = RuntimeStatusResponse
@@ -47,6 +58,11 @@ export interface StartHttpServerOptions {
   /** Test-only seam: overrides the real createFileGcSweeper so wiring tests
    *  can observe start/stop without waiting on a real 24h interval. */
   fileGcSweeperFactory?: typeof createFileGcSweeper
+  /** Test seam, matching `fileGcSweeperFactory`. Composition is the one thing
+   *  a unit test of the tail itself cannot reach, and "started and stopped
+   *  exactly once, and only when configured" is the part that would fail
+   *  silently. */
+  workspaceTailFactory?: typeof createWorkspaceTail
   /** Test-only seam: overrides `process.exit` for the fatal-bind-error path
    *  below, so a test can observe the exit call instead of actually killing
    *  the test process. */
@@ -92,6 +108,24 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // to reference it.
   const fileGcSweeper: FileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
 
+  // Off unless an operator turns it on: one daemon learns about its own
+  // writes through `onWorkspaceDocUpdated` already, and polling for a second
+  // instance that does not exist is pure cost. See ADR-0020.
+  const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
+  const workspaceTail =
+    workspaceTailIntervalMs === null
+      ? null
+      : (options.workspaceTailFactory ?? createWorkspaceTail)({
+          subscribedWorkspaces: subscribedWorkspaceIds,
+          docs: cacheBackedWorkspaceDocs(),
+          // The CACHED document, which is what every reader on this instance
+          // is served from — catching up a fresh copy would leave the one
+          // people actually read untouched.
+          liveDoc: getWorkspaceDoc,
+          emit: emitWorkspaceDocUpdated,
+          intervalMs: workspaceTailIntervalMs,
+        })
+
   const idleTimer = new IdleTimer(options.idleTimeoutMs ?? 15 * 60_000, () => {
     void close()
   })
@@ -133,6 +167,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
 
   const performClose = async (): Promise<void> => {
     idleTimer.stop()
+    await workspaceTail?.stop()
     await fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     setRuntimeTouchFn(() => {})
 
@@ -240,6 +275,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   setRuntimeTouchFn(touch)
   idleTimer.start()
   fileGcSweeper.start()
+  workspaceTail?.start()
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
   // `serve()` returns before the underlying bind resolves, so a bind failure
@@ -257,6 +293,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     // and the GC sweeper's interval would keep firing in whatever process
     // hosts this call for the seam's lifetime.
     idleTimer.stop()
+    void workspaceTail?.stop()
     void fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     ;(options.exitProcess ?? process.exit)(1)
   })

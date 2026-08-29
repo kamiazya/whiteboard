@@ -161,6 +161,16 @@ generation from decision 3 is exactly the signal that the prefix is gone and
 the snapshot must be re-read, so the two compose into one cursor rather than
 needing a second mechanism.
 
+The daemon follows by POLLING (`store/workspace-tail.ts`), once per interval
+over the workspaces that have a connected client, pushing whatever it caught
+up through the same funnel a local write uses. Polling is the right first
+answer here precisely because decision 1 put the data plane outside
+coordination: propagation may be late without being wrong, so a push channel
+buys latency and nothing else and can wait until the latency is measured to
+matter. It is **off unless an operator sets `WHITEBOARD_WORKSPACE_TAIL_MS`**,
+since one daemon already hears its own writes and would be polling for a
+second instance that does not exist.
+
 `WorkspaceDocs.catchUp` is that cursor's one consumer: it imports whatever
 the record gained, or re-reads the snapshot when the generation moved, and it
 MERGES rather than replaces so an instance's unsaved local edits survive being

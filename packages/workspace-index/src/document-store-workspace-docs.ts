@@ -14,7 +14,7 @@
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, reassembleSnapshot, shouldCompact } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, VersionVector } from 'loro-crdt'
-import type { WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
+import type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
 
 const MAX_CHUNK_BYTES = 1_000_000
 
@@ -177,18 +177,17 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     return { generation, afterSeq: lastSeq }
   }
 
-  async catchUp(
-    workspaceId: string,
-    doc: LoroDoc,
-    cursor: WorkspaceDocCursor,
-  ): Promise<WorkspaceDocCursor> {
+  async catchUp(workspaceId: string, doc: LoroDoc, cursor: WorkspaceDocCursor): Promise<CaughtUp> {
     const docRef = refOf(workspaceId)
     const tail = await this.store.loadDeltas({ docRef, afterSeq: cursor.afterSeq })
     if (tail.generation === cursor.generation) {
       // Same generation, so the seqs this cursor points past are still the
       // ones it consumed: the tail alone is the whole difference.
       for (const update of tail.updates) doc.import(update)
-      return { generation: tail.generation, afterSeq: tail.lastSeq ?? cursor.afterSeq }
+      return {
+        cursor: { generation: tail.generation, afterSeq: tail.lastSeq ?? cursor.afterSeq },
+        updates: tail.updates,
+      }
     }
     // The generation moved, so a fold has superseded some prefix of the log —
     // possibly all of it, after which the next append starts numbering again.
@@ -197,11 +196,20 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     // snapshot is re-read. Importing it is a MERGE, which is why `doc`'s own
     // unsaved edits survive.
     const base = await this.store.loadSnapshot({ docRef })
-    if (base !== null) doc.import(reassembleSnapshot(base.manifest, base.chunks))
+    const carried: Uint8Array[] = []
+    if (base !== null) {
+      const snapshot = reassembleSnapshot(base.manifest, base.chunks)
+      doc.import(snapshot)
+      carried.push(snapshot)
+    }
     // Re-read rather than reusing `tail`: the snapshot above was read after
     // it, so a fold landing in between would leave the log half-applied.
     const settled = await this.store.loadDeltas({ docRef, afterSeq: null })
     for (const update of settled.updates) doc.import(update)
-    return { generation: settled.generation, afterSeq: settled.lastSeq }
+    carried.push(...settled.updates)
+    return {
+      cursor: { generation: settled.generation, afterSeq: settled.lastSeq },
+      updates: carried,
+    }
   }
 }

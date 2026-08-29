@@ -252,6 +252,30 @@ const workspaceDocUpdatedListeners = new Set<WorkspaceDocUpdatedListener>()
  * sync fan-out surface. Listeners get the exact bytes the store persisted;
  * importing them into a replica of the workspace document converges it.
  */
+/**
+ * Announce an update this process did NOT persist — one another instance
+ * wrote, brought in by the workspace tail.
+ *
+ * The same funnel a local save uses, deliberately: the subscribers are a
+ * websocket fan-out and an SSE stream, and where the bytes came from changes
+ * nothing about who needs them. A second path would be a second place for the
+ * two transports to fall out of step.
+ */
+export function emitWorkspaceDocUpdated(workspaceId: string, update: Uint8Array): void {
+  for (const listener of workspaceDocUpdatedListeners) {
+    try {
+      listener(workspaceId, update)
+    } catch (err) {
+      // A subscriber failing to fan out must never turn a completed save into
+      // a failed one, nor stop the other subscribers from being told.
+      getLogger('document-store').warning(
+        { workspaceId, err },
+        'workspace-doc update listener threw; ignoring',
+      )
+    }
+  }
+}
+
 export function onWorkspaceDocUpdated(listener: WorkspaceDocUpdatedListener): () => void {
   workspaceDocUpdatedListeners.add(listener)
   return () => workspaceDocUpdatedListeners.delete(listener)
@@ -281,20 +305,10 @@ export async function saveWorkspaceDoc(
     evictWorkspaceDocs(workspaceId)
     throw err
   }
-  if (update !== null) {
-    for (const listener of workspaceDocUpdatedListeners) {
-      try {
-        listener(workspaceId, update)
-      } catch (err) {
-        // A subscriber failing to fan out must never turn a completed save
-        // into a failed one.
-        getLogger('document-store').warning(
-          { workspaceId, err },
-          'workspace-doc update listener threw; ignoring',
-        )
-      }
-    }
-  }
+  // Through the shared funnel rather than a second loop: a remote update
+  // brought in by the workspace tail announces itself the same way, and one
+  // of the two copies would eventually stop matching the other.
+  if (update !== null) emitWorkspaceDocUpdated(workspaceId, update)
   return update
 }
 

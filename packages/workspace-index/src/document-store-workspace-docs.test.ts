@@ -370,14 +370,14 @@ it('catches an instance up on another writer\u2019s appends, without reopening',
   await writer.save('ws-a', other)
 
   expect(held.getMap('meta').get('added')).toBeUndefined()
-  const next = await reader.catchUp('ws-a', held, cursor)
+  const { cursor: next } = await reader.catchUp('ws-a', held, cursor)
   expect(held.getMap('meta').get('added')).toBe('1')
   expect(held.getMap('meta').get('seed')).toBe('1')
 
   // Resuming from the answered cursor changes nothing further: a tail that
   // re-delivered its last batch would also pass the assertion above.
   const before = JSON.stringify(held.getMap('meta').toJSON())
-  const after = await reader.catchUp('ws-a', held, next)
+  const { cursor: after } = await reader.catchUp('ws-a', held, next)
   expect(JSON.stringify(held.getMap('meta').toJSON())).toBe(before)
   expect(after.afterSeq).toBe(next.afterSeq)
 })
@@ -464,4 +464,61 @@ it('keeps a caught-up instance able to write, with both sides surviving the save
   expect(settled.getMap('meta').get('mine')).toBe('1')
   expect(settled.getMap('meta').get('theirs')).toBe('1')
   expect(settled.getMap('meta').get('seed')).toBe('1')
+})
+
+/**
+ * The bytes a catch-up answers are what the daemon's websocket fan-out sends
+ * on, so a peer importing them has to arrive at the same place. Nothing else
+ * checks the RETURN value — the cases above all assert on the doc that was
+ * caught up, which is mutated in place and would pass against a `catchUp`
+ * that answered an empty array.
+ */
+it('answers bytes that bring an unrelated peer to the same state', async () => {
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+  // A peer that is level with the reader — the connected browser's copy.
+  const peer = new LoroDoc()
+  peer.import(held.export({ mode: 'snapshot' }))
+
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('appended', '1')
+  other.commit()
+  await writer.save('ws-a', other)
+
+  const { updates } = await reader.catchUp('ws-a', held, cursor)
+  expect(updates.length).toBeGreaterThan(0)
+  for (const update of updates) peer.import(update)
+  expect(peer.getMap('meta').toJSON()).toEqual(held.getMap('meta').toJSON())
+})
+
+it('answers bytes a peer can use across a fold, where the tail alone is not enough', async () => {
+  const store = new FakeDocumentStore()
+  const writer = new DocumentStoreWorkspaceDocs(store)
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await writer.save('ws-a', seed)
+
+  const reader = new DocumentStoreWorkspaceDocs(store)
+  const held = (await reader.open('ws-a')) as LoroDoc
+  const cursor = await reader.readCursor('ws-a')
+  const peer = new LoroDoc()
+  peer.import(held.export({ mode: 'snapshot' }))
+
+  const other = (await writer.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('folded', 'w'.repeat(80 * 1024))
+  other.commit()
+  await writer.save('ws-a', other)
+
+  const { updates } = await reader.catchUp('ws-a', held, cursor)
+  for (const update of updates) peer.import(update)
+  expect(peer.getMap('meta').toJSON()).toEqual(held.getMap('meta').toJSON())
 })

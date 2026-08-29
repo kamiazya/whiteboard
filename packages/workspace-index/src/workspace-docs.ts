@@ -14,6 +14,26 @@ export interface WorkspaceDocCursor {
 }
 
 /**
+ * What a catch-up brought in, and where to resume.
+ *
+ * `updates` is returned rather than merely applied because a caller that
+ * catches a SHARED document up usually has an audience for it — the daemon's
+ * websocket fan-out sends these bytes on to every connected client, which is
+ * how a browser attached to one instance learns what another instance wrote.
+ * Deriving them again from the doc afterwards is not possible: only the
+ * catch-up knows which ops were new.
+ *
+ * On a reload `updates` carries the snapshot and the log that survived the
+ * fold rather than a delta. Both are bytes `import` accepts and both are
+ * idempotent, so a recipient converges either way and does not have to know
+ * which case it received.
+ */
+export interface CaughtUp {
+  cursor: WorkspaceDocCursor
+  updates: readonly Uint8Array[]
+}
+
+/**
  * Where a workspace's Loro document comes from, and where a change to it goes.
  *
  * The one thing this package does not decide. A workspace document is bytes in
@@ -67,9 +87,5 @@ export interface WorkspaceDocs {
    * Merges rather than replaces: `doc` may carry local edits that are not
    * saved yet, and a catch-up must not be a way to lose them.
    */
-  catchUp(
-    workspaceId: string,
-    doc: LoroDoc,
-    cursor: WorkspaceDocCursor,
-  ): Promise<WorkspaceDocCursor>
+  catchUp(workspaceId: string, doc: LoroDoc, cursor: WorkspaceDocCursor): Promise<CaughtUp>
 }
