@@ -20,12 +20,15 @@ function makeDeps() {
 }
 
 async function seedTwo(deps: ReturnType<typeof makeDeps>) {
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  await deps.documentIndex.createWorkspace({ workspaceId: WS })
   const create = (path: string, name?: string) =>
     wbDocumentCreate(deps, {
       workspaceId: WS,
       path,
       kind: 'markdown',
-      createWorkspace: true,
       ...(name === undefined ? {} : { name }),
     })
   const a = await create('a', 'Alpha')
@@ -43,11 +46,11 @@ describe('ContentFactsCache', () => {
     const deps = makeDeps()
     await seedTwo(deps) // ws-1
     const OTHER = 'ws-2'
+    await deps.documentIndex.createWorkspace({ workspaceId: OTHER })
     const c = await wbDocumentCreate(deps, {
       workspaceId: OTHER,
       path: 'c',
       kind: 'markdown',
-      createWorkspace: true,
       name: 'Gamma',
     })
     await createDocumentSetTool(deps).execute({
@@ -148,11 +151,11 @@ describe('ContentFactsCache', () => {
 
   it('carries content tags for the tags projection', async () => {
     const deps = makeDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
     const doc = await wbDocumentCreate(deps, {
       workspaceId: WS,
       path: 'tagged',
       kind: 'markdown',
-      createWorkspace: true,
     })
     await createDocumentSetTool(deps).execute({
       workspaceId: WS,

@@ -62,6 +62,10 @@ function fakeEmbedder(): Embedder & { calls: number } {
 }
 
 async function seed(deps: ReturnType<typeof makeDeps>) {
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  await deps.documentIndex.createWorkspace({ workspaceId: WS })
   const set = createDocumentSetTool(deps)
   const write = async (path: string, name: string, body: string) => {
     const created = await wbDocumentCreate(deps, {
@@ -69,7 +73,6 @@ async function seed(deps: ReturnType<typeof makeDeps>) {
       path,
       kind: 'markdown',
       name,
-      createWorkspace: true,
     })
     await set.execute({
       workspaceId: WS,
@@ -206,6 +209,10 @@ describe('semantic fusion', () => {
     // equally-ranked documents comes first" was when they happened to be
     // written, which is not a fact about the query.
     const deps = makeDeps()
+    // The workspace exists because this fixture says so, not as a side effect
+    // of the first create: creating one is ADR-0019's MINT boundary, which
+    // keys it by a fresh ULID and would leave the literal below naming nothing.
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
     const set = createDocumentSetTool(deps)
     const write = async (path: string, name: string, body: string) => {
       const created = await wbDocumentCreate(deps, {
@@ -213,7 +220,6 @@ describe('semantic fusion', () => {
         path,
         kind: 'markdown',
         name,
-        createWorkspace: true,
       })
       await set.execute({
         workspaceId: WS,

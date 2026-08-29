@@ -23,14 +23,17 @@ function makeDeps() {
   }
 }
 
-function harness(deps: ReturnType<typeof makeDeps>) {
+async function harness(deps: ReturnType<typeof makeDeps>) {
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  await deps.documentIndex.createWorkspace({ workspaceId: WS })
   const app = createServer(deps).app
   const create = (path: string, kind: 'markdown' | 'spatial', name?: string) =>
     wbDocumentCreate(deps, {
       workspaceId: WS,
       path,
       kind,
-      createWorkspace: true,
       ...(name === undefined ? {} : { name }),
     })
   const set = createDocumentSetTool(deps)
@@ -65,7 +68,7 @@ function harness(deps: ReturnType<typeof makeDeps>) {
 describe('POST /linkify-mentions', () => {
   it('wraps every prose occurrence, skips existing references, and the mention disappears', async () => {
     const deps = makeDeps()
-    const h = harness(deps)
+    const h = await harness(deps)
     const target = await h.create('target', 'markdown', '設計メモ')
     const src = await h.create('src', 'markdown', '日報')
     await h.writeBody(
@@ -91,7 +94,7 @@ describe('POST /linkify-mentions', () => {
 
   it('an ambiguous name links by id with the name as alias', async () => {
     const deps = makeDeps()
-    const h = harness(deps)
+    const h = await harness(deps)
     const target = await h.create('target', 'markdown', 'Dup')
     await h.create('rival', 'markdown', 'Dup')
     const src = await h.create('src', 'markdown')
@@ -102,7 +105,7 @@ describe('POST /linkify-mentions', () => {
 
   it('rewrites canvas text nodes but never labels', async () => {
     const deps = makeDeps()
-    const h = harness(deps)
+    const h = await harness(deps)
     const target = await h.create('target', 'markdown', 'Redis')
     const board = await h.create('board', 'spatial')
     const edit = createCanvasEditTool(deps)
@@ -131,7 +134,7 @@ describe('POST /linkify-mentions', () => {
 
   it('refuses a nameless target and unknown documents', async () => {
     const deps = makeDeps()
-    const h = harness(deps)
+    const h = await harness(deps)
     const nameless = await h.create('nameless', 'markdown')
     const src = await h.create('src', 'markdown')
     expect((await h.linkify(src.documentId, nameless.documentId)).status).toBe(400)

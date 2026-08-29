@@ -216,6 +216,11 @@ describe('reference semantics under command sequences', () => {
         documentTeardown: unusedDocumentTeardown(),
         documentWritten: ignoredDocumentWrites(),
       }
+      // The workspace exists because this run says so, not as a side effect of
+      // whichever command happens to create first: creating one is ADR-0019's
+      // MINT boundary, which keys it by a fresh ULID — and here that would
+      // also make the identity depend on the generated command sequence.
+      await deps.documentIndex.createWorkspace({ workspaceId: WS })
       const setTool = createDocumentSetTool(deps)
       const editTool = createCanvasEditTool(deps)
       const model = new Model()
@@ -237,7 +242,6 @@ describe('reference semantics under command sequences', () => {
                   workspaceId: WS,
                   path: cmd.path,
                   kind: cmd.kind,
-                  createWorkspace: true,
                   ...(cmd.name === undefined ? {} : { name: cmd.name }),
                 }),
               ).rejects.toThrow()
@@ -247,7 +251,6 @@ describe('reference semantics under command sequences', () => {
               workspaceId: WS,
               path: cmd.path,
               kind: cmd.kind,
-              createWorkspace: true,
               ...(cmd.name === undefined ? {} : { name: cmd.name }),
             })
             slots[cmd.slot] = created.documentId
