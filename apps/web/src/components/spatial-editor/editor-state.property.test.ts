@@ -352,6 +352,10 @@ const SHORTCUT_COVERAGE = {
   'reorder-front': 'covered',
   'reorder-back': 'covered',
   'delete-selection': 'covered',
+  // The overlay editors' commit. Cmd+Enter and a blur both reach the
+  // reducer through the same `commit-text-edit`, so the model drives the
+  // binding even though it never synthesises the keystroke.
+  'commit-text-edit': 'covered',
   'toggle-lock': 'covered',
   'nudge-selection': 'covered',
   cancel: 'covered',
@@ -1176,6 +1180,7 @@ class TypeText extends GestureCommand {
 
 class CommitTextEdit extends GestureCommand {
   event(real: Real): GestureEvent {
+    tallyShortcut(real, 'commit-text-edit')
     const text = real.gesture.kind === 'editing-text' ? real.gesture.pendingText : ''
     return { type: 'commit-text-edit', text }
   }
