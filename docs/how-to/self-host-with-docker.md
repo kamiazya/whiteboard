@@ -161,6 +161,16 @@ backups is the data you lose.
 Setting an interval or a retention count WITHOUT a destination aborts startup:
 that combination configures nothing while looking exactly like one that works.
 
+**Running more than one instance changes nothing about how you configure
+this.** Set the same variables on every instance; they agree among themselves
+through a lease row in the database they already share, so one instance takes
+each night's backup and the rest stand down. That matters more under cron than
+it would under an interval — an interval drifts apart from each container's own
+restart, while `0 3 * * *` fires on all of them in the same minute. Retention
+runs inside the same lease, because N instances pruning independently would
+each be deleting from a set the others are changing. An instance that cannot
+reach the shared database skips the pass rather than assuming it is alone.
+
 **Constraints:**
 - **You no longer need to stop the container to take a backup.** The rows are
   captured through the database rather than by reading its files, every write

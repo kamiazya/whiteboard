@@ -3,7 +3,8 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { captureLogsForTests } from '../log.js'
-import { createBackupScheduler } from './backup-scheduler.js'
+import { createBackupLease, createBackupScheduler } from './backup-scheduler.js'
+import { createIsolatedDb } from './db/test-helpers.js'
 
 let root: string
 beforeEach(async () => {
@@ -306,5 +307,169 @@ describe('createBackupScheduler cron scheduling', () => {
     clock = new Date(clock.getTime() + 2_147_483_647)
     await scheduler.stop()
     expect(runBackup).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * ADR-0020: several instances doing the same discardable work is exactly what
+ * a leader lease is for, and a backup is the clearest case of it. Two
+ * instances sharing a data directory do not merely take two backups — their
+ * retention passes each delete from a set the other is changing, so the
+ * survivors are whichever pair of passes interleaved most favourably.
+ *
+ * Cron makes it worse rather than better: an interval starts from each
+ * instance's own restart and drifts apart, while `0 3 * * *` fires on every
+ * instance in the same minute.
+ */
+describe('createBackupScheduler leader lease', () => {
+  it('stands down when another instance holds the lease', async () => {
+    const capture = captureLogsForTests()
+    try {
+      const backupDir = join(root, 'backups')
+      const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+      const scheduler = createBackupScheduler({
+        dataDir: join(root, 'data'),
+        backupDir,
+        runBackup,
+        runExclusively: async () => ({ ok: false, reason: 'not-leader' }),
+      })
+      await scheduler.runOnceForTests()
+
+      expect(runBackup).not.toHaveBeenCalled()
+      // Standing down is not a failure, so it must not be reported as one —
+      // an operator watching for a broken backup would see every follower
+      // instance shouting nightly.
+      expect(capture.records.filter((r) => r.level === 'error')).toEqual([])
+    } finally {
+      capture.restore()
+    }
+  })
+
+  /**
+   * Retention has to be inside the lease, not merely the backup. A follower
+   * that skipped the pass but still pruned would be deleting on the strength
+   * of a count it did not take.
+   */
+  it('does not apply retention when it stood down', async () => {
+    const backupDir = join(root, 'backups')
+    // TWO, against a `keep` of one. With a single existing backup retention
+    // deletes nothing whether it runs or not, so the test would pass on code
+    // that pruned regardless — it has to be able to delete something before
+    // its not deleting anything means a thing.
+    await mkdir(join(backupDir, '2026-01-01T00-00-00.000Z'), { recursive: true })
+    await mkdir(join(backupDir, '2026-01-02T00-00-00.000Z'), { recursive: true })
+    const scheduler = createBackupScheduler({
+      dataDir: join(root, 'data'),
+      backupDir,
+      keep: 1,
+      runBackup: async () => ({ kind: 'ok' as const }),
+      runExclusively: async () => ({ ok: false, reason: 'not-leader' }),
+    })
+    await scheduler.runOnceForTests()
+
+    expect((await readdir(backupDir)).sort()).toEqual([
+      '2026-01-01T00-00-00.000Z',
+      '2026-01-02T00-00-00.000Z',
+    ])
+  })
+
+  /**
+   * Fail CLOSED. If leadership cannot be established the pass does not run —
+   * the cost is one missed nightly backup on a deployment whose database is
+   * unreachable, which is a deployment whose backup would have failed at the
+   * snapshot step anyway. Running regardless would put every instance back to
+   * backing up at once precisely when the shared store is unwell.
+   */
+  it('skips the pass when the lease cannot be reached', async () => {
+    const capture = captureLogsForTests()
+    try {
+      const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+      const scheduler = createBackupScheduler({
+        dataDir: join(root, 'data'),
+        backupDir: join(root, 'backups'),
+        runBackup,
+        runExclusively: async () => {
+          throw new Error('database unreachable')
+        },
+      })
+      await scheduler.runOnceForTests()
+
+      expect(runBackup).not.toHaveBeenCalled()
+      expect(capture.records.some((r) => r.level === 'error')).toBe(true)
+    } finally {
+      capture.restore()
+    }
+  })
+
+  /**
+   * The end of it, against the real lease and one shared database: two
+   * schedulers, the same minute, one backup. This is the arrangement the
+   * whole mechanism exists for, and the one a fake `runExclusively` cannot
+   * prove anything about.
+   */
+  it('takes one backup between two instances sharing a database', async () => {
+    const handle = await createIsolatedDb({ dataDir: join(root, 'data') })
+    try {
+      const backupDir = join(root, 'backups')
+      // Counted, not inferred from the directory listing: both instances fire
+      // in the same minute, so they would write the same timestamped NAME —
+      // a listing of one entry is what a total absence of coordination looks
+      // like too.
+      const taken: string[] = []
+      const instance = (holder: string) =>
+        createBackupScheduler({
+          dataDir: join(root, 'data'),
+          backupDir,
+          now: () => new Date('2026-03-04T03:00:00.000Z'),
+          runExclusively: createBackupLease({ holder, getDb: async () => handle.db }),
+          runBackup: async (_dataDir, outputDir) => {
+            taken.push(holder)
+            await mkdir(outputDir, { recursive: true })
+            await new Promise((r) => setTimeout(r, 20))
+            return { kind: 'ok' as const }
+          },
+        })
+
+      await Promise.all([
+        instance('instance-a').runOnceForTests(),
+        instance('instance-b').runOnceForTests(),
+      ])
+
+      expect(taken).toHaveLength(1)
+      expect(await readdir(backupDir)).toEqual(['2026-03-04T03-00-00.000Z'])
+    } finally {
+      await handle.dispose()
+    }
+  })
+
+  /**
+   * And the lease is given back, so the follower is not locked out of the
+   * NEXT night by a TTL covering work that finished hours ago.
+   */
+  it('lets the other instance take the following pass', async () => {
+    const handle = await createIsolatedDb({ dataDir: join(root, 'data') })
+    try {
+      const backupDir = join(root, 'backups')
+      const taken: string[] = []
+      const instance = (holder: string, at: string) =>
+        createBackupScheduler({
+          dataDir: join(root, 'data'),
+          backupDir,
+          now: () => new Date(at),
+          runExclusively: createBackupLease({ holder, getDb: async () => handle.db }),
+          runBackup: async (_dataDir, outputDir) => {
+            taken.push(holder)
+            await mkdir(outputDir, { recursive: true })
+            return { kind: 'ok' as const }
+          },
+        })
+
+      await instance('instance-a', '2026-03-04T03:00:00.000Z').runOnceForTests()
+      await instance('instance-b', '2026-03-05T03:00:00.000Z').runOnceForTests()
+
+      expect(taken).toEqual(['instance-a', 'instance-b'])
+    } finally {
+      await handle.dispose()
+    }
   })
 })

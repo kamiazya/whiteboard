@@ -28,7 +28,7 @@ import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
-import { createBackupScheduler } from './store/backup-scheduler.js'
+import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
 import {
@@ -132,6 +132,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     backupDir: backupDir.ok ? backupDir.value : null,
     ...(backupSchedule.ok ? { schedule: backupSchedule.value } : {}),
     ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
+    // ADR-0020's leader election, so a deployment running several instances
+    // over one data directory takes ONE backup a night rather than one per
+    // instance — whose retention passes would each delete from a set the
+    // others are changing. A single daemon takes the lease unopposed, so
+    // this is not conditional on being multi-instance: nothing here knows
+    // whether it is, and a deployment that grows a second instance must not
+    // depend on someone remembering to turn coordination on.
+    runExclusively: createBackupLease({ holder: instanceId }),
   })
 
   const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()

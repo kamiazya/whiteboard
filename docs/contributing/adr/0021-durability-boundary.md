@@ -3,7 +3,8 @@
 **Status:** Accepted — decisions 2, 3 and 4 implemented (a database we do not
 host is reported out of scope rather than refused wholesale; the rows are
 captured by a hot snapshot, so backup no longer requires stopping the
-server; backups run on a schedule), plus the first slice of decision 1's
+server; backups run on a schedule, taken by one instance per deployment
+under ADR-0020's leader lease), plus the first slice of decision 1's
 per-store record. Decisions 5 and 6 are not: `backup-retention.ts` and its
 property hold decision 6's invariant but nothing wires them yet.
 

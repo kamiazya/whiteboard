@@ -19,6 +19,10 @@ import { Cron } from 'croner'
 import { getLogger } from '../log.js'
 import type { ServerBackupOutcome } from './backup-pass.js'
 import { performBackup } from './backup-pass.js'
+import type { Database } from './db/index.js'
+import { getDb } from './db/index.js'
+import type { LeaseOutcome } from './lease.js'
+import { withLease } from './lease.js'
 import type { BackupSchedule } from './storage-env.js'
 
 const log = getLogger('backup-scheduler')
@@ -59,6 +63,48 @@ export interface BackupSchedulerOptions {
   keep?: number
   now?: () => Date
   runBackup?: (dataDir: string, outputDir: string) => Promise<ServerBackupOutcome>
+  /**
+   * Runs a pass only if this instance is the deployment's leader.
+   *
+   * Defaults to running it — a single daemon is trivially the leader, and a
+   * deployment with no shared database has nothing to contend with. Wired to
+   * `createBackupLease` by the composition root, which is what makes several
+   * instances take one backup between them rather than one each.
+   */
+  runExclusively?: <T>(body: () => Promise<T>) => Promise<LeaseOutcome<T>>
+}
+
+export interface BackupLeaseOptions {
+  /** This instance. The daemon's `instanceId`, minted once per process. */
+  holder: string
+  getDb?: () => Promise<Database>
+}
+
+/**
+ * How long a pass may go unrenewed before another instance may take over.
+ *
+ * Generous, because the cost of it being too long is nil — the next attempt
+ * is the next cron fire, hours away — while the cost of it being too short is
+ * two instances backing up at once, which is the thing being prevented. The
+ * lease is renewed at a third of this for as long as the pass runs, so the
+ * duration of a pass does not enter into it.
+ */
+const BACKUP_LEASE_TTL_MS = 5 * 60_000
+
+const BACKUP_LEASE_NAME = 'backup'
+
+export function createBackupLease(
+  options: BackupLeaseOptions,
+): <T>(body: () => Promise<T>) => Promise<LeaseOutcome<T>> {
+  const resolveDb = options.getDb ?? (() => getDb())
+  return async <T>(body: () => Promise<T>) => {
+    const db = await resolveDb()
+    return withLease(
+      db,
+      { name: BACKUP_LEASE_NAME, holder: options.holder, ttlMs: BACKUP_LEASE_TTL_MS },
+      body,
+    )
+  }
 }
 
 export interface BackupScheduler {
@@ -78,12 +124,36 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
   const runBackup =
     options.runBackup ??
     ((src: string, dest: string) => performBackup({ dataDir: src, outputDir: dest }))
+  const runExclusively =
+    options.runExclusively ??
+    (async <T>(body: () => Promise<T>) => ({ ok: true as const, value: await body() }))
 
   let timer: ReturnType<typeof setTimeout> | null = null
   let inFlight: Promise<void> | null = null
   let stopped = false
 
   async function runPass(): Promise<void> {
+    if (backupDir === null) return
+    // Fail CLOSED around leadership: an error here means this instance cannot
+    // tell whether another is already backing up, and the answer to that is
+    // not "back up anyway". A missed nightly pass on a deployment whose
+    // shared store is unreachable costs one night; every instance running at
+    // once precisely when that store is unwell costs more.
+    let leased: LeaseOutcome<void>
+    try {
+      leased = await runExclusively(takeOneBackup)
+    } catch (err) {
+      log.error({ err }, 'could not establish which instance takes the backup; skipping this pass')
+      return
+    }
+    if (!leased.ok) {
+      // Not an error: on a multi-instance deployment this is what every
+      // instance but one does, every night.
+      log.info({}, 'another instance holds the backup lease; standing down')
+    }
+  }
+
+  async function takeOneBackup(): Promise<void> {
     if (backupDir === null) return
     const outputDir = join(backupDir, backupDirName(now()))
     let outcome: ServerBackupOutcome
@@ -101,6 +171,9 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
       log.error({ outcome: outcome.kind }, 'scheduled backup did not complete')
       return
     }
+    // Inside the lease with the backup, not beside it: a follower that skipped
+    // the pass but still pruned would be deleting on the strength of a count
+    // it did not take.
     await pruneOldBackups(backupDir, keep)
   }
 
