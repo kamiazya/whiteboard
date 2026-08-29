@@ -6,6 +6,7 @@ import {
   DocumentNotFoundError,
   DocumentPathTakenError,
   WorkspaceNotFoundError,
+  WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '../index.js'
 
@@ -550,6 +551,112 @@ export function describeDocumentIndexConformance(
       it('answers null for a handle nothing answers to', async () => {
         await withIndex(async (index) => {
           expect(await index.resolveWorkspace('no-such-workspace')).toBeNull()
+        })
+      })
+    })
+
+    /**
+     * ADR-0019 calls `segment` and `displayName` the two layers their owner
+     * chooses. A layer that can only be chosen once is not chosen — it is
+     * whatever the create call happened to derive — so the rename is part of
+     * what makes the three-layer model true rather than decorative.
+     *
+     * Unlike `createWorkspace`, this suite REQUIRES the fields to be served
+     * back. An implementation free to ignore them would pass every case here
+     * vacuously, and the one thing rename exists to do would go untested at
+     * exactly the implementation that did not do it.
+     */
+    describe('renameWorkspace', () => {
+      it('gives a workspace a display name it did not have', async () => {
+        await withIndex(async (index) => {
+          const renamed = await index.renameWorkspace({
+            workspaceId: WS,
+            displayName: 'Design team',
+          })
+
+          expect(renamed.displayName).toBe('Design team')
+          const listed = (await index.listWorkspaces()).find((w) => w.workspaceId === WS)
+          expect(listed?.displayName).toBe('Design team')
+        })
+      })
+
+      it('moves the address: the new segment resolves and the old one stops', async () => {
+        await withIndex(async (index, seedWorkspace) => {
+          await seedWorkspace({ workspaceId: 'ws-moving', segment: 'before' })
+
+          const renamed = await index.renameWorkspace({
+            workspaceId: 'ws-moving',
+            segment: 'after',
+          })
+
+          expect(renamed.segment).toBe('after')
+          expect((await index.resolveWorkspace('after'))?.workspaceId).toBe('ws-moving')
+          // The whole reason ADR-0019 keeps the canonical layer resolvable:
+          // the address a rename vacates stops answering, and the id does not.
+          expect(await index.resolveWorkspace('before')).toBeNull()
+          expect((await index.resolveWorkspace('ws-moving'))?.workspaceId).toBe('ws-moving')
+        })
+      })
+
+      // Absent means "leave it alone", not "clear it". Two layers renamed
+      // through one call would otherwise make every display-name edit erase
+      // the address, which is the most destructive reading of the two.
+      it('leaves a layer the call did not name exactly as it was', async () => {
+        await withIndex(async (index, seedWorkspace) => {
+          await seedWorkspace({
+            workspaceId: 'ws-partial',
+            segment: 'keep-me',
+            displayName: 'Keep me',
+          })
+
+          const renamed = await index.renameWorkspace({
+            workspaceId: 'ws-partial',
+            displayName: 'Renamed',
+          })
+
+          expect(renamed.displayName).toBe('Renamed')
+          expect(renamed.segment).toBe('keep-me')
+          expect((await index.resolveWorkspace('keep-me'))?.workspaceId).toBe('ws-partial')
+        })
+      })
+
+      it('refuses a segment another workspace already holds', async () => {
+        await withIndex(async (index, seedWorkspace) => {
+          await seedWorkspace({ workspaceId: 'ws-holder', segment: 'taken' })
+          await seedWorkspace({ workspaceId: 'ws-asking', segment: 'asking' })
+
+          await expect(
+            index.renameWorkspace({ workspaceId: 'ws-asking', segment: 'taken' }),
+          ).rejects.toThrow(WorkspaceSegmentTakenError)
+          // Refused as one operation: the workspace keeps the address it had
+          // rather than ending up with neither.
+          expect((await index.resolveWorkspace('asking'))?.workspaceId).toBe('ws-asking')
+          expect((await index.resolveWorkspace('taken'))?.workspaceId).toBe('ws-holder')
+        })
+      })
+
+      // Otherwise a form that submits every field would refuse to save a
+      // display-name edit, reporting the workspace's own address as taken.
+      it('accepts the segment the workspace already holds', async () => {
+        await withIndex(async (index, seedWorkspace) => {
+          await seedWorkspace({ workspaceId: 'ws-idem', segment: 'same' })
+
+          const renamed = await index.renameWorkspace({
+            workspaceId: 'ws-idem',
+            segment: 'same',
+            displayName: 'Same address, new name',
+          })
+
+          expect(renamed.segment).toBe('same')
+          expect(renamed.displayName).toBe('Same address, new name')
+        })
+      })
+
+      it('fails WorkspaceNotFoundError for a workspace that does not exist', async () => {
+        await withIndex(async (index) => {
+          await expect(
+            index.renameWorkspace({ workspaceId: ABSENT_ID, displayName: 'nobody' }),
+          ).rejects.toThrow(WorkspaceNotFoundError)
         })
       })
     })

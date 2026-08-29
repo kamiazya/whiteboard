@@ -36,7 +36,10 @@ import {
   chunkSnapshot,
   createWorkspaceInputSchema,
   DocumentPathTakenError,
+  type RenameWorkspaceInput,
+  renameWorkspaceInputSchema,
   type WorkspaceEntry,
+  WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
@@ -44,6 +47,7 @@ import {
   LoroWorkspaceDocumentIndex,
   type WorkspaceDocCursor,
   type WorkspaceDocs,
+  type WorkspaceRegistry,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
@@ -58,7 +62,7 @@ import {
 } from './corrupt-stored-data.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
-import { upsertWorkspaceRow } from './db/upsert-workspace.js'
+import { renameWorkspaceRow, upsertWorkspaceRow } from './db/upsert-workspace.js'
 import { evictDoc, evictWorkspaceDocs, getOrLoad, peekDoc } from './doc-cache.js'
 import { DocumentNotFoundError } from './document-not-found-error.js'
 import { FsBlobStore } from './fs/fs-blob-store.js'
@@ -383,7 +387,7 @@ export function cacheBackedWorkspaceDocs(): WorkspaceDocs {
  * carries them — absent, never `null`/`''`, for a legacy workspace that
  * predates migration 0018 or was never given either.
  */
-export function workspaceRegistry(): { listWorkspaces(): Promise<WorkspaceEntry[]> } {
+export function workspaceRegistry(): WorkspaceRegistry {
   return {
     async listWorkspaces() {
       const db = await dbReady()
@@ -396,6 +400,27 @@ export function workspaceRegistry(): { listWorkspaces(): Promise<WorkspaceEntry[
         ...(row.segment === null ? {} : { segment: row.segment }),
         ...(row.displayName === null ? {} : { displayName: row.displayName }),
       }))
+    },
+    /**
+     * The registry's write half. Identity is a ROW here, so this is the
+     * whole rename — the workspace's tree document holds placement and is
+     * untouched by it.
+     */
+    async renameWorkspace(input) {
+      const parsed = renameWorkspaceInputSchema.parse(input)
+      const updated = await renameWorkspaceRow(await dbReady(), parsed.workspaceId, {
+        ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
+        ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
+      })
+      // No row updated means no such workspace. Distinguished here rather
+      // than by a preceding SELECT, which would be a second statement
+      // another writer could land a delete between.
+      if (updated === null) throw new WorkspaceNotFoundError(parsed.workspaceId)
+      return {
+        workspaceId: parsed.workspaceId,
+        ...(updated.segment === null ? {} : { segment: updated.segment }),
+        ...(updated.displayName === null ? {} : { displayName: updated.displayName }),
+      }
     },
   }
 }
@@ -438,6 +463,17 @@ export class CacheCoherentDocumentIndex extends LoroWorkspaceDocumentIndex {
       })
       await super.createWorkspace(parsed)
     })
+  }
+
+  /**
+   * Under the same lock every other mutator holds. A rename writes only the
+   * registry row, but `createWorkspace` writes that row too — and the two
+   * running unserialised on one workspace is the interleaving the lock
+   * exists for.
+   */
+  override async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    const parsed = renameWorkspaceInputSchema.parse(input)
+    return withWorkspaceWriteLock(parsed.workspaceId, () => super.renameWorkspace(parsed))
   }
 
   override async createDocument(

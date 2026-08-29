@@ -8,7 +8,13 @@
  * suite says so rather than a comment claiming it does.
  */
 
-import type { BlobRef, BlobStore, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import type {
+  BlobRef,
+  BlobStore,
+  RenameWorkspaceInput,
+  WorkspaceEntry,
+} from '@kamiazya/whiteboard-ports'
+import { WorkspaceNotFoundError, WorkspaceSegmentTakenError } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
@@ -32,6 +38,7 @@ import type { WorkspaceDocs } from './workspace-docs.js'
 function inMemoryWorkspaceDocs(): WorkspaceDocs & {
   listWorkspaces(): Promise<WorkspaceEntry[]>
   seedWorkspace(entry: WorkspaceEntry): Promise<void>
+  renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 } {
   const identities = new Map<string, WorkspaceEntry>()
   const docs = new Map<string, LoroDoc>()
@@ -63,6 +70,26 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
     async seedWorkspace(entry) {
       identities.set(entry.workspaceId, entry)
       await this.create(entry.workspaceId)
+    },
+    async renameWorkspace({ workspaceId, segment, displayName }) {
+      if (!docs.has(workspaceId)) throw new WorkspaceNotFoundError(workspaceId)
+      const rows = [...docs.keys()].map(
+        (id) => identities.get(id) ?? ({ workspaceId: id } satisfies WorkspaceEntry),
+      )
+      if (
+        segment !== undefined &&
+        rows.some((row) => row.segment === segment && row.workspaceId !== workspaceId)
+      ) {
+        throw new WorkspaceSegmentTakenError(segment)
+      }
+      const current = identities.get(workspaceId) ?? { workspaceId }
+      const renamed: WorkspaceEntry = {
+        ...current,
+        ...(segment === undefined ? {} : { segment }),
+        ...(displayName === undefined ? {} : { displayName }),
+      }
+      identities.set(workspaceId, renamed)
+      return renamed
     },
   }
 }

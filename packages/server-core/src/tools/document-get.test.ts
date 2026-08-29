@@ -24,6 +24,7 @@ function withResolveOverride(
     createWorkspace: index.createWorkspace.bind(index),
     listWorkspaces: index.listWorkspaces.bind(index),
     resolveWorkspace: index.resolveWorkspace.bind(index),
+    renameWorkspace: index.renameWorkspace.bind(index),
     createDocument: index.createDocument.bind(index),
     resolveDocument: index.resolveDocument.bind(index),
     resolveDocumentById,
