@@ -1,4 +1,5 @@
 import { isAbsolute } from 'node:path'
+import { Cron } from 'croner'
 import type { EnvIssue, ParsedSetting } from '../../shared/env-setting.js'
 import { parseOptionalMilliseconds } from '../../shared/env-setting.js'
 import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
@@ -21,7 +22,8 @@ const FILE_GC_INTERVAL_ENV = 'WHITEBOARD_FILE_GC_INTERVAL_MS'
 const FILE_GC_GRACE_ENV = 'WHITEBOARD_FILE_GC_GRACE_MS'
 const WORKSPACE_TAIL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
 const BACKUP_DIR_ENV = 'WHITEBOARD_BACKUP_DIR'
-const BACKUP_INTERVAL_ENV = 'WHITEBOARD_BACKUP_INTERVAL_MS'
+const BACKUP_CRON_ENV = 'WHITEBOARD_BACKUP_CRON'
+const BACKUP_TZ_ENV = 'WHITEBOARD_BACKUP_TZ'
 const BACKUP_KEEP_ENV = 'WHITEBOARD_BACKUP_KEEP'
 
 /** How often the file-GC sweeper runs. `0` disables it. */
@@ -79,11 +81,57 @@ export function parseBackupDir(env: NodeJS.ProcessEnv = process.env): ParsedSett
   return { ok: true, value: trimmed }
 }
 
-/** How often a scheduled backup runs. `null` leaves the caller's default. */
-export function parseBackupIntervalMs(
+/**
+ * When scheduled backups run: a cron expression and the zone to read it in.
+ *
+ * Cron rather than an interval, because an interval cannot say WHEN. "Every
+ * 24 hours" starts 24 hours after the daemon last restarted — whenever the
+ * container happened to come up — so it lands in the middle of the working
+ * day as readily as at night. A backup is a database snapshot plus a copy of
+ * every blob, which is real load, and the operator is the only one who knows
+ * their quiet window.
+ *
+ * The default is a nightly one rather than nothing, so that window is what an
+ * operator gets without having to know to ask for it.
+ *
+ * An expression that cannot fire is refused as firmly as one that cannot
+ * parse. `0 0 30 2 *` is valid cron and describes the 30th of February; a
+ * scheduler armed with it is configured, plausible-looking, and permanently
+ * idle — the exact shape this area exists to remove.
+ */
+export interface BackupSchedule {
+  expression: string
+  /** `null` means the host's own zone, which in a container is usually UTC. */
+  timezone: string | null
+}
+
+export function parseBackupSchedule(
   env: NodeJS.ProcessEnv = process.env,
-): ParsedSetting<number | null> {
-  return parseOptionalMilliseconds(env[BACKUP_INTERVAL_ENV], null)
+): ParsedSetting<BackupSchedule> {
+  const expression = env[BACKUP_CRON_ENV]?.trim() || '0 3 * * *'
+  const timezone = env[BACKUP_TZ_ENV]?.trim() || null
+
+  let next: Date | null
+  try {
+    // Constructed paused and stopped immediately: this is a validity check,
+    // not a scheduler. The daemon keeps its own timer loop.
+    const probe = new Cron(expression, { ...(timezone ? { timezone } : {}), paused: true })
+    next = probe.nextRun()
+    probe.stop()
+  } catch {
+    // The thrown message quotes the value, so it is not reused here.
+    return {
+      ok: false,
+      reason: `must be a 5- or 6-field cron expression${timezone ? ', and the timezone must be a real IANA zone' : ''}`,
+    }
+  }
+  if (next === null) {
+    return {
+      ok: false,
+      reason: 'describes a time that can never occur, so no backup would ever run',
+    }
+  }
+  return { ok: true, value: { expression, timezone } }
 }
 
 /**
@@ -129,7 +177,7 @@ export function collectStorageEnvIssues(
     [FILE_GC_GRACE_ENV, parseFileGcGraceMs],
     [WORKSPACE_TAIL_ENV, parseWorkspaceTailMs],
     [BACKUP_DIR_ENV, parseBackupDir],
-    [BACKUP_INTERVAL_ENV, parseBackupIntervalMs],
+    [BACKUP_CRON_ENV, parseBackupSchedule],
     [BACKUP_KEEP_ENV, parseBackupKeep],
   ] as const) {
     const parsed = parse(env)
@@ -142,7 +190,7 @@ export function collectStorageEnvIssues(
   // remove, so it is said at startup rather than ignored.
   const destination = parseBackupDir(env)
   if (destination.ok && destination.value === null) {
-    for (const variable of [BACKUP_INTERVAL_ENV, BACKUP_KEEP_ENV]) {
+    for (const variable of [BACKUP_CRON_ENV, BACKUP_TZ_ENV, BACKUP_KEEP_ENV]) {
       if ((env[variable]?.trim() ?? '') !== '') {
         issues.push({
           variable,

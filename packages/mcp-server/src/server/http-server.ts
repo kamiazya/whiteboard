@@ -37,7 +37,7 @@ import {
   getWorkspaceDoc,
 } from './store/document-store.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
-import { parseBackupDir, parseBackupIntervalMs, parseBackupKeep } from './store/storage-env.js'
+import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
 
@@ -125,14 +125,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // a retention count set without one, so a half-configured schedule fails at
   // startup rather than silently doing nothing.
   const backupDir = parseBackupDir(process.env)
-  const backupIntervalMs = parseBackupIntervalMs(process.env)
+  const backupSchedule = parseBackupSchedule(process.env)
   const backupKeep = parseBackupKeep(process.env)
   const backupScheduler = (options.backupSchedulerFactory ?? createBackupScheduler)({
     dataDir: getDataDir(),
     backupDir: backupDir.ok ? backupDir.value : null,
-    ...(backupIntervalMs.ok && backupIntervalMs.value !== null
-      ? { intervalMs: backupIntervalMs.value }
-      : {}),
+    ...(backupSchedule.ok ? { schedule: backupSchedule.value } : {}),
     ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
   })
 

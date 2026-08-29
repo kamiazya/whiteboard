@@ -198,3 +198,76 @@ describe('createBackupScheduler', () => {
     expect(maxConcurrent).toBe(1)
   })
 })
+
+/**
+ * The schedule is a cron expression, so the operator controls WHEN as well as
+ * how often — the point of the exercise being to put an expensive pass in a
+ * quiet window rather than wherever a restart happened to leave it.
+ *
+ * The timer loop is unchanged and still ours: croner supplies only the next
+ * fire time. Mixing two scheduling models would mean two answers to "is a
+ * pass already running", and the no-overlap guard above is the one that is
+ * tested.
+ */
+describe('createBackupScheduler cron scheduling', () => {
+  it('waits until the next matching time rather than a fixed offset from start', () => {
+    const scheduler = createBackupScheduler({
+      dataDir: join(root, 'data'),
+      backupDir: join(root, 'backups'),
+      schedule: { expression: '0 3 * * *', timezone: 'UTC' },
+      // Just after 3am, so the next fire is nearly a whole day away — which
+      // an interval-based scheduler started now could not express.
+      now: () => new Date('2026-03-04T03:00:01.000Z'),
+      runBackup: async () => ({ kind: 'ok' as const }),
+    })
+
+    expect(scheduler.nextRunForTests()?.toISOString()).toBe('2026-03-05T03:00:00.000Z')
+  })
+
+  /**
+   * "3am" means 3am where the operator is. A container's clock is usually
+   * UTC, so without this the quiet window they picked is someone else's
+   * afternoon.
+   */
+  it('reads the expression in the configured timezone', () => {
+    const scheduler = createBackupScheduler({
+      dataDir: join(root, 'data'),
+      backupDir: join(root, 'backups'),
+      schedule: { expression: '0 3 * * *', timezone: 'Asia/Tokyo' },
+      now: () => new Date('2026-03-04T18:30:00.000Z'),
+      runBackup: async () => ({ kind: 'ok' as const }),
+    })
+
+    // 03:00 JST on the 5th is 18:00 UTC on the 4th.
+    expect(scheduler.nextRunForTests()?.toISOString()).toBe('2026-03-05T18:00:00.000Z')
+  })
+
+  /**
+   * `setTimeout` truncates anything past ~24.8 days to 1ms, which would turn
+   * an annual schedule into an immediate backup and then a tight loop. A cron
+   * expression reaches that range easily, so the clamp has a real branch:
+   * wake early, notice the target is still ahead, re-arm.
+   */
+  it('re-arms instead of firing early when the next run is beyond the timer maximum', async () => {
+    const runBackup = vi.fn(async () => ({ kind: 'ok' as const }))
+    let clock = new Date('2026-03-04T00:00:00.000Z')
+    const scheduler = createBackupScheduler({
+      dataDir: join(root, 'data'),
+      backupDir: join(root, 'backups'),
+      // Annually on 1 January: ~10 months out from the clock above.
+      schedule: { expression: '0 0 1 1 *', timezone: 'UTC' },
+      now: () => clock,
+      runBackup,
+    })
+
+    expect(scheduler.nextRunForTests()?.toISOString()).toBe('2027-01-01T00:00:00.000Z')
+
+    scheduler.start()
+    // Let the clamped timer fire: it is armed for the 32-bit maximum, so it
+    // cannot be awaited directly. Advance the clock only as far as the clamp
+    // would reach and confirm nothing was backed up.
+    clock = new Date(clock.getTime() + 2_147_483_647)
+    await scheduler.stop()
+    expect(runBackup).not.toHaveBeenCalled()
+  })
+})

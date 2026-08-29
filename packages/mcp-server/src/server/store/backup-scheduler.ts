@@ -15,18 +15,23 @@
 
 import { mkdir, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
+import { Cron } from 'croner'
 import { getLogger } from '../log.js'
 import type { ServerBackupOutcome } from './backup-pass.js'
 import { performBackup } from './backup-pass.js'
+import type { BackupSchedule } from './storage-env.js'
 
 const log = getLogger('backup-scheduler')
 
-const DEFAULT_INTERVAL_MS = 24 * 60 * 60 * 1000
 const DEFAULT_KEEP = 7
+const DEFAULT_SCHEDULE: BackupSchedule = { expression: '0 3 * * *', timezone: null }
 
 // setTimeout only supports delays up to a signed 32-bit int and silently
-// truncates anything larger to 1ms, which would turn "run monthly" into a
-// near-continuous backup loop. Same clamp, same reason, as file-gc-sweeper.
+// truncates anything larger to 1ms, which would turn a monthly schedule into
+// a near-continuous backup loop. Same clamp, same reason, as
+// file-gc-sweeper — and reachable here, since a cron expression can name a
+// date more than 24.8 days out. The pass simply re-arms when it wakes and
+// finds the target still ahead.
 const MAX_TIMER_DELAY_MS = 2_147_483_647
 
 /**
@@ -49,7 +54,8 @@ export interface BackupSchedulerOptions {
   dataDir: string
   /** `null` disables the scheduler entirely — see `parseBackupDir`. */
   backupDir: string | null
-  intervalMs?: number
+  /** When to run. Cron, so the operator controls the hour, not just the gap. */
+  schedule?: BackupSchedule
   keep?: number
   now?: () => Date
   runBackup?: (dataDir: string, outputDir: string) => Promise<ServerBackupOutcome>
@@ -60,11 +66,13 @@ export interface BackupScheduler {
   stop(): Promise<void>
   /** Run one pass now, awaiting it. Used by tests and by a manual trigger. */
   runOnceForTests(): Promise<void>
+  /** The next time the schedule fires, or `null` if it never will. */
+  nextRunForTests(): Date | null
 }
 
 export function createBackupScheduler(options: BackupSchedulerOptions): BackupScheduler {
   const { dataDir, backupDir } = options
-  const intervalMs = Math.min(options.intervalMs ?? DEFAULT_INTERVAL_MS, MAX_TIMER_DELAY_MS)
+  const schedule = options.schedule ?? DEFAULT_SCHEDULE
   const keep = options.keep ?? DEFAULT_KEEP
   const now = options.now ?? (() => new Date())
   const runBackup =
@@ -117,12 +125,49 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
     }
   }
 
+  /**
+   * croner is asked only for the next fire time; the loop stays ours.
+   *
+   * Its own scheduler would be a second answer to "is a pass already
+   * running", and the no-overlap guard below is the one that is tested. This
+   * also keeps the shape `file-gc-sweeper` established — a
+   * completion-rescheduled unref'd one-shot.
+   */
+  function nextRun(from: Date): Date | null {
+    const cron = new Cron(schedule.expression, {
+      ...(schedule.timezone ? { timezone: schedule.timezone } : {}),
+      paused: true,
+    })
+    try {
+      return cron.nextRun(from)
+    } finally {
+      cron.stop()
+    }
+  }
+
   function scheduleNext(): void {
-    if (stopped || backupDir === null || intervalMs <= 0) return
+    if (stopped || backupDir === null) return
+    const at = nextRun(now())
+    if (at === null) {
+      // Refused at startup by `parseBackupSchedule`, so this is only
+      // reachable through a direct caller. Say so rather than arming a timer
+      // that silently never fires.
+      log.error({}, 'backup schedule can never fire; no backups will be taken')
+      return
+    }
+    // Clamped, not skipped: a target further out than the timer maximum wakes
+    // early, finds itself still ahead, and re-arms.
+    const delay = Math.min(Math.max(0, at.getTime() - now().getTime()), MAX_TIMER_DELAY_MS)
     timer = setTimeout(() => {
       timer = null
+      // Woke early because the target was beyond the timer maximum. Re-arm
+      // rather than backing up ten months ahead of schedule.
+      if (now().getTime() < at.getTime()) {
+        scheduleNext()
+        return
+      }
       void tick()
-    }, intervalMs)
+    }, delay)
     timer.unref()
   }
 
@@ -163,6 +208,9 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
     },
     runOnceForTests(): Promise<void> {
       return tick()
+    },
+    nextRunForTests(): Date | null {
+      return nextRun(now())
     },
   }
 }

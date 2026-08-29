@@ -200,6 +200,17 @@ machinery, and it should not be built as though it were.
 the schedule and the CLI share one implementation rather than two — the CLI is
 now argument handling and nothing else.
 
+**The schedule is cron, not an interval.** An interval cannot say WHEN: "every
+24h" is phased on the daemon's last restart, so it lands mid-working-day as
+readily as at night. A backup is a snapshot plus a copy of every blob — real
+load — and only the operator knows their quiet window. `croner` supplies the
+next fire time and nothing else; the timer loop stays the one
+`file-gc-sweeper` established, because croner's own scheduler would be a
+second answer to "is a pass already running" and the no-overlap guard here is
+the one that is tested. A cron expression also reaches past `setTimeout`'s
+~24.8-day maximum, so the clamp wakes early, notices the target is still
+ahead, and re-arms.
+
 One thing this decision says that the implementation does not: "scheduled by
 default". There is no destination worth defaulting to. Writing copies beside
 the data they protect is not a backup, and anywhere else is a path only the

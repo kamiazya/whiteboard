@@ -2,8 +2,8 @@ import { describe, expect, it } from 'vitest'
 import {
   collectStorageEnvIssues,
   parseBackupDir,
-  parseBackupIntervalMs,
   parseBackupKeep,
+  parseBackupSchedule,
   parseFileGcGraceMs,
   parseFileGcIntervalMs,
   parseWorkspaceTailMs,
@@ -163,20 +163,54 @@ describe('the scheduled-backup settings', () => {
     })
   })
 
-  describe('parseBackupIntervalMs', () => {
-    it('is absent when unset, so the caller supplies the default', () => {
-      expect(parseBackupIntervalMs({})).toEqual({ ok: true, value: null })
+  describe('parseBackupSchedule', () => {
+    /**
+     * Cron rather than an interval, because an interval cannot say WHEN.
+     * `every 24h` starts 24 hours after the daemon last restarted, which is
+     * whenever the container happened to come up — so a backup lands in the
+     * middle of the working day as easily as at night. A backup is expensive:
+     * a database snapshot plus a copy of every blob. The operator has to be
+     * able to put it in their own quiet window.
+     */
+    it('defaults to a nightly window rather than a start-relative interval', () => {
+      const parsed = parseBackupSchedule({})
+      expect(parsed).toEqual({ ok: true, value: { expression: '0 3 * * *', timezone: null } })
     })
 
-    it('takes a bare integer', () => {
-      expect(parseBackupIntervalMs({ WHITEBOARD_BACKUP_INTERVAL_MS: '3600000' })).toEqual({
-        ok: true,
-        value: 3600000,
-      })
+    it('takes an expression and a timezone', () => {
+      expect(
+        parseBackupSchedule({
+          WHITEBOARD_BACKUP_CRON: '30 2 * * 0',
+          WHITEBOARD_BACKUP_TZ: 'Asia/Tokyo',
+        }),
+      ).toEqual({ ok: true, value: { expression: '30 2 * * 0', timezone: 'Asia/Tokyo' } })
     })
 
-    it('refuses a unit suffix rather than reading its digits', () => {
-      expect(parseBackupIntervalMs({ WHITEBOARD_BACKUP_INTERVAL_MS: '6h' }).ok).toBe(false)
+    it('refuses an expression cron cannot parse', () => {
+      expect(parseBackupSchedule({ WHITEBOARD_BACKUP_CRON: 'nightly please' }).ok).toBe(false)
+    })
+
+    /**
+     * A schedule that parses but can never fire is the shape this whole area
+     * exists to remove: configured, plausible-looking, and doing nothing. The
+     * 30th of February parses fine.
+     */
+    it('refuses an expression that can never fire', () => {
+      const parsed = parseBackupSchedule({ WHITEBOARD_BACKUP_CRON: '0 0 30 2 *' })
+      expect(parsed.ok).toBe(false)
+    })
+
+    it('refuses a timezone that is not a real zone', () => {
+      expect(parseBackupSchedule({ WHITEBOARD_BACKUP_TZ: 'Mars/Olympus_Mons' }).ok).toBe(false)
+    })
+
+    /** Never echo the value: a cron expression is not secret, but the rule is
+     *  one rule for every setting rather than one judged per variable. */
+    it('names the setting without quoting what was set', () => {
+      const parsed = parseBackupSchedule({ WHITEBOARD_BACKUP_CRON: 'sekrit-looking' })
+      expect(parsed.ok).toBe(false)
+      if (parsed.ok) return
+      expect(parsed.reason).not.toMatch(/sekrit-looking/)
     })
   })
 
@@ -213,10 +247,10 @@ describe('the scheduled-backup settings', () => {
     // The issue is reported ON the setting that has no effect, and its reason
     // names the one that would give it effect — so an operator reading the
     // startup line knows both which variable is inert and what to add.
-    const issues = collectStorageEnvIssues(DATA_DIR, { WHITEBOARD_BACKUP_INTERVAL_MS: '3600000' })
+    const issues = collectStorageEnvIssues(DATA_DIR, { WHITEBOARD_BACKUP_CRON: '0 3 * * *' })
     expect(issues).toContainEqual(
       expect.objectContaining({
-        variable: 'WHITEBOARD_BACKUP_INTERVAL_MS',
+        variable: 'WHITEBOARD_BACKUP_CRON',
         reason: expect.stringContaining('WHITEBOARD_BACKUP_DIR'),
       }),
     )
@@ -234,7 +268,7 @@ describe('the scheduled-backup settings', () => {
     expect(
       collectStorageEnvIssues(DATA_DIR, {
         WHITEBOARD_BACKUP_DIR: '/srv/backups',
-        WHITEBOARD_BACKUP_INTERVAL_MS: '3600000',
+        WHITEBOARD_BACKUP_CRON: '0 3 * * *',
         WHITEBOARD_BACKUP_KEEP: '7',
       }),
     ).toEqual([])

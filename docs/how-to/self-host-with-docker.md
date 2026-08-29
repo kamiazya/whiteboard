@@ -140,7 +140,13 @@ provide the operator-facing surface for data backup and restore.
 `WHITEBOARD_BACKUP_DIR` to an absolute path on a volume that is not the data
 volume, and the daemon takes a backup on a schedule — the same pass
 `whiteboard server backup` runs, into one timestamped directory per run, with
-`WHITEBOARD_BACKUP_KEEP` older ones retained. The explicit command keeps its
+`WHITEBOARD_BACKUP_KEEP` older ones retained.
+
+`WHITEBOARD_BACKUP_CRON` puts it in a window you choose (default `0 3 * * *`,
+daily at 03:00), and `WHITEBOARD_BACKUP_TZ` says whose 03:00 — a container's
+clock is usually UTC, so without it the quiet hour you picked may be someone
+else's afternoon. A backup is a database snapshot plus a copy of every blob,
+so putting it where the load is low is worth the two settings. The explicit command keeps its
 value for a migration, a support copy, or a snapshot before a risky change,
 but it stops being the only way anything gets backed up. A backup you have to
 remember to take is one taken rarely or never, and the interval between
