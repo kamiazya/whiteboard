@@ -51,16 +51,18 @@ describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', ()
     await rm(tempDir, { recursive: true, force: true })
   })
 
-  it('returns 503 immediately when there are no WS clients', async () => {
+  it('returns 503 without waiting for the response timeout when there are no WS clients', async () => {
+    // Pinned by the TIMEOUT the route was given, not by the wall clock. The
+    // zero-client branch answers before the timer is ever armed, so a
+    // regression into the waiting path would blow the per-test budget and
+    // say so — where `elapsed < 500ms` instead measured how loaded the
+    // machine was, and failed on CI at 721ms with nothing wrong.
     mockGetClientCount.mockReturnValue(0)
-    const app = makeApp()
+    const app = makeApp({ timeoutMs: 30_000 })
 
-    const start = Date.now()
     const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
-    const elapsed = Date.now() - start
 
     expect(res.status).toBe(503)
-    expect(elapsed).toBeLessThan(500)
     expect(mockSendViewportRequest).not.toHaveBeenCalled()
   })
 
