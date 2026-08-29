@@ -18,6 +18,7 @@
  *   surfaced, not remembered forever, because closing the offending tab or
  *   freeing quota is a normal recovery a reload should not be required for.
  */
+import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 
 type ResolutionState =
@@ -71,7 +72,18 @@ async function readSoleWorkspaceId(dbName: string | undefined): Promise<string> 
           reject(new Error(`expected exactly one browser workspace, found ${keys.length}`))
           return
         }
-        resolve(String(keys[0]))
+        // The SHAPE is checked too, not only the count. A single row keyed
+        // `'local'` is exactly what a rekey that silently did not run leaves
+        // behind, and caching it would put every later read and write under
+        // an id ADR-0019 says cannot exist — indistinguishable from working,
+        // until a keeper comparison or a promotion reads it.
+        const sole = String(keys[0])
+        const canonical = workspaceCanonicalIdSchema.safeParse(sole)
+        if (!canonical.success) {
+          reject(new Error(`browser workspace is not keyed by a canonical id: ${sole}`))
+          return
+        }
+        resolve(canonical.data)
       }
       req.onerror = () => reject(req.error)
       tx.onerror = () => reject(tx.error)
@@ -103,6 +115,23 @@ export async function resolveBrowserWorkspaceId(dbName?: string): Promise<string
     })
   inFlight = attempt
   return attempt
+}
+
+/**
+ * The id, or null when it is unavailable.
+ *
+ * For a caller whose own failure path is already a null — a deep link that
+ * falls through to the default document, say. Such a caller otherwise has to
+ * read the id in an ARGUMENT position, where a throw precedes the promise and
+ * escapes the `.catch` that was supposed to absorb it, turning a graceful
+ * fallback into a rejected load.
+ */
+export function browserWorkspaceIdOrNull(): string | null {
+  try {
+    return getBrowserWorkspaceId()
+  } catch {
+    return null
+  }
 }
 
 /** Test seam: resolve synchronously to a fixed id, without opening a database. */

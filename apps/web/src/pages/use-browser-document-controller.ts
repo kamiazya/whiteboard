@@ -3,7 +3,7 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
-import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import {
   type ContentClock,
@@ -268,9 +268,17 @@ export function useBrowserDocumentController(
         // read throw instead would dead-end EVERY deep link on a degraded
         // store — and App mounts this page only with a path, so that is every
         // mount.
-        const requested = await indexRef.current
-          .resolveDocument({ workspaceId: getBrowserWorkspaceId(), path: initialPath })
-          .catch(() => null)
+        // The id is read through the null-answering accessor for the same
+        // reason: in an argument position its throw would precede the promise
+        // and escape the `.catch` below, dead-ending the deep link this
+        // fallback exists to keep open.
+        const workspaceId = browserWorkspaceIdOrNull()
+        const requested =
+          workspaceId === null
+            ? null
+            : await indexRef.current
+                .resolveDocument({ workspaceId, path: initialPath })
+                .catch(() => null)
         if (cancelled) return
         if (requested !== null) {
           const snap = await loadLocalDocument(

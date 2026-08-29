@@ -30,6 +30,13 @@ import { resolveBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 
 const log = getAppLogger('boot')
 
+/**
+ * Matches the viewer font's own budget: both bound a first-paint wait on
+ * something that usually takes milliseconds, and neither is a delay — nothing
+ * that succeeds is slowed by it.
+ */
+const WORKSPACE_ID_RESOLVE_TIMEOUT_MS = 3000
+
 export interface BootSequenceOptions {
   rootEl: HTMLElement
   resolveWorkspaceId?: () => Promise<string>
@@ -63,9 +70,27 @@ export async function startBootSequence({
   // and self-corrects once the font finishes loading in the background (see
   // CanvasViewer's useViewerFontReady for that path).
   await loadFont()
-  await resolveWorkspaceId().catch((cause: unknown) => {
-    log.warn('browser workspace id resolution failed; rendering degraded', cause)
-  })
+  // Bounded, for the same reason the font load is: an IndexedDB open can fail
+  // by never settling as easily as by rejecting — a `deleteDatabase` in
+  // another tab, a browser that leaves the request pending under storage
+  // pressure — and an unbounded await there holds the splash forever, which
+  // is the one outcome worse than rendering without the id.
+  //
+  // Bounded rather than not awaited at all: on every normal load the resolve
+  // wins this race by orders of magnitude, and awaiting it is what guarantees
+  // no consumer reads the accessor unresolved. Dropping the await to fix the
+  // hang would trade a rare stall for a routine race.
+  await Promise.race([
+    resolveWorkspaceId().catch((cause: unknown) => {
+      log.warn('browser workspace id resolution failed; rendering degraded', cause)
+    }),
+    new Promise<void>((resolve) => {
+      setTimeout(() => {
+        log.warn('browser workspace id resolution did not settle; rendering degraded')
+        resolve()
+      }, WORKSPACE_ID_RESOLVE_TIMEOUT_MS)
+    }),
+  ])
   // Paces the index.html splash: the app is ready at this point, but the
   // splash stays up until its draw animation lands plus a beat, and fades out
   // before React's first commit replaces it.

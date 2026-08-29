@@ -7,6 +7,7 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { startBootSequence } from './boot.js'
+import { DB_VERSION } from './lib/browser-idb.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
@@ -108,6 +109,58 @@ describe('startBootSequence — resolver rejection does not block render', () =>
     const recovered = await resolveBrowserWorkspaceId(REAL_DB_NAME)
     expect(recovered).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
     expect(getBrowserWorkspaceId()).toBe(recovered)
+  })
+
+  it('renders anyway when the resolver never settles, rather than holding the splash', async () => {
+    // A REJECTION is not the only way an IndexedDB open fails: it can also
+    // simply never settle. The `.catch` covers the first; only the bound
+    // covers this one, and without it the app would sit on the splash forever.
+    let rendered = false
+    let splashDismissed = false
+    const start = Date.now()
+    await startBootSequence({
+      rootEl: rootEl(),
+      resolveWorkspaceId: () => new Promise<string>(() => {}),
+      loadFont: async () => undefined,
+      dismissSplash: async () => {
+        splashDismissed = true
+      },
+      render: () => {
+        rendered = true
+      },
+    })
+    expect(rendered).toBe(true)
+    expect(splashDismissed).toBe(true)
+    // The bound is what released it, so this cannot have returned instantly —
+    // an assertion that would pass just as well against a `render()` that
+    // never waited for the resolver at all.
+    expect(Date.now() - start).toBeGreaterThanOrEqual(2500)
+    expect(() => getBrowserWorkspaceId()).toThrow(/resolveBrowserWorkspaceId/)
+  }, 15_000)
+
+  it('refuses a sole workspace key that is not a canonical id', async () => {
+    // What a rekey that silently did not run leaves behind. Caching it would
+    // put every later read and write under an id ADR-0019 says cannot exist.
+    await new Promise<void>((resolve, reject) => {
+      // At exactly DB_VERSION, so the app's own open finds nothing to upgrade
+      // and goes straight to the read — the state a rekey that silently did
+      // not run would leave, rather than a version the app cannot open at all.
+      const req = indexedDB.open(REAL_DB_NAME, DB_VERSION)
+      req.onupgradeneeded = () => {
+        const db = req.result
+        if (!db.objectStoreNames.contains('workspaces')) db.createObjectStore('workspaces')
+        req.transaction?.objectStore('workspaces').put({ workspaceId: 'local' }, 'local')
+      }
+      req.onsuccess = () => {
+        req.result.close()
+        resolve()
+      }
+      req.onerror = () => reject(req.error)
+    })
+    await expect(resolveBrowserWorkspaceId(REAL_DB_NAME)).rejects.toThrow(
+      /not keyed by a canonical/,
+    )
+    expect(() => getBrowserWorkspaceId()).toThrow(/browser workspace unavailable/)
   })
 
   it('the unresolved-state message is distinct from the failed-state message', () => {
