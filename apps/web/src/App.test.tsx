@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
+import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once its
 // dynamic import resolves — and under a full-suite run that resolution can
@@ -758,6 +759,23 @@ describe('App daemon provider state', () => {
       await router.navigate(-1)
     })
     expect(router.state.location.pathname).toBe('/w/design-team')
+  })
+
+  it('opens a browser document addressed by the canonical id, not only the segment', async () => {
+    // The DURABLE form. ADR-0019 keeps the canonical id resolvable in the
+    // same position precisely so a link survives a rename — and the browser
+    // route comparison read one layer, so the moment a segment existed the id
+    // form matched nothing and fell through to the index. The guarantee the
+    // id layer exists to give was absent for this keeper.
+    const canonicalId = getBrowserWorkspaceId()
+    render(
+      <MemoryRouter initialEntries={[`/w/${canonicalId}/d/c1`]}>
+        <App providerState={BROWSER_STATE} />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByTestId('browser-document-page')).toBeTruthy()
+    expect(screen.queryByTestId('browser-index-page')).toBeNull()
   })
 
   it('escapes to the browser with BROWSER_CAPABILITIES', async () => {

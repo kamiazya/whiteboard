@@ -213,6 +213,30 @@ export function browserWorkspaceHandleOrNull(): string | null {
   }
 }
 
+/**
+ * Whether an address names THIS browser workspace — by its segment, or by the
+ * canonical id ADR-0019 keeps resolvable in the same position.
+ *
+ * Both layers, and that is the whole point: the id form is the DURABLE link,
+ * the one that survives a rename. A comparison against the handle alone reads
+ * only the layer the handle happened to pick, so the moment a workspace has a
+ * segment its id-form address matches nothing — and the guarantee the id
+ * layer exists to give is silently gone. This lives beside the identity
+ * rather than at the call site because the call site has no business knowing
+ * a workspace answers to two names.
+ *
+ * False while the identity is unavailable: an address cannot be shown to name
+ * a workspace nobody can read.
+ */
+export function browserWorkspaceMatches(handle: string): boolean {
+  try {
+    const identity = getBrowserWorkspaceIdentity()
+    return identity.segment === handle || identity.workspaceId === handle
+  } catch {
+    return false
+  }
+}
+
 /** Test seam: resolve synchronously to a fixed identity, without opening a database. */
 export function setBrowserWorkspaceIdForTests(workspaceId: string, segment?: string): void {
   state = {

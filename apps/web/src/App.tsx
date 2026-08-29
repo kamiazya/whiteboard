@@ -12,7 +12,10 @@ const NotFoundPage = lazy(() =>
 import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
-import { browserWorkspaceHandleOrNull } from './lib/browser-workspace-id.js'
+import {
+  browserWorkspaceHandleOrNull,
+  browserWorkspaceMatches,
+} from './lib/browser-workspace-id.js'
 import {
   consumeGrantFragment,
   type GrantConsumeResult,
@@ -246,8 +249,12 @@ export function App({ providerState }: AppProps) {
   // keeper. Treating that as a browser document would open a path in a
   // workspace that does not exist here; the index is the honest answer, and
   // is what this shell already showed while the two grammars kept them apart.
+  //
+  // Matched against BOTH layers, not against the handle: the canonical-id
+  // form is the durable link, and comparing to `segment ?? id` rejects it the
+  // moment a segment exists.
   const browserPath =
-    browserRoute?.kind === 'document' && browserRoute.workspace === browserHandle
+    browserRoute?.kind === 'document' && browserWorkspaceMatches(browserRoute.workspace)
       ? browserRoute.path
       : undefined
 
