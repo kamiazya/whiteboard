@@ -24,6 +24,7 @@ const { getDb, closeDb, clearDbCache, registerDbDisposeHook, runDbDisposeHooks }
   './index.js'
 )
 const { prepareDataDir, clearPrepareCache } = await import('./prepare.js')
+const { readDatabaseLocationRecord } = await import('./location-record.js')
 
 // registerDbDisposeHook has no unregister counterpart, so this file registers
 // exactly one hook at module scope and routes it through a swappable
@@ -286,5 +287,70 @@ describe('getDb honours WHITEBOARD_DATABASE_URL', () => {
     delete process.env[ENV]
     const db = await getDb(tempDir)
     expect(db).toBeDefined()
+  })
+})
+
+/**
+ * Opening the database is the only moment the truth is available.
+ *
+ * `whiteboard server backup` runs later, host-side, against a stopped
+ * deployment: it has neither the container's environment nor a way to tell a
+ * live `whiteboard.db` from one left behind by a move to libSQL. Whoever
+ * opens the database knows both, so it writes the answer down where a backup
+ * can find it.
+ *
+ * A record that is never produced would leave both guards falling back to the
+ * environment forever — passing their own tests, since those supply the
+ * record themselves.
+ */
+describe('the database location record getDb leaves behind', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-location-record-test-'))
+    clearDbCache()
+    clearPrepareCache()
+  })
+
+  afterEach(async () => {
+    await closeDb(tempDir).catch(() => {})
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('records that the rows are in the data directory when they are', async () => {
+    expect(await readDatabaseLocationRecord(tempDir)).toBeNull()
+    await getDb(tempDir)
+    expect(await readDatabaseLocationRecord(tempDir)).toEqual({ inDataDir: true })
+  })
+
+  it('records that they are not when the database is somewhere else', async () => {
+    // A file outside the data directory rather than a libSQL URL: the
+    // predicate under test is the same one, and this connects instead of
+    // reaching the network. (The connection is NOT lazy — the FK pragma runs
+    // eagerly — so a libsql: URL here resolves a hostname and fails.)
+    const elsewhere = await mkdtemp(join(tmpdir(), 'whiteboard-db-elsewhere-'))
+    vi.stubEnv('WHITEBOARD_DATABASE_URL', `file:${join(elsewhere, 'whiteboard.db')}`)
+    try {
+      await getDb(tempDir)
+      expect(await readDatabaseLocationRecord(tempDir)).toEqual({ inDataDir: false })
+    } finally {
+      vi.unstubAllEnvs()
+      await rm(elsewhere, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * The case an operator hits precisely when they reach for a backup: the
+   * database server is down. The location is a property of the configuration,
+   * so it is knowable anyway — and a missing record here would send the
+   * backup guard back to the environment, and from there to the stale file
+   * this record exists to catch.
+   */
+  it('records the location even when the database cannot be opened', async () => {
+    vi.stubEnv('WHITEBOARD_DATABASE_URL', 'libsql://db.invalid')
+    try {
+      await expect(getDb(tempDir)).rejects.toBeDefined()
+      expect(await readDatabaseLocationRecord(tempDir)).toEqual({ inDataDir: false })
+    } finally {
+      vi.unstubAllEnvs()
+    }
   })
 })

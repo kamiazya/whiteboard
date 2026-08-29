@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
+import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { runServerRestore } from './server-restore.js'
 
 let tmpRoot: string
@@ -332,5 +333,60 @@ describe('runServerRestore judges from the backup directory, not the invoking sh
 
     expect(outcome.kind).toBe('external-database')
     expect(mockDoRestore).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The mirror of the stale-file case, on the target side.
+ *
+ * Restore's target question is the same one backup asks of its source: will
+ * the deployment that reads this directory find its rows in it? A host shell
+ * cannot answer that for a container, so the target's own record answers it
+ * when there is one. Restoring a file-based backup into a deployment that
+ * reads libSQL writes a `whiteboard.db` nothing will ever open, and reports
+ * success while doing it.
+ */
+describe('runServerRestore with a target that keeps its rows elsewhere', () => {
+  it('refuses when the target record says the rows are not in the directory', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(backupDir, { recursive: true })
+    await mkdir(targetDir, { recursive: true })
+    await writeFile(join(backupDir, 'whiteboard.db'), 'rows')
+    await writeDatabaseLocationRecord(targetDir, false)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoRestore).not.toHaveBeenCalled()
+  })
+
+  it('proceeds when the target record says the rows are here and the shell disagrees', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(backupDir, { recursive: true })
+    await mkdir(targetDir, { recursive: true })
+    await writeFile(join(backupDir, 'whiteboard.db'), 'rows')
+    await writeDatabaseLocationRecord(targetDir, true)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      // In conflict on purpose — see the backup mirror of this test.
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://other.example.com' },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoRestore).toHaveBeenCalledTimes(1)
   })
 })

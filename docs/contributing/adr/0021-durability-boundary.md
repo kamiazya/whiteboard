@@ -205,6 +205,22 @@ nothing was ever collectable. The guard is now the arrangement itself
   this ADR comes before that work.
 - A store the product does not cover is visible in the output instead of
   silently missing.
+- The first slice of decision 1's per-store record already ships, ahead of the
+  rest of this ADR, because the narrow guard could not be made correct without
+  it. `<dataDir>/storage.json` records one boolean — whether this deployment's
+  rows are in the data directory — written by whoever opens the database and
+  deliberately never removed. It is what closes the stale-`whiteboard.db`
+  case: an operator who moved the rows to a libSQL server but left the old
+  file in place defeats both other sources, because the environment a
+  host-side backup reads is the invoking shell's rather than the deployment's,
+  and the directory cannot tell a live database from a fossil. The record is
+  consulted first and the environment remains the fallback for a deployment
+  that has never opened one, so no existing install is made worse.
+
+  It carries no connection string. The file sits in the directory a backup
+  copies wholesale, a URL can carry userinfo, and one boolean answers the only
+  question asked of it. Widening it to describe blob and version stores is
+  what decision 1 still has left to do.
 
 ### Harder
 
@@ -218,18 +234,6 @@ nothing was ever collectable. The guard is now the arrangement itself
   so an operator can still read it at a glance.
 
 ### Not addressed here
-
-- **A stale `whiteboard.db` left behind by a migration.** The narrow guard
-  asks the environment and the directory, and both answer "local" when an
-  operator has moved the rows to a libSQL server but left the old file in
-  place — so a host-side backup copies pre-migration rows and reports success.
-  Nothing available at that moment can contradict it: the environment is the
-  invoking shell's, not the deployment's, and the server-mode record is
-  deleted on graceful shutdown, which the documented flow performs first.
-  Decision 1's per-store record is what closes this — a marker that survives
-  shutdown and states where each store's data actually lives — and it is the
-  first thing to build when this ADR is implemented. Until then the
-  self-hosting guide tells operators to delete the leftover file.
 
 - **Restore across a configuration change** — restoring a backup taken with an
   embedded database into a deployment using a libSQL server, or vice versa. It

@@ -5,6 +5,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
+import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { runServerBackup } from './server-backup.js'
 
 let tmpRoot: string
@@ -356,5 +357,101 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
 
     expect(outcome.kind).toBe('ok')
     expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+})
+
+/**
+ * The case both other guards pass: a stale `whiteboard.db`.
+ *
+ * An operator who once ran the embedded database, later pointed
+ * `WHITEBOARD_DATABASE_URL` at a libSQL server, and left the old file behind
+ * defeats each of them for a different reason. The environment check reads
+ * the invoking HOST shell, which never had the container's `--env-file`. The
+ * artifact check finds a database file and is satisfied — it cannot tell a
+ * live one from a fossil. The result is a backup of pre-migration rows,
+ * reported as a success.
+ *
+ * Nothing observable at backup time contradicts it, so something has to have
+ * been written down earlier, by the process that actually opened the
+ * database. That is what `storage.json` is. It survives shutdown on purpose:
+ * `server-mode.json` — the other thing this command reads — is deleted by
+ * graceful shutdown, which the documented flow performs first, so it is
+ * always already gone by the time a backup runs.
+ */
+describe('runServerBackup with a stale database file left behind', () => {
+  it('refuses when the recorded location says the rows are elsewhere', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    // Every observable signal points at a healthy local database…
+    await writeFile(join(dataDir, 'whiteboard.db'), 'pre-migration rows')
+    // …except the one the server itself wrote when it last opened one.
+    await writeDatabaseLocationRecord(dataDir, false)
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      // The host shell, exactly as the Docker how-to leaves it.
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoBackup).not.toHaveBeenCalled()
+  })
+
+  /**
+   * The record is the authority in BOTH directions, or it would be a guard
+   * that only ever refuses. A deployment using the embedded database records
+   * that, and a clean host shell must not then override it.
+   */
+  it('proceeds when the record says the rows are here and the shell disagrees', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+    await writeDatabaseLocationRecord(dataDir, true)
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      // The two sources in conflict, which is the only arrangement that can
+      // show the record is consulted at all: an operator whose shell exports
+      // the variable for a DIFFERENT deployment. A clean env would agree with
+      // the record for its own reason and prove nothing.
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://other.example.com' },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * A record claiming the rows are here does not excuse them being gone. The
+   * artifact check stays in force underneath it — the record answers WHERE,
+   * never WHETHER.
+   */
+  it('still refuses when the record says here but no database file exists', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeDatabaseLocationRecord(dataDir, true)
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoBackup).not.toHaveBeenCalled()
   })
 })
