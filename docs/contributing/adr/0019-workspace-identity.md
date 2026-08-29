@@ -210,28 +210,43 @@ flags), so this address has one keeper to serve and no user waiting for it.
 It is recorded so the daemon's history UI adopts this shape rather than
 minting another.
 
-### What shipped, where it differs from the Decision
+### What shipped, and the two rules building it produced
 
-- **The browser workspace switch is a document load, not an in-SPA route
-  change.** The Decision says in-SPA with no reload, and it stands — this
-  records that the implementation has not reached it. The browser resolves
-  its active workspace once into a synchronous accessor that some twenty call
-  sites read inline (`browser-workspace-id.ts` states that rationale in
-  place), so re-pointing it live means re-reading it at all of them.
+- **The browser workspace switch is in-SPA, as decided.** It shipped as a
+  document load first, and what closed the gap was a second door rather than
+  a redesign: the accessor still resolves ONCE — that is what makes the
+  synchronous read at some twenty call sites possible — and
+  `switchBrowserWorkspace` re-points it explicitly. React learns through a
+  `useSyncExternalStore` subscription, so App and the index page follow a
+  switch without either being rebuilt.
 
-  **Flush-before-switch is already pinned**, and by the in-SPA path rather
+  Two rules came out of building it, and both are the kind that would be
+  wrong if guessed:
+
+  - **The switch resolve is STRICT where the boot resolve is lenient.** Boot
+    falls back to first-listed because a stale bookmark should still open the
+    app and there is no previous state worth keeping. A switch has one, so
+    answering "go here" by going somewhere else — and then rewriting the
+    address to match a place nobody asked for — is worse than declining. The
+    address rewrite is what a declined switch falls back to, which is only
+    distinguishable from a successful one because the resolve is strict.
+  - **The address moves first and the runtime follows.** Same direction as
+    everything else here: the switcher navigates, and an effect re-points the
+    active workspace to whatever the address names. The rewrite guard added
+    earlier in this initiative had to learn the difference — before this it
+    read any unmatched address as a leftover and rewrote it, which would have
+    fought every switch.
+
+  **Flush-before-switch was already pinned**, and by the in-SPA path rather
   than the shipped one. Two `browser-backend.browser.test.tsx` cases hold it:
   a write still on the queue when `disconnect()` runs reaches storage, and a
   write in flight while the active workspace is RE-POINTED lands in the
   workspace it was made in rather than the one being switched to. The second
-  simulates the switch exactly as an in-SPA one would perform it. Both found
-  real defects — `_doWrite` returned early on a nulled doc, and read the
-  workspace id at execution time — so the invariant is guarded by tests that
-  went red, not by a load that happens to make the hazard unreachable.
-
-  That is what the remaining follow-up is and is not. It does not need new
-  coverage for the invariant; it needs the path production takes to become
-  the path already under test.
+  simulates exactly what `switchBrowserWorkspace` now does in production.
+  Both found real defects — `_doWrite` returned early on a nulled doc, and
+  read the workspace id at execution time — so the invariant is guarded by
+  tests that went red, not by a load that happened to make the hazard
+  unreachable.
 - **Rename is not in the v1 that shipped.** The Decision's v1 is create +
   switch + rename; `DocumentIndex` has no `renameWorkspace`, so rename needs
   the port, three implementations, the conformance suite, a daemon route and

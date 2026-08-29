@@ -10,6 +10,7 @@ import {
   resetBrowserWorkspaceIdForTests,
   setBrowserWorkspaceIdForTests,
 } from './lib/browser-workspace-id.js'
+
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once its
 // dynamic import resolves — and under a full-suite run that resolution can
@@ -846,6 +847,23 @@ describe('App daemon provider state', () => {
     } finally {
       setBrowserWorkspaceIdForTests(settled, 'default')
     }
+  })
+
+  it('rewrites an address naming a workspace the registry cannot resolve', async () => {
+    // The other half, and why the switch resolve is STRICT. A lenient one
+    // would answer any unknown handle with first-listed, and the effect would
+    // then leave the address alone while believing it had switched — an
+    // address naming a workspace nobody has.
+    const settled = getBrowserWorkspaceId()
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      { initialEntries: ['/w/no-such-workspace'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    await waitFor(() => expect(router.state.location.pathname).toBe('/w/default'))
+    expect(getBrowserWorkspaceId()).toBe(settled)
   })
 
   it('gives the browser shell a workspace switcher naming what the address says', async () => {

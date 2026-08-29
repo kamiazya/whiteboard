@@ -125,61 +125,59 @@ export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
   }
 }
 
-async function readWorkspaceIdentity(
+/**
+ * Every workspace this database holds, as identities.
+ *
+ * Keys AND values, in one transaction. The values carry the segment an
+ * address resolves through; the KEYS are what a canonical-shape check has to
+ * read, because a row keyed `'local'` says `'local'` in its value too —
+ * validating the value would pass the check for precisely the reason it
+ * should fail.
+ */
+async function readRegistryEntries(
   dbName: string | undefined,
-  handle: string | undefined,
-): Promise<BrowserWorkspaceIdentity> {
+): Promise<BrowserWorkspaceIdentity[]> {
   const db = await openWhiteboardDb(dbName)
   try {
-    return await new Promise<BrowserWorkspaceIdentity>((resolve, reject) => {
+    return await new Promise<BrowserWorkspaceIdentity[]>((resolve, reject) => {
       const tx = db.transaction(WORKSPACES_STORE, 'readonly')
       const store = tx.objectStore(WORKSPACES_STORE)
-      // Keys AND values, in one transaction. The values carry the segment an
-      // address resolves through; the KEYS are what the shape check below has
-      // to read, because a row keyed `'local'` says `'local'` in its value
-      // too — validating the value would pass the check for precisely the
-      // reason it should fail.
       const keysReq = store.getAllKeys()
       const rowsReq = store.getAll()
       tx.onerror = () => reject(tx.error)
       tx.oncomplete = () => {
-        const keys = keysReq.result.map(String)
-        if (keys.length === 0) {
-          reject(new Error('no browser workspace exists'))
-          return
-        }
         const rows = rowsReq.result as { segment?: unknown }[]
-        const entries = keys.map((workspaceId, i) => {
-          const segment = rows[i]?.segment
-          return {
-            workspaceId,
-            ...(typeof segment === 'string' ? { segment } : {}),
-          }
-        })
-        // The address decides which workspace is ACTIVE (ADR-0019), through
-        // ports' one definition of segment-first-then-id. A handle naming
-        // nothing falls back rather than refusing: a stale bookmark should
-        // still open the app, and turning an unmatched name into not-found is
-        // the ROUTE layer's job, where there is a page to say so.
-        const chosen =
-          (handle === undefined ? null : resolveWorkspaceHandle(entries, handle)) ?? entries[0]
-        if (chosen === undefined) {
-          reject(new Error('no browser workspace exists'))
-          return
-        }
-        const canonical = workspaceCanonicalIdSchema.safeParse(chosen.workspaceId)
-        if (!canonical.success) {
-          reject(
-            new Error(`browser workspace is not keyed by a canonical id: ${chosen.workspaceId}`),
-          )
-          return
-        }
-        resolve(chosen)
+        resolve(
+          keysReq.result.map(String).map((workspaceId, i) => {
+            const segment = rows[i]?.segment
+            return { workspaceId, ...(typeof segment === 'string' ? { segment } : {}) }
+          }),
+        )
       }
     })
   } finally {
     db.close()
   }
+}
+
+async function readWorkspaceIdentity(
+  dbName: string | undefined,
+  handle: string | undefined,
+): Promise<BrowserWorkspaceIdentity> {
+  const entries = await readRegistryEntries(dbName)
+  // The address decides which workspace is ACTIVE (ADR-0019), through ports'
+  // one definition of segment-first-then-id. A handle naming nothing falls
+  // back rather than refusing: a stale bookmark should still open the app,
+  // and turning an unmatched name into not-found is the ROUTE layer's job,
+  // where there is a page to say so. `switchBrowserWorkspace` is strict for
+  // the opposite reason, and says so in place.
+  const chosen =
+    (handle === undefined ? null : resolveWorkspaceHandle(entries, handle)) ?? entries[0]
+  if (chosen === undefined) throw new Error('no browser workspace exists')
+  if (!workspaceCanonicalIdSchema.safeParse(chosen.workspaceId).success) {
+    throw new Error(`browser workspace is not keyed by a canonical id: ${chosen.workspaceId}`)
+  }
+  return chosen
 }
 
 /**
@@ -204,6 +202,40 @@ export async function resolveBrowserWorkspaceId(dbName?: string, handle?: string
     })
   inFlight = attempt
   return attempt
+}
+
+/**
+ * Re-points the active workspace at the one `handle` names, or answers null
+ * when this registry holds no such workspace.
+ *
+ * The second door the resolve-once accessor needs. `resolveBrowserWorkspaceId`
+ * serves every later call from cache — that is what makes the synchronous
+ * accessor above possible — so without this a switch has to be a document
+ * load, which is what ADR-0019's Decision says it should not be.
+ *
+ * STRICT where the boot resolve is lenient, and the asymmetry is deliberate.
+ * Boot falls back to first-listed because a stale bookmark should still open
+ * the app and there is no previous state worth keeping. A switch has one:
+ * answering "go here" by going somewhere else, and then rewriting the address
+ * to match a place nobody asked for, is worse than declining.
+ *
+ * Callers must settle the outgoing workspace's writes before calling — which
+ * `BrowserBackend` does by capturing its workspace at enqueue rather than at
+ * execution (flush-before-switch, pinned in `browser-backend.browser.test.tsx`).
+ */
+export async function switchBrowserWorkspace(
+  handle: string,
+  dbName?: string,
+): Promise<BrowserWorkspaceIdentity | null> {
+  const chosen = resolveWorkspaceHandle(await readRegistryEntries(dbName), handle)
+  if (chosen === null) return null
+  const identity: BrowserWorkspaceIdentity = {
+    workspaceId: chosen.workspaceId,
+    ...(chosen.segment === undefined ? {} : { segment: chosen.segment }),
+  }
+  inFlight = null
+  setResolutionState({ kind: 'resolved', identity })
+  return identity
 }
 
 /**

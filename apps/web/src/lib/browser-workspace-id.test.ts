@@ -12,6 +12,7 @@ import {
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
+  switchBrowserWorkspace,
 } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 
@@ -57,6 +58,38 @@ describe('browser workspace id accessor', () => {
     const first = await resolveBrowserWorkspaceId(DB_NAME)
     const second = await resolveBrowserWorkspaceId(DB_NAME)
     expect(second).toBe(first)
+  })
+
+  it('switches a resolved identity to another workspace in this registry', async () => {
+    // ADR-0019's switch, at the layer that has to move. The accessor resolves
+    // ONCE by design — a boot-time resolve every later read is served from —
+    // so a switcher needs a second door, or the shipped switch has to be a
+    // document load.
+    const index = new IdbDocumentIndex(DB_NAME)
+    const first = await resolveBrowserWorkspaceId(DB_NAME)
+    await index.createWorkspace({ workspaceId: LATER_ULID, segment: 'second' })
+
+    const moved = await switchBrowserWorkspace('second', DB_NAME)
+
+    expect(moved?.workspaceId).toBe(LATER_ULID)
+    expect(getBrowserWorkspaceId()).toBe(LATER_ULID)
+    expect(getBrowserWorkspaceId()).not.toBe(first)
+    expect(getBrowserWorkspaceIdentity().segment).toBe('second')
+  })
+
+  it('refuses a handle this registry does not hold, leaving the identity where it was', async () => {
+    // STRICT, unlike the boot resolve one line up, and the asymmetry is the
+    // point. Boot is lenient because a stale bookmark should still open the
+    // app and there is no previous state worth keeping. A switch has one:
+    // silently landing on first-listed would answer a request to go
+    // somewhere by going somewhere else, and the address would then be
+    // rewritten to match a place nobody asked for.
+    const before = await resolveBrowserWorkspaceId(DB_NAME)
+
+    const moved = await switchBrowserWorkspace('no-such-workspace', DB_NAME)
+
+    expect(moved).toBeNull()
+    expect(getBrowserWorkspaceId()).toBe(before)
   })
 
   it('the test seam sets a resolved value directly, without opening a database', () => {

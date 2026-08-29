@@ -17,6 +17,7 @@ import {
   browserWorkspaceIdentitySnapshot,
   browserWorkspaceMatches,
   subscribeBrowserWorkspaceIdentity,
+  switchBrowserWorkspace,
 } from './lib/browser-workspace-id.js'
 import {
   consumeGrantFragment,
@@ -458,11 +459,16 @@ export function App({ providerState }: AppProps) {
             m.createBrowserWorkspaceNamed(displayName),
           ),
       },
+      // An in-SPA route change (ADR-0019), not a document load. The address
+      // moves first and the identity follows it, which is the same direction
+      // everything else in this app reads: the effect below re-points the
+      // active workspace to whatever the address names, and rewrites the
+      // address only when it names nothing this browser holds.
       onSwitch: (handle: string) => {
-        window.location.assign(workspacePath(handle))
+        navigate(workspacePath(handle))
       },
     }),
-    [],
+    [navigate],
   )
 
   // The browser keeper's half of the same rule, and it exists for the same
@@ -493,9 +499,30 @@ export function App({ providerState }: AppProps) {
     const route = parseWorkspaceRoute(location.pathname)
     const named = route === null ? undefined : route.workspace
     if (named !== undefined && browserWorkspaceMatches(named)) return
-    const path = workspacePath(browserHandle)
-    if (location.pathname === path) return
-    navigate(path, { replace: true })
+    let cancelled = false
+    const rewrite = () => {
+      if (cancelled) return
+      const path = workspacePath(browserHandle)
+      if (location.pathname !== path) navigate(path, { replace: true })
+    }
+    // An address naming a workspace this browser DOES hold is a switch, not a
+    // mistake — the switcher moves the address and this is what makes the
+    // runtime follow. Only a handle the registry cannot resolve gets the
+    // address rewritten, and `switchBrowserWorkspace` is strict precisely so
+    // the two cases stay distinguishable here: a lenient resolve would answer
+    // every unknown handle with first-listed, and this effect would then
+    // rewrite the address to a workspace nobody asked for while believing it
+    // had switched.
+    if (named === undefined) {
+      rewrite()
+    } else {
+      switchBrowserWorkspace(named).then((moved) => {
+        if (moved === null) rewrite()
+      }, rewrite)
+    }
+    return () => {
+      cancelled = true
+    }
   }, [location.pathname, browserHandle, daemonKept, isPairRoute, navigate])
 
   // URL -> state: handles the browser back/forward buttons (and, in
