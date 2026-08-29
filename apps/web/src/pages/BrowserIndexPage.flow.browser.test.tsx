@@ -38,6 +38,31 @@ function renderApp() {
   return router
 }
 
+/**
+ * Waits until a debounced save has actually LANDED for this document.
+ *
+ * Not `getByRole('button', { name: 'Saved' })`. A document that has never
+ * been written is already `Saved` — correct for a reader, and useless as
+ * proof that a write completed. That wait matched the state the page was
+ * already in, so these tests navigated away with the write still pending and
+ * read the loss later as lost keystrokes: `expected '# ' to contain
+ * '# From the list'` after reopening, with a 15s budget the write never
+ * needed because it was never going to happen.
+ *
+ * `data-last-saved-at` is absent until a write lands, so requiring it
+ * together with a settled `saved` state is a TRANSITION rather than a label.
+ */
+async function waitForSaved(): Promise<void> {
+  await waitFor(
+    () => {
+      const chip = document.querySelector('[data-testid="save-status-chip"]')
+      expect(chip?.getAttribute('data-save-state')).toBe('saved')
+      expect(chip?.getAttribute('data-last-saved-at')).toBeTruthy()
+    },
+    { timeout: 15_000 },
+  )
+}
+
 describe('browser list landing (browser — real IndexedDB)', () => {
   beforeEach(async () => {
     await clearWhiteboardDb()
@@ -104,11 +129,7 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toBe('# From the list')
     })
-    // The page's own report that the debounced write reached IndexedDB —
-    // waiting on it keeps this off the timing-flake shape.
-    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy(), {
-      timeout: 15_000,
-    })
+    await waitForSaved()
 
     // Back again: both documents listed, the note marked as markdown.
     await router.navigate(-1)
