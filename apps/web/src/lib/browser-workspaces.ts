@@ -10,7 +10,7 @@
  * nothing to fold. Taking the folding one would pull loro-crdt behind a
  * control that renders in the app shell.
  */
-import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { createBrowserWorkspace } from './create-browser-workspace.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 
@@ -22,4 +22,18 @@ export function listBrowserWorkspaces(): Promise<WorkspaceEntry[]> {
 
 export function createBrowserWorkspaceNamed(displayName: string): Promise<WorkspaceEntry> {
   return createBrowserWorkspace(index, { displayName })
+}
+
+/**
+ * Renames the workspace the browser keeps, and answers what it now is.
+ *
+ * Takes the canonical id rather than a handle for the reason the switcher's
+ * own contract states: the address is what may be moving, so it cannot also
+ * be how the subject is named.
+ */
+export function renameBrowserWorkspace(
+  workspaceId: string,
+  input: Omit<RenameWorkspaceInput, 'workspaceId'>,
+): Promise<WorkspaceEntry> {
+  return index.renameWorkspace({ workspaceId, ...input })
 }

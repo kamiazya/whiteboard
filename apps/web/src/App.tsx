@@ -458,6 +458,10 @@ export function App({ providerState }: AppProps) {
           import('./lib/browser-workspaces.js').then((m) =>
             m.createBrowserWorkspaceNamed(displayName),
           ),
+        rename: (workspaceId: string, input: { segment?: string; displayName?: string }) =>
+          import('./lib/browser-workspaces.js').then((m) =>
+            m.renameBrowserWorkspace(workspaceId, input),
+          ),
       },
       // An in-SPA route change (ADR-0019), not a document load. The address
       // moves first and the identity follows it, which is the same direction

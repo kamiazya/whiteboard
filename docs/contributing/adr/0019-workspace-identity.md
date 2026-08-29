@@ -247,13 +247,32 @@ minting another.
   read the workspace id at execution time — so the invariant is guarded by
   tests that went red, not by a load that happened to make the hazard
   unreachable.
-- **Rename is not in the v1 that shipped.** The Decision's v1 is create +
-  switch + rename; `DocumentIndex` has no `renameWorkspace`, so rename needs
-  the port, three implementations, the conformance suite, a daemon route and
-  a client — its own increment rather than a corner of the switcher's.
-- **Creation is browser-only.** The daemon publishes `GET /api/workspaces`
-  and nothing that writes one, so the switcher offers creation only where a
-  keeper can honour it. The daemon's create surface is its own increment too.
+- **Rename landed in the increment after.** It needed the port, three
+  implementations and the conformance suite, which is why it was not a
+  corner of the switcher's own increment. The conformance suite asks more of
+  it than of `createWorkspace`: an implementation may accept-and-ignore the
+  identity layers on create, but a rename that ignored them would pass every
+  case vacuously while doing the one thing it exists for to nothing.
+
+  The FORM is where the three-layer model becomes visible to a person. Name
+  and address are two fields, edited separately, because the segment is what
+  every existing link already says — deriving it from the display name would
+  break those links each time somebody fixed a typo in a name. Only what
+  changed is sent, since the address write is the one that can be refused for
+  a collision, and an unchanged field submitted back would put every name
+  edit at that risk for nothing. Moving the address moves the URL with it; a
+  name-only rename navigates nowhere, so the switcher re-reads its subject
+  from what the rename ANSWERED rather than from a re-list.
+
+  Renaming on the daemon still needs its route, and waits with creation
+  below.
+- **Writing a workspace is browser-only.** The daemon publishes
+  `GET /api/workspaces` and nothing that writes one, so the switcher offers
+  creation and renaming only where a keeper can honour them. Its own
+  increment, and a published-contract change: the routes belong beside the
+  daemon, in `@kamiazya/whiteboard-mcp/api-contracts`. The daemon's
+  `DocumentIndex` already implements `renameWorkspace` — only the HTTP
+  surface in front of it is missing.
 - **`workspaces` stopped being a capability.** The Consequences above
   predicted the flag would flip to `true` for the browser. It did not flip —
   it was deleted. Once both keepers set it the same way it gated nothing, and

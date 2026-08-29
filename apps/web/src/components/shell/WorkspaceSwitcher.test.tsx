@@ -243,6 +243,154 @@ describe('WorkspaceSwitcher', () => {
     expect(screen.queryByRole('button', { name: /new workspace/i })).toBeNull()
   })
 
+  it('renames the workspace in place, without leaving it', async () => {
+    // A display-name edit does not move the address, so nothing navigates
+    // and nothing remounts — which is exactly why the trigger has to be
+    // re-read from what rename ANSWERED. Re-listing would work too; taking
+    // the answer is why the port returns one.
+    const onSwitch = vi.fn()
+    const rename = vi.fn(() =>
+      Promise.resolve({ workspaceId: DESIGN, segment: 'design', displayName: 'Marketing' }),
+    )
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={{
+          ...listOnly([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }]),
+          rename,
+        }}
+        onSwitch={onSwitch}
+      />,
+    )
+    open()
+    fireEvent.click(await screen.findByRole('button', { name: /rename workspace/i }))
+    fireEvent.change(screen.getByLabelText(/^workspace name$/i), {
+      target: { value: 'Marketing' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() =>
+      expect(screen.getByTestId('workspace-switcher-trigger').textContent).toContain('Marketing'),
+    )
+    expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Marketing' })
+    expect(onSwitch).not.toHaveBeenCalled()
+  })
+
+  it('follows the address when a rename moves it', async () => {
+    // The segment IS the address. Renaming it while the URL still says the
+    // old one leaves the page addressing a workspace that no longer answers
+    // to that handle, so the switcher moves the address to what rename
+    // answered with.
+    const onSwitch = vi.fn()
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={{
+          ...listOnly([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }]),
+          rename: () =>
+            Promise.resolve({
+              workspaceId: DESIGN,
+              segment: 'marketing',
+              displayName: 'Design team',
+            }),
+        }}
+        onSwitch={onSwitch}
+      />,
+    )
+    open()
+    fireEvent.click(await screen.findByRole('button', { name: /rename workspace/i }))
+    fireEvent.change(screen.getByLabelText(/workspace address/i), {
+      target: { value: 'marketing' },
+    })
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('marketing'))
+  })
+
+  it('sends only the layers the form actually changed', async () => {
+    // Absent means "leave this layer alone" in the port, and submitting the
+    // unchanged address back would turn every name edit into an address
+    // write — the one call that can fail on a collision, for no reason.
+    const rename = vi.fn(() =>
+      Promise.resolve({ workspaceId: DESIGN, segment: 'design', displayName: 'Renamed' }),
+    )
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={{
+          ...listOnly([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }]),
+          rename,
+        }}
+        onSwitch={vi.fn()}
+      />,
+    )
+    open()
+    fireEvent.click(await screen.findByRole('button', { name: /rename workspace/i }))
+    fireEvent.change(screen.getByLabelText(/^workspace name$/i), { target: { value: 'Renamed' } })
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    await waitFor(() => expect(rename).toHaveBeenCalled())
+    expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Renamed' })
+  })
+
+  it('surfaces a taken address in the form and stays put', async () => {
+    const onSwitch = vi.fn()
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={{
+          ...listOnly([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }]),
+          rename: () => Promise.reject(new Error('Workspace segment "notes" is already taken')),
+        }}
+        onSwitch={onSwitch}
+      />,
+    )
+    open()
+    fireEvent.click(await screen.findByRole('button', { name: /rename workspace/i }))
+    fireEvent.change(screen.getByLabelText(/workspace address/i), { target: { value: 'notes' } })
+    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+    expect((await screen.findByRole('alert')).textContent).toContain('already taken')
+    expect(onSwitch).not.toHaveBeenCalled()
+    // The address the page carries is unchanged, so the subject still reads
+    // as the workspace it is.
+    expect(screen.getByTestId('workspace-switcher-trigger').textContent).toContain('Design team')
+  })
+
+  it('offers no rename when the keeper has no way to rename one', async () => {
+    // Same standing rule as creation: never offer what the keeper cannot
+    // honour. The daemon has no rename route yet.
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={listOnly([
+          { workspaceId: DESIGN, segment: 'design', displayName: 'Design team' },
+          { workspaceId: NOTES, segment: 'notes', displayName: 'Notes' },
+        ])}
+        onSwitch={vi.fn()}
+      />,
+    )
+    open()
+    // The subject is PRESENT before the absence below is claimed.
+    expect(await screen.findByRole('menuitem', { name: /notes/i })).toBeTruthy()
+    expect(screen.queryByRole('button', { name: /rename workspace/i })).toBeNull()
+  })
+
+  it('offers no rename until the list says which workspace the address names', async () => {
+    // Renaming needs the row: the form starts from the name and address the
+    // workspace HAS, and a form pre-filled from a handle alone would offer
+    // to overwrite a display name it never read.
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={{ list: () => new Promise(() => {}), rename: () => Promise.reject(new Error()) }}
+        onSwitch={vi.fn()}
+      />,
+    )
+    open()
+    expect(screen.queryByRole('button', { name: /rename workspace/i })).toBeNull()
+  })
+
   it('renders nothing while the address has not resolved a workspace', () => {
     // A subject the shell cannot name is not one to invent a placeholder
     // for. Asserting the trigger is ABSENT is only meaningful because the

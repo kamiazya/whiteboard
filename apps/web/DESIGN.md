@@ -133,11 +133,23 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   replaced hid itself below two, which is right for narrowing rows and wrong
   for the only door out of one workspace.
 
-  What it OFFERS follows the keeper. Creation appears only where the keeper
-  can actually create — the browser mints its own workspaces, the daemon
-  publishes no write surface for them yet — which is the standing rule below
-  applied to this control. Absent, not disabled: a disabled control says "not
-  right now" about something that is not there at all.
+  What it OFFERS follows the keeper. Creation and renaming appear only where
+  the keeper can actually perform them — the browser mints and renames its
+  own workspaces, the daemon publishes no write surface for them yet — which
+  is the standing rule below applied to this control. Absent, not disabled: a
+  disabled control says "not right now" about something that is not there at
+  all. Renaming additionally waits for the list, because its form starts from
+  the name and address the workspace HAS, and one pre-filled from a handle
+  alone would offer to overwrite a display name it never read.
+
+  **The name and the address are two fields, edited separately.** ADR-0019's
+  middle layer is what every existing link to a workspace says, so deriving
+  it from the display name would break those links each time somebody fixed a
+  typo in the name. Only what the form actually changed is sent — an address
+  field submitted unchanged would turn a name edit into an address write, and
+  the address write is the one that can be refused for a collision. Moving
+  the address moves the URL with it; a name-only rename navigates nowhere and
+  the trigger re-reads its subject from what the rename answered.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over
