@@ -280,7 +280,7 @@ describe('saveDocument / loadDocument', () => {
     // And the edit is in the delta log, small.
     const { updates } = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
     expect(updates).toHaveLength(1)
-    expect(updates[0]!.byteLength).toBeLessThan(baseline!.totalBytes / 10)
+    expect(updates[0]!.byteLength).toBeLessThan(baseline!.manifest.totalBytes / 10)
   })
 
   it('does not grow the delta log when the document has not changed', async () => {

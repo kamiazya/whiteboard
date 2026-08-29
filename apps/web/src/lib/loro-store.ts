@@ -263,7 +263,8 @@ export class LoroStore {
       // out is what made appending cost as much as the document was big:
       // measured at 9 / 23 / 85 ms against snapshots of 0.5 / 2 / 8 MB, for
       // an operation that writes 88 bytes.
-      if ((await this.#store.readSnapshotManifest({ docRef })) === null) return
+      const header = await this.#store.readSnapshotManifest({ docRef })
+      if (header === null) return
 
       const existing = (await this.#store.loadDeltas({ docRef, sinceFrontier: EMPTY_FRONTIER }))
         .updates
@@ -302,17 +303,28 @@ export class LoroStore {
         const { manifest, chunks } = chunkSnapshot(folded, MAX_CHUNK_BYTES)
         // One operation, not save-then-clear: the port has it precisely so
         // this cannot drop an append that lands between the two halves.
-        await this.#store.saveCompactedSnapshot({
+        const written = await this.#store.saveCompactedSnapshot({
           docRef,
           manifest,
           chunks,
           frontier: EMPTY_FRONTIER,
+          // ADR-0020. `#serialise` orders folds within THIS tab; the fence is
+          // what covers a second tab on the same IndexedDB. A refusal means
+          // another tab folded first, so the delta goes to the log instead —
+          // losing the race costs a fold, never an edit.
+          expectedGeneration: header.generation,
           // What the fold consumed: the log AS READ. The new delta is folded
           // in too but was never written, so it is not part of the count —
           // and anything appended since this read is neither superseded nor
           // in the snapshot, which is exactly what the count protects.
           supersededDeltaCount: existing.length,
         })
+        if (!written.ok) {
+          await this.#store.appendDeltas({
+            docRef,
+            deltaBatch: { updates: [new Uint8Array(delta)], newFrontier: EMPTY_FRONTIER },
+          })
+        }
       }
       await this.#touch(documentId)
     })

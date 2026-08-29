@@ -57,18 +57,29 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
    */
   async save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
     const docRef = refOf(workspaceId)
-    const manifest = await this.store.readSnapshotManifest({ docRef })
-    if (manifest === null) {
+    const header = await this.store.readSnapshotManifest({ docRef })
+    if (header === null) {
       const snapshot = doc.export({ mode: 'snapshot' })
       const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
-      await this.store.saveSnapshot({
+      // The whole history as one update: what an empty peer needs, and also
+      // what this call appends if it loses the race below.
+      const update = new Uint8Array(doc.export({ mode: 'update' }))
+      const created = await this.store.saveCompactedSnapshot({
         docRef,
         manifest: fresh,
         chunks,
         frontier: new Uint8Array(doc.oplogVersion().encode()),
+        // Nothing to supersede: there is no log this snapshot folded.
+        supersededDeltaCount: 0,
+        expectedGeneration: null,
       })
-      // The whole history as one update: what an empty peer needs.
-      return new Uint8Array(doc.export({ mode: 'update' }))
+      if (created.ok) return update
+      // Another writer minted the snapshot between the read and the write.
+      // Theirs does not contain these ops, so appending is the only move that
+      // keeps both — replacing it would be the lost update this fence exists
+      // to stop (ADR-0020).
+      await this.appendInstead(docRef, doc, update)
+      return update
     }
 
     const stored = await this.store.readFrontier({ docRef })
@@ -88,13 +99,20 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     if (shouldCompact([...existing, update])) {
       const snapshot = doc.export({ mode: 'snapshot' })
       const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
-      await this.store.saveCompactedSnapshot({
+      const folded = await this.store.saveCompactedSnapshot({
         docRef,
         manifest: fresh,
         chunks,
         frontier: new Uint8Array(doc.oplogVersion().encode()),
         supersededDeltaCount: existing.length,
+        expectedGeneration: header.generation,
       })
+      if (folded.ok) return update
+      // Refused: someone else folded first, and this doc's new ops are in the
+      // snapshot we did NOT write. Appending them is what makes losing the
+      // race cost a delay rather than an edit — the whole reason the refusal
+      // is an outcome and not an error.
+      await this.appendInstead(docRef, doc, update)
       return update
     }
     await this.store.appendDeltas({
@@ -105,5 +123,23 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       },
     })
     return update
+  }
+
+  /**
+   * The one move available after a refused fold: put the ops in the log
+   * instead of the snapshot.
+   *
+   * Not merged with the plain append path above because the reason differs
+   * and the reason is the whole point — this one runs having just decided not
+   * to overwrite another writer's snapshot.
+   */
+  private async appendInstead(docRef: DocRef, doc: LoroDoc, update: Uint8Array): Promise<void> {
+    await this.store.appendDeltas({
+      docRef,
+      deltaBatch: {
+        updates: [new Uint8Array(update)],
+        newFrontier: new Uint8Array(doc.oplogVersion().encode()),
+      },
+    })
   }
 }

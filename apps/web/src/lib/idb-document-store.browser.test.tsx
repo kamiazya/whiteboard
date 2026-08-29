@@ -142,7 +142,7 @@ describe('IdbDocumentStore layout', () => {
     // a read, since a caller sees answers and not the work behind them.
     await withRaw((db) => clear(db, SYNC_SNAPSHOT_CHUNKS_STORE))
 
-    expect(await store.readSnapshotManifest({ docRef })).toEqual(manifest)
+    expect((await store.readSnapshotManifest({ docRef }))?.manifest).toEqual(manifest)
     // The discriminator: the operation that does need the bytes now refuses,
     // so the assertion above cannot be passing because the chunks were still
     // there.

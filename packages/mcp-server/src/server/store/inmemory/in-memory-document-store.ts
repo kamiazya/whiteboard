@@ -14,6 +14,7 @@ import type {
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
@@ -35,11 +36,14 @@ interface DocRecord {
   } | null
   readonly frontier: Frontier | null
   readonly deltas: readonly Uint8Array[]
+  /** ADR-0020's fencing token. Advanced by every write that replaces the
+   *  snapshot; meaningless while `snapshot` is null. */
+  readonly generation: number
   readonly unreadable?: StoredDocumentUnreadableCode
 }
 
 function emptyRecord(): DocRecord {
-  return { snapshot: null, frontier: null, deltas: [] }
+  return { snapshot: null, frontier: null, deltas: [], generation: 0 }
 }
 
 function cloneChunk(chunk: SnapshotChunk): SnapshotChunk {
@@ -86,7 +90,7 @@ export class InMemoryDocumentStore implements DocumentStore {
     if (!record?.snapshot || !record.frontier) {
       return null
     }
-    return record.snapshot.manifest
+    return { manifest: record.snapshot.manifest, generation: record.generation }
   }
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
@@ -122,6 +126,9 @@ export class InMemoryDocumentStore implements DocumentStore {
         chunks: input.chunks.map(cloneChunk),
       },
       frontier: cloneBytes(input.frontier),
+      // Unconditional, but still fenced: a fold computed against the content
+      // this call just replaced must not be accepted afterwards and undo it.
+      generation: existing.generation + 1,
     })
   }
 
@@ -131,16 +138,26 @@ export class InMemoryDocumentStore implements DocumentStore {
    * was not: the await let a concurrent `appendDeltas` land in between, and
    * the clear then threw away an update that could not be in the snapshot.
    */
-  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(
+    input: SaveCompactedSnapshotInput,
+  ): Promise<SaveCompactedSnapshotResult> {
     const key = docRefKey(input.docRef)
     const existing = this.getRecord(key)
+    // `null` expects no snapshot; a number expects exactly that generation.
+    const current = existing.snapshot === null ? null : existing.generation
+    if (current !== input.expectedGeneration) {
+      return { ok: false, currentGeneration: current }
+    }
+    const generation = existing.generation + 1
     this.docs.set(key, {
       snapshot: { manifest: input.manifest, chunks: input.chunks.map(cloneChunk) },
       frontier: cloneBytes(input.frontier),
       // Exactly the superseded prefix. Anything appended after the caller
       // folded is not in the snapshot and stays.
       deltas: existing.deltas.slice(input.supersededDeltaCount),
+      generation,
     })
+    return { ok: true, generation }
   }
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {

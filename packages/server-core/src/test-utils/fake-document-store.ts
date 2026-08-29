@@ -13,6 +13,7 @@ import type {
   ReadFrontierResult,
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
@@ -54,7 +55,8 @@ export class FakeDocumentStore implements DocumentStore {
   async readSnapshotManifest(
     input: ReadSnapshotManifestInput,
   ): Promise<ReadSnapshotManifestResult> {
-    return this.saved.get(docRefKey(input.docRef))?.manifest ?? null
+    const stored = this.saved.get(docRefKey(input.docRef))
+    return stored === undefined ? null : { manifest: stored.manifest, generation: 1 }
   }
 
   async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
@@ -62,8 +64,12 @@ export class FakeDocumentStore implements DocumentStore {
   }
 
   /** No delta log here, so compacting one is the save. */
-  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<SaveCompactedSnapshotResult> {
     this.saved.set(docRefKey(input.docRef), input)
+    // Unconditional: this double has one writer by construction, so the fence
+    // has nothing to arbitrate. Reporting `ok` keeps a route under test on the
+    // path it takes in production rather than the refusal branch.
+    return { ok: true, generation: 1 }
   }
 
   async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {

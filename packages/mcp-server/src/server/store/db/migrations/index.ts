@@ -17,6 +17,7 @@ import { migration as versionsBranchesWorkspaceId } from './0015-versions-branch
 import { migration as dropDocumentsFk } from './0016-drop-documents-fk.js'
 import { migration as dropDocumentsTable } from './0017-drop-documents-table.js'
 import { migration as workspaceSegment } from './0018-workspace-segment.js'
+import { migration as snapshotGeneration } from './0019-snapshot-generation.js'
 
 // Ordered map; kysely sorts by key so the numeric prefix decides execution order.
 // 0003 still says `canvas-doc-store` after the port it creates was renamed to
@@ -45,4 +46,5 @@ export const migrations: Record<string, Migration> = {
   '0016-drop-documents-fk': dropDocumentsFk,
   '0017-drop-documents-table': dropDocumentsTable,
   '0018-workspace-segment': workspaceSegment,
+  '0019-snapshot-generation': snapshotGeneration,
 }

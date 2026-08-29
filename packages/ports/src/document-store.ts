@@ -57,6 +57,18 @@ export const saveSnapshotInputSchema = z
 export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
 
 /**
+ * A fencing token for the stored snapshot, advanced by every write that
+ * replaces it (ADR-0020).
+ *
+ * Read alongside the manifest and presented back on a fold, it is what makes
+ * the fold conditional. Opaque on purpose beyond "it changes": a caller
+ * compares it for equality and never does arithmetic on it, so a store is
+ * free to implement it as a counter, a row version, or a clock.
+ */
+export const snapshotGenerationSchema = z.number().int().min(0)
+export type SnapshotGeneration = z.infer<typeof snapshotGenerationSchema>
+
+/**
  * A snapshot that already contains the first `supersededDeltaCount` entries of
  * the document's delta log.
  *
@@ -69,8 +81,33 @@ export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
  */
 export const saveCompactedSnapshotInputSchema = saveSnapshotInputSchema.safeExtend({
   supersededDeltaCount: z.number().int().min(0),
+  /**
+   * The generation this fold was computed against, or `null` to mean "there
+   * was no snapshot" — the create half of the same conditional write, so
+   * racing to mint a document needs no second operation.
+   *
+   * Required rather than optional. An optional fence is one a caller forgets,
+   * and the shape it protects against — a second folder replacing the
+   * snapshot this one is about to write — is invisible in a single-process
+   * test run.
+   */
+  expectedGeneration: snapshotGenerationSchema.nullable(),
 })
 export type SaveCompactedSnapshotInput = z.infer<typeof saveCompactedSnapshotInputSchema>
+
+/**
+ * A refusal is an OUTCOME, not an error: losing the race is expected under
+ * concurrency and the caller's answer is to append its update to the log
+ * instead. Throwing would push a routine control-flow branch through a catch,
+ * where it reads as a failure worth logging.
+ */
+export const saveCompactedSnapshotResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), generation: snapshotGenerationSchema }).strict(),
+  z
+    .object({ ok: z.literal(false), currentGeneration: snapshotGenerationSchema.nullable() })
+    .strict(),
+])
+export type SaveCompactedSnapshotResult = z.infer<typeof saveCompactedSnapshotResultSchema>
 
 export const appendDeltasInputSchema = z
   .object({ docRef: docRefSchema, deltaBatch: deltaBatchSchema })
@@ -99,7 +136,10 @@ export type ReadFrontierResult = z.infer<typeof readFrontierResultSchema>
 export const readSnapshotManifestInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type ReadSnapshotManifestInput = z.infer<typeof readSnapshotManifestInputSchema>
 
-export const readSnapshotManifestResultSchema = snapshotManifestSchema.nullable()
+export const readSnapshotManifestResultSchema = z
+  .object({ manifest: snapshotManifestSchema, generation: snapshotGenerationSchema })
+  .strict()
+  .nullable()
 export type ReadSnapshotManifestResult = z.infer<typeof readSnapshotManifestResultSchema>
 
 export const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
@@ -161,7 +201,7 @@ export interface DocumentStore {
    * Without this a log has no way to stop growing while the document lives:
    * `deleteDoc` is the only other thing that clears one.
    */
-  saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void>
+  saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<SaveCompactedSnapshotResult>
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>
   loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult>
   readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult>

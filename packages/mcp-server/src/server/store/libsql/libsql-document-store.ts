@@ -14,11 +14,12 @@ import type {
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
   SnapshotChunk,
 } from '@kamiazya/whiteboard-ports'
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
-import type { Kysely, Transaction } from 'kysely'
+import { type Kysely, sql, type Transaction } from 'kysely'
 import { getLogger } from '../../log.js'
 import type { DatabaseSchema } from '../db/schema.js'
 import { cloneBytes } from '../inmemory/clone-bytes.js'
@@ -90,7 +91,7 @@ export class LibsqlDocumentStore implements DocumentStore {
   private async readSnapshotHeader(docKey: string): Promise<ReadSnapshotManifestResult> {
     const header = await this.db
       .selectFrom('documentSnapshots')
-      .select(['chunkCount', 'totalBytes', 'maxChunkBytes'])
+      .select(['chunkCount', 'totalBytes', 'maxChunkBytes', 'generation'])
       .where('docKey', '=', docKey)
       .executeTakeFirst()
     if (!header) {
@@ -107,18 +108,22 @@ export class LibsqlDocumentStore implements DocumentStore {
       )
     }
     return {
-      chunkCount: header.chunkCount,
-      totalBytes: header.totalBytes,
-      maxChunkBytes: header.maxChunkBytes,
+      manifest: {
+        chunkCount: header.chunkCount,
+        totalBytes: header.totalBytes,
+        maxChunkBytes: header.maxChunkBytes,
+      },
+      generation: header.generation,
     }
   }
 
   async loadSnapshot({ docRef }: LoadSnapshotInput): Promise<LoadSnapshotResult> {
     const docKey = docRefKey(docRef)
-    const manifest = await this.readSnapshotHeader(docKey)
-    if (manifest === null) {
+    const header = await this.readSnapshotHeader(docKey)
+    if (header === null) {
       return null
     }
+    const { manifest } = header
 
     const [chunkRows, frontier] = await Promise.all([
       this.db
@@ -164,6 +169,7 @@ export class LibsqlDocumentStore implements DocumentStore {
           totalBytes: manifest.totalBytes,
           maxChunkBytes: manifest.maxChunkBytes,
           frontier: frontierBlob,
+          generation: 1,
         })
         .onConflict((oc) =>
           oc.column('docKey').doUpdateSet({
@@ -171,6 +177,11 @@ export class LibsqlDocumentStore implements DocumentStore {
             totalBytes: manifest.totalBytes,
             maxChunkBytes: manifest.maxChunkBytes,
             frontier: frontierBlob,
+            // Bare `generation` in a DO UPDATE SET refers to the EXISTING
+            // row, so this advances the fence rather than resetting it to the
+            // literal above. An authoritative overwrite is unconditional but
+            // must still invalidate a fold computed against what it replaced.
+            generation: sql<number>`generation + 1`,
           }),
         )
         .execute()
@@ -198,12 +209,28 @@ export class LibsqlDocumentStore implements DocumentStore {
 
   /**
    * One transaction, so a concurrent `appendDeltas` cannot land between the
-   * save and the clear and be silently dropped.
+   * save and the clear and be silently dropped — and so the fence is read and
+   * acted on without another writer slipping between the two. SQLite
+   * serialises write transactions, which is what makes the read-then-write
+   * below a compare-and-swap rather than a check that races.
    */
-  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(
+    input: SaveCompactedSnapshotInput,
+  ): Promise<SaveCompactedSnapshotResult> {
     const docKey = docRefKey(input.docRef)
     const frontierBlob = toBlob(input.frontier)
-    await this.db.transaction().execute(async (trx) => {
+    return this.db.transaction().execute(async (trx) => {
+      const existing = await trx
+        .selectFrom('documentSnapshots')
+        .select('generation')
+        .where('docKey', '=', docKey)
+        .executeTakeFirst()
+      // `null` expects no snapshot; a number expects exactly that generation.
+      const current = existing?.generation ?? null
+      if (current !== input.expectedGeneration) {
+        return { ok: false as const, currentGeneration: current }
+      }
+      const generation = (current ?? 0) + 1
       await trx
         .insertInto('documentSnapshots')
         .values({
@@ -212,6 +239,7 @@ export class LibsqlDocumentStore implements DocumentStore {
           totalBytes: input.manifest.totalBytes,
           maxChunkBytes: input.manifest.maxChunkBytes,
           frontier: frontierBlob,
+          generation,
         })
         .onConflict((oc) =>
           oc.column('docKey').doUpdateSet({
@@ -219,6 +247,7 @@ export class LibsqlDocumentStore implements DocumentStore {
             totalBytes: input.manifest.totalBytes,
             maxChunkBytes: input.manifest.maxChunkBytes,
             frontier: frontierBlob,
+            generation,
           }),
         )
         .execute()
@@ -256,8 +285,9 @@ export class LibsqlDocumentStore implements DocumentStore {
           .execute()
       }
       await upsertFrontier(trx, docKey, input.frontier)
+      log.debug({ docKey, chunkCount: input.manifest.chunkCount }, 'saved compacted snapshot')
+      return { ok: true as const, generation }
     })
-    log.debug({ docKey, chunkCount: input.manifest.chunkCount }, 'saved compacted snapshot')
   }
 
   /**
@@ -275,6 +305,7 @@ export class LibsqlDocumentStore implements DocumentStore {
         totalBytes: 0,
         maxChunkBytes: -1,
         frontier: toBlob(new Uint8Array()),
+        generation: 1,
       })
       .onConflict((oc) => oc.column('docKey').doUpdateSet({ maxChunkBytes: -1 }))
       .execute()

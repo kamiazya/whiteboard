@@ -750,7 +750,7 @@ export interface CompactResult {
   compacted: boolean
   beforeBytes: number
   afterBytes: number
-  reason?: 'no-versions' | 'no-file' | 'no-gain' | 'ok'
+  reason?: 'no-versions' | 'no-file' | 'no-gain' | 'raced' | 'ok'
 }
 
 /**
@@ -850,10 +850,11 @@ export async function compactDocument(
   // read that decides the shallow snapshot and the write that persists it
   // see no concurrent tree write in between.
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const manifest = await documentStore.readSnapshotManifest({ docRef })
-    if (manifest === null) {
+    const header = await documentStore.readSnapshotManifest({ docRef })
+    if (header === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
+    const { manifest } = header
     const { updates: storedDeltas } = await documentStore.loadDeltas({
       docRef,
       sinceFrontier: new Uint8Array(),
@@ -886,7 +887,7 @@ export async function compactDocument(
       new Uint8Array(shallow),
       SNAPSHOT_MAX_CHUNK_BYTES,
     )
-    await documentStore.saveCompactedSnapshot({
+    const folded = await documentStore.saveCompactedSnapshot({
       docRef,
       manifest: fresh,
       chunks,
@@ -895,7 +896,20 @@ export async function compactDocument(
       // above is neither in `shallow` nor superseded by it, and dropping it
       // would lose an edit that arrived while compaction ran.
       supersededDeltaCount: storedDeltas.length,
+      // ADR-0020. The workspace lock above serialises writers inside THIS
+      // process; the fence is what covers a second process. Ignoring the
+      // refusal is deliberate here and only here: this path folds history
+      // that is already durable rather than carrying new ops, so losing the
+      // race costs a compaction, not an edit, and the next save folds again.
+      expectedGeneration: header.generation,
     })
+    if (!folded.ok) {
+      // Another writer replaced the snapshot while this fold ran. Nothing was
+      // written and nothing was lost — this fold carried no new ops, only a
+      // shorter rendering of history that is already durable — so the honest
+      // answer is that no compaction happened, and the next save folds again.
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'raced' }
+    }
     // Compaction folds the WORKSPACE record's oplog, so the timestamp the
     // storage report shows describes the workspace, on the workspace meta.
     // Written after the compacted snapshot, as a small delta on top of it.

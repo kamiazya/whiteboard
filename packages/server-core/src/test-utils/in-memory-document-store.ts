@@ -12,6 +12,7 @@ import type {
   ReadFrontierResult,
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 
@@ -41,18 +42,25 @@ export function createInMemoryDocumentStore(): DocumentStore {
     ): Promise<ReadSnapshotManifestResult> {
       const stored = snapshots.get(docRefKey(input.docRef))
       if (!stored) return null
-      return structuredClone(stored.manifest) as ReadSnapshotManifestResult
+      return {
+        manifest: structuredClone(stored.manifest),
+        generation: 1,
+      } as ReadSnapshotManifestResult
     },
     async saveSnapshot(input: SaveSnapshotInput): Promise<void> {
       const { docRef, manifest, chunks, frontier } = input
       snapshots.set(docRefKey(docRef), structuredClone({ manifest, chunks, frontier }))
     },
-    async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<void> {
+    async saveCompactedSnapshot(input: SaveSnapshotInput): Promise<SaveCompactedSnapshotResult> {
       // This double keeps no delta log — `appendDeltas` refuses — so
       // compacting one is just the save. Left as a delegation rather than a
       // refusal because a route under test may legitimately compact.
       const { docRef, manifest, chunks, frontier } = input
       snapshots.set(docRefKey(docRef), structuredClone({ manifest, chunks, frontier }))
+      // Unconditional: one writer by construction, so the fence has nothing
+      // to arbitrate and a route under test stays on the path it takes in
+      // production rather than the refusal branch.
+      return { ok: true, generation: 1 }
     },
     async appendDeltas(_input: AppendDeltasInput): Promise<AppendDeltasResult> {
       throw new Error('appendDeltas is not supported by createInMemoryDocumentStore')

@@ -40,6 +40,7 @@ import type {
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { docRefKey, StoredDocumentUnreadableError } from '@kamiazya/whiteboard-ports'
@@ -70,7 +71,12 @@ const chunkSchema = z.object({
 /** One document's chunks, as they come back out of their store. */
 const chunksSchema = z.array(chunkSchema)
 
-const syncRecordSchema = z
+// The v2 envelope, kept only to be READ. ADR-0020 added the fencing
+// generation, and the outer object is `.strict()`, so a v3 record is not a v2
+// record with a field — an older cached bundle would report it malformed.
+// Reading v2 and writing v3 is what stops a tab that has not picked up the
+// new build from turning a live document into an unreadable one.
+const syncRecordV2Schema = z
   .object({
     v: z.literal(2),
     snapshot: z
@@ -97,9 +103,40 @@ const syncRecordSchema = z
     message: 'a stored snapshot must carry the frontier it was saved with',
   })
 
+const syncRecordSchema = z
+  .object({
+    v: z.literal(3),
+    snapshot: z
+      .object({
+        manifest: z.object({
+          chunkCount: z.number().int().min(0),
+          totalBytes: z.number().int().min(0),
+          maxChunkBytes: z.number().int().positive(),
+        }),
+      })
+      .strict()
+      .nullable(),
+    frontier: storedBytesSchema.nullable(),
+    deltas: z.array(storedBytesSchema),
+    // ADR-0020's fencing token. Two TABS share this database, so the fold
+    // race this arbitrates is not hypothetical here — it is the same race the
+    // daemon has between processes.
+    generation: z.number().int().min(0),
+  })
+  .strict()
+  .refine((record) => record.snapshot === null || record.frontier !== null, {
+    message: 'a stored snapshot must carry the frontier it was saved with',
+  })
+
 type SyncRecord = z.infer<typeof syncRecordSchema>
 
-const EMPTY_RECORD: SyncRecord = { v: 2, snapshot: null, frontier: null, deltas: [] }
+const EMPTY_RECORD: SyncRecord = {
+  v: 3,
+  snapshot: null,
+  frontier: null,
+  deltas: [],
+  generation: 0,
+}
 
 /**
  * Every chunk of one document, as a key range.
@@ -130,8 +167,13 @@ function chunkRange(key: string): IDBKeyRange {
 function parseRecord(key: string, raw: unknown): SyncRecord {
   const parsed = syncRecordSchema.safeParse(raw)
   if (parsed.success) return parsed.data
+  // A v2 record is a v3 record that has never been folded under a fence.
+  // Lifted on READ rather than by a sweep: the next write emits v3, and a
+  // document nobody opens costs nothing by staying as it is.
+  const legacy = syncRecordV2Schema.safeParse(raw)
+  if (legacy.success) return { ...legacy.data, v: 3, generation: 1 }
   const version = (raw as { v?: unknown } | null)?.v
-  if (typeof version === 'number' && version !== 2) {
+  if (typeof version === 'number' && version !== 2 && version !== 3) {
     throw new StoredDocumentUnreadableError(
       'unsupported-version',
       `Stored document ${key} was written in envelope version ${version}`,
@@ -210,7 +252,7 @@ export class IdbDocumentStore implements DocumentStore {
     // grows.
     await this.#read('readonly', docRefKey(input.docRef), [SYNC_DOCUMENTS_STORE], (record) => {
       if (record.snapshot === null || record.frontier === null) return
-      result = record.snapshot.manifest
+      result = { manifest: record.snapshot.manifest, generation: record.generation }
     })
     return result
   }
@@ -289,6 +331,10 @@ export class IdbDocumentStore implements DocumentStore {
           // document at a point, so the previous chunks have to go with it.
           snapshot: { manifest: input.manifest },
           frontier: copy(input.frontier),
+          // Unconditional, but still fenced: a fold computed against the
+          // content this call just replaced must not be accepted afterwards
+          // and undo it.
+          generation: record.generation + 1,
         }
         await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
         await writeChunks(tx, key, input.chunks)
@@ -345,26 +391,42 @@ export class IdbDocumentStore implements DocumentStore {
    * save and the clear and be silently dropped. That window is the whole
    * reason this is an operation rather than two calls at the call site.
    */
-  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(
+    input: SaveCompactedSnapshotInput,
+  ): Promise<SaveCompactedSnapshotResult> {
     const key = docRefKey(input.docRef)
+    let result: SaveCompactedSnapshotResult = { ok: false, currentGeneration: null }
     await this.#read(
       'readwrite',
       key,
       [SYNC_DOCUMENTS_STORE, SYNC_SNAPSHOT_CHUNKS_STORE],
       async (record, tx) => {
+        // `null` expects no snapshot; a number expects exactly that
+        // generation. The comparison and the write share one IndexedDB
+        // transaction, which is what makes this a compare-and-swap rather
+        // than a check another tab can slip past.
+        const current = record.snapshot === null ? null : record.generation
+        if (current !== input.expectedGeneration) {
+          result = { ok: false, currentGeneration: current }
+          return
+        }
+        const generation = (current ?? 0) + 1
         const next: SyncRecord = {
-          v: 2,
+          v: 3,
           snapshot: { manifest: input.manifest },
           frontier: copy(input.frontier),
           // The half `saveSnapshot` does not do — but only the SUPERSEDED
           // prefix. Anything appended after the caller folded is not in the
           // snapshot, so clearing the whole log would lose it.
           deltas: record.deltas.slice(input.supersededDeltaCount),
+          generation,
         }
         await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
         await writeChunks(tx, key, input.chunks)
+        result = { ok: true, generation }
       },
     )
+    return result
   }
 
   /**

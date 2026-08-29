@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { DocRef, DocumentStore, SnapshotChunk } from '../index.js'
+import type { DocRef, DocumentStore, SaveCompactedSnapshotInput, SnapshotChunk } from '../index.js'
 import { isStoredDocumentUnreadableError } from '../index.js'
 
 /**
@@ -98,6 +98,29 @@ export function describeDocumentStoreConformance(
 
   const EMPTY = { manifest: { chunkCount: 0, totalBytes: 0, maxChunkBytes: 4 }, chunks: [] }
 
+  /**
+   * Fold, reading the fence immediately before and asserting the write was
+   * ACCEPTED.
+   *
+   * A refused fold does nothing and returns, so a case that merely called
+   * `saveCompactedSnapshot` and then asserted the result would pass against a
+   * store that refused every one of them — the assertions would be reading
+   * the state the fold was supposed to change, unchanged. Every case below
+   * that folds as a SETUP step goes through here; the cases that are ABOUT
+   * refusal call the port directly.
+   */
+  async function foldAccepted(
+    store: DocumentStore,
+    input: Omit<SaveCompactedSnapshotInput, 'expectedGeneration'>,
+  ): Promise<void> {
+    const read = await store.readSnapshotManifest({ docRef: input.docRef })
+    const result = await store.saveCompactedSnapshot({
+      ...input,
+      expectedGeneration: read?.generation ?? null,
+    })
+    if (!result.ok) throw new Error('expected the fold to be accepted')
+  }
+
   describe('DocumentStore conformance', () => {
     it('answers null before anything has been saved', async () => {
       await withStore(async (store) => {
@@ -139,9 +162,11 @@ export function describeDocumentStoreConformance(
         const payload = chunked([bytes(1, 2, 3, 4), bytes(5, 6), bytes(7)])
         await store.saveSnapshot({ docRef: DOC, ...payload, frontier: bytes(9, 9) })
 
-        expect(await store.readSnapshotManifest({ docRef: DOC })).toEqual(payload.manifest)
+        expect((await store.readSnapshotManifest({ docRef: DOC }))?.manifest).toEqual(
+          payload.manifest,
+        )
         // The same value `loadSnapshot` reports, not merely a plausible one.
-        expect(await store.readSnapshotManifest({ docRef: DOC })).toEqual(
+        expect((await store.readSnapshotManifest({ docRef: DOC }))?.manifest).toEqual(
           (await store.loadSnapshot({ docRef: DOC }))?.manifest,
         )
         // Scoped like every other operation: another document's snapshot is
@@ -163,13 +188,15 @@ export function describeDocumentStoreConformance(
           deltaBatch: { updates: [bytes(8)], newFrontier: bytes(2) },
         })
         const compacted = chunked([bytes(9, 9, 9)])
-        await store.saveCompactedSnapshot({
+        await foldAccepted(store, {
           docRef: DOC,
           ...compacted,
           frontier: bytes(3),
           supersededDeltaCount: 1,
         })
-        expect(await store.readSnapshotManifest({ docRef: DOC })).toEqual(compacted.manifest)
+        expect((await store.readSnapshotManifest({ docRef: DOC }))?.manifest).toEqual(
+          compacted.manifest,
+        )
 
         await store.deleteDoc({ docRef: DOC })
         expect(await store.readSnapshotManifest({ docRef: DOC })).toBeNull()
@@ -356,7 +383,7 @@ export function describeDocumentStoreConformance(
           deltaBatch: { updates: [bytes(2), bytes(3)], newFrontier: bytes(3) },
         })
 
-        await store.saveCompactedSnapshot({
+        await foldAccepted(store, {
           docRef: DOC,
           ...chunked([bytes(1, 2, 3)]),
           frontier: bytes(3),
@@ -380,7 +407,7 @@ export function describeDocumentStoreConformance(
           docRef: OTHER,
           deltaBatch: { updates: [bytes(9)], newFrontier: bytes(9) },
         })
-        await store.saveCompactedSnapshot({
+        await foldAccepted(store, {
           docRef: DOC,
           ...chunked([bytes(1)]),
           frontier: bytes(1),
@@ -409,7 +436,7 @@ export function describeDocumentStoreConformance(
           deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
         })
 
-        const compacting = store.saveCompactedSnapshot({
+        const compacting = foldAccepted(store, {
           docRef: DOC,
           ...chunked([bytes(1, 2)]),
           frontier: bytes(2),
@@ -428,6 +455,115 @@ export function describeDocumentStoreConformance(
         // edit — which is the only outcome this case rejects, and an empty
         // log is exactly that outcome rather than an alternative to it.
         expect(updates.map((update) => [...update])).toContainEqual([3])
+      })
+    })
+
+    /**
+     * ADR-0020. The count above protects a concurrent APPEND; nothing
+     * protected a concurrent COMPACTION, and that one loses ops outright
+     * rather than merely reordering them: the folding caller's own new ops go
+     * into the snapshot and were never appended as a delta, so when a second
+     * folder replaces that snapshot they exist nowhere. A generation read
+     * with the manifest and presented back on the write is what makes the
+     * replace conditional.
+     */
+    it('refuses a fold whose generation another writer already replaced', async () => {
+      await withStore(async (store) => {
+        await store.saveSnapshot({ docRef: DOC, ...chunked([bytes(1)]), frontier: bytes(1) })
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+        })
+        const read = await store.readSnapshotManifest({ docRef: DOC })
+        if (read === null) throw new Error('expected a stored snapshot')
+
+        // Two writers folded the same log and hold the same generation.
+        const winner = await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1, 2)]),
+          frontier: bytes(2),
+          supersededDeltaCount: 1,
+          expectedGeneration: read.generation,
+        })
+        expect(winner.ok).toBe(true)
+
+        const loser = await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(9)]),
+          frontier: bytes(9),
+          supersededDeltaCount: 1,
+          expectedGeneration: read.generation,
+        })
+        expect(loser.ok).toBe(false)
+        if (loser.ok) throw new Error('unreachable')
+        // Reported so the loser can re-read rather than guess.
+        expect(loser.currentGeneration).not.toBe(read.generation)
+
+        // The refusal is total: the loser wrote no chunks, no frontier, and
+        // deleted no deltas. Asserting the stored bytes rather than only the
+        // flag is what catches a store that reports `ok: false` after
+        // half-applying the write.
+        const stored = await store.loadSnapshot({ docRef: DOC })
+        expect(stored?.chunks.flatMap((chunk) => [...chunk.bytes])).toEqual([1, 2])
+      })
+    })
+
+    it('refuses a first snapshot when another writer already created one', async () => {
+      await withStore(async (store) => {
+        const winner = await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1)]),
+          frontier: bytes(1),
+          supersededDeltaCount: 0,
+          // `null` is "expect no snapshot" — the create half of the same
+          // conditional write, so a caller racing to mint a document does not
+          // need a second operation with its own semantics.
+          expectedGeneration: null,
+        })
+        expect(winner.ok).toBe(true)
+
+        const loser = await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(9)]),
+          frontier: bytes(9),
+          supersededDeltaCount: 0,
+          expectedGeneration: null,
+        })
+        expect(loser.ok).toBe(false)
+
+        const stored = await store.loadSnapshot({ docRef: DOC })
+        expect(stored?.chunks.flatMap((chunk) => [...chunk.bytes])).toEqual([1])
+      })
+    })
+
+    /**
+     * `saveSnapshot` stays UNCONDITIONAL — it is the authoritative write
+     * (create, import, restore), where the caller's content is the answer
+     * rather than a fold of what it read. It must still advance the
+     * generation, or a fold of the content it replaced would be accepted
+     * afterwards and silently undo it.
+     */
+    it('advances the generation on an authoritative overwrite', async () => {
+      await withStore(async (store) => {
+        await store.saveSnapshot({ docRef: DOC, ...chunked([bytes(1)]), frontier: bytes(1) })
+        const before = await store.readSnapshotManifest({ docRef: DOC })
+        if (before === null) throw new Error('expected a stored snapshot')
+
+        await store.saveSnapshot({ docRef: DOC, ...chunked([bytes(5)]), frontier: bytes(5) })
+        const after = await store.readSnapshotManifest({ docRef: DOC })
+        if (after === null) throw new Error('expected a stored snapshot')
+        expect(after.generation).not.toBe(before.generation)
+
+        const stale = await store.saveCompactedSnapshot({
+          docRef: DOC,
+          ...chunked([bytes(1, 2)]),
+          frontier: bytes(2),
+          supersededDeltaCount: 0,
+          expectedGeneration: before.generation,
+        })
+        expect(stale.ok).toBe(false)
+        const stored = await store.loadSnapshot({ docRef: DOC })
+        expect(stored?.chunks.flatMap((chunk) => [...chunk.bytes])).toEqual([5])
       })
     })
 
