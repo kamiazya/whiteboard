@@ -23,6 +23,10 @@ function render(ui: ReactElement, options?: RenderOptions) {
 
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
+// A real canonical id, so a test that says "not the raw identifier" is
+// checking against the shape ADR-0019 actually mints.
+const WS_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
     status,
@@ -46,7 +50,7 @@ function withSummaryDefaults(
 }
 
 interface MockRoutes {
-  workspaces: Array<{ workspaceId: string }>
+  workspaces: Array<{ workspaceId: string; segment?: string; displayName?: string }>
   documentsByWorkspace: Record<
     string,
     Array<{ path: string; updatedAt: string; id?: string; kind?: string; displayName?: string }>
@@ -640,6 +644,102 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
     expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
+  })
+
+  it('opens a document under the workspace segment, not its canonical id', async () => {
+    // ADR-0019: the visible URL carries the human-readable segment. This page
+    // is where a daemon URL is born — `onOpenDocument` is what App.tsx turns
+    // into `/w/:handle/document/:path` — so a raw ULID handed over here is a
+    // raw ULID in the address bar.
+    installFetchMock({
+      workspaces: [{ workspaceId: WS_ULID, segment: 'design-team' }],
+      documentsByWorkspace: {
+        // Keyed under BOTH so this test is about the handle `onOpenDocument`
+        // receives, and not about which one the fetch used.
+        [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'design-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onOpenDocument = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+    await selectCard('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('design-team', 'alpha')
+  })
+
+  it('labels the workspace selector with a name a person chose, not an identifier', async () => {
+    // DESIGN.md's "Raw identifiers are not chrome". The three layers exist so
+    // this control has something to show; reading the canonical id back at
+    // the user is the defect ADR-0019 opened by naming.
+    installFetchMock({
+      workspaces: [
+        { workspaceId: WS_ULID, segment: 'design-team', displayName: 'Design Team' },
+        { workspaceId: 'ws-b', segment: 'sandbox' },
+      ],
+      documentsByWorkspace: {
+        'design-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        sandbox: [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+
+    const selector = (await screen.findByRole('combobox', {
+      name: 'Workspace',
+    })) as HTMLSelectElement
+    const options = [...selector.options]
+    // The display name when there is one, the segment when there is not.
+    expect(options.map((o) => o.textContent)).toEqual(['Design Team', 'sandbox'])
+    // The VALUE stays the addressable handle — it is what a switch routes by.
+    expect(options.map((o) => o.value)).toEqual(['design-team', 'sandbox'])
+    expect(selector.textContent).not.toContain(WS_ULID)
+  })
+
+  it('a canonical-id address still finds the workspace it names', async () => {
+    // The durable half of segment-first resolution: an id-form URL is the
+    // link that survives a rename, so it must keep selecting the workspace
+    // even once that workspace answers to a name.
+    installFetchMock({
+      workspaces: [
+        { workspaceId: 'ws-a', segment: 'alpha-space' },
+        { workspaceId: WS_ULID, segment: 'design-team' },
+      ],
+      documentsByWorkspace: {
+        'alpha-space': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'design-team': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        initialWorkspaceId={WS_ULID}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('beta')).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+  })
+
+  it('a workspace with no segment is still addressed by its id', async () => {
+    // 0019 left a legacy workspace's segment NULL rather than inventing one,
+    // so the id-as-handle path is not a legacy curiosity — it is live.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-unnamed' }],
+      documentsByWorkspace: {
+        'ws-unnamed': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onOpenDocument = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+    await selectCard('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-unnamed', 'alpha')
   })
 
   it('duplicates a canvas via the preview Duplicate action without opening it', async () => {

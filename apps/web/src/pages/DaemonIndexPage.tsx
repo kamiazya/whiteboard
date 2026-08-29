@@ -1,4 +1,6 @@
+import type { WorkspaceSummary } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { resolveWorkspaceHandle } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
@@ -24,6 +26,7 @@ import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
+import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
 // time — the workspace selector picks which workspace the panel shows.
@@ -76,7 +79,7 @@ export function DaemonIndexPage({
 }: DaemonIndexPageProps) {
   const daemonFetch = useMemo(() => createDaemonFetch(daemonBaseUrl, token), [daemonBaseUrl, token])
 
-  const [workspaces, setWorkspaces] = useState<string[]>([])
+  const [workspaces, setWorkspaces] = useState<WorkspaceSummary[]>([])
   // Whether the workspace LIST has settled, which `workspaces.length === 0`
   // alone cannot say — it reads the same before the first fetch returns and
   // after a daemon answers with nothing. Only the second of those is a state
@@ -155,12 +158,22 @@ export function DaemonIndexPage({
     try {
       const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
       if (superseded()) return
-      const ids = res.workspaces.map((w) => w.workspaceId)
-      setWorkspaces(ids)
+      setWorkspaces(res.workspaces)
       setWorkspacesLoaded(true)
       const targeted = initialWorkspaceIdRef.current
-      const wanted = targeted && ids.includes(targeted) ? targeted : undefined
-      setSelectedWorkspace((current) => current ?? wanted ?? ids[0] ?? null)
+      // Through `resolveWorkspaceHandle`, not an `includes`: the URL may carry
+      // EITHER layer — the segment a person reads, or the canonical id that
+      // survives a rename — and an id-form address matched against segments
+      // alone would miss and silently open a different workspace.
+      const wanted = targeted ? resolveWorkspaceHandle(res.workspaces, targeted) : null
+      const first = res.workspaces[0]
+      setSelectedWorkspace(
+        (current) =>
+          current ??
+          (wanted ? workspaceHandle(wanted) : undefined) ??
+          (first ? workspaceHandle(first) : undefined) ??
+          null,
+      )
     } catch {
       if (superseded()) return
       setWorkspacesLoaded(true)
@@ -184,9 +197,8 @@ export function DaemonIndexPage({
       try {
         const res = await listWorkspaces(daemonFetch, daemonBaseUrl)
         if (isStale()) return
-        const ids = res.workspaces.map((w) => w.workspaceId)
-        setWorkspaces(ids)
-        const next = ids.find((id) => id !== staleWorkspaceId)
+        setWorkspaces(res.workspaces)
+        const next = res.workspaces.map(workspaceHandle).find((h) => h !== staleWorkspaceId)
         if (next === undefined) {
           // Nothing to move to — this was the only workspace, or the list and
           // the documents disagree about it. Re-selecting the same one would
@@ -430,8 +442,8 @@ export function DaemonIndexPage({
               className="rounded-md border bg-background px-2 py-1 text-sm"
             >
               {workspaces.map((w) => (
-                <option key={w} value={w}>
-                  {w}
+                <option key={w.workspaceId} value={workspaceHandle(w)}>
+                  {workspaceLabel(w)}
                 </option>
               ))}
             </select>
