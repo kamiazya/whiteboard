@@ -244,6 +244,38 @@ export function App({ providerState }: AppProps) {
   // separate history entry the user could "back" into (it's already been
   // consumed and re-visiting it would silently do nothing); every
   // subsequent sync pushes, so browser back/forward has real steps to walk.
+  const state = providerState ?? defaultProviderState
+
+  // The 'Work in this browser instead' escape hatch collapses a daemon OR
+  // invalid-config state to browser capabilities, so every downstream
+  // consumer (chip, banner, canvas page) reads this effective state rather
+  // than the raw one — otherwise the escape could leave daemon capabilities
+  // or copy leaking into a mode the user explicitly opted out of, or bounce
+  // a failed-pairing escape onto the invalid-config error page.
+  const effectiveState =
+    forcedBrowser && (state.kind === 'daemon' || state.kind === 'invalid-config')
+      ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
+      : state
+
+  // WHO KEEPS this session's workspace, stated once.
+  //
+  // It is decided by pairing and provider state — ADR-0004 settles it at page
+  // load — and the two branches below are the same two conditions the render
+  // tail uses to choose a daemon tree over the browser one. Derived here
+  // rather than there because the URL-sync effects need it: hooks cannot be
+  // conditional, so they run under BOTH keepers and something has to tell
+  // them which one this is.
+  //
+  // That used to be the URL's own shape (`parseBrowserRoute(...) !== null`),
+  // which worked only because `/local/*` named the keeper in the address.
+  // Reading the keeper off the address is exactly what three-layer identity
+  // exists to stop, and the guard could not survive the two route families
+  // becoming one.
+  const daemonKept =
+    (!forcedBrowser &&
+      (daemonConnection.status === 'paired' || grantConnection?.status === 'paired')) ||
+    effectiveState.kind === 'daemon'
+
   const isFirstUrlSyncRef = useRef(true)
   // The path this effect last navigated to. StrictMode's effect replay
   // re-runs the effect with the PRE-navigation location still in its
@@ -252,10 +284,9 @@ export function App({ providerState }: AppProps) {
   const lastNavigatedPathRef = useRef<string | null>(null)
   useEffect(() => {
     if (isPairRoute) return
-    // /local/:documentId belongs to the browser world, not daemonView —
-    // rewriting it to the daemon path would yank an open browser-kept
-    // editor back to the list.
-    if (parseBrowserRoute(location.pathname) !== null) return
+    // A browser-kept session's address is not daemonView's to write —
+    // rewriting it would yank an open browser-kept editor back to the list.
+    if (!daemonKept) return
     // /settings is its own top-level surface, not a daemonView — without
     // this the sync effect below would immediately rewrite it to '/'.
     if (parseSettingsRoute(location.pathname) !== null) return
@@ -280,7 +311,7 @@ export function App({ providerState }: AppProps) {
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daemonView, navigate, isPairRoute])
+  }, [daemonView, navigate, isPairRoute, daemonKept])
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going
@@ -502,19 +533,6 @@ export function App({ providerState }: AppProps) {
       )
     }
   }
-
-  const state = providerState ?? defaultProviderState
-
-  // The 'Work in this browser instead' escape hatch collapses a daemon OR
-  // invalid-config state to browser capabilities, so every downstream
-  // consumer (chip, banner, canvas page) reads this effective state rather
-  // than the raw one — otherwise the escape could leave daemon capabilities
-  // or copy leaking into a mode the user explicitly opted out of, or bounce
-  // a failed-pairing escape onto the invalid-config error page.
-  const effectiveState =
-    forcedBrowser && (state.kind === 'daemon' || state.kind === 'invalid-config')
-      ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
-      : state
 
   if (effectiveState.kind === 'invalid-config') {
     return (
