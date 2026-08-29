@@ -55,7 +55,31 @@ const BUDGETS = [
 // Raised from 108 KB when history routing landed: react-router has to be in
 // the entry (it decides which page to lazy-load), so its ~16 KB is a real,
 // unavoidable critical-path cost of addressable URLs. Measured 114.0 KB.
-const CRITICAL_PATH_BUDGET_KB = 126
+//
+// Raised again from 126 KB when an address started naming its WORKSPACE.
+// Boot resolves which workspace the address means before first paint — that
+// is what guarantees no consumer reads the accessor unresolved — so the route
+// parser and the identity resolver are entry code for the same reason
+// react-router is. Measured 126.0 KB.
+//
+// Two numbers are worth writing down rather than just the new one, because
+// the second is not this change's doing and outlives it:
+//
+//   main   125.7 KB   the branch this was raised from
+//   here   126.0 KB   +335 bytes, against 316 bytes of remaining headroom
+//
+// The budget was already spent. `main` sat at 99.75% of 126 KB, so ANY change
+// adding twenty bytes to the critical path failed this gate — it had stopped
+// being a regression stop and become a tripwire on the next commit, whoever
+// wrote it. The ~10% headroom this file's own rule asks for was gone, and
+// restoring it is the fix; unblocking one PR is the occasion, not the reason.
+//
+// What that headroom does NOT settle is whether 126 KB of critical path is
+// the right size. It has grown 108 -> 114 -> 126 in three raises, each
+// individually justified, which is how a budget stops meaning anything. That
+// is a product call about first paint, and this gate is the wrong place to
+// make it quietly.
+const CRITICAL_PATH_BUDGET_KB = 138
 
 // Attribute-order-, quote-style-, and case-insensitive: extract each tag
 // first, then match attributes independently, so a Vite/minifier formatting
