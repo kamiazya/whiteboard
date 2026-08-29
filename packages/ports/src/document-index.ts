@@ -103,6 +103,37 @@ export const workspaceEntrySchema = z
   .strict()
 export type WorkspaceEntry = z.infer<typeof workspaceEntrySchema>
 
+/**
+ * Turns an incoming address string into the workspace it names: `segment`
+ * first, then `workspaceId`, else null.
+ *
+ * The ONE definition of that order. Every surface that accepts a handle — an
+ * HTTP path parameter, a WS target, an MCP tool argument — shares a single
+ * namespace between ADR-0019's canonical and user-facing layers, so a rule
+ * spelled out per surface is a rule that will eventually be spelled
+ * differently at one of them.
+ *
+ * Segment wins the one collision that can arise. It cannot happen against a
+ * CANONICAL id, since `workspaceSegmentSchema` structurally forbids a
+ * ULID-shaped segment, but a LEGACY id is any `[a-zA-Z0-9_-]+` string and can
+ * equal somebody's segment. The segment is what a human chose on purpose; the
+ * shadowed workspace stays reachable by its own id.
+ *
+ * Total, and never turns a handle away for its SHAPE: the daemon's live ids
+ * include `default` and nanoid-minted strings carrying `_`, none of which are
+ * valid segments, and all of which must still resolve.
+ */
+export function resolveWorkspaceHandle(
+  entries: readonly WorkspaceEntry[],
+  handle: string,
+): WorkspaceEntry | null {
+  return (
+    entries.find((entry) => entry.segment === handle) ??
+    entries.find((entry) => entry.workspaceId === handle) ??
+    null
+  )
+}
+
 export const resolveDocumentByIdInputSchema = z
   .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
@@ -326,10 +357,24 @@ export interface DocumentIndex {
    * Answers rather than throwing when there are no documents yet — unlike
    * `listDocuments`, there is no id here that could have been a typo, so
    * "none" is an answer rather than an ambiguity. Note this does NOT promise
-   * the list is empty on a fresh index: apps/web's writes `local` when its
-   * store is created, because that is the one the browser UI opens.
+   * the list is empty on a fresh index: apps/web writes its one workspace
+   * when its store is created, because that is the one the browser UI opens.
    */
   listWorkspaces(): Promise<WorkspaceEntry[]>
+  /**
+   * The workspace an incoming ADDRESS names — `segment` first, then
+   * `workspaceId` — or null when nothing answers to it.
+   *
+   * Separate from `listWorkspaces` because a caller holding a handle should
+   * not have to know the resolution order to use it; `resolveWorkspaceHandle`
+   * above is the single definition, and every implementation is expected to
+   * delegate to it rather than restate the order.
+   *
+   * Required, not optional. An optional method is one a surface can forget to
+   * call, and forgetting means falling back to a literal id match — which is
+   * indistinguishable from working until the day a segment exists.
+   */
+  resolveWorkspace(handle: string): Promise<WorkspaceEntry | null>
   /**
    * Fails `WorkspaceNotFoundError` if the workspace does not exist. Fails if
    * the path is taken. Creating never silently adopts an existing

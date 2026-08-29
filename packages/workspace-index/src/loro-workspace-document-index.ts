@@ -56,6 +56,7 @@ import {
   DocumentPathContestedError,
   DocumentPathTakenError,
   isSelfOrDescendant,
+  resolveWorkspaceHandle,
   WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
@@ -99,6 +100,15 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
    */
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return this.registry.listWorkspaces()
+  }
+
+  /**
+   * Over the registry's own rows, through the port's single definition of the
+   * order. Nothing tree-shaped participates: a workspace's ADDRESS is a
+   * property of who keeps it, the same reason `listWorkspaces` delegates.
+   */
+  async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
+    return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
   }
 
   /** A document's containers, for the content bridge. */

@@ -41,9 +41,13 @@ async function deleteDb(): Promise<void> {
 describe('IdbDocumentIndex', () => {
   describeDocumentIndexConformance(async () => {
     await deleteDb()
+    const index = new IdbDocumentIndex(DB_NAME)
     return {
-      index: new IdbDocumentIndex(DB_NAME),
+      index,
       dispose: deleteDb,
+      // This index IS its own registry — one IndexedDB store holding the row
+      // `createWorkspace` writes — so the seam is that call.
+      seedWorkspace: async (entry) => index.createWorkspace(entry),
     }
   })
 })
