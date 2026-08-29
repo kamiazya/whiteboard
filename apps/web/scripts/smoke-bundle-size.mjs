@@ -79,6 +79,27 @@ const BUDGETS = [
 // individually justified, which is how a budget stops meaning anything. That
 // is a product call about first paint, and this gate is the wrong place to
 // make it quietly.
+//
+// `measure-critical-path.mjs` is what turns that question from an argument
+// into a number. Measured on one container, 10 runs at CPU x4 / 10 Mbps:
+// LCP 512 ms with a 2% spread, and appending 17.9 KB gzipped to the entry
+// moved it to 600 ms with the spread unchanged. So a metric gate is possible,
+// and two things follow that are worth knowing HERE, where the next person
+// reaches for the budget:
+//
+// - A gate on LCP would be COARSER than this one, not finer: respecting a 2%
+//   band, it detects roughly a 2.5 KB gzipped regression and would have
+//   missed the +335 bytes that occasioned the last raise. Replacing bytes
+//   with LCP trades resolution away.
+// - The two answer different questions, and the drift above is what happens
+//   when one number carries both. Bytes answer "did this change grow the
+//   critical path" — fine, deterministic, and a raise is then just a recorded
+//   fact. LCP answers "is first paint still good" — coarse, absolute, and the
+//   only one of the two that can go red for a change that reorders work
+//   without adding any.
+//
+// Choosing the LCP threshold is the product call this comment already says
+// does not belong in a gate file, so it is not made here either.
 const CRITICAL_PATH_BUDGET_KB = 138
 
 // Attribute-order-, quote-style-, and case-insensitive: extract each tag
