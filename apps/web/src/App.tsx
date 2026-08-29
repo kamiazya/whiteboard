@@ -1,5 +1,5 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
-import { lazy, Suspense, useEffect, useMemo, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { AppShellLazy } from './components/AppShellLazy.js'
 
@@ -13,8 +13,9 @@ import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
 import {
-  browserWorkspaceHandleOrNull,
+  browserWorkspaceIdentitySnapshot,
   browserWorkspaceMatches,
+  subscribeBrowserWorkspaceIdentity,
 } from './lib/browser-workspace-id.js'
 import {
   consumeGrantFragment,
@@ -52,6 +53,7 @@ import {
   resolveHostedProviderStateFromRaw,
 } from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
+import { workspaceHandle } from './lib/workspace-handle.js'
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
 // of the entry chunk — sessions arriving via a #wb= pairing fragment AND
@@ -237,10 +239,22 @@ export function App({ providerState }: AppProps) {
   // initialPath a single time), so App re-routes only when the URL crosses
   // the list/editor boundary — including browser Back from the editor to the
   // list.
+  // SUBSCRIBED, not merely read. `boot.ts` bounds the identity resolve at 3s
+  // and renders degraded past it, so the identity can settle while React is
+  // already mounted — a stale tab blocking the IndexedDB version upgrade
+  // reaches that path for real. Read without a subscription, the module
+  // updates and nothing re-renders: a valid document deep link stays on the
+  // index, and the null handle below disables every navigation out of it, for
+  // the life of the tab.
+  //
   // Null while the identity has not resolved (or failed to). A URL builder
   // that cannot name its workspace declines to navigate rather than sending
-  // the session somewhere wrong — see browserWorkspaceHandleOrNull.
-  const browserHandle = browserWorkspaceHandleOrNull()
+  // the session somewhere wrong.
+  const browserIdentity = useSyncExternalStore(
+    subscribeBrowserWorkspaceIdentity,
+    browserWorkspaceIdentitySnapshot,
+  )
+  const browserHandle = browserIdentity === null ? null : workspaceHandle(browserIdentity)
   const browserRoute = parseWorkspaceRoute(location.pathname)
   // Only a route naming THIS browser's workspace opens a document here. One
   // grammar means a daemon address parses under the browser keeper too, and

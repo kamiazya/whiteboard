@@ -56,6 +56,40 @@ let state: ResolutionState = { kind: 'unresolved' }
 // later call after a failure re-attempts instead of replaying the rejection.
 let inFlight: Promise<string> | null = null
 
+// React's channel onto the state machine above. It exists because the resolve
+// can settle AFTER first paint: `boot.ts` bounds its wait at 3s and renders
+// degraded past it, which a stale tab blocking the IndexedDB version upgrade
+// reaches for real. A module accessor nobody subscribes to then updates while
+// React is already mounted, so nothing re-renders — the deep link stays on
+// the index and every URL builder keeps answering null. That is not a slow
+// start, it is an app that stays unusable until a reload.
+const listeners = new Set<() => void>()
+
+function setResolutionState(next: ResolutionState): void {
+  state = next
+  for (const listener of listeners) listener()
+}
+
+/** `useSyncExternalStore`'s subscribe half. */
+export function subscribeBrowserWorkspaceIdentity(listener: () => void): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+/**
+ * `useSyncExternalStore`'s snapshot half — the identity, or null while it is
+ * unavailable.
+ *
+ * Stable by reference in both arms, which the hook requires: `identity` is
+ * written once per resolve and never rebuilt, and the not-resolved arms all
+ * answer the same `null`.
+ */
+export function browserWorkspaceIdentitySnapshot(): BrowserWorkspaceIdentity | null {
+  return state.kind === 'resolved' ? state.identity : null
+}
+
 function causeMessage(cause: unknown): string {
   return cause instanceof Error ? cause.message : String(cause)
 }
@@ -159,13 +193,13 @@ export async function resolveBrowserWorkspaceId(dbName?: string, handle?: string
   if (inFlight !== null) return inFlight
   const attempt = readWorkspaceIdentity(dbName, handle)
     .then((identity) => {
-      state = { kind: 'resolved', identity }
       inFlight = null
+      setResolutionState({ kind: 'resolved', identity })
       return identity.workspaceId
     })
     .catch((cause: unknown) => {
-      state = { kind: 'failed', cause }
       inFlight = null
+      setResolutionState({ kind: 'failed', cause })
       throw cause
     })
   inFlight = attempt
@@ -239,15 +273,19 @@ export function browserWorkspaceMatches(handle: string): boolean {
 
 /** Test seam: resolve synchronously to a fixed identity, without opening a database. */
 export function setBrowserWorkspaceIdForTests(workspaceId: string, segment?: string): void {
-  state = {
+  inFlight = null
+  // Through the notifying setter, like the real resolve: a seam that moved
+  // the state without telling subscribers could not stand in for the
+  // transition it exists to simulate, and the delayed-resolution test would
+  // pass against production code that never notifies.
+  setResolutionState({
     kind: 'resolved',
     identity: { workspaceId, ...(segment === undefined ? {} : { segment }) },
-  }
-  inFlight = null
+  })
 }
 
 /** Test seam: return to the unresolved state, as at module load. */
 export function resetBrowserWorkspaceIdForTests(): void {
-  state = { kind: 'unresolved' }
   inFlight = null
+  setResolutionState({ kind: 'unresolved' })
 }

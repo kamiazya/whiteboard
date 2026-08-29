@@ -5,7 +5,11 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { App, LazyPageFallback } from './App.js'
 import { errorBoundaryLog } from './components/ErrorBoundary.js'
 import type { DaemonConnectionResult } from './hooks/useDaemonConnection.js'
-import { getBrowserWorkspaceId } from './lib/browser-workspace-id.js'
+import {
+  getBrowserWorkspaceId,
+  resetBrowserWorkspaceIdForTests,
+  setBrowserWorkspaceIdForTests,
+} from './lib/browser-workspace-id.js'
 import { resetShellStatusForTests, setShellConnection } from './lib/shell-status-store.js'
 // App reaches every page through React.lazy(), so a page renders only once its
 // dynamic import resolves — and under a full-suite run that resolution can
@@ -783,6 +787,33 @@ describe('App daemon provider state', () => {
     // REPLACE for the same reason the daemon does it: the app is finishing a
     // sentence the person started, not taking a step on their behalf.
     expect(router.state.historyAction).toBe('REPLACE')
+  })
+
+  it('mounts the document once the workspace identity settles after first paint', async () => {
+    // `boot.ts` bounds the identity resolve at 3s and renders DEGRADED past
+    // it — a stale tab blocking the IndexedDB version upgrade is the
+    // realistic way there, and this PR's own v15 migration is exactly such an
+    // upgrade. Past that bound the identity settles while React is already
+    // mounted, and a module-level accessor that nobody subscribes to updates
+    // without re-rendering anything: the deep link stays on the index, and
+    // `browserHandle === null` disables every navigation out of it. Not a
+    // slow start — a permanently unusable app until a reload.
+    const settled = getBrowserWorkspaceId()
+    resetBrowserWorkspaceIdForTests()
+    try {
+      render(
+        <MemoryRouter initialEntries={['/w/default/d/c1']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+      expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
+
+      act(() => setBrowserWorkspaceIdForTests(settled, 'default'))
+
+      expect(await screen.findByTestId('browser-document-page')).toBeTruthy()
+    } finally {
+      setBrowserWorkspaceIdForTests(settled, 'default')
+    }
   })
 
   it('gives the browser shell a workspace switcher naming what the address says', async () => {
