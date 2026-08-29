@@ -140,6 +140,17 @@ provide the operator-facing surface for data backup and restore.
 - Stop the container before taking a backup. Never run backup against a live
   data volume — the CLI checks for a running `server-mode.json` record and
   refuses if the server process is still alive.
+- **The data directory holds three database files, not one.** The database
+  runs in WAL mode, so `whiteboard.db` is accompanied by `whiteboard.db-wal`
+  and `whiteboard.db-shm`. They are one artifact: the newest commits live in
+  the `-wal` until a checkpoint folds them back, so copying `whiteboard.db`
+  on its own silently loses recent writes. `backup` copies the directory and
+  takes all three; if you ever copy by hand, take all three too.
+
+  WAL is what lets a backup read the database without stopping the daemon
+  from serving — under SQLite's default journal a read in progress blocks
+  writes outright.
+
 - **These commands answer per store, not with one boolean.** They copy a
   directory, so they capture the database only while it *is* a file in that
   directory. If you have set

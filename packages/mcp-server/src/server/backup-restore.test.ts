@@ -343,10 +343,21 @@ describe('backupDataDir with excludeDatabaseFile', () => {
         '{"schemaVersion":1,"database":{"inDataDir":false}}',
       )
 
+      // WAL sidecars, which a fossil in a WAL database has beside it.
+      await writeFile(join(roots.src, 'whiteboard.db-wal'), 'uncheckpointed rows')
+      await writeFile(join(roots.src, 'whiteboard.db-shm'), 'shared memory')
+
       await backupDataDir(roots.src, roots.backup, {
         allowedRoots: [roots.root],
         excludeDatabaseFile: true,
       })
+
+      // The sidecars go with it. A `-wal` left behind on its own is a
+      // fragment of the very pre-migration rows the exclusion exists to keep
+      // out — and SQLite would replay it into any `whiteboard.db` later put
+      // beside it.
+      const copied = await readdir(roots.backup)
+      expect(copied.filter((f) => f.startsWith('whiteboard.db'))).toEqual([])
 
       expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
       // The record travels: it is how restore later knows this backup was

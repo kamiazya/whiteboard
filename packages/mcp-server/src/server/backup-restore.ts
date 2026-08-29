@@ -159,6 +159,19 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
   }
 }
 
+/**
+ * The database and everything SQLite keeps beside it.
+ *
+ * In WAL mode the newest commits live in `whiteboard.db-wal` until a
+ * checkpoint folds them back, so the three files are one artifact. Excluding
+ * only the main file would leave a `-wal` in the backup holding a fragment of
+ * exactly the pre-migration rows the exclusion exists to keep out — and
+ * SQLite replays a `-wal` into any database later placed beside it.
+ */
+function isDatabaseFile(dataDir: string, path: string): boolean {
+  return path === join(dataDir, DB_FILENAME) || path.startsWith(join(dataDir, `${DB_FILENAME}-`))
+}
+
 // Copy <srcDataDir> into <backupDir>. The backup is a directory copy,
 // not an archive — restore is the inverse copy. `srcDataDir` must
 // exist; `backupDir` must be empty (or missing) so a backup never
@@ -206,7 +219,7 @@ export async function backupDataDir(
     // away in between raises ENOENT for the whole backup.
     filter: (src: string) =>
       src !== join(srcDataDir, BLOB_TEMP_DIRNAME) &&
-      !(options.excludeDatabaseFile === true && src === join(srcDataDir, DB_FILENAME)),
+      !(options.excludeDatabaseFile === true && isDatabaseFile(srcDataDir, src)),
   })
 }
 

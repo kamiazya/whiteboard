@@ -135,12 +135,6 @@
     // imports, only JS/TS module graphs.
     "tailwindcss",
     "tw-animate-css",
-    // Not imported directly anywhere in src — @libsql/kysely-libsql pulls it
-    // in transitively — but the direct pin here forces the whole workspace
-    // onto a newer @libsql/client (^0.17.3) than kysely-libsql's own range
-    // (^0.8.0). See the comment next to the LibsqlDialect import in
-    // server/store/db/index.ts.
-    "@libsql/client",
     // Loaded via .secretlintrc.json's "rules" list, not a JS/TS import.
     "@secretlint/secretlint-rule-pattern",
     "@secretlint/secretlint-rule-preset-recommend",

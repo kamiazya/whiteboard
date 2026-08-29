@@ -55,6 +55,35 @@ async function buildDb(dataDir: string): Promise<Database> {
   const db = new Kysely<DatabaseSchema>({
     dialect: new LibsqlDialect(location),
   })
+  // WAL, so readers and writers stop blocking each other.
+  //
+  // Under SQLite's default rollback journal, a read transaction's SHARED lock
+  // blocks the EXCLUSIVE lock a commit needs — so anything that reads the
+  // database for a while stops the daemon serving. Measured on the same
+  // arrangement either way: a held reader plus a committing writer gives
+  // `SQLITE_BUSY: database is locked` under `delete` and commits cleanly
+  // under `wal`.
+  //
+  // It is also what ADR-0021 decision 3's hot snapshot rests on, though the
+  // ADR does not say so. `whiteboard server backup` is a SEPARATE process
+  // opening its own connection, and cross-process `VACUUM INTO` against a
+  // database under active write was refused outright 3 times out of 3 under
+  // the default, and succeeded 3 out of 3 in 9-22ms under WAL. The ADR's own
+  // measurement was taken on the writing connection itself, where the locks
+  // are already held and nothing contends.
+  //
+  // The cost is one this deployment has already accepted: WAL needs real
+  // filesystem shared memory and does not work over a network filesystem —
+  // and neither does the locking this store depends on regardless, which is
+  // why ADR-0020 sends multi-instance deployments to a libSQL server rather
+  // than a shared file.
+  //
+  // Persistent: the mode lives in the database header, so this both converts
+  // an existing file once and sets it on a new one. It is deliberately NOT
+  // fatal — a database that refuses the switch (a filesystem without the
+  // shared-memory primitives) should still open and serve, more slowly, in
+  // the mode it already had.
+  await sql`PRAGMA journal_mode = WAL`.execute(db).catch(() => {})
   // libsql currently defaults `PRAGMA foreign_keys = ON` per connection (the
   // store/db/index.test FK case verifies this), so this call is belt-and-
   // suspenders rather than load-bearing. Vanilla SQLite does NOT default the

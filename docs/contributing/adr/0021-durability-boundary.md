@@ -111,6 +111,40 @@ The embedded default is ours, and gets a hot snapshot per decision 3.
 connection. The server keeps serving. This is what makes decision 4 possible,
 and it is the whole reason the stop-the-server constraint can go.
 
+**It rests on WAL, which this ADR originally did not say.** The measurement
+above was taken on the writing connection itself, where the locks are already
+held and nothing contends. `whiteboard server backup` is a SEPARATE process
+opening its own connection to the same file, and under SQLite's default
+rollback journal that connection cannot read a database being written at all.
+Measured cross-process, three snapshot attempts during a tight writing loop:
+
+```
+journal_mode=delete -> SQLITE_BUSY: database is locked        (3 of 3)
+journal_mode=wal    -> ok in 9/17/22 ms, integrity ok         (3 of 3)
+```
+
+The same difference shows in the direction that matters for a daemon, and
+there it is deterministic rather than timing-dependent: with a read
+transaction held open — which is what a snapshot in progress is — a commit on
+another connection raises `SQLITE_BUSY` under `delete` and succeeds under
+`wal`. Under the default, *taking a backup stops the product working*.
+
+So `db/index.ts` opens every database `PRAGMA journal_mode = WAL`. The cost is
+one this deployment has already accepted: WAL needs real filesystem shared
+memory and does not work over a network filesystem — and neither does the
+locking this store depends on regardless, which is why
+[ADR-0020](0020-coordination-boundary.md) sends multi-instance deployments to
+a libSQL server rather than a shared file.
+
+WAL cuts the other way for anything that copies FILES, and the cut is this
+ADR's own failure mode. The newest commits live in `whiteboard.db-wal` until a
+checkpoint folds them back, so a copy of the main file alone is short —
+measured at **4977 of 5000 rows**, silently. The three files are one artifact
+and travel together, which the whole-directory copy already does and the
+`excludeDatabaseFile` filter had to learn. `VACUUM INTO` is immune by
+construction: it writes a single self-contained database, which is one more
+reason the snapshot replaces the file copy rather than sitting beside it.
+
 ### 4. Backup is scheduled by default; the CLI triggers the same pass
 
 What an operator wants is not a command they must remember to run. It is for
