@@ -14,7 +14,7 @@
 import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, reassembleSnapshot, shouldCompact } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, VersionVector } from 'loro-crdt'
-import type { WorkspaceDocs } from './workspace-docs.js'
+import type { CaughtUp, WorkspaceDocCursor, WorkspaceDocs } from './workspace-docs.js'
 
 const MAX_CHUNK_BYTES = 1_000_000
 
@@ -31,7 +31,7 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     if (stored === null) return null
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
-    const { updates } = await this.store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    const { updates } = await this.store.loadDeltas({ docRef, afterSeq: null })
     for (const update of updates) doc.import(update)
     return doc
   }
@@ -57,18 +57,29 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
    */
   async save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null> {
     const docRef = refOf(workspaceId)
-    const manifest = await this.store.readSnapshotManifest({ docRef })
-    if (manifest === null) {
+    const header = await this.store.readSnapshotManifest({ docRef })
+    if (header === null) {
       const snapshot = doc.export({ mode: 'snapshot' })
       const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
-      await this.store.saveSnapshot({
+      // The whole history as one update: what an empty peer needs, and also
+      // what this call appends if it loses the race below.
+      const update = new Uint8Array(doc.export({ mode: 'update' }))
+      const created = await this.store.saveCompactedSnapshot({
         docRef,
         manifest: fresh,
         chunks,
         frontier: new Uint8Array(doc.oplogVersion().encode()),
+        // Nothing to supersede: there is no log this snapshot folded.
+        supersededDeltaCount: 0,
+        expectedGeneration: null,
       })
-      // The whole history as one update: what an empty peer needs.
-      return new Uint8Array(doc.export({ mode: 'update' }))
+      if (created.ok) return update
+      // Another writer minted the snapshot between the read and the write.
+      // Theirs does not contain these ops, so appending is the only move that
+      // keeps both — replacing it would be the lost update this fence exists
+      // to stop (ADR-0020).
+      await this.appendInstead(docRef, doc, update)
+      return update
     }
 
     const stored = await this.store.readFrontier({ docRef })
@@ -83,18 +94,49 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     )
     const { updates: existing } = await this.store.loadDeltas({
       docRef,
-      sinceFrontier: new Uint8Array(),
+      afterSeq: null,
     })
     if (shouldCompact([...existing, update])) {
-      const snapshot = doc.export({ mode: 'snapshot' })
+      // Folded from the STORED state plus this update — never from `doc`.
+      //
+      // `doc` is one writer's view, and a writer's view is not the record: it
+      // holds whatever that instance had when it last read, plus its own
+      // edits. Exporting a snapshot from it replaces the record with a subset
+      // of itself, dropping every op this instance never saw. The generation
+      // fence does not catch that — nobody REPLACED the snapshot, so the
+      // compare-and-swap legitimately succeeds — and neither does the
+      // superseded count, which drops a prefix this snapshot does not
+      // contain. Found by the multi-instance convergence property, not by
+      // any example test.
+      //
+      // The stored bytes are read only here, on the path that already decided
+      // to fold — once per COMPACT_DELTA_BYTES written, not once per save.
+      // `loro-store.ts` folds the same way in the browser, and for the same
+      // reason.
+      const base = await this.store.loadSnapshot({ docRef })
+      const merged = new LoroDoc()
+      if (base !== null) merged.import(reassembleSnapshot(base.manifest, base.chunks))
+      for (const stale of existing) merged.import(stale)
+      merged.import(update)
+      const snapshot = merged.export({ mode: 'snapshot' })
       const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
-      await this.store.saveCompactedSnapshot({
+      const folded = await this.store.saveCompactedSnapshot({
         docRef,
         manifest: fresh,
         chunks,
-        frontier: new Uint8Array(doc.oplogVersion().encode()),
+        // The MERGED version, not `doc`'s: the snapshot being written holds
+        // every op above, so reporting the writer's own narrower vector would
+        // under-claim the record's state.
+        frontier: new Uint8Array(merged.oplogVersion().encode()),
         supersededDeltaCount: existing.length,
+        expectedGeneration: header.generation,
       })
+      if (folded.ok) return update
+      // Refused: someone else folded first, and this doc's new ops are in the
+      // snapshot we did NOT write. Appending them is what makes losing the
+      // race cost a delay rather than an edit — the whole reason the refusal
+      // is an outcome and not an error.
+      await this.appendInstead(docRef, doc, update)
       return update
     }
     await this.store.appendDeltas({
@@ -105,5 +147,73 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       },
     })
     return update
+  }
+
+  /**
+   * The one move available after a refused fold: put the ops in the log
+   * instead of the snapshot.
+   *
+   * Not merged with the plain append path above because the reason differs
+   * and the reason is the whole point — this one runs having just decided not
+   * to overwrite another writer's snapshot.
+   */
+  private async appendInstead(docRef: DocRef, doc: LoroDoc, update: Uint8Array): Promise<void> {
+    await this.store.appendDeltas({
+      docRef,
+      deltaBatch: {
+        updates: [new Uint8Array(update)],
+        newFrontier: new Uint8Array(doc.oplogVersion().encode()),
+      },
+    })
+  }
+
+  async readCursor(workspaceId: string): Promise<WorkspaceDocCursor> {
+    const { lastSeq, generation } = await this.store.loadDeltas({
+      docRef: refOf(workspaceId),
+      // The cursor, not the payload. `lastSeq` reports the whole log's
+      // highest seq whatever was RETURNED — the contract says so precisely
+      // for this caller — so asking from past the end answers the position
+      // and no bytes. `null` here would mean "give me everything", which is
+      // the opposite of what this method is for, and it is called on every
+      // baseline pass of the tail and before every GC pass.
+      afterSeq: Number.MAX_SAFE_INTEGER,
+    })
+    return { generation, afterSeq: lastSeq }
+  }
+
+  async catchUp(workspaceId: string, doc: LoroDoc, cursor: WorkspaceDocCursor): Promise<CaughtUp> {
+    const docRef = refOf(workspaceId)
+    const tail = await this.store.loadDeltas({ docRef, afterSeq: cursor.afterSeq })
+    if (tail.generation === cursor.generation) {
+      // Same generation, so the seqs this cursor points past are still the
+      // ones it consumed: the tail alone is the whole difference.
+      for (const update of tail.updates) doc.import(update)
+      return {
+        cursor: { generation: tail.generation, afterSeq: tail.lastSeq ?? cursor.afterSeq },
+        updates: tail.updates,
+      }
+    }
+    // The generation moved, so a fold has superseded some prefix of the log —
+    // possibly all of it, after which the next append starts numbering again.
+    // Following the log from here would skip whatever was folded into the
+    // snapshot AND could mistake reused seqs for ones already seen, so the
+    // snapshot is re-read. Importing it is a MERGE, which is why `doc`'s own
+    // unsaved edits survive.
+    const base = await this.store.loadSnapshot({ docRef })
+    const carried: Uint8Array[] = []
+    if (base !== null) {
+      const snapshot = reassembleSnapshot(base.manifest, base.chunks)
+      doc.import(snapshot)
+      carried.push(snapshot)
+    }
+    // Re-read rather than reusing `tail`: the snapshot above was read after
+    // it, so a fold landing in between would leave the log half-applied.
+    const settled = await this.store.loadDeltas({ docRef, afterSeq: null })
+    for (const update of settled.updates) doc.import(update)
+    carried.push(...settled.updates)
+    return {
+      cursor: { generation: settled.generation, afterSeq: settled.lastSeq },
+      updates: carried,
+    }
   }
 }

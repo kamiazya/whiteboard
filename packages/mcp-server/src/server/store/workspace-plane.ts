@@ -28,6 +28,7 @@ import type {
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
 } from '@kamiazya/whiteboard-ports'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -91,7 +92,10 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
       // Derived from the same projection loadSnapshot serves, so the two
       // answers can never disagree about whether a base exists.
       const loaded = await this.loadSnapshot({ docRef: input.docRef })
-      return loaded === null ? null : loaded.manifest
+      // A projection has no stored row to fence, so it reports the generation
+      // a never-folded record would: nothing can have replaced it. Compaction
+      // of a tree-served document is refused below in any case.
+      return loaded === null ? null : { manifest: loaded.manifest, generation: 0 }
     }
     return this.inner.readSnapshotManifest(input)
   }
@@ -135,7 +139,9 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
     return this.inner.saveSnapshot(input)
   }
 
-  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(
+    input: SaveCompactedSnapshotInput,
+  ): Promise<SaveCompactedSnapshotResult> {
     // Compaction is a legacy-plane concern: a tree-served document has no
     // per-document log to fold. Delegated as-is.
     return this.inner.saveCompactedSnapshot(input)

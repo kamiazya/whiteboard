@@ -84,7 +84,7 @@ interface Observation {
 async function observe(store: DocumentStore, docRef: DocRef): Promise<Observation> {
   return {
     snapshot: await store.loadSnapshot({ docRef }),
-    deltas: await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() }),
+    deltas: await store.loadDeltas({ docRef, afterSeq: null }),
     frontier: await store.readFrontier({ docRef }),
   }
 }

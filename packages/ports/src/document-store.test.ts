@@ -80,10 +80,18 @@ describe('DocumentStore method DTOs', () => {
     expect(appendDeltasResultSchema.safeParse({}).success).toBe(false)
   })
 
-  it('loadDeltas: accepts a docRef + sinceFrontier input; result requires updates + frontier', () => {
-    expect(loadDeltasInputSchema.safeParse({ docRef, sinceFrontier: frontier }).success).toBe(true)
-    expect(loadDeltasResultSchema.safeParse({ updates: [], frontier }).success).toBe(true)
-    expect(loadDeltasResultSchema.safeParse({ updates: [] }).success).toBe(false)
+  it('loadDeltas: takes a seq cursor, and the result carries the cursor and the generation', () => {
+    expect(loadDeltasInputSchema.safeParse({ docRef, afterSeq: null }).success).toBe(true)
+    expect(loadDeltasInputSchema.safeParse({ docRef, afterSeq: 3 }).success).toBe(true)
+    // Required, not optional: an omitted cursor is the shape that reads as
+    // "caught up" against a SQL store, so the schema refuses it here.
+    expect(loadDeltasInputSchema.safeParse({ docRef }).success).toBe(false)
+    expect(loadDeltasInputSchema.safeParse({ docRef, afterSeq: -1 }).success).toBe(false)
+    expect(
+      loadDeltasResultSchema.safeParse({ updates: [], lastSeq: null, generation: null, frontier })
+        .success,
+    ).toBe(true)
+    expect(loadDeltasResultSchema.safeParse({ updates: [], frontier }).success).toBe(false)
   })
 
   it('readFrontier: accepts a docRef input; result accepts null and a frontier payload', () => {

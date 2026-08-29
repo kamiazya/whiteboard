@@ -67,6 +67,10 @@ interface DocumentSnapshotsTable {
   totalBytes: number
   maxChunkBytes: number
   frontier: Uint8Array
+  // ADR-0020's fencing token: advanced by every write that replaces this row,
+  // read with the manifest, and presented back on a fold to make the replace
+  // conditional.
+  generation: number
 }
 
 interface DocumentSnapshotChunksTable {

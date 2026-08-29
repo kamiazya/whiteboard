@@ -52,6 +52,11 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
     async save() {
       return null
     },
+    // These doubles serve INDEX tests, which never tail. Rejecting rather than
+    // answering an empty cursor: a silent no-op would let a tailing test pass
+    // against a double that cannot tail.
+    readCursor: () => Promise.reject(new Error('not implemented')),
+    catchUp: () => Promise.reject(new Error('not implemented')),
     async listWorkspaces() {
       return [...docs.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
     },

@@ -42,6 +42,8 @@ import type { DocumentTeardown } from '@kamiazya/whiteboard-server-core'
 import {
   DocumentStoreWorkspaceDocs,
   LoroWorkspaceDocumentIndex,
+  type WorkspaceDocCursor,
+  type WorkspaceDocs,
 } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
@@ -251,6 +253,30 @@ const workspaceDocUpdatedListeners = new Set<WorkspaceDocUpdatedListener>()
  * sync fan-out surface. Listeners get the exact bytes the store persisted;
  * importing them into a replica of the workspace document converges it.
  */
+/**
+ * Announce an update this process did NOT persist — one another instance
+ * wrote, brought in by the workspace tail.
+ *
+ * The same funnel a local save uses, deliberately: the subscribers are a
+ * websocket fan-out and an SSE stream, and where the bytes came from changes
+ * nothing about who needs them. A second path would be a second place for the
+ * two transports to fall out of step.
+ */
+export function emitWorkspaceDocUpdated(workspaceId: string, update: Uint8Array): void {
+  for (const listener of workspaceDocUpdatedListeners) {
+    try {
+      listener(workspaceId, update)
+    } catch (err) {
+      // A subscriber failing to fan out must never turn a completed save into
+      // a failed one, nor stop the other subscribers from being told.
+      getLogger('document-store').warning(
+        { workspaceId, err },
+        'workspace-doc update listener threw; ignoring',
+      )
+    }
+  }
+}
+
 export function onWorkspaceDocUpdated(listener: WorkspaceDocUpdatedListener): () => void {
   workspaceDocUpdatedListeners.add(listener)
   return () => workspaceDocUpdatedListeners.delete(listener)
@@ -280,20 +306,10 @@ export async function saveWorkspaceDoc(
     evictWorkspaceDocs(workspaceId)
     throw err
   }
-  if (update !== null) {
-    for (const listener of workspaceDocUpdatedListeners) {
-      try {
-        listener(workspaceId, update)
-      } catch (err) {
-        // A subscriber failing to fan out must never turn a completed save
-        // into a failed one.
-        getLogger('document-store').warning(
-          { workspaceId, err },
-          'workspace-doc update listener threw; ignoring',
-        )
-      }
-    }
-  }
+  // Through the shared funnel rather than a second loop: a remote update
+  // brought in by the workspace tail announces itself the same way, and one
+  // of the two copies would eventually stop matching the other.
+  if (update !== null) emitWorkspaceDocUpdated(workspaceId, update)
   return update
 }
 
@@ -303,15 +319,57 @@ export async function saveWorkspaceDoc(
  * delete/rename, the dual-plane index) shares the same instance the save
  * path diffs against, so no path can leave another holding a stale doc.
  */
-export function cacheBackedWorkspaceDocs(): {
-  open(workspaceId: string): Promise<LoroDoc | null>
-  create(workspaceId: string): Promise<LoroDoc>
-  save(workspaceId: string, doc: LoroDoc): Promise<Uint8Array | null>
-} {
+/**
+ * Bring the cached workspace document up to the stored record, answering the
+ * position it now stands at.
+ *
+ * For a reader that must judge against the RECORD rather than this
+ * instance's view of it — file-GC being the one that matters, since it acts
+ * destructively on what it decides is unreferenced.
+ *
+ * A workspace with nothing cached needs no catch-up: the next open reads the
+ * store. Answering its cursor anyway keeps the two callers of this symmetric,
+ * so a fence taken around a pass compares like with like either way.
+ */
+export async function catchUpWorkspaceDoc(workspaceId: string): Promise<WorkspaceDocCursor> {
+  const docs = cacheBackedWorkspaceDocs()
+  const cached = workspaceDocCache.get(workspaceDocCacheKey(workspaceId))
+  if (cached === undefined) return docs.readCursor(workspaceId)
+  // A COLD cursor, not the record's current one. Nothing tracks where the
+  // cached document stands — it is mutated in place by every local write —
+  // so the only honest answer is "I do not know", which is what
+  // `{null, null}` says. `catchUp` reads that as a generation mismatch and
+  // reconciles from the snapshot, which is the whole point: passing the
+  // record's current cursor instead would say "already up to date" and
+  // import nothing, leaving the caller with exactly the stale view it asked
+  // to be rid of.
+  const { cursor } = await docs.catchUp(workspaceId, cached, { generation: null, afterSeq: null })
+  return cursor
+}
+
+export function cacheBackedWorkspaceDocs(): WorkspaceDocs {
   return {
     open: (workspaceId) => openWorkspaceDocIfStored(workspaceId),
     create: (workspaceId) => getWorkspaceDoc(workspaceId),
     save: (workspaceId, doc) => saveWorkspaceDoc(workspaceId, doc),
+    // The tailing half is a STORE concern, so it delegates rather than being
+    // reimplemented against the cache: the cursor describes the record, and
+    // the only thing this wrapper adds is which doc gets caught up.
+    readCursor: async (workspaceId) =>
+      new DocumentStoreWorkspaceDocs(await documentStoreReady()).readCursor(workspaceId),
+    // Under the workspace write barrier, because this MUTATES the live cached
+    // document that every in-process writer is diffing against. Importing
+    // another instance's ops into it while a local save is computing its own
+    // delta is the one way a catch-up could make things worse rather than
+    // better.
+    catchUp: (workspaceId, doc, cursor) =>
+      withWorkspaceWriteLock(workspaceId, async () =>
+        new DocumentStoreWorkspaceDocs(await documentStoreReady()).catchUp(
+          workspaceId,
+          doc,
+          cursor,
+        ),
+      ),
   }
 }
 
@@ -750,7 +808,7 @@ export interface CompactResult {
   compacted: boolean
   beforeBytes: number
   afterBytes: number
-  reason?: 'no-versions' | 'no-file' | 'no-gain' | 'ok'
+  reason?: 'no-versions' | 'no-file' | 'no-gain' | 'raced' | 'ok'
 }
 
 /**
@@ -850,13 +908,21 @@ export async function compactDocument(
   // read that decides the shallow snapshot and the write that persists it
   // see no concurrent tree write in between.
   return withWorkspaceWriteLock(workspaceId, async () => {
-    const manifest = await documentStore.readSnapshotManifest({ docRef })
-    if (manifest === null) {
+    // Same reason file-GC catches up first (ADR-0020): the fold below exports
+    // a shallow snapshot from the CACHED document, and a cached document that
+    // is behind produces a snapshot missing another instance's ops. The
+    // generation fence does not cover it — a writer that merely APPENDED left
+    // the generation alone, and `supersededDeltaCount` then drops the very
+    // delta that carried those ops.
+    await catchUpWorkspaceDoc(workspaceId)
+    const header = await documentStore.readSnapshotManifest({ docRef })
+    if (header === null) {
       return { compacted: false, beforeBytes: 0, afterBytes: 0, reason: 'no-file' }
     }
+    const { manifest } = header
     const { updates: storedDeltas } = await documentStore.loadDeltas({
       docRef,
-      sinceFrontier: new Uint8Array(),
+      afterSeq: null,
     })
     const beforeBytes =
       manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)
@@ -886,7 +952,7 @@ export async function compactDocument(
       new Uint8Array(shallow),
       SNAPSHOT_MAX_CHUNK_BYTES,
     )
-    await documentStore.saveCompactedSnapshot({
+    const folded = await documentStore.saveCompactedSnapshot({
       docRef,
       manifest: fresh,
       chunks,
@@ -895,7 +961,20 @@ export async function compactDocument(
       // above is neither in `shallow` nor superseded by it, and dropping it
       // would lose an edit that arrived while compaction ran.
       supersededDeltaCount: storedDeltas.length,
+      // ADR-0020. The workspace lock above serialises writers inside THIS
+      // process; the fence is what covers a second process. Ignoring the
+      // refusal is deliberate here and only here: this path folds history
+      // that is already durable rather than carrying new ops, so losing the
+      // race costs a compaction, not an edit, and the next save folds again.
+      expectedGeneration: header.generation,
     })
+    if (!folded.ok) {
+      // Another writer replaced the snapshot while this fold ran. Nothing was
+      // written and nothing was lost — this fold carried no new ops, only a
+      // shorter rendering of history that is already durable — so the honest
+      // answer is that no compaction happened, and the next save folds again.
+      return { compacted: false, beforeBytes, afterBytes: beforeBytes, reason: 'raced' }
+    }
     // Compaction folds the WORKSPACE record's oplog, so the timestamp the
     // storage report shows describes the workspace, on the workspace meta.
     // Written after the compacted snapshot, as a small delta on top of it.

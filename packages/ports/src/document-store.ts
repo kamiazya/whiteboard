@@ -57,6 +57,18 @@ export const saveSnapshotInputSchema = z
 export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
 
 /**
+ * A fencing token for the stored snapshot, advanced by every write that
+ * replaces it (ADR-0020).
+ *
+ * Read alongside the manifest and presented back on a fold, it is what makes
+ * the fold conditional. Opaque on purpose beyond "it changes": a caller
+ * compares it for equality and never does arithmetic on it, so a store is
+ * free to implement it as a counter, a row version, or a clock.
+ */
+export const snapshotGenerationSchema = z.number().int().min(0)
+export type SnapshotGeneration = z.infer<typeof snapshotGenerationSchema>
+
+/**
  * A snapshot that already contains the first `supersededDeltaCount` entries of
  * the document's delta log.
  *
@@ -69,8 +81,33 @@ export type SaveSnapshotInput = z.infer<typeof saveSnapshotInputSchema>
  */
 export const saveCompactedSnapshotInputSchema = saveSnapshotInputSchema.safeExtend({
   supersededDeltaCount: z.number().int().min(0),
+  /**
+   * The generation this fold was computed against, or `null` to mean "there
+   * was no snapshot" — the create half of the same conditional write, so
+   * racing to mint a document needs no second operation.
+   *
+   * Required rather than optional. An optional fence is one a caller forgets,
+   * and the shape it protects against — a second folder replacing the
+   * snapshot this one is about to write — is invisible in a single-process
+   * test run.
+   */
+  expectedGeneration: snapshotGenerationSchema.nullable(),
 })
 export type SaveCompactedSnapshotInput = z.infer<typeof saveCompactedSnapshotInputSchema>
+
+/**
+ * A refusal is an OUTCOME, not an error: losing the race is expected under
+ * concurrency and the caller's answer is to append its update to the log
+ * instead. Throwing would push a routine control-flow branch through a catch,
+ * where it reads as a failure worth logging.
+ */
+export const saveCompactedSnapshotResultSchema = z.discriminatedUnion('ok', [
+  z.object({ ok: z.literal(true), generation: snapshotGenerationSchema }).strict(),
+  z
+    .object({ ok: z.literal(false), currentGeneration: snapshotGenerationSchema.nullable() })
+    .strict(),
+])
+export type SaveCompactedSnapshotResult = z.infer<typeof saveCompactedSnapshotResultSchema>
 
 export const appendDeltasInputSchema = z
   .object({ docRef: docRefSchema, deltaBatch: deltaBatchSchema })
@@ -80,13 +117,50 @@ export type AppendDeltasInput = z.infer<typeof appendDeltasInputSchema>
 export const appendDeltasResultSchema = z.object({ frontier: frontierSchema }).strict()
 export type AppendDeltasResult = z.infer<typeof appendDeltasResultSchema>
 
+/**
+ * A position in a document's delta log.
+ *
+ * A SEQ rather than a frontier, because comparing frontiers needs the
+ * loro-crdt runtime and a store does not have one — `Frontier` is an opaque
+ * `Uint8Array` at this layer, which is why the frontier-shaped parameter this
+ * replaced was ignored by every implementation that ever had it. The seq a
+ * store already assigns to order the log costs it nothing, and CRDT updates
+ * are idempotent, so a cursor that over-delivers is slower rather than wrong.
+ */
+export const deltaSeqSchema = z.number().int().min(0)
+export type DeltaSeq = z.infer<typeof deltaSeqSchema>
+
 export const loadDeltasInputSchema = z
-  .object({ docRef: docRefSchema, sinceFrontier: frontierSchema })
+  .object({
+    docRef: docRefSchema,
+    /** Exclusive. `null` asks for the whole log. */
+    afterSeq: deltaSeqSchema.nullable(),
+  })
   .strict()
 export type LoadDeltasInput = z.infer<typeof loadDeltasInputSchema>
 
 export const loadDeltasResultSchema = z
-  .object({ updates: z.array(z.instanceof(Uint8Array)), frontier: frontierSchema })
+  .object({
+    updates: z.array(z.instanceof(Uint8Array)),
+    /**
+     * The highest seq in the log at read time, whatever was returned, so a
+     * caught-up caller still learns where to resume. `null` for an empty log.
+     */
+    lastSeq: deltaSeqSchema.nullable(),
+    /**
+     * The snapshot generation at read time, or `null` when the log has no
+     * snapshot behind it.
+     *
+     * A tailing reader's cursor is the PAIR `(generation, afterSeq)`, and this
+     * is the half that keeps it honest: a seq is monotonic only WITHIN a
+     * generation. `appendDeltas` assigns from the highest seq present, so a
+     * fold that empties the log lets the next append reuse seqs the reader has
+     * already consumed. A generation that differs from the one the reader
+     * holds means its prefix was folded away and the snapshot must be re-read.
+     */
+    generation: snapshotGenerationSchema.nullable(),
+    frontier: frontierSchema,
+  })
   .strict()
 export type LoadDeltasResult = z.infer<typeof loadDeltasResultSchema>
 
@@ -99,7 +173,10 @@ export type ReadFrontierResult = z.infer<typeof readFrontierResultSchema>
 export const readSnapshotManifestInputSchema = z.object({ docRef: docRefSchema }).strict()
 export type ReadSnapshotManifestInput = z.infer<typeof readSnapshotManifestInputSchema>
 
-export const readSnapshotManifestResultSchema = snapshotManifestSchema.nullable()
+export const readSnapshotManifestResultSchema = z
+  .object({ manifest: snapshotManifestSchema, generation: snapshotGenerationSchema })
+  .strict()
+  .nullable()
 export type ReadSnapshotManifestResult = z.infer<typeof readSnapshotManifestResultSchema>
 
 export const deleteDocInputSchema = z.object({ docRef: docRefSchema }).strict()
@@ -161,7 +238,7 @@ export interface DocumentStore {
    * Without this a log has no way to stop growing while the document lives:
    * `deleteDoc` is the only other thing that clears one.
    */
-  saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void>
+  saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<SaveCompactedSnapshotResult>
   appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult>
   loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult>
   readFrontier(input: ReadFrontierInput): Promise<ReadFrontierResult>

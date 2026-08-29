@@ -2,7 +2,7 @@ import { createHash } from 'node:crypto'
 import { request } from 'node:http'
 import { createServer } from 'node:net'
 import { Client, StreamableHTTPClientTransport } from '@modelcontextprotocol/client'
-import { afterEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { findAvailablePort } from '../cli/daemon-run.js'
 import { decodeBase64UrlText } from '../shared/api-contracts/pairing-link.js'
 import {
@@ -528,5 +528,77 @@ describe('startHttpServer bind-failure handling', () => {
       capture.restore()
       await new Promise<void>((resolve) => occupier.close(() => resolve()))
     }
+  })
+})
+
+describe('workspace tail wiring', () => {
+  const ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
+  let running: Awaited<ReturnType<typeof startHttpServer>> | undefined
+  let previous: string | undefined
+
+  beforeEach(() => {
+    previous = process.env[ENV]
+  })
+
+  afterEach(async () => {
+    if (previous === undefined) delete process.env[ENV]
+    else process.env[ENV] = previous
+    await running?.close()
+    running = undefined
+  })
+
+  function countingTailFactory() {
+    const counts = { created: 0, started: 0, stopped: 0 }
+    const factory = () => {
+      counts.created += 1
+      return {
+        pollOnce: async () => {},
+        start: () => {
+          counts.started += 1
+        },
+        stop: async () => {
+          counts.stopped += 1
+        },
+      }
+    }
+    return { counts, factory }
+  }
+
+  /**
+   * The default is OFF, and this is the assertion that keeps it that way. A
+   * tail running in every single-daemon install would poll the database
+   * forever for a second instance nobody deployed, and nothing else here
+   * would notice.
+   */
+  it('creates no tail when the interval is unset', async () => {
+    delete process.env[ENV]
+    const port = await findAvailablePort(4600)
+    const { counts, factory } = countingTailFactory()
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      workspaceTailFactory: factory,
+    })
+    await fetch(`http://127.0.0.1:${port}/api/runtime/ping`)
+    expect(counts.created).toBe(0)
+  })
+
+  it('creates, starts and stops exactly one tail when the interval is set', async () => {
+    process.env[ENV] = '250'
+    const port = await findAvailablePort(4610)
+    const { counts, factory } = countingTailFactory()
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      workspaceTailFactory: factory,
+    })
+    await fetch(`http://127.0.0.1:${port}/api/runtime/ping`)
+    expect(counts.created).toBe(1)
+    expect(counts.started).toBe(1)
+    expect(counts.stopped).toBe(0)
+
+    await running.close()
+    running = undefined
+    expect(counts.stopped).toBe(1)
   })
 })

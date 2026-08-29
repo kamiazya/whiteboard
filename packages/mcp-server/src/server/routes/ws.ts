@@ -44,6 +44,21 @@ const readyConnections = new Map<string, Set<WebSocket>>()
 // retired; a workspace replica could never import those frames.)
 const workspaceConnections = new Map<string, Set<WebSocket>>()
 
+/**
+ * The workspaces with a live audience on THIS instance.
+ *
+ * Read by the workspace tail so it follows only records somebody is watching.
+ * Exposed as a function rather than the map so the caller cannot mutate the
+ * registry, and so this module keeps owning what "connected" means.
+ */
+export function subscribedWorkspaceIds(): string[] {
+  const ids: string[] = []
+  for (const [workspaceId, clients] of workspaceConnections) {
+    if (clients.size > 0) ids.push(workspaceId)
+  }
+  return ids
+}
+
 // The store-side funnel: every persisted workspace-document update — from a
 // workspace-scope socket, an HTTP update at either granularity, an MCP tool
 // save, a delete/rename, a restore — lands here once, with the exact bytes

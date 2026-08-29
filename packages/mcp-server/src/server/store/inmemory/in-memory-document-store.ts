@@ -14,6 +14,7 @@ import type {
   ReadSnapshotManifestInput,
   ReadSnapshotManifestResult,
   SaveCompactedSnapshotInput,
+  SaveCompactedSnapshotResult,
   SaveSnapshotInput,
   SnapshotChunk,
   SnapshotManifest,
@@ -35,11 +36,18 @@ interface DocRecord {
   } | null
   readonly frontier: Frontier | null
   readonly deltas: readonly Uint8Array[]
+  /** The seq the NEXT appended update gets. Monotonic across truncations —
+   *  `deltas[i]` carries `nextSeq - deltas.length + i` — which is what lets a
+   *  tail resume without re-reading what it has. */
+  readonly nextSeq: number
+  /** ADR-0020's fencing token. Advanced by every write that replaces the
+   *  snapshot; meaningless while `snapshot` is null. */
+  readonly generation: number
   readonly unreadable?: StoredDocumentUnreadableCode
 }
 
 function emptyRecord(): DocRecord {
-  return { snapshot: null, frontier: null, deltas: [] }
+  return { snapshot: null, frontier: null, deltas: [], nextSeq: 1, generation: 0 }
 }
 
 function cloneChunk(chunk: SnapshotChunk): SnapshotChunk {
@@ -86,7 +94,7 @@ export class InMemoryDocumentStore implements DocumentStore {
     if (!record?.snapshot || !record.frontier) {
       return null
     }
-    return record.snapshot.manifest
+    return { manifest: record.snapshot.manifest, generation: record.generation }
   }
 
   async loadSnapshot(input: LoadSnapshotInput): Promise<LoadSnapshotResult> {
@@ -122,6 +130,9 @@ export class InMemoryDocumentStore implements DocumentStore {
         chunks: input.chunks.map(cloneChunk),
       },
       frontier: cloneBytes(input.frontier),
+      // Unconditional, but still fenced: a fold computed against the content
+      // this call just replaced must not be accepted afterwards and undo it.
+      generation: existing.generation + 1,
     })
   }
 
@@ -131,16 +142,29 @@ export class InMemoryDocumentStore implements DocumentStore {
    * was not: the await let a concurrent `appendDeltas` land in between, and
    * the clear then threw away an update that could not be in the snapshot.
    */
-  async saveCompactedSnapshot(input: SaveCompactedSnapshotInput): Promise<void> {
+  async saveCompactedSnapshot(
+    input: SaveCompactedSnapshotInput,
+  ): Promise<SaveCompactedSnapshotResult> {
     const key = docRefKey(input.docRef)
     const existing = this.getRecord(key)
+    // `null` expects no snapshot; a number expects exactly that generation.
+    const current = existing.snapshot === null ? null : existing.generation
+    if (current !== input.expectedGeneration) {
+      return { ok: false, currentGeneration: current }
+    }
+    const generation = existing.generation + 1
     this.docs.set(key, {
       snapshot: { manifest: input.manifest, chunks: input.chunks.map(cloneChunk) },
       frontier: cloneBytes(input.frontier),
       // Exactly the superseded prefix. Anything appended after the caller
       // folded is not in the snapshot and stays.
       deltas: existing.deltas.slice(input.supersededDeltaCount),
+      // NOT reset. A fold shortens the array without moving the seqs already
+      // handed out, which is what keeps a tail's cursor meaningful across it.
+      nextSeq: existing.nextSeq,
+      generation,
     })
+    return { ok: true, generation }
   }
 
   async appendDeltas(input: AppendDeltasInput): Promise<AppendDeltasResult> {
@@ -150,28 +174,30 @@ export class InMemoryDocumentStore implements DocumentStore {
     this.docs.set(key, {
       ...existing,
       deltas: [...existing.deltas, ...input.deltaBatch.updates.map(cloneBytes)],
+      nextSeq: existing.nextSeq + input.deltaBatch.updates.length,
       frontier,
     })
     return { frontier: cloneBytes(frontier) }
   }
 
   /**
-   * `sinceFrontier` is intentionally ignored: comparing frontiers is a
-   * loro-crdt runtime concern (frontiers are an opaque `Uint8Array` at the
-   * `ports` contract layer), not something this in-memory test
-   * double can do on its own. It always returns the full accumulated delta
-   * log for the doc; a future libSQL-backed store that actually filters by
-   * frontier remains behaviorally compatible with every caller of this
-   * double because "everything since the start" is always a superset of
-   * "everything since `sinceFrontier`".
+   * Tails by seq. `deltas[i]` carries `nextSeq - deltas.length + i`, so a
+   * truncating fold shifts the array without shifting the seqs — which is the
+   * whole point of storing `nextSeq` rather than deriving a position from the
+   * array index.
    */
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
     const record = this.docs.get(docRefKey(input.docRef))
     if (!record) {
-      return { updates: [], frontier: new Uint8Array() }
+      return { updates: [], lastSeq: null, generation: null, frontier: new Uint8Array() }
     }
+    const firstSeq = record.nextSeq - record.deltas.length
+    const after = input.afterSeq ?? firstSeq - 1
+    const updates = record.deltas.filter((_, index) => firstSeq + index > after).map(cloneBytes)
     return {
-      updates: record.deltas.map(cloneBytes),
+      updates,
+      lastSeq: record.deltas.length === 0 ? null : record.nextSeq - 1,
+      generation: record.snapshot === null ? null : record.generation,
       frontier: record.frontier ? cloneBytes(record.frontier) : new Uint8Array(),
     }
   }

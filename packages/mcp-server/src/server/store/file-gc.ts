@@ -14,7 +14,12 @@ import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
 import { loadDocumentBranches } from './branches-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
-import { cloneStoredWorkspaceDoc, listDocuments, loadDocument } from './document-store.js'
+import {
+  catchUpWorkspaceDoc,
+  cloneStoredWorkspaceDoc,
+  listDocuments,
+  loadDocument,
+} from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
@@ -253,6 +258,18 @@ export async function purgeDanglingFiles(
   // as "dangling".
   const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
+    // Judge against the RECORD, not this instance's cache. `listDocuments`
+    // and `loadDocument` both read the cached workspace document, which is
+    // authoritative for one daemon — every write goes through it — and is
+    // simply behind for two. A pass that trusted it would not see a document
+    // another instance created and would unlink its blobs as dangling. That
+    // is not a narrow race: the gap is however long since this instance last
+    // caught up (ADR-0020).
+    //
+    // Reentrant on the barrier held above: `withWorkspaceWriteLock` detects
+    // an acquisition from the chain that already holds it, so this does not
+    // deadlock against the lock this pass is running inside.
+    const before = await catchUpWorkspaceDoc(workspaceId)
     // List the candidate files BEFORE the reference scan: collecting
     // references forks + checks out every branch/version of every canvas,
     // which is far too expensive to pay for a workspace that has no files
@@ -269,6 +286,22 @@ export async function purgeDanglingFiles(
     if (entries.length === 0) return { purgedCount: 0, purgedBytes: 0 }
 
     const referenced = await collectReferencedFileIds(workspaceId, options.versionStore)
+
+    // The fence. Collecting forks and checks out every branch and version of
+    // every document, so it is the longest window in this pass and the one
+    // another instance is most likely to write into. A record that moved
+    // means the referenced set was computed against a state that no longer
+    // exists, so this pass stands down rather than acting on it. Purging is
+    // periodic; the next pass sees the new state and decides again.
+    //
+    // This narrows the window to the span between the check and the unlinks
+    // rather than closing it, which is what a fence over a filesystem can do
+    // — the grace period covers what is left.
+    const after = await catchUpWorkspaceDoc(workspaceId)
+    if (after.generation !== before.generation || after.afterSeq !== before.afterSeq) {
+      log.info({ workspaceId }, 'purge stood down: the workspace record moved mid-pass')
+      return { purgedCount: 0, purgedBytes: 0, skippedReason: 'record-moved' as const }
+    }
 
     let purgedCount = 0
     let purgedBytes = 0
