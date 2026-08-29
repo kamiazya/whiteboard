@@ -9,7 +9,7 @@
 import { act, cleanup, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
@@ -59,7 +59,7 @@ describe('stale /local/:path deep link', () => {
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       // Deliberately not the id: the fallback below has to be reached by PATH,
       // and an id-shaped path could not tell the two apart.
       path: 'real-canvas',
@@ -110,7 +110,7 @@ describe('stale /local/:path deep link', () => {
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'real-canvas',
       name: 'Real canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
@@ -162,7 +162,7 @@ describe('stale /local/:path deep link', () => {
     await store.setDefaultDocumentId('005AFMSY38DJQW16BGNTZ49EKR')
     await store.save({
       documentId: '005AFMSY38DJQW16BGNTZ49EKR',
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'real-canvas',
       name: 'Real canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
@@ -170,7 +170,7 @@ describe('stale /local/:path deep link', () => {
     })
     await store.save({
       documentId: '01ARZ3NDEKTSV4RRFFQ69G5FB0',
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'other-canvas',
       name: 'Other canvas',
       updatedAt: '2026-05-25T00:00:00.000Z',

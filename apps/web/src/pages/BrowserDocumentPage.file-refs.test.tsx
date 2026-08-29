@@ -9,7 +9,7 @@ import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-lib
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import type { SpatialEditorProps } from '../components/spatial-editor/index.js'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
@@ -73,7 +73,7 @@ async function seededStore(): Promise<LocalStoreDouble> {
   await store.setDefaultDocumentId(HERE_ID)
   await store.save({
     documentId: HERE_ID,
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     path: 'here',
     name: 'Here',
     updatedAt: '2026-05-24T00:00:00.000Z',
@@ -81,7 +81,7 @@ async function seededStore(): Promise<LocalStoreDouble> {
   })
   await store.save({
     documentId: TARGET_ID,
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     // Deliberately unlike both the id and the display name: a fixture where
     // any of the three could stand in for another proves nothing about which
     // one the wiring actually used.

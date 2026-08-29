@@ -22,6 +22,7 @@ import {
 } from '../store/document-store.js'
 import type { VersionEntry } from '../store/version-store.js'
 import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
+import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
 import {
   setSyncSseHooks,
   sseBroadcastText,
@@ -268,6 +269,13 @@ export async function handleWsUpgrade(
     ws.close()
     return
   }
+
+  // Resolved before ANY use, and OUTSIDE the parse guard above so a registry
+  // failure is not absorbed as a malformed address: `key` and both connection
+  // registries below are keyed by this, and a socket registered under the
+  // segment while its fan-out looks up the canonical id would go permanently
+  // silent.
+  workspaceId = await resolveWorkspaceHandleToId(workspaceId)
 
   const key = `${workspaceId}/${path}`
 

@@ -30,8 +30,11 @@ import {
   planSubtreeMove,
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
+  resolveWorkspaceHandle,
   type SetDocumentNameInput,
+  type WorkspaceEntry,
   WorkspaceNotFoundError,
+  workspaceEntrySchema,
 } from '@kamiazya/whiteboard-ports'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
@@ -82,20 +85,46 @@ export class IdbDocumentIndex implements DocumentIndex {
     return inTransaction(this.dbName, stores, mode, body)
   }
 
-  async createWorkspace({ workspaceId }: CreateWorkspaceInput): Promise<void> {
+  async createWorkspace({
+    workspaceId,
+    segment,
+    displayName,
+  }: CreateWorkspaceInput): Promise<void> {
     await this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
       // put, not add: creating one that exists is explicitly not an error.
-      await request(tx.objectStore(WORKSPACES_STORE).put({ workspaceId }, workspaceId))
+      await request(
+        tx.objectStore(WORKSPACES_STORE).put(
+          {
+            workspaceId,
+            ...(segment === undefined ? {} : { segment }),
+            ...(displayName === undefined ? {} : { displayName }),
+          },
+          workspaceId,
+        ),
+      )
     })
   }
 
-  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+  /**
+   * Reads VALUES, not keys. The key alone was enough while `workspaceId` was
+   * the only field a row had, but `segment` is what an address resolves
+   * through and lives only in the value — a key-only read would answer every
+   * row with its segment silently missing, which reads as "this workspace has
+   * no segment" rather than as a read that did not look.
+   *
+   * A row written before the value carried those fields still lists: they are
+   * optional in `workspaceEntrySchema` precisely because absent is a state a
+   * workspace can be in.
+   */
+  async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return this.tx([WORKSPACES_STORE], 'readonly', async (tx) => {
-      // The store is keyed by workspaceId, so the KEYS are the answer — no
-      // value read, and nothing to go stale between the two.
-      const keys = await request(tx.objectStore(WORKSPACES_STORE).getAllKeys())
-      return keys.map((key) => ({ workspaceId: String(key) }))
+      const rows = await request(tx.objectStore(WORKSPACES_STORE).getAll())
+      return rows.map((row) => workspaceEntrySchema.parse(row))
     })
+  }
+
+  async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
+    return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
   }
 
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {

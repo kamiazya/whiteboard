@@ -214,8 +214,18 @@ async function main() {
   if (typeof created.documentId !== 'string' || created.path !== 'e2e-src') {
     throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
   }
+  // A create says which workspace it filed the document under (ADR-0019).
+  // Asserted here rather than only in a unit test because the MCP SDK
+  // validates structuredContent against outputSchema at runtime through the
+  // PUBLISHED artifact — this is the last place a schema and the value it
+  // describes can be caught travelling separately.
+  if (created.workspaceId !== WORKSPACE_ID) {
+    throw new Error(
+      `wb_document_create did not report the workspace it wrote to: ${JSON.stringify(created)}`,
+    )
+  }
   const documentId = created.documentId
-  console.log(`[e2e] wb_document_create → ${documentId}`)
+  console.log(`[e2e] wb_document_create → ${documentId} in ${created.workspaceId}`)
 
   // A document's name is the workspace's, not its content's (ADR-0009), so
   // it round-trips through create -> list without any document read.

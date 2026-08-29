@@ -5,10 +5,10 @@ import { DeleteDocumentDialog } from '../components/document-list/DeleteDocument
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import {
-  BROWSER_WORKSPACE_ID,
   type ContentClock,
   type DefaultDocumentPointer,
   ensureLocalWorkspace,
@@ -128,10 +128,10 @@ export function BrowserIndexPage({
       // editor.
       const pointed = await pointer.get()
       const target = await index.resolveDocument({
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         path: pendingDelete.path,
       })
-      await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: pendingDelete.path })
+      await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: pendingDelete.path })
       if (pointed !== null && target !== null && pointed === target.documentId) {
         await pointer.clear()
       }

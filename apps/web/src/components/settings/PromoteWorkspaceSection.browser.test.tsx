@@ -18,10 +18,11 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../../lib/idb-document-index.js'
-import { BROWSER_WORKSPACE_ID, ensureLocalWorkspace } from '../../lib/local-document-summary.js'
+import { ensureLocalWorkspace } from '../../lib/local-document-summary.js'
 import { LoroStore } from '../../lib/loro-store.js'
 import { createUserSettingsStore, STORAGE_KEY } from '../../lib/user-settings-store.js'
 import { seedWorkspaceDocumentContent } from '../../lib/workspace-content.js'
@@ -82,12 +83,12 @@ async function seedTwoDocuments(): Promise<{ roadmapId: string; sketchId: string
   const index = new FoldingBrowserIndex()
   await ensureLocalWorkspace(index)
   const roadmap = await index.createDocument({
-    workspaceId: 'local',
+    workspaceId: getBrowserWorkspaceId(),
     path: 'notes/roadmap',
     kind: 'markdown',
   })
   const sketch = await index.createDocument({
-    workspaceId: 'local',
+    workspaceId: getBrowserWorkspaceId(),
     path: 'sketch',
     kind: 'spatial',
   })
@@ -123,9 +124,9 @@ async function seedImageOnSketch(sketchId: string): Promise<void> {
  */
 async function seedPreFoldDocument(path: string): Promise<string> {
   const index = new IdbDocumentIndex()
-  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const entry = await index.createDocument({
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'spatial',
   })
@@ -227,7 +228,9 @@ describe('PromoteWorkspaceSection', () => {
     // browser keeper still resolves them too (the copy here stays).
     expect(resolveWorkspaceDocumentById(target, roadmapId)).not.toBeNull()
     expect(resolveWorkspaceDocumentById(target, sketchId)).not.toBeNull()
-    const stillHere = await new FoldingBrowserIndex().listDocuments({ workspaceId: 'local' })
+    const stillHere = await new FoldingBrowserIndex().listDocuments({
+      workspaceId: getBrowserWorkspaceId(),
+    })
     expect([...stillHere.map((d) => d.documentId)].sort()).toEqual([roadmapId, sketchId].sort())
 
     // Not a toast: no alert/transient surface anywhere, and the report is

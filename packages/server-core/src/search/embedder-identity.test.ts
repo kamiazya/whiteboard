@@ -36,12 +36,15 @@ function embedderNamed(id: string, fill: number): Embedder & { calls: number } {
 }
 
 async function seed(deps: ReturnType<typeof makeDeps>) {
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  await deps.documentIndex.createWorkspace({ workspaceId: WS })
   const created = await wbDocumentCreate(deps, {
     workspaceId: WS,
     path: 'untitled-1',
     kind: 'markdown',
     name: 'note',
-    createWorkspace: true,
   })
   await createDocumentSetTool(deps).execute({
     workspaceId: WS,

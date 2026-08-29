@@ -23,6 +23,7 @@ function withResolveOverride(
   return {
     createWorkspace: index.createWorkspace.bind(index),
     listWorkspaces: index.listWorkspaces.bind(index),
+    resolveWorkspace: index.resolveWorkspace.bind(index),
     createDocument: index.createDocument.bind(index),
     resolveDocument: index.resolveDocument.bind(index),
     resolveDocumentById,
@@ -44,11 +45,15 @@ function makeDeps(): ServerDeps {
 }
 
 async function createDoc(deps: ServerDeps, kind: 'spatial' | 'markdown') {
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  // Idempotent on the in-memory double, so calling it per document is fine.
+  await deps.documentIndex.createWorkspace({ workspaceId: 'ws' })
   const { documentId } = await wbDocumentCreate(deps, {
     workspaceId: 'ws',
     path: `doc-${kind}`,
     kind,
-    createWorkspace: true,
   })
   return documentId
 }

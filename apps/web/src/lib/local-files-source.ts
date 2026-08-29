@@ -16,9 +16,9 @@ import {
   type WorkspaceFilesSource,
   WorkspaceMissingError,
 } from '../components/workspace-files/files-source.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import {
-  BROWSER_WORKSPACE_ID,
   type ContentClock,
   ensureLocalWorkspace,
   idbContentClock,
@@ -92,12 +92,12 @@ export function createLocalFilesSource(
     async listDocuments(): Promise<readonly WorkspaceDocumentEntry[]> {
       let entries: Awaited<ReturnType<DocumentIndex['listDocuments']>>
       try {
-        entries = await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })
+        entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
       } catch (err) {
         // The panel's not-found state is mode-independent: this is the local
         // spelling of the daemon's 404.
         if (err instanceof WorkspaceNotFoundError) {
-          throw new WorkspaceMissingError(BROWSER_WORKSPACE_ID)
+          throw new WorkspaceMissingError(getBrowserWorkspaceId())
         }
         throw err
       }
@@ -140,7 +140,7 @@ export function createLocalFilesSource(
       await ensureLocalWorkspace(index)
       const trimmed = name?.trim()
       const entry = await index.createDocument({
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         path,
         kind,
         ...(trimmed ? { name: trimmed } : {}),
@@ -153,7 +153,7 @@ export function createLocalFilesSource(
         await loro.save(entry.documentId, loro.createEmptySnapshot())
       } catch (err) {
         try {
-          await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: entry.path })
+          await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: entry.path })
         } catch {
           // Best-effort: a stray index row is harmless next to reporting a
           // create that did not happen.
@@ -163,7 +163,7 @@ export function createLocalFilesSource(
     },
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {
-      await index.moveDocument({ workspaceId: BROWSER_WORKSPACE_ID, from: path, to: newPath })
+      await index.moveDocument({ workspaceId: getBrowserWorkspaceId(), from: path, to: newPath })
     },
 
     async searchDocuments(query, limit = 20) {
@@ -217,7 +217,7 @@ export function createLocalFilesSource(
 
     async setDocumentName(entry, name): Promise<void> {
       await index.setDocumentName({
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         documentId: entry.documentId,
         // The port spells "clear" as absence, not empty string.
         ...(name === undefined ? {} : { name }),
@@ -242,7 +242,7 @@ export function createLocalFilesSource(
       ? {
           async listTrash() {
             const rows = await (index as FoldingBrowserIndex).listTrash({
-              workspaceId: BROWSER_WORKSPACE_ID,
+              workspaceId: getBrowserWorkspaceId(),
             })
             return rows.map((row) => ({
               documentId: row.documentId,
@@ -252,7 +252,7 @@ export function createLocalFilesSource(
           },
           async restoreFromTrash(documentId: string) {
             const restored = await (index as FoldingBrowserIndex).restoreDocument({
-              workspaceId: BROWSER_WORKSPACE_ID,
+              workspaceId: getBrowserWorkspaceId(),
               documentId,
             })
             // null means nothing came back — surfacing it is what lets the

@@ -68,13 +68,16 @@ beforeAll(async () => {
   }
   const set = createDocumentSetTool(deps)
   const edit = createCanvasEditTool(deps)
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  await deps.documentIndex.createWorkspace({ workspaceId: WS })
   for (const doc of CORPUS_DOCUMENTS) {
     const created = await wbDocumentCreate(deps, {
       workspaceId: WS,
       path: doc.path,
       kind: doc.kind,
       name: doc.name,
-      createWorkspace: true,
     })
     if (doc.kind === 'markdown') {
       const frontmatter =

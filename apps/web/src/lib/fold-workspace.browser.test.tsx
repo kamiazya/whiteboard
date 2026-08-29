@@ -16,9 +16,9 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 
 const DB_NAME = claimIsolatedWhiteboardDb('fold-workspace')
@@ -35,9 +35,9 @@ beforeEach(deleteDb)
 
 async function seedDocument(path: string, text: string): Promise<string> {
   const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const entry = await index.createDocument({
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     path,
     kind: 'spatial',
   })
@@ -57,7 +57,7 @@ it('folds every indexed document into the workspace document, content included',
 
   // Read back through a FRESH open — what was persisted, not what was in
   // memory when the fold ran.
-  const workspace = await new BrowserWorkspaceDocs(DB_NAME).open(BROWSER_WORKSPACE_ID)
+  const workspace = await new BrowserWorkspaceDocs(DB_NAME).open(getBrowserWorkspaceId())
   expect(workspace).not.toBeNull()
   if (workspace === null) return
   expect(
@@ -82,9 +82,9 @@ it('is idempotent, and picks up documents created between runs', async () => {
 
 it('skips an unreadable document rather than folding an empty one', async () => {
   const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   const entry = await index.createDocument({
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     path: 'damaged',
     kind: 'spatial',
   })
@@ -95,7 +95,7 @@ it('skips an unreadable document rather than folding an empty one', async () => 
 
   // Not in the tree: the old record stays the damaged document's home, where
   // the old read path reports it as present-but-unreadable.
-  const workspace = await new BrowserWorkspaceDocs(DB_NAME).open(BROWSER_WORKSPACE_ID)
+  const workspace = await new BrowserWorkspaceDocs(DB_NAME).open(getBrowserWorkspaceId())
   expect(
     workspace === null ? null : resolveWorkspaceDocumentById(workspace, entry.documentId),
   ).toBeNull()

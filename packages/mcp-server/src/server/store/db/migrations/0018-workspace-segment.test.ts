@@ -79,7 +79,10 @@ describe('0018-workspace-segment', () => {
     await handle.migrateTo(PRE_0018)
     await seedWorkspace(handle.db, 'ws-legacy')
 
-    await handle.migrateToHead()
+    // At 0018, not at head: 0019 re-keys `ws-legacy` onto a canonical ULID
+    // and carries the old handle into the very column this is asserting is
+    // NULL, so head would be checking 0019's behaviour under 0018's name.
+    await handle.migrateTo('0018-workspace-segment')
 
     expect(await columnNames(handle.db, 'workspaces')).toContain('segment')
     const row = await handle.db

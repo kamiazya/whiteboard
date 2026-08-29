@@ -22,12 +22,15 @@ function makeDeps() {
 }
 
 async function seed(deps: ReturnType<typeof makeDeps>) {
+  // The workspace exists because this fixture says so, not as a side effect
+  // of the first create: creating one is ADR-0019's MINT boundary, which
+  // keys it by a fresh ULID and would leave the literal below naming nothing.
+  await deps.documentIndex.createWorkspace({ workspaceId: WS })
   const create = (path: string, kind: 'markdown' | 'spatial', name?: string) =>
     wbDocumentCreate(deps, {
       workspaceId: WS,
       path,
       kind,
-      createWorkspace: true,
       ...(name === undefined ? {} : { name }),
     })
   const target = await create('target', 'markdown', 'Release plan')

@@ -80,6 +80,15 @@ export const wbDocumentCreateInputSchema = z
 
 export const wbDocumentCreateOutputSchema = z
   .object({
+    /**
+     * The workspace the document was filed under, as its CANONICAL id
+     * (ADR-0019). Always present, not only when this call created one: a
+     * caller that addressed an existing workspace by its segment learns the
+     * id behind it, and a caller that created one learns what the server
+     * minted. Without it a create is unusable — the server picks an id,
+     * files the document under it, and never says which.
+     */
+    workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     path: documentPathSchema,
   })

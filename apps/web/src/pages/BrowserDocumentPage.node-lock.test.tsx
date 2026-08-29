@@ -34,8 +34,9 @@ import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
-import { BROWSER_WORKSPACE_ID, IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
+import { IdbDefaultDocumentPointer } from '../lib/local-document-summary.js'
 import {
   clearWhiteboardDb,
   createNodeCommand,
@@ -102,7 +103,7 @@ async function waitForStoredLocks(want: 'some' | 'none'): Promise<void> {
   await waitFor(
     async () => {
       const id = (await new IdbDefaultDocumentPointer().get()) ?? ''
-      const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID)
+      const workspace = await new BrowserWorkspaceDocs().open(getBrowserWorkspaceId())
       expect(workspace).not.toBeNull()
       if (workspace === null) return
       expect(resolveWorkspaceDocumentById(workspace, id)).not.toBeNull()

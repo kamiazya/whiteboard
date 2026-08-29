@@ -29,5 +29,6 @@ export const PUBLISHED_MIGRATION_NAMES = [
   '0016-drop-documents-fk',
   '0017-drop-documents-table',
   '0018-workspace-segment',
-  '0019-snapshot-generation',
+  '0019-workspace-canonical-id',
+  '0020-snapshot-generation',
 ] as const satisfies readonly string[]

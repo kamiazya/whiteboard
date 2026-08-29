@@ -8,7 +8,7 @@
  * suite says so rather than a comment claiming it does.
  */
 
-import type { BlobRef, BlobStore } from '@kamiazya/whiteboard-ports'
+import type { BlobRef, BlobStore, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe } from 'vitest'
@@ -22,9 +22,18 @@ import type { WorkspaceDocs } from './workspace-docs.js'
  * exported. A real backing store exports and writes there, which is exactly
  * the part this package does not decide.
  */
+/**
+ * Doubles as this index's `WorkspaceRegistry`, which is why it holds identity
+ * separately from the documents: the tree index never writes a registry row —
+ * `createWorkspace` only creates the tree doc — so `segment`/`displayName`
+ * reach the registry through whoever owns it, which in the daemon is
+ * `CacheCoherentDocumentIndex`'s override and here is `seedWorkspace`.
+ */
 function inMemoryWorkspaceDocs(): WorkspaceDocs & {
-  listWorkspaces(): Promise<{ workspaceId: string }[]>
+  listWorkspaces(): Promise<WorkspaceEntry[]>
+  seedWorkspace(entry: WorkspaceEntry): Promise<void>
 } {
+  const identities = new Map<string, WorkspaceEntry>()
   const docs = new Map<string, LoroDoc>()
   let nextPeer = 1n
   return {
@@ -49,7 +58,11 @@ function inMemoryWorkspaceDocs(): WorkspaceDocs & {
     readCursor: () => Promise.reject(new Error('not implemented')),
     catchUp: () => Promise.reject(new Error('not implemented')),
     async listWorkspaces() {
-      return [...docs.keys()].map((workspaceId) => ({ workspaceId }))
+      return [...docs.keys()].map((workspaceId) => identities.get(workspaceId) ?? { workspaceId })
+    },
+    async seedWorkspace(entry) {
+      identities.set(entry.workspaceId, entry)
+      await this.create(entry.workspaceId)
     },
   }
 }
@@ -82,11 +95,12 @@ function inMemoryBlobStore(): BlobStore {
 }
 
 describe('LoroWorkspaceDocumentIndex', () => {
-  describeDocumentIndexConformance(async () => ({
-    index: (() => {
-      const docs = inMemoryWorkspaceDocs()
-      return new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs)
-    })(),
-    dispose: async () => {},
-  }))
+  describeDocumentIndexConformance(async () => {
+    const docs = inMemoryWorkspaceDocs()
+    return {
+      index: new LoroWorkspaceDocumentIndex(docs, inMemoryBlobStore(), docs),
+      dispose: async () => {},
+      seedWorkspace: (entry) => docs.seedWorkspace(entry),
+    }
+  })
 })

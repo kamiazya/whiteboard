@@ -128,14 +128,26 @@ describe('wbDocumentCreateInputSchema', () => {
 describe('wbDocumentCreateOutputSchema', () => {
   it('accepts valid output', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
+      workspaceId: 'ws-1',
       documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
     })
     expect(result.success).toBe(true)
   })
 
+  it('requires the workspace the document was filed under', () => {
+    // A create that does not say which workspace it wrote to is unusable
+    // once the server, rather than the caller, decides that id (ADR-0019).
+    const result = wbDocumentCreateOutputSchema.safeParse({
+      documentId: VALID_DOCUMENT_ID,
+      path: 'my-doc',
+    })
+    expect(result.success).toBe(false)
+  })
+
   it('rejects invalid documentId', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
+      workspaceId: 'ws-1',
       documentId: 'not-a-ulid',
       path: 'my-doc',
     })
@@ -144,6 +156,7 @@ describe('wbDocumentCreateOutputSchema', () => {
 
   it('rejects extra keys (strict)', () => {
     const result = wbDocumentCreateOutputSchema.safeParse({
+      workspaceId: 'ws-1',
       documentId: VALID_DOCUMENT_ID,
       path: 'my-doc',
       extra: 1,
