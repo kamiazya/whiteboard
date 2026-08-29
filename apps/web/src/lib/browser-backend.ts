@@ -13,9 +13,9 @@ import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { getAppLogger } from './app-logger.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore, dataUrlToBlob } from './document-file-store.js'
 import { foldWorkspaceDocuments } from './fold-workspace.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 
 /**
@@ -124,7 +124,7 @@ export class BrowserBackend implements DocumentBackend {
     if (workspaceDoc === null) return
     try {
       workspaceDoc.import(bytes)
-      await this.docs.save(BROWSER_WORKSPACE_ID, workspaceDoc)
+      await this.docs.save(getBrowserWorkspaceId(), workspaceDoc)
       // The listing's updatedAt: stamped per push, keyed by the document this
       // backend serves — the workspace document itself has no row to stamp.
       await touchContentTimestamp(this.target.documentId)
@@ -206,7 +206,7 @@ export class BrowserBackend implements DocumentBackend {
 
     let workspaceDoc: LoroDoc
     try {
-      workspaceDoc = await this.docs.create(BROWSER_WORKSPACE_ID)
+      workspaceDoc = await this.docs.create(getBrowserWorkspaceId())
     } catch {
       // The workspace record would not read back. Every document is in it,
       // so this is the browser twin of a corrupt per-document snapshot.
@@ -271,7 +271,7 @@ export class BrowserBackend implements DocumentBackend {
         ...(name === undefined ? {} : { name }),
       })
     }
-    await this.docs.save(BROWSER_WORKSPACE_ID, workspaceDoc)
+    await this.docs.save(getBrowserWorkspaceId(), workspaceDoc)
     return true
   }
 }

@@ -11,10 +11,10 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { inTransaction, request } from './idb-tx.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 import { LoroStore } from './loro-store.js'
 import { loadDocumentContent, seedWorkspaceDocumentContent } from './workspace-content.js'
 
@@ -58,9 +58,9 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     // Seeded exactly as an older build left it: an index row and a
     // per-document Loro record, no workspace document anywhere.
     const legacyIndex = new IdbDocumentIndex()
-    await legacyIndex.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     const entry = await legacyIndex.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'from-before',
       kind: 'spatial',
       name: 'From before',
@@ -70,7 +70,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
 
     const index = new FoldingBrowserIndex()
-    const rows = await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })
+    const rows = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
     expect(rows.map((row) => row.path)).toEqual(['from-before'])
     expect(rows[0]?.name).toBe('From before')
 
@@ -87,9 +87,9 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     // fallback read is what keeps that sentence true — without it the
     // document vanishes from every listing while its bytes sit intact.
     const legacyIndex = new IdbDocumentIndex()
-    await legacyIndex.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     const readable = await legacyIndex.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'readable',
       kind: 'spatial',
     })
@@ -97,7 +97,7 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     writeSpatialCanvas(readableDoc, canvasWith('fine'))
     await new LoroStore().save(readable.documentId, readableDoc.export({ mode: 'snapshot' }))
     const unreadable = await legacyIndex.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'unreadable',
       kind: 'spatial',
       name: 'Damaged but present',
@@ -107,44 +107,44 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     await seedSyncDocument(unreadable.documentId, { raw: { v: 99 } })
 
     const index = new FoldingBrowserIndex()
-    const rows = await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })
+    const rows = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
     expect(rows.map((row) => row.path)).toEqual(['readable', 'unreadable'])
 
     const resolved = await index.resolveDocumentById({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: unreadable.documentId,
     })
     expect(resolved?.path).toBe('unreadable')
     expect(resolved?.name).toBe('Damaged but present')
     expect(
-      await index.resolveDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: 'unreadable' }),
+      await index.resolveDocument({ workspaceId: getBrowserWorkspaceId(), path: 'unreadable' }),
     ).not.toBeNull()
 
     // Deletable, so a user can clear a damaged document instead of keeping
     // an error screen forever.
-    await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: 'unreadable' })
+    await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: 'unreadable' })
     expect(
-      (await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })).map((row) => row.path),
+      (await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).map((row) => row.path),
     ).toEqual(['readable'])
   })
 
   it('a kindless legacy row stays invisible — our own pre-kind data defect', async () => {
     const legacyIndex = new IdbDocumentIndex()
-    await legacyIndex.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    await legacyIndex.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     // createDocument requires a kind, so write the row the way the defect
     // actually exists: created, then stripped in place.
     const entry = await legacyIndex.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'pre-kind',
       kind: 'spatial',
     })
     await stripKindInPlace(entry.documentId)
 
     const index = new FoldingBrowserIndex()
-    expect(await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })).toEqual([])
+    expect(await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
     expect(
       await index.resolveDocumentById({
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         documentId: entry.documentId,
       }),
     ).toBeNull()
@@ -152,9 +152,9 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
 
   it('delete evacuates into the trash; restore brings the document back under the same id', async () => {
     const index = new FoldingBrowserIndex()
-    await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     const entry = await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'doomed',
       kind: 'spatial',
       name: 'Doomed',
@@ -163,33 +163,33 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     writeSpatialCanvas(source, canvasWith('to bring back'))
     await seedWorkspaceDocumentContent(entry.documentId, source.export({ mode: 'snapshot' }))
 
-    await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: 'doomed' })
-    const trash = await index.listTrash({ workspaceId: BROWSER_WORKSPACE_ID })
+    await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: 'doomed' })
+    const trash = await index.listTrash({ workspaceId: getBrowserWorkspaceId() })
     expect(trash.map((row) => row.documentId)).toEqual([entry.documentId])
     expect(trash[0]?.path).toBe('doomed')
 
     const restored = await index.restoreDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: entry.documentId,
     })
     expect(restored?.documentId).toBe(entry.documentId)
     // Identity survives: the id resolves again, at the old path, with content.
     const back = await index.resolveDocumentById({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: entry.documentId,
     })
     expect(back?.path).toBe('doomed')
     const content = await loadDocumentContent(entry.documentId)
     const node = content === null ? null : readSpatialCanvas(content).nodes[0]
     expect(node?.type === 'text' ? node.text : null).toBe('to bring back')
-    expect(await index.listTrash({ workspaceId: BROWSER_WORKSPACE_ID })).toEqual([])
+    expect(await index.listTrash({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
   })
 
   it('create, seed, rename and delete all round-trip through the tree', async () => {
     const index = new FoldingBrowserIndex()
-    await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+    await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
     const entry = await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'fresh',
       kind: 'spatial',
     })
@@ -207,18 +207,18 @@ describe('FoldingBrowserIndex (tree-backed composition)', () => {
     expect((await new LoroStore().load(entry.documentId)).kind).toBe('not-found')
 
     await index.setDocumentName({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: entry.documentId,
       name: 'Renamed',
     })
     const renamed = await index.resolveDocumentById({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: entry.documentId,
     })
     expect(renamed?.name).toBe('Renamed')
 
-    await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: 'fresh' })
-    expect(await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })).toEqual([])
+    await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: 'fresh' })
+    expect(await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })).toEqual([])
     // Deleted from the tree means unreadable through the content path too.
     expect(await loadDocumentContent(entry.documentId)).toBeNull()
   })

@@ -8,15 +8,25 @@
  * transitions. Focus-restore is the class behind three root-caused flakes,
  * so it is pinned here against the real thing.
  */
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { act, cleanup, render as rtlRender, screen, waitFor } from '@testing-library/react'
 import type { ReactElement } from 'react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, expect, it } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import {
+  getBrowserWorkspaceId,
+  setBrowserWorkspaceIdForTests,
+} from '../lib/browser-workspace-id.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import { BrowserDocumentPage } from './BrowserDocumentPage.js'
 import '../index.css'
+
+// No real IndexedDB in this file (`LocalStoreDouble` is in-memory), so
+// nothing else in this page's module graph resolves the workspace-id
+// accessor the way `claimIsolatedWhiteboardDb` would for a real-DB file.
+setBrowserWorkspaceIdForTests(generateDocumentId())
 
 afterEach(async () => {
   if (document.fullscreenElement !== null) {
@@ -35,7 +45,7 @@ function render(ui: ReactElement) {
 
 const snap: DocumentSnapshot = {
   documentId: '0PV05AFMSY38DJQW16BGNTZ49E',
-  workspaceId: 'local',
+  workspaceId: getBrowserWorkspaceId(),
   path: 'canvas-a',
   name: 'Canvas A',
   kind: 'spatial',

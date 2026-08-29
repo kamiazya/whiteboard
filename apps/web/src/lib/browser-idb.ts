@@ -7,6 +7,7 @@
  * Owning DB_VERSION and onupgradeneeded in one place makes that impossible by
  * construction instead of relying on a hand-synced comment.
  */
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { loroRecordEnvelopeSchema } from './loro-record-envelope.js'
 
@@ -146,8 +147,16 @@ export function whiteboardDbName(): string {
  * happens anyway (a tab still running a pre-v8 bundle) rejects with a
  * message a caller can show instead of hanging on a request that never
  * settles.
+ *
+ * v13 -> v14: re-keys the browser's single workspace off the literal string
+ * `'local'` onto a canonical ULID (ADR-0019's browser-keeper half — the
+ * daemon keeper is a separate lane). `'local'` was never a valid
+ * `workspaceCanonicalIdSchema` value; it survived as a stand-in because
+ * nothing before this needed the two keepers' workspace ids to share a
+ * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
+ * rename-and-done.
  */
-export const DB_VERSION = 13
+export const DB_VERSION = 14
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -301,8 +310,9 @@ function discardPrePathDocuments(tx: IDBTransaction, done: () => void): void {
  * The workspace rows come from the documents themselves rather than from a
  * hardcoded `'local'`: this store never held more than one workspace, but
  * reading it from the data is the version that stays correct if it ever did.
- * `BROWSER_WORKSPACE_ID` is still written unconditionally, because that is the
- * one the browser UI opens.
+ * The literal `'local'` key below is still written unconditionally on every
+ * upgrade — `rekeyBrowserWorkspace` (v13->v14, further down) is what absorbs
+ * it onto the canonical id the browser UI actually opens.
  */
 /**
  * Moves every Loro content record into the `DocumentStore` port's store, and
@@ -391,13 +401,16 @@ function isEnvelopeV1(value: unknown): value is { v: 1; snapshot: unknown } {
  * store, splits nothing, and looks exactly like a successful upgrade — leaving
  * v1 records the new parser reports as unreadable documents.
  */
-function splitInlineSnapshotChunks(tx: IDBTransaction): void {
+function splitInlineSnapshotChunks(tx: IDBTransaction, done: () => void): void {
   const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
   const chunks = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
   const cursorReq = sync.openCursor()
   cursorReq.onsuccess = () => {
     const cursor = cursorReq.result
-    if (!cursor) return
+    if (!cursor) {
+      done()
+      return
+    }
     const record = cursor.value
     if (isEnvelopeV1(record)) {
       const snapshot = record.snapshot as { manifest?: unknown; chunks?: unknown } | null
@@ -410,6 +423,128 @@ function splitInlineSnapshotChunks(tx: IDBTransaction): void {
       }
     }
     cursor.continue()
+  }
+}
+
+/**
+ * The literal key the browser's single workspace lived under before v14.
+ * Spelled out rather than imported from anywhere else: this migration's job
+ * is to make the string stop meaning anything, and a migration's own text is
+ * history that names the shape it found, the way `defaultCanvasId` still
+ * does in the v6->v7 rename above.
+ */
+const LEGACY_BROWSER_WORKSPACE_ID = 'local'
+
+/**
+ * Re-keys the browser's one workspace off `'local'` onto a canonical ULID —
+ * the registry row, every `documentIndex` row it owns, and the
+ * `workspace-tree:local` sync record plus its chunk rows.
+ *
+ * Convergent, not run-once, because it CANNOT assume it runs exactly once:
+ * `backfillDocumentIndex` (v9->v10, above) unconditionally re-puts
+ * `{workspaceId:'local'}` under key `'local'` on every future upgrade — it
+ * has no way to know this step exists — so a later multi-version jump
+ * resurrects the very row this step just deleted, inside the SAME
+ * transaction, ordered right before it. The fix is not to skip when a ULID
+ * row already exists (that would leave the resurrected `'local'` row behind
+ * forever); it is to look for an existing target on every run and absorb
+ * whatever `'local'` remnant is present into it, minting a new id only when
+ * no target exists yet. Ordered last in the upgrade chain for the reason
+ * every carrier here is: it reads what `backfillDocumentIndex` just wrote.
+ *
+ * Exported (only `browser-idb-migration.browser.test.tsx` imports it): the
+ * convergence property this exists for can only be observed by running this
+ * step a second time, and `backfillDocumentIndex`'s re-put depends on stores
+ * (`documents`, `loroDocuments`) that no longer exist by v14 — replaying the
+ * WHOLE upgrade chain a second time throws on those, where a real future
+ * migration would still have them. Invoking this one step directly, against
+ * a manually re-seeded `'local'` remnant, tests the real convergence logic
+ * without needing a real v15 to reach it.
+ */
+export function rekeyBrowserWorkspace(tx: IDBTransaction, done: () => void): void {
+  const workspaces = tx.objectStore(WORKSPACES_STORE)
+  const index = tx.objectStore(DOCUMENT_INDEX_STORE)
+  const sync = tx.objectStore(SYNC_DOCUMENTS_STORE)
+  const chunks = tx.objectStore(SYNC_SNAPSHOT_CHUNKS_STORE)
+
+  const keysReq = workspaces.getAllKeys()
+  keysReq.onsuccess = () => {
+    const keys = keysReq.result.map(String)
+    const hasLegacyRemnant = keys.includes(LEGACY_BROWSER_WORKSPACE_ID)
+    const targetId = keys.find((key) => key !== LEGACY_BROWSER_WORKSPACE_ID) ?? generateDocumentId()
+
+    if (!hasLegacyRemnant) {
+      // Nothing to absorb this pass. A brand-new database (no row at all)
+      // still needs its registry row written; an already-converged one is
+      // left alone rather than re-put on every upgrade.
+      if (keys.length === 0) workspaces.put({ workspaceId: targetId }, targetId)
+      done()
+      return
+    }
+
+    workspaces.delete(LEGACY_BROWSER_WORKSPACE_ID)
+    workspaces.put({ workspaceId: targetId }, targetId)
+    rekeyLegacyIndexRows(index, targetId, () => rekeyLegacySyncTree(sync, chunks, targetId, done))
+  }
+}
+
+/** Moves every `documentIndex` row keyed under the legacy workspace onto `targetId`. */
+function rekeyLegacyIndexRows(index: IDBObjectStore, targetId: string, done: () => void): void {
+  const range = IDBKeyRange.bound([LEGACY_BROWSER_WORKSPACE_ID], [LEGACY_BROWSER_WORKSPACE_ID, []])
+  const cursorReq = index.openCursor(range)
+  cursorReq.onsuccess = () => {
+    const cursor = cursorReq.result
+    if (!cursor) {
+      done()
+      return
+    }
+    const row = cursor.value as Record<string, unknown>
+    cursor.delete()
+    // The new key's first element is `targetId`, entirely outside the
+    // `'local'` range this cursor walks, so the add cannot be observed by
+    // this same cursor and cannot loop.
+    index.add({ ...row, workspaceId: targetId })
+    cursor.continue()
+  }
+}
+
+/**
+ * Moves the `workspace-tree:local` sync record and its `syncSnapshotChunks`
+ * rows onto `workspace-tree:<targetId>`, as opaque values — no Loro decode,
+ * matching every other carrier in this file that only needs to relocate
+ * bytes it does not need to understand.
+ */
+function rekeyLegacySyncTree(
+  sync: IDBObjectStore,
+  chunks: IDBObjectStore,
+  targetId: string,
+  done: () => void,
+): void {
+  const legacyKey = `workspace-tree:${LEGACY_BROWSER_WORKSPACE_ID}`
+  const targetKey = `workspace-tree:${targetId}`
+  const getReq = sync.get(legacyKey)
+  getReq.onsuccess = () => {
+    const value = getReq.result
+    if (value === undefined) {
+      done()
+      return
+    }
+    sync.delete(legacyKey)
+    sync.put(value, targetKey)
+    const chunkRange = IDBKeyRange.bound([legacyKey], [legacyKey, []])
+    const cursorReq = chunks.openCursor(chunkRange)
+    cursorReq.onsuccess = () => {
+      const cursor = cursorReq.result
+      if (!cursor) {
+        done()
+        return
+      }
+      const [, chunkIndex] = cursor.primaryKey as [string, number]
+      const chunkValue = cursor.value
+      cursor.delete()
+      chunks.add(chunkValue, [targetKey, chunkIndex])
+      cursor.continue()
+    }
   }
 }
 
@@ -508,7 +643,9 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
           // nothing.
           discardPrePathDocuments(tx, () =>
             backfillDocumentIndex(tx, () =>
-              carryLoroDocuments(tx, () => splitInlineSnapshotChunks(tx)),
+              carryLoroDocuments(tx, () =>
+                splitInlineSnapshotChunks(tx, () => rekeyBrowserWorkspace(tx, () => {})),
+              ),
             ),
           )
         }

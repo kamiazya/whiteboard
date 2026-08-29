@@ -26,11 +26,17 @@ export default defineConfig({
         __dirname,
         '../../packages/mcp-server/src/shared/test-utils/document-backend-contract.ts',
       ),
-      // Subpath alias must precede the root alias: rollup-alias prefix-matches,
+      // Subpath aliases must precede the root alias: rollup-alias prefix-matches,
       // so the root entry alone would rewrite '/scene' to 'index.ts/scene'.
       '@kamiazya/whiteboard-canvas-viewer/scene': resolve(
         __dirname,
         '../../packages/canvas-viewer/src/scene.ts',
+      ),
+      // boot.ts (main.tsx's boot chain) imports this narrow subpath so a
+      // jsdom test of the boot sequence does not need the whole viewer graph.
+      '@kamiazya/whiteboard-canvas-viewer/font-loading': resolve(
+        __dirname,
+        '../../packages/canvas-viewer/src/font-loading.ts',
       ),
       // Resolve canvas-viewer from source so tests run before `pnpm build`.
       '@kamiazya/whiteboard-canvas-viewer': resolve(

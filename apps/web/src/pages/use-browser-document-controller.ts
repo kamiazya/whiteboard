@@ -3,9 +3,9 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { newDocumentPathIn } from '../components/workspace-files/new-document-path.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
 import {
-  BROWSER_WORKSPACE_ID,
   type ContentClock,
   type DefaultDocumentPointer,
   ensureLocalWorkspace,
@@ -88,7 +88,7 @@ export async function createSeededDocument(
   const taken = (await listLocalDocuments(index, clock).catch(() => [])).map((row) => row.path)
   const trimmed = name?.trim()
   const entry = await index.createDocument({
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     path: newDocumentPathIn('', taken),
     kind,
     ...(trimmed ? { name: trimmed } : {}),
@@ -108,7 +108,7 @@ export async function createSeededDocument(
     }
   } catch (err) {
     try {
-      await index.deleteDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: entry.path })
+      await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: entry.path })
     } catch {
       // Rollback is best-effort; a stray index row is harmless next to
       // reporting a create that did not happen.
@@ -229,7 +229,7 @@ export function useBrowserDocumentController(
           // A rename is the only mutation that reaches the save path, and the
           // index keys it by id so the document does not move.
           await indexRef.current.setDocumentName({
-            workspaceId: BROWSER_WORKSPACE_ID,
+            workspaceId: getBrowserWorkspaceId(),
             documentId: snap.documentId,
             // Omitted when it equals the path, which is how the index spells
             // "no name of its own" — see `toSnapshot`'s fallback.
@@ -269,7 +269,7 @@ export function useBrowserDocumentController(
         // store — and App mounts this page only with a path, so that is every
         // mount.
         const requested = await indexRef.current
-          .resolveDocument({ workspaceId: BROWSER_WORKSPACE_ID, path: initialPath })
+          .resolveDocument({ workspaceId: getBrowserWorkspaceId(), path: initialPath })
           .catch(() => null)
         if (cancelled) return
         if (requested !== null) {
@@ -390,12 +390,12 @@ export function useBrowserDocumentController(
     if (id === null) return
     try {
       const entry = await indexRef.current.resolveDocumentById({
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         documentId: id,
       })
       if (entry === null) return // the pointer names nothing: silent no-op
       await indexRef.current.deleteDocument({
-        workspaceId: BROWSER_WORKSPACE_ID,
+        workspaceId: getBrowserWorkspaceId(),
         path: entry.path,
       })
       await pointerRef.current.clear()
@@ -422,7 +422,7 @@ export function useBrowserDocumentController(
       if (existingId !== null && existingId !== fresh.documentId) {
         try {
           const stale = await indexRef.current.resolveDocumentById({
-            workspaceId: BROWSER_WORKSPACE_ID,
+            workspaceId: getBrowserWorkspaceId(),
             documentId: existingId,
           })
           if (stale !== null) {
@@ -434,7 +434,7 @@ export function useBrowserDocumentController(
             // deleting by path has no such coupling, so the clear is explicit.
             await pointerRef.current.clear()
             await indexRef.current.deleteDocument({
-              workspaceId: BROWSER_WORKSPACE_ID,
+              workspaceId: getBrowserWorkspaceId(),
               path: stale.path,
             })
           }
@@ -547,7 +547,9 @@ export function useBrowserDocumentController(
     // moment the editor commits. Projection first, old record as the fallback
     // for a document nothing has folded yet (and for jsdom tests, whose
     // injected store is the only storage there is).
-    const workspace = await new BrowserWorkspaceDocs().open(BROWSER_WORKSPACE_ID).catch(() => null)
+    const workspace = await new BrowserWorkspaceDocs()
+      .open(getBrowserWorkspaceId())
+      .catch(() => null)
     const projected =
       workspace === null ? null : projectWorkspaceDocument(workspace, source.documentId)
     let mergedSnapshot: Uint8Array

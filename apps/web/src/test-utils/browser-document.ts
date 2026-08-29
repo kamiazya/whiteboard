@@ -14,7 +14,7 @@ import { Loro } from 'loro-crdt'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
 import { SYNC_DOCUMENTS_STORE, whiteboardDbName } from '../lib/browser-idb.js'
 import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { LoroStore } from '../lib/loro-store.js'
 
 const DOCUMENT_STORE = SYNC_DOCUMENTS_STORE
@@ -73,7 +73,7 @@ export async function persistedNodeIds(documentId: string): Promise<string[]> {
   // below stays as the fallback for suites that seed the OLD stores and
   // assert before any backend has folded them.
   const workspace = await new BrowserWorkspaceDocs(whiteboardDbName())
-    .open(BROWSER_WORKSPACE_ID)
+    .open(getBrowserWorkspaceId())
     .catch(() => null)
   if (workspace !== null) {
     const projected = projectWorkspaceDocument(workspace, documentId)

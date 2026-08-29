@@ -1,5 +1,6 @@
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { openWhiteboardDb, SYNC_DOCUMENTS_STORE } from '../lib/browser-idb.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentStore } from '../lib/idb-document-store.js'
 
 /**
@@ -25,7 +26,12 @@ export async function seedSyncDocument(
   // writing it through `IdbDocumentStore` keeps this helper from carrying its
   // own copy of a storage layout that has already changed once underneath it.
   if (!('raw' in content)) {
-    const docRef = { kind: 'document', workspaceId: 'local', documentId } as const
+    // `docRefKey` never reads `workspaceId` for a `'document'` ref (a
+    // documentId is already globally unique — see its comment in ports), so
+    // this value is inert for the STORED key; it is still resolved through
+    // the real accessor rather than a stale literal so this fixture never
+    // reads as evidence for a workspace id that no longer exists.
+    const docRef = { kind: 'document', workspaceId: getBrowserWorkspaceId(), documentId } as const
     const store = new IdbDocumentStore(dbName)
     const { manifest, chunks } = chunkSnapshot(new Uint8Array(content.snapshot), 1_000_000)
     // Empty, matching what `LoroStore` writes: nothing in the browser reads a

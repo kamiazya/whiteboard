@@ -15,7 +15,7 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { Loro, type LoroDoc } from 'loro-crdt'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { LoroStore, touchContentTimestamp } from './loro-store.js'
 
 /**
@@ -55,7 +55,7 @@ export async function loadWorkspaceDocumentProjection(
   dbName?: string,
 ): Promise<LoroDoc | null> {
   const workspace = await new BrowserWorkspaceDocs(dbName)
-    .open(BROWSER_WORKSPACE_ID)
+    .open(getBrowserWorkspaceId())
     .catch(() => null)
   if (workspace === null) return null
   return projectWorkspaceDocument(workspace, documentId)
@@ -71,7 +71,7 @@ export async function touchIfWorkspaceBacked(
   dbName?: string,
 ): Promise<boolean> {
   const workspace = await new BrowserWorkspaceDocs(dbName)
-    .open(BROWSER_WORKSPACE_ID)
+    .open(getBrowserWorkspaceId())
     .catch(() => null)
   if (workspace === null) return false
   if (resolveWorkspaceDocumentById(workspace, documentId) === null) return false
@@ -85,12 +85,12 @@ export async function seedWorkspaceDocumentContent(
   dbName?: string,
 ): Promise<boolean> {
   const docs = new BrowserWorkspaceDocs(dbName)
-  const workspace = await docs.open(BROWSER_WORKSPACE_ID).catch(() => null)
+  const workspace = await docs.open(getBrowserWorkspaceId()).catch(() => null)
   if (workspace === null) return false
   const source = new Loro()
   source.import(content)
   if (!writeWorkspaceDocumentContent(workspace, documentId, source)) return false
-  await docs.save(BROWSER_WORKSPACE_ID, workspace)
+  await docs.save(getBrowserWorkspaceId(), workspace)
   await touchContentTimestamp(documentId, dbName)
   return true
 }

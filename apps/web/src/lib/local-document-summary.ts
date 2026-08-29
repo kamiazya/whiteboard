@@ -1,16 +1,7 @@
 import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { CONTENT_TIMESTAMPS_STORE, openWhiteboardDb } from './browser-idb.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import type { DocumentSnapshot } from './whiteboard-client.js'
-
-/**
- * The one workspace a browser-kept setup has. Stored on every row rather than
- * implied, so a document kept here carries the same address a daemon one does.
- *
- * The VALUE keeps the retired keeper spelling because it is a stored shape:
- * every existing `DocumentIndex` row in IndexedDB is written against it, so
- * changing it here orphans them. It moves with a migration, not with a rename.
- */
-export const BROWSER_WORKSPACE_ID = 'local'
 
 /**
  * What `DocumentIndex` deliberately does not own, for browser mode.
@@ -76,7 +67,7 @@ async function contentUpdatedAt(db: IDBDatabase, ids: string[]): Promise<Map<str
 function toSnapshot(entry: DocumentEntry, updatedAt: string | undefined): DocumentSnapshot {
   return {
     documentId: entry.documentId,
-    workspaceId: BROWSER_WORKSPACE_ID,
+    workspaceId: getBrowserWorkspaceId(),
     path: entry.path,
     name: entry.name ?? entry.path,
     updatedAt: updatedAt ?? new Date(0).toISOString(),
@@ -116,14 +107,14 @@ export function idbContentClock(dbName?: string): ContentClock {
  * whether they are first.
  */
 export async function ensureLocalWorkspace(index: DocumentIndex): Promise<void> {
-  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
 }
 
 export async function listLocalDocuments(
   index: DocumentIndex,
   clock: ContentClock = idbContentClock(),
 ): Promise<DocumentSnapshot[]> {
-  const entries = await index.listDocuments({ workspaceId: BROWSER_WORKSPACE_ID })
+  const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
   if (entries.length === 0) return []
   const stamps = await clock(entries.map((entry) => entry.documentId))
   return entries.map((entry) => toSnapshot(entry, stamps.get(entry.documentId)))
@@ -135,7 +126,10 @@ export async function loadLocalDocument(
   documentId: string,
   clock: ContentClock = idbContentClock(),
 ): Promise<DocumentSnapshot | null> {
-  const entry = await index.resolveDocumentById({ workspaceId: BROWSER_WORKSPACE_ID, documentId })
+  const entry = await index.resolveDocumentById({
+    workspaceId: getBrowserWorkspaceId(),
+    documentId,
+  })
   if (entry === null) return null
   const stamps = await clock([documentId])
   return toSnapshot(entry, stamps.get(documentId))

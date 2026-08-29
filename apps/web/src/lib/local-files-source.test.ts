@@ -8,6 +8,11 @@ import { Loro } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import {
+  getBrowserWorkspaceId,
+  resetBrowserWorkspaceIdForTests,
+  resolveBrowserWorkspaceId,
+} from './browser-workspace-id.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
@@ -22,11 +27,19 @@ describe('createLocalFilesSource', () => {
 
   it('lists a fresh database as empty, not as missing', async () => {
     // Written as the missing-workspace case first, and the test refuted its
-    // own premise: the v8+ IndexedDB upgrade seeds the `local` workspace row
+    // own premise: the v8+ IndexedDB upgrade seeds the browser workspace row
     // unconditionally, so a fresh database HAS the workspace before anything
     // else touches it. The `WorkspaceMissingError` mapping in the source
     // stays — it guards a state a hand-edited store can still reach — but the
     // reachable first-run behaviour is an empty list.
+    //
+    // Nothing seeds a workspace here on purpose — that is the point being
+    // tested — so `getBrowserWorkspaceId()` has to read the id the fresh
+    // database's own v14 upgrade actually minted, not the arbitrary id
+    // `claimIsolatedWhiteboardDb` claimed for tests that create their
+    // workspace explicitly under it.
+    resetBrowserWorkspaceIdForTests()
+    await resolveBrowserWorkspaceId()
     await expect(createLocalFilesSource().listDocuments()).resolves.toEqual([])
   })
 
@@ -37,7 +50,7 @@ describe('createLocalFilesSource', () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const entry = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'a',
       kind: 'spatial',
       name: 'A',
@@ -57,9 +70,9 @@ describe('createLocalFilesSource', () => {
     // writes to — exactly the split the injectable parameter exists to
     // close, reopened by the default.
     const production = new FoldingBrowserIndex()
-    await production.createWorkspace({ workspaceId: 'local' }).catch(() => {})
+    await production.createWorkspace({ workspaceId: getBrowserWorkspaceId() }).catch(() => {})
     await production.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'tree-only',
       kind: 'markdown',
       name: 'Tree Only',
@@ -119,7 +132,11 @@ describe('createLocalFilesSource', () => {
     const source = createLocalFilesSource()
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
-    const entry = await index.createDocument({ workspaceId: 'local', path: 'n', kind: 'markdown' })
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'n',
+      kind: 'markdown',
+    })
     const doc = new Loro()
     doc.getText('body').insert(0, '# Hello from local')
     await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
@@ -132,7 +149,11 @@ describe('createLocalFilesSource', () => {
     const source = createLocalFilesSource()
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
-    const entry = await index.createDocument({ workspaceId: 'local', path: 's', kind: 'spatial' })
+    const entry = await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 's',
+      kind: 'spatial',
+    })
     const doc = new Loro()
     doc.getList('elements').push({ id: 'a' })
     doc.commit()
@@ -159,11 +180,15 @@ describe('createLocalFilesSource tags', () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const tagged = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'tagged',
       kind: 'markdown',
     })
-    await index.createDocument({ workspaceId: 'local', path: 'plain', kind: 'markdown' })
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'plain',
+      kind: 'markdown',
+    })
 
     const doc = new Loro()
     writeCoreFacets(doc, { type: 'note', tags: ['release', 'q3'] })
@@ -182,13 +207,13 @@ describe('createLocalFilesSource trash', () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
     const entry = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'doomed',
       kind: 'spatial',
     })
     await seedWorkspaceDocumentContent(entry.documentId, new Loro().export({ mode: 'snapshot' }))
     const source = createLocalFilesSource({ index })
-    await index.deleteDocument({ workspaceId: 'local', path: 'doomed' })
+    await index.deleteDocument({ workspaceId: getBrowserWorkspaceId(), path: 'doomed' })
 
     const trash = await source.listTrash?.()
     expect(trash?.map((row) => row.documentId)).toEqual([entry.documentId])

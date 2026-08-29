@@ -3,6 +3,7 @@ import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/re
 import { Loro } from 'loro-crdt'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { ensureLocalWorkspace } from '../lib/local-document-summary.js'
 import { LoroStore } from '../lib/loro-store.js'
@@ -21,7 +22,7 @@ describe('searching from the page', () => {
     const index = new IdbDocumentIndex()
     await ensureLocalWorkspace(index)
     const entry = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'untitled',
       kind: 'markdown',
     })

@@ -7,6 +7,7 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { Loro } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
 import { createLocalFilesSource } from './local-files-source.js'
@@ -20,7 +21,11 @@ import { seedWorkspaceDocumentContent } from './workspace-content.js'
 claimIsolatedWhiteboardDb('local-body-search')
 
 async function seedMarkdown(index: IdbDocumentIndex, path: string, body: string): Promise<string> {
-  const entry = await index.createDocument({ workspaceId: 'local', path, kind: 'markdown' })
+  const entry = await index.createDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path,
+    kind: 'markdown',
+  })
   const doc = new Loro()
   writeDocumentKind(doc, 'markdown')
   writeMarkdownBody(doc, body)
@@ -29,7 +34,11 @@ async function seedMarkdown(index: IdbDocumentIndex, path: string, body: string)
 }
 
 async function seedSpatial(index: IdbDocumentIndex, path: string, canvas: SpatialCanvas) {
-  const entry = await index.createDocument({ workspaceId: 'local', path, kind: 'spatial' })
+  const entry = await index.createDocument({
+    workspaceId: getBrowserWorkspaceId(),
+    path,
+    kind: 'spatial',
+  })
   const doc = new Loro()
   writeDocumentKind(doc, 'spatial')
   writeSpatialCanvas(doc, canvas)

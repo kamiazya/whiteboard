@@ -15,9 +15,9 @@
 import 'fake-indexeddb/auto'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
 import {
-  BROWSER_WORKSPACE_ID,
   IdbDefaultDocumentPointer,
   idbContentClock,
   listLocalDocuments,
@@ -36,7 +36,7 @@ async function clearDb(): Promise<void> {
 
 async function seedWorkspace(): Promise<IdbDocumentIndex> {
   const index = new IdbDocumentIndex(DB_NAME)
-  await index.createWorkspace({ workspaceId: BROWSER_WORKSPACE_ID })
+  await index.createWorkspace({ workspaceId: getBrowserWorkspaceId() })
   return index
 }
 
@@ -53,7 +53,7 @@ describe('local document summary', () => {
   it('carries the index entry plus the time its content was last written', async () => {
     const index = await seedWorkspace()
     const entry = await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'notes',
       kind: 'markdown',
       name: 'Notes',
@@ -75,7 +75,7 @@ describe('local document summary', () => {
     // a title. Choosing the fallback is this layer's job, not the port's.
     const index = await seedWorkspace()
     const entry = await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'archive/untitled',
       kind: 'spatial',
     })
@@ -92,7 +92,7 @@ describe('local document summary', () => {
     // the sort puts it last rather than first.
     const index = await seedWorkspace()
     await index.createDocument({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       path: 'contentless',
       kind: 'spatial',
     })

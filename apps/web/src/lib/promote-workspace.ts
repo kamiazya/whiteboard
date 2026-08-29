@@ -28,9 +28,9 @@ import {
 import { apiErrorReason, documentFileApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
 import { DocumentFileStore } from './document-file-store.js'
-import { BROWSER_WORKSPACE_ID } from './local-document-summary.js'
 
 export interface PromoteWorkspaceOptions {
   fetch: typeof globalThis.fetch
@@ -55,7 +55,7 @@ export interface PromoteWorkspaceOptions {
 export async function countBrowserWorkspaceDocuments(
   workspaceDocs: WorkspaceDocs,
 ): Promise<number> {
-  const record = await workspaceDocs.open(BROWSER_WORKSPACE_ID)
+  const record = await workspaceDocs.open(getBrowserWorkspaceId())
   if (record === null) return 0
   return readWorkspaceDocuments(record).length
 }
@@ -136,7 +136,7 @@ async function promoteWorkspaceUnsafe(
   // the same claimed database, so tests seed through the production path.
   const fileStore = new DocumentFileStore()
 
-  const record = await workspaceDocs.open(BROWSER_WORKSPACE_ID)
+  const record = await workspaceDocs.open(getBrowserWorkspaceId())
   if (record === null) {
     return { kind: 'failed', reason: 'This browser keeps no workspace record to promote.' }
   }

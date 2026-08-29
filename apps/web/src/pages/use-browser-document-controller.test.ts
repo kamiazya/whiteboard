@@ -1,7 +1,7 @@
 import { act, renderHook } from '@testing-library/react'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { BROWSER_WORKSPACE_ID } from '../lib/local-document-summary.js'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import type { LoroLoadResult } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
@@ -53,7 +53,7 @@ const C2 = '01ARZ3NDEKTSV4RRFFQ69G5FB0'
 
 const snap: DocumentSnapshot = {
   documentId: C1,
-  workspaceId: 'local',
+  workspaceId: getBrowserWorkspaceId(),
   path: 'untitled',
   name: 'untitled',
   updatedAt: '2026-05-24T00:00:00.000Z',
@@ -665,7 +665,7 @@ describe('useBrowserDocumentController', () => {
 
     expect(result.current.snapshot?.name).toBe('Restored name')
     const stored = await store.index.resolveDocumentById({
-      workspaceId: BROWSER_WORKSPACE_ID,
+      workspaceId: getBrowserWorkspaceId(),
       documentId: C1,
     })
     expect(stored?.name).toBe('Restored name')
@@ -693,7 +693,7 @@ describe('useBrowserDocumentController', () => {
       await act(async () => {
         created = await result.current.createDocument('Second')
       })
-      expect(created?.workspaceId).toBe(BROWSER_WORKSPACE_ID)
+      expect(created?.workspaceId).toBe(getBrowserWorkspaceId())
     })
 
     // Two documents at one address is the failure the path exists to
@@ -727,7 +727,7 @@ describe('useBrowserDocumentController', () => {
   describe('initialPath (deep-linked document)', () => {
     const other: DocumentSnapshot = {
       documentId: C2,
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'other-canvas',
       name: 'other canvas',
       updatedAt: '2026-05-24T00:00:00.000Z',
@@ -1337,7 +1337,7 @@ describe('useBrowserDocumentController', () => {
       await store.save(snap)
       await store.save({
         documentId: '01ARZ3NDEKTSV4RRFFQ69G5FD2',
-        workspaceId: 'local',
+        workspaceId: getBrowserWorkspaceId(),
         path: 'untitled-2',
         name: 'untitled (copy)',
         updatedAt: snap.updatedAt,

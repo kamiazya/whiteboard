@@ -19,6 +19,7 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { DocumentFileStore } from './document-file-store.js'
 import { FoldingBrowserIndex } from './folding-browser-index.js'
 import { ensureLocalWorkspace } from './local-document-summary.js'
@@ -99,12 +100,12 @@ describe('promoteWorkspace', () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
     const roadmap = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'notes/roadmap',
       kind: 'markdown',
     })
     const contested = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'contested',
       kind: 'spatial',
     })
@@ -172,7 +173,7 @@ describe('promoteWorkspace', () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
     const sketch = await index.createDocument({
-      workspaceId: 'local',
+      workspaceId: getBrowserWorkspaceId(),
       path: 'sketch',
       kind: 'spatial',
     })
@@ -212,7 +213,11 @@ describe('promoteWorkspace', () => {
   it('a 404 target is a structured failure naming the missing daemon workspace', async () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
-    await index.createDocument({ workspaceId: 'local', path: 'doc', kind: 'markdown' })
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'doc',
+      kind: 'markdown',
+    })
     const fetch404 = (async () =>
       new Response(JSON.stringify({ title: 'Workspace "ws-gone" not found' }), {
         status: 404,
@@ -233,7 +238,11 @@ describe('promoteWorkspace', () => {
   it('a thrown fetch is a structured network failure, never a rejection', async () => {
     const index = new FoldingBrowserIndex()
     await ensureLocalWorkspace(index)
-    await index.createDocument({ workspaceId: 'local', path: 'doc', kind: 'markdown' })
+    await index.createDocument({
+      workspaceId: getBrowserWorkspaceId(),
+      path: 'doc',
+      kind: 'markdown',
+    })
     const fetchDown = (async () => {
       throw new TypeError('Failed to fetch')
     }) as typeof globalThis.fetch
