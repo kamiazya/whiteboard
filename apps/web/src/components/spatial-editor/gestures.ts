@@ -20,8 +20,9 @@
  * Open-text-edit-vs-other-gesture policy: `editing-text` carries the
  * in-progress `pendingText` (kept current via `update-text-edit`, one per
  * keystroke). A `pointerdown`/`pointerdown-handle`/`pointerdown-connect`/
- * `pointerdown-empty`/`dblclick-empty` arriving while a text edit is open
- * COMMITS that pending text — emits `set-text` — and then proceeds with the
+ * `pointerdown-empty`/`dblclick-empty`, or a `start-text-edit` naming a
+ * DIFFERENT node, arriving while a text edit is open COMMITS that pending
+ * text — emits `set-text` — and then proceeds with the
  * requested gesture, matching every text editor's click-away-commits
  * behavior (and this component's own blur-commits convention in
  * `TextNodeEditor`). Escape (`cancel-text-edit`) remains the only explicit
@@ -441,7 +442,23 @@ export function reduceGesture(
         stateOnly({ kind: 'connecting', fromNodeId: event.nodeId }),
       )
     case 'start-text-edit':
-      return stateOnly({ kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text })
+      // Opening an editor SOMEWHERE ELSE leaves the current one, so it
+      // commits like every other way out (see the policy at the top of this
+      // file). This arm reaches the reducer with no pointerdown in front of
+      // it — the context menu's "Edit text" verb dispatches it directly, and
+      // the right-click that opened the menu returned early from
+      // `handlePointerDown` — so nothing upstream has already committed.
+      // Re-opening the SAME node is excluded: `event.text` was read from the
+      // canvas before any commit could land, so committing and then
+      // re-seeding from it would write the pending text and immediately
+      // discard it.
+      if (state.kind === 'editing-text' && state.nodeId === event.nodeId) {
+        return stateOnly({ ...state, pendingText: event.text })
+      }
+      return withPendingTextCommit(
+        state,
+        stateOnly({ kind: 'editing-text', nodeId: event.nodeId, pendingText: event.text }),
+      )
     case 'update-text-edit':
       if (state.kind !== 'editing-text') return stateOnly(state)
       return stateOnly({ ...state, pendingText: event.text })

@@ -660,7 +660,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // synchronous slot costs nothing and removes the need to reason about when
     // React flushes passive effects relative to input.
     useLayoutEffect(() => {
-      if (prevCanvasRef.current === canvas) return
+      const previous = prevCanvasRef.current
+      if (previous === canvas) return
       prevCanvasRef.current = canvas
       const isExternal =
         externalVersion !== undefined && externalVersion !== prevExternalVersionRef.current
@@ -671,6 +672,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         origin: isExternal ? 'external' : 'local',
       })
       setGestureState(result.state)
+      // The gesture is not the only state pinned to a node id: a selection
+      // outlives the node it named unless something retires it, and every
+      // site that READS the selection filters by laid-out box, so the stale
+      // id stays invisible while quietly disabling the verbs. A primary
+      // whose node an undo removed leaves `selection` undefined, and the
+      // Delete key's own branches are gated on it — two extras keep drawing
+      // their outlines while Delete does nothing.
+      const held = new Set(canvas.nodes.map((node) => node.id))
+      const missingIds = new Set(
+        previous.nodes.map((node) => node.id).filter((id) => !held.has(id)),
+      )
+      if (missingIds.size > 0) applySelection({ type: 'drop-missing', missingIds })
       // Mirror gestures.ts's canvas-replaced abort/continue answer into the
       // preview: an abort (result.state no longer in-flight) must retire the
       // preview too, or it would keep drawing a gesture the reducer already
