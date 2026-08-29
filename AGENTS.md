@@ -248,8 +248,16 @@ Server-side code never calls `console.*` directly. Use the project logger:
 import { getLogger } from './log.js'   // path varies by file depth
 
 const log = getLogger('canvas-store')
-log.warning('skipped corrupt row', { workspaceId, slug, err })
+log.warning({ workspaceId, documentId, err }, 'skipped corrupt row')
 ```
+
+**Fields first, message second.** This is pino's signature, and getting it
+round the wrong way is silent: `log.warning('msg', { … })` matches the
+printf overload, where the object is an interpolation argument for a message
+with no placeholder, so it is dropped and the record ships with no fields at
+all. Nothing fails — not the types (`...args` is `any[]`), not a test that
+only checks the message. Measured on a real call site: `{"level":"warning",
+"scope":"…","msg":"…"}` with the `dataDir` and `err` simply gone.
 
 Why this exists:
 
