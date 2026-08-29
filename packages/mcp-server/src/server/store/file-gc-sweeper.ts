@@ -21,6 +21,7 @@ import { validateWorkspaceId } from '../validators.js'
 import { isMissingFileError } from './corrupt-stored-data.js'
 import { listWorkspaces } from './document-store.js'
 import { purgeDanglingFiles } from './file-gc.js'
+import { parseFileGcIntervalMs } from './storage-env.js'
 import type { VersionStore } from './version-store.js'
 import { FileVersionStore } from './version-store.js'
 
@@ -49,11 +50,12 @@ function resolveIntervalMs(explicit: number | undefined): number {
   if (typeof explicit === 'number' && Number.isFinite(explicit)) {
     return Math.min(Math.max(0, explicit), MAX_TIMER_DELAY_MS)
   }
-  const raw = process.env.WHITEBOARD_FILE_GC_INTERVAL_MS
-  if (typeof raw === 'string' && /^\d+$/.test(raw)) {
-    const parsed = Number(raw)
-    if (Number.isSafeInteger(parsed)) return Math.min(parsed, MAX_TIMER_DELAY_MS)
-  }
+  // One definition of the rule, in storage-env.ts, which startup also uses to
+  // refuse a value it cannot understand. This fallback is therefore
+  // unreachable in a started server and kept only so library and test callers
+  // get a safe value rather than a throw.
+  const parsed = parseFileGcIntervalMs(process.env)
+  if (parsed.ok && parsed.value !== null) return Math.min(parsed.value, MAX_TIMER_DELAY_MS)
   return DEFAULT_INTERVAL_MS
 }
 

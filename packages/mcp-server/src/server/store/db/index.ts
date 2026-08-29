@@ -8,7 +8,8 @@ import { mkdir } from 'node:fs/promises'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
 import { getDataDir } from '../../config.js'
-import { resolveDatabaseLocation } from './location.js'
+import { databaseIsInsideDataDir, resolveDatabaseLocation } from './location.js'
+import { writeDatabaseLocationRecord } from './location-record.js'
 import type { DatabaseSchema } from './schema.js'
 
 export type Database = Kysely<DatabaseSchema>
@@ -36,6 +37,21 @@ async function buildDb(dataDir: string): Promise<Database> {
   // where the rows do.
   await mkdir(dataDir, { recursive: true })
   const location = resolveDatabaseLocation(dataDir)
+  // Written by whoever opens the database, because this is the only moment
+  // the answer is available. `whiteboard server backup` runs later,
+  // host-side, against a stopped deployment: it has neither this environment
+  // nor any way to tell a live `whiteboard.db` from one an operator left
+  // behind when they moved to libSQL.
+  //
+  // Before the connection, not after, so a deployment whose database server
+  // is unreachable still leaves the right answer behind. That is exactly when
+  // an operator reaches for a backup, and a missing record there would send
+  // the guard back to the stale file it exists to catch. The location is a
+  // property of the configuration, which is fully known here.
+  //
+  // Never throws: a directory that cannot hold this file costs a hint, not a
+  // startup.
+  await writeDatabaseLocationRecord(dataDir, databaseIsInsideDataDir(dataDir))
   const db = new Kysely<DatabaseSchema>({
     dialect: new LibsqlDialect(location),
   })

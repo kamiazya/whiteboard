@@ -6,6 +6,8 @@ import type { ServerModeRecordReadResult } from '../server/security/server-mode-
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
+import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
+import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import type { ServerBackupArgs } from './server-backup-args.js'
 
 export interface RunServerBackupOptions {
@@ -19,6 +21,7 @@ export interface RunServerBackupOptions {
 export type ServerBackupOutcome =
   | { kind: 'ok'; result: ServerBackupResult }
   | { kind: 'running-server' }
+  | { kind: 'external-database' }
   | { kind: 'invalid-output-path' }
   | { kind: 'error'; message: string }
 
@@ -57,6 +60,10 @@ export async function runServerBackup(
     return { kind: 'running-server' }
   }
 
+  // Refuse when the rows are not in the directory being copied. This command
+  // copies a directory, so a database configured to live anywhere else is
+  // simply absent from the result — and reporting success over blobs alone
+  // hands the operator a backup they will trust and cannot restore from.
   // Reject if the output path itself is a symlink or a plain file.
   try {
     const st = await lstat(outputDir)
@@ -91,6 +98,25 @@ export async function runServerBackup(
     }
   } catch {
     return { kind: 'error', message: 'backup failed' }
+  }
+
+  // Three sources, because each alone is answerable from the wrong place.
+  //
+  // WHERE the rows live is the recorded answer when there is one: it was
+  // written by the process that actually opened the database, so it is the
+  // only source that survives being asked from a host shell the deployment's
+  // env-file never reached, and the only one that can tell a live database
+  // file from a fossil left behind by a move to libSQL. Absent — an install
+  // predating the record, or one that has never started — the question falls
+  // back to the environment, which is what it had before and no worse.
+  //
+  // WHETHER they are here is always the directory's to answer. The record
+  // says where a deployment keeps its rows, never that the file is still
+  // sitting there, so the artifact check stays in force underneath it.
+  const recorded = await readDatabaseLocationRecord(dataDir)
+  const configuredInside = recorded?.inDataDir ?? databaseIsInsideDataDir(dataDir, env)
+  if (!configuredInside || !(await dataDirHasDatabaseFile(dataDir))) {
+    return { kind: 'external-database' }
   }
 
   try {

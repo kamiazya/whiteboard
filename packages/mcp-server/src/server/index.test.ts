@@ -173,6 +173,65 @@ describe('server/index main() WHITEBOARD_ALLOWED_WEB_ORIGINS startup gate', () =
   })
 })
 
+/**
+ * The same fail-fast posture, extended to the settings that decide what is
+ * kept and for how long.
+ *
+ * Setting a value is how an operator states a requirement. Starting on the
+ * default instead answers it with behaviour nobody asked for, and says so
+ * nowhere — `1h` on the grace window silently meant one millisecond, and the
+ * protection the operator configured was simply gone.
+ */
+describe('server/index main() storage settings startup gate', () => {
+  afterEach(() => {
+    vi.clearAllMocks()
+    vi.unstubAllEnvs()
+    delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
+    delete process.env.WHITEBOARD_DATABASE_URL
+  })
+
+  it('aborts before startHttpServer when a duration carries a unit suffix', async () => {
+    process.env.WHITEBOARD_FILE_GC_GRACE_MS = '1h'
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const capture = captureLogsForTests('debug')
+    try {
+      await expect(main()).rejects.toThrow('process.exit called')
+      expect(exitSpy).toHaveBeenCalledWith(1)
+      expect(startHttpServerMock).not.toHaveBeenCalled()
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
+      expect(record).toBeDefined()
+      expect(JSON.stringify(record)).toContain('WHITEBOARD_FILE_GC_GRACE_MS')
+    } finally {
+      capture.restore()
+      exitSpy.mockRestore()
+    }
+  })
+
+  it('names every bad setting at once, so one restart is enough to fix them', async () => {
+    process.env.WHITEBOARD_FILE_GC_GRACE_MS = '1h'
+    process.env.WHITEBOARD_DATABASE_URL = 'postgres://user:hunter2@db.example.com'
+    const exitSpy = vi.spyOn(process, 'exit').mockImplementation(() => {
+      throw new Error('process.exit called')
+    })
+    const capture = captureLogsForTests('debug')
+    try {
+      await expect(main()).rejects.toThrow('process.exit called')
+      const record = capture.records.find((r) => r.scope === 'server-index' && r.level === 'error')
+      const rendered = JSON.stringify(record)
+      expect(rendered).toContain('WHITEBOARD_FILE_GC_GRACE_MS')
+      expect(rendered).toContain('WHITEBOARD_DATABASE_URL')
+      // Never the values: a database URL can carry a credential.
+      expect(rendered).not.toContain('hunter2')
+      expect(rendered).not.toContain('db.example.com')
+    } finally {
+      capture.restore()
+      exitSpy.mockRestore()
+    }
+  })
+})
+
 describe('server/index main() WHITEBOARD_OAUTH_CLIENT_REGISTRY startup gate', () => {
   afterEach(() => {
     vi.clearAllMocks()

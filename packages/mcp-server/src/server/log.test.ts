@@ -247,3 +247,22 @@ describe('default destination', () => {
     }
   })
 })
+
+describe('parseLogLevel normalises the same way every reader does', () => {
+  /**
+   * The startup gate trims before validating. If this did not, a padded value
+   * would pass the gate and then resolve to the default — measured:
+   * `'INFO '` validated as `info` and resolved to `warning`, which is exactly
+   * the silent drop the gate exists to prevent.
+   */
+  it('accepts a whitespace-padded level, so the gate and the logger agree', () => {
+    expect(parseLogLevel('INFO ')).toBe('info')
+    expect(parseLogLevel('  debug')).toBe('debug')
+    expect(parseLogLevel(' warn ')).toBe('warning')
+  })
+
+  it('still rejects blank and unknown values', () => {
+    expect(parseLogLevel('   ')).toBeNull()
+    expect(parseLogLevel('verbose')).toBeNull()
+  })
+})

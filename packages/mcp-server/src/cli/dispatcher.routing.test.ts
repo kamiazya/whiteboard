@@ -325,6 +325,17 @@ describe('dispatcher routing: whiteboard server backup', () => {
     expect(stderr).toMatch(/backup refused: server is running/)
   })
 
+  it('exits 1 and names the database when it is outside the data directory', async () => {
+    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
+      kind: 'external-database',
+    })
+    const { result: exitCode, stderr } = await captureStdio(() =>
+      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
+    )
+    expect(exitCode).toBe(1)
+    expect(stderr).toMatch(/backup refused: the database is not in the data directory/)
+  })
+
   it('exits 1 and writes to stderr when output path is invalid', async () => {
     vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
       kind: 'invalid-output-path',

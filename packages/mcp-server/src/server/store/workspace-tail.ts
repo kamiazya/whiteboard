@@ -1,6 +1,7 @@
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
+import { parseWorkspaceTailMs } from './storage-env.js'
 
 const log = getLogger('workspace-tail')
 
@@ -70,12 +71,11 @@ export const WORKSPACE_TAIL_INTERVAL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
 export function resolveWorkspaceTailIntervalMs(
   env: NodeJS.ProcessEnv = process.env,
 ): number | null {
-  const raw = env[WORKSPACE_TAIL_INTERVAL_ENV]?.trim()
-  if (raw === undefined || raw === '') return null
-  if (!/^[0-9]+$/.test(raw)) return null
-  const parsed = Number(raw)
-  if (!Number.isSafeInteger(parsed) || parsed <= 0) return null
-  return parsed
+  // One definition of the rule, in storage-env.ts, which startup also uses to
+  // refuse a value it cannot understand. Falling back to OFF here is the safe
+  // direction and is unreachable in a started server.
+  const parsed = parseWorkspaceTailMs(env)
+  return parsed.ok ? parsed.value : null
 }
 
 export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTail {

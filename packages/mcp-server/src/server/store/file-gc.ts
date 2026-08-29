@@ -21,6 +21,7 @@ import {
   loadDocument,
 } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
+import { parseFileGcGraceMs } from './storage-env.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -237,13 +238,30 @@ export interface PurgeFilesOptions {
 
 const DEFAULT_GRACE_MS = 60 * 60 * 1000
 
+/**
+ * Parsed strictly — a bare non-negative base-10 integer — matching the
+ * sibling `WHITEBOARD_FILE_GC_INTERVAL_MS`.
+ *
+ * `Number.parseInt` reads leading digits and discards the rest, so `1h` (the
+ * most natural way to write one hour) resolved to **1 millisecond**, and
+ * `30m` to 30. This window is the only thing standing between an upload that
+ * has finished writing and the save that will reference it, so a value that
+ * silently collapses it deletes live data — the sibling parsed strictly for
+ * exactly this reason, and the two were simply written to different
+ * conventions.
+ *
+ * A malformed value falls back to the default rather than aborting: unlike
+ * `WHITEBOARD_DATABASE_URL`, a wrong value here cannot make two instances
+ * disagree about what the record is, and the default is the safe direction
+ * (deleting later than asked, never sooner).
+ */
 function resolveGraceMs(options: PurgeFilesOptions): number {
   if (typeof options.graceMs === 'number') return Math.max(0, options.graceMs)
-  const envRaw = process.env.WHITEBOARD_FILE_GC_GRACE_MS
-  if (typeof envRaw === 'string' && envRaw.length > 0) {
-    const parsed = Number.parseInt(envRaw, 10)
-    if (Number.isFinite(parsed) && parsed >= 0) return parsed
-  }
+  // One definition of the rule, in storage-env.ts, which startup also uses to
+  // refuse a value it cannot understand — so a started server never reaches
+  // the fallback below.
+  const parsed = parseFileGcGraceMs(process.env)
+  if (parsed.ok && parsed.value !== null) return parsed.value
   return DEFAULT_GRACE_MS
 }
 
