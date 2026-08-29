@@ -376,6 +376,40 @@ describe('purgeDanglingFiles', () => {
     }
   })
 
+  /**
+   * A unit-suffixed value must not become a near-zero window.
+   *
+   * `Number.parseInt` reads the leading digits and discards the rest, so the
+   * most natural way an operator writes one hour — `1h` — resolved to **1
+   * millisecond**. This is the one setting whose entire job is protecting the
+   * window between an upload finishing and the matching save landing, so
+   * silently shrinking it to nothing deletes files that are still in flight.
+   *
+   * Measured across plausible spellings before the fix:
+   * `1h` -> 1ms, `30m` -> 30ms, `2s` -> 2ms, `1e3` -> 1ms.
+   *
+   * The sibling `WHITEBOARD_FILE_GC_INTERVAL_MS` already parsed strictly for
+   * exactly this reason. The two were written to different conventions, and
+   * only the lenient one guards data.
+   */
+  it('falls back to the default rather than reading a unit suffix as a millisecond count', async () => {
+    const previous = process.env.WHITEBOARD_FILE_GC_GRACE_MS
+    try {
+      for (const raw of ['1h', '30m', '2s', '1e3', ' 500', '-1', '1.5']) {
+        process.env.WHITEBOARD_FILE_GC_GRACE_MS = raw
+        await seedFreshFile(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`, 'fresh', '.png', 8)
+        const result = await purgeDanglingFiles(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`)
+        // A freshly-written file is inside the default one-hour window, so a
+        // correctly-parsed setting purges nothing. Under the old parse `1h`
+        // became 1ms and this file was deleted.
+        expect(result.purgedCount, `${raw} must not arm a near-zero grace window`).toBe(0)
+      }
+    } finally {
+      if (previous === undefined) delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
+      else process.env.WHITEBOARD_FILE_GC_GRACE_MS = previous
+    }
+  })
+
   it('serialises against a concurrent saveDocument that adds a new file reference', async () => {
     // Race scenario: user has foo.png on disk left over from an earlier
     // session, but no canvas references it yet. They open a canvas and
