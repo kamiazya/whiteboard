@@ -1,4 +1,6 @@
+import { stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const DB_FILENAME = 'whiteboard.db'
 export const DB_URL_ENV = 'WHITEBOARD_DATABASE_URL'
@@ -65,4 +67,65 @@ export function resolveDatabaseLocation(
 
   const authToken = env[DB_URL_AUTH_TOKEN_ENV]?.trim()
   return { url: raw, ...(authToken === undefined || authToken === '' ? {} : { authToken }) }
+}
+
+/**
+ * Whether copying `dataDir` would carry the rows with it.
+ *
+ * Every whole-directory operation — `whiteboard server backup` and its
+ * restore — rests on an assumption it never states: that the database is a
+ * file inside the directory being copied. That held for every install until
+ * `WHITEBOARD_DATABASE_URL` made the location configurable, and nothing
+ * re-asked it. Measured: with a remote database configured, `server backup`
+ * reported `{"ok":true}` over a backup holding blobs alone.
+ *
+ * **Fail closed.** `true` is the answer that lets a whole-directory copy
+ * proceed, so anything unreadable answers `false` — a refused backup is
+ * recoverable, one the operator believes in is not.
+ */
+export function databaseIsInsideDataDir(
+  dataDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  let url: string
+  try {
+    url = resolveDatabaseLocation(dataDir, env).url
+  } catch {
+    // An unusable value aborts startup elsewhere; here it simply is not a
+    // path inside the directory.
+    return false
+  }
+  if (!url.startsWith('file:')) return false
+  try {
+    return fileURLToPath(url) === join(dataDir, DB_FILENAME)
+  } catch {
+    // A relative or otherwise non-path file: URL. Whatever it names, this
+    // function cannot show it is inside.
+    return false
+  }
+}
+
+/**
+ * Whether `dir` actually holds a database file.
+ *
+ * `databaseIsInsideDataDir` answers what the ENVIRONMENT says, which is only
+ * as good as the environment the question is asked in. The self-hosting guide
+ * tells operators to stop the container and run `whiteboard server backup`
+ * host-side, where `WHITEBOARD_DATABASE_URL` — set in the container's
+ * env-file — is simply absent: the env-only check then reads a clean shell,
+ * concludes the database is local, and copies a directory with no database in
+ * it. Measured: `{"ok":true,"operation":"backup"}` over `[ 'blobs' ]`.
+ *
+ * So the directory is asked as well. A directory with no database file cannot
+ * produce a copy containing rows, whatever any environment claims, and that
+ * holds whether the rows live in a libSQL server or the server has simply
+ * never run.
+ */
+export async function dataDirHasDatabaseFile(dir: string): Promise<boolean> {
+  try {
+    const stats = await stat(join(dir, DB_FILENAME))
+    return stats.isFile()
+  } catch {
+    return false
+  }
 }

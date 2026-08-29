@@ -1,5 +1,9 @@
 import { cp, lstat, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
+import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
+import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
+import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
+import { DB_FILENAME } from './store/db/location.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -33,6 +37,12 @@ export interface BackupRestoreOptions {
   // The runtime caller (e.g. a future support-bundle CLI) would pass
   // the user data dir + a sibling backup dir.
   allowedRoots: string[]
+  // Leave `whiteboard.db` out of the copy. Set when the deployment keeps its
+  // rows elsewhere, where any file of that name in the directory is a fossil
+  // from before the move — it looks exactly like a live database, and a
+  // restore would put its pre-migration rows back as though they were
+  // current. Backup only.
+  excludeDatabaseFile?: boolean
 }
 
 // Canonicalize `p` by resolving symlinks on the deepest existing ancestor.
@@ -151,6 +161,37 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
   }
 }
 
+/**
+ * Entries that never travel into a backup, whatever else is happening.
+ *
+ * - The staging area holds mid-flight bytes under names no digest or file id
+ *   matches, so a copy of one resolves to nothing. It is also the entry a
+ *   live copy is most likely to trip over: `cp` stats each name it listed,
+ *   and a file renamed away in between raises ENOENT for the whole backup.
+ * - The daemon record holds the Bearer token the daemon authenticates HTTP
+ *   and WS with, which is why it is written owner-only. A backup directory is
+ *   the opposite of owner-only — it gets copied to another disk, shipped to
+ *   support, kept for months. It was never present during a backup until
+ *   backups could be taken hot, so enabling that is what would have started
+ *   leaking it.
+ * - The in-progress marker is this command's own bookkeeping, and a copy of
+ *   it in a restored data directory claims a backup is running there.
+ */
+const NEVER_COPIED = [PENDING_WRITES_DIRNAME, DAEMON_RECORD_FILENAME, BACKUP_MARKER_FILENAME]
+
+/**
+ * The database and everything SQLite keeps beside it.
+ *
+ * In WAL mode the newest commits live in `whiteboard.db-wal` until a
+ * checkpoint folds them back, so the three files are one artifact. Excluding
+ * only the main file would leave a `-wal` in the backup holding a fragment of
+ * exactly the pre-migration rows the exclusion exists to keep out — and
+ * SQLite replays a `-wal` into any database later placed beside it.
+ */
+function isDatabaseFile(dataDir: string, path: string): boolean {
+  return path === join(dataDir, DB_FILENAME) || path.startsWith(join(dataDir, `${DB_FILENAME}-`))
+}
+
 // Copy <srcDataDir> into <backupDir>. The backup is a directory copy,
 // not an archive — restore is the inverse copy. `srcDataDir` must
 // exist; `backupDir` must be empty (or missing) so a backup never
@@ -186,6 +227,19 @@ export async function backupDataDir(
     dereference: false,
     errorOnExist: true,
     force: false,
+    // Two things are filtered out rather than deleted afterwards: a fossil
+    // that is copied and then removed exists on disk in between, and a backup
+    // interrupted in that window is one holding rows it was never meant to
+    // hold.
+    //
+    // The staging area never travels, whatever the database is doing. It
+    // holds mid-flight bytes under names no digest or file id matches, so a
+    // copy of one resolves to nothing — and it is the entry a live copy is
+    // most likely to trip over, since `cp` stats each name it listed and a
+    // file renamed away in between raises ENOENT for the whole backup.
+    filter: (src: string) =>
+      !NEVER_COPIED.some((name) => src === join(srcDataDir, name)) &&
+      !(options.excludeDatabaseFile === true && isDatabaseFile(srcDataDir, src)),
   })
 }
 

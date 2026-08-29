@@ -366,10 +366,23 @@ async function dispatchServerBackup(rest: readonly string[]): Promise<number> {
   switch (outcome.kind) {
     case 'ok':
       writeJsonObject(outcome.result)
+      // A store the product does not cover is named in words as well as in
+      // the JSON (ADR-0021 decision 2). An operator reading a terminal should
+      // not have to notice a nested `captured: false` to learn that their
+      // rows are still their own responsibility. stdout stays pure JSON, so
+      // this goes to stderr.
+      if (!outcome.result.stores.database.captured) {
+        process.stderr.write(
+          'note: the database was not backed up — this deployment points ' +
+            'WHITEBOARD_DATABASE_URL at a server we do not host, so its backups are ' +
+            'yours to arrange. The blobs in the data directory were copied.\n',
+        )
+      }
       return 0
-    case 'running-server':
+    case 'missing-database':
       process.stderr.write(
-        'backup refused: server is running. Stop the server before taking a backup.\n',
+        'backup refused: this data directory is where the rows belong, and it has no ' +
+          'database in it. Nothing here can be restored from.\n',
       )
       return 1
     case 'invalid-output-path':
@@ -388,7 +401,7 @@ async function dispatchServerRestore(rest: readonly string[]): Promise<number> {
     return 64
   }
   const { runServerRestore } = await import('./server-restore.js')
-  const outcome = await runServerRestore({ args: parsed })
+  const outcome = await runServerRestore({ args: parsed, env: process.env })
   switch (outcome.kind) {
     case 'ok':
       writeJsonObject(outcome.result)
@@ -396,6 +409,15 @@ async function dispatchServerRestore(rest: readonly string[]): Promise<number> {
     case 'running-target':
       process.stderr.write(
         'restore refused: target is a running server. Stop the server before restoring.\n',
+      )
+      return 1
+    case 'external-database':
+      process.stderr.write(
+        'restore refused: this backup and this target disagree about where the rows ' +
+          'live. A backup taken from a deployment that keeps its rows in the data ' +
+          'directory can only be restored into another one, and the same holds for a ' +
+          'backup whose rows were hosted elsewhere. Restoring across that change is not ' +
+          'supported yet.\n',
       )
       return 1
     case 'invalid-target-path':

@@ -424,13 +424,25 @@ describe('createFileGcSweeper env parsing', () => {
     else process.env[ENV_KEY] = previous
   })
 
+  /**
+   * The safe fallback for a value this resolver cannot understand.
+   *
+   * Startup refuses such a value outright (see `storage-env.ts`), so a running
+   * server never reaches this branch; it is kept for library and test callers,
+   * which should get a sane interval rather than a throw.
+   *
+   * `' 5'` left this list when the rule moved to `storage-env.ts`, which trims
+   * before parsing: surrounding whitespace is a transport artifact of compose
+   * files and shell quoting, not an operator asking for something. It now
+   * means 5, which is what anyone writing it meant. Refusing to boot over a
+   * stray space would be a hostile reading of an unambiguous value.
+   */
   it.each([
     '',
     '1.5',
     '1x',
     '-1',
     '1e3',
-    ' 5',
     'abc',
   ])('falls back to the 24h default for invalid env value %j', async (raw) => {
     process.env[ENV_KEY] = raw

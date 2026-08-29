@@ -12,6 +12,7 @@ import type { purgeResultSchema } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
+import { backupIsInProgress } from './backup-in-progress.js'
 import { loadDocumentBranches } from './branches-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import {
@@ -21,6 +22,7 @@ import {
   loadDocument,
 } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
+import { parseFileGcGraceMs } from './storage-env.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -237,13 +239,30 @@ export interface PurgeFilesOptions {
 
 const DEFAULT_GRACE_MS = 60 * 60 * 1000
 
+/**
+ * Parsed strictly — a bare non-negative base-10 integer — matching the
+ * sibling `WHITEBOARD_FILE_GC_INTERVAL_MS`.
+ *
+ * `Number.parseInt` reads leading digits and discards the rest, so `1h` (the
+ * most natural way to write one hour) resolved to **1 millisecond**, and
+ * `30m` to 30. This window is the only thing standing between an upload that
+ * has finished writing and the save that will reference it, so a value that
+ * silently collapses it deletes live data — the sibling parsed strictly for
+ * exactly this reason, and the two were simply written to different
+ * conventions.
+ *
+ * A malformed value falls back to the default rather than aborting: unlike
+ * `WHITEBOARD_DATABASE_URL`, a wrong value here cannot make two instances
+ * disagree about what the record is, and the default is the safe direction
+ * (deleting later than asked, never sooner).
+ */
 function resolveGraceMs(options: PurgeFilesOptions): number {
   if (typeof options.graceMs === 'number') return Math.max(0, options.graceMs)
-  const envRaw = process.env.WHITEBOARD_FILE_GC_GRACE_MS
-  if (typeof envRaw === 'string' && envRaw.length > 0) {
-    const parsed = Number.parseInt(envRaw, 10)
-    if (Number.isFinite(parsed) && parsed >= 0) return parsed
-  }
+  // One definition of the rule, in storage-env.ts, which startup also uses to
+  // refuse a value it cannot understand — so a started server never reaches
+  // the fallback below.
+  const parsed = parseFileGcGraceMs(process.env)
+  if (parsed.ok && parsed.value !== null) return parsed.value
   return DEFAULT_GRACE_MS
 }
 
@@ -258,6 +277,27 @@ export async function purgeDanglingFiles(
   // as "dangling".
   const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
+    // Asked INSIDE the barrier, not before it. Doing async work first looks
+    // cheaper — there is no listing or reference collect worth starting while
+    // a backup reads the tree — but it widens the gap between deciding to run
+    // and holding the lock, and a concurrent route writes into that gap.
+    // Measured: hoisting this above the lock broke the PUT /head
+    // serialisation case with a half-written tipFrontiers.
+    //
+    // A backup captures the rows as a snapshot and the uploads as a directory
+    // copy, and those are two moments. Unlinking between them removes a file
+    // the snapshot still references, leaving a backup that restores to a
+    // document pointing at nothing — silently, since every step reported
+    // success. That is ADR-0021 decision 6's far end ("retention must not
+    // delete behind") in the shape this system has today.
+    //
+    // Standing down costs nothing: this pass is periodic (24h by default), so
+    // a skipped one simply happens on the next tick.
+    if (await backupIsInProgress(getDataDir())) {
+      log.info({ workspaceId }, 'purge stood down: a backup is assembling this data directory')
+      return { purgedCount: 0, purgedBytes: 0, skippedReason: 'backup-in-progress' as const }
+    }
+
     // Judge against the RECORD, not this instance's cache. `listDocuments`
     // and `loadDocument` both read the cached workspace document, which is
     // authoritative for one daemon — every write goes through it — and is

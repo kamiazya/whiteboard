@@ -53,3 +53,41 @@ it('the popover explains the state as text on demand', () => {
   const popover = baseElement.querySelector('[data-testid="save-status-popover"]')
   expect(popover?.textContent).toContain('saved')
 })
+
+/**
+ * A document that has never been written and one whose write just landed are
+ * BOTH `Saved`, and the accessible name is identical for the two.
+ *
+ * That is correct for a person — "Saved" is what they want to read either way
+ * — but it makes the name useless as a test's proof that a write completed.
+ * Two browser tests waited on `getByRole('button', { name: 'Saved' })` for
+ * exactly that, one of them under a comment calling it "the page's own report
+ * that the write completed". It matched the state the page was already in, so
+ * they navigated away with the debounced write still pending and read the
+ * loss later as lost keystrokes.
+ *
+ * `data-last-saved-at` is the discriminator that was missing: absent until a
+ * write has actually landed for this document.
+ */
+it('distinguishes a landed write from having never written, which the name cannot', () => {
+  const neverWritten = render(<SaveStatusChip state={{ kind: 'saved', lastSavedAt: null }} />)
+  const landed = render(
+    <SaveStatusChip state={{ kind: 'saved', lastSavedAt: '2026-01-01T00:00:00.000Z' }} />,
+  )
+  const [first, second] = [neverWritten, landed].map((r) => chip(r.container))
+
+  // Identical to a reader, by design.
+  expect(first!.getAttribute('aria-label')).toBe(second!.getAttribute('aria-label'))
+
+  // Distinguishable to a test.
+  expect(first!.getAttribute('data-last-saved-at')).toBeNull()
+  expect(second!.getAttribute('data-last-saved-at')).toBe('2026-01-01T00:00:00.000Z')
+})
+
+it('publishes the state kind, so a wait can require a transition rather than a label', () => {
+  for (const kind of ['saved', 'saving', 'pending'] as const) {
+    cleanup()
+    const { container } = render(<SaveStatusChip state={{ kind, lastSavedAt: null }} />)
+    expect(chip(container).getAttribute('data-save-state')).toBe(kind)
+  }
+})

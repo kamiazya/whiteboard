@@ -19,6 +19,7 @@ const { saveDocument, loadDocument, listDocuments, workspaceFrontiersForPath } =
   './document-store.js'
 )
 const { purgeDanglingFiles, IncompleteFileGcScanError } = await import('./file-gc.js')
+const { withBackupMarker } = await import('./backup-in-progress.js')
 const { isCorruptStoredDataError } = await import('./corrupt-stored-data.js')
 const { captureLogsForTests } = await import('../log.js')
 const { FileVersionStore } = await import('./version-store.js')
@@ -370,6 +371,46 @@ describe('purgeDanglingFiles', () => {
       await seedFreshFile('ws_env', 'fresh-orphan', '.png', 8)
       const result = await purgeDanglingFiles('ws_env')
       expect(result.purgedCount).toBe(1)
+    } finally {
+      if (previous === undefined) delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
+      else process.env.WHITEBOARD_FILE_GC_GRACE_MS = previous
+    }
+  })
+
+  /**
+   * A unit-suffixed value must not become a near-zero window.
+   *
+   * `Number.parseInt` reads the leading digits and discards the rest, so the
+   * most natural way an operator writes one hour — `1h` — resolved to **1
+   * millisecond**. This is the one setting whose entire job is protecting the
+   * window between an upload finishing and the matching save landing, so
+   * silently shrinking it to nothing deletes files that are still in flight.
+   *
+   * Measured across plausible spellings before the fix:
+   * `1h` -> 1ms, `30m` -> 30ms, `2s` -> 2ms, `1e3` -> 1ms.
+   *
+   * `' 500'` is deliberately NOT in this list: the shared parser trims, so it
+   * is a valid 500ms window rather than a rejected value — and as a 500ms
+   * grace it would purge the freshly-seeded file whenever the scan ran longer
+   * than that, making this test flaky for a reason unrelated to what it
+   * checks.
+   *
+   * The sibling `WHITEBOARD_FILE_GC_INTERVAL_MS` already parsed strictly for
+   * exactly this reason. The two were written to different conventions, and
+   * only the lenient one guards data.
+   */
+  it('falls back to the default rather than reading a unit suffix as a millisecond count', async () => {
+    const previous = process.env.WHITEBOARD_FILE_GC_GRACE_MS
+    try {
+      for (const raw of ['1h', '30m', '2s', '1e3', '-1', '1.5']) {
+        process.env.WHITEBOARD_FILE_GC_GRACE_MS = raw
+        await seedFreshFile(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`, 'fresh', '.png', 8)
+        const result = await purgeDanglingFiles(`ws_grace_${raw.replace(/[^a-z0-9]/gi, '')}`)
+        // A freshly-written file is inside the default one-hour window, so a
+        // correctly-parsed setting purges nothing. Under the old parse `1h`
+        // became 1ms and this file was deleted.
+        expect(result.purgedCount, `${raw} must not arm a near-zero grace window`).toBe(0)
+      }
     } finally {
       if (previous === undefined) delete process.env.WHITEBOARD_FILE_GC_GRACE_MS
       else process.env.WHITEBOARD_FILE_GC_GRACE_MS = previous
@@ -757,5 +798,51 @@ it('stands down when another instance writes while the pass is deciding', async 
   // stood-down pass acts on nothing, and the next pass decides again.
   const files = await readdir(join(tempDir, workspaceId, 'files'))
   expect(files).toContain('orphan.png')
+  expect(files).toContain('kept.png')
+})
+
+/**
+ * A backup being assembled is a reason to stand down.
+ *
+ * A backup captures the rows as a snapshot and the uploads as a directory
+ * copy — two moments. A pass that unlinks between them removes a file the
+ * snapshot still references, and the backup restores to a document pointing
+ * at nothing, silently, because every step reported success. That is
+ * ADR-0021 decision 6's far end in the shape this system has today.
+ *
+ * Checked FIRST, before the listing and the reference collect: the whole
+ * point is to do no work and touch nothing while a backup reads the tree.
+ */
+it('stands down while a backup is assembling this data directory', async () => {
+  const workspaceId = 'gc-backup-running'
+  await saveDocument(workspaceId, 'mine', makeSpatialDocWithImage('kept'))
+  await seedFile(workspaceId, 'kept', '.png', 64)
+  await seedFile(workspaceId, 'orphan', '.png', 64)
+
+  const result = await withBackupMarker(tempDir, () =>
+    purgeDanglingFiles(workspaceId, { graceMs: 0 }),
+  )
+
+  expect(result.skippedReason).toBe('backup-in-progress')
+  expect(result.purgedCount).toBe(0)
+  // Nothing unlinked — not even the file that really was dangling.
+  const files = await readdir(join(tempDir, workspaceId, 'files'))
+  expect(files).toContain('orphan.png')
+  expect(files).toContain('kept.png')
+})
+
+it('collects again once the backup has finished', async () => {
+  const workspaceId = 'gc-backup-finished'
+  await saveDocument(workspaceId, 'mine', makeSpatialDocWithImage('kept'))
+  await seedFile(workspaceId, 'kept', '.png', 64)
+  await seedFile(workspaceId, 'orphan', '.png', 64)
+
+  await withBackupMarker(tempDir, async () => {})
+  const result = await purgeDanglingFiles(workspaceId, { graceMs: 0 })
+
+  expect(result.skippedReason).toBeUndefined()
+  expect(result.purgedCount).toBe(1)
+  const files = await readdir(join(tempDir, workspaceId, 'files'))
+  expect(files).not.toContain('orphan.png')
   expect(files).toContain('kept.png')
 })

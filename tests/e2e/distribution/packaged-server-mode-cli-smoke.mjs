@@ -37,9 +37,11 @@ import {
   existsSync,
   mkdirSync,
   mkdtempSync,
+  readdirSync,
   readFileSync,
   realpathSync,
   rmSync,
+  statSync,
   writeFileSync,
 } from 'node:fs'
 import { createServer as createHttpsServer } from 'node:https'
@@ -340,12 +342,39 @@ try {
     } catch {
       fail('scenario 3: backup stdout is not valid JSON')
     }
-    if (backupJson.schemaVersion !== 1) fail('scenario 3: schemaVersion mismatch')
+    if (backupJson.schemaVersion !== 2) fail('scenario 3: schemaVersion mismatch')
     if (backupJson.ok !== true) fail('scenario 3: ok not true')
     if (backupJson.operation !== 'backup') fail('scenario 3: operation mismatch')
+    // `ok` no longer answers "is my backup complete?" — that is per store now,
+    // so the smoke has to read the part that carries the meaning. This
+    // deployment keeps its rows in the data directory, so both are captured.
+    if (backupJson.stores?.database?.captured !== true) {
+      fail('scenario 3: stores.database not reported captured')
+    }
+    if (backupJson.stores?.blobs?.captured !== true) {
+      fail('scenario 3: stores.blobs not reported captured')
+    }
     assertNoLeak('scenario 3 backup stdout', r.stdout, SMOKE_LITERALS)
     assertNoLeak('scenario 3 backup stderr', r.stderr ?? '')
-    console.log('[server-cli-smoke] scenario 3 PASS: backup CLI succeeded')
+
+    // The daemon record holds the Bearer token and is written owner-only. It
+    // must never reach a backup — a directory that gets copied to another
+    // disk, shipped to support, kept for months. This is reachable here
+    // because the seed daemon above was killed rather than stopped
+    // gracefully, so its record is still on disk for the backup to skip.
+    const backedUp = readdirSync(backupDir)
+    if (backedUp.includes('daemon.json')) {
+      fail('scenario 3: backup carries the daemon record (Bearer token)')
+    }
+    if (backedUp.includes('backup-in-progress.json')) {
+      fail("scenario 3: backup carries the backup command's own marker")
+    }
+    for (const name of backedUp) {
+      const full = join(backupDir, name)
+      if (!existsSync(full) || statSync(full).isDirectory()) continue
+      assertNoLeak(`scenario 3 backup file ${name}`, readFileSync(full, 'utf8'), SMOKE_LITERALS)
+    }
+    console.log('[server-cli-smoke] scenario 3 PASS: backup CLI succeeded, no credential copied')
   }
 
   // ── Scenario 4: restore via CLI ────────────────────────────────────────────
@@ -560,12 +589,18 @@ try {
     console.log('[server-cli-smoke] scenario 10 PASS: ancestor symlink in --target-dir rejected')
   }
 
-  // ── Scenario 11: running-record rejection on backup ──────────────────────
+  // ── Scenario 11: a running server no longer blocks a backup ──────────────
 
   {
     const liveDataDir = join(tmpRoot, 'live-src')
     const liveOut = join(tmpRoot, 'live-out')
     mkdirSync(liveDataDir)
+    // A real database to snapshot: the one scenario 3 wrote is a VACUUM INTO
+    // output, which is an ordinary self-contained database.
+    writeFileSync(
+      join(liveDataDir, 'whiteboard.db'),
+      readFileSync(join(backupDir, 'whiteboard.db')),
+    )
     // Write a server-mode.json pointing to the smoke process itself (live PID).
     writeFileSync(
       join(liveDataDir, 'server-mode.json'),
@@ -588,11 +623,35 @@ try {
       `--data-dir=${liveDataDir}`,
       `--output-dir=${liveOut}`,
     ])
-    if (r.status === 0) fail('scenario 11: backup of running server should have been refused')
-    if (r.stdout.trim() !== '') fail('scenario 11: stdout not empty on failure')
-    if (!r.stderr?.includes('running')) fail('scenario 11: stderr should mention running')
+    // This used to be a refusal, and pinning that here is what caught the
+    // change (ADR-0021 decision 3). A backup requiring downtime is one an
+    // operator takes rarely or never, and the interval between backups is the
+    // data they lose — so a live server record is no longer a reason to stop.
+    // Three things make it safe: the rows are captured through the database
+    // rather than read out from under a writer, every write into the data
+    // directory lands atomically, and file-GC stands down for the duration.
+    if (r.status !== 0) {
+      fail('scenario 11: backup of a running server should now succeed', {
+        stderrBytes: (r.stderr ?? '').length,
+      })
+    }
+    let liveJson
+    try {
+      liveJson = JSON.parse(r.stdout.trim())
+    } catch {
+      fail('scenario 11: backup stdout is not valid JSON')
+    }
+    if (liveJson.stores?.database?.captured !== true) {
+      fail('scenario 11: rows not captured from a running deployment')
+    }
+    // The marker is this command's own bookkeeping and must not survive it,
+    // or file-GC in that deployment never collects again.
+    if (existsSync(join(liveDataDir, 'backup-in-progress.json'))) {
+      fail('scenario 11: the stand-down marker was left behind')
+    }
+    assertNoLeak('scenario 11 stdout', r.stdout, SMOKE_LITERALS)
     assertNoLeak('scenario 11 stderr', r.stderr ?? '', SMOKE_LITERALS)
-    console.log('[server-cli-smoke] scenario 11 PASS: running-record backup refused')
+    console.log('[server-cli-smoke] scenario 11 PASS: backup taken while a server record is live')
   }
 
   // ── Scenario 12: running-record rejection on restore ─────────────────────

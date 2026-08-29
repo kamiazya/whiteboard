@@ -1,5 +1,6 @@
 #!/usr/bin/env node
 import { deleteDaemonRecord, saveDaemonRecord } from '../daemon/daemon-registry.js'
+import { describeEnvIssues } from '../shared/env-setting.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { getDataDir } from './config.js'
 import { applyConfigFileToEnvAndLogLevel, loadConfigFile } from './config-file.js'
@@ -15,6 +16,7 @@ import {
   DEFAULT_ALLOWED_WEB_ORIGINS,
   loadAllowedWebOriginsFromEnv,
 } from './security/web-origin-allowlist.js'
+import { collectStartupEnvIssues } from './startup-env.js'
 
 /**
  * Reads a `--name=value` flag out of an argv list. When the same flag is
@@ -152,6 +154,22 @@ export async function main() {
     log.error(
       { reason: oauthRegistry.error },
       'WHITEBOARD_OAUTH_CLIENT_REGISTRY could not be parsed; refusing to start',
+    )
+    process.exit(1)
+  }
+
+  // The same posture, for every remaining setting an operator can configure.
+  // One the process cannot honour must abort rather than start on a default:
+  // `1h` on a grace window silently meant one millisecond, and a misspelled
+  // log level silently meant `warning` for someone who asked for `debug` to
+  // investigate an incident. Every bad variable is named at once, so one
+  // restart is enough to fix them all.
+  const startupIssues = collectStartupEnvIssues(getDataDir(), process.env)
+  if (startupIssues.length > 0) {
+    const log = getLogger('server-index')
+    log.error(
+      { issues: describeEnvIssues(startupIssues) },
+      'configured settings could not be understood; refusing to start',
     )
     process.exit(1)
   }

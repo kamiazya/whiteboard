@@ -18,6 +18,7 @@ vi.mock('./config.js', () => ({
 }))
 
 const { backupDataDir, restoreDataDir, BackupError } = await import('./backup-restore.js')
+const { PENDING_WRITES_DIRNAME } = await import('./atomic-write.js')
 const { saveDocument, listDocuments, loadDocument } = await import('./store/document-store.js')
 const { FileVersionStore } = await import('./store/version-store.js')
 const { clearDbCache } = await import('./store/db/index.js')
@@ -312,6 +313,145 @@ describe('backup-restore drill', () => {
       expect(msg).not.toMatch(/\.ts:\d/)
       expect(msg).not.toMatch(/Bearer/i)
       expect(msg).toMatch(/does not exist/i)
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * A fossil must not travel into a backup.
+ *
+ * An operator who moved their rows to a libSQL server and left the old
+ * `whiteboard.db` in the data directory has a file that looks exactly like a
+ * live database and holds pre-migration rows. Copying it produces a backup
+ * that restore would put back as though it were current — the same silent
+ * data loss this whole area exists to prevent, arriving by a different route.
+ *
+ * Everything else in the directory is still ours and still copied: the blobs
+ * are precisely what no libSQL provider is backing up.
+ */
+describe('backupDataDir with excludeDatabaseFile', () => {
+  it('copies the blobs but leaves the stale database behind', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await mkdir(join(roots.src, 'blobs', 'ab'), { recursive: true })
+      await writeFile(join(roots.src, 'blobs', 'ab', 'cdef'), 'blob bytes')
+      await writeFile(join(roots.src, 'whiteboard.db'), 'pre-migration rows')
+      await writeFile(
+        join(roots.src, 'storage.json'),
+        '{"schemaVersion":1,"database":{"inDataDir":false}}',
+      )
+
+      // WAL sidecars, which a fossil in a WAL database has beside it.
+      await writeFile(join(roots.src, 'whiteboard.db-wal'), 'uncheckpointed rows')
+      await writeFile(join(roots.src, 'whiteboard.db-shm'), 'shared memory')
+
+      await backupDataDir(roots.src, roots.backup, {
+        allowedRoots: [roots.root],
+        excludeDatabaseFile: true,
+      })
+
+      // The sidecars go with it. A `-wal` left behind on its own is a
+      // fragment of the very pre-migration rows the exclusion exists to keep
+      // out — and SQLite would replay it into any `whiteboard.db` later put
+      // beside it.
+      const copied = await readdir(roots.backup)
+      expect(copied.filter((f) => f.startsWith('whiteboard.db'))).toEqual([])
+
+      expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
+      // The record travels: it is how restore later knows this backup was
+      // never meant to hold rows.
+      expect(await readFile(join(roots.backup, 'storage.json'), 'utf8')).toContain(
+        '"inDataDir":false',
+      )
+      expect(await readdir(roots.backup)).not.toContain('whiteboard.db')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+
+  it('copies the database when the option is absent', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+      expect(await readFile(join(roots.backup, 'whiteboard.db'), 'utf8')).toBe('rows')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * The blob store's temp area must never reach a backup.
+ *
+ * Atomic blob writes land beside the target and `rename` onto it, so a temp
+ * file exists for the duration of every write. It is not content — it is
+ * mid-flight bytes under a name no digest matches — and copying it puts a
+ * file in the backup that nothing can ever resolve.
+ *
+ * It also removes the copy's most common way to die. `cp` enumerates a
+ * directory and then stats each entry; a temp file listed and renamed away
+ * before the stat raises ENOENT, which aborts the WHOLE backup. Measured on a
+ * copy overlapping a 6 MiB rewrite: the copy crashed with
+ * `ENOENT: lstat '.../.<digest>.<uuid>.tmp'`. Excluding the directory
+ * removes the file this hits; a copy taken while a server is genuinely
+ * writing needs more than this, and that is ADR-0021 decision 3's job.
+ */
+describe('backupDataDir and the blob temp area', () => {
+  it('does not copy the temp directory into the backup', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await mkdir(join(roots.src, PENDING_WRITES_DIRNAME), { recursive: true })
+      await writeFile(join(roots.src, PENDING_WRITES_DIRNAME, 'half-written.tmp'), 'partial')
+      await mkdir(join(roots.src, 'blobs', 'ab'), { recursive: true })
+      await writeFile(join(roots.src, 'blobs', 'ab', 'cdef'), 'blob bytes')
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+
+      expect(await readdir(roots.backup)).not.toContain(PENDING_WRITES_DIRNAME)
+      // Everything real still travels.
+      expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
+      expect(await readFile(join(roots.backup, 'whiteboard.db'), 'utf8')).toBe('rows')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * A backup must not carry a live credential.
+ *
+ * `daemon.json` holds the Bearer token the daemon authenticates HTTP and WS
+ * with, which is why it is written 0o600. A backup directory is the opposite
+ * of owner-only: it gets copied to another disk, shipped to support, kept for
+ * months. Before backups could be taken hot the file was never present during
+ * one — the command refused while the server ran — so enabling that is
+ * exactly what would have started leaking it.
+ *
+ * The in-progress marker goes too. It is this command's own bookkeeping, and
+ * a copy of it in a restored data directory is a claim that a backup is
+ * running there.
+ */
+describe('backupDataDir and files that must not travel', () => {
+  it('leaves the daemon record and the backup marker out of the copy', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await writeFile(join(roots.src, 'daemon.json'), '{"token":"super-secret-bearer"}')
+      await writeFile(join(roots.src, 'backup-in-progress.json'), '{"schemaVersion":1}')
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+      await mkdir(join(roots.src, 'blobs'), { recursive: true })
+      await writeFile(join(roots.src, 'blobs', 'keep'), 'blob bytes')
+
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+
+      const copied = await readdir(roots.backup)
+      expect(copied).not.toContain('daemon.json')
+      expect(copied).not.toContain('backup-in-progress.json')
+      // Everything real still travels.
+      expect(await readFile(join(roots.backup, 'blobs', 'keep'), 'utf8')).toBe('blob bytes')
     } finally {
       await rm(roots.root, { recursive: true, force: true })
     }

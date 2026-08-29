@@ -133,6 +133,50 @@ describe('runServerRun — config-error', () => {
   })
 })
 
+/**
+ * A storage setting the operator configured and this process cannot honour
+ * stops the server, rather than starting it on a default nobody asked for.
+ *
+ * Same posture `server/index.ts` already takes for a malformed
+ * WHITEBOARD_ALLOWED_WEB_ORIGINS: a silent fallback "would look identical to
+ * 'the operator never configured it'". Setting a value IS the requirement,
+ * and starting anyway answers it with behaviour that was not requested.
+ */
+describe('runServerRun — storage config', () => {
+  it('refuses to start when a duration carries a unit suffix', async () => {
+    const outcome = await runServerRun({
+      flags: dryRunFlags(),
+      env: { ...VALID_ENV, WHITEBOARD_FILE_GC_GRACE_MS: '1h' },
+    })
+    expect(outcome.kind).toBe('config-error')
+    if (outcome.kind !== 'config-error') return
+    expect(outcome.field).toBe('WHITEBOARD_FILE_GC_GRACE_MS')
+  })
+
+  it('starts normally when the storage settings are understood', async () => {
+    const outcome = await runServerRun({
+      flags: dryRunFlags(),
+      env: {
+        ...VALID_ENV,
+        WHITEBOARD_FILE_GC_GRACE_MS: '3600000',
+        WHITEBOARD_WORKSPACE_TAIL_MS: '0',
+      },
+    })
+    expect(outcome.kind).toBe('dry-run-ok')
+  })
+
+  it('non-leak: a bad database URL never reaches the outcome', async () => {
+    const outcome = await runServerRun({
+      flags: dryRunFlags(),
+      env: { ...VALID_ENV, WHITEBOARD_DATABASE_URL: 'postgres://user:hunter2@db.example.com' },
+    })
+    expect(outcome.kind).toBe('config-error')
+    const asText = JSON.stringify(outcome)
+    expect(asText).not.toContain('hunter2')
+    expect(asText).not.toContain('db.example.com')
+  })
+})
+
 describe('runServerRun — plan-error', () => {
   it('non-HTTPS externalUrl → plan-error', async () => {
     const outcome = await runServerRun({

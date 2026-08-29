@@ -49,6 +49,14 @@ export function SaveStatusChip({ state }: SaveStatusChipProps) {
             <button
               type="button"
               data-testid="save-status-chip"
+              // The accessible name is the same for "never written" and "the
+              // write landed" — correct for a reader, useless as a test's
+              // proof that a write completed. These two publish the state
+              // machine itself so a wait can require a TRANSITION: absent
+              // `data-last-saved-at` means nothing has been written for this
+              // document yet.
+              data-save-state={state.kind}
+              {...(state.lastSavedAt === null ? {} : { 'data-last-saved-at': state.lastSavedAt })}
               aria-label={label}
               className="flex shrink-0 items-center justify-center rounded-full p-1.5 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent"
             >

@@ -64,8 +64,14 @@ export type Logger = PinoLogger<LogLevel, true>
 const DEFAULT_LEVEL: LogLevel = 'warning'
 
 export function parseLogLevel(input: string | undefined | null): LogLevel | null {
-  if (typeof input !== 'string' || input.length === 0) return null
-  const normalised = input.toLowerCase()
+  if (typeof input !== 'string') return null
+  // Trimmed here rather than at each call site, so every reader normalises
+  // identically. The startup gate trimmed and this did not, which meant
+  // `WHITEBOARD_LOG_LEVEL='INFO '` passed validation and then resolved to
+  // `warning` — the silent drop the gate exists to prevent, reintroduced by
+  // the two disagreeing about what the value was.
+  const normalised = input.trim().toLowerCase()
+  if (normalised.length === 0) return null
   // Tolerate "warn" — the Node ecosystem says warn, MCP says warning. Pino
   // itself does not accept "warn" once useOnlyCustomLevels is on, so we
   // collapse it here.
