@@ -3,6 +3,7 @@ import { evictDoc } from '../../store/doc-cache.js'
 import { compactDocument, listDocuments } from '../../store/document-store.js'
 import type { VersionStore } from '../../store/version-store.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -37,14 +38,15 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // autos add no rollback value once both bracket points exist. Loops over
   // every canvas in the workspace and aggregates totals.
   app.post('/api/workspaces/:workspaceId/versions/prune-sandwiched', async (c) => {
-    const { workspaceId } = c.req.param()
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
       const documents = await listDocuments(workspaceId)
       const results: Array<{ path: string; deletedCount: number }> = []
@@ -68,14 +70,15 @@ export function createMaintenanceRouter(options: MaintenanceRouterOptions) {
   // adds race risk. Returns a per-canvas array plus aggregated totals so
   // the UI can show a meaningful summary in one round-trip.
   app.post('/api/workspaces/:workspaceId/documents/optimize-all', async (c) => {
-    const { workspaceId } = c.req.param()
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
       const documents = await listDocuments(workspaceId)
       const results: Array<{

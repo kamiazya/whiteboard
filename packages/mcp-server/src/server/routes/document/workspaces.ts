@@ -26,6 +26,7 @@ import {
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { workspaceIdFromHandle } from '../../workspace-handle.js'
 import { handleCorruptStoredData } from './_shared.js'
 import { onDocumentsRoute } from './path-route.js'
 
@@ -77,14 +78,15 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   })
 
   app.get('/api/workspaces/:workspaceId/documents', async (c) => {
-    const { workspaceId } = c.req.param()
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json(body, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     try {
       const deps = options.serverDeps ?? (await getDefaultServerDeps())
       const { documents } = await wbDocumentList(deps, { workspaceId })
@@ -125,14 +127,15 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
   // Save a new empty LoroDoc under path. Return 409 for conflicts and 400 for invalid paths.
   // On success, return { path } for client-side navigation.
   app.post('/api/workspaces/:workspaceId/documents', async (c) => {
-    const { workspaceId } = c.req.param()
+    const handle = c.req.param('workspaceId')
     try {
-      validateWorkspaceId(workspaceId)
+      validateWorkspaceId(handle)
     } catch (err) {
       const body = validationErrorBody(err)
       if (body) return c.json({ title: body.message } satisfies ApiErrorBody, 400)
       throw err
     }
+    const workspaceId = await workspaceIdFromHandle(c, handle)
     const raw = await c.req.json().catch(() => null)
     if (raw === null) {
       return c.json({ title: 'JSON body required' } satisfies ApiErrorBody, 400)

@@ -25,8 +25,16 @@ const { clearCache } = await import('../store/doc-cache.js')
 const { loadDocument, saveDocument } = await import('../store/document-store.js')
 const { corruptStoredData } = await import('../store/corrupt-stored-data.js')
 const { createAutoVersionTrigger } = await import('./document.js')
-const { handleWsUpgrade, setAutoVersionTrigger, sendViewportRequest, setOnPersistedForTests } =
-  await import('./ws.js')
+const {
+  handleWsUpgrade,
+  setAutoVersionTrigger,
+  sendViewportRequest,
+  setOnPersistedForTests,
+  getClientCount,
+} = await import('./ws.js')
+const { upsertWorkspaceRow } = await import('../store/db/upsert-workspace.js')
+const { getDb } = await import('../store/db/index.js')
+const { prepareDataDir } = await import('../store/db/prepare.js')
 const { captureLogsForTests } = await import('../log.js')
 
 // Build a binary frame in the WORKSPACE lineage — the only binary contract:
@@ -98,6 +106,8 @@ class FakeWebSocket {
   }
 }
 
+const CANONICAL = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
 describe('handleWsUpgrade workspace existence', () => {
   beforeEach(async () => {
     tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-test-'))
@@ -147,6 +157,30 @@ describe('handleWsUpgrade workspace existence', () => {
     expect(ws.closes).toEqual([])
     // The initial snapshot for the lazily-created empty doc.
     expect(ws.sent.length).toBe(1)
+  })
+
+  it('registers a socket opened by segment under the canonical id, not the segment', async () => {
+    // The socket's registry key is what every later fan-out looks it up by
+    // (sendVersionCreated, the binary broadcast, SSE). Registered under the
+    // segment while the senders resolve to the canonical id, it stays open,
+    // reports "Synced", and receives NOTHING for the rest of its life — so
+    // asserting only that the connect succeeded would miss the whole defect.
+    // Segment claimed on the INITIAL insert: upsertWorkspaceRow is
+    // onConflict-doNothing, so the row saveDocument would create first
+    // cannot be given one afterwards.
+    await prepareDataDir(tempDir)
+    await upsertWorkspaceRow(await getDb(tempDir), CANONICAL, { segment: 'design' })
+    await saveDocument(CANONICAL, 'spec', new LoroDoc())
+
+    const ws = new FakeWebSocket()
+    await handleWsUpgrade(
+      { url: '/ws/design/spec', headers: { host: 'localhost:3099' } } as never,
+      ws as never,
+    )
+
+    expect(ws.closes).toEqual([])
+    expect(getClientCount(CANONICAL, 'spec')).toBe(1)
+    expect(getClientCount('design', 'spec')).toBe(0)
   })
 })
 

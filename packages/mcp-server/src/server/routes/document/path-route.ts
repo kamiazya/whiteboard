@@ -6,6 +6,7 @@ import {
 } from '../../../shared/api-contracts/document-url.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { validateDocumentPath, validateWorkspaceId, validationErrorBody } from '../../validators.js'
+import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
 export const DOCUMENT_WILDCARD = '/api/w/:workspaceId/document/*'
 
@@ -64,7 +65,11 @@ export function onDocumentAction(
     const parsed = parseDocumentApiPath(c.req.path)
     const path = parsed === null ? null : documentPathForAction(parsed.tail, action)
     if (parsed === null || path === null) return next()
-    return validated(c, parsed.workspaceId, path) ?? handler(c, parsed.workspaceId, path)
+    // Validated on the handle AS WRITTEN, so a malformed one keeps its 400;
+    // resolved afterwards, so the handler only ever sees a canonical id.
+    const invalid = validated(c, parsed.workspaceId, path)
+    if (invalid) return invalid
+    return handler(c, await workspaceIdFromHandle(c, parsed.workspaceId), path)
   }
   app[method](DOCUMENT_WILDCARD, ...(middleware as []), dispatch)
 }
@@ -80,10 +85,9 @@ export function onDocumentFile(
     const parsed = parseDocumentApiPath(c.req.path)
     const file = parsed === null ? null : documentPathForFile(parsed.tail)
     if (parsed === null || file === null) return next()
-    return (
-      validated(c, parsed.workspaceId, file.path) ??
-      handler(c, parsed.workspaceId, file.path, file.fileId)
-    )
+    const invalid = validated(c, parsed.workspaceId, file.path)
+    if (invalid) return invalid
+    return handler(c, await workspaceIdFromHandle(c, parsed.workspaceId), file.path, file.fileId)
   }
   app[method](DOCUMENT_WILDCARD, ...(middleware as []), dispatch)
 }
@@ -134,9 +138,9 @@ export function onDocumentsRoute(
       else if (actual !== expected) return next()
     }
     const path = (tail.slice(0, suffixStart) as string[]).join('/')
-    return (
-      validated(c, workspaceId, path, options.badRequest) ?? handler(c, workspaceId, path, params)
-    )
+    const invalid = validated(c, workspaceId, path, options.badRequest)
+    if (invalid) return invalid
+    return handler(c, await workspaceIdFromHandle(c, workspaceId), path, params)
   }
   app[method](DOCUMENTS_WILDCARD, ...(middleware as []), dispatch)
 }
