@@ -7,16 +7,24 @@
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { startBootSequence } from './boot.js'
-import { DB_VERSION } from './lib/browser-idb.js'
+import { DB_VERSION, setWhiteboardDbNameForTests } from './lib/browser-idb.js'
 import {
   getBrowserWorkspaceId,
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
 } from './lib/browser-workspace-id.js'
+import { IdbDocumentIndex } from './lib/idb-document-index.js'
 import { loadWorkspaceDocumentProjection } from './lib/workspace-content.js'
 
 const REAL_DB_NAME = 'whiteboard-boot-test'
+
+// Fixed, not minted, and deliberately the HIGHEST id in the database: the
+// address-less fallback takes the lowest, so a target that sorts below the
+// minted first workspace would be chosen anyway and the test would pass
+// without the address ever being read. The first draft used a 2017 ULID and
+// did exactly that.
+const ADDRESSED_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
 
 async function clearDb(): Promise<void> {
   return new Promise((resolve) => {
@@ -182,5 +190,48 @@ describe('startBootSequence — resolver rejection does not block render', () =>
     })
     expect(rendered).toBe(true)
     expect(getBrowserWorkspaceId()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+})
+
+describe('startBootSequence — the address chooses which workspace boots', () => {
+  beforeEach(async () => {
+    resetBrowserWorkspaceIdForTests()
+    setWhiteboardDbNameForTests(REAL_DB_NAME)
+    await clearDb()
+  })
+  afterEach(async () => {
+    resetBrowserWorkspaceIdForTests()
+    window.history.replaceState(null, '', '/')
+    await clearDb()
+  })
+
+  it('boots the workspace the address names, through the DEFAULT resolver', async () => {
+    // Deliberately no `resolveWorkspaceId` override. Every other case in this
+    // file injects one, so the production default — the only caller that can
+    // give the resolver a handle — was reached by nothing. The handle
+    // parameter existed with no producer, which is a parameter that looks
+    // wired and is not.
+    const first = await resolveBrowserWorkspaceId(REAL_DB_NAME)
+    await new IdbDocumentIndex(REAL_DB_NAME).createWorkspace({
+      workspaceId: ADDRESSED_ULID,
+      segment: 'second',
+    })
+    resetBrowserWorkspaceIdForTests()
+
+    window.history.replaceState(null, '', '/w/second/d/anything')
+    await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
+
+    expect(getBrowserWorkspaceId()).toBe(ADDRESSED_ULID)
+    expect(getBrowserWorkspaceId()).not.toBe(first)
+  })
+
+  it('boots the fallback when the address names no workspace', async () => {
+    const only = await resolveBrowserWorkspaceId(REAL_DB_NAME)
+    resetBrowserWorkspaceIdForTests()
+
+    window.history.replaceState(null, '', '/')
+    await startBootSequence({ rootEl: rootEl(), loadFont: async () => {}, render: () => {} })
+
+    expect(getBrowserWorkspaceId()).toBe(only)
   })
 })

@@ -93,7 +93,6 @@ const { App } = await import('./App.js')
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
   capabilities: {
-    workspaces: false,
     versions: false,
     branches: false,
     merge: false,
@@ -128,10 +127,10 @@ describe('App route sync against an asynchronously-propagating router', () => {
       })
     }
     expect(screen.getByTestId('daemon-document-page')).toBeTruthy()
-    expect(fakeLocation.pathname).toBe('/w/w1/document/main')
+    expect(fakeLocation.pathname).toBe('/w/w1/d/main')
     // The payload said "open this canvas": the gallery must never flash in,
     // and one navigation ('/' -> canvas URL) is all the sync needs.
     expect(indexPageMounts).toBe(0)
-    expect(navigateCalls).toEqual(['/w/w1/document/main'])
+    expect(navigateCalls).toEqual(['/w/w1/d/main'])
   })
 })

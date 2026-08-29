@@ -1,6 +1,7 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { cleanup } from '@testing-library/react'
 import { afterEach, expect, vi } from 'vitest'
+import { BROWSER_DEFAULT_SEGMENT } from './src/lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from './src/lib/browser-workspace-id.js'
 import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
 
@@ -11,7 +12,14 @@ import { drainSchedulerMacrotasks } from './src/test-utils/scheduler-drain.js'
 // call site sees; a test exercising the accessor's own unresolved/failed
 // states resets and restores it explicitly (see browser-workspace-id.test.ts
 // and boot.test.ts).
-setBrowserWorkspaceIdForTests(generateDocumentId())
+//
+// The SEGMENT is seeded too, and is what a browser address names. Without it
+// the handle falls back to a per-file random ULID, which no fixture can spell
+// — and a route naming a workspace this keeper does not have is not a browser
+// document route at all, so every `/w/default/document/...` fixture would
+// quietly render the index instead. `default` is the same segment the v15
+// carrier mints in production, so the fixture and the product agree.
+setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
 
 // jsdom ships no ResizeObserver; Radix popper-positioned surfaces
 // (DropdownMenu/Popover content) observe their anchor on mount and throw

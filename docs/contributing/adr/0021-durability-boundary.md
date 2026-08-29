@@ -1,6 +1,11 @@
 # ADR-0021: Durability is a property of each store, not an operation on a directory
 
-**Status:** Proposed
+**Status:** Accepted — decisions 2 and 3 implemented (a database we do not
+host is reported out of scope rather than refused wholesale; the rows are
+captured by a hot snapshot, so backup no longer requires stopping the
+server), plus the first slice of decision 1's per-store record. Decisions
+4, 5 and 6 are not: `backup-retention.ts` and its property hold decision
+6's invariant but nothing wires them yet.
 
 ## Context
 
@@ -110,6 +115,70 @@ The embedded default is ours, and gets a hot snapshot per decision 3.
 `VACUUM INTO`, not a file copy — measured above to work on a live writing
 connection. The server keeps serving. This is what makes decision 4 possible,
 and it is the whole reason the stop-the-server constraint can go.
+
+**It rests on WAL, which this ADR originally did not say.** The measurement
+above was taken on the writing connection itself, where the locks are already
+held and nothing contends. `whiteboard server backup` is a SEPARATE process
+opening its own connection to the same file, and under SQLite's default
+rollback journal that connection cannot read a database being written at all.
+Measured cross-process, three snapshot attempts during a tight writing loop:
+
+```
+journal_mode=delete -> SQLITE_BUSY: database is locked        (3 of 3)
+journal_mode=wal    -> ok in 9/17/22 ms, integrity ok         (3 of 3)
+```
+
+The same difference shows in the direction that matters for a daemon, and
+there it is deterministic rather than timing-dependent: with a read
+transaction held open — which is what a snapshot in progress is — a commit on
+another connection raises `SQLITE_BUSY` under `delete` and succeeds under
+`wal`. Under the default, *taking a backup stops the product working*.
+
+So `db/index.ts` opens every database `PRAGMA journal_mode = WAL`. The cost is
+one this deployment has already accepted: WAL needs real filesystem shared
+memory and does not work over a network filesystem — and neither does the
+locking this store depends on regardless, which is why
+[ADR-0020](0020-coordination-boundary.md) sends multi-instance deployments to
+a libSQL server rather than a shared file.
+
+WAL cuts the other way for anything that copies FILES, and the cut is this
+ADR's own failure mode. The newest commits live in `whiteboard.db-wal` until a
+checkpoint folds them back, so a copy of the main file alone is short —
+measured at **4977 of 5000 rows**, silently. The three files are one artifact
+and travel together, which the whole-directory copy already does and the
+`excludeDatabaseFile` filter had to learn. `VACUUM INTO` is immune by
+construction: it writes a single self-contained database, which is one more
+reason the snapshot replaces the file copy rather than sitting beside it.
+
+**Implemented** as `snapshotDatabaseInto`, which `whiteboard server backup`
+now uses for the rows whenever the database is ours. The copy therefore never
+carries database FILES at all — the same exclusion the fossil case already
+needed, applied unconditionally — and a backup directory holds one plain
+`whiteboard.db`. A snapshot that fails fails the backup: reporting success
+over a directory of blobs and no rows is the defect this ADR opened with.
+
+**The stop-the-server requirement is gone.** Three things had to hold, and the
+last two were found by measuring rather than by reading:
+
+1. The rows are snapshotted rather than read out from under a writer.
+2. Every write into the data directory lands atomically. Uploads used a plain
+   `writeFile` like blobs did — measured, a copy overlapping an in-flight 8 MiB
+   upload captured a torn file 2 times out of 10, which is worse than always,
+   because the backup then holds a corrupt image only sometimes.
+3. Nothing DELETES while the copy runs. A backup is a snapshot plus a copy,
+   two moments; a file-GC pass unlinking between them removes a file the
+   snapshot still references. `backup-in-progress.json` is how the host-side
+   backup process tells the daemon's GC to stand down — the filesystem is the
+   only channel between them. It fails OPEN, the opposite of every other guard
+   here: wrongly believing a backup is running means GC never collects again,
+   an unbounded disk leak from a file nobody maintains, while wrongly believing
+   none is running costs one skipped stand-down in a window of seconds.
+
+Enabling this is also what would have started leaking a credential. The
+daemon record holds the Bearer token and is written owner-only; it was simply
+never present during a backup while backups required a stopped server. It is
+now excluded, as is the marker itself. Neither unit tests nor review found
+that — running the real command against a real daemon did.
 
 ### 4. Backup is scheduled by default; the CLI triggers the same pass
 

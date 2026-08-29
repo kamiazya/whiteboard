@@ -600,15 +600,6 @@ export function DaemonDocumentPage({
       <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
         <div className="min-w-0">
           <h1 className="sr-only">Whiteboard (daemon)</h1>
-          {controller.switchError && (
-            <div
-              role="alert"
-              aria-live="assertive"
-              className="flex items-center gap-2 border-b bg-background px-4 py-1"
-            >
-              <span className="text-xs text-destructive">{controller.switchError}</span>
-            </div>
-          )}
           {canvas && (
             <WorkspaceTopBar
               // Document identity in the merged header row, mirroring the
@@ -682,39 +673,18 @@ export function DaemonDocumentPage({
             <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
           )}
           {/* This row only exists when it carries something meaningful: a
-            real workspace CHOICE (two or more), or capability teasers. A
-            single-workspace daemon with full capabilities — the common
-            local case — gets no extra header row at all (raw ids are not
-            chrome, and every header row costs canvas height on a phone). */}
-          {(!capabilities.workspaces ||
-            (controller.workspaces.length > 1 && !canvas) ||
-            !capabilities.versions ||
-            !capabilities.branches ||
-            !capabilities.merge) && (
+            capability this keeper does not have. A daemon with full
+            capabilities — the common local case — gets no extra header row
+            at all (every header row costs canvas height on a phone).
+
+            It used to also carry a workspace select, which showed raw
+            canonical ids as its own option labels — the "Raw identifiers are
+            not chrome" defect ADR-0019 exists to fix — behind a comment that
+            had gone stale: it deferred to a WorkspaceTopBar dropdown that no
+            longer exists. The shell switcher names the workspace on every
+            page, this one included, so it is the one carrier now. */}
+          {(!capabilities.versions || !capabilities.branches || !capabilities.merge) && (
             <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-              {capabilities.workspaces ? (
-                // WorkspaceTopBar's dropdown is the switcher once a canvas is
-                // mounted; this select survives only for the no-canvas state
-                // (empty workspace), where that dropdown never mounts and it
-                // is the only way to switch back out.
-                controller.workspaces.length > 1 &&
-                !canvas && (
-                  <select
-                    aria-label="Workspaces"
-                    value={controller.workspaceId ?? ''}
-                    onChange={(event) => void controller.switchWorkspace(event.target.value)}
-                    className="min-w-0 max-w-40 truncate rounded-md border bg-background px-2 py-1 text-xs"
-                  >
-                    {controller.workspaces.map((w) => (
-                      <option key={w.workspaceId} value={w.workspaceId}>
-                        {w.workspaceId}
-                      </option>
-                    ))}
-                  </select>
-                )
-              ) : (
-                <CapabilityTeaser label="Workspaces" enabled={capabilities.workspaces} />
-              )}
               {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}

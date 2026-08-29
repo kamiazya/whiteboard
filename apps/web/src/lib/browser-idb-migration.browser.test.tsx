@@ -19,12 +19,15 @@ import {
   adoptWorkspaceDocument,
   resolveWorkspaceDocumentById,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot, type SnapshotChunk } from '@kamiazya/whiteboard-ports'
 import { Loro } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
+  BROWSER_DEFAULT_SEGMENT,
   DB_VERSION,
   DOCUMENT_INDEX_STORE,
+  mintBrowserWorkspaceSegment,
   openWhiteboardDb,
   rekeyBrowserWorkspace,
   SYNC_DOCUMENTS_STORE,
@@ -647,6 +650,97 @@ describe("IndexedDB v13 -> v14 (re-keys the 'local' workspace)", () => {
     })
     expect(workspaceKeys).toEqual([ulid])
     expect(getBrowserWorkspaceId()).toBe(ulid)
+  })
+})
+
+describe('IndexedDB v14 -> v15 (the browser workspace gets a segment)', () => {
+  beforeEach(clearDb)
+  afterEach(clearDb)
+
+  it('current DB_VERSION is 15 or higher', () => {
+    expect(DB_VERSION).toBeGreaterThanOrEqual(15)
+  })
+
+  it('fresh install: the sole workspace row carries a segment that resolves', async () => {
+    const ulid = await resolveBrowserWorkspaceId(MIGRATION_DB)
+    const index = new IdbDocumentIndex(MIGRATION_DB)
+
+    expect(await index.listWorkspaces()).toEqual([
+      { workspaceId: ulid, segment: BROWSER_DEFAULT_SEGMENT },
+    ])
+
+    // The point of the slice, and not merely that a field is populated: the
+    // workspace answers to the name a URL would carry. `resolveWorkspace` is
+    // segment-first, so a row whose segment never landed answers `null` here
+    // while still listing perfectly well.
+    expect(await index.resolveWorkspace(BROWSER_DEFAULT_SEGMENT)).toEqual({
+      workspaceId: ulid,
+      segment: BROWSER_DEFAULT_SEGMENT,
+    })
+  })
+
+  it('the minted segment is a legal one, not merely a string', () => {
+    // A segment that fails its own schema would be rejected the moment the
+    // URL layer parses it back, and this is the one segment nobody types.
+    expect(workspaceSegmentSchema.safeParse(BROWSER_DEFAULT_SEGMENT).success).toBe(true)
+  })
+
+  it('a v13 database upgraded to head gets a segment beside its carried rows', async () => {
+    const contentDoc = new Loro()
+    contentDoc.getMovableList('elements').push('carried')
+    await seedV13Fixture({
+      documentId: V13_DOCUMENT_ID,
+      path: 'carried-doc',
+      contentSnapshot: contentDoc.export({ mode: 'snapshot' }),
+    })
+
+    const ulid = await resolveBrowserWorkspaceId(MIGRATION_DB)
+    const index = new IdbDocumentIndex(MIGRATION_DB)
+    expect(await index.listWorkspaces()).toEqual([
+      { workspaceId: ulid, segment: BROWSER_DEFAULT_SEGMENT },
+    ])
+
+    // The carrier is ordered AFTER the re-key, and reads what it wrote. If it
+    // ran first it would find no row, mint nothing, and still look green on
+    // the fresh-install case above — so the document surviving beside the
+    // segment is what says the ordering held.
+    expect((await migratedLocal().listDocuments()).map((d) => d.documentId)).toEqual([
+      V13_DOCUMENT_ID,
+    ])
+  })
+
+  it('convergent: a segment already chosen is never overwritten by a later pass', async () => {
+    await resolveBrowserWorkspaceId(MIGRATION_DB)
+    const ulid = getBrowserWorkspaceId()
+
+    // A rename is the whole reason this has to converge: the carrier re-runs
+    // on EVERY future version bump (the chain has no memory of having run),
+    // so a carrier that mints unconditionally would silently revert the name
+    // its owner chose, one upgrade later.
+    resetBrowserWorkspaceIdForTests()
+    const stored = await new Promise<unknown>((resolveOpen, rejectOpen) => {
+      const req = indexedDB.open(MIGRATION_DB, DB_VERSION + 1)
+      req.onupgradeneeded = () => {
+        const tx = req.transaction
+        if (!tx) return
+        tx.objectStore(WORKSPACES_STORE).put({ workspaceId: ulid, segment: 'work' }, ulid)
+        mintBrowserWorkspaceSegment(tx, () => {})
+      }
+      req.onsuccess = async () => {
+        const db = req.result
+        const row = await new Promise<unknown>((resolveRow, rejectRow) => {
+          const readTx = db.transaction(WORKSPACES_STORE, 'readonly')
+          const rowReq = readTx.objectStore(WORKSPACES_STORE).get(ulid)
+          rowReq.onerror = () => rejectRow(rowReq.error)
+          readTx.oncomplete = () => resolveRow(rowReq.result)
+        })
+        db.close()
+        resolveOpen(row)
+      }
+      req.onerror = () => rejectOpen(req.error)
+    })
+
+    expect(stored).toEqual({ workspaceId: ulid, segment: 'work' })
   })
 })
 

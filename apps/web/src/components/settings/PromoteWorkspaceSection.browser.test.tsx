@@ -39,7 +39,7 @@ interface StubOptions {
   updateDelayMs?: number
   putDelayMs?: number
   failUpdateStatus?: number
-  workspaces?: { workspaceId: string; displayName?: string }[]
+  workspaces?: { workspaceId: string; segment?: string; displayName?: string }[]
 }
 
 /** The three daemon routes the flow touches, answering from `target`. */
@@ -388,6 +388,29 @@ describe('PromoteWorkspaceSection', () => {
     expect(single.textContent).toMatch(/team notes/i)
     await userEvent.click(screen.getByTestId('promote-confirm'))
     expect((await screen.findByTestId('promote-last-result')).textContent).toMatch(/moved 2/i)
+  })
+
+  it('a workspace named only by its segment shows the segment, never its ULID', async () => {
+    // The middle of ADR-0019's three layers. This selector reached straight
+    // past it for `displayName ?? workspaceId`, so a workspace whose owner
+    // named it in the URL but never gave it a display name read back here as
+    // 26 characters nobody chose.
+    await seedTwoDocuments()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), {
+          workspaces: [{ workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', segment: 'design-team' }],
+        })}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await screen.findByTestId('promote-dialog')
+    const single = screen.getByTestId('promote-target-single')
+    expect(single.textContent).toBe('design-team')
+    expect(single.textContent).not.toContain('01ARZ3')
   })
 
   // The section can be a session's FIRST surface (deep-link/reload straight

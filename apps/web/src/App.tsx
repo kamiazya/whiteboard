@@ -1,6 +1,7 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
-import { lazy, Suspense, useEffect, useRef, useState } from 'react'
+import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import type { AppShellWorkspaces } from './components/AppShell.js'
 import { AppShellLazy } from './components/AppShellLazy.js'
 
 // Lazy: the not-found page renders on rare, dead-end navigations only —
@@ -12,6 +13,12 @@ const NotFoundPage = lazy(() =>
 import { DocumentPageSkeleton } from './components/DocumentPageSkeleton.js'
 import { ErrorBoundary } from './components/ErrorBoundary.js'
 import { useDaemonConnection } from './hooks/useDaemonConnection.js'
+import {
+  browserWorkspaceIdentitySnapshot,
+  browserWorkspaceMatches,
+  subscribeBrowserWorkspaceIdentity,
+  switchBrowserWorkspace,
+} from './lib/browser-workspace-id.js'
 import {
   consumeGrantFragment,
   type GrantConsumeResult,
@@ -34,13 +41,13 @@ const SettingsPage = lazy(() =>
 )
 
 import {
-  browserDocumentPath,
-  type DaemonRoute,
-  daemonRoutePath,
+  documentPath,
   isKnownAppPath,
-  parseBrowserRoute,
-  parseDaemonRoute,
   parseSettingsRoute,
+  parseWorkspaceRoute,
+  type WorkspaceRoute,
+  workspacePath,
+  workspaceRoutePath,
 } from './lib/app-routes.js'
 import {
   BROWSER_CAPABILITIES,
@@ -48,6 +55,7 @@ import {
   resolveHostedProviderStateFromRaw,
 } from './lib/provider.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
+import { workspaceHandle } from './lib/workspace-handle.js'
 
 // Lazy so the daemon stack (DaemonBackend, ws-protocol, api client) stays out
 // of the entry chunk — sessions arriving via a #wb= pairing fragment AND
@@ -87,7 +95,7 @@ const DaemonIndexPage = lazy(() =>
 // transition instead of reusing a previous canvas's identity. Reuses
 // DaemonRoute's shape (rather than a parallel type) since this state IS the
 // route — app-routes.ts's parse/build functions keep the two in sync.
-type DaemonView = DaemonRoute
+type DaemonView = WorkspaceRoute
 
 interface AppProps {
   providerState?: ProviderState
@@ -142,7 +150,7 @@ export function App({ providerState }: AppProps) {
   const navigate = useNavigate()
 
   // The daemon-served consent page is its OWN surface, not a daemon view:
-  // parseDaemonRoute('/pair') is null, so without this guard the
+  // parseWorkspaceRoute('/pair') is null, so without this guard the
   // daemonView -> URL sync effect below immediately navigated to '/',
   // dropping the origin/challenge/state query and dumping the user on the
   // gallery instead of the consent prompt.
@@ -214,26 +222,58 @@ export function App({ providerState }: AppProps) {
   // starts on the gallery pre-scoped to that workspace rather than
   // whichever workspace the daemon happens to list first. Absent a fragment
   // (the daemon's runtime-config path, or a same-origin cold load of a
-  // `/w/:workspaceId/document/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
+  // `/w/:workspaceId/d/:path` or `/w/:workspaceId` URL — e.g. a bookmark,
   // a shared link, or R3's "Open the local app" deep link), the URL itself
   // seeds the view. Lazy initializer: both the payload and the pathname at
   // mount time are fixed for the life of the mount.
   const [daemonView, setDaemonView] = useState<DaemonView>(() => {
     if (daemonConnection.status === 'paired') {
       const { workspaceId, path } = daemonConnection.payload
-      if (workspaceId && path) return { kind: 'document', workspaceId, path }
-      return { kind: 'index', workspaceId }
+      if (workspaceId && path) return { kind: 'document', workspace: workspaceId, path }
+      return { kind: 'index', workspace: workspaceId }
     }
-    return parseDaemonRoute(location.pathname) ?? { kind: 'index' }
+    return parseWorkspaceRoute(location.pathname) ?? { kind: 'index' }
   })
 
-  // Derived per render, not read once at mount: '/' (no id) renders the
-  // canvas list, /local/:documentId mounts the editor. Once mounted, the
-  // editor owns URL<->canvas-id sync for in-editor switching (it reads
-  // initialDocumentId a single time), so App re-routes only when the URL
-  // crosses the list/editor boundary — including browser Back from the
-  // editor to the list.
-  const browserPath = parseBrowserRoute(location.pathname)?.path
+  // Derived per render, not read once at mount: an index route renders the
+  // document list, a document route mounts the editor. Once mounted, the
+  // editor owns URL<->document sync for in-editor switching (it reads
+  // initialPath a single time), so App re-routes only when the URL crosses
+  // the list/editor boundary — including browser Back from the editor to the
+  // list.
+  // SUBSCRIBED, not merely read. `boot.ts` bounds the identity resolve at 3s
+  // and renders degraded past it, so the identity can settle while React is
+  // already mounted — a stale tab blocking the IndexedDB version upgrade
+  // reaches that path for real. Read without a subscription, the module
+  // updates and nothing re-renders: a valid document deep link stays on the
+  // index, and the null handle below disables every navigation out of it, for
+  // the life of the tab.
+  //
+  // Null while the identity has not resolved (or failed to). A URL builder
+  // that cannot name its workspace declines to navigate rather than sending
+  // the session somewhere wrong.
+  const browserIdentity = useSyncExternalStore(
+    subscribeBrowserWorkspaceIdentity,
+    browserWorkspaceIdentitySnapshot,
+  )
+  const browserHandle = browserIdentity === null ? null : workspaceHandle(browserIdentity)
+  const browserRoute = parseWorkspaceRoute(location.pathname)
+  // Only a route naming THIS browser's workspace opens a document here. One
+  // grammar means a daemon address parses under the browser keeper too, and
+  // it names a workspace this keeper does not have — reachable by hand, and
+  // reached for real by the 'Work in this browser instead' escape, which
+  // leaves a `/w/<daemon-ws>/d/...` address behind as it switches
+  // keeper. Treating that as a browser document would open a path in a
+  // workspace that does not exist here; the index is the honest answer, and
+  // is what this shell already showed while the two grammars kept them apart.
+  //
+  // Matched against BOTH layers, not against the handle: the canonical-id
+  // form is the durable link, and comparing to `segment ?? id` rejects it the
+  // moment a segment exists.
+  const browserPath =
+    browserRoute?.kind === 'document' && browserWorkspaceMatches(browserRoute.workspace)
+      ? browserRoute.path
+      : undefined
 
   // Keeps the address bar in sync with `daemonView` in both directions.
   //
@@ -244,6 +284,38 @@ export function App({ providerState }: AppProps) {
   // separate history entry the user could "back" into (it's already been
   // consumed and re-visiting it would silently do nothing); every
   // subsequent sync pushes, so browser back/forward has real steps to walk.
+  const state = providerState ?? defaultProviderState
+
+  // The 'Work in this browser instead' escape hatch collapses a daemon OR
+  // invalid-config state to browser capabilities, so every downstream
+  // consumer (chip, banner, canvas page) reads this effective state rather
+  // than the raw one — otherwise the escape could leave daemon capabilities
+  // or copy leaking into a mode the user explicitly opted out of, or bounce
+  // a failed-pairing escape onto the invalid-config error page.
+  const effectiveState =
+    forcedBrowser && (state.kind === 'daemon' || state.kind === 'invalid-config')
+      ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
+      : state
+
+  // WHO KEEPS this session's workspace, stated once.
+  //
+  // It is decided by pairing and provider state — ADR-0004 settles it at page
+  // load — and the two branches below are the same two conditions the render
+  // tail uses to choose a daemon tree over the browser one. Derived here
+  // rather than there because the URL-sync effects need it: hooks cannot be
+  // conditional, so they run under BOTH keepers and something has to tell
+  // them which one this is.
+  //
+  // That used to be the URL's own shape (`parseBrowserRoute(...) !== null`),
+  // which worked only because `/local/*` named the keeper in the address.
+  // Reading the keeper off the address is exactly what three-layer identity
+  // exists to stop, and the guard could not survive the two route families
+  // becoming one.
+  const daemonKept =
+    (!forcedBrowser &&
+      (daemonConnection.status === 'paired' || grantConnection?.status === 'paired')) ||
+    effectiveState.kind === 'daemon'
+
   const isFirstUrlSyncRef = useRef(true)
   // The path this effect last navigated to. StrictMode's effect replay
   // re-runs the effect with the PRE-navigation location still in its
@@ -252,17 +324,16 @@ export function App({ providerState }: AppProps) {
   const lastNavigatedPathRef = useRef<string | null>(null)
   useEffect(() => {
     if (isPairRoute) return
-    // /local/:documentId belongs to the browser world, not daemonView —
-    // rewriting it to the daemon path would yank an open browser-kept
-    // editor back to the list.
-    if (parseBrowserRoute(location.pathname) !== null) return
+    // A browser-kept session's address is not daemonView's to write —
+    // rewriting it would yank an open browser-kept editor back to the list.
+    if (!daemonKept) return
     // /settings is its own top-level surface, not a daemonView — without
     // this the sync effect below would immediately rewrite it to '/'.
     if (parseSettingsRoute(location.pathname) !== null) return
     // An unknown path is the not-found page's to keep: rewriting it to the
     // daemon route would swallow the 404 into a silent redirect.
     if (!isKnownAppPath(location.pathname)) return
-    const path = daemonRoutePath(daemonView)
+    const path = workspaceRoutePath(daemonView)
     // Read-then-clear on the FIRST EFFECT RUN regardless of whether it ends
     // up navigating: a no-op first run (URL already matches the initial
     // view) must not leave the very next real navigation still thinking
@@ -275,12 +346,184 @@ export function App({ providerState }: AppProps) {
     }
     if (lastNavigatedPathRef.current === path) return
     lastNavigatedPathRef.current = path
-    navigate(path, { replace: isFirstSync })
+    // Naming an address that named nothing is a REPLACE. `/` does not say
+    // which workspace is on screen; the page resolves one and this writes it
+    // down, which is the app finishing a sentence rather than a step the
+    // person took. Pushed, it would put `/` behind them — and going back
+    // there resolves again and pushes again, a trap of our own making.
+    // Changing a workspace the address already named is a real step and
+    // pushes, so back returns to the one before.
+    //
+    // Narrow to index -> index deliberately. Opening a DOCUMENT from `/` also
+    // leaves an address that named no workspace, and it is a step: replacing
+    // there costs the back button the list you came from.
+    const currentRoute = parseWorkspaceRoute(location.pathname)
+    const namingTheSameIndex =
+      daemonView.kind === 'index' &&
+      currentRoute?.kind === 'index' &&
+      currentRoute.workspace === undefined
+    navigate(path, { replace: isFirstSync || namingTheSameIndex })
     // location.pathname is read, not depended on: including it would refire
     // this effect on every navigation (including the one it just performed),
     // which is harmless but noisy. daemonView is the actual trigger.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [daemonView, navigate, isPairRoute])
+  }, [daemonView, navigate, isPairRoute, daemonKept])
+
+  // Which daemon the SHELL is talking to, resolved once from the same three
+  // sources the render branches below each resolve for themselves: a #wb=
+  // pairing payload, a completed grant exchange, or the configured provider
+  // state. Hoisted above the branches because a hook cannot live inside one,
+  // and the switcher has to work on the pairing-link path too — that branch
+  // renders the same index page, so leaving it out would have taken the
+  // deleted select away with nothing in its place.
+  const grantPaired = grantConnection?.status === 'paired' ? grantConnection : null
+  const shellDaemonBaseUrl =
+    daemonConnection.status === 'paired'
+      ? daemonConnection.payload.baseUrl
+      : grantPaired !== null
+        ? grantPaired.daemonBaseUrl
+        : effectiveState.kind === 'daemon'
+          ? effectiveState.daemonBaseUrl
+          : undefined
+  const shellDaemonToken =
+    daemonConnection.status === 'paired'
+      ? daemonConnection.payload.authMode === 'bootstrap'
+        ? daemonConnection.payload.bootstrapToken
+        : undefined
+      : grantPaired !== null
+        ? grantPaired.token
+        : (daemonToken ?? undefined)
+  // Memoised on the two SCALARS rather than on the connection objects: those
+  // are rebuilt per render, and the switcher reads its list in an effect keyed
+  // on this source — a fresh object each render is a fetch each render.
+  const daemonShellTarget = useMemo(
+    () =>
+      forcedBrowser || shellDaemonBaseUrl === undefined
+        ? undefined
+        : { baseUrl: shellDaemonBaseUrl, token: shellDaemonToken },
+    [forcedBrowser, shellDaemonBaseUrl, shellDaemonToken],
+  )
+
+  // The daemon keeper's switcher source, built from whichever daemon this
+  // branch is talking to. Dynamic import for the same reason the browser's
+  // is: the shell is lazy, App is not.
+  //
+  // No `create`: the daemon publishes `GET /api/workspaces` and nothing that
+  // writes one, so the switcher offers no creation there. DESIGN.md's
+  // standing rule — never offer what the keeper cannot honour — and absent
+  // rather than disabled, because a disabled control says "not right now"
+  // about something that is not there at all.
+  //
+  // Switching is an in-app navigation, unlike the browser's: this keeper has
+  // no synchronous singleton to re-point, so setting the view is enough. The
+  // address follows from it, and the index page follows the address.
+  const daemonWorkspaces = useMemo(
+    (): AppShellWorkspaces | undefined =>
+      daemonShellTarget === undefined
+        ? undefined
+        : {
+            source: {
+              list: () =>
+                import('./lib/daemon-api-client.js').then((m) =>
+                  m
+                    .listWorkspaces(
+                      m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                      daemonShellTarget.baseUrl,
+                    )
+                    .then((res) => res.workspaces),
+                ),
+            },
+            onSwitch: (workspace: string) => setDaemonView({ kind: 'index', workspace }),
+          },
+    [daemonShellTarget],
+  )
+
+  // The browser keeper's switcher source. Both halves reach their module
+  // through a dynamic import so the workspace registry — and the create path
+  // behind it — stay off the critical path; the shell is lazy, but App is
+  // not, and a static import here would put IndexedDB index code in the
+  // entry chunk for a control most sessions never open.
+  //
+  // A switch is a document LOAD, not an in-app navigation. This keeper
+  // resolves its active workspace once, into a synchronous accessor whose
+  // whole rationale is that some twenty call sites read it inline; re-pointing
+  // it in place would mean re-reading it at every one of them. A load also
+  // settles the outgoing workspace's writes for free, which is the invariant
+  // a switch has to keep.
+  const browserWorkspaces = useMemo(
+    () => ({
+      source: {
+        list: () => import('./lib/browser-workspaces.js').then((m) => m.listBrowserWorkspaces()),
+        create: (displayName: string) =>
+          import('./lib/browser-workspaces.js').then((m) =>
+            m.createBrowserWorkspaceNamed(displayName),
+          ),
+      },
+      // An in-SPA route change (ADR-0019), not a document load. The address
+      // moves first and the identity follows it, which is the same direction
+      // everything else in this app reads: the effect below re-points the
+      // active workspace to whatever the address names, and rewrites the
+      // address only when it names nothing this browser holds.
+      onSwitch: (handle: string) => {
+        navigate(workspacePath(handle))
+      },
+    }),
+    [navigate],
+  )
+
+  // The browser keeper's half of the same rule, and it exists for the same
+  // reason the daemon's does: the address has to NAME the workspace on
+  // screen. It went unwritten while this keeper held exactly one workspace,
+  // where `/` and `/w/default` were the same statement in practice. They are
+  // not once a workspace can be switched — the switcher changes the outermost
+  // address layer, and `/` has no layer to change — and they were never the
+  // same to `boot.ts`, which resolves the active workspace from
+  // `parseWorkspaceRoute(location.pathname)?.workspace`: at `/` that is
+  // always undefined, so a reload took first-listed no matter where the
+  // person was.
+  //
+  // Two addresses get rewritten, and the second is not hypothetical. "Work in
+  // this browser instead" switches keeper under a `/w/<daemon-workspace>/...`
+  // address; the page already falls back to the index for it, but the address
+  // kept naming a workspace this browser does not keep.
+  //
+  // REPLACE, like the daemon's: the app is finishing a sentence the person
+  // started. Pushed, back would return to an address that rewrites itself
+  // again — a trap of our own making.
+  useEffect(() => {
+    if (isPairRoute) return
+    if (daemonKept) return
+    if (browserHandle === null) return
+    if (parseSettingsRoute(location.pathname) !== null) return
+    if (!isKnownAppPath(location.pathname)) return
+    const route = parseWorkspaceRoute(location.pathname)
+    const named = route === null ? undefined : route.workspace
+    if (named !== undefined && browserWorkspaceMatches(named)) return
+    let cancelled = false
+    const rewrite = () => {
+      if (cancelled) return
+      const path = workspacePath(browserHandle)
+      if (location.pathname !== path) navigate(path, { replace: true })
+    }
+    // An address naming a workspace this browser DOES hold is a switch, not a
+    // mistake — the switcher moves the address and this is what makes the
+    // runtime follow. Only a handle the registry cannot resolve gets the
+    // address rewritten, and `switchBrowserWorkspace` is strict precisely so
+    // the two cases stay distinguishable here: a lenient resolve would answer
+    // every unknown handle with first-listed, and this effect would then
+    // rewrite the address to a workspace nobody asked for while believing it
+    // had switched.
+    if (named === undefined) {
+      rewrite()
+    } else {
+      switchBrowserWorkspace(named).then((moved) => {
+        if (moved === null) rewrite()
+      }, rewrite)
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [location.pathname, browserHandle, daemonKept, isPairRoute, navigate])
 
   // URL -> state: handles the browser back/forward buttons (and, in
   // principle, any other code path that changes the route without going
@@ -299,14 +542,14 @@ export function App({ providerState }: AppProps) {
     if (isPairRoute) return
     if (lastRouteSyncPathRef.current === location.pathname) return
     lastRouteSyncPathRef.current = location.pathname
-    const parsed = parseDaemonRoute(location.pathname)
+    const parsed = parseWorkspaceRoute(location.pathname)
     if (parsed === null) return
     // parseDaemonRoute returns a fresh object every time, and React compares
     // state by reference — so re-set only when the route actually differs,
     // otherwise a back/forward landing on the current view re-renders for
     // nothing.
     setDaemonView((current) =>
-      daemonRoutePath(current) === daemonRoutePath(parsed) ? current : parsed,
+      workspaceRoutePath(current) === workspaceRoutePath(parsed) ? current : parsed,
     )
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [location.pathname, isPairRoute])
@@ -423,7 +666,6 @@ export function App({ providerState }: AppProps) {
     // Both pairing paths converge here: the legacy #wb= fragment carries
     // its token inline; the grant flow resolved its token via the POST
     // exchange above. Either way the daemon pages just get baseUrl+token.
-    const grantPaired = grantConnection?.status === 'paired' ? grantConnection : null
     if (daemonConnection.status === 'paired' || grantPaired !== null) {
       const payload =
         daemonConnection.status === 'paired'
@@ -445,7 +687,11 @@ export function App({ providerState }: AppProps) {
         // boundary, which must be here to catch it.
         <ErrorBoundary>
           <div className="flex h-dvh flex-col">
-            <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowser(true)} />
+            <AppShellLazy
+              daemon={true}
+              workspaces={daemonWorkspaces}
+              onWorkInBrowser={() => setForcedBrowser(true)}
+            />
             <div className="min-h-0 flex-1">
               <Suspense
                 fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -454,20 +700,21 @@ export function App({ providerState }: AppProps) {
                   <DaemonIndexPage
                     daemonBaseUrl={payload.baseUrl}
                     token={pairedToken}
-                    initialWorkspaceId={daemonView.workspaceId}
-                    onOpenDocument={(workspaceId, path) =>
-                      setDaemonView({ kind: 'document', workspaceId, path })
+                    workspace={daemonView.workspace}
+                    onWorkspaceResolved={(workspace) => setDaemonView({ kind: 'index', workspace })}
+                    onOpenDocument={(workspace, path) =>
+                      setDaemonView({ kind: 'document', workspace, path })
                     }
                   />
                 ) : (
                   <DaemonDocumentPage
-                    key={`${daemonView.workspaceId}:${daemonView.path}`}
+                    key={`${daemonView.workspace}:${daemonView.path}`}
                     daemonBaseUrl={payload.baseUrl}
-                    workspaceId={daemonView.workspaceId}
+                    workspaceId={daemonView.workspace}
                     path={daemonView.path}
                     token={pairedToken}
                     onNavigateBack={() =>
-                      setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                      setDaemonView({ kind: 'index', workspace: daemonView.workspace })
                     }
                   />
                 )}
@@ -503,19 +750,6 @@ export function App({ providerState }: AppProps) {
     }
   }
 
-  const state = providerState ?? defaultProviderState
-
-  // The 'Work in this browser instead' escape hatch collapses a daemon OR
-  // invalid-config state to browser capabilities, so every downstream
-  // consumer (chip, banner, canvas page) reads this effective state rather
-  // than the raw one — otherwise the escape could leave daemon capabilities
-  // or copy leaking into a mode the user explicitly opted out of, or bounce
-  // a failed-pairing escape onto the invalid-config error page.
-  const effectiveState =
-    forcedBrowser && (state.kind === 'daemon' || state.kind === 'invalid-config')
-      ? { kind: 'browser' as const, capabilities: BROWSER_CAPABILITIES }
-      : state
-
   if (effectiveState.kind === 'invalid-config') {
     return (
       <ErrorBoundary>
@@ -530,7 +764,11 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShellLazy daemon={true} onWorkInBrowser={() => setForcedBrowser(true)} />
+          <AppShellLazy
+            daemon={true}
+            workspaces={daemonWorkspaces}
+            onWorkInBrowser={() => setForcedBrowser(true)}
+          />
           <div className="min-h-0 flex-1 overflow-hidden">
             <Suspense
               fallback={<LazyPageFallback heightClass="h-full" message="Connecting to daemon…" />}
@@ -539,21 +777,22 @@ export function App({ providerState }: AppProps) {
                 <DaemonIndexPage
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
                   token={daemonToken}
-                  initialWorkspaceId={daemonView.workspaceId}
-                  onOpenDocument={(workspaceId, path) =>
-                    setDaemonView({ kind: 'document', workspaceId, path })
+                  workspace={daemonView.workspace}
+                  onWorkspaceResolved={(workspace) => setDaemonView({ kind: 'index', workspace })}
+                  onOpenDocument={(workspace, path) =>
+                    setDaemonView({ kind: 'document', workspace, path })
                   }
                 />
               ) : (
                 <DaemonDocumentPage
-                  key={`${daemonView.workspaceId}:${daemonView.path}`}
+                  key={`${daemonView.workspace}:${daemonView.path}`}
                   daemonBaseUrl={effectiveState.daemonBaseUrl}
-                  workspaceId={daemonView.workspaceId}
+                  workspaceId={daemonView.workspace}
                   path={daemonView.path}
                   capabilities={effectiveState.capabilities}
                   token={daemonToken}
                   onNavigateBack={() =>
-                    setDaemonView({ kind: 'index', workspaceId: daemonView.workspaceId })
+                    setDaemonView({ kind: 'index', workspace: daemonView.workspace })
                   }
                 />
               )}
@@ -572,7 +811,7 @@ export function App({ providerState }: AppProps) {
   return (
     <ErrorBoundary>
       <div className="flex h-dvh flex-col">
-        <AppShellLazy daemon={false} />
+        <AppShellLazy daemon={false} workspaces={browserWorkspaces} />
         {grantConnection?.status === 'identity-mismatch' && !grantErrorDismissed && (
           // Fail-closed renewal refusal: a PINNED daemon answered with a
           // wrong or missing identity signature. Either the daemon rotated
@@ -624,11 +863,15 @@ export function App({ providerState }: AppProps) {
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
             {browserPath === undefined ? (
-              // '/' (and any non-/local path) lands on the canvas list. The
-              // editor mounts only for /local/:path, whose in-editor
-              // canvas switching it keeps owning — App re-routes solely when
-              // the URL crosses the list/editor boundary.
-              <BrowserIndexPage onOpenDocument={(path) => navigate(browserDocumentPath(path))} />
+              // An index route lands on the document list. The editor mounts
+              // only for a document route, whose in-editor switching it keeps
+              // owning — App re-routes solely when the URL crosses the
+              // list/editor boundary.
+              <BrowserIndexPage
+                onOpenDocument={(path) => {
+                  if (browserHandle !== null) navigate(documentPath(browserHandle, path))
+                }}
+              />
             ) : (
               <BrowserDocumentPage
                 capabilities={effectiveState.capabilities}

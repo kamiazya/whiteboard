@@ -2,62 +2,63 @@
 // functions (no React Router import) so the shape is unit-testable without a
 // router context and has exactly one place that can drift from
 // DaemonDetectedBanner's deep link (which builds the same
-// `/w/:workspaceId/document/*` shape independently, since it runs on a
+// `/w/:workspace/d/*` shape independently, since it runs on a
 // different origin — the daemon's — and cannot import a client-side route
 // table).
+//
+// ONE grammar, for both keepers. The browser kept a `/local/*` family of its
+// own until ADR-0019 gave a browser workspace a segment to be named by;
+// before that it had no address to put there, and the shape said so. Two
+// grammars encode the KEEPER into the address, which is what three-layer
+// identity exists to stop — and the keeper is not the URL's to say: ADR-0004
+// settles it once at page load, so one path means "this workspace, of
+// whichever keeper this session runs".
+//
+// The parameter is a HANDLE, not an id. ADR-0019 resolves an address
+// segment-first with the canonical id as the durable fallback, so this layer
+// deliberately does not know which of the two it is carrying.
 export function indexPath(): string {
   return '/'
 }
 
-export function workspacePath(workspaceId: string): string {
-  return `/w/${encodeURIComponent(workspaceId)}`
+export function workspacePath(workspace: string): string {
+  return `/w/${encodeURIComponent(workspace)}`
 }
 
 // Nested under the workspace it belongs to, so the URL reads as placement.
 // The tail is the document's path, one URL segment per path segment: each
 // segment is encoded, the separators are not — encoding them would collapse
 // the hierarchy the workspace shows into one opaque URL segment.
-export function documentPath(workspaceId: string, path: string): string {
+export function documentPath(workspace: string, path: string): string {
   const tail = path.split('/').map(encodeURIComponent).join('/')
-  return `${workspacePath(workspaceId)}/document/${tail}`
+  return `${workspacePath(workspace)}/d/${tail}`
 }
 
-export function browserIndexPath(): string {
-  return '/local'
-}
-
-// Per-segment encoding, separators left alone — the same rule `documentPath`
-// follows for the daemon. Encoding the separators would collapse a hierarchy
-// the browser shows into one opaque URL segment.
-export function browserDocumentPath(path: string): string {
-  return `/local/${path.split('/').map(encodeURIComponent).join('/')}`
-}
-
-export type DaemonRoute =
-  | { kind: 'index'; workspaceId?: string }
-  | { kind: 'document'; workspaceId: string; path: string }
+export type WorkspaceRoute =
+  | { kind: 'index'; workspace?: string }
+  | { kind: 'document'; workspace: string; path: string }
 
 // Deliberately regex-based rather than react-router's matchPath: App.tsx
 // needs this result inside a useState lazy initializer (before any Route
 // tree exists to match against), and keeping it framework-agnostic lets it
 // be unit-tested without a Router context.
-export function parseDaemonRoute(pathname: string): DaemonRoute | null {
-  // The canvas branch is checked first: `/w/:ws` and `/w/:ws/document/...`
+export function parseWorkspaceRoute(pathname: string): WorkspaceRoute | null {
+  // The document branch is checked first: `/w/:ws` and `/w/:ws/d/...`
   // share a prefix, and the workspace pattern below is anchored so it cannot
-  // swallow a canvas URL either way.
-  const canvasMatch = pathname.match(/^\/w\/([^/]+)\/document\/(.+?)\/?$/)
-  if (canvasMatch) {
-    const workspaceId = decodeSegment(canvasMatch[1])
-    const segments = (canvasMatch[2] as string).split('/').map(decodeSegment)
-    if (workspaceId === null || segments.some((segment) => segment === null || segment === '')) {
+  // swallow a document URL either way.
+  const documentMatch = pathname.match(/^\/w\/([^/]+)\/d\/(.+?)\/?$/)
+  if (documentMatch) {
+    const workspace = decodeSegment(documentMatch[1])
+    const segments = (documentMatch[2] as string).split('/').map(decodeSegment)
+    if (workspace === null || segments.some((segment) => segment === null || segment === '')) {
       return null
     }
-    return { kind: 'document', workspaceId, path: segments.join('/') }
+    return { kind: 'document', workspace, path: segments.join('/') }
   }
   const workspaceMatch = pathname.match(/^\/w\/([^/]+)\/?$/)
   if (workspaceMatch) {
-    const workspaceId = decodeSegment(workspaceMatch[1])
-    return workspaceId === null ? null : { kind: 'index', workspaceId }
+    const workspace = decodeSegment(workspaceMatch[1])
+    return workspace === null ? null : { kind: 'index', workspace }
   }
   if (pathname === '/' || pathname === '') {
     return { kind: 'index' }
@@ -66,7 +67,7 @@ export function parseDaemonRoute(pathname: string): DaemonRoute | null {
 }
 
 // decodeURIComponent throws URIError on a malformed percent sequence
-// (`/w/w%1/document/main`). These parsers run inside render-phase lazy
+// (`/w/w%1/d/main`). These parsers run inside render-phase lazy
 // initializers, so a throw here takes down the whole app; an unparseable URL
 // is a not-a-route, not a crash.
 function decodeSegment(segment: string): string | null {
@@ -77,20 +78,12 @@ function decodeSegment(segment: string): string | null {
   }
 }
 
-// Inverse of parseDaemonRoute — the single place that turns a DaemonView
-// back into the URL it should be addressable at, so App.tsx's state->URL
-// sync and parseDaemonRoute can never drift from each other.
-export function daemonRoutePath(route: DaemonRoute): string {
-  if (route.kind === 'document') return documentPath(route.workspaceId, route.path)
-  return route.workspaceId ? workspacePath(route.workspaceId) : indexPath()
-}
-
-export function parseBrowserRoute(pathname: string): { path: string } | null {
-  const match = pathname.match(/^\/local\/(.+?)\/?$/)
-  if (!match) return null
-  const segments = (match[1] as string).split('/').map(decodeSegment)
-  if (segments.some((segment) => segment === null || segment === '')) return null
-  return { path: segments.join('/') }
+// Inverse of parseWorkspaceRoute — the single place that turns a route back
+// into the URL it should be addressable at, so App.tsx's state->URL sync and
+// the parser can never drift from each other.
+export function workspaceRoutePath(route: WorkspaceRoute): string {
+  if (route.kind === 'document') return documentPath(route.workspace, route.path)
+  return route.workspace ? workspacePath(route.workspace) : indexPath()
 }
 
 export type SettingsSection = 'general' | 'data' | 'fonts' | 'connections'
@@ -122,9 +115,7 @@ export function parseSettingsRoute(pathname: string): { section: SettingsSection
 export function isKnownAppPath(pathname: string): boolean {
   return (
     pathname === '/pair' ||
-    pathname === browserIndexPath() ||
-    parseBrowserRoute(pathname) !== null ||
     parseSettingsRoute(pathname) !== null ||
-    parseDaemonRoute(pathname) !== null
+    parseWorkspaceRoute(pathname) !== null
   )
 }

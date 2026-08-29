@@ -300,8 +300,15 @@ export const purgeResultSchema = z.object({
    * record that no longer exists and the pass stood down (ADR-0020). Purging
    * is periodic, so standing down costs a cycle and nothing else — which is
    * the whole reason a fence is affordable here.
+   *
+   * `backup-in-progress`: a backup is assembling this data directory. It
+   * captures the rows as a snapshot and the uploads as a directory copy, and
+   * those are two moments; unlinking between them removes a file the snapshot
+   * still references, so the backup restores to a document pointing at
+   * nothing (ADR-0021 decision 6's far end). Same affordability argument as
+   * above — a skipped pass happens again on the next tick.
    */
-  skippedReason: z.literal('record-moved').optional(),
+  skippedReason: z.enum(['record-moved', 'backup-in-progress']).optional(),
 })
 
 export type PurgeResult = z.infer<typeof purgeResultSchema>

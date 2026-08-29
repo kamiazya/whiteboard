@@ -17,6 +17,7 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { configure } from '@testing-library/react'
 import '../index.css'
+import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
 
 /**
@@ -31,7 +32,7 @@ import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
  * A test exercising the accessor's own unresolved/failed states resets it
  * explicitly.
  */
-setBrowserWorkspaceIdForTests(generateDocumentId())
+setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
 
 /**
  * Testing Library's `findBy*`/`waitFor` default is 1000ms, which is a

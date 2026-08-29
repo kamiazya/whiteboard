@@ -2,9 +2,9 @@ import { lstat, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
+import { backupIsInProgress } from '../server/store/backup-in-progress.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { runServerBackup } from './server-backup.js'
 
@@ -18,19 +18,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(tmpRoot, { recursive: true, force: true })
 })
-
-function makeRecord(overrides: Partial<ServerModeRecord> = {}): ServerModeRecord {
-  return {
-    schemaVersion: 1,
-    pid: 99999,
-    host: '127.0.0.1',
-    port: 3099,
-    publicBaseUrl: 'https://whiteboard.example.com',
-    authStrategy: 'oauth-jwt',
-    startedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
-  }
-}
 
 describe('runServerBackup', () => {
   it('success: calls doBackup with resolved paths and non-tautological allowedRoots', async () => {
@@ -49,17 +36,20 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
     if (outcome.kind === 'ok') {
       expect(outcome.result).toMatchObject({
-        schemaVersion: 1,
+        schemaVersion: 2,
         ok: true,
         operation: 'backup',
+        // `ok` alone can no longer answer "is my backup good?" — it says the
+        // operation did what it is responsible for, and `stores` says what
+        // that covered.
+        stores: { database: { captured: true }, blobs: { captured: true } },
       })
       // outputDir must NOT appear in success result (non-leak policy).
       expect(outcome.result).not.toHaveProperty('outputDir')
@@ -88,9 +78,8 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {}),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -108,9 +97,8 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: join(link, 'backup'), dataDir: tmpRoot },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     // Ancestor symlink must be rejected, not followed.
@@ -130,11 +118,10 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {
         throw new BackupError('Backup directory is not empty.')
       }),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('error')
@@ -145,31 +132,18 @@ describe('runServerBackup', () => {
     }
   })
 
-  it('running-server: live pid in server-mode.json causes backup to be refused', async () => {
-    const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir: join(tmpRoot, 'out'), dataDir: tmpRoot },
-      env: {},
-      isPidAlive: () => true,
-      doReadRecord: () => ({ kind: 'ok', record: makeRecord({ pid: process.pid }) }),
-      doBackup: vi.fn(),
-    })
-
-    expect(outcome.kind).toBe('running-server')
-  })
-
-  it('running-server: stale (dead) pid is not refused', async () => {
-    const outputDir = join(tmpRoot, 'out')
-
-    const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir: tmpRoot },
-      env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'ok', record: makeRecord({ pid: 99999 }) }),
-      doBackup: vi.fn(async () => {}),
-    })
-
-    expect(outcome.kind).not.toBe('running-server')
-  })
+  /**
+   * A running server used to be a refusal outright. That is gone, and this is
+   * where the old pair of tests for it lived — the `running-server` outcome
+   * no longer exists, so pinning it would pin nothing.
+   *
+   * What replaced it is exercised in full further down ("runServerBackup
+   * against a running server"): the rows are snapshotted through the database
+   * rather than read out from under a writer, every write into the data
+   * directory lands atomically so a copy cannot pick one up half-written, and
+   * file-GC stands down for the duration so nothing is unlinked between the
+   * snapshot and the copy.
+   */
 
   it('invalid-output-path: symlink output dir is rejected', async () => {
     const realDir = join(tmpRoot, 'real')
@@ -180,9 +154,8 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: linkPath, dataDir: tmpRoot },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('invalid-output-path')
@@ -197,9 +170,8 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: join(tmpRoot, 'out'), dataDir: link },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('error')
@@ -212,9 +184,8 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: filePath, dataDir: tmpRoot },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('invalid-output-path')
@@ -231,11 +202,10 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {
         throw new BackupError('some internal error with path /internal/detail')
       }),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('error')
@@ -258,27 +228,38 @@ describe('runServerBackup', () => {
  * elsewhere, and nothing re-asked it when that changed.
  */
 describe('runServerBackup with the database outside the data directory', () => {
-  it('refuses rather than copying blobs alone and calling it a backup', async () => {
+  /**
+   * This case used to refuse outright, and the invariant that refusal
+   * protected is the one asserted here: a backup must never be presented as
+   * holding rows it does not hold. What changed is how it is protected —
+   * by reporting per store and leaving the fossil out, rather than by
+   * declining to save the blobs too.
+   */
+  it('leaves a stale database out of the copy instead of refusing everything', async () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(dataDir)
-    // A data directory with no database is refused now (see the host-shell
-    // case at the bottom of this file), so the happy paths seed one.
-    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+    // The fossil: what a move to libSQL leaves behind.
+    await writeFile(join(dataDir, 'whiteboard.db'), 'pre-migration rows')
 
     const mockDoBackup = vi.fn(async () => {})
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
-    expect(outcome.kind).toBe('external-database')
-    // Refused BEFORE copying: a half-backup left on disk is the thing an
-    // operator would later restore from.
-    expect(mockDoBackup).not.toHaveBeenCalled()
+    expect(outcome.kind).toBe('ok')
+    if (outcome.kind !== 'ok') return
+    expect(outcome.result.stores.database).toEqual({
+      captured: false,
+      reason: 'hosted-elsewhere',
+    })
+    // The copy is instructed to skip the fossil. Without this the backup
+    // would carry pre-migration rows that restore puts back as current.
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+    expect(mockDoBackup.mock.calls[0][2]).toMatchObject({ excludeDatabaseFile: true })
   })
 
   it('still backs up normally when the database is the data directory file', async () => {
@@ -293,9 +274,8 @@ describe('runServerBackup with the database outside the data directory', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: { WHITEBOARD_DATABASE_URL: `file:${join(dataDir, 'whiteboard.db')}` },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -331,12 +311,11 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
-    expect(outcome.kind).toBe('external-database')
+    expect(outcome.kind).toBe('missing-database')
     expect(mockDoBackup).not.toHaveBeenCalled()
   })
 
@@ -350,9 +329,8 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -379,7 +357,7 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
  * always already gone by the time a backup runs.
  */
 describe('runServerBackup with a stale database file left behind', () => {
-  it('refuses when the recorded location says the rows are elsewhere', async () => {
+  it('keeps the fossil out on a clean host shell, on the record alone', async () => {
     const dataDir = join(tmpRoot, 'data')
     const outputDir = join(tmpRoot, 'backup')
     await mkdir(dataDir, { recursive: true })
@@ -393,13 +371,17 @@ describe('runServerBackup with a stale database file left behind', () => {
       args: { kind: 'ok', json: true, outputDir, dataDir },
       // The host shell, exactly as the Docker how-to leaves it.
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
-    expect(outcome.kind).toBe('external-database')
-    expect(mockDoBackup).not.toHaveBeenCalled()
+    expect(outcome.kind).toBe('ok')
+    if (outcome.kind !== 'ok') return
+    expect(outcome.result.stores.database).toEqual({
+      captured: false,
+      reason: 'hosted-elsewhere',
+    })
+    expect(mockDoBackup.mock.calls[0][2]).toMatchObject({ excludeDatabaseFile: true })
   })
 
   /**
@@ -422,9 +404,8 @@ describe('runServerBackup with a stale database file left behind', () => {
       // the variable for a DIFFERENT deployment. A clean env would agree with
       // the record for its own reason and prove nothing.
       env: { WHITEBOARD_DATABASE_URL: 'libsql://other.example.com' },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -446,12 +427,275 @@ describe('runServerBackup with a stale database file left behind', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
-    expect(outcome.kind).toBe('external-database')
+    expect(outcome.kind).toBe('missing-database')
     expect(mockDoBackup).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * ADR-0021 decision 2: a database we do not host is not ours to back up, and
+ * we say so — rather than refusing to back up anything at all.
+ *
+ * The refusal above was the right first move and the wrong resting place. It
+ * protects the rows by declining to pretend they were copied, but it also
+ * declines to copy the BLOBS, which are ours and which no libSQL provider is
+ * looking at. An operator who moved their rows to Turso currently has no way
+ * to back up their images through this product at all, and the guard that
+ * protects them from a misleading backup is what took it away.
+ *
+ * So the answer becomes per store: the database is reported out of scope, the
+ * blobs are copied, and the output says which is which. The invariant the
+ * refusal was protecting is unchanged and is now carried by the report — a
+ * backup is never presented as holding rows it does not hold.
+ */
+describe('runServerBackup when the rows are not ours to back up', () => {
+  const externalEnv = { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' }
+
+  it('backs the blobs up instead of refusing everything', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(join(dataDir, 'blobs'), { recursive: true })
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: externalEnv,
+      doBackup: mockDoBackup,
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The report is what now carries the invariant the refusal used to. An
+   * operator must not be able to read this as "everything is safe", so the
+   * database's absence is stated rather than left to be inferred from a
+   * missing key.
+   */
+  it('reports the database as out of scope rather than claiming a whole backup', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(join(dataDir, 'blobs'), { recursive: true })
+
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: externalEnv,
+      doBackup: async () => {},
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('ok')
+    if (outcome.kind !== 'ok') return
+    expect(outcome.result.stores.database).toEqual({
+      captured: false,
+      reason: 'hosted-elsewhere',
+    })
+    expect(outcome.result.stores.blobs).toEqual({ captured: true })
+  })
+
+  it('says the database is captured when it is ours', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: async () => {},
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('ok')
+    if (outcome.kind !== 'ok') return
+    expect(outcome.result.stores.database).toEqual({ captured: true })
+  })
+
+  /**
+   * The one case that still refuses. "The rows belong in this directory" and
+   * "the directory has no rows in it" cannot both be true of a working
+   * deployment, so this is a broken data directory rather than a partial
+   * backup, and copying it would produce something restore could not use.
+   */
+  it('still refuses when the rows should be in the directory and are not', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(join(dataDir, 'blobs'), { recursive: true })
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: mockDoBackup,
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('missing-database')
+    expect(mockDoBackup).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The rows reach the backup as a SNAPSHOT, never as copied files (ADR-0021
+ * decision 3).
+ *
+ * The two are not interchangeable. A file copy has to take `whiteboard.db`,
+ * `-wal` and `-shm` together and get all three, because in WAL mode the
+ * newest commits live in the `-wal` — measured at 4977 of 5000 rows when only
+ * the main file travels. A snapshot is one self-contained file with
+ * everything folded in, so a backup directory holds a plain `whiteboard.db`
+ * and nothing downstream has to know sidecars exist.
+ *
+ * It is also the step that will let a backup be taken without stopping the
+ * server, since it opens its own connection rather than reading bytes out
+ * from under one.
+ */
+describe('runServerBackup captures the rows through the database', () => {
+  it('snapshots the database and keeps its files out of the copy', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const mockDoBackup = vi.fn(async () => {})
+    const mockDoSnapshot = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: mockDoBackup,
+      doSnapshot: mockDoSnapshot,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    // The copy never carries the database, even when it is ours — the
+    // snapshot is what carries it.
+    expect(mockDoBackup.mock.calls[0][2]).toMatchObject({ excludeDatabaseFile: true })
+    expect(mockDoSnapshot).toHaveBeenCalledWith(dataDir, join(outputDir, 'whiteboard.db'))
+  })
+
+  it('takes no snapshot of a database that is not ours', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(join(dataDir, 'blobs'), { recursive: true })
+
+    const mockDoSnapshot = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
+      doBackup: async () => {},
+      doSnapshot: mockDoSnapshot,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoSnapshot).not.toHaveBeenCalled()
+  })
+
+  /**
+   * A snapshot that fails must fail the backup. Reporting `ok` over a
+   * directory holding blobs and no rows is the defect this whole area exists
+   * to remove, and it would arrive here by simply not checking.
+   */
+  it('fails the backup when the snapshot cannot be taken', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: async () => {},
+      doSnapshot: async () => {
+        throw new Error('database is locked')
+      },
+    })
+
+    expect(outcome.kind).toBe('error')
+  })
+})
+
+/**
+ * ADR-0021 decision 3's point: a backup that requires downtime is one an
+ * operator takes rarely or never, and the interval between backups is the
+ * data they lose. So a running server stops being a refusal.
+ *
+ * Two things had to be true first, and both now are. The rows are captured
+ * through the database rather than by reading its bytes out from under it,
+ * and file-GC stands down for the duration — because a backup is a snapshot
+ * plus a copy, two moments, and a pass unlinking between them removes a file
+ * the snapshot still references.
+ */
+describe('runServerBackup against a running server', () => {
+  it('backs up rather than refusing, now that the rows are snapshotted', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: mockDoBackup,
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The marker is what makes it safe, so it has to be in place while the work
+   * happens — not merely written at some point.
+   */
+  it('holds the file-GC stand-down marker across the whole backup', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    let markerDuringCopy = false
+    let markerDuringSnapshot = false
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: async () => {
+        markerDuringCopy = await backupIsInProgress(dataDir)
+      },
+      doSnapshot: async () => {
+        markerDuringSnapshot = await backupIsInProgress(dataDir)
+      },
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(markerDuringCopy).toBe(true)
+    expect(markerDuringSnapshot).toBe(true)
+    // And released afterwards, or GC never runs again.
+    expect(await backupIsInProgress(dataDir)).toBe(false)
+  })
+
+  it('releases the marker when the backup fails', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: async () => {
+        throw new Error('copy blew up')
+      },
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('error')
+    expect(await backupIsInProgress(dataDir)).toBe(false)
   })
 })

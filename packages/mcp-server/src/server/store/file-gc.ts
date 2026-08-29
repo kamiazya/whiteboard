@@ -12,6 +12,7 @@ import type { purgeResultSchema } from '../../shared/api-contracts/document.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateWorkspaceId } from '../validators.js'
+import { backupIsInProgress } from './backup-in-progress.js'
 import { loadDocumentBranches } from './branches-store.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
 import {
@@ -276,6 +277,27 @@ export async function purgeDanglingFiles(
   // as "dangling".
   const graceMs = resolveGraceMs(options)
   return withWorkspaceWriteLock(workspaceId, async () => {
+    // Asked INSIDE the barrier, not before it. Doing async work first looks
+    // cheaper — there is no listing or reference collect worth starting while
+    // a backup reads the tree — but it widens the gap between deciding to run
+    // and holding the lock, and a concurrent route writes into that gap.
+    // Measured: hoisting this above the lock broke the PUT /head
+    // serialisation case with a half-written tipFrontiers.
+    //
+    // A backup captures the rows as a snapshot and the uploads as a directory
+    // copy, and those are two moments. Unlinking between them removes a file
+    // the snapshot still references, leaving a backup that restores to a
+    // document pointing at nothing — silently, since every step reported
+    // success. That is ADR-0021 decision 6's far end ("retention must not
+    // delete behind") in the shape this system has today.
+    //
+    // Standing down costs nothing: this pass is periodic (24h by default), so
+    // a skipped one simply happens on the next tick.
+    if (await backupIsInProgress(getDataDir())) {
+      log.info({ workspaceId }, 'purge stood down: a backup is assembling this data directory')
+      return { purgedCount: 0, purgedBytes: 0, skippedReason: 'backup-in-progress' as const }
+    }
+
     // Judge against the RECORD, not this instance's cache. `listDocuments`
     // and `loadDocument` both read the cached workspace document, which is
     // authoritative for one daemon — every write goes through it — and is
