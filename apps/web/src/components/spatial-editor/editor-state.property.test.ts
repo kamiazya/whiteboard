@@ -45,7 +45,13 @@
  * `applyResult` that DOES touch canvas/gesture/selection has to be added
  * here too.
  */
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import {
+  type CanvasColor,
+  type CanvasEdge,
+  type SpatialCanvas,
+  type SpatialNode,
+  spatialCanvasSchema,
+} from '@kamiazya/whiteboard-model'
 import { afterAll, describe, expect, it } from 'vitest'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -61,22 +67,166 @@ import {
 import type { Point } from './viewport.js'
 
 /**
- * Four nodes at fixed, overlapping-free positions — small enough that a
- * random sequence keeps landing on the SAME node (which is what makes
- * press-then-press, edit-then-edit and delete-then-drag reachable), and
- * mixed in type so the reducer's text-only arms are exercised against a
- * node that is not text.
+ * The initial document is GENERATED, not fixed, and the geometry is drawn
+ * from a coarse grid on purpose: boxes have to overlap often, because
+ * several behaviours are defined in terms of overlap and silently do
+ * nothing without it.
+ *
+ * That is not hypothetical. This model began with four hand-placed,
+ * pairwise non-overlapping nodes, and `reorder-forward`/`backward` step
+ * the selection over the nearest OVERLAPPING non-member — so they
+ * returned the input canvas every time. Measured before the change: 16,
+ * 17 and 7 forward/backward attempts across three runs producing 2, 0 and
+ * 0 actual reorders. The coverage floor was green throughout, because it
+ * counted attempts. Hence both halves of this file's answer — a generator
+ * dense enough to reach the arrangement, and counters that only tick when
+ * the canvas actually changed.
+ *
+ * All four node types appear. `group` is included for its geometry and
+ * its z-order participation only: the editor's frame-containment rule
+ * (dragging a frame carries the nodes inside it) lives in
+ * `drag-preview.ts`'s `carriedWithDrag`, which this model does not run —
+ * its own tests do.
  */
-const POOL: readonly SpatialNode[] = [
-  { id: 'n0', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'zero' },
-  { id: 'n1', type: 'text', x: 160, y: 0, width: 100, height: 60, text: 'one' },
-  { id: 'n2', type: 'text', x: 0, y: 120, width: 100, height: 60, text: '' },
-  { id: 'n3', type: 'link', x: 160, y: 120, width: 100, height: 60, url: 'https://example.com/' },
-]
+const NODE_IDS = ['n0', 'n1', 'n2', 'n3', 'n4'] as const
 
+const colorArb = fc.oneof(
+  fc.constant(undefined),
+  fc.constantFrom<CanvasColor>('1', '2', '3', '4', '5', '6'),
+  fc.constant<CanvasColor>('#3a7bd5'),
+)
+
+/** Coarse and overlapping: a 40px lattice over a span only 3 cells wide. */
+const coordArb = fc.constantFrom(0, 40, 80, 120)
+/**
+ * Weighted toward boxes WIDER than the lattice they sit on, so a pair of
+ * nodes usually overlaps. Overlap is a precondition for `reorder-forward`
+ * and `backward` — the effective-reorder counters are what measure whether
+ * this weighting is still doing its job.
+ *
+ * Zero stays in the draw at low weight: it is a legal JSON Canvas size and
+ * the editor's collapse-to-zero resize produces one, so documents that
+ * already contain the degenerate case are worth starting from. It is rare
+ * because a zero-side box overlaps nothing, and a fixture full of them is
+ * a fixture that reaches less.
+ */
+const sizeArb = fc.oneof(
+  { arbitrary: fc.constantFrom(120, 160, 200), weight: 7 },
+  { arbitrary: fc.constantFrom(40, 80), weight: 2 },
+  { arbitrary: fc.constant(0), weight: 1 },
+)
+
+function nodeArb(id: string): fc.Arbitrary<SpatialNode> {
+  const shared = fc.record({
+    x: coordArb,
+    y: coordArb,
+    width: sizeArb,
+    height: sizeArb,
+    color: colorArb,
+  })
+  return fc
+    .tuple(
+      shared,
+      // Weighted, not uniform: `text` is both the commonest node in a real
+      // document and the ONLY type the text-edit half of this model can
+      // reach, so a uniform draw over four types quarters the pending-text
+      // coverage that the T1 invariant depends on.
+      fc.oneof(
+        { arbitrary: fc.constant('text' as const), weight: 5 },
+        { arbitrary: fc.constantFrom('file', 'link', 'group' as const), weight: 3 },
+      ),
+      fc.string({ maxLength: 8 }),
+    )
+    .map(([box, kind, text]): SpatialNode => {
+      const base = { id, ...box }
+      switch (kind) {
+        case 'file':
+          return { ...base, type: 'file', file: `notes/${id}.md` }
+        case 'link':
+          return { ...base, type: 'link', url: `https://example.com/${id}` }
+        case 'group':
+          return { ...base, type: 'group', label: text }
+        default:
+          return { ...base, type: 'text', text }
+      }
+    })
+}
+
+const sideArb = fc.option(fc.constantFrom('top', 'right', 'bottom', 'left' as const), {
+  nil: undefined,
+})
+
+/**
+ * Edges carry their optional attributes too — sides, ends, colour, label —
+ * so the commands that rewrite one attribute are exercised against edges
+ * that already have the others, not only against bare ones.
+ */
+function edgesArb(nodeIds: readonly string[]): fc.Arbitrary<readonly CanvasEdge[]> {
+  if (nodeIds.length < 2) return fc.constant([])
+  const pair = fc
+    .tuple(fc.nat({ max: nodeIds.length - 1 }), fc.nat({ max: nodeIds.length - 1 }))
+    .filter(([a, b]) => a !== b)
+  return (
+    fc
+      .array(
+        fc.tuple(
+          pair,
+          sideArb,
+          sideArb,
+          fc.option(fc.constantFrom('none', 'arrow' as const), { nil: undefined }),
+          colorArb,
+          fc.option(fc.string({ maxLength: 6 }), { nil: undefined }),
+        ),
+        { maxLength: 4 },
+      )
+      .map((raws) =>
+        raws.map(([[a, b], fromSide, toSide, toEnd, color, label], i) => ({
+          id: `e${i}`,
+          fromNode: nodeIds[a],
+          toNode: nodeIds[b],
+          ...(fromSide === undefined ? {} : { fromSide }),
+          ...(toSide === undefined ? {} : { toSide }),
+          ...(toEnd === undefined ? {} : { toEnd }),
+          ...(color === undefined ? {} : { color }),
+          ...(label === undefined ? {} : { label }),
+        })),
+      )
+      // A canvas may not carry two edges with the same id; the index-derived
+      // ids are unique by construction, but a duplicated (from, to) pair is
+      // legal and deliberately left in — parallel edges are a real document.
+      .map((edges) => edges)
+  )
+}
+
+const initialCanvasArb: fc.Arbitrary<SpatialCanvas> = fc
+  .integer({ min: 3, max: NODE_IDS.length })
+  .chain((count) => {
+    const ids = NODE_IDS.slice(0, count)
+    return fc
+      .tuple(fc.tuple(...ids.map((id) => nodeArb(id))), edgesArb(ids))
+      .map(([nodes, edges]) => ({ nodes: [...nodes], edges: [...edges] }))
+  })
+  // The generator has to produce documents the MODEL accepts, or every
+  // invariant below is asserting about a shape that could never be loaded.
+  .map((canvas) => spatialCanvasSchema.parse(canvas))
+
+/** The fixed document the pinned counterexamples replay against. */
 function initialCanvas(): SpatialCanvas {
   return {
-    nodes: [...POOL],
+    nodes: [
+      { id: 'n0', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'zero' },
+      { id: 'n1', type: 'text', x: 160, y: 0, width: 100, height: 60, text: 'one' },
+      { id: 'n2', type: 'text', x: 0, y: 120, width: 100, height: 60, text: '' },
+      {
+        id: 'n3',
+        type: 'link',
+        x: 160,
+        y: 120,
+        width: 100,
+        height: 60,
+        url: 'https://example.com/',
+      },
+    ],
     edges: [{ id: 'e0', fromNode: 'n0', toNode: 'n1' }],
   }
 }
@@ -93,7 +243,19 @@ interface Stats {
   multiSelections: number
   nudges: number
   duplicates: number
-  reorders: number
+  /**
+   * Reorders that CHANGED the canvas, not reorders attempted.
+   *
+   * `reorder-nodes` is total — the extremes and a block already on top of
+   * its pile return the input — so an attempt counter says nothing about
+   * whether the code under it ran. Forward/backward additionally need an
+   * OVERLAPPING non-member, which a tidy fixture never supplies. Split
+   * because the two halves fail differently: `front`/`back` work on any
+   * document, `forward`/`backward` need the generator to keep producing
+   * overlap.
+   */
+  reordersEffective: number
+  stepReordersEffective: number
   locksApplied: number
   selectAlls: number
 }
@@ -312,6 +474,22 @@ function dispatchCommands(real: Real, commands: readonly EditorCommand[], label:
   settle(real)
 }
 
+/**
+ * A plain press on a node body, as `handlePointerDown` performs it: the
+ * selection `press` transition FIRST, then the gesture's own
+ * `set-primary` through `applyResult`.
+ *
+ * Both halves matter and the model originally had only the second. `press`
+ * is what COLLAPSES a multi-selection when the pressed node is not a
+ * member — `set-primary` alone preserves the extras — so a model missing
+ * it carries selections that are stickier than the editor's, and every
+ * command downstream inherits that.
+ */
+function pressNode(real: Real, nodeId: string, point: Point, label: string): void {
+  real.selection = reduceSelection(real.selection, { type: 'press', id: nodeId })
+  dispatch(real, { type: 'pointerdown', nodeId, point }, label)
+}
+
 /** A command whose whole body is one gesture event. */
 abstract class GestureCommand implements fc.Command<Model, Real> {
   check(): boolean {
@@ -360,10 +538,13 @@ class PressNode extends GestureCommand {
   ) {
     super()
   }
-  event(real: Real): GestureEvent | undefined {
+  event(): GestureEvent | undefined {
+    return undefined
+  }
+  run(_model: Model, real: Real): void {
     const node = pick(real, this.index)
-    if (node === undefined) return undefined
-    return { type: 'pointerdown', nodeId: node.id, point: this.point }
+    if (node === undefined) return
+    pressNode(real, node.id, this.point, this.toString())
   }
   toString(): string {
     return `press(#${this.index})`
@@ -680,7 +861,7 @@ class DragNode implements fc.Command<Model, Real> {
     const node = pick(real, this.index)
     if (node === undefined) return
     const to = { x: this.from.x + this.delta.x, y: this.from.y + this.delta.y }
-    dispatch(real, { type: 'pointerdown', nodeId: node.id, point: this.from }, this.toString())
+    pressNode(real, node.id, this.from, this.toString())
     dispatch(real, { type: 'pointermove', point: to }, `${this.toString()}:move`)
     dispatch(real, { type: 'pointerup', point: to }, `${this.toString()}:up`)
   }
@@ -851,12 +1032,17 @@ class Reorder implements fc.Command<Model, Real> {
   run(_model: Model, real: Real): void {
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
+    const before = real.canvas
     dispatchCommands(
       real,
       [{ kind: 'reorder-nodes', ids: members, placement: this.placement }],
       this.toString(),
     )
-    real.stats.reorders += 1
+    if (real.canvas === before) return
+    real.stats.reordersEffective += 1
+    if (this.placement === 'forward' || this.placement === 'backward') {
+      real.stats.stepReordersEffective += 1
+    }
   }
   toString(): string {
     return `reorder(${this.placement})`
@@ -915,15 +1101,71 @@ class PressThenReplace implements fc.Command<Model, Real> {
   run(model: Model, real: Real): void {
     const node = pick(real, this.index)
     if (node === undefined) return
-    dispatch(
-      real,
-      { type: 'pointerdown', nodeId: node.id, point: { x: node.x, y: node.y } },
-      this.toString(),
-    )
+    pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
     new ReplaceCanvas(this.keep, this.external).run(model, real)
   }
   toString(): string {
     return `pressThenReplace(#${this.index},${this.external ? 'external' : 'local'})`
+  }
+}
+
+/**
+ * Select one node, then press a z-order key.
+ *
+ * Its own command for the same reason `PressThenReplace` is: reorder is
+ * only observable on a PROPER SUBSET of the document, and Cmd+A — the
+ * cheapest way for a random sequence to acquire a selection — makes the
+ * selection the whole canvas, where every placement is a no-op. Drawn
+ * uniformly the effective-reorder count sat at 4 per 300 runs.
+ */
+class PressThenReorder implements fc.Command<Model, Real> {
+  constructor(
+    private readonly index: number,
+    private readonly placement: 'forward' | 'backward' | 'front' | 'back',
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    const node = pick(real, this.index)
+    if (node === undefined) return
+    pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
+    new Reorder(this.placement).run(model, real)
+  }
+  toString(): string {
+    return `pressThenReorder(#${this.index},${this.placement})`
+  }
+}
+
+/**
+ * Select one node, then press an arrow key — the click-then-nudge a user
+ * actually performs. Its own command because the arrows need BOTH a
+ * selection and an idle gesture, a conjunction a uniform draw reaches
+ * rarely and erratically: nudges ranged 3-17 per 300 runs without it,
+ * which is too few for the floor to distinguish variance from a generator
+ * that stopped reaching the handler.
+ */
+class PressThenNudge implements fc.Command<Model, Real> {
+  constructor(
+    private readonly index: number,
+    private readonly delta: { readonly dx: number; readonly dy: number },
+    private readonly large: boolean,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    const node = pick(real, this.index)
+    if (node === undefined) return
+    pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
+    // The press leaves a `moving` gesture and the arrows only fire while
+    // idle, exactly as the handler requires — so release it first, as the
+    // finger does.
+    dispatch(real, { type: 'pointerup', point: { x: node.x, y: node.y } }, `${this.toString()}:up`)
+    new Nudge(this.delta, this.large).run(model, real)
+  }
+  toString(): string {
+    return `pressThenNudge(#${this.index},${this.delta.dx},${this.delta.dy})`
   }
 }
 
@@ -966,7 +1208,10 @@ const allCommands = [
   fc.constant(new DeleteSelection()),
   indexArb.map((i) => new ToggleMember(i)),
   fc
-    .tuple(fc.array(fc.boolean(), { minLength: 4, maxLength: 4 }), fc.boolean())
+    .tuple(
+      fc.array(fc.boolean(), { minLength: NODE_IDS.length, maxLength: NODE_IDS.length }),
+      fc.boolean(),
+    )
     .map(([keep, external]) => new ReplaceCanvas(keep, external)),
   fc
     .tuple(indexArb, pointArb, nonZeroDeltaArb)
@@ -983,8 +1228,26 @@ const allCommands = [
     .map((p) => new Reorder(p)),
   fc.constant(new ToggleLock()),
   fc
-    .tuple(indexArb, fc.array(fc.boolean(), { minLength: 4, maxLength: 4 }), fc.boolean())
+    .tuple(
+      indexArb,
+      fc.array(fc.boolean(), { minLength: NODE_IDS.length, maxLength: NODE_IDS.length }),
+      fc.boolean(),
+    )
     .map(([i, keep, external]) => new PressThenReplace(i, keep, external)),
+  fc
+    .tuple(
+      indexArb,
+      fc.constantFrom<'forward' | 'backward' | 'front' | 'back'>(
+        'forward',
+        'backward',
+        'front',
+        'back',
+      ),
+    )
+    .map(([i, p]) => new PressThenReorder(i, p)),
+  fc
+    .tuple(indexArb, arrowArb, fc.boolean())
+    .map(([i, d, large]) => new PressThenNudge(i, d, large)),
 ]
 
 describe('editor composite state (command-based)', () => {
@@ -999,7 +1262,8 @@ describe('editor composite state (command-based)', () => {
     multiSelections: 0,
     nudges: 0,
     duplicates: 0,
-    reorders: 0,
+    reordersEffective: 0,
+    stepReordersEffective: 0,
     locksApplied: 0,
     selectAlls: 0,
   }
@@ -1013,48 +1277,58 @@ describe('editor composite state (command-based)', () => {
   afterAll(() => {
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each floor sits well under the minimum measured across five
-    // consecutive runs of the full command set — moves 57-84, resizes
-    // 53-77, connects 35-47, deletes 23-37, text edits opened 92-117,
-    // pending-text handoffs 25-39, mid-gesture external replacements
-    // 35-50, multi-selections 152-209, nudges 10-19, duplicates 14-26,
-    // reorders 17-29, locks applied 15-26, select-alls 48-66 — so ordinary
-    // seed variance never trips them, and a drift big enough to hollow the
-    // property out fails here before the invariants start passing
-    // vacuously.
+    // reject. Each sits well under the minimum measured across six
+    // consecutive runs — moves 49-80, resizes 55-68, connects 31-39,
+    // deletes 27-46, text edits opened 87-104, pending-text handoffs
+    // 20-33, mid-gesture external replacements 35-48, multi-selections
+    // 163-205, nudges 56-93, duplicates 20-32, effective reorders 28-46
+    // (of which forward/backward 11-23), locks applied 14-28, select-alls
+    // 52-63.
     //
-    // Re-measure when adding a command: every new kind dilutes every
-    // existing one. Adding the keyboard half took mid-gesture external
-    // replacements from 9-19 down to 4-13, which is why that arrangement
-    // now has a command of its own rather than a lowered floor.
+    // Two rules, both learned by getting them wrong here. Count EFFECTS,
+    // not attempts: `reorders` counted attempts and read as green while
+    // forward/backward were doing nothing at all. And re-measure when
+    // adding a command or widening the document generator, because both
+    // dilute every existing counter — the keyboard half took mid-gesture
+    // external replacements from 9-19 to 4-13, and generating four node
+    // types quartered the text-node share the T1 invariant feeds on.
+    // Three arrangements were dense enough to need a command of their own
+    // rather than a lowered floor.
     expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(25)
     expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(25)
-    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(20)
+    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(15)
     expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(10)
-    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(50)
+    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(40)
     expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(
-      12,
+      10,
     )
     expect(
       stats.externalReplacementsMidGesture,
       'external replacements barely landed mid-gesture',
     ).toBeGreaterThan(15)
     expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(50)
-    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(4)
+    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(25)
     expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(8)
-    expect(stats.reorders, 'z-order keys barely reached').toBeGreaterThan(6)
-    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(8)
+    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(12)
+    expect(
+      stats.stepReordersEffective,
+      'forward/backward never stepped over an overlapping node',
+    ).toBeGreaterThan(5)
+    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(6)
     expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(25)
   })
 
-  fcTest.prop([fc.commands(allCommands, { maxCommands: 24 })], withDefaults({ numRuns: 300 }))(
+  fcTest.prop(
+    [initialCanvasArb, fc.commands(allCommands, { maxCommands: 24 })],
+    withDefaults({ numRuns: 300 }),
+  )(
     'canvas, gesture and selection stay mutually coherent under any operation sequence',
-    (commands) => {
+    (startCanvas, commands) => {
       fc.modelRun(
         () => ({
           model: {} as Model,
           real: {
-            canvas: initialCanvas(),
+            canvas: startCanvas,
             gesture: createIdleState(),
             selection: EMPTY_SELECTION,
             lockedNodeIds: new Set<string>(),
