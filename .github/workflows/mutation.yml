@@ -25,6 +25,16 @@ on:
     # else that runs at :00.
     - cron: '23 4 * * 1'
   workflow_dispatch:
+  # A PR that changes the lane's own wiring runs the SMOKE step below. A
+  # scheduled workflow is otherwise unverifiable until it is already on the
+  # default branch — `workflow_dispatch` cannot reach a branch's copy — so
+  # without this the first proof that the lane runs at all arrives a week
+  # after it merges.
+  pull_request:
+    paths:
+      - '.github/workflows/mutation.yml'
+      - 'packages/canvas-render/stryker.config.mjs'
+      - 'packages/canvas-render/vitest.stryker.config.ts'
 
 permissions:
   contents: read
@@ -46,7 +56,19 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Mutation test canvas-render
+        if: github.event_name != 'pull_request'
         run: pnpm mutation:render
+
+      # What breaks about this lane is its WIRING, not its verdicts: the
+      # plugin has to resolve out of a pnpm workspace, the tsconfig-rewriting
+      # step has to stay skipped, and the vitest config has to load. One cheap
+      # module exercises all three in about a minute, so a PR touching the
+      # lane proves it still starts without paying for the full run.
+      - name: Smoke the lane's wiring
+        if: github.event_name == 'pull_request'
+        run: >-
+          pnpm --filter @kamiazya/whiteboard-canvas-render exec
+          stryker run --mutate 'src/layout/nodes/truncate.ts'
 
       - name: Upload mutation report
         if: always()
