@@ -36,13 +36,14 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
+import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { getAppLogger } from '../lib/app-logger.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
-import type { LoroStoreLike } from './use-browser-document-controller.js'
+import type { BrowserPersistenceState, LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
 
@@ -78,6 +79,33 @@ interface ContentHost {
  * Never rejects: a failed save is swallowed here exactly as a fire-and-forget
  * one was, so it cannot leave the queue permanently poisoned.
  */
+/**
+ * One write, with the indicator told what happened to it.
+ *
+ * `queueSave` swallows failures so the queue cannot be poisoned, which also
+ * means a failed write is invisible — the degraded branch here is the only
+ * thing that surfaces it. The error is re-thrown so `queueSave` still absorbs
+ * it exactly as before.
+ */
+async function reportingSave(
+  host: ContentHost,
+  report: Dispatch<SetStateAction<BrowserPersistenceState>>,
+): Promise<void> {
+  report((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt }))
+  try {
+    await host.save()
+    report({ kind: 'saved', lastSavedAt: new Date().toISOString() })
+  } catch (err) {
+    report((p) => ({
+      kind: 'degraded',
+      reason: 'write-failed',
+      message: 'The last write to this browser failed. Your edits stay in memory for this session.',
+      lastSavedAt: p.lastSavedAt,
+    }))
+    throw err
+  }
+}
+
 function queueSave(documentId: string, save: () => Promise<void>): Promise<void> {
   const previous = pendingFlushes.get(documentId)
   const next = Promise.resolve(previous)
@@ -103,6 +131,15 @@ export interface MarkdownDocumentState {
   /** Null until the initial load resolves — render nothing editable before. */
   readonly body: string | null
   readonly setBody: (next: string) => void
+  /**
+   * Whether this hook's own debounced write has landed.
+   *
+   * Published because the page's save indicator reads the CONTROLLER's
+   * persistence, which a body edit never touches — so without this the dot
+   * reported `Saved` over text that had not been written. The page merges the
+   * two (`mergePersistence`); this side answers only for the body.
+   */
+  readonly saveState: BrowserPersistenceState
   /** Null until the initial load resolves, mirroring `body`. */
   readonly coreFacets: StoredCoreFacets | null
   readonly setCoreFacets: (next: StoredCoreFacets) => void
@@ -174,6 +211,14 @@ export function useMarkdownDocument(
   enabled: boolean,
 ): MarkdownDocumentState {
   const [body, setBodyState] = useState<string | null>(null)
+  const [saveState, setSaveState] = useState<BrowserPersistenceState>({
+    kind: 'saved',
+    lastSavedAt: null,
+  })
+  // Through a ref: the debounce closure and the unmount flush both report,
+  // and neither may re-arm the timer by depending on the setter's identity.
+  const setSaveStateRef = useRef(setSaveState)
+  setSaveStateRef.current = setSaveState
   const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
   const hostRef = useRef<ContentHost | null>(null)
@@ -248,7 +293,11 @@ export function useMarkdownDocument(
         timerRef.current = null
         const host = hostRef.current
         if (host !== null && documentId !== null) {
-          void queueSave(documentId, () => host.save())
+          // Reports like any other write. The component is going away, so
+          // nothing renders the result — but this share the queue with the
+          // next load, and a silent branch here is how the two call sites
+          // drift apart later.
+          void queueSave(documentId, () => reportingSave(host, setSaveStateRef.current))
         }
       }
     }
@@ -262,6 +311,10 @@ export function useMarkdownDocument(
   const scheduleSave = useCallback(() => {
     if (documentId === null) return
     if (timerRef.current !== null) clearTimeout(timerRef.current)
+    // Unsaved from this instant, not from when the timer fires: the window
+    // between the keystroke and the debounce is exactly when the old
+    // indicator claimed everything was safe.
+    setSaveStateRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt }))
     timerRef.current = setTimeout(() => {
       // Clearing the ref first means a cleanup arriving after this point
       // finds no timer to flush — so this save has to enqueue itself, or the
@@ -269,7 +322,7 @@ export function useMarkdownDocument(
       timerRef.current = null
       const host = hostRef.current
       if (host === null) return
-      void queueSave(documentId, () => host.save())
+      void queueSave(documentId, () => reportingSave(host, setSaveStateRef.current))
     }, SAVE_DEBOUNCE_MS)
   }, [documentId])
   scheduleSaveRef.current = scheduleSave
@@ -313,5 +366,5 @@ export function useMarkdownDocument(
     [documentId],
   )
 
-  return { body, setBody, coreFacets, setCoreFacets, doc, bodyTextOf }
+  return { body, setBody, saveState, coreFacets, setCoreFacets, doc, bodyTextOf }
 }
