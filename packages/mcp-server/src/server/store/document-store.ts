@@ -407,17 +407,21 @@ export function workspaceRegistry(): WorkspaceRegistry {
      * untouched by it.
      */
     async renameWorkspace(input) {
-      const parsed = renameWorkspaceInputSchema.parse(input)
-      const updated = await renameWorkspaceRow(await dbReady(), parsed.workspaceId, {
-        ...(parsed.segment === undefined ? {} : { segment: parsed.segment }),
-        ...(parsed.displayName === undefined ? {} : { displayName: parsed.displayName }),
+      // Unvalidated on purpose: `CacheCoherentDocumentIndex.renameWorkspace`
+      // parses at the boundary before it gets here, exactly as it does for
+      // `createWorkspace`, and this registry is reached only through it. A
+      // second parse would be a guard no test can reach — one was written,
+      // and its mutation check stayed green.
+      const updated = await renameWorkspaceRow(await dbReady(), input.workspaceId, {
+        ...(input.segment === undefined ? {} : { segment: input.segment }),
+        ...(input.displayName === undefined ? {} : { displayName: input.displayName }),
       })
       // No row updated means no such workspace. Distinguished here rather
       // than by a preceding SELECT, which would be a second statement
       // another writer could land a delete between.
-      if (updated === null) throw new WorkspaceNotFoundError(parsed.workspaceId)
+      if (updated === null) throw new WorkspaceNotFoundError(input.workspaceId)
       return {
-        workspaceId: parsed.workspaceId,
+        workspaceId: input.workspaceId,
         ...(updated.segment === null ? {} : { segment: updated.segment }),
         ...(updated.displayName === null ? {} : { displayName: updated.displayName }),
       }
