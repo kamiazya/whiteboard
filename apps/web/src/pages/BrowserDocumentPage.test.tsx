@@ -828,7 +828,7 @@ describe('BrowserDocumentPage', () => {
       // ...nor does the chip itself: the connection is app-level, so the
       // App-mounted shell draws it (and hosts the CTA in its popover) from
       // the state this page publishes.
-      expect(screen.queryByTestId('connection-chip')).toBeNull()
+      expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
       expect(getShellConnection()).toEqual({ state: { keeper: 'browser' } })
 
       cleanup()

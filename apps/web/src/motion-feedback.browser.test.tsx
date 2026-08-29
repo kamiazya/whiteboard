@@ -33,19 +33,19 @@ describe('feedback micro-motion', () => {
     expect(cs.animationDuration).toBe('0.22s')
   })
 
-  it('connection chip transitions colors on the token duration', () => {
+  it('the shell mark transitions colors on the token duration', () => {
     render(<ConnectionStatus state={{ keeper: 'daemon', session: 'synced' }} />)
-    const chip = document.querySelector('[data-testid="connection-chip"]') as HTMLElement
+    const chip = document.querySelector('[data-testid="shell-mark-trigger"]') as HTMLElement
     const cs = getComputedStyle(chip)
     expect(cs.transitionProperty).toContain('color')
     expect(cs.transitionDuration).toContain('0.22s')
   })
 
-  it('sync-off shows a finite attention pulse on the chip dot', () => {
+  it('sync-off shows a finite attention pulse on the mark', () => {
     render(
       <ConnectionStatus state={{ keeper: 'daemon', session: 'sync-off' }} onRepair={vi.fn()} />,
     )
-    const echo = document.querySelector('[data-testid="connection-chip-pulse"]') as HTMLElement
+    const echo = document.querySelector('[data-testid="shell-mark-pulse"]') as HTMLElement
     expect(echo).not.toBeNull()
     const cs = getComputedStyle(echo)
     expect(cs.animationName).toBe('attention-pulse')
@@ -54,8 +54,20 @@ describe('feedback micro-motion', () => {
     expect(cs.animationIterationCount).not.toBe('infinite')
   })
 
-  it('synced chip has no attention pulse', () => {
+  it('a synced mark has no attention pulse', () => {
     render(<ConnectionStatus state={{ keeper: 'daemon', session: 'synced' }} />)
-    expect(document.querySelector('[data-testid="connection-chip-pulse"]')).toBeNull()
+    expect(document.querySelector('[data-testid="shell-mark-pulse"]')).toBeNull()
+  })
+
+  it("reconnecting travels rather than pulsing, since it shares sync-off's tone", () => {
+    // The two amber states are told apart by motion, not colour. Pinned here
+    // because it is a COMPUTED-style claim: the class has to resolve to a
+    // real running animation, not merely be present in the markup.
+    render(<ConnectionStatus state={{ keeper: 'daemon', session: 'reconnecting' }} />)
+    expect(document.querySelector('[data-testid="shell-mark-pulse"]')).toBeNull()
+    const stroke = document.querySelector('[data-testid="shell-mark-stroke"]') as SVGPathElement
+    const cs = getComputedStyle(stroke)
+    expect(cs.animationName).toBe('wb-loader')
+    expect(cs.animationIterationCount).toBe('infinite')
   })
 })

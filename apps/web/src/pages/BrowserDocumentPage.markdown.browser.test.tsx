@@ -50,18 +50,28 @@ vi.mock('../components/spatial-editor/index.js', () => ({
 const { BrowserDocumentPage } = await import('./BrowserDocumentPage.js')
 
 /**
- * Waits until the page reports the debounced save as landed.
+ * Waits until a debounced save has actually LANDED for this document.
  *
- * The save is debounced 500ms and then has to reach IndexedDB, so a fixed
- * sleep is a bet on machine speed — the timing-based assertion this repo
- * treats as a recurring flake shape, and what tipped these tests over under
- * load. `Saved` is the page's own report that the write completed, which is
- * the condition these tests actually depend on before tearing the page down.
+ * Not `getByRole('button', { name: 'Saved' })`. A document that has never
+ * been written is already `Saved` — correct for a reader, and useless as
+ * proof that a write completed. That wait matched the state the page was
+ * already in, so these tests navigated away with the write still pending and
+ * read the loss later as lost keystrokes: `expected '# ' to contain
+ * '# From the list'` after reopening, with a 15s budget the write never
+ * needed because it was never going to happen.
+ *
+ * `data-last-saved-at` is absent until a write lands, so requiring it
+ * together with a settled `saved` state is a TRANSITION rather than a label.
  */
 async function waitForSaved(): Promise<void> {
-  await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeTruthy(), {
-    timeout: 15_000,
-  })
+  await waitFor(
+    () => {
+      const chip = document.querySelector('[data-testid="save-status-chip"]')
+      expect(chip?.getAttribute('data-save-state')).toBe('saved')
+      expect(chip?.getAttribute('data-last-saved-at')).toBeTruthy()
+    },
+    { timeout: 15_000 },
+  )
 }
 
 /**

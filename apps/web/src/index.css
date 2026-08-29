@@ -274,6 +274,68 @@
   }
 
   /*
+   * Shell mark (components/shell/ShellMark.tsx): the signature carrying the
+   * live session's state. `reconnecting` reuses `.wb-loader` above verbatim
+   * — same path, same 120-unit normalisation — so there is one definition of
+   * "the pen is moving" rather than two that can drift.
+   *
+   * What lives here is the rest of the vocabulary:
+   *
+   * `wb-mark-broken` is sync-off. It shares reconnecting's amber tone (both
+   * are `attention` in StateDot's closed set), so the STROKE is what tells
+   * them apart: one travels, this one sits in pieces and dimmed. Colour
+   * cannot carry that distinction on a mark that has no label.
+   *
+   * `wb-mark-recovered` is the one celebration in the shell, and it is
+   * deliberately the rare one: reconnecting/sync-off -> synced. The routine
+   * "a write landed" moment is NOT here, because the daemon keeper has no
+   * write-landed signal to hang it on — see DESIGN.md.
+   *
+   * The global reduced-motion floor below collapses all of it, which is
+   * sound only because the cap's tone states the resting state without any
+   * motion at all: the gesture is a flourish on a fact, never the fact.
+   */
+  .wb-mark-broken {
+    stroke-dasharray: 9 7;
+    opacity: 0.5;
+  }
+
+  .wb-mark-cap {
+    transform-box: view-box;
+    transform-origin: 68px 25px;
+  }
+
+  @keyframes wb-mark-draw {
+    from {
+      stroke-dashoffset: 120;
+    }
+    to {
+      stroke-dashoffset: 0;
+    }
+  }
+
+  @keyframes wb-mark-land {
+    0% {
+      transform: scale(0);
+    }
+    62% {
+      transform: scale(1.28);
+    }
+    100% {
+      transform: scale(1);
+    }
+  }
+
+  .wb-mark-recovered .wb-mark-stroke {
+    stroke-dasharray: 120;
+    animation: wb-mark-draw 520ms var(--motion-ease-out) 1 both;
+  }
+
+  .wb-mark-recovered .wb-mark-cap {
+    animation: wb-mark-land 360ms 360ms var(--motion-ease-out) 1 both;
+  }
+
+  /*
    * Skeletons appear only when the wait is real: invisible for a beat,
    * then a gentle fade-in. A skeleton that pops for a single frame
    * between a resolved chunk and first paint reads as a glitch, not as

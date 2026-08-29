@@ -36,10 +36,14 @@ function renderShell(daemonConnected: boolean, at = '/local/c1', onWorkInBrowser
 }
 
 describe('AppShell', () => {
-  it('brand mark links home', () => {
+  it('brand mark links home while no page holds a session', () => {
+    // With nothing to report the mark is not a menu: it is the way home,
+    // exactly as before. The popover appears only once there is a state for
+    // it to explain.
     renderShell(true)
     const home = screen.getByRole('link', { name: 'Home' })
     expect(home.getAttribute('href')).toBe('/')
+    expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBeNull()
   })
 
   it('alpha chip opens the honesty popover with a protect link', async () => {
@@ -99,15 +103,37 @@ describe('AppShell', () => {
 // this browser talks to does not change when you open a different document.
 // It lives beside the settings gear for the same reason the gear does — the
 // document's own surface is for the document.
-describe('AppShell — the connection chip', () => {
+describe('AppShell — the mark as the connection carrier', () => {
   // Matched loosely: the CTA is two sentences across JSX lines, so an exact
   // string match would be asserting the source's line breaks, not the copy.
   const CTA = /Connect a daemon \(MCP\) for version history/i
   const CTA_LIMIT = /move this workspace to it from Settings/i
 
-  it('shows no chip until a page publishes a live session', () => {
+  it('carries no state until a page publishes a live session', () => {
     renderShell(true)
-    expect(screen.queryByTestId('connection-chip')).toBeNull()
+    expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
+    expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBeNull()
+  })
+
+  it('leaves exactly one state carrier in the row, not two', async () => {
+    // The row had two carriers and no subject. One carrier now answers both
+    // "which workspace" and "is my work safe"; a chip left beside it would be
+    // the same fact twice, which DESIGN.md's closed-set rule exists to stop.
+    //
+    // Counted rather than named: asserting the OLD test id is absent would
+    // pass just as well if a replacement chip were added under a new one, and
+    // a guard that cannot see its subject is no guard.
+    setShellConnection({
+      state: { keeper: 'daemon', session: 'synced' },
+      daemonBaseUrl: 'http://127.0.0.1:3099',
+    })
+    renderShell(true)
+    const header = (await screen.findByTestId('shell-mark-trigger')).closest('header')
+    expect(header).not.toBeNull()
+    const carriers = header?.querySelectorAll(
+      '[data-testid="shell-mark-cap"], [data-testid="state-dot"]',
+    )
+    expect(carriers?.length).toBe(1)
   })
 
   it.each([
@@ -118,7 +144,11 @@ describe('AppShell — the connection chip', () => {
   ] as const)('renders the %s state the page published', async (_name, state, label) => {
     setShellConnection({ state, daemonBaseUrl: 'http://127.0.0.1:3099' })
     renderShell(state.keeper === 'daemon')
-    expect((await screen.findByTestId('connection-chip')).textContent).toMatch(label)
+    // The mark has no room for the word, so the accessible name carries it —
+    // and it must, because two of these four states share a tone.
+    expect((await screen.findByTestId('shell-mark-trigger')).getAttribute('aria-label')).toMatch(
+      label,
+    )
   })
 
   it('follows the page as its session changes, without a remount', async () => {
@@ -127,7 +157,9 @@ describe('AppShell — the connection chip', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
     })
     renderShell(true)
-    expect((await screen.findByTestId('connection-chip')).textContent).toMatch(/synced/i)
+    expect((await screen.findByTestId('shell-mark-trigger')).getAttribute('aria-label')).toMatch(
+      /synced/i,
+    )
 
     act(() =>
       setShellConnection({
@@ -135,12 +167,16 @@ describe('AppShell — the connection chip', () => {
         daemonBaseUrl: 'http://127.0.0.1:3099',
       }),
     )
-    expect(screen.getByTestId('connection-chip').textContent).toMatch(/reconnecting/i)
+    expect(screen.getByTestId('shell-mark-trigger').getAttribute('aria-label')).toMatch(
+      /reconnecting/i,
+    )
+    expect(screen.getByTestId('shell-mark').getAttribute('data-session')).toBe('reconnecting')
 
     // Leaving the document takes the claim with it: nothing on an index page
-    // is synced, and a latched chip would say otherwise.
+    // is synced, and a latched mark would say otherwise.
     act(() => setShellConnection(null))
-    expect(screen.queryByTestId('connection-chip')).toBeNull()
+    expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
+    expect(screen.getByTestId('shell-mark').getAttribute('data-session')).toBeNull()
   })
 
   it('carries the capability CTA inside the Local popover, not in page chrome', async () => {
@@ -148,7 +184,7 @@ describe('AppShell — the connection chip', () => {
     renderShell(false)
     expect(screen.queryByText(CTA)).toBeNull()
 
-    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     expect(await screen.findByText(CTA)).toBeTruthy()
     // The CTA points at where the move lives (Settings manages; the chip
     // only reports and nudges) — whole-workspace promotion is implemented,
@@ -178,7 +214,7 @@ describe('AppShell — the connection chip', () => {
     }))
     setShellConnection({ state: { keeper: 'browser' } })
     renderShell(false)
-    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     const notice = await screen.findByTestId('promoted-elsewhere-notice')
     expect(notice.textContent).toMatch(/moved to the daemon/i)
     expect(notice.textContent).toMatch(/stay in this browser/i)
@@ -204,7 +240,7 @@ describe('AppShell — the connection chip', () => {
     }))
     setShellConnection({ state: { keeper: 'browser' } })
     renderShell(false)
-    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     await screen.findByText(CTA)
     expect(screen.queryByTestId('promoted-elsewhere-notice')).toBeNull()
   })
@@ -217,7 +253,7 @@ describe('AppShell — the connection chip', () => {
     })
     renderShell(true, '/w/ws/document/a.canvas', onWorkInBrowser)
 
-    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     fireEvent.click(await screen.findByRole('button', { name: /work in this browser instead/i }))
     expect(onWorkInBrowser).toHaveBeenCalledTimes(1)
   })
@@ -230,7 +266,7 @@ describe('AppShell — the connection chip', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
     })
     renderShell(true)
-    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     await waitFor(() => expect(screen.getByTestId('connection-popover')).toBeTruthy())
 
     expect(screen.queryByTestId('connection-disconnect')).toBeNull()

@@ -733,7 +733,7 @@ describe('App daemon provider state', () => {
         daemonBaseUrl: 'http://127.0.0.1:3099',
       })
     })
-    fireEvent.click(await screen.findByTestId('connection-chip'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     fireEvent.click(await screen.findByRole('button', { name: /work in this browser instead/i }))
     expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
     expect(screen.queryByTestId('daemon-document-page')).toBeNull()
@@ -1024,9 +1024,13 @@ describe('App shell (single instance above the routed pages)', () => {
         })
       })
       expect(screen.getByTestId('settings-nudge')).toBeTruthy()
-      // The chip is the shell's now, so the state a page reports reaches the
-      // user here rather than inside the page's own top bar.
-      expect(screen.getByTestId('connection-chip').textContent).toMatch(/sync off/i)
+      // The mark is the shell's now, so the state a page reports reaches the
+      // user here rather than inside the page's own top bar. Read from the
+      // accessible name: the mark carries the state as colour and motion and
+      // has no room for the word.
+      expect(screen.getByTestId('shell-mark-trigger').getAttribute('aria-label')).toMatch(
+        /sync off/i,
+      )
     } finally {
       Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
     }
