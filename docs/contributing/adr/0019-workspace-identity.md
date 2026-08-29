@@ -195,7 +195,7 @@ Branches and versions are DOCUMENT-scoped in the schema — `branches` keys on
 because a version's frontier points into that workspace's oplog. So the ref
 sits AFTER the document, unlike git, where a branch scopes a whole tree:
 
-```
+```text
 /w/:workspace/d/:path/@:ref
 ```
 

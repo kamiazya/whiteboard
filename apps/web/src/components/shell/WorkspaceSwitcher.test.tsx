@@ -1,5 +1,5 @@
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { WorkspaceSwitcher, type WorkspaceSwitcherSource } from './WorkspaceSwitcher.js'
 
@@ -138,6 +138,49 @@ describe('WorkspaceSwitcher', () => {
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
     await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('design-2'))
     expect(create).toHaveBeenCalledWith('Design')
+  })
+
+  it('creates once when Create is pressed twice before the first settles', async () => {
+    // `busy` is a React state SNAPSHOT: the closure that ran the first press
+    // still sees `busy === false`. The button's `disabled` covers a second
+    // CLICK — React flushes discrete events synchronously — but this form
+    // also submits on Enter, and the input carries no disabled attribute, so
+    // the keyboard path has no such flush between two presses.
+    //
+    // Each browser create mints and persists a workspace, so a second one is
+    // a workspace nobody asked for, holding a segment that shifts the next
+    // real one to `-2`.
+    let settle: ((w: WorkspaceEntry) => void) | undefined
+    const create = vi.fn(
+      () =>
+        new Promise<WorkspaceEntry>((resolve) => {
+          settle = resolve
+        }),
+    )
+    render(
+      <WorkspaceSwitcher
+        current="design"
+        source={source([{ workspaceId: DESIGN, segment: 'design' }], create)}
+        onSwitch={vi.fn()}
+      />,
+    )
+    open()
+    fireEvent.click(await screen.findByRole('button', { name: /new workspace/i }))
+    const input = await screen.findByLabelText(/workspace name/i)
+    fireEvent.change(input, { target: { value: 'Design' } })
+
+    // Dispatched RAW inside one act, not through two `fireEvent` calls:
+    // fireEvent flushes between them, so the second already sees the state
+    // update and the case never arrives. Measured — through fireEvent this
+    // passes with no guard at all, which is how a test for this can look
+    // green while pinning nothing.
+    await act(async () => {
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+      input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
+    })
+
+    expect(create).toHaveBeenCalledTimes(1)
+    settle?.({ workspaceId: NOTES, segment: 'design-2', displayName: 'Design' })
   })
 
   it('surfaces a create failure in the form and stays put', async () => {

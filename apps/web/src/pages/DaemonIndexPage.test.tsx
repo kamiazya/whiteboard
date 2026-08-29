@@ -448,6 +448,48 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('alpha')).toBeTruthy()
   })
 
+  it('reports the fallback when the address moves to a workspace the daemon does not have', async () => {
+    // A bookmark of a deleted workspace, opened while the app is already
+    // running. The page falls back to first-listed, which is the standing
+    // behaviour — but the FALLBACK has to reach the address, or the page
+    // serves one workspace under an address naming another and every document
+    // created lands somewhere the URL does not say.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onWorkspaceResolved = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="ws-a"
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    onWorkspaceResolved.mockClear()
+
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-gone"
+          onWorkspaceResolved={onWorkspaceResolved}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    // The selection does not move — ws-a is still the right answer — so the
+    // report is the ONLY signal, and it has to fire anyway.
+    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('ws-a'))
+    expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
   it('follows the workspace the address names when it changes under the page', async () => {
     // The switcher is the SHELL's now, and it changes the address; the page
     // renders whatever workspace the address names. Until this, `workspace`

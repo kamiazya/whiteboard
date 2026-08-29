@@ -222,19 +222,38 @@ export function DaemonIndexPage({
   // `resolveWorkspaceHandle` because the address may carry either of
   // ADR-0019's layers, and matching segments alone would miss the canonical
   // id form and silently open a different workspace.
+  // Keyed on the SETTLED value, not on the act of choosing: the initial
+  // resolve and a switch reach the address bar the same way, because to a
+  // reader they are the same fact — this is the workspace you are looking at.
+  // A re-render that did not move it reports nothing, which is why the stale
+  // -address branch above has to clear this deliberately.
+  const reportedWorkspaceRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (workspace === undefined || !workspacesLoaded) return
     const wanted = resolveWorkspaceHandle(workspaces, workspace)
-    if (wanted === null) return
-    const handle = workspaceHandle(wanted)
+    const fallback = workspaces[0]
+    const target = wanted ?? fallback
+    if (target === undefined) return
+    const handle = workspaceHandle(target)
     setSelectedWorkspace((current) => (current === handle ? current : handle))
-  }, [workspace, workspaces, workspacesLoaded])
+    if (wanted !== null) return
+    // A STALE address — a bookmark of a workspace that is gone, opened while
+    // the app is already running. The page falls back to first-listed, which
+    // is the standing behaviour, but the fallback has to reach the ADDRESS
+    // too. Returning here left the page on one workspace under an address
+    // naming another, and every document created then landed somewhere the
+    // URL did not say.
+    //
+    // Reported straight from here rather than by clearing the ref below: the
+    // fallback is usually the workspace already selected, so the reporting
+    // effect never re-runs — its deps did not move, and a ref is not a dep.
+    // Marking it reported in the same breath is what keeps this to ONE call
+    // when the fallback IS a different workspace and that effect does fire.
+    reportedWorkspaceRef.current = handle
+    onWorkspaceResolved?.(handle)
+  }, [workspace, workspaces, workspacesLoaded, onWorkspaceResolved])
 
-  // Keyed on the SETTLED value, not on the act of choosing: the initial
-  // resolve and a switch reach the address bar the same way, because
-  // to a reader they are the same fact — this is the workspace you are
-  // looking at. A re-render that did not move it reports nothing.
-  const reportedWorkspaceRef = useRef<string | null>(null)
   useEffect(() => {
     if (selectedWorkspace === null) return
     if (reportedWorkspaceRef.current === selectedWorkspace) return

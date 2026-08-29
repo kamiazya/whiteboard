@@ -68,10 +68,11 @@ survives the rename because it names the `documentId` (see
 [ADR-0007](../contributing/adr/0007-canvas-identity-and-store-split.md),
 which predates the rename and calls this a *slug* throughout).
 
-Canvases kept in the browser are addressed the same way. A path is stored, not
-derived: it is assigned at creation (`untitled`, `untitled-2`, …) exactly as
-in daemon mode, it is what `/local/:path` names, and it is unique within the
-browser — the store refuses a second canvas at a path another one holds,
+Canvases kept in the browser are addressed the same way — literally the same
+way, since both keepers use one URL grammar. A path is stored, not derived: it
+is assigned at creation (`untitled`, `untitled-2`, …) exactly as in daemon
+mode, it is the `<path>` in `/w/<workspace>/d/<path>`, and it is unique within
+its workspace — the store refuses a second canvas at a path another one holds,
 because a duplicate would make that address ambiguous rather than merely
 untidy.
 

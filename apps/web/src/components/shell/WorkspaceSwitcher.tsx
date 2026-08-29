@@ -76,6 +76,18 @@ export function WorkspaceSwitcher({ current, source, onSwitch }: WorkspaceSwitch
   const [error, setError] = useState<string | null>(null)
   const nameId = useId()
   const nameRef = useRef<HTMLInputElement>(null)
+  // A ref, not the `busy` state below, and the difference is the whole guard.
+  // `busy` is a React SNAPSHOT: a second submit that runs before React
+  // re-renders still sees it false. The Create button's `disabled` covers a
+  // second CLICK — React flushes discrete events synchronously — but this
+  // form also submits on Enter and the input carries no disabled attribute.
+  //
+  // Measured rather than argued: two keydowns dispatched inside one batch
+  // call `create` twice; the same two through `fireEvent`, which flushes
+  // between them, call it once. Each browser create MINTS and persists a
+  // workspace, so a second one is a workspace nobody asked for, holding a
+  // segment that shifts the next real one to `-2`.
+  const submitting = useRef(false)
 
   // Focused on REVEAL, not on mount: the form appears because the person
   // asked for it, and typing is the only thing to do next. `autoFocus` would
@@ -113,7 +125,8 @@ export function WorkspaceSwitcher({ current, source, onSwitch }: WorkspaceSwitch
   const create = source.create
   const submit = () => {
     const displayName = name.trim()
-    if (create === undefined || displayName === '' || busy) return
+    if (create === undefined || displayName === '' || submitting.current) return
+    submitting.current = true
     setBusy(true)
     setError(null)
     create(displayName)
@@ -125,6 +138,7 @@ export function WorkspaceSwitcher({ current, source, onSwitch }: WorkspaceSwitch
         onSwitch(workspaceHandle(created))
       })
       .catch((cause: unknown) => {
+        submitting.current = false
         setError(messageOf(cause))
         setBusy(false)
       })
