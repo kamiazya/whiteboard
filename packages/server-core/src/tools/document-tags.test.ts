@@ -23,8 +23,12 @@ function makeDeps() {
 describe('GET /document-tags', () => {
   it('lists tagged markdown documents and omits tagless, spatial, and snapshotless ones', async () => {
     const deps = makeDeps()
+    // The workspace exists because this fixture says so, not as a side effect
+    // of the first create: creating one is ADR-0019's MINT boundary, which
+    // keys it by a fresh ULID and would leave the literal below naming nothing.
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
     const create = (path: string, kind: 'markdown' | 'spatial') =>
-      wbDocumentCreate(deps, { workspaceId: WS, path, kind, createWorkspace: true })
+      wbDocumentCreate(deps, { workspaceId: WS, path, kind })
     const tagged = await create('tagged', 'markdown')
     const plain = await create('plain', 'markdown')
     await create('board', 'spatial')
