@@ -52,6 +52,7 @@ describe('runServerBackup', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -95,6 +96,7 @@ describe('runServerBackup', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {}),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -115,6 +117,7 @@ describe('runServerBackup', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     // Ancestor symlink must be rejected, not followed.
@@ -139,6 +142,7 @@ describe('runServerBackup', () => {
       doBackup: vi.fn(async () => {
         throw new BackupError('Backup directory is not empty.')
       }),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('error')
@@ -187,6 +191,7 @@ describe('runServerBackup', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('invalid-output-path')
@@ -204,6 +209,7 @@ describe('runServerBackup', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('error')
@@ -219,6 +225,7 @@ describe('runServerBackup', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('invalid-output-path')
@@ -240,6 +247,7 @@ describe('runServerBackup', () => {
       doBackup: vi.fn(async () => {
         throw new BackupError('some internal error with path /internal/detail')
       }),
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('error')
@@ -283,6 +291,7 @@ describe('runServerBackup with the database outside the data directory', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -312,6 +321,7 @@ describe('runServerBackup with the database outside the data directory', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -350,6 +360,7 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('missing-database')
@@ -369,6 +380,7 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -412,6 +424,7 @@ describe('runServerBackup with a stale database file left behind', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -446,6 +459,7 @@ describe('runServerBackup with a stale database file left behind', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -470,6 +484,7 @@ describe('runServerBackup with a stale database file left behind', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('missing-database')
@@ -508,6 +523,7 @@ describe('runServerBackup when the rows are not ours to back up', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -531,6 +547,7 @@ describe('runServerBackup when the rows are not ours to back up', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: async () => {},
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -554,6 +571,7 @@ describe('runServerBackup when the rows are not ours to back up', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: async () => {},
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
@@ -579,9 +597,95 @@ describe('runServerBackup when the rows are not ours to back up', () => {
       isPidAlive: () => false,
       doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
+      doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('missing-database')
     expect(mockDoBackup).not.toHaveBeenCalled()
+  })
+})
+
+/**
+ * The rows reach the backup as a SNAPSHOT, never as copied files (ADR-0021
+ * decision 3).
+ *
+ * The two are not interchangeable. A file copy has to take `whiteboard.db`,
+ * `-wal` and `-shm` together and get all three, because in WAL mode the
+ * newest commits live in the `-wal` — measured at 4977 of 5000 rows when only
+ * the main file travels. A snapshot is one self-contained file with
+ * everything folded in, so a backup directory holds a plain `whiteboard.db`
+ * and nothing downstream has to know sidecars exist.
+ *
+ * It is also the step that will let a backup be taken without stopping the
+ * server, since it opens its own connection rather than reading bytes out
+ * from under one.
+ */
+describe('runServerBackup captures the rows through the database', () => {
+  it('snapshots the database and keeps its files out of the copy', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const mockDoBackup = vi.fn(async () => {})
+    const mockDoSnapshot = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+      doSnapshot: mockDoSnapshot,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    // The copy never carries the database, even when it is ours — the
+    // snapshot is what carries it.
+    expect(mockDoBackup.mock.calls[0][2]).toMatchObject({ excludeDatabaseFile: true })
+    expect(mockDoSnapshot).toHaveBeenCalledWith(dataDir, join(outputDir, 'whiteboard.db'))
+  })
+
+  it('takes no snapshot of a database that is not ours', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(join(dataDir, 'blobs'), { recursive: true })
+
+    const mockDoSnapshot = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: async () => {},
+      doSnapshot: mockDoSnapshot,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoSnapshot).not.toHaveBeenCalled()
+  })
+
+  /**
+   * A snapshot that fails must fail the backup. Reporting `ok` over a
+   * directory holding blobs and no rows is the defect this whole area exists
+   * to remove, and it would arrive here by simply not checking.
+   */
+  it('fails the backup when the snapshot cannot be taken', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: async () => {},
+      doSnapshot: async () => {
+        throw new Error('database is locked')
+      },
+    })
+
+    expect(outcome.kind).toBe('error')
   })
 })

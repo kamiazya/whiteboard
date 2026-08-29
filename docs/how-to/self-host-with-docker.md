@@ -151,6 +151,11 @@ provide the operator-facing surface for data backup and restore.
   from serving — under SQLite's default journal a read in progress blocks
   writes outright.
 
+  A backup DIRECTORY holds only one, though. The rows are captured through
+  the database (`VACUUM INTO`), not by copying its files, so the result is a
+  single self-contained `whiteboard.db` with the write-ahead log already
+  folded in. Nothing reading a backup has to know sidecars exist.
+
 - **These commands answer per store, not with one boolean.** They copy a
   directory, so they capture the database only while it *is* a file in that
   directory. If you have set

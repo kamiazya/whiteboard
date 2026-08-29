@@ -145,6 +145,19 @@ and travel together, which the whole-directory copy already does and the
 construction: it writes a single self-contained database, which is one more
 reason the snapshot replaces the file copy rather than sitting beside it.
 
+**Implemented** as `snapshotDatabaseInto`, which `whiteboard server backup`
+now uses for the rows whenever the database is ours. The copy therefore never
+carries database FILES at all — the same exclusion the fossil case already
+needed, applied unconditionally — and a backup directory holds one plain
+`whiteboard.db`. A snapshot that fails fails the backup: reporting success
+over a directory of blobs and no rows is the defect this ADR opened with.
+
+What is NOT done yet is dropping the stop-the-server requirement itself. The
+snapshot no longer needs it, but the blob copy still does: `cp` walks a
+directory it does not own, and file-GC deleting an entry between the walk and
+the stat aborts the whole backup. That needs a copy that tolerates a
+vanishing source, and it is the remaining half of this decision.
+
 ### 4. Backup is scheduled by default; the CLI triggers the same pass
 
 What an operator wants is not a command they must remember to run. It is for

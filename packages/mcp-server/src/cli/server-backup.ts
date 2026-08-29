@@ -1,13 +1,18 @@
 import { lstat } from 'node:fs/promises'
-import { dirname, resolve } from 'node:path'
+import { dirname, join, resolve } from 'node:path'
 import { resolveDefaultDataDir } from '../daemon/data-dir.js'
 import { hasAncestorSymlink } from '../server/backup-restore.js'
 import type { ServerModeRecordReadResult } from '../server/security/server-mode-record.js'
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
-import { databaseIsInsideDataDir, dataDirHasDatabaseFile } from '../server/store/db/location.js'
+import {
+  DB_FILENAME,
+  databaseIsInsideDataDir,
+  dataDirHasDatabaseFile,
+} from '../server/store/db/location.js'
 import { readDatabaseLocationRecord } from '../server/store/db/location-record.js'
+import { snapshotDatabaseInto } from '../server/store/db/snapshot.js'
 import type { ServerBackupArgs } from './server-backup-args.js'
 
 export interface RunServerBackupOptions {
@@ -16,6 +21,7 @@ export interface RunServerBackupOptions {
   isPidAlive?: (pid: number) => boolean
   doReadRecord?: (dataDir: string) => ServerModeRecordReadResult
   doBackup?: (src: string, dest: string, opts: BackupRestoreOptions) => Promise<void>
+  doSnapshot?: (dataDir: string, destPath: string) => Promise<void>
 }
 
 export type ServerBackupOutcome =
@@ -76,6 +82,7 @@ export async function runServerBackup(
     isPidAlive = defaultIsPidAlive,
     doReadRecord = readServerModeRecord,
     doBackup = backupServerModeDataDir,
+    doSnapshot = snapshotDatabaseInto,
   } = options
 
   const dataDir = resolve(args.dataDir ?? resolveDefaultDataDir(env))
@@ -162,13 +169,31 @@ export async function runServerBackup(
       // dirname is non-tautological: the helper's assertWithinAllowed verifies
       // outputDir against its parent, not against itself.
       allowedRoots: [dataDir, dirname(outputDir)],
-      // A fossil must not travel. An operator who moved their rows to libSQL
-      // and left the old file behind would otherwise get a backup carrying
-      // pre-migration rows that restore would put back as though current.
-      excludeDatabaseFile: !configuredInside,
+      // The database never travels as FILES, whoever owns it.
+      //
+      // When it is ours the snapshot below carries it, and carries it better:
+      // a copy would have to take `whiteboard.db`, `-wal` and `-shm` as one
+      // artifact, while a snapshot is a single file with the WAL already
+      // folded in. When it is not ours, any file of that name is a fossil
+      // from before the move, and copying it would put pre-migration rows in
+      // the backup for restore to put back as current.
+      excludeDatabaseFile: true,
     })
   } catch {
     return { kind: 'error', message: 'backup failed' }
+  }
+
+  // Ordered after the copy because the copy requires an empty destination,
+  // and `VACUUM INTO` refuses to overwrite. Neither can go first twice.
+  if (configuredInside) {
+    try {
+      await doSnapshot(dataDir, join(outputDir, DB_FILENAME))
+    } catch {
+      // A snapshot that failed must fail the BACKUP. Reporting success over a
+      // directory holding blobs and no rows is precisely the defect this area
+      // exists to remove, and it would arrive by simply not checking.
+      return { kind: 'error', message: 'backup failed' }
+    }
   }
 
   return {
