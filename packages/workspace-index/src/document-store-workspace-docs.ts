@@ -31,7 +31,7 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     if (stored === null) return null
     const doc = new LoroDoc()
     doc.import(reassembleSnapshot(stored.manifest, stored.chunks))
-    const { updates } = await this.store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    const { updates } = await this.store.loadDeltas({ docRef, afterSeq: null })
     for (const update of updates) doc.import(update)
     return doc
   }
@@ -94,7 +94,7 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
     )
     const { updates: existing } = await this.store.loadDeltas({
       docRef,
-      sinceFrontier: new Uint8Array(),
+      afterSeq: null,
     })
     if (shouldCompact([...existing, update])) {
       // Folded from the STORED state plus this update — never from `doc`.

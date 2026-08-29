@@ -212,7 +212,7 @@ export class LoroStore {
 
     let updates: Uint8Array[]
     try {
-      updates = (await this.#store.loadDeltas({ docRef, sinceFrontier: EMPTY_FRONTIER })).updates
+      updates = (await this.#store.loadDeltas({ docRef, afterSeq: null })).updates
     } catch {
       return { kind: 'corrupt-delta' }
     }
@@ -266,8 +266,7 @@ export class LoroStore {
       const header = await this.#store.readSnapshotManifest({ docRef })
       if (header === null) return
 
-      const existing = (await this.#store.loadDeltas({ docRef, sinceFrontier: EMPTY_FRONTIER }))
-        .updates
+      const existing = (await this.#store.loadDeltas({ docRef, afterSeq: null })).updates
       const deltas = [...existing, delta]
 
       // Folding HERE rather than on read: this is the one place that already

@@ -336,6 +336,10 @@ export class LibsqlDocumentStore implements DocumentStore {
         .select((eb) => eb.fn.max('seq').as('maxSeq'))
         .where('docKey', '=', docKey)
         .executeTakeFirst()
+      // Assigned from the highest seq PRESENT, so a fold that empties the log
+      // lets the next append start over at 1. That is why a tail's cursor is
+      // the pair `(generation, afterSeq)` rather than a seq alone — see
+      // `loadDeltasResultSchema`.
       let nextSeq = (maxRow?.maxSeq ?? 0) + 1
 
       const rows = deltaBatch.updates.map((update) => ({
@@ -354,34 +358,56 @@ export class LibsqlDocumentStore implements DocumentStore {
   }
 
   /**
-   * `sinceFrontier` is intentionally ignored, matching `InMemoryDocumentStore`
-   * — comparing frontiers is a loro-crdt runtime concern that this DocRef-keyed
-   * SQL store has no access to. It always returns the full append-ordered
-   * delta log, a superset of "everything since `sinceFrontier`" for every
-   * caller.
-   *
    * The returned `frontier` is the doc's *current* frontier (from
    * canvasDocFrontiers), not the frontier of the last delta row — a
    * saveSnapshot that runs after the last appendDeltas call still advances
    * what this method reports, matching InMemoryDocumentStore's single
    * per-doc `frontier` field that both write paths update.
    */
-  async loadDeltas({ docRef }: LoadDeltasInput): Promise<LoadDeltasResult> {
+  async loadDeltas({ docRef, afterSeq }: LoadDeltasInput): Promise<LoadDeltasResult> {
     const docKey = docRefKey(docRef)
-    const [rows, frontier] = await Promise.all([
-      this.db
-        .selectFrom('documentDeltas')
-        .select('bytes')
-        .where('docKey', '=', docKey)
-        .orderBy('seq', 'asc')
-        .execute(),
-      this.currentFrontier(docKey),
-    ])
+    // `?? null` rather than a bare `!== null`: a caller that omits the field
+    // reads as `undefined`, and `where seq > NULL` matches no row — an
+    // omission would silently answer "you are caught up" for every document.
+    const after = afterSeq ?? null
+    // One transaction across all four reads: a fold landing between them
+    // would answer a log from before it and a generation from after, which is
+    // exactly the pair a tailing reader uses to decide it is caught up.
+    return this.db.transaction().execute(async (trx) => {
+      const [rows, highest, snapshot, frontierRow] = await Promise.all([
+        trx
+          .selectFrom('documentDeltas')
+          .select('bytes')
+          .where('docKey', '=', docKey)
+          .$if(after !== null, (qb) => qb.where('seq', '>', after as number))
+          .orderBy('seq', 'asc')
+          .execute(),
+        // The highest seq in the WHOLE log, not among the rows returned, so a
+        // caller that is already caught up still learns where to resume.
+        trx
+          .selectFrom('documentDeltas')
+          .select((eb) => eb.fn.max('seq').as('maxSeq'))
+          .where('docKey', '=', docKey)
+          .executeTakeFirst(),
+        trx
+          .selectFrom('documentSnapshots')
+          .select('generation')
+          .where('docKey', '=', docKey)
+          .executeTakeFirst(),
+        trx
+          .selectFrom('documentFrontiers')
+          .select('frontier')
+          .where('docKey', '=', docKey)
+          .executeTakeFirst(),
+      ])
 
-    return {
-      updates: rows.map((row) => normalizeBlob(row.bytes)),
-      frontier,
-    }
+      return {
+        updates: rows.map((row) => normalizeBlob(row.bytes)),
+        lastSeq: highest?.maxSeq ?? null,
+        generation: snapshot?.generation ?? null,
+        frontier: frontierRow ? normalizeBlob(frontierRow.frontier) : new Uint8Array(),
+      }
+    })
   }
 
   async readFrontier({ docRef }: ReadFrontierInput): Promise<ReadFrontierResult> {

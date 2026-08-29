@@ -18,11 +18,12 @@ import { isStoredDocumentUnreadableError } from '../index.js'
  *   was saved with. A snapshot plus later deltas is a document whose frontier
  *   has moved on; answering with the stale one would tell a caller it is
  *   caught up when it is not.
- * - **`loadDeltas` ignores `sinceFrontier`** and returns the whole log.
- *   Comparing frontiers needs the loro-crdt runtime, which a store does not
- *   have — `Frontier` is an opaque `Uint8Array` at this layer. Returning
- *   everything is a superset of the correct answer for every caller, so a
- *   store that later learns to filter stays compatible.
+ * - **`loadDeltas` tails by SEQ, not by frontier.** Comparing frontiers needs
+ *   the loro-crdt runtime, which a store does not have — `Frontier` is an
+ *   opaque `Uint8Array` at this layer. The seq a store already assigns costs
+ *   it nothing. The cursor is the PAIR `(generation, afterSeq)`: a seq is
+ *   monotonic only within a generation, because a fold that empties the log
+ *   lets the next append reuse seqs a caller has already consumed.
  */
 export function describeDocumentStoreConformance(
   makeStore: () => Promise<{
@@ -217,7 +218,7 @@ export function describeDocumentStoreConformance(
 
     it('answers an empty delta log for a document it has never seen', async () => {
       await withStore(async (store) => {
-        const result = await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })
+        const result = await store.loadDeltas({ docRef: DOC, afterSeq: null })
         expect(result.updates).toEqual([])
         expect([...result.frontier]).toEqual([])
       })
@@ -310,20 +311,92 @@ export function describeDocumentStoreConformance(
           docRef: DOC,
           deltaBatch: { updates: [bytes(2), bytes(3)], newFrontier: bytes(3) },
         })
-        const loaded = await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })
+        const loaded = await store.loadDeltas({ docRef: DOC, afterSeq: null })
         expect(loaded.updates.map((update) => [...update])).toEqual([[1], [2], [3]])
         expect([...loaded.frontier]).toEqual([3])
       })
     })
 
-    it('ignores sinceFrontier and returns the whole log', async () => {
+    /**
+     * The incremental tail, which `sinceFrontier` promised and no
+     * implementation ever delivered.
+     *
+     * It is a SEQ and not a frontier because comparing frontiers needs the
+     * loro-crdt runtime and a store does not have one — `Frontier` is an
+     * opaque `Uint8Array` at this layer. A seq the store already assigns
+     * costs it nothing, and CRDT updates are idempotent, so a cursor that
+     * over-delivers is merely slower rather than wrong.
+     */
+    it('answers only the log after the cursor, and says where to resume', async () => {
       await withStore(async (store) => {
         await store.appendDeltas({
           docRef: DOC,
           deltaBatch: { updates: [bytes(1), bytes(2)], newFrontier: bytes(2) },
         })
-        const loaded = await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes(2) })
-        expect(loaded.updates.map((update) => [...update])).toEqual([[1], [2]])
+        const all = await store.loadDeltas({ docRef: DOC, afterSeq: null })
+        expect(all.updates.map((update) => [...update])).toEqual([[1], [2]])
+        expect(all.lastSeq).not.toBeNull()
+
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(3)], newFrontier: bytes(3) },
+        })
+        const tail = await store.loadDeltas({ docRef: DOC, afterSeq: all.lastSeq })
+        expect(tail.updates.map((update) => [...update])).toEqual([[3]])
+        // Resuming from the new cursor answers nothing, and keeps answering
+        // nothing — a tail that re-delivered its last batch forever would
+        // pass every assertion above.
+        const caughtUp = await store.loadDeltas({ docRef: DOC, afterSeq: tail.lastSeq })
+        expect(caughtUp.updates).toEqual([])
+        expect(caughtUp.lastSeq).toBe(tail.lastSeq)
+      })
+    })
+
+    it('reports no cursor for a log that is empty', async () => {
+      await withStore(async (store) => {
+        expect((await store.loadDeltas({ docRef: DOC, afterSeq: null })).lastSeq).toBeNull()
+      })
+    })
+
+    /**
+     * Why the cursor is a PAIR, and the one thing a tailing reader must not
+     * get wrong.
+     *
+     * A seq is monotonic only within a generation. `appendDeltas` assigns
+     * from the highest seq present, so a fold that empties the log lets the
+     * next append reuse seqs the caller has already consumed — and a tail
+     * holding one of them would skip real updates. The fold changes the
+     * generation, which is the signal that the prefix is gone and the
+     * snapshot has to be re-read; `loadDeltas` reports it for exactly that.
+     */
+    it('reports the snapshot generation alongside the log, and changes it on a fold', async () => {
+      await withStore(async (store) => {
+        await store.saveSnapshot({ docRef: DOC, ...chunked([bytes(1)]), frontier: bytes(1) })
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(2)], newFrontier: bytes(2) },
+        })
+        const before = await store.loadDeltas({ docRef: DOC, afterSeq: null })
+        expect(before.generation).not.toBeNull()
+
+        await foldAccepted(store, {
+          docRef: DOC,
+          ...chunked([bytes(1, 2)]),
+          frontier: bytes(2),
+          supersededDeltaCount: 1,
+        })
+        const after = await store.loadDeltas({ docRef: DOC, afterSeq: before.lastSeq })
+        expect(after.generation).not.toBe(before.generation)
+      })
+    })
+
+    it('reports a null generation for a log with no snapshot behind it', async () => {
+      await withStore(async (store) => {
+        await store.appendDeltas({
+          docRef: DOC,
+          deltaBatch: { updates: [bytes(1)], newFrontier: bytes(1) },
+        })
+        expect((await store.loadDeltas({ docRef: DOC, afterSeq: null })).generation).toBeNull()
       })
     })
 
@@ -335,9 +408,7 @@ export function describeDocumentStoreConformance(
           deltaBatch: { updates: [bytes(9)], newFrontier: bytes(9) },
         })
         expect(await store.loadSnapshot({ docRef: OTHER })).toBeNull()
-        expect((await store.loadDeltas({ docRef: OTHER, sinceFrontier: bytes() })).updates).toEqual(
-          [],
-        )
+        expect((await store.loadDeltas({ docRef: OTHER, afterSeq: null })).updates).toEqual([])
       })
     })
 
@@ -362,9 +433,7 @@ export function describeDocumentStoreConformance(
 
         expect(await store.loadSnapshot({ docRef: DOC })).toBeNull()
         expect(await store.readFrontier({ docRef: DOC })).toBeNull()
-        expect((await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })).updates).toEqual(
-          [],
-        )
+        expect((await store.loadDeltas({ docRef: DOC, afterSeq: null })).updates).toEqual([])
         // The neighbour is untouched — a delete that takes the store with it
         // would pass every assertion above.
         expect(await store.loadSnapshot({ docRef: OTHER })).not.toBeNull()
@@ -392,9 +461,7 @@ export function describeDocumentStoreConformance(
 
         const loaded = await store.loadSnapshot({ docRef: DOC })
         expect(loaded?.chunks.map((chunk) => [...chunk.bytes])).toEqual([[1, 2, 3]])
-        expect((await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })).updates).toEqual(
-          [],
-        )
+        expect((await store.loadDeltas({ docRef: DOC, afterSeq: null })).updates).toEqual([])
         // The frontier is NOT rolled back to before the deltas: they are in
         // the snapshot now, so the document is still as far along as it was.
         expect([...((await store.readFrontier({ docRef: DOC }))?.frontier ?? [])]).toEqual([3])
@@ -413,9 +480,7 @@ export function describeDocumentStoreConformance(
           frontier: bytes(1),
           supersededDeltaCount: 0,
         })
-        expect(
-          (await store.loadDeltas({ docRef: OTHER, sinceFrontier: bytes() })).updates.length,
-        ).toBe(1)
+        expect((await store.loadDeltas({ docRef: OTHER, afterSeq: null })).updates.length).toBe(1)
       })
     })
 
@@ -449,7 +514,7 @@ export function describeDocumentStoreConformance(
         })
         await Promise.all([compacting, appending])
 
-        const { updates } = await store.loadDeltas({ docRef: DOC, sinceFrontier: bytes() })
+        const { updates } = await store.loadDeltas({ docRef: DOC, afterSeq: null })
         // `[3]` MUST survive. It cannot be in the compacted snapshot: the
         // caller folded before it existed. So a store that cleared it lost an
         // edit — which is the only outcome this case rejects, and an empty

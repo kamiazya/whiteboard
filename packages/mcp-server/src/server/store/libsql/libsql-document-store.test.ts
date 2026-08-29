@@ -69,7 +69,7 @@ describe('LibsqlDocumentStore', () => {
 
     expect(await store.readFrontier({ docRef })).toEqual({ frontier: new Uint8Array([2]) })
 
-    const loaded = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    const loaded = await store.loadDeltas({ docRef, afterSeq: null })
     expect(loaded.updates).toEqual([updateA, updateB])
     expect(loaded.frontier).toEqual(new Uint8Array([2]))
   })

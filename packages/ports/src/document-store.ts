@@ -117,13 +117,50 @@ export type AppendDeltasInput = z.infer<typeof appendDeltasInputSchema>
 export const appendDeltasResultSchema = z.object({ frontier: frontierSchema }).strict()
 export type AppendDeltasResult = z.infer<typeof appendDeltasResultSchema>
 
+/**
+ * A position in a document's delta log.
+ *
+ * A SEQ rather than a frontier, because comparing frontiers needs the
+ * loro-crdt runtime and a store does not have one — `Frontier` is an opaque
+ * `Uint8Array` at this layer, which is why the frontier-shaped parameter this
+ * replaced was ignored by every implementation that ever had it. The seq a
+ * store already assigns to order the log costs it nothing, and CRDT updates
+ * are idempotent, so a cursor that over-delivers is slower rather than wrong.
+ */
+export const deltaSeqSchema = z.number().int().min(0)
+export type DeltaSeq = z.infer<typeof deltaSeqSchema>
+
 export const loadDeltasInputSchema = z
-  .object({ docRef: docRefSchema, sinceFrontier: frontierSchema })
+  .object({
+    docRef: docRefSchema,
+    /** Exclusive. `null` asks for the whole log. */
+    afterSeq: deltaSeqSchema.nullable(),
+  })
   .strict()
 export type LoadDeltasInput = z.infer<typeof loadDeltasInputSchema>
 
 export const loadDeltasResultSchema = z
-  .object({ updates: z.array(z.instanceof(Uint8Array)), frontier: frontierSchema })
+  .object({
+    updates: z.array(z.instanceof(Uint8Array)),
+    /**
+     * The highest seq in the log at read time, whatever was returned, so a
+     * caught-up caller still learns where to resume. `null` for an empty log.
+     */
+    lastSeq: deltaSeqSchema.nullable(),
+    /**
+     * The snapshot generation at read time, or `null` when the log has no
+     * snapshot behind it.
+     *
+     * A tailing reader's cursor is the PAIR `(generation, afterSeq)`, and this
+     * is the half that keeps it honest: a seq is monotonic only WITHIN a
+     * generation. `appendDeltas` assigns from the highest seq present, so a
+     * fold that empties the log lets the next append reuse seqs the reader has
+     * already consumed. A generation that differs from the one the reader
+     * holds means its prefix was folded away and the snapshot must be re-read.
+     */
+    generation: snapshotGenerationSchema.nullable(),
+    frontier: frontierSchema,
+  })
   .strict()
 export type LoadDeltasResult = z.infer<typeof loadDeltasResultSchema>
 

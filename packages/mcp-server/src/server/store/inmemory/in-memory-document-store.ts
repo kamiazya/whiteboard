@@ -36,6 +36,10 @@ interface DocRecord {
   } | null
   readonly frontier: Frontier | null
   readonly deltas: readonly Uint8Array[]
+  /** The seq the NEXT appended update gets. Monotonic across truncations —
+   *  `deltas[i]` carries `nextSeq - deltas.length + i` — which is what lets a
+   *  tail resume without re-reading what it has. */
+  readonly nextSeq: number
   /** ADR-0020's fencing token. Advanced by every write that replaces the
    *  snapshot; meaningless while `snapshot` is null. */
   readonly generation: number
@@ -43,7 +47,7 @@ interface DocRecord {
 }
 
 function emptyRecord(): DocRecord {
-  return { snapshot: null, frontier: null, deltas: [], generation: 0 }
+  return { snapshot: null, frontier: null, deltas: [], nextSeq: 1, generation: 0 }
 }
 
 function cloneChunk(chunk: SnapshotChunk): SnapshotChunk {
@@ -155,6 +159,9 @@ export class InMemoryDocumentStore implements DocumentStore {
       // Exactly the superseded prefix. Anything appended after the caller
       // folded is not in the snapshot and stays.
       deltas: existing.deltas.slice(input.supersededDeltaCount),
+      // NOT reset. A fold shortens the array without moving the seqs already
+      // handed out, which is what keeps a tail's cursor meaningful across it.
+      nextSeq: existing.nextSeq,
       generation,
     })
     return { ok: true, generation }
@@ -167,28 +174,30 @@ export class InMemoryDocumentStore implements DocumentStore {
     this.docs.set(key, {
       ...existing,
       deltas: [...existing.deltas, ...input.deltaBatch.updates.map(cloneBytes)],
+      nextSeq: existing.nextSeq + input.deltaBatch.updates.length,
       frontier,
     })
     return { frontier: cloneBytes(frontier) }
   }
 
   /**
-   * `sinceFrontier` is intentionally ignored: comparing frontiers is a
-   * loro-crdt runtime concern (frontiers are an opaque `Uint8Array` at the
-   * `ports` contract layer), not something this in-memory test
-   * double can do on its own. It always returns the full accumulated delta
-   * log for the doc; a future libSQL-backed store that actually filters by
-   * frontier remains behaviorally compatible with every caller of this
-   * double because "everything since the start" is always a superset of
-   * "everything since `sinceFrontier`".
+   * Tails by seq. `deltas[i]` carries `nextSeq - deltas.length + i`, so a
+   * truncating fold shifts the array without shifting the seqs — which is the
+   * whole point of storing `nextSeq` rather than deriving a position from the
+   * array index.
    */
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
     const record = this.docs.get(docRefKey(input.docRef))
     if (!record) {
-      return { updates: [], frontier: new Uint8Array() }
+      return { updates: [], lastSeq: null, generation: null, frontier: new Uint8Array() }
     }
+    const firstSeq = record.nextSeq - record.deltas.length
+    const after = input.afterSeq ?? firstSeq - 1
+    const updates = record.deltas.filter((_, index) => firstSeq + index > after).map(cloneBytes)
     return {
-      updates: record.deltas.map(cloneBytes),
+      updates,
+      lastSeq: record.deltas.length === 0 ? null : record.nextSeq - 1,
+      generation: record.snapshot === null ? null : record.generation,
       frontier: record.frontier ? cloneBytes(record.frontier) : new Uint8Array(),
     }
   }

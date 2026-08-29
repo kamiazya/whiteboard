@@ -278,7 +278,7 @@ describe('saveDocument / loadDocument', () => {
     // the first save wrote.
     expect(await store.readSnapshotManifest({ docRef })).toEqual(baseline)
     // And the edit is in the delta log, small.
-    const { updates } = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    const { updates } = await store.loadDeltas({ docRef, afterSeq: null })
     expect(updates).toHaveLength(1)
     expect(updates[0]!.byteLength).toBeLessThan(baseline!.manifest.totalBytes / 10)
   })
@@ -302,7 +302,7 @@ describe('saveDocument / loadDocument', () => {
     const db = await getDb(tempDir)
     const store = new LibsqlDocumentStore(db)
     const docRef = { kind: 'workspace-tree' as const, workspaceId: 'session1' }
-    const { updates } = await store.loadDeltas({ docRef, sinceFrontier: new Uint8Array() })
+    const { updates } = await store.loadDeltas({ docRef, afterSeq: null })
     // Exactly what the CONTENT-BEARING save appended (the record is minted
     // empty at workspace creation, so the first content arrives as one
     // delta) — and not one entry more. An update carrying no ops is still

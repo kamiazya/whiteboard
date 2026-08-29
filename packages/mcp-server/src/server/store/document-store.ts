@@ -857,7 +857,7 @@ export async function compactDocument(
     const { manifest } = header
     const { updates: storedDeltas } = await documentStore.loadDeltas({
       docRef,
-      sinceFrontier: new Uint8Array(),
+      afterSeq: null,
     })
     const beforeBytes =
       manifest.totalBytes + storedDeltas.reduce((sum, delta) => sum + delta.byteLength, 0)

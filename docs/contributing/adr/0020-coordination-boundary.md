@@ -64,15 +64,11 @@ paragraph exists.
    append path is the writing process's own `doc.oplogVersion()`, so a second
    writer's frontier overwrites the first's rather than joining with it. What
    this produces is an UNDER-claim — the record reports a version older than
-   the log it holds — so today it costs a redundant export rather than an op,
-   and every current reader is safe. It is nonetheless wrong, and it is
-   currently invisible because `loadDeltas` ignores `sinceFrontier` and
-   returns the whole log, a behaviour the port's own conformance suite pins
-   (`packages/ports/src/test-utils/document-store-conformance.ts`, "ignores
-   sinceFrontier and returns the whole log"). Anything that later reports sync
-   status, or decides what to send a peer, reads this value and would be told
-   the record is behind when it is not. The fold path now writes the merged
-   version vector; the append path is the increment still outstanding.
+   the log it holds — so it costs a redundant export rather than an op, and
+   every reader is safe. It is nonetheless wrong: anything that later reports
+   sync status reads this value and would be told the record is behind when it
+   is not. The fold path now writes the merged version vector; the append path
+   does not, and is left that way deliberately (see decision 5).
 
 4. **State outside the CRDT.** Blobs and versions are files
    (`FileVersionStore` writes `<dataDir>/blobs/<workspaceId>/versions/*.png`),
@@ -146,6 +142,30 @@ election may be added later to stop several processes doing the same
 discardable work, and when it is, it is rented too (a `leases` table, a
 Postgres advisory lock, or a Kubernetes `Lease` — never a bespoke
 implementation).
+
+**5. A tailing reader's cursor is `(generation, afterSeq)`, not a frontier.**
+Cross-instance propagation needs to ask "what has arrived since I last
+looked". The obvious answer is a frontier, and it is the wrong one: comparing
+or joining frontiers needs the loro-crdt runtime, which a store must not have
+— `Frontier` is an opaque `Uint8Array` at the port layer. That is why
+`loadDeltas`' frontier-shaped parameter was ignored by every implementation
+that ever had it, in three stores and a conformance suite that pinned the
+omission as the contract.
+
+The seq a store already assigns to order its log costs it nothing, and CRDT
+updates are idempotent, so a cursor that over-delivers is slower rather than
+wrong. The catch is that a seq is monotonic only WITHIN a generation:
+`appendDeltas` assigns from the highest seq present, so a fold that empties
+the log lets the next append reuse seqs a reader has already consumed. The
+generation from decision 3 is exactly the signal that the prefix is gone and
+the snapshot must be re-read, so the two compose into one cursor rather than
+needing a second mechanism.
+
+This is also why the frontier's remaining last-write-wins flaw is not
+scheduled: nothing in the propagation path reads it. Making it a version-vector
+join would need a runtime seam threaded through every store — the same seam a
+frontier-based tail would have needed — to correct a value whose only job is
+to be reported.
 
 **4. Invariants a CRDT cannot preserve are resolved by deterministic
 convergence, not by a uniqueness authority.** Path uniqueness is settled

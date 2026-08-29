@@ -122,6 +122,10 @@ const syncRecordSchema = z
     // race this arbitrates is not hypothetical here — it is the same race the
     // daemon has between processes.
     generation: z.number().int().min(0),
+    // The seq the NEXT appended update gets. `deltas[i]` carries
+    // `nextSeq - deltas.length + i`, so a truncating fold shortens the array
+    // without moving the positions already handed out.
+    nextSeq: z.number().int().min(1),
   })
   .strict()
   .refine((record) => record.snapshot === null || record.frontier !== null, {
@@ -136,6 +140,7 @@ const EMPTY_RECORD: SyncRecord = {
   frontier: null,
   deltas: [],
   generation: 0,
+  nextSeq: 1,
 }
 
 /**
@@ -171,7 +176,17 @@ function parseRecord(key: string, raw: unknown): SyncRecord {
   // Lifted on READ rather than by a sweep: the next write emits v3, and a
   // document nobody opens costs nothing by staying as it is.
   const legacy = syncRecordV2Schema.safeParse(raw)
-  if (legacy.success) return { ...legacy.data, v: 3, generation: 1 }
+  if (legacy.success) {
+    // Its existing log gets seqs 1..n, which is what a v3 record that had
+    // appended them would hold. Nothing has read a position out of a v2
+    // record, so no cursor can disagree with the one invented here.
+    return {
+      ...legacy.data,
+      v: 3,
+      generation: 1,
+      nextSeq: legacy.data.deltas.length + 1,
+    }
+  }
   const version = (raw as { v?: unknown } | null)?.v
   if (typeof version === 'number' && version !== 2 && version !== 3) {
     throw new StoredDocumentUnreadableError(
@@ -352,6 +367,7 @@ export class IdbDocumentStore implements DocumentStore {
       const next: SyncRecord = {
         ...record,
         deltas: [...record.deltas, ...input.deltaBatch.updates.map(copy)],
+        nextSeq: record.nextSeq + input.deltaBatch.updates.length,
         frontier,
       }
       await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))
@@ -360,17 +376,23 @@ export class IdbDocumentStore implements DocumentStore {
   }
 
   /**
-   * `sinceFrontier` is ignored, deliberately and in agreement with every other
-   * implementation: comparing frontiers needs the loro-crdt runtime, and a
-   * `Frontier` is an opaque `Uint8Array` at this layer. The whole log is a
-   * superset of the correct answer for every caller, so a store that later
-   * learns to filter stays compatible with all of them.
+   * Tails by seq. `deltas[i]` carries `nextSeq - deltas.length + i`, so the
+   * position survives a truncating fold that the array index would not.
    */
   async loadDeltas(input: LoadDeltasInput): Promise<LoadDeltasResult> {
-    let result: LoadDeltasResult = { updates: [], frontier: new Uint8Array() }
+    let result: LoadDeltasResult = {
+      updates: [],
+      lastSeq: null,
+      generation: null,
+      frontier: new Uint8Array(),
+    }
     await this.#read('readonly', docRefKey(input.docRef), [SYNC_DOCUMENTS_STORE], (record) => {
+      const firstSeq = record.nextSeq - record.deltas.length
+      const after = input.afterSeq ?? firstSeq - 1
       result = {
-        updates: record.deltas.map(copy),
+        updates: record.deltas.filter((_, index) => firstSeq + index > after).map(copy),
+        lastSeq: record.deltas.length === 0 ? null : record.nextSeq - 1,
+        generation: record.snapshot === null ? null : record.generation,
         frontier: record.frontier === null ? new Uint8Array() : copy(record.frontier),
       }
     })
@@ -419,6 +441,9 @@ export class IdbDocumentStore implements DocumentStore {
           // prefix. Anything appended after the caller folded is not in the
           // snapshot, so clearing the whole log would lose it.
           deltas: record.deltas.slice(input.supersededDeltaCount),
+          // NOT reset: a fold shortens the array without moving the seqs
+          // already handed out.
+          nextSeq: record.nextSeq,
           generation,
         }
         await request(tx.objectStore(SYNC_DOCUMENTS_STORE).put(next, key))

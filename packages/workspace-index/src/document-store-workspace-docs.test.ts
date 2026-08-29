@@ -33,6 +33,9 @@ interface StoredDoc {
   chunks: SaveSnapshotInput['chunks']
   frontier: Uint8Array<ArrayBuffer>
   deltas: Uint8Array<ArrayBuffer>[]
+  /** The seq the next appended update gets — implemented rather than stubbed,
+   *  so this double cannot report a cursor the real stores would not. */
+  nextSeq: number
   /** ADR-0020's fence, implemented for real here: the save path's refusal
    *  branch is only reachable against a store that can refuse. */
   generation: number
@@ -82,6 +85,7 @@ class FakeDocumentStore implements DocumentStore {
       chunks,
       frontier,
       deltas: [],
+      nextSeq: previous?.nextSeq ?? 1,
       generation: (previous?.generation ?? 0) + 1,
     })
   }
@@ -108,6 +112,7 @@ class FakeDocumentStore implements DocumentStore {
       chunks,
       frontier,
       deltas: surviving,
+      nextSeq: stored?.nextSeq ?? 1,
       generation,
     })
     return { ok: true, generation }
@@ -117,13 +122,24 @@ class FakeDocumentStore implements DocumentStore {
     const stored = this.docs.get(docRefKey(docRef))
     if (stored === undefined) throw new Error('append without a snapshot')
     stored.deltas.push(...deltaBatch.updates)
+    stored.nextSeq += deltaBatch.updates.length
     stored.frontier = deltaBatch.newFrontier
     return { frontier: stored.frontier }
   }
 
-  async loadDeltas({ docRef }: LoadDeltasInput): Promise<LoadDeltasResult> {
+  async loadDeltas({ docRef, afterSeq }: LoadDeltasInput): Promise<LoadDeltasResult> {
     const stored = this.docs.get(docRefKey(docRef))
-    return { updates: stored?.deltas ?? [], frontier: stored?.frontier ?? new Uint8Array() }
+    if (stored === undefined) {
+      return { updates: [], lastSeq: null, generation: null, frontier: new Uint8Array() }
+    }
+    const firstSeq = stored.nextSeq - stored.deltas.length
+    const after = afterSeq ?? firstSeq - 1
+    return {
+      updates: stored.deltas.filter((_, index) => firstSeq + index > after),
+      lastSeq: stored.deltas.length === 0 ? null : stored.nextSeq - 1,
+      generation: stored.manifest === null ? null : stored.generation,
+      frontier: stored.frontier,
+    }
   }
 
   async readFrontier({ docRef }: ReadFrontierInput): Promise<ReadFrontierResult> {
