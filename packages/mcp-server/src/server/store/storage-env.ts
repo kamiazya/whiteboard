@@ -1,3 +1,4 @@
+import { isAbsolute } from 'node:path'
 import type { EnvIssue, ParsedSetting } from '../../shared/env-setting.js'
 import { parseOptionalMilliseconds } from '../../shared/env-setting.js'
 import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
@@ -19,6 +20,9 @@ import { DB_URL_ENV, resolveDatabaseLocation } from './db/location.js'
 const FILE_GC_INTERVAL_ENV = 'WHITEBOARD_FILE_GC_INTERVAL_MS'
 const FILE_GC_GRACE_ENV = 'WHITEBOARD_FILE_GC_GRACE_MS'
 const WORKSPACE_TAIL_ENV = 'WHITEBOARD_WORKSPACE_TAIL_MS'
+const BACKUP_DIR_ENV = 'WHITEBOARD_BACKUP_DIR'
+const BACKUP_INTERVAL_ENV = 'WHITEBOARD_BACKUP_INTERVAL_MS'
+const BACKUP_KEEP_ENV = 'WHITEBOARD_BACKUP_KEEP'
 
 /** How often the file-GC sweeper runs. `0` disables it. */
 export function parseFileGcIntervalMs(
@@ -49,6 +53,65 @@ export function parseWorkspaceTailMs(
 }
 
 /**
+ * Where scheduled backups are written, or `null` for "do not take any".
+ *
+ * ADR-0021 decision 4 says a backup should be handled rather than remembered,
+ * and this is the setting that arms it. It is nevertheless OFF by default,
+ * because there is no destination worth guessing: writing copies beside the
+ * data they protect is not a backup, and anywhere else is a path only the
+ * operator knows.
+ *
+ * Absolute only. A relative path resolves against the process's working
+ * directory, which for a daemon is whatever the init system happened to pick
+ * — so `./backups` would mean something specific to the operator and land
+ * somewhere else.
+ */
+export function parseBackupDir(env: NodeJS.ProcessEnv = process.env): ParsedSetting<string | null> {
+  const trimmed = env[BACKUP_DIR_ENV]?.trim()
+  if (trimmed === undefined || trimmed === '') return { ok: true, value: null }
+  if (!isAbsolute(trimmed)) {
+    return {
+      ok: false,
+      reason:
+        "must be an absolute path; a relative one resolves against the daemon's working directory",
+    }
+  }
+  return { ok: true, value: trimmed }
+}
+
+/** How often a scheduled backup runs. `null` leaves the caller's default. */
+export function parseBackupIntervalMs(
+  env: NodeJS.ProcessEnv = process.env,
+): ParsedSetting<number | null> {
+  return parseOptionalMilliseconds(env[BACKUP_INTERVAL_ENV], null)
+}
+
+/**
+ * How many scheduled backups to keep. `null` leaves the caller's default.
+ *
+ * `0` is refused rather than treated as "off": it would mean taking a backup
+ * and then deleting every backup including the one just taken, which is a
+ * pass that does nothing but spend disk and IO. Unsetting the destination is
+ * how an operator turns this off.
+ */
+export function parseBackupKeep(
+  env: NodeJS.ProcessEnv = process.env,
+): ParsedSetting<number | null> {
+  const trimmed = env[BACKUP_KEEP_ENV]?.trim()
+  if (trimmed === undefined || trimmed === '') return { ok: true, value: null }
+  if (!/^\d+$/.test(trimmed)) return { ok: false, reason: 'must be a whole number of backups' }
+  const parsed = Number(trimmed)
+  if (parsed === 0) {
+    return {
+      ok: false,
+      reason: 'must keep at least one backup; unset the destination to turn scheduled backups off',
+    }
+  }
+  if (!Number.isSafeInteger(parsed)) return { ok: false, reason: 'is too large to be a count' }
+  return { ok: true, value: parsed }
+}
+
+/**
  * Every storage setting this process cannot honour, in one pass.
  *
  * All of them rather than the first: an operator fixing a misconfiguration
@@ -65,9 +128,28 @@ export function collectStorageEnvIssues(
     [FILE_GC_INTERVAL_ENV, parseFileGcIntervalMs],
     [FILE_GC_GRACE_ENV, parseFileGcGraceMs],
     [WORKSPACE_TAIL_ENV, parseWorkspaceTailMs],
+    [BACKUP_DIR_ENV, parseBackupDir],
+    [BACKUP_INTERVAL_ENV, parseBackupIntervalMs],
+    [BACKUP_KEEP_ENV, parseBackupKeep],
   ] as const) {
     const parsed = parse(env)
     if (!parsed.ok) issues.push({ variable, reason: parsed.reason })
+  }
+
+  // A destination is what arms the pass, so an interval or a retention count
+  // without one configures nothing — and looks from the outside exactly like
+  // a configuration that works. That is the shape this whole area exists to
+  // remove, so it is said at startup rather than ignored.
+  const destination = parseBackupDir(env)
+  if (destination.ok && destination.value === null) {
+    for (const variable of [BACKUP_INTERVAL_ENV, BACKUP_KEEP_ENV]) {
+      if ((env[variable]?.trim() ?? '') !== '') {
+        issues.push({
+          variable,
+          reason: `has no effect without ${BACKUP_DIR_ENV}, which is what turns scheduled backups on`,
+        })
+      }
+    }
   }
 
   // The database URL already aborts by throwing from wherever it is first

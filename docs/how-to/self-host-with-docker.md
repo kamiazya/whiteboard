@@ -136,6 +136,19 @@ waits for it to exit cleanly. The server handles SIGTERM gracefully.
 The `whiteboard server backup` and `whiteboard server restore` CLI commands
 provide the operator-facing surface for data backup and restore.
 
+**You can have this handled rather than remembered.** Set
+`WHITEBOARD_BACKUP_DIR` to an absolute path on a volume that is not the data
+volume, and the daemon takes a backup on a schedule — the same pass
+`whiteboard server backup` runs, into one timestamped directory per run, with
+`WHITEBOARD_BACKUP_KEEP` older ones retained. The explicit command keeps its
+value for a migration, a support copy, or a snapshot before a risky change,
+but it stops being the only way anything gets backed up. A backup you have to
+remember to take is one taken rarely or never, and the interval between
+backups is the data you lose.
+
+Setting an interval or a retention count WITHOUT a destination aborts startup:
+that combination configures nothing while looking exactly like one that works.
+
 **Constraints:**
 - **You no longer need to stop the container to take a backup.** The rows are
   captured through the database rather than by reading its files, every write

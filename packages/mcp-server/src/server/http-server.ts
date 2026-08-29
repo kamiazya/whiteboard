@@ -28,6 +28,7 @@ import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
+import { createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
 import {
@@ -36,6 +37,7 @@ import {
   getWorkspaceDoc,
 } from './store/document-store.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
+import { parseBackupDir, parseBackupIntervalMs, parseBackupKeep } from './store/storage-env.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
 
@@ -63,6 +65,11 @@ export interface StartHttpServerOptions {
    *  exactly once, and only when configured" is the part that would fail
    *  silently. */
   workspaceTailFactory?: typeof createWorkspaceTail
+  /** Test seam, matching the two above. Composition is the one thing a unit
+   *  test of the scheduler itself cannot reach, and "started and stopped
+   *  exactly once, and only when a destination is configured" is the part
+   *  that would fail silently. */
+  backupSchedulerFactory?: typeof createBackupScheduler
   /** Test-only seam: overrides `process.exit` for the fatal-bind-error path
    *  below, so a test can observe the exit call instead of actually killing
    *  the test process. */
@@ -111,6 +118,24 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // Off unless an operator turns it on: one daemon learns about its own
   // writes through `onWorkspaceDocUpdated` already, and polling for a second
   // instance that does not exist is pure cost. See ADR-0020.
+  // Off unless a destination is configured (ADR-0021 decision 4). The ADR
+  // asks for backups to be handled rather than remembered, and this is what
+  // handles them — but there is no destination worth guessing, so an operator
+  // still has to say where. `collectStorageEnvIssues` refuses an interval or
+  // a retention count set without one, so a half-configured schedule fails at
+  // startup rather than silently doing nothing.
+  const backupDir = parseBackupDir(process.env)
+  const backupIntervalMs = parseBackupIntervalMs(process.env)
+  const backupKeep = parseBackupKeep(process.env)
+  const backupScheduler = (options.backupSchedulerFactory ?? createBackupScheduler)({
+    dataDir: getDataDir(),
+    backupDir: backupDir.ok ? backupDir.value : null,
+    ...(backupIntervalMs.ok && backupIntervalMs.value !== null
+      ? { intervalMs: backupIntervalMs.value }
+      : {}),
+    ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
+  })
+
   const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
   const workspaceTail =
     workspaceTailIntervalMs === null
@@ -168,6 +193,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   const performClose = async (): Promise<void> => {
     idleTimer.stop()
     await workspaceTail?.stop()
+    await backupScheduler.stop()
     await fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     setRuntimeTouchFn(() => {})
 
@@ -276,6 +302,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   idleTimer.start()
   fileGcSweeper.start()
   workspaceTail?.start()
+  backupScheduler.start()
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
   // `serve()` returns before the underlying bind resolves, so a bind failure
@@ -294,6 +321,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     // hosts this call for the seam's lifetime.
     idleTimer.stop()
     void workspaceTail?.stop()
+    void backupScheduler.stop()
     void fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
     ;(options.exitProcess ?? process.exit)(1)
   })

@@ -1,11 +1,11 @@
 # ADR-0021: Durability is a property of each store, not an operation on a directory
 
-**Status:** Accepted — decisions 2 and 3 implemented (a database we do not
+**Status:** Accepted — decisions 2, 3 and 4 implemented (a database we do not
 host is reported out of scope rather than refused wholesale; the rows are
 captured by a hot snapshot, so backup no longer requires stopping the
-server), plus the first slice of decision 1's per-store record. Decisions
-4, 5 and 6 are not: `backup-retention.ts` and its property hold decision
-6's invariant but nothing wires them yet.
+server; backups run on a schedule), plus the first slice of decision 1's
+per-store record. Decisions 5 and 6 are not: `backup-retention.ts` and its
+property hold decision 6's invariant but nothing wires them yet.
 
 ## Context
 
@@ -195,6 +195,25 @@ The periodic-pass shape already exists twice in this codebase
 (`file-gc-sweeper` and `workspace-tail`): a completion-rescheduled unref'd
 one-shot, off unless configured, strict interval parsing. This is not new
 machinery, and it should not be built as though it were.
+
+**Implemented** as `backup-scheduler.ts`, with `performBackup` extracted so
+the schedule and the CLI share one implementation rather than two — the CLI is
+now argument handling and nothing else.
+
+One thing this decision says that the implementation does not: "scheduled by
+default". There is no destination worth defaulting to. Writing copies beside
+the data they protect is not a backup, and anywhere else is a path only the
+operator knows — so `WHITEBOARD_BACKUP_DIR` arms it, matching what
+`workspace-tail` already does for the same reason. What the decision's intent
+survives as: setting an interval or a retention count WITHOUT a destination
+aborts startup, because that combination configures nothing while looking from
+the outside exactly like one that works.
+
+Retention ships with it. An automatic daily backup with no bound fills the
+disk, which costs the operator the running server as well as the backups. It
+counts only directories the scheduler wrote, and does not run at all after a
+failed pass — deleting on the way to a backup that then failed is how someone
+ends up with fewer backups than before they turned this on.
 
 ### 5. A blob's durable copy is a mirror, and the mirror never deletes on garbage collection's behalf
 
