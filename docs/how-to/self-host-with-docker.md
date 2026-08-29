@@ -137,9 +137,22 @@ The `whiteboard server backup` and `whiteboard server restore` CLI commands
 provide the operator-facing surface for data backup and restore.
 
 **Constraints:**
-- Stop the container before taking a backup. Never run backup against a live
-  data volume — the CLI checks for a running `server-mode.json` record and
-  refuses if the server process is still alive.
+- **You no longer need to stop the container to take a backup.** The rows are
+  captured through the database rather than by reading its files, every write
+  into the data directory lands atomically, and file-GC stands down for the
+  duration — so a backup taken while the server serves is a consistent one.
+  A backup that requires downtime is one you take rarely or never, and the
+  interval between backups is the data you lose.
+
+  `restore` still requires the target to be stopped and empty: it is putting
+  a whole data directory back, not reading one.
+- **A backup never carries `daemon.json`.** That file holds the Bearer token
+  the daemon authenticates HTTP and WS with, and is written owner-only for
+  that reason. A backup directory is the opposite of owner-only, so it is
+  excluded — along with the staging directory for in-flight writes and the
+  backup's own progress marker. A restored deployment writes a fresh daemon
+  record on first start.
+
 - **The data directory holds three database files, not one.** The database
   runs in WAL mode, so `whiteboard.db` is accompanied by `whiteboard.db-wal`
   and `whiteboard.db-shm`. They are one artifact: the newest commits live in

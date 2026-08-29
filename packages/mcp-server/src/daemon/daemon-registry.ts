@@ -6,7 +6,12 @@ import { type DaemonRecord, daemonRecordSchema } from './daemon-record-schema.js
 
 export type { DaemonRecord } from './daemon-record-schema.js'
 
-const DAEMON_RECORD_FILENAME = 'daemon.json'
+/**
+ * Exported so `backupDataDir` can keep it OUT of a backup. The file holds the
+ * Bearer token the daemon authenticates HTTP and WS with — which is why it is
+ * written 0o600 below — and a backup directory is the opposite of owner-only.
+ */
+export const DAEMON_RECORD_FILENAME = 'daemon.json'
 
 export function getDaemonRecordPath(dataDir: string = DATA_DIR): string {
   return join(dataDir, DAEMON_RECORD_FILENAME)

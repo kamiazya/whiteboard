@@ -2,9 +2,9 @@ import { lstat, mkdir, mkdtemp, realpath, rm, symlink, writeFile } from 'node:fs
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { ServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { BackupError } from '../server/server-mode-backup-restore.js'
+import { backupIsInProgress } from '../server/store/backup-in-progress.js'
 import { writeDatabaseLocationRecord } from '../server/store/db/location-record.js'
 import { runServerBackup } from './server-backup.js'
 
@@ -18,19 +18,6 @@ beforeEach(async () => {
 afterEach(async () => {
   await rm(tmpRoot, { recursive: true, force: true })
 })
-
-function makeRecord(overrides: Partial<ServerModeRecord> = {}): ServerModeRecord {
-  return {
-    schemaVersion: 1,
-    pid: 99999,
-    host: '127.0.0.1',
-    port: 3099,
-    publicBaseUrl: 'https://whiteboard.example.com',
-    authStrategy: 'oauth-jwt',
-    startedAt: '2026-01-01T00:00:00.000Z',
-    ...overrides,
-  }
-}
 
 describe('runServerBackup', () => {
   it('success: calls doBackup with resolved paths and non-tautological allowedRoots', async () => {
@@ -49,8 +36,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -93,8 +78,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {}),
       doSnapshot: async () => {},
     })
@@ -114,8 +97,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: join(link, 'backup'), dataDir: tmpRoot },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
       doSnapshot: async () => {},
     })
@@ -137,8 +118,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {
         throw new BackupError('Backup directory is not empty.')
       }),
@@ -153,31 +132,18 @@ describe('runServerBackup', () => {
     }
   })
 
-  it('running-server: live pid in server-mode.json causes backup to be refused', async () => {
-    const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir: join(tmpRoot, 'out'), dataDir: tmpRoot },
-      env: {},
-      isPidAlive: () => true,
-      doReadRecord: () => ({ kind: 'ok', record: makeRecord({ pid: process.pid }) }),
-      doBackup: vi.fn(),
-    })
-
-    expect(outcome.kind).toBe('running-server')
-  })
-
-  it('running-server: stale (dead) pid is not refused', async () => {
-    const outputDir = join(tmpRoot, 'out')
-
-    const outcome = await runServerBackup({
-      args: { kind: 'ok', json: true, outputDir, dataDir: tmpRoot },
-      env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'ok', record: makeRecord({ pid: 99999 }) }),
-      doBackup: vi.fn(async () => {}),
-    })
-
-    expect(outcome.kind).not.toBe('running-server')
-  })
+  /**
+   * A running server used to be a refusal outright. That is gone, and this is
+   * where the old pair of tests for it lived — the `running-server` outcome
+   * no longer exists, so pinning it would pin nothing.
+   *
+   * What replaced it is exercised in full further down ("runServerBackup
+   * against a running server"): the rows are snapshotted through the database
+   * rather than read out from under a writer, every write into the data
+   * directory lands atomically so a copy cannot pick one up half-written, and
+   * file-GC stands down for the duration so nothing is unlinked between the
+   * snapshot and the copy.
+   */
 
   it('invalid-output-path: symlink output dir is rejected', async () => {
     const realDir = join(tmpRoot, 'real')
@@ -188,8 +154,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: linkPath, dataDir: tmpRoot },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
       doSnapshot: async () => {},
     })
@@ -206,8 +170,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: join(tmpRoot, 'out'), dataDir: link },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
       doSnapshot: async () => {},
     })
@@ -222,8 +184,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir: filePath, dataDir: tmpRoot },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(),
       doSnapshot: async () => {},
     })
@@ -242,8 +202,6 @@ describe('runServerBackup', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: vi.fn(async () => {
         throw new BackupError('some internal error with path /internal/detail')
       }),
@@ -288,8 +246,6 @@ describe('runServerBackup with the database outside the data directory', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -318,8 +274,6 @@ describe('runServerBackup with the database outside the data directory', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: { WHITEBOARD_DATABASE_URL: `file:${join(dataDir, 'whiteboard.db')}` },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -357,8 +311,6 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -377,8 +329,6 @@ describe('runServerBackup judges from the directory, not the invoking shell', ()
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -421,8 +371,6 @@ describe('runServerBackup with a stale database file left behind', () => {
       args: { kind: 'ok', json: true, outputDir, dataDir },
       // The host shell, exactly as the Docker how-to leaves it.
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -456,8 +404,6 @@ describe('runServerBackup with a stale database file left behind', () => {
       // the variable for a DIFFERENT deployment. A clean env would agree with
       // the record for its own reason and prove nothing.
       env: { WHITEBOARD_DATABASE_URL: 'libsql://other.example.com' },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -481,8 +427,6 @@ describe('runServerBackup with a stale database file left behind', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -520,8 +464,6 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: externalEnv,
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -544,8 +486,6 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: externalEnv,
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: async () => {},
       doSnapshot: async () => {},
     })
@@ -568,8 +508,6 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: async () => {},
       doSnapshot: async () => {},
     })
@@ -594,8 +532,6 @@ describe('runServerBackup when the rows are not ours to back up', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: async () => {},
     })
@@ -632,8 +568,6 @@ describe('runServerBackup captures the rows through the database', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: mockDoBackup,
       doSnapshot: mockDoSnapshot,
     })
@@ -654,8 +588,6 @@ describe('runServerBackup captures the rows through the database', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: async () => {},
       doSnapshot: mockDoSnapshot,
     })
@@ -678,8 +610,6 @@ describe('runServerBackup captures the rows through the database', () => {
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      isPidAlive: () => false,
-      doReadRecord: () => ({ kind: 'missing' }),
       doBackup: async () => {},
       doSnapshot: async () => {
         throw new Error('database is locked')
@@ -687,5 +617,85 @@ describe('runServerBackup captures the rows through the database', () => {
     })
 
     expect(outcome.kind).toBe('error')
+  })
+})
+
+/**
+ * ADR-0021 decision 3's point: a backup that requires downtime is one an
+ * operator takes rarely or never, and the interval between backups is the
+ * data they lose. So a running server stops being a refusal.
+ *
+ * Two things had to be true first, and both now are. The rows are captured
+ * through the database rather than by reading its bytes out from under it,
+ * and file-GC stands down for the duration — because a backup is a snapshot
+ * plus a copy, two moments, and a pass unlinking between them removes a file
+ * the snapshot still references.
+ */
+describe('runServerBackup against a running server', () => {
+  it('backs up rather than refusing, now that the rows are snapshotted', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: mockDoBackup,
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * The marker is what makes it safe, so it has to be in place while the work
+   * happens — not merely written at some point.
+   */
+  it('holds the file-GC stand-down marker across the whole backup', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    let markerDuringCopy = false
+    let markerDuringSnapshot = false
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: async () => {
+        markerDuringCopy = await backupIsInProgress(dataDir)
+      },
+      doSnapshot: async () => {
+        markerDuringSnapshot = await backupIsInProgress(dataDir)
+      },
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(markerDuringCopy).toBe(true)
+    expect(markerDuringSnapshot).toBe(true)
+    // And released afterwards, or GC never runs again.
+    expect(await backupIsInProgress(dataDir)).toBe(false)
+  })
+
+  it('releases the marker when the backup fails', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir, { recursive: true })
+    await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
+
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: {},
+      doBackup: async () => {
+        throw new Error('copy blew up')
+      },
+      doSnapshot: async () => {},
+    })
+
+    expect(outcome.kind).toBe('error')
+    expect(await backupIsInProgress(dataDir)).toBe(false)
   })
 })

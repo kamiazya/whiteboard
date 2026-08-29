@@ -152,11 +152,28 @@ needed, applied unconditionally — and a backup directory holds one plain
 `whiteboard.db`. A snapshot that fails fails the backup: reporting success
 over a directory of blobs and no rows is the defect this ADR opened with.
 
-What is NOT done yet is dropping the stop-the-server requirement itself. The
-snapshot no longer needs it, but the blob copy still does: `cp` walks a
-directory it does not own, and file-GC deleting an entry between the walk and
-the stat aborts the whole backup. That needs a copy that tolerates a
-vanishing source, and it is the remaining half of this decision.
+**The stop-the-server requirement is gone.** Three things had to hold, and the
+last two were found by measuring rather than by reading:
+
+1. The rows are snapshotted rather than read out from under a writer.
+2. Every write into the data directory lands atomically. Uploads used a plain
+   `writeFile` like blobs did — measured, a copy overlapping an in-flight 8 MiB
+   upload captured a torn file 2 times out of 10, which is worse than always,
+   because the backup then holds a corrupt image only sometimes.
+3. Nothing DELETES while the copy runs. A backup is a snapshot plus a copy,
+   two moments; a file-GC pass unlinking between them removes a file the
+   snapshot still references. `backup-in-progress.json` is how the host-side
+   backup process tells the daemon's GC to stand down — the filesystem is the
+   only channel between them. It fails OPEN, the opposite of every other guard
+   here: wrongly believing a backup is running means GC never collects again,
+   an unbounded disk leak from a file nobody maintains, while wrongly believing
+   none is running costs one skipped stand-down in a window of seconds.
+
+Enabling this is also what would have started leaking a credential. The
+daemon record holds the Bearer token and is written owner-only; it was simply
+never present during a backup while backups required a stopped server. It is
+now excluded, as is the marker itself. Neither unit tests nor review found
+that — running the real command against a real daemon did.
 
 ### 4. Backup is scheduled by default; the CLI triggers the same pass
 

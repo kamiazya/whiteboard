@@ -201,9 +201,9 @@ describe('FsBlobStore concurrent rewrite', () => {
   })
 
   /**
-   * The temp file must not be left behind, or the shard directory accumulates
-   * one per write and the blob directory stops being purely content-addressed
-   * — file-GC walks it by digest name and would find entries it cannot match.
+   * Nothing staged may be left in the shard directory, or the blob tree stops
+   * being purely content-addressed and a backup copies entries that resolve
+   * to nothing.
    */
   it('leaves no temporary files in the shard directory', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'fs-blob-tmp-'))

@@ -18,7 +18,7 @@ vi.mock('./config.js', () => ({
 }))
 
 const { backupDataDir, restoreDataDir, BackupError } = await import('./backup-restore.js')
-const { BLOB_TEMP_DIRNAME } = await import('./store/fs/fs-blob-store.js')
+const { PENDING_WRITES_DIRNAME } = await import('./atomic-write.js')
 const { saveDocument, listDocuments, loadDocument } = await import('./store/document-store.js')
 const { FileVersionStore } = await import('./store/version-store.js')
 const { clearDbCache } = await import('./store/db/index.js')
@@ -403,18 +403,55 @@ describe('backupDataDir and the blob temp area', () => {
   it('does not copy the temp directory into the backup', async () => {
     const roots = await makeDrillRoots()
     try {
-      await mkdir(join(roots.src, BLOB_TEMP_DIRNAME), { recursive: true })
-      await writeFile(join(roots.src, BLOB_TEMP_DIRNAME, 'half-written.tmp'), 'partial')
+      await mkdir(join(roots.src, PENDING_WRITES_DIRNAME), { recursive: true })
+      await writeFile(join(roots.src, PENDING_WRITES_DIRNAME, 'half-written.tmp'), 'partial')
       await mkdir(join(roots.src, 'blobs', 'ab'), { recursive: true })
       await writeFile(join(roots.src, 'blobs', 'ab', 'cdef'), 'blob bytes')
       await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
 
       await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
 
-      expect(await readdir(roots.backup)).not.toContain(BLOB_TEMP_DIRNAME)
+      expect(await readdir(roots.backup)).not.toContain(PENDING_WRITES_DIRNAME)
       // Everything real still travels.
       expect(await readFile(join(roots.backup, 'blobs', 'ab', 'cdef'), 'utf8')).toBe('blob bytes')
       expect(await readFile(join(roots.backup, 'whiteboard.db'), 'utf8')).toBe('rows')
+    } finally {
+      await rm(roots.root, { recursive: true, force: true })
+    }
+  })
+})
+
+/**
+ * A backup must not carry a live credential.
+ *
+ * `daemon.json` holds the Bearer token the daemon authenticates HTTP and WS
+ * with, which is why it is written 0o600. A backup directory is the opposite
+ * of owner-only: it gets copied to another disk, shipped to support, kept for
+ * months. Before backups could be taken hot the file was never present during
+ * one — the command refused while the server ran — so enabling that is
+ * exactly what would have started leaking it.
+ *
+ * The in-progress marker goes too. It is this command's own bookkeeping, and
+ * a copy of it in a restored data directory is a claim that a backup is
+ * running there.
+ */
+describe('backupDataDir and files that must not travel', () => {
+  it('leaves the daemon record and the backup marker out of the copy', async () => {
+    const roots = await makeDrillRoots()
+    try {
+      await writeFile(join(roots.src, 'daemon.json'), '{"token":"super-secret-bearer"}')
+      await writeFile(join(roots.src, 'backup-in-progress.json'), '{"schemaVersion":1}')
+      await writeFile(join(roots.src, 'whiteboard.db'), 'rows')
+      await mkdir(join(roots.src, 'blobs'), { recursive: true })
+      await writeFile(join(roots.src, 'blobs', 'keep'), 'blob bytes')
+
+      await backupDataDir(roots.src, roots.backup, { allowedRoots: [roots.root] })
+
+      const copied = await readdir(roots.backup)
+      expect(copied).not.toContain('daemon.json')
+      expect(copied).not.toContain('backup-in-progress.json')
+      // Everything real still travels.
+      expect(await readFile(join(roots.backup, 'blobs', 'keep'), 'utf8')).toBe('blob bytes')
     } finally {
       await rm(roots.root, { recursive: true, force: true })
     }

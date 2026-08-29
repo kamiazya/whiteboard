@@ -379,11 +379,6 @@ async function dispatchServerBackup(rest: readonly string[]): Promise<number> {
         )
       }
       return 0
-    case 'running-server':
-      process.stderr.write(
-        'backup refused: server is running. Stop the server before taking a backup.\n',
-      )
-      return 1
     case 'missing-database':
       process.stderr.write(
         'backup refused: this data directory is where the rows belong, and it has no ' +

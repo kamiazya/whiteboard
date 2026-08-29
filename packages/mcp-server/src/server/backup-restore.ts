@@ -1,7 +1,9 @@
 import { cp, lstat, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
+import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
+import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
+import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
 import { DB_FILENAME } from './store/db/location.js'
-import { BLOB_TEMP_DIRNAME } from './store/fs/fs-blob-store.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -160,6 +162,24 @@ async function assertNoSymlinks(root: string, label: string): Promise<void> {
 }
 
 /**
+ * Entries that never travel into a backup, whatever else is happening.
+ *
+ * - The staging area holds mid-flight bytes under names no digest or file id
+ *   matches, so a copy of one resolves to nothing. It is also the entry a
+ *   live copy is most likely to trip over: `cp` stats each name it listed,
+ *   and a file renamed away in between raises ENOENT for the whole backup.
+ * - The daemon record holds the Bearer token the daemon authenticates HTTP
+ *   and WS with, which is why it is written owner-only. A backup directory is
+ *   the opposite of owner-only — it gets copied to another disk, shipped to
+ *   support, kept for months. It was never present during a backup until
+ *   backups could be taken hot, so enabling that is what would have started
+ *   leaking it.
+ * - The in-progress marker is this command's own bookkeeping, and a copy of
+ *   it in a restored data directory claims a backup is running there.
+ */
+const NEVER_COPIED = [PENDING_WRITES_DIRNAME, DAEMON_RECORD_FILENAME, BACKUP_MARKER_FILENAME]
+
+/**
  * The database and everything SQLite keeps beside it.
  *
  * In WAL mode the newest commits live in `whiteboard.db-wal` until a
@@ -212,13 +232,13 @@ export async function backupDataDir(
     // interrupted in that window is one holding rows it was never meant to
     // hold.
     //
-    // The blob temp area never travels, whatever the database is doing. It
-    // holds mid-flight bytes under a name no digest matches, so a copy of one
-    // resolves to nothing — and it is the entry a live copy is most likely to
-    // trip over, since `cp` stats each name it listed and a temp file renamed
-    // away in between raises ENOENT for the whole backup.
+    // The staging area never travels, whatever the database is doing. It
+    // holds mid-flight bytes under names no digest or file id matches, so a
+    // copy of one resolves to nothing — and it is the entry a live copy is
+    // most likely to trip over, since `cp` stats each name it listed and a
+    // file renamed away in between raises ENOENT for the whole backup.
     filter: (src: string) =>
-      src !== join(srcDataDir, BLOB_TEMP_DIRNAME) &&
+      !NEVER_COPIED.some((name) => src === join(srcDataDir, name)) &&
       !(options.excludeDatabaseFile === true && isDatabaseFile(srcDataDir, src)),
   })
 }

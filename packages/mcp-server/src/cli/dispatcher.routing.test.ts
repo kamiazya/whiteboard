@@ -322,17 +322,6 @@ describe('dispatcher routing: whiteboard server backup', () => {
     expect(vi.mocked(serverBackupModule.runServerBackup)).toHaveBeenCalledOnce()
   })
 
-  it('exits 1 and writes to stderr when server is running', async () => {
-    vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
-      kind: 'running-server',
-    })
-    const { result: exitCode, stderr } = await captureStdio(() =>
-      main(['server', 'backup', '--json', '--output-dir=/tmp/backup-out']),
-    )
-    expect(exitCode).toBe(1)
-    expect(stderr).toMatch(/backup refused: server is running/)
-  })
-
   it('exits 1 when the rows belong in the directory and are not there', async () => {
     vi.mocked(serverBackupModule.runServerBackup).mockResolvedValueOnce({
       kind: 'missing-database',
