@@ -54,8 +54,20 @@ import {
 } from '@kamiazya/whiteboard-model'
 import { afterAll, describe, expect, it } from 'vitest'
 import { extractClipboardFragment } from '../../lib/clipboard-fragment.js'
+import {
+  clearClipboardFragmentForTests,
+  readClipboardFragment,
+  recordedReconnection,
+  recordReconnection,
+  writeClipboardFragment,
+} from '../../lib/clipboard-store.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
-import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
+import {
+  applyCommand,
+  buildFragmentInsertCommand,
+  DUPLICATE_OFFSET_PX,
+  type EditorCommand,
+} from './commands.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import { createIdleState, type GestureEvent, type GestureState, reduceGesture } from './gestures.js'
 import {
@@ -260,6 +272,14 @@ interface Stats {
   selectAlls: number
   edgeSelections: number
   edgeDeletes: number
+  copies: number
+  cuts: number
+  /** Pastes that resolved as a same-canvas MOVE of the held originals. */
+  cutMoves: number
+  /** Pastes that inserted reminted copies. */
+  pasteInserts: number
+  /** Inserts that reconnected at least one severed boundary edge. */
+  reconnections: number
 }
 
 interface Real {
@@ -282,6 +302,13 @@ interface Real {
    * nodes.
    */
   selectedEdgeId: string | null
+  /**
+   * A cut holds its originals rather than deleting them, until a paste
+   * decides what the cut meant — a move here, a copy elsewhere, or
+   * nothing. The snapshot is the frozen JSON of each held node, which is
+   * what the invalidation effect compares against.
+   */
+  pendingCut: { readonly cutId: string; readonly snapshot: ReadonlyMap<string, string> } | null
   nextId: number
   trail: string[]
   stats: Stats
@@ -407,6 +434,19 @@ function settle(real: Real): void {
       lockedIds: lockedMembers,
     })
   }
+  // The pending-cut invalidation effect: anyone touching a held node —
+  // a local drag, a remote edit, a delete — lifts the hold, because the
+  // veil must never dim a node that changed under it. Keyed on `canvas`,
+  // so like the lock effect it runs after every step.
+  if (real.pendingCut !== null) {
+    const held = real.pendingCut.snapshot
+    const touched = [...held].some(([id, frozen]) => {
+      const node = real.canvas.nodes.find((n) => n.id === id)
+      return node === undefined || JSON.stringify(node) !== frozen
+    })
+    if (touched) real.pendingCut = null
+  }
+
   checkInvariants(real)
 }
 
@@ -554,6 +594,16 @@ function pick(real: Real, index: number): SpatialNode | undefined {
   const selectable = real.canvas.nodes.filter((node) => !real.lockedNodeIds.has(node.id))
   if (selectable.length === 0) return undefined
   return selectable[index % selectable.length]
+}
+
+/** A selectable node with at least one edge, or any selectable node. */
+function pickConnected(real: Real, index: number): SpatialNode | undefined {
+  const touched = new Set(real.canvas.edges.flatMap((edge) => [edge.fromNode, edge.toNode]))
+  const connected = real.canvas.nodes.filter(
+    (node) => touched.has(node.id) && !real.lockedNodeIds.has(node.id),
+  )
+  if (connected.length === 0) return pick(real, index)
+  return connected[index % connected.length]
 }
 
 function pickText(real: Real, index: number): SpatialNode | undefined {
@@ -1272,6 +1322,260 @@ class PressEdgeThen implements fc.Command<Model, Real> {
   }
 }
 
+/**
+ * The clipboard family — Cmd+C / Cmd+X / Cmd+V. Three more pieces of
+ * state than the rest of the surface put together, and the only ones that
+ * live OUTSIDE the component: a module-scoped fragment slot, a
+ * module-scoped record of which edges each cut's reconnection created,
+ * and the component's own `pendingCut` hold.
+ *
+ * The module-scoped halves are why `clearClipboardFragmentForTests` runs
+ * in the setup below. `fc.commands` replays the same setup for every
+ * generated sequence and again for every shrink step; state surviving
+ * between them would make a counterexample depend on the runs before it,
+ * which is exactly the shape that cannot be reproduced from a seed.
+ *
+ * A cut does NOT delete. It holds the originals until a paste decides what
+ * it meant — a move here (same canvas, matching cut id: the held nodes
+ * keep their ids and only change place, so every edge survives without
+ * reconnection machinery), a copy elsewhere, or nothing.
+ */
+class Copy implements fc.Command<Model, Real> {
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection)
+    if (members.length === 0) return
+    const fragment = extractClipboardFragment(real.canvas, new Set(members))
+    if (fragment.nodes.length === 0) return
+    writeClipboardFragment(fragment)
+    // The newest clipboard intent wins: a plain copy lifts a pending cut.
+    real.pendingCut = null
+    real.stats.copies += 1
+    real.trail.push(this.toString())
+    settle(real)
+  }
+  toString(): string {
+    return 'copy'
+  }
+}
+
+class Cut implements fc.Command<Model, Real> {
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const members = selectionMembers(real.selection)
+    if (members.length === 0) return
+    const cutId = `cut-${real.nextId++}`
+    const fragment = extractClipboardFragment(real.canvas, new Set(members), { cutId })
+    if (fragment.nodes.length === 0 || fragment.cut === undefined) return
+    writeClipboardFragment(fragment)
+    real.pendingCut = {
+      cutId: fragment.cut.id,
+      snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
+    }
+    real.stats.cuts += 1
+    real.trail.push(this.toString())
+    settle(real)
+  }
+  toString(): string {
+    return 'cut'
+  }
+}
+
+class Paste implements fc.Command<Model, Real> {
+  constructor(private readonly at: Point | null) {}
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    const fragment = readClipboardFragment()
+    if (fragment === null) return
+    const current = real.canvas
+    const at = this.at ?? undefined
+
+    // A paste answering THIS canvas's pending cut is a MOVE.
+    if (fragment.cut !== undefined && real.pendingCut?.cutId === fragment.cut.id) {
+      const snapshot = real.pendingCut.snapshot
+      const held = current.nodes.filter((node) => snapshot.has(node.id))
+      if (held.length > 0) {
+        let dx = DUPLICATE_OFFSET_PX
+        let dy = DUPLICATE_OFFSET_PX
+        if (at !== undefined) {
+          const minX = Math.min(...held.map((node) => node.x))
+          const minY = Math.min(...held.map((node) => node.y))
+          const maxX = Math.max(...held.map((node) => node.x + node.width))
+          const maxY = Math.max(...held.map((node) => node.y + node.height))
+          dx = Math.round(at.x - (minX + maxX) / 2)
+          dy = Math.round(at.y - (minY + maxY) / 2)
+        }
+        const moveCommand: EditorCommand = {
+          kind: 'batch',
+          commands: held.map((node) => ({
+            kind: 'move-node' as const,
+            id: node.id,
+            x: node.x + dx,
+            y: node.y + dy,
+          })),
+        }
+        // Cleared BEFORE the command applies, so the move's own geometry
+        // change does not race the invalidation effect above.
+        real.pendingCut = null
+        const before = current
+        dispatchCommands(real, [moveCommand], `${this.toString()}:move`)
+        if (real.canvas === before) return
+        // P2: a cut-move is a MOVE. The held nodes keep their ids, so the
+        // node set is untouched and no edge — internal or boundary — had
+        // to be reconnected. A resolution that deleted and recreated them
+        // would satisfy every other invariant here and silently break
+        // every edge into the cut region.
+        expect(
+          new Set(real.canvas.nodes.map((n) => n.id)),
+          `P2 cut-move changed the node set after ${real.trail.join(' → ')}`,
+        ).toEqual(new Set(before.nodes.map((n) => n.id)))
+        expect(
+          real.canvas.edges.map((e) => e.id),
+          `P2 cut-move changed the edges after ${real.trail.join(' → ')}`,
+        ).toEqual(before.edges.map((e) => e.id))
+        real.selection = reduceSelection(real.selection, {
+          type: 'set-members',
+          ids: held.map((node) => node.id),
+        })
+        real.selectedEdgeId = null
+        real.stats.cutMoves += 1
+        settle(real)
+        return
+      }
+    }
+
+    // The cut surface reconnects only while the document shows no trace of
+    // a previous reconnection for this cut.
+    const cut =
+      fragment.cut !== undefined &&
+      !recordedReconnection(fragment.cut.id).some((id) =>
+        current.edges.some((edge) => edge.id === id),
+      )
+        ? fragment.cut
+        : undefined
+    const command = buildFragmentInsertCommand(
+      current,
+      { nodes: fragment.nodes, edges: fragment.edges, cut },
+      () => `paste-${real.nextId++}`,
+      at,
+    )
+    if (command === undefined) return
+    const before = current
+    dispatchCommands(real, [command], this.toString())
+    // P3: a paste of a non-empty fragment INSERTS it. Ids are reminted
+    // against the target canvas, so the node count grows by exactly the
+    // fragment's size — no collision can silently swallow a node.
+    // Worth stating because the failure is quiet: `create-node` returns
+    // the input canvas for an id that already exists, so a paste that
+    // stopped reminting would do nothing at all rather than corrupt
+    // anything, and every other invariant here would stay green.
+    expect(
+      real.canvas.nodes.length,
+      `P3 paste did not insert its fragment after ${real.trail.join(' → ')}`,
+    ).toBe(before.nodes.length + fragment.nodes.length)
+    if (cut !== undefined && command.kind === 'batch') {
+      const createdNodeIds = new Set(
+        command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
+      )
+      const boundary = command.commands.flatMap((c) =>
+        c.kind === 'create-edge' &&
+        (!createdNodeIds.has(c.edge.fromNode) || !createdNodeIds.has(c.edge.toNode))
+          ? [c.edge.id]
+          : [],
+      )
+      // P4: the cut surface reconnects only edges that were actually
+      // severed. A boundary edge whose original is still on the canvas
+      // was never cut — the hold was lifted some other way — and wiring
+      // the peer again would leave it with two edges where the user sees
+      // one.
+      const severed = cut.boundaryEdges.filter(
+        (edge) => !before.edges.some((existing) => existing.id === edge.id),
+      )
+      expect(
+        boundary.length,
+        `P4 reconnected more than was severed after ${real.trail.join(' → ')}`,
+      ).toBeLessThanOrEqual(severed.length)
+      recordReconnection(cut.id, boundary)
+      if (boundary.length > 0) real.stats.reconnections += 1
+    }
+    const reminted =
+      command.kind === 'batch'
+        ? command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : []))
+        : []
+    if (reminted.length > 0) {
+      real.selection = reduceSelection(real.selection, { type: 'set-members', ids: reminted })
+      real.selectedEdgeId = null
+    }
+    real.stats.pasteInserts += 1
+    settle(real)
+  }
+  toString(): string {
+    return this.at === null ? 'paste' : `pasteAt(${this.at.x},${this.at.y})`
+  }
+}
+
+/**
+ * Select a node, then run one of the three clipboard flows on it. Drawn
+ * directly for the reason every other composite here is: the steps must
+ * land in order on a live selection, with nothing in between touching a
+ * held node — which lifts the hold and changes which branch the paste
+ * takes.
+ *
+ * The three modes reach three DIFFERENT branches, and the third is the
+ * only route to the most intricate code in the clipboard:
+ *
+ * - `copy` → the insert branch, reminted ids, no cut surface.
+ * - `cut` → the same-canvas MOVE branch, the pending-cut mechanism's
+ *   whole reason to exist.
+ * - `cutDelete` → the insert branch WITH a cut surface to reconnect. A
+ *   cut defers its delete, so while the originals are still present the
+ *   boundary loop skips every edge (`canvasEdgeIds.has(edge.id)`) and the
+ *   reconnection code cannot run at all. Measured: 0 reconnections per
+ *   300 runs before this mode existed.
+ */
+class ClipboardFlow implements fc.Command<Model, Real> {
+  constructor(
+    private readonly index: number,
+    private readonly mode: 'copy' | 'cut' | 'cutDelete' | 'cutTouch',
+    private readonly at: Point | null,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    // For `cutDelete` prefer a node that HAS an edge: the reconnection is
+    // about the severed boundary, and cutting a lone node exercises none
+    // of it. Falls back to any node, so the arm still runs on documents
+    // where nothing is connected.
+    const node =
+      this.mode === 'cutDelete' ? pickConnected(real, this.index) : pick(real, this.index)
+    if (node === undefined) return
+    pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
+    dispatch(real, { type: 'pointerup', point: { x: node.x, y: node.y } }, `${this.toString()}:up`)
+    if (this.mode === 'copy') {
+      new Copy().run(model, real)
+    } else {
+      new Cut().run(model, real)
+      if (this.mode === 'cutDelete') new DeleteSelection().run(model, real)
+      // Nudging a held node lifts the hold without removing anything, so
+      // the paste falls to the INSERT branch while the cut's boundary
+      // edges are all still on the canvas — the only arrangement in which
+      // the reconnect-once guard has anything to do.
+      if (this.mode === 'cutTouch') new Nudge({ dx: 1, dy: 0 }, false).run(model, real)
+    }
+    new Paste(this.at).run(model, real)
+  }
+  toString(): string {
+    return `clipboard:${this.mode}(#${this.index})`
+  }
+}
+
 const indexArb = fc.nat({ max: 3 })
 const pointArb: fc.Arbitrary<Point> = fc.record({
   x: fc.integer({ min: -40, max: 300 }),
@@ -1359,6 +1663,21 @@ const allCommands = [
       fc.boolean(),
     )
     .map(([i, then, keep, external]) => new PressEdgeThen(i, then, keep, external)),
+  fc.constant(new Copy()),
+  fc.constant(new Cut()),
+  fc.option(pointArb, { nil: null }).map((at) => new Paste(at)),
+  fc
+    .tuple(
+      indexArb,
+      fc.constantFrom<'copy' | 'cut' | 'cutDelete' | 'cutTouch'>(
+        'copy',
+        'cut',
+        'cutDelete',
+        'cutTouch',
+      ),
+      fc.option(pointArb, { nil: null }),
+    )
+    .map(([i, mode, at]) => new ClipboardFlow(i, mode, at)),
 ]
 
 describe('editor composite state (command-based)', () => {
@@ -1379,6 +1698,11 @@ describe('editor composite state (command-based)', () => {
     selectAlls: 0,
     edgeSelections: 0,
     edgeDeletes: 0,
+    copies: 0,
+    cuts: 0,
+    cutMoves: 0,
+    pasteInserts: 0,
+    reconnections: 0,
   }
 
   /**
@@ -1390,47 +1714,58 @@ describe('editor composite state (command-based)', () => {
   afterAll(() => {
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each sits well under the minimum measured across five
-    // consecutive runs — moves 44-69, resizes 38-61, connects 33-43,
-    // deletes 24-36, text edits opened 87-117, pending-text handoffs
-    // 23-38, mid-gesture external replacements 30-47, multi-selections
-    // 128-201, nudges 56-75, duplicates 13-27, effective reorders 32-43
-    // (of which forward/backward 11-17), locks applied 19-27, select-alls
-    // 49-64, edge selections 69-84, edge deletes 15-28.
+    // reject. Each sits well under the minimum measured across six
+    // consecutive runs — moves 45-58, resizes 38-63, connects 24-36,
+    // deletes 22-46, text edits opened 67-96, pending-text handoffs
+    // 20-36, mid-gesture external replacements 28-34, multi-selections
+    // 123-187, nudges 56-73, duplicates 13-25, effective reorders 25-59
+    // (of which forward/backward 9-23), locks applied 14-31, select-alls
+    // 44-54, edge selections 56-69, edge deletes 14-23, copies 25-36,
+    // cuts 49-63, cut-moves 10-15, paste-inserts 35-52, reconnections
+    // 3-13.
     //
-    // Two rules, both learned by getting them wrong here. Count EFFECTS,
-    // not attempts: `reorders` counted attempts and read as green while
-    // forward/backward were doing nothing at all. And re-measure when
-    // adding a command or widening the document generator, because both
-    // dilute every existing counter — the keyboard half took mid-gesture
-    // external replacements from 9-19 to 4-13, and generating four node
-    // types quartered the text-node share T1 feeds on. Five arrangements
-    // were dilute enough to need a command of their own rather than a
-    // lowered floor.
-    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(20)
-    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(20)
-    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(15)
-    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(10)
-    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(40)
-    expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(
-      10,
-    )
+    // Two rules, both learned by getting them wrong here.
+    //
+    // Count EFFECTS, not attempts. `reorders` counted attempts and read
+    // as green while forward/backward were doing nothing at all, because
+    // the fixture's nodes never overlapped.
+    //
+    // Re-measure when adding a command or widening the document
+    // generator, because both dilute every existing counter — the
+    // keyboard half took mid-gesture external replacements from 9-19 to
+    // 4-13, and generating four node types quartered the text-node share
+    // T1 feeds on. Eight arrangements proved dilute enough to need a
+    // command of their own rather than a lowered floor, and two needed a
+    // biased pick as well: reorder is invisible on a full selection, the
+    // arrows need a selection AND an idle gesture, and the cut surface
+    // cannot reconnect while the originals are still on the canvas.
+    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(15)
+    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(15)
+    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(10)
+    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(8)
+    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(30)
+    expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(8)
     expect(
       stats.externalReplacementsMidGesture,
       'external replacements barely landed mid-gesture',
     ).toBeGreaterThan(12)
     expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(50)
-    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(25)
-    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(6)
-    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(12)
+    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(20)
+    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(5)
+    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(10)
     expect(
       stats.stepReordersEffective,
       'forward/backward never stepped over an overlapping node',
-    ).toBeGreaterThan(5)
-    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(8)
-    expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(25)
-    expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(30)
-    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(6)
+    ).toBeGreaterThan(4)
+    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(6)
+    expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(15)
+    expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(20)
+    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(5)
+    expect(stats.copies, 'Cmd+C barely reached').toBeGreaterThan(10)
+    expect(stats.cuts, 'Cmd+X barely reached').toBeGreaterThan(20)
+    expect(stats.cutMoves, 'no paste resolved as a same-canvas move').toBeGreaterThan(4)
+    expect(stats.pasteInserts, 'no paste inserted a copy').toBeGreaterThan(15)
+    expect(stats.reconnections, 'no cut surface was ever reconnected').toBeGreaterThan(1)
   })
 
   fcTest.prop(
@@ -1439,8 +1774,15 @@ describe('editor composite state (command-based)', () => {
   )(
     'canvas, gesture and selection stay mutually coherent under any operation sequence',
     (startCanvas, commands) => {
-      fc.modelRun(
-        () => ({
+      // The clipboard's slot and its reconnection record are MODULE
+      // state, so they are reset per sequence. `fc.commands` replays this
+      // setup for every generated sequence and again for every shrink
+      // step; state surviving between them makes a counterexample depend
+      // on the runs before it, which is exactly what cannot be reproduced
+      // from a seed.
+      const freshState = () => {
+        clearClipboardFragmentForTests()
+        return {
           model: {} as Model,
           real: {
             canvas: startCanvas,
@@ -1448,13 +1790,14 @@ describe('editor composite state (command-based)', () => {
             selection: EMPTY_SELECTION,
             lockedNodeIds: new Set<string>(),
             selectedEdgeId: null,
+            pendingCut: null,
             nextId: 0,
             trail: [],
             stats,
           } satisfies Real,
-        }),
-        commands,
-      )
+        }
+      }
+      fc.modelRun(freshState, commands)
     },
   )
 })
