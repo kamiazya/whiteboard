@@ -46,15 +46,38 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   named set, and each member says what QUESTION it answers — two carriers
   that look alike but answer differently is the defect this naming exists to
   prevent:
-  - **connection chip** (`ConnectionStatus`) — who keeps this workspace, and
-    is the session reaching it? Filled dot. It lives in the AppShell, not in
-    a page. Those are two questions in one carrier and the split is still
-    open: `browser` names the KEEPER (and survives navigation), while
-    `synced`/`reconnecting`/`sync-off` report a live session (and do not).
+  - **the shell mark** (`ShellMark`, triggered through `ConnectionStatus`) —
+    who keeps this workspace, and is the session reaching it? A filled dot on
+    the signature's own end point. It lives in the AppShell, not in a page,
+    and it REPLACED a labelled chip at the far right of the row: a keeper and
+    a session are facts about the workspace, so they belong on the thing that
+    stands for it. Those are still two questions in one carrier and the split
+    is still open — `browser` names the KEEPER (and survives navigation),
+    while `synced`/`reconnecting`/`sync-off` report a live session (and do
+    not). Merging the carriers did not resolve that; it put the unresolved
+    pair in one place instead of implying two subjects.
+
+    This is the one carrier with a SECOND channel, and it is not decoration.
+    `reconnecting` and `sync-off` are both `attention`, and the chip's WORD
+    was what separated them for a sighted reader. A 26×16 signature has no
+    room for a word, so MOTION does it: reconnecting travels (`wb-loader` —
+    the loader mark's own dash, on the same path), sync-off sits broken and
+    dimmed. The word moves to the accessible name and the popover's header,
+    where assistive tech reads it either way.
+
+    Two gestures, both finite, one per direction. `sync-off` arriving keeps
+    the chip's attention echo verbatim. `reconnecting`/`sync-off` → `synced`
+    plays a recovery draw — the RARE moment, not the routine one. There is
+    deliberately no "a write landed" celebration: the daemon keeper has no
+    write-landed signal to hang one on (its `session` is derived from
+    transport liveness, not from an ack), so shipping it would light up for
+    browser-kept workspaces only and read as "the daemon is not saving" —
+    which is exactly what "never offer what the keeper cannot honour" below
+    forbids.
   - **save-state chip** (`SaveStatusChip`) — did the last write to this
     browser's storage land? Filled dot. Browser keeper only; on a daemon the
-    connection chip is what answers "is my work safe", and a second dot
-    saying so would be the same fact twice.
+    shell mark is what answers "is my work safe", and a second dot saying so
+    would be the same fact twice.
   - **version dot** (`HeaderVersionDot`) — are there edits no named version
     holds yet? RING, not filled, precisely because it shares the amber tone
     with the save-state chip while asking something else. It carried the
@@ -65,21 +88,36 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   Anything else stateful in chrome needs this list amended first, and takes
   its paint from `StateDot` rather than a fresh literal.
 - **The AppShell owns brand, connection and settings.** Every page mounts
-  `AppShell` (brand mark = home, the ALPHA honesty chip, the connection chip,
-  the settings gear + attention dot) and never renders its own brand,
-  connection or settings chrome. Context and tools stay in the page's own
-  surface, always visible — collapsing them into menus is a narrow-viewport
+  `AppShell` (the signature mark, the ALPHA honesty chip, the settings gear +
+  attention dot) and never renders its own brand, connection or settings
+  chrome.
+
+  The row reads in two halves, and the spacer is the divider: **left of it is
+  what you are working IN** (the mark = this workspace), **right of it is the
+  app and its own state** (the alpha stage, settings). Position is what tells
+  a reader which layer a control belongs to, since chrome carries no
+  sentence-length copy to say so — and it is why the connection carrier moved
+  onto the mark rather than staying at the far right.
+
+  The mark's click changed with it: with a live session it opens the
+  connection popover, and Home is the last item there rather than the click
+  itself. With NO session published there is nothing to explain, so the mark
+  stays a plain link home — the popover appears exactly when it has something
+  to say.
+
+  Context and tools stay in the page's own surface, always visible —
+  collapsing them into menus is a narrow-viewport
   last resort, not a desktop pattern. Where BRAND.md (identity, motion) and
   this file (app chrome) disagree about chrome, this file wins and the
   exception gets documented here.
 - **What belongs in the shell is what does not change when you open a
-  different document.** Which daemon this browser talks to is one such fact,
-  so the connection chip is the shell's; the document's own title, actions
+  different document.** Which workspace you are in, and who keeps it, are
+  such facts, so the mark is the shell's; the document's own title, actions
   and history are the page's. The dividing question is not importance, it is
   whether the answer survives navigation.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
-  draws no chip at all. A daemon index page does talk to the daemon over
+  leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over
   HTTP but runs no document sync, so neither "Synced" nor "Reconnecting" is
   true there, and a chip that stayed behind from the last document would say
   one of them anyway. Clear on unmount; never latch.
@@ -100,10 +138,10 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   it. Before adding a control, ask which keepers can actually deliver it.
 - **Status reports; Settings manages.** A surface that reports a state carries
   only what you cannot go looking for — a dropped sync is not something anyone
-  seeks out, so its recovery (re-pair, work in the browser instead) stays on
-  the chip that reports it. Changing which daemon this browser uses is the
-  opposite: it has an intent behind it, so it lives in Settings and the chip
-  only points there. The dividing question is whether the user would know to
+  seeks out, so its recovery (re-pair, work in the browser instead) stays in
+  the popover of the mark that reports it. Changing which daemon this browser uses is the
+  opposite: it has an intent behind it, so it lives in Settings and the
+  popover only points there. The dividing question is whether the user would know to
   look.
 - **Name the keeper, never the locality.** A workspace is kept by the
   **Browser** or by a **Daemon**; both are on the user's machine, so "Local"
