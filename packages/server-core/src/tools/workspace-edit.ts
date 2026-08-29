@@ -91,6 +91,16 @@ export type WorkspaceEditInput = z.infer<typeof workspaceEditInputSchema>
 
 export const workspaceEditOutputSchema = z
   .object({
+    /**
+     * The workspace the batch applied to, as its CANONICAL id (ADR-0019).
+     * Always present, not only when `createWorkspace: true` minted one: a
+     * caller that addressed an existing workspace by its segment learns the
+     * id behind it, and a caller that created one learns what the server
+     * minted. Without it a bootstrapping batch is unusable in the same way
+     * a bootstrapping `wb_document_create` was — the server picks an id,
+     * files the whole batch under it, and never says which.
+     */
+    workspaceId: workspaceIdSchema,
     applied: z
       .number()
       .int()
@@ -136,12 +146,20 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
       const input = workspaceEditInputSchema.parse(rawInput)
       const set = createDocumentSetTool(deps)
       const results: WorkspaceEditOutput['results'] = []
+      // The batch addresses ONE workspace, and a bootstrapping first op is
+      // what decides which. Creating is ADR-0019's mint boundary, so after
+      // op 0 the caller's handle is that workspace's SEGMENT rather than its
+      // id — and every later op in this loop reaches the port directly, with
+      // no resolution step between. Carrying the id the create reported is
+      // what keeps ops 1..n inside the workspace op 0 made, instead of
+      // failing against a handle that now names nothing.
+      let workspaceId = input.workspaceId
 
       for (const [index, op] of input.ops.entries()) {
         try {
           if (op.op === 'document.create') {
             const created = await wbDocumentCreate(deps, {
-              workspaceId: input.workspaceId,
+              workspaceId,
               path: op.path,
               ...(op.kind === 'markdown'
                 ? {
@@ -154,17 +172,18 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
               // per op would make a typo'd id create one silently.
               ...(index === 0 && input.createWorkspace === true ? { createWorkspace: true } : {}),
             })
+            workspaceId = created.workspaceId
             results.push({ op: op.op, documentId: created.documentId, path: created.path })
           } else if (op.op === 'document.set') {
             await set.execute({
-              workspaceId: input.workspaceId,
+              workspaceId,
               documentId: op.documentId,
               markdown: op.markdown,
             })
             results.push({ op: op.op, documentId: op.documentId })
           } else {
             await wbDocumentDelete(deps, {
-              workspaceId: input.workspaceId,
+              workspaceId,
               documentId: op.documentId,
             })
             results.push({ op: op.op, documentId: op.documentId })
@@ -179,7 +198,7 @@ export function createWorkspaceEditTool(deps: ServerDeps) {
         }
       }
 
-      return { applied: results.length, results }
+      return { workspaceId, applied: results.length, results }
     },
   }
 }

@@ -15,6 +15,7 @@ import { join } from 'node:path'
 import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
+import { seedWorkspaceRow } from '../_test-helpers.js'
 
 let tempDir: string
 vi.mock('../../config.js', () => ({
@@ -39,6 +40,12 @@ beforeEach(async () => {
   handle = await createIsolatedDb({ dataDir: tempDir })
   clearCache()
   _clearWorkspaceDocCacheForTests()
+  // The workspace exists because this fixture says so, not because the first
+  // POST created it: that route passes `createWorkspace: true`, which is
+  // ADR-0019's MINT boundary — a mint keys the workspace by a fresh ULID and
+  // files `session1` as its segment, leaving the direct store reads in these
+  // cases naming nothing.
+  await seedWorkspaceRow(tempDir, 'session1')
 })
 afterEach(async () => {
   await handle.dispose()

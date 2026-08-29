@@ -273,7 +273,12 @@ async function main() {
     throw new Error(`wb_document_create returned unexpected shape: ${JSON.stringify(created)}`)
   }
   const documentId = created.documentId
-  log(`[e2e] wb_document_create → ${documentId}`)
+  // ADR-0019's mint: the server chose this workspace's canonical id, and
+  // `WORKSPACE_ID` is now its SEGMENT. Everything below keeps addressing it
+  // by that segment — only a lookup that compares against a served row needs
+  // the canonical id, which is why it is captured here.
+  const workspaceId = created.workspaceId
+  log(`[e2e] wb_document_create → ${documentId} in ${workspaceId} (segment ${WORKSPACE_ID})`)
 
   // ── Step 2b: ADR-0019 — GET /api/workspaces serves the displayName a
   //    plain HTTP PUT set, through the published listWorkspacesResponseSchema.
@@ -295,11 +300,20 @@ async function main() {
     throw new Error(`GET /api/workspaces failed: HTTP ${listWorkspacesRes.status}`)
   }
   const listWorkspacesBody = listWorkspacesResponseSchema.parse(await listWorkspacesRes.json())
-  const ourWorkspace = listWorkspacesBody.workspaces.find((w) => w.workspaceId === WORKSPACE_ID)
+  const ourWorkspace = listWorkspacesBody.workspaces.find((w) => w.workspaceId === workspaceId)
   if (ourWorkspace?.displayName !== WORKSPACE_DISPLAY_NAME) {
     throw new Error(`GET /api/workspaces did not echo displayName: ${JSON.stringify(ourWorkspace)}`)
   }
-  log('[e2e] GET /api/workspaces → displayName echoed through the published schema')
+  // The PUT above addressed the workspace as `conv-e2e` and the row it wrote
+  // is keyed by a ULID, so this row arriving at all is segment-first
+  // resolution working across two separate HTTP requests — and the segment
+  // is served back beside the name.
+  if (ourWorkspace.segment !== WORKSPACE_ID) {
+    throw new Error(
+      `GET /api/workspaces did not serve the segment: ${JSON.stringify(ourWorkspace)}`,
+    )
+  }
+  log('[e2e] GET /api/workspaces → displayName and segment echoed through the published schema')
 
   const NODE_A = {
     id: 'node-a',

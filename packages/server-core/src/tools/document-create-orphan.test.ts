@@ -21,12 +21,18 @@ describe('a create that cannot finish leaves nothing behind', () => {
       documentWritten: ignoredDocumentWrites(),
       documentIndex: new InMemoryDocumentIndex(),
     }
+    // The workspace exists up front, so this case is only about the DOCUMENT.
+    // It used to arrive via `createWorkspace: true` and the comment claimed
+    // the refusal left no workspace either — which was not true then (the
+    // bootstrap ran before the preflight) and was asserted by nothing. It IS
+    // true now, and `document-crud.mint.test.ts` is where it is checked.
+    await deps.documentIndex.createWorkspace({ workspaceId: WS })
+
     await expect(
       wbDocumentCreate(deps, {
         workspaceId: WS,
         path: 'taken-by-nothing',
         kind: 'markdown',
-        createWorkspace: true,
         markdown: '---\nthis: [is: not: yaml\n---\nbody',
       }),
     ).rejects.toThrow(/okf|frontmatter|yaml|parse/i)
@@ -36,13 +42,10 @@ describe('a create that cannot finish leaves nothing behind', () => {
     ).toEqual([])
 
     // And the path is still free, which is the thing a caller retries into.
-    // `createWorkspace` is needed again: refusing before any write means the
-    // workspace was not created either, which is the point.
     const retried = await wbDocumentCreate(deps, {
       workspaceId: WS,
       path: 'taken-by-nothing',
       kind: 'markdown',
-      createWorkspace: true,
       markdown: '---\ntype: note\n---\nvalid this time',
     })
     expect(retried.path).toBe('taken-by-nothing')

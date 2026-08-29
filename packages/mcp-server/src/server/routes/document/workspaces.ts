@@ -161,10 +161,22 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         workspaceId,
         path,
         kind: parsed.data.kind,
-        // `saveDocument` used to upsert the workspace row on the way past, so
-        // posting into a workspace that does not exist yet has always worked
-        // on this surface. The operation makes that an explicit flag rather
-        // than a side effect, and this preserves the behaviour.
+        // Kept, and now safe. `saveDocument` used to upsert the workspace
+        // row on the way past, so posting into a workspace that does not
+        // exist has always worked here — the one surface that opted out of
+        // "workspaces never materialize implicitly".
+        //
+        // Under ADR-0019's mint boundary the flag no longer risks a phantom:
+        // it resolves first, so an existing workspace is a no-op, and a
+        // handle that names nothing is either minted with that handle as its
+        // segment or refused (400) when it cannot be one — which is what a
+        // browser posting a canonical id for a workspace the daemon no
+        // longer has now gets, instead of a silent new workspace.
+        //
+        // Removing it outright is a real improvement and a SEPARATE
+        // increment: measured, six other suites bootstrap their fixtures by
+        // POSTing here, so it is a 20-test fixture change rather than the
+        // no-op `workspaces.test.ts` alone suggests.
         createWorkspace: true,
         // Passed through as given. A blank name meaning "no name" is the
         // OPERATION's rule now, not a second copy of it here — two places
