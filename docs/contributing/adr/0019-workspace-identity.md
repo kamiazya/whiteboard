@@ -217,11 +217,21 @@ minting another.
   records that the implementation has not reached it. The browser resolves
   its active workspace once into a synchronous accessor that some twenty call
   sites read inline (`browser-workspace-id.ts` states that rationale in
-  place), so re-pointing it live means re-reading it at all of them. A load
-  also settles the outgoing workspace's writes for free, which is why nothing
-  is at risk today — but "for free" is not the same as PINNED, and the
-  Decision asks the switch slice to pin flush-before-switch with a test. The
-  in-SPA switch and that test are one follow-up, not two.
+  place), so re-pointing it live means re-reading it at all of them.
+
+  **Flush-before-switch is already pinned**, and by the in-SPA path rather
+  than the shipped one. Two `browser-backend.browser.test.tsx` cases hold it:
+  a write still on the queue when `disconnect()` runs reaches storage, and a
+  write in flight while the active workspace is RE-POINTED lands in the
+  workspace it was made in rather than the one being switched to. The second
+  simulates the switch exactly as an in-SPA one would perform it. Both found
+  real defects — `_doWrite` returned early on a nulled doc, and read the
+  workspace id at execution time — so the invariant is guarded by tests that
+  went red, not by a load that happens to make the hazard unreachable.
+
+  That is what the remaining follow-up is and is not. It does not need new
+  coverage for the invariant; it needs the path production takes to become
+  the path already under test.
 - **Rename is not in the v1 that shipped.** The Decision's v1 is create +
   switch + rename; `DocumentIndex` has no `renameWorkspace`, so rename needs
   the port, three implementations, the conformance suite, a daemon route and
