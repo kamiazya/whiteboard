@@ -76,6 +76,7 @@ import {
   type SelectionState,
   selectionMembers,
 } from './selection.js'
+import type { ShortcutId } from './shortcuts.js'
 import type { Point } from './viewport.js'
 
 /**
@@ -243,6 +244,141 @@ function initialCanvas(): SpatialCanvas {
   }
 }
 
+/**
+ * Whether this model exercises a surface, or deliberately does not.
+ *
+ * The three ledgers below are the mechanism that keeps this file honest
+ * as the editor grows. Each is `satisfies Record<Union, SurfaceCoverage>`
+ * over a closed union the editor already maintains, so ADDING A MEMBER
+ * FAILS THE BUILD until someone writes down which it is. A new
+ * `EditorCommand` kind is what "added a feature to the canvas" almost
+ * always means, and without this the property stays green while covering
+ * none of it — the exact vacuity the effect-counters were introduced to
+ * catch one layer down.
+ *
+ * Guarded from BOTH sides at runtime, the way this repo's other
+ * allowlists are (`ADAPTERS_REACHING_MECHANICS`, `KNOWN_IMPORT_CYCLES`):
+ * a `covered` entry that never fired is a lie, and a `not modelled` entry
+ * that DID fire is stale. Neither can outlive what it claims.
+ *
+ * `not modelled` requires a reason, for the same purpose `blastRadius:
+ * none:` does — a bare exemption is the omission with a word in front of
+ * it.
+ */
+type SurfaceCoverage = 'covered' | `not modelled: ${string}`
+
+/**
+ * Every canvas mutation the editor can perform. The uncovered half is
+ * uniform in shape: single-property writes from an inspector panel, a
+ * dialog or a context-menu item, which change one field of one element
+ * and touch neither the gesture state machine nor the selection. They are
+ * worth covering the day one of them starts interacting with either.
+ */
+const COMMAND_COVERAGE = {
+  batch: 'covered',
+  'move-node': 'covered',
+  'resize-node': 'covered',
+  'set-text': 'covered',
+  'connect-nodes': 'covered',
+  'create-node': 'covered',
+  'delete-node': 'covered',
+  'create-edge': 'covered',
+  'delete-edge': 'covered',
+  'reorder-nodes': 'covered',
+  'set-body':
+    'not modelled: the markdown editor writes the document body, which is not in the canvas at all — applyCommand returns the same reference',
+  'set-facets':
+    'not modelled: the document properties panel writes core facets, likewise outside the canvas',
+  'set-edge-label':
+    'not modelled: edge label editor, a single-field write with no gesture or selection coupling',
+  'set-edge-ends': 'not modelled: edge inspector, single-field write',
+  'set-edge-side': 'not modelled: edge inspector, single-field write',
+  'set-edge-color': 'not modelled: edge inspector, single-field write',
+  'set-edge-routing': 'not modelled: a canvas-wide preference, not per-element state',
+  'set-line-jumps': 'not modelled: a canvas-wide preference, not per-element state',
+  'set-node-color': 'not modelled: node inspector, single-field write',
+  'set-node-facet': 'not modelled: facet panel, a plugin-owned payload with its own tests',
+  'set-node-file': 'not modelled: file picker dialog, single-field write',
+  'set-node-url': 'not modelled: link URL dialog, single-field write',
+  'create-group':
+    'not modelled: group creation is geometry-derived from the selection and has its own browser tests',
+  'set-group-label': 'not modelled: group label editor, single-field write',
+  'set-group-background': 'not modelled: group inspector, single-field write',
+} satisfies Record<EditorCommand['kind'], SurfaceCoverage>
+
+/** Every event the gesture state machine accepts. All of them are driven. */
+const GESTURE_EVENT_COVERAGE = {
+  pointerdown: 'covered',
+  'pointerdown-handle': 'covered',
+  'pointerdown-connect': 'covered',
+  'pointerdown-empty': 'covered',
+  'dblclick-empty': 'covered',
+  'delete-selection': 'covered',
+  pointermove: 'covered',
+  pointerup: 'covered',
+  pointercancel: 'covered',
+  'canvas-replaced': 'covered',
+  'start-text-edit': 'covered',
+  'update-text-edit': 'covered',
+  'commit-text-edit': 'covered',
+  'cancel-text-edit': 'covered',
+} satisfies Record<GestureEvent['type'], SurfaceCoverage>
+
+/**
+ * Every keyboard binding in `shortcuts.ts`, the editor's single catalog.
+ * The uncovered five are the viewport family, which cannot reach canvas,
+ * gesture or selection state — `viewport.property.test.ts` owns them.
+ */
+const SHORTCUT_COVERAGE = {
+  'select-all': 'covered',
+  'duplicate-selection': 'covered',
+  'copy-selection': 'covered',
+  'cut-selection': 'covered',
+  'paste-clipboard': 'covered',
+  'reorder-forward': 'covered',
+  'reorder-backward': 'covered',
+  'reorder-front': 'covered',
+  'reorder-back': 'covered',
+  'delete-selection': 'covered',
+  'toggle-lock': 'covered',
+  'nudge-selection': 'covered',
+  cancel: 'covered',
+  'zoom-in': 'not modelled: viewport only — cannot reach canvas, gesture or selection state',
+  'zoom-out': 'not modelled: viewport only',
+  'zoom-to-fit': 'not modelled: viewport only',
+  'zoom-to-selection': 'not modelled: viewport only',
+  'space-pan': 'not modelled: viewport only',
+} satisfies Record<ShortcutId, SurfaceCoverage>
+
+function emptyTally<K extends string>(ledger: Record<K, SurfaceCoverage>): Record<K, number> {
+  return Object.fromEntries(Object.keys(ledger).map((key) => [key, 0])) as Record<K, number>
+}
+
+/**
+ * Asserts a ledger against what the run actually did, from both sides.
+ * The messages name the fix, because the person reading them is usually
+ * someone who just added a feature and has never opened this file.
+ */
+function assertLedger<K extends string>(
+  what: string,
+  ledger: Record<K, SurfaceCoverage>,
+  tally: Record<K, number>,
+): void {
+  for (const [key, coverage] of Object.entries(ledger) as [K, SurfaceCoverage][]) {
+    if (coverage === 'covered') {
+      expect(
+        tally[key],
+        `${what} "${key}" is marked covered but the run never produced it — either drive it from a command, or change its entry to "not modelled: <reason>"`,
+      ).toBeGreaterThan(0)
+    } else {
+      expect(
+        tally[key],
+        `${what} "${key}" is marked "${coverage}" but the run produced it ${tally[key]} times — the entry is stale, mark it covered`,
+      ).toBe(0)
+    }
+  }
+}
+
 interface Stats {
   moveCommits: number
   resizeCommits: number
@@ -280,6 +416,16 @@ interface Stats {
   pasteInserts: number
   /** Inserts that reconnected at least one severed boundary edge. */
   reconnections: number
+  /**
+   * Per-member tallies behind the three ledgers above. Emissions, not
+   * effects — the question these answer is "does the model ever produce
+   * this at all", which is about the model's REACH. Whether what it
+   * produced then did anything is the separate question the effect
+   * counters answer.
+   */
+  commandKinds: Record<EditorCommand['kind'], number>
+  eventTypes: Record<GestureEvent['type'], number>
+  shortcutIds: Record<ShortcutId, number>
 }
 
 interface Real {
@@ -316,6 +462,22 @@ interface Real {
 
 /** The invariants are the oracle; nothing needs a shadow copy of the state. */
 type Model = Record<string, never>
+
+/** Applies a command and tallies its kind, recursing into a batch. */
+function applyAndCount(real: Real, command: EditorCommand): void {
+  tallyCommand(real, command)
+  real.canvas = applyCommand(real.canvas, command)
+}
+
+function tallyCommand(real: Real, command: EditorCommand): void {
+  real.stats.commandKinds[command.kind] += 1
+  if (command.kind === 'batch') for (const inner of command.commands) tallyCommand(real, inner)
+}
+
+/** Records that a command exercised the keyboard binding it stands for. */
+function tallyShortcut(real: Real, id: ShortcutId): void {
+  real.stats.shortcutIds[id] += 1
+}
 
 function nodeById(canvas: SpatialCanvas, id: string): SpatialNode | undefined {
   return canvas.nodes.find((node) => node.id === id)
@@ -515,6 +677,7 @@ function recordStats(real: Real, before: GestureState, commands: readonly Editor
  * file's header for what of that function is deliberately not mirrored.
  */
 function dispatch(real: Real, event: GestureEvent, label: string): void {
+  real.stats.eventTypes[event.type] += 1
   const before = real.gesture
   const result = reduceGesture(real.gesture, real.canvas, event, {
     createId: () => `made-${real.nextId++}`,
@@ -526,7 +689,7 @@ function dispatch(real: Real, event: GestureEvent, label: string): void {
     // rule in `applyResult`, and its note on why `null` is excluded.
     if (result.selectedId !== null) real.selectedEdgeId = null
   }
-  for (const command of result.commands) real.canvas = applyCommand(real.canvas, command)
+  for (const command of result.commands) applyAndCount(real, command)
   real.trail.push(label)
   recordStats(real, before, result.commands)
   checkPendingTextSurvives(real, before, event, result.commands)
@@ -540,7 +703,7 @@ function dispatch(real: Real, event: GestureEvent, label: string): void {
  */
 function dispatchCommands(real: Real, commands: readonly EditorCommand[], label: string): void {
   const before = real.gesture
-  for (const command of commands) real.canvas = applyCommand(real.canvas, command)
+  for (const command of commands) applyAndCount(real, command)
   real.trail.push(label)
   recordStats(real, before, commands)
   settle(real)
@@ -816,7 +979,9 @@ class CommitTextEdit extends GestureCommand {
  */
 class CancelTextEdit extends GestureCommand {
   event(real: Real): GestureEvent | undefined {
-    return real.gesture.kind === 'idle' ? undefined : { type: 'cancel-text-edit' }
+    if (real.gesture.kind === 'idle') return undefined
+    tallyShortcut(real, 'cancel')
+    return { type: 'cancel-text-edit' }
   }
   toString(): string {
     return 'cancelTextEdit'
@@ -835,6 +1000,7 @@ class DeleteSelection implements fc.Command<Model, Real> {
   }
   run(_model: Model, real: Real): void {
     if (real.gesture.kind === 'editing-text') return
+    tallyShortcut(real, 'delete-selection')
     // The edge branch comes FIRST in `handleKeyDown` and returns, so a
     // selected edge consumes the key whether or not it still exists.
     if (real.selectedEdgeId !== null) {
@@ -855,7 +1021,7 @@ class DeleteSelection implements fc.Command<Model, Real> {
       }
       real.gesture = result.state
       real.selection = reduceSelection(real.selection, { type: 'set-primary', id: null })
-      for (const command of result.commands) real.canvas = applyCommand(real.canvas, command)
+      for (const command of result.commands) applyAndCount(real, command)
       real.trail.push(this.toString())
       recordStats(real, before, result.commands)
       settle(real)
@@ -922,6 +1088,7 @@ class ReplaceCanvas implements fc.Command<Model, Real> {
     // The layout effect feeds the reducer the replacement and takes its
     // answer; the canvas prop itself is the new one either way.
     const before = real.gesture
+    real.stats.eventTypes['canvas-replaced'] += 1
     const result = reduceGesture(real.gesture, replacement, {
       type: 'canvas-replaced',
       canvas: replacement,
@@ -1064,6 +1231,7 @@ class SelectAll implements fc.Command<Model, Real> {
     real.selection = reduceSelection(real.selection, { type: 'set-members', ids })
     real.selectedEdgeId = null
     real.trail.push(this.toString())
+    tallyShortcut(real, 'select-all')
     real.stats.selectAlls += 1
     if (real.selection.extraIds.size > 0) real.stats.multiSelections += 1
     settle(real)
@@ -1105,6 +1273,7 @@ class Nudge implements fc.Command<Model, Real> {
           ]
     })
     if (moves.length === 0) return
+    tallyShortcut(real, 'nudge-selection')
     dispatchCommands(real, [{ kind: 'batch', commands: moves }], this.toString())
     real.stats.nudges += 1
   }
@@ -1134,6 +1303,7 @@ class Duplicate implements fc.Command<Model, Real> {
     if (reminted.length > 0) {
       real.selection = reduceSelection(real.selection, { type: 'set-members', ids: reminted })
       real.selectedEdgeId = null
+      tallyShortcut(real, 'duplicate-selection')
       real.stats.duplicates += 1
       settle(real)
     }
@@ -1159,6 +1329,7 @@ class Reorder implements fc.Command<Model, Real> {
       this.toString(),
     )
     if (real.canvas === before) return
+    tallyShortcut(real, `reorder-${this.placement}`)
     real.stats.reordersEffective += 1
     if (this.placement === 'forward' || this.placement === 'backward') {
       real.stats.stepReordersEffective += 1
@@ -1181,6 +1352,7 @@ class ToggleLock implements fc.Command<Model, Real> {
   run(_model: Model, real: Real): void {
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
+    tallyShortcut(real, 'toggle-lock')
     const next = !real.lockedNodeIds.has(members[0])
     for (const id of members) {
       if (next) real.lockedNodeIds.add(id)
@@ -1352,6 +1524,7 @@ class Copy implements fc.Command<Model, Real> {
     writeClipboardFragment(fragment)
     // The newest clipboard intent wins: a plain copy lifts a pending cut.
     real.pendingCut = null
+    tallyShortcut(real, 'copy-selection')
     real.stats.copies += 1
     real.trail.push(this.toString())
     settle(real)
@@ -1376,6 +1549,7 @@ class Cut implements fc.Command<Model, Real> {
       cutId: fragment.cut.id,
       snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
     }
+    tallyShortcut(real, 'cut-selection')
     real.stats.cuts += 1
     real.trail.push(this.toString())
     settle(real)
@@ -1393,6 +1567,7 @@ class Paste implements fc.Command<Model, Real> {
   run(_model: Model, real: Real): void {
     const fragment = readClipboardFragment()
     if (fragment === null) return
+    tallyShortcut(real, 'paste-clipboard')
     const current = real.canvas
     const at = this.at ?? undefined
 
@@ -1703,15 +1878,35 @@ describe('editor composite state (command-based)', () => {
     cutMoves: 0,
     pasteInserts: 0,
     reconnections: 0,
+    commandKinds: emptyTally(COMMAND_COVERAGE),
+    eventTypes: emptyTally(GESTURE_EVENT_COVERAGE),
+    shortcutIds: emptyTally(SHORTCUT_COVERAGE),
   }
 
   /**
+   * Everything below lives in `afterAll`, which vitest reports as a
+   * failed SUITE rather than a failed test — the summary line still says
+   * "6 passed" beside the failure, and only the exit code (verified: 1)
+   * disagrees. CI keys on the exit code; a human skimming locally should
+   * read the error, not the count.
+   *
    * The fixture reached its subject. Every invariant here is about an
    * ARRANGEMENT — a commit landing, an edit handed off, a node vanishing
    * under a live gesture — and a generator that drifted away from those
    * would keep passing while covering only presses that resolve to nothing.
    */
   afterAll(() => {
+    // The three surface ledgers, checked from both sides. These come
+    // FIRST because they answer a different question from the floors
+    // below: not "did the fixture reach the interesting arrangement" but
+    // "does this model still know about the whole editor". A feature
+    // added to the canvas fails the BUILD at the ledger's `satisfies`
+    // before it ever reaches here; these assertions are what stop an
+    // entry that compiles from being wrong.
+    assertLedger('EditorCommand kind', COMMAND_COVERAGE, stats.commandKinds)
+    assertLedger('GestureEvent type', GESTURE_EVENT_COVERAGE, stats.eventTypes)
+    assertLedger('shortcut', SHORTCUT_COVERAGE, stats.shortcutIds)
+
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
     // reject. Each sits well under the minimum measured across six
