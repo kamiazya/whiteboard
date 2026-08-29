@@ -1,6 +1,7 @@
 import { cp, lstat, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DB_FILENAME } from './store/db/location.js'
+import { BLOB_TEMP_DIRNAME } from './store/fs/fs-blob-store.js'
 
 // Backup / restore drill helper for the local daemon data directory.
 //
@@ -193,12 +194,19 @@ export async function backupDataDir(
     dereference: false,
     errorOnExist: true,
     force: false,
-    // Filtered rather than deleted afterwards: a fossil that is copied and
-    // then removed exists on disk in between, and a backup interrupted in
-    // that window is one holding rows it was never meant to hold.
-    ...(options.excludeDatabaseFile
-      ? { filter: (src: string) => src !== join(srcDataDir, DB_FILENAME) }
-      : {}),
+    // Two things are filtered out rather than deleted afterwards: a fossil
+    // that is copied and then removed exists on disk in between, and a backup
+    // interrupted in that window is one holding rows it was never meant to
+    // hold.
+    //
+    // The blob temp area never travels, whatever the database is doing. It
+    // holds mid-flight bytes under a name no digest matches, so a copy of one
+    // resolves to nothing — and it is the entry a live copy is most likely to
+    // trip over, since `cp` stats each name it listed and a temp file renamed
+    // away in between raises ENOENT for the whole backup.
+    filter: (src: string) =>
+      src !== join(srcDataDir, BLOB_TEMP_DIRNAME) &&
+      !(options.excludeDatabaseFile === true && src === join(srcDataDir, DB_FILENAME)),
   })
 }
 

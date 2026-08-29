@@ -146,3 +146,77 @@ describe('FsBlobStore', () => {
     await expect(oracle.delete({ ref: unknownRef })).resolves.toBeUndefined()
   })
 })
+
+/**
+ * A blob must never be observable half-written.
+ *
+ * `put` is idempotent by design — the store is content-addressed, so the same
+ * bytes always land on the same path — which makes REWRITING an existing blob
+ * an ordinary event rather than an edge case. Re-uploading an image, or two
+ * people uploading the same file, does it.
+ *
+ * A plain `writeFile` opens with O_TRUNC, so for the whole duration of that
+ * write the blob is short. Anyone reading it in that window gets a truncated
+ * JSON envelope, which `get` correctly refuses to parse — so the read fails
+ * for a blob that is present, complete and unchanged either side of it.
+ *
+ * Measured before the fix, on a 6 MiB blob: 8 reads during 8 re-puts,
+ * `readable=0 threw-corrupt=8`. Not a narrow race — the window is as long as
+ * the write.
+ *
+ * The same window is what makes a hot backup impossible: 12 of 12 directory
+ * copies taken during a rewrite captured a truncated file. ADR-0021 decision
+ * 3 removes the stop-the-server requirement for the ROWS, and this is the
+ * matching half for the blobs.
+ */
+describe('FsBlobStore concurrent rewrite', () => {
+  it('keeps an existing blob readable while the same bytes are put again', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fs-blob-rewrite-'))
+    try {
+      const store = new FsBlobStore(dir)
+      // Large enough that the write spans many reads. A small blob can finish
+      // inside one scheduler turn and hide the window entirely.
+      const bytes = new Uint8Array(6 * 1024 * 1024).fill(0x41)
+      const { ref } = await store.put({ bytes, contentType: 'image/png' })
+
+      const reads: Array<Promise<number | string>> = []
+      const writing = store.put({ bytes, contentType: 'image/png' })
+      for (let i = 0; i < 8; i++) {
+        reads.push(
+          store
+            .get({ ref })
+            .then((got) => got?.bytes.length ?? -1)
+            .catch((err) => (isCorruptStoredDataError(err) ? 'corrupt' : `other: ${err}`)),
+        )
+      }
+      const results = await Promise.all(reads)
+      await writing
+
+      // Every read sees the whole blob. None sees a truncated envelope, and
+      // none sees a zero-length one.
+      expect(results).toEqual(Array.from({ length: 8 }, () => bytes.length))
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+
+  /**
+   * The temp file must not be left behind, or the shard directory accumulates
+   * one per write and the blob directory stops being purely content-addressed
+   * — file-GC walks it by digest name and would find entries it cannot match.
+   */
+  it('leaves no temporary files in the shard directory', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'fs-blob-tmp-'))
+    try {
+      const store = new FsBlobStore(dir)
+      const bytes = new Uint8Array(1024).fill(0x42)
+      const { ref } = await store.put({ bytes, contentType: 'image/png' })
+      await store.put({ bytes, contentType: 'image/png' })
+
+      const shard = join(dir, 'blobs', ref.digestHex.slice(0, 2))
+      expect(await readdir(shard)).toEqual([ref.digestHex.slice(2)])
+    } finally {
+      await rm(dir, { recursive: true, force: true })
+    }
+  })
+})
