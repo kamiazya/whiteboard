@@ -87,12 +87,21 @@ export function ShellMark({ state, className }: ShellMarkProps) {
   useEffect(() => {
     const before = previous.current
     previous.current = session
+    // Leaving synced ENDS the gesture, and clearing the flag is what makes
+    // the next recovery playable: `setRecovered(true)` on a flag that is
+    // already true is a no-op — React bails on identical state, the class
+    // never leaves the DOM, and the animation therefore never restarts. A
+    // connection that drops repeatedly would show the reassurance once and
+    // then never again, which is the opposite of who needs it.
+    if (session !== 'synced') {
+      setRecovered(false)
+      return
+    }
     // Only a session that had DROPPED and came back. A first mount that is
     // already synced is not a recovery — celebrating it would make every
     // navigation twinkle, and spend the gesture before anything went wrong.
     // A keeper change is not one either: browser -> daemon is a move, with
     // its own narration, and no session dropped for it to come back from.
-    if (session !== 'synced') return
     if (before !== 'reconnecting' && before !== 'sync-off') return
     setRecovered(true)
     const timer = setTimeout(() => setRecovered(false), RECOVERED_MS)
@@ -100,19 +109,28 @@ export function ShellMark({ state, className }: ShellMarkProps) {
   }, [session])
 
   const tone = state === undefined ? undefined : toneOf(state)
+  // Gated on the session as well as on the flag. `useEffect` is PASSIVE — it
+  // runs after paint — so between the render that carries the new session and
+  // the effect that clears the flag there is a real painted frame showing the
+  // recovery gesture under a session that has just dropped. The flag clear is
+  // what makes the NEXT recovery playable; this is what keeps the current one
+  // from outliving its session by a frame. Deliberately not test-pinned: a
+  // single pre-effect frame is not observable from jsdom, and asserting it
+  // would need a browser test that catches one paint.
+  const playingRecovery = recovered && session === 'synced'
 
   return (
     <svg
       data-testid="shell-mark"
       {...(state === undefined ? {} : { 'data-keeper': state.keeper })}
       {...(session === undefined ? {} : { 'data-session': session })}
-      {...(recovered ? { 'data-gesture': 'recovered' } : {})}
+      {...(playingRecovery ? { 'data-gesture': 'recovered' } : {})}
       viewBox="0 0 88 56"
       fill="none"
       aria-hidden="true"
       className={cn(
         'h-[16px] w-[26px] overflow-visible',
-        recovered && 'wb-mark-recovered',
+        playingRecovery && 'wb-mark-recovered',
         className,
       )}
     >

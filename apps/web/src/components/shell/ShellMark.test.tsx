@@ -65,10 +65,55 @@ describe('ShellMark', () => {
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
   })
 
+  it('ends the gesture the moment the session leaves synced', () => {
+    // Leaving synced cancelled the timer but left the flag set, so the mark
+    // went on claiming a gesture with no recovered session behind it.
+    const { rerender } = render(<ShellMark state={DAEMON('reconnecting')} />)
+    rerender(<ShellMark state={DAEMON('synced')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
+
+    // Well inside the gesture's own duration: this is the drop that arrives
+    // before it has finished playing.
+    rerender(<ShellMark />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBeNull()
+  })
+
+  it('plays the SECOND recovery too, on a session that keeps dropping', () => {
+    // The sharper half of the same defect. A flag left set makes the next
+    // `setRecovered(true)` a no-op — React bails on identical state, the
+    // class never leaves the DOM, and the animation therefore never
+    // restarts. The user who most needs the reassurance, on a connection
+    // that drops repeatedly, is the one who would stop seeing it.
+    const { rerender } = render(<ShellMark state={DAEMON('reconnecting')} />)
+    rerender(<ShellMark state={DAEMON('synced')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
+
+    rerender(<ShellMark state={DAEMON('reconnecting')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBeNull()
+
+    rerender(<ShellMark state={DAEMON('synced')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
+  })
+
   it('celebrates a recovery out of sync-off too', () => {
     const { rerender } = render(<ShellMark state={DAEMON('sync-off')} />)
     rerender(<ShellMark state={DAEMON('synced')} />)
     expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
+  })
+
+  it('does not celebrate a later synced session that never dropped', () => {
+    // The path the two cases above do not reach: recover, then MOVE to the
+    // browser, then come back on a daemon. Nothing dropped on that last
+    // step — it is a keeper change — so a flag left over from the earlier
+    // recovery would make the mark congratulate a session that never fell
+    // over.
+    const { rerender } = render(<ShellMark state={DAEMON('reconnecting')} />)
+    rerender(<ShellMark state={DAEMON('synced')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBe('recovered')
+
+    rerender(<ShellMark state={{ keeper: 'browser' }} />)
+    rerender(<ShellMark state={DAEMON('synced')} />)
+    expect(screen.getByTestId('shell-mark').getAttribute('data-gesture')).toBeNull()
   })
 
   it('does not celebrate a keeper change, which is not a recovery', () => {
