@@ -448,12 +448,13 @@ export function reduceGesture(
       // it — the context menu's "Edit text" verb dispatches it directly, and
       // the right-click that opened the menu returned early from
       // `handlePointerDown` — so nothing upstream has already committed.
-      // Re-opening the SAME node is excluded: `event.text` was read from the
-      // canvas before any commit could land, so committing and then
-      // re-seeding from it would write the pending text and immediately
-      // discard it.
+      // Re-opening the SAME node is a NO-OP, not a re-seed. There is
+      // nothing to commit — the edit never left — and `event.text` is the
+      // node's last COMMITTED text, so seeding from it would replace what
+      // the user has typed since. That is the same silent loss this arm
+      // exists to prevent, one carve-out further in.
       if (state.kind === 'editing-text' && state.nodeId === event.nodeId) {
-        return stateOnly({ ...state, pendingText: event.text })
+        return stateOnly(state)
       }
       return withPendingTextCommit(
         state,

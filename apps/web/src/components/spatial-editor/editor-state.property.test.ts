@@ -693,7 +693,21 @@ function checkPendingTextSurvives(
   if (before.kind !== 'editing-text' || before.pendingText === '') return
   const stillEditingSameNode =
     real.gesture.kind === 'editing-text' && real.gesture.nodeId === before.nodeId
-  if (stillEditingSameNode) return
+  if (stillEditingSameNode) {
+    // Staying in the SAME edit is not automatically safe, and treating it
+    // as such is what hid a loss here: `start-text-edit` on the node
+    // already being edited re-seeded `pendingText` from the canvas,
+    // silently replacing what had been typed. Only a keystroke may change
+    // it, so every other event that leaves the edit open must leave the
+    // text alone.
+    if (event.type !== 'update-text-edit') {
+      expect(
+        real.gesture.kind === 'editing-text' ? real.gesture.pendingText : undefined,
+        `T1 ${event.type} changed the open edit's text without a keystroke after ${real.trail.join(' → ')}`,
+      ).toBe(before.pendingText)
+    }
+    return
+  }
   real.stats.pendingTextHandoffs += 1
   if (DISCARDS_PENDING_TEXT.has(event.type)) return
   const at = `after ${real.trail.join(' → ')}`
@@ -2521,7 +2535,15 @@ describe('pinned counterexamples', () => {
     })
   })
 
-  it('re-opening the edit on the SAME node re-seeds without committing', () => {
+  // Re-opening the editor on the node ALREADY being edited is a no-op, and
+  // this test used to pin the opposite. `event.text` is read from the
+  // canvas, so re-seeding from it replaces what the user typed with the
+  // last committed value and emits nothing — the same silent loss as the
+  // different-node case above, in the one arm that was carved out of it.
+  // Reachable the same way: right-click the node you are editing and pick
+  // Edit text, which the right-click leaves open because it returns early
+  // from `handlePointerDown`. Found by CodeRabbit on #1119.
+  it('re-opening the edit on the SAME node keeps what was typed', () => {
     const canvas = initialCanvas()
     const opened = reduceGesture(createIdleState(), canvas, {
       type: 'start-text-edit',
@@ -2538,6 +2560,6 @@ describe('pinned counterexamples', () => {
       text: 'zero',
     })
     expect(again.commands).toEqual([])
-    expect(again.state).toEqual({ kind: 'editing-text', nodeId: 'n0', pendingText: 'zero' })
+    expect(again.state).toEqual({ kind: 'editing-text', nodeId: 'n0', pendingText: 'zero, edited' })
   })
 })
