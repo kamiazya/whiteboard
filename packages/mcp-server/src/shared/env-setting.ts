@@ -24,6 +24,15 @@
  * trimmed rather than rejected: it is a transport artifact of compose files
  * and shell quoting, not an operator asking for something, and refusing to
  * boot over a stray space would be a hostile reading of an unambiguous value.
+ *
+ * **Boolean flags are deliberately outside this rule.** `WHITEBOARD_DEBUG`,
+ * `WHITEBOARD_DEV` and `WHITEBOARD_NO_WATCH` test `=== '1'`, so `true` and
+ * `yes` are off rather than errors. That is the same silent-fallback shape on
+ * paper, and it is kept anyway (user decision, 2026-08-29): "exactly `1` is
+ * on" is a spec a reader can hold in their head and an operator can satisfy
+ * without consulting anything, and a clear narrow spec beats a forgiving one
+ * that has to enumerate which spellings of true it accepts. Do not "finish"
+ * the convention by extending it here — the omission is the decision.
  */
 
 export type ParsedSetting<T> = { ok: true; value: T } | { ok: false; reason: string }

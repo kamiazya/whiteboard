@@ -26,6 +26,12 @@ you stop one without removing the variable, but it is an error for
 `WHITEBOARD_DAEMON_STARTUP_TIMEOUT_MS`, where it would mean "give up before
 looking".
 
+The `1`-or-off flags (`WHITEBOARD_DEBUG`, `WHITEBOARD_DEV`,
+`WHITEBOARD_NO_WATCH`) are deliberately outside the rule: they are on only for
+exactly `1`, so `true` and `yes` are off rather than errors. That is kept on
+purpose — a spec you can hold in your head beats a forgiving one that has to
+enumerate which spellings of true it accepts.
+
 | Variable | Purpose | Default |
 |---|---|---|
 | `WHITEBOARD_DATA_DIR` | Runtime data directory. Workspaces, snapshots, versions, and exports all live underneath it. | `~/.whiteboard` (falls back to the OS temp directory if unwritable) |
