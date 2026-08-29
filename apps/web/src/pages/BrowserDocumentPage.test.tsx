@@ -803,8 +803,7 @@ describe('BrowserDocumentPage', () => {
   })
 
   describe('daemon-only capability messaging', () => {
-    const CTA_TEXT =
-      'Connect a daemon (MCP) for version history, workspaces, variations and merging.'
+    const CTA_TEXT = 'Connect a daemon (MCP) for version history, variations and merging.'
 
     it('keeps the capability CTA out of page chrome and reports "local" to the shell', async () => {
       const store = new LocalStoreDouble()

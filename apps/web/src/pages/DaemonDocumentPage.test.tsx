@@ -348,7 +348,7 @@ describe('DaemonDocumentPage', () => {
           <DaemonDocumentPage
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
-            capabilities={{ workspaces: false, versions: true, branches: true, merge: true }}
+            capabilities={{ versions: true, branches: true, merge: true }}
           />,
           { container: document.body },
         )
@@ -855,7 +855,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: false,
               branches: true,
               merge: true,
@@ -1069,7 +1068,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: false,
               branches: true,
               merge: true,
@@ -1266,7 +1264,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: true,
               branches: false,
               merge: false,
@@ -1434,7 +1431,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: true,
               branches: false,
               merge: false,
@@ -1506,7 +1502,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              workspaces: true,
               versions: true,
               branches: true,
               merge: false,

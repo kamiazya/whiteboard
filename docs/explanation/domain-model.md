@@ -11,12 +11,18 @@ backed by more than one representation today. Read
   spatial node-and-edge editor) or `markdown` (a single markdown body).
   The kind is chosen at creation and does not change afterwards — except
   that restoring a version also restores that version's kind.
-- **Workspace** — a named collection of canvases. Only daemon mode has
-  real, multiple workspaces; a browser keeper has exactly one, and it is
-  stored rather than implied — every canvas kept in the browser carries the
-  workspace it belongs to, the same field a daemon canvas carries. The
-  constraint is "a single workspace that is always present", not the absence
-  of the concept.
+- **Workspace** — a named collection of canvases. Both keepers hold as many
+  as you make: the app names the current one in the header, and the same
+  control switches between them and creates new ones. Which workspace you are
+  in is part of the address (`/w/<workspace>`), so a link, a bookmark and the
+  back button all carry it.
+
+  A workspace has three names, and only two are yours to choose. The one in
+  the URL is short and URL-safe; the one in the header is free text with no
+  restrictions; the third is an identifier the app keeps for itself and never
+  shows you. Renaming changes what you chose and never the identity — which
+  is why a link built on the identifier keeps working across a rename, and
+  one built on the short name does not.
 - **Display name** — the human title of a canvas. Optional; a canvas
   without one shows its identifier instead. Renaming changes only the
   display name, never the identity.

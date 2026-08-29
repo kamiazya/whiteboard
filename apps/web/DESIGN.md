@@ -178,8 +178,13 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 - **Dialogs**: `max-h` + `overflow-y-auto` when content can grow; page-width
   cards must wrap (`min-w-0`, `break-all` for unbreakable strings) before
   entering a dialog.
-- **Raw identifiers are not chrome.** Ids appear in detail surfaces only;
-  single-choice selectors (one workspace) render nothing at all.
+- **Raw identifiers are not chrome.** Ids appear in detail surfaces only. A
+  control that would have nothing but an id to show is the case to look at:
+  two workspace selects rendered canonical ids as their own option labels
+  before the switcher replaced them, and one of those was on the document
+  page's header row. What a control falls back to when a name is missing is
+  part of its design, not an afterthought — `workspaceLabel` is where that
+  precedence lives.
 - **Both themes always.** Any new color must be defined for `:root` and
   `.dark`, and respect the WCAG 1.4.3/1.4.11 floors the contrast tests pin.
 - **Motion**: every animation must serve hierarchy, feedback, or
