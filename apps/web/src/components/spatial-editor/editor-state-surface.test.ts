@@ -58,9 +58,8 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
 
   viewport:
     'not modelled: pan/zoom, owned by viewport.property.test.ts — it cannot reach canvas, gesture or selection state',
-  tool: 'not modelled: select/hand/connect changes what a pointerdown MEANS (hand cancels the gesture and clears the selection, connect routes to pointerdown-connect). The model drives select only',
-  marquee:
-    'not modelled: a drag from empty space that resolves to set-members on pointerup. Real selection state, reached by no command here',
+  tool: 'modelled',
+  marquee: 'modelled',
 
   // The four id-pinned entries. Each resolves its element IN THE RENDER
   // and shows nothing when it is missing, so a stale id here is inert

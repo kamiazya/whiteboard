@@ -421,6 +421,11 @@ interface Stats {
   pasteInserts: number
   /** Inserts that reconnected at least one severed boundary edge. */
   reconnections: number
+  marqueeSelections: number
+  handPressesIgnored: number
+  handEntries: number
+  connectArms: number
+  toolSwitches: number
   /**
    * Per-member tallies behind the three ledgers above. Emissions, not
    * effects — the question these answer is "does the model ever produce
@@ -460,6 +465,21 @@ interface Real {
    * what the invalidation effect compares against.
    */
   pendingCut: { readonly cutId: string; readonly snapshot: ReadonlyMap<string, string> } | null
+  /**
+   * Which tool is active. Not decoration: `hand` returns from
+   * `handlePointerDown` before any gesture or selection work happens at
+   * all, and `connect` re-routes a node press to `pointerdown-connect`
+   * instead of starting a move.
+   */
+  tool: 'select' | 'hand' | 'connect'
+  /**
+   * The rubber-band rectangle, armed by a press that hit no node. While
+   * it is armed the pointer NEVER reaches the gesture reducer again —
+   * `pointermove` and `pointerup` both branch to the marquee and return —
+   * so this is not an extra layer over the gesture path but a fork away
+   * from it.
+   */
+  marquee: { readonly start: Point; readonly current: Point } | null
   nextId: number
   trail: string[]
   stats: Stats
@@ -477,6 +497,20 @@ function applyAndCount(real: Real, command: EditorCommand): void {
 function tallyCommand(real: Real, command: EditorCommand): void {
   real.stats.commandKinds[command.kind] += 1
   if (command.kind === 'batch') for (const inner of command.commands) tallyCommand(real, inner)
+}
+
+/**
+ * Whether a shortcut declaring `tools: ['select']` would fire.
+ *
+ * `findShortcut` takes the tool and refuses a spec the current tool is
+ * not listed in, so half the catalog is inert outside select mode:
+ * select-all, the clipboard family, duplicate, the z-order brackets and
+ * the lock toggle. The four inline-handled bindings — Delete, Escape, the
+ * arrows and Space — declare no `tools` and stay live in every tool,
+ * which is why they are not gated here.
+ */
+function inSelectTool(real: Real): boolean {
+  return real.tool === 'select'
 }
 
 /** Records that a command exercised the keyboard binding it stands for. */
@@ -726,8 +760,24 @@ function dispatchCommands(real: Real, commands: readonly EditorCommand[], label:
  * command downstream inherits that.
  */
 function pressNode(real: Real, nodeId: string, point: Point, label: string): void {
+  // Hand mode is navigation only: the handler returns before any of this,
+  // so a press changes nothing at all.
+  if (real.tool === 'hand') {
+    real.stats.handPressesIgnored += 1
+    return
+  }
   real.selection = reduceSelection(real.selection, { type: 'press', id: nodeId })
   real.selectedEdgeId = null
+  if (real.tool === 'connect') {
+    // The connect tool arms from a node press instead of starting a move,
+    // and a press while already connecting is swallowed — the edge
+    // completes on the pointerup over the target.
+    if (real.gesture.kind !== 'connecting') {
+      real.stats.connectArms += 1
+      dispatch(real, { type: 'pointerdown-connect', nodeId }, `${label}:connectTool`)
+    }
+    return
+  }
   dispatch(real, { type: 'pointerdown', nodeId, point }, label)
 }
 
@@ -861,16 +911,27 @@ class PressConnect extends GestureCommand {
  * including its `collapse-extras` before the reducer's own clear.
  */
 class PressEmpty implements fc.Command<Model, Real> {
-  constructor(private readonly onEdgeIndex: number | null) {}
+  constructor(
+    private readonly onEdgeIndex: number | null,
+    private readonly at: Point,
+  ) {}
   check(): boolean {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (real.tool === 'hand') {
+      real.stats.handPressesIgnored += 1
+      return
+    }
     const edges = real.canvas.edges
     const hitEdge =
       this.onEdgeIndex === null || edges.length === 0
         ? undefined
         : edges[this.onEdgeIndex % edges.length]
+    // The press ARMS the rubber band, whether it landed on empty space or
+    // on an edge line — an edge press that turns into a drag was a marquee
+    // all along, and the release drops the edge selection it made here.
+    real.marquee = { start: this.at, current: this.at }
     real.selection = reduceSelection(real.selection, { type: 'collapse-extras' })
     real.selectedEdgeId = hitEdge?.id ?? null
     if (hitEdge !== undefined) real.stats.edgeSelections += 1
@@ -881,36 +942,92 @@ class PressEmpty implements fc.Command<Model, Real> {
   }
 }
 
-class Move extends GestureCommand {
-  constructor(private readonly point: Point) {
-    super()
+class Move implements fc.Command<Model, Real> {
+  constructor(private readonly point: Point) {}
+  check(): boolean {
+    return true
   }
-  event(): GestureEvent {
-    return { type: 'pointermove', point: this.point }
+  run(_model: Model, real: Real): void {
+    // An armed marquee takes the move and RETURNS — the reducer never sees
+    // it. Mirrored rather than layered, because the two paths are
+    // exclusive in the handler too.
+    if (real.marquee !== null) {
+      real.marquee = { start: real.marquee.start, current: this.point }
+      real.trail.push(this.toString())
+      settle(real)
+      return
+    }
+    dispatch(real, { type: 'pointermove', point: this.point }, this.toString())
   }
   toString(): string {
     return `move(${this.point.x},${this.point.y})`
   }
 }
 
-class Release extends GestureCommand {
+class Release implements fc.Command<Model, Real> {
   constructor(
     private readonly point: Point,
     private readonly overIndex: number | null,
-  ) {
-    super()
+  ) {}
+  check(): boolean {
+    return true
   }
-  event(real: Real): GestureEvent {
-    const over = this.overIndex === null ? undefined : pick(real, this.overIndex)
-    return {
-      type: 'pointerup',
-      point: this.point,
-      ...(over === undefined ? {} : { targetNodeId: over.id }),
-    }
+  run(_model: Model, real: Real): void {
+    releasePointer(real, this.point, this.overIndex, this.toString())
   }
   toString(): string {
     return `release(${this.point.x},${this.point.y}${this.overIndex === null ? '' : `,over#${this.overIndex}`})`
   }
+}
+
+/**
+ * One pointer release, branching as `handlePointerUp` does: an armed
+ * marquee resolves to an area selection and the reducer is never
+ * consulted; anything else goes to the reducer's `pointerup`.
+ */
+function releasePointer(real: Real, point: Point, overIndex: number | null, label: string): void {
+  const marquee = real.marquee
+  if (marquee !== null) {
+    real.marquee = null
+    if (marquee.start.x === point.x && marquee.start.y === point.y) {
+      // A stationary press. The click paths it resolves to (double-press
+      // create, tap-to-place paste, edge label edit) have their own
+      // commands; nothing selection-shaped happens here.
+      real.trail.push(`${label}:click`)
+      settle(real)
+      return
+    }
+    const rect = {
+      x: Math.min(marquee.start.x, point.x),
+      y: Math.min(marquee.start.y, point.y),
+      w: Math.abs(point.x - marquee.start.x),
+      h: Math.abs(point.y - marquee.start.y),
+    }
+    // `selectableBoxes` again: a marquee may not gather a locked node.
+    const hitIds = real.canvas.nodes
+      .filter(
+        (node) =>
+          !real.lockedNodeIds.has(node.id) &&
+          node.x < rect.x + rect.w &&
+          node.x + node.width > rect.x &&
+          node.y < rect.y + rect.h &&
+          node.y + node.height > rect.y,
+      )
+      .map((node) => node.id)
+    real.selection = reduceSelection(real.selection, { type: 'set-members', ids: hitIds })
+    // A drag that began on an edge line was a marquee, not an edge click.
+    real.selectedEdgeId = null
+    if (hitIds.length > 0) real.stats.marqueeSelections += 1
+    real.trail.push(`${label}:marquee`)
+    settle(real)
+    return
+  }
+  const over = overIndex === null ? undefined : pick(real, overIndex)
+  dispatch(
+    real,
+    { type: 'pointerup', point, ...(over === undefined ? {} : { targetNodeId: over.id }) },
+    label,
+  )
 }
 
 class Cancel extends GestureCommand {
@@ -1153,7 +1270,7 @@ class DragNode implements fc.Command<Model, Real> {
     const to = { x: this.from.x + this.delta.x, y: this.from.y + this.delta.y }
     pressNode(real, node.id, this.from, this.toString())
     dispatch(real, { type: 'pointermove', point: to }, `${this.toString()}:move`)
-    dispatch(real, { type: 'pointerup', point: to }, `${this.toString()}:up`)
+    releasePointer(real, to, null, `${this.toString()}:up`)
   }
   toString(): string {
     return `drag(#${this.index},+${this.delta.x},+${this.delta.y})`
@@ -1180,7 +1297,7 @@ class ResizeNode implements fc.Command<Model, Real> {
       { type: 'pointerdown-handle', nodeId: node.id, handle: this.handle, point: this.from, box },
       this.toString(),
     )
-    dispatch(real, { type: 'pointerup', point: to }, `${this.toString()}:up`)
+    releasePointer(real, to, null, `${this.toString()}:up`)
   }
   toString(): string {
     return `resize(#${this.index},${this.handle},+${this.delta.x},+${this.delta.y})`
@@ -1231,6 +1348,7 @@ class SelectAll implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const ids = real.canvas.nodes.map((node) => node.id).filter((id) => !real.lockedNodeIds.has(id))
     if (ids.length === 0) return
     real.selection = reduceSelection(real.selection, { type: 'set-members', ids })
@@ -1293,6 +1411,7 @@ class Duplicate implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
     const fragment = extractClipboardFragment(real.canvas, new Set(members))
@@ -1325,6 +1444,7 @@ class Reorder implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
     const before = real.canvas
@@ -1355,6 +1475,7 @@ class ToggleLock implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
     tallyShortcut(real, 'toggle-lock')
@@ -1458,7 +1579,7 @@ class PressThenNudge implements fc.Command<Model, Real> {
     // The press leaves a `moving` gesture and the arrows only fire while
     // idle, exactly as the handler requires — so release it first, as the
     // finger does.
-    dispatch(real, { type: 'pointerup', point: { x: node.x, y: node.y } }, `${this.toString()}:up`)
+    releasePointer(real, { x: node.x, y: node.y }, null, `${this.toString()}:up`)
     new Nudge(this.delta, this.large).run(model, real)
   }
   toString(): string {
@@ -1489,7 +1610,7 @@ class PressEdgeThen implements fc.Command<Model, Real> {
   }
   run(model: Model, real: Real): void {
     if (real.canvas.edges.length === 0) return
-    new PressEmpty(this.edgeIndex).run(model, real)
+    new PressEmpty(this.edgeIndex, { x: 0, y: 0 }).run(model, real)
     if (real.selectedEdgeId === null) return
     if (this.then === 'delete') new DeleteSelection().run(model, real)
     else new ReplaceCanvas(this.keep, this.external).run(model, real)
@@ -1522,6 +1643,7 @@ class Copy implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
     const fragment = extractClipboardFragment(real.canvas, new Set(members))
@@ -1544,6 +1666,7 @@ class Cut implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const members = selectionMembers(real.selection)
     if (members.length === 0) return
     const cutId = `cut-${real.nextId++}`
@@ -1570,6 +1693,7 @@ class Paste implements fc.Command<Model, Real> {
     return true
   }
   run(_model: Model, real: Real): void {
+    if (!inSelectTool(real)) return
     const fragment = readClipboardFragment()
     if (fragment === null) return
     tallyShortcut(real, 'paste-clipboard')
@@ -1737,7 +1861,7 @@ class ClipboardFlow implements fc.Command<Model, Real> {
       this.mode === 'cutDelete' ? pickConnected(real, this.index) : pick(real, this.index)
     if (node === undefined) return
     pressNode(real, node.id, { x: node.x, y: node.y }, this.toString())
-    dispatch(real, { type: 'pointerup', point: { x: node.x, y: node.y } }, `${this.toString()}:up`)
+    releasePointer(real, { x: node.x, y: node.y }, null, `${this.toString()}:up`)
     if (this.mode === 'copy') {
       new Copy().run(model, real)
     } else {
@@ -1753,6 +1877,71 @@ class ClipboardFlow implements fc.Command<Model, Real> {
   }
   toString(): string {
     return `clipboard:${this.mode}(#${this.index})`
+  }
+}
+
+/**
+ * The tool palette. Only `hand` clears anything, and it clears
+ * everything: a surviving selection would keep Delete, the resize handles
+ * and connect live, an open editor would keep accepting text, and an
+ * armed connect could still complete — all edits in a mode whose contract
+ * is that no press can change the canvas.
+ */
+class SwitchTool implements fc.Command<Model, Real> {
+  constructor(private readonly next: 'select' | 'hand' | 'connect') {}
+  check(): boolean {
+    return true
+  }
+  run(_model: Model, real: Real): void {
+    real.tool = this.next
+    real.stats.toolSwitches += 1
+    if (this.next === 'hand') {
+      if (real.gesture.kind !== 'idle') {
+        dispatch(real, { type: 'pointercancel' }, `${this.toString()}:cancel`)
+      }
+      real.selection = reduceSelection(real.selection, { type: 'clear' })
+      real.selectedEdgeId = null
+      real.marquee = null
+      real.stats.handEntries += 1
+    }
+    real.trail.push(this.toString())
+    settle(real)
+  }
+  toString(): string {
+    return `tool(${this.next})`
+  }
+}
+
+/**
+ * Switch tool, then use the pointer in it — the two halves a user
+ * performs together and a uniform draw almost never pairs. Without it the
+ * connect tool armed 3-5 times per 300 runs and hand mode swallowed 3-10
+ * presses, which is too few for a floor to tell a live path from a dead
+ * one.
+ *
+ * The connect arm is the interesting half: it reaches `connecting`
+ * through the TOOL rather than through the selection overlay's connect
+ * handle, and completes on the release over the second node.
+ */
+class WithTool implements fc.Command<Model, Real> {
+  constructor(
+    private readonly tool: 'hand' | 'connect',
+    private readonly from: number,
+    private readonly to: number,
+  ) {}
+  check(): boolean {
+    return true
+  }
+  run(model: Model, real: Real): void {
+    new SwitchTool(this.tool).run(model, real)
+    const from = pick(real, this.from)
+    const to = pick(real, this.to)
+    if (from === undefined || to === undefined) return
+    pressNode(real, from.id, { x: from.x, y: from.y }, this.toString())
+    releasePointer(real, { x: to.x, y: to.y }, this.to, `${this.toString()}:up`)
+  }
+  toString(): string {
+    return `withTool(${this.tool},#${this.from}→#${this.to})`
   }
 }
 
@@ -1781,7 +1970,9 @@ const allCommands = [
     .tuple(indexArb, handleArb, pointArb, fc.boolean())
     .map(([i, h, p, multi]) => new PressHandle(i, h, p, multi)),
   indexArb.map((i) => new PressConnect(i)),
-  fc.option(fc.nat({ max: 3 }), { nil: null }).map((i) => new PressEmpty(i)),
+  fc
+    .tuple(fc.option(fc.nat({ max: 3 }), { nil: null }), pointArb)
+    .map(([i, at]) => new PressEmpty(i, at)),
   pointArb.map((p) => new Move(p)),
   fc.tuple(pointArb, fc.option(indexArb, { nil: null })).map(([p, over]) => new Release(p, over)),
   fc.constant(new Cancel()),
@@ -1858,6 +2049,18 @@ const allCommands = [
       fc.option(pointArb, { nil: null }),
     )
     .map(([i, mode, at]) => new ClipboardFlow(i, mode, at)),
+  // Weighted back toward `select`: hand mode makes every pointer command
+  // inert by design, so an even draw would spend a third of the sequence
+  // asserting that nothing happens.
+  fc
+    .oneof(
+      { arbitrary: fc.constant('select' as const), weight: 2 },
+      { arbitrary: fc.constantFrom('hand', 'connect' as const), weight: 2 },
+    )
+    .map((next) => new SwitchTool(next)),
+  fc
+    .tuple(fc.constantFrom<'hand' | 'connect'>('hand', 'connect'), indexArb, indexArb)
+    .map(([t, from, to]) => new WithTool(t, from, to)),
 ]
 
 describe('editor composite state (command-based)', () => {
@@ -1883,6 +2086,11 @@ describe('editor composite state (command-based)', () => {
     cutMoves: 0,
     pasteInserts: 0,
     reconnections: 0,
+    marqueeSelections: 0,
+    handPressesIgnored: 0,
+    handEntries: 0,
+    connectArms: 0,
+    toolSwitches: 0,
     commandKinds: emptyTally(COMMAND_COVERAGE),
     eventTypes: emptyTally(GESTURE_EVENT_COVERAGE),
     shortcutIds: emptyTally(SHORTCUT_COVERAGE),
@@ -1914,15 +2122,16 @@ describe('editor composite state (command-based)', () => {
 
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
-    // reject. Each sits well under the minimum measured across six
-    // consecutive runs — moves 45-58, resizes 38-63, connects 24-36,
-    // deletes 22-46, text edits opened 67-96, pending-text handoffs
-    // 20-36, mid-gesture external replacements 28-34, multi-selections
-    // 123-187, nudges 56-73, duplicates 13-25, effective reorders 25-59
-    // (of which forward/backward 9-23), locks applied 14-31, select-alls
-    // 44-54, edge selections 56-69, edge deletes 14-23, copies 25-36,
-    // cuts 49-63, cut-moves 10-15, paste-inserts 35-52, reconnections
-    // 3-13.
+    // reject. Each sits well under the minimum measured across five
+    // consecutive runs — moves 25-47, resizes 34-55, connects 37-52,
+    // deletes 20-56, text edits opened 73-87, pending-text handoffs
+    // 18-35, mid-gesture external replacements 20-30, multi-selections
+    // 124-204, nudges 39-73, duplicates 12-20, effective reorders 20-33
+    // (of which forward/backward 8-13), locks applied 12-19, select-alls
+    // 35-49, edge selections 42-66, edge deletes 10-21, copies 23-29,
+    // cuts 38-61, cut-moves 6-17, paste-inserts 27-44, reconnections 5-7,
+    // marquee selections 12-19, hand-swallowed presses 37-53, hand
+    // entries 33-43, connect arms 23-59, tool switches 88-122.
     //
     // Two rules, both learned by getting them wrong here.
     //
@@ -1930,42 +2139,46 @@ describe('editor composite state (command-based)', () => {
     // as green while forward/backward were doing nothing at all, because
     // the fixture's nodes never overlapped.
     //
-    // Re-measure when adding a command or widening the document
-    // generator, because both dilute every existing counter — the
-    // keyboard half took mid-gesture external replacements from 9-19 to
-    // 4-13, and generating four node types quartered the text-node share
-    // T1 feeds on. Eight arrangements proved dilute enough to need a
-    // command of their own rather than a lowered floor, and two needed a
-    // biased pick as well: reorder is invisible on a full selection, the
-    // arrows need a selection AND an idle gesture, and the cut surface
-    // cannot reconnect while the originals are still on the canvas.
-    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(15)
-    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(15)
-    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(10)
+    // Re-measure when adding a command, widening the document generator,
+    // or making the model MORE faithful, because all three dilute every
+    // existing counter. The keyboard half took mid-gesture external
+    // replacements from 9-19 to 4-13; four generated node types quartered
+    // the text-node share T1 feeds on; and gating the select-only
+    // shortcuts on the tool cut every one of them again. Nine
+    // arrangements proved dilute enough to need a command of their own
+    // rather than a lowered floor, and two needed a biased pick as well.
+    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(12)
+    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(18)
+    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(20)
     expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(8)
-    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(30)
+    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(35)
     expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(8)
     expect(
       stats.externalReplacementsMidGesture,
       'external replacements barely landed mid-gesture',
-    ).toBeGreaterThan(12)
+    ).toBeGreaterThan(10)
     expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(50)
-    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(20)
+    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(18)
     expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(5)
-    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(10)
+    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(8)
     expect(
       stats.stepReordersEffective,
       'forward/backward never stepped over an overlapping node',
     ).toBeGreaterThan(4)
-    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(6)
+    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(5)
     expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(15)
     expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(20)
-    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(5)
+    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(4)
     expect(stats.copies, 'Cmd+C barely reached').toBeGreaterThan(10)
-    expect(stats.cuts, 'Cmd+X barely reached').toBeGreaterThan(20)
-    expect(stats.cutMoves, 'no paste resolved as a same-canvas move').toBeGreaterThan(4)
-    expect(stats.pasteInserts, 'no paste inserted a copy').toBeGreaterThan(15)
+    expect(stats.cuts, 'Cmd+X barely reached').toBeGreaterThan(15)
+    expect(stats.cutMoves, 'no paste resolved as a same-canvas move').toBeGreaterThan(3)
+    expect(stats.pasteInserts, 'no paste inserted a copy').toBeGreaterThan(12)
     expect(stats.reconnections, 'no cut surface was ever reconnected').toBeGreaterThan(1)
+    expect(stats.marqueeSelections, 'no marquee ever gathered a node').toBeGreaterThan(5)
+    expect(stats.handPressesIgnored, 'hand mode never swallowed a press').toBeGreaterThan(12)
+    expect(stats.handEntries, 'hand mode was never entered').toBeGreaterThan(12)
+    expect(stats.connectArms, 'the connect tool never armed').toBeGreaterThan(10)
+    expect(stats.toolSwitches, 'the tool never changed').toBeGreaterThan(30)
   })
 
   fcTest.prop(
@@ -1991,6 +2204,8 @@ describe('editor composite state (command-based)', () => {
             lockedNodeIds: new Set<string>(),
             selectedEdgeId: null,
             pendingCut: null,
+            tool: 'select',
+            marquee: null,
             nextId: 0,
             trail: [],
             stats,
