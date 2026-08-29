@@ -97,13 +97,37 @@ export class DocumentStoreWorkspaceDocs implements WorkspaceDocs {
       sinceFrontier: new Uint8Array(),
     })
     if (shouldCompact([...existing, update])) {
-      const snapshot = doc.export({ mode: 'snapshot' })
+      // Folded from the STORED state plus this update — never from `doc`.
+      //
+      // `doc` is one writer's view, and a writer's view is not the record: it
+      // holds whatever that instance had when it last read, plus its own
+      // edits. Exporting a snapshot from it replaces the record with a subset
+      // of itself, dropping every op this instance never saw. The generation
+      // fence does not catch that — nobody REPLACED the snapshot, so the
+      // compare-and-swap legitimately succeeds — and neither does the
+      // superseded count, which drops a prefix this snapshot does not
+      // contain. Found by the multi-instance convergence property, not by
+      // any example test.
+      //
+      // The stored bytes are read only here, on the path that already decided
+      // to fold — once per COMPACT_DELTA_BYTES written, not once per save.
+      // `loro-store.ts` folds the same way in the browser, and for the same
+      // reason.
+      const base = await this.store.loadSnapshot({ docRef })
+      const merged = new LoroDoc()
+      if (base !== null) merged.import(reassembleSnapshot(base.manifest, base.chunks))
+      for (const stale of existing) merged.import(stale)
+      merged.import(update)
+      const snapshot = merged.export({ mode: 'snapshot' })
       const { manifest: fresh, chunks } = chunkSnapshot(new Uint8Array(snapshot), MAX_CHUNK_BYTES)
       const folded = await this.store.saveCompactedSnapshot({
         docRef,
         manifest: fresh,
         chunks,
-        frontier: new Uint8Array(doc.oplogVersion().encode()),
+        // The MERGED version, not `doc`'s: the snapshot being written holds
+        // every op above, so reporting the writer's own narrower vector would
+        // under-claim the record's state.
+        frontier: new Uint8Array(merged.oplogVersion().encode()),
         supersededDeltaCount: existing.length,
         expectedGeneration: header.generation,
       })

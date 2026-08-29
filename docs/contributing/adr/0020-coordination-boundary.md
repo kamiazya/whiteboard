@@ -30,7 +30,7 @@ document cache is therefore a *visibility* problem, not a correctness one —
 which is the opposite of what a first reading suggests, and is why this
 paragraph exists.
 
-### Three places where convergence stops covering, measured
+### Four places where convergence stops covering, measured
 
 1. **Compaction is a read-modify-write that does not append.** In `save()`'s
    `shouldCompact` branch the new ops are folded into a fresh snapshot and
@@ -44,18 +44,37 @@ paragraph exists.
    loser's ops exist nowhere, because the compaction branch never appended
    them as a delta. This is permanent data loss, not staleness.
 
-2. **The stored frontier is a last-write-wins scalar.** `newFrontier` is the
-   writing process's own `doc.oplogVersion()`, so a second writer's frontier
-   overwrites the first's rather than joining with it. It is currently
-   harmless only because `loadDeltas` ignores `sinceFrontier` and returns the
-   whole log — a behaviour the port's own conformance suite pins
-   (`packages/ports/src/test-utils/document-store-conformance.ts`, "ignores
-   sinceFrontier and returns the whole log"). The unimplemented parameter is
-   masking the incorrect frontier. Implementing incremental reads without
-   first making the frontier a version-vector join would turn a latent bug
-   into data loss.
+2. **A fold computed from the writer's own doc, rather than from the record.**
+   The compaction branch exported its snapshot from the `LoroDoc` the caller
+   handed it. That doc is one writer's VIEW — whatever that instance held when
+   it last read, plus its own edits — so folding it replaces the record with a
+   subset of itself, dropping every op this instance never saw. The generation
+   fence does not catch this and cannot: nobody REPLACED the snapshot, so the
+   compare-and-swap legitimately succeeds. The superseded count makes it
+   worse, dropping a delta prefix the new snapshot does not contain.
 
-3. **State outside the CRDT.** Blobs and versions are files
+   This was found by the multi-instance convergence property, after the fence
+   was already written and every example test passed. It is the reason the
+   property exists and the reason a fence alone is not the answer: **a fold
+   must be computed from the stored snapshot plus the stored log, never from a
+   writer's doc.** `loro-store.ts` in the browser already folded that way; the
+   daemon-side path did not, and no test compared them.
+
+3. **The stored frontier is a last-write-wins scalar.** `newFrontier` on the
+   append path is the writing process's own `doc.oplogVersion()`, so a second
+   writer's frontier overwrites the first's rather than joining with it. What
+   this produces is an UNDER-claim — the record reports a version older than
+   the log it holds — so today it costs a redundant export rather than an op,
+   and every current reader is safe. It is nonetheless wrong, and it is
+   currently invisible because `loadDeltas` ignores `sinceFrontier` and
+   returns the whole log, a behaviour the port's own conformance suite pins
+   (`packages/ports/src/test-utils/document-store-conformance.ts`, "ignores
+   sinceFrontier and returns the whole log"). Anything that later reports sync
+   status, or decides what to send a peer, reads this value and would be told
+   the record is behind when it is not. The fold path now writes the merged
+   version vector; the append path is the increment still outstanding.
+
+4. **State outside the CRDT.** Blobs and versions are files
    (`FileVersionStore` writes `<dataDir>/blobs/<workspaceId>/versions/*.png`),
    and `file-gc` computes a referenced set and then unlinks. Neither is a
    CRDT operation, and unlinking is not monotonic: one process's GC can
@@ -109,6 +128,15 @@ is rejected by storage if the generation is stale. Concretely,
 becomes conditional; a loser re-appends its update as a delta instead of
 compacting.
 
+The fence is necessary and **not sufficient**, which is worth stating because
+the first implementation of this decision stopped there and was still wrong.
+It arbitrates writers RACING for the same row; it says nothing about a writer
+whose own view is narrower than the row it is about to replace. So it comes
+with a second rule of the same standing: **an operation that rewrites shared
+state derives its new value from the stored state, never from the caller's
+copy of it.** Both are required, and only the property test checks the pair —
+each one alone passes every example written for the other.
+
 This ordering is the substance of the decision. A lease can expire while its
 holder is stalled, so a lease alone does not make a destructive operation
 safe; a guard in storage does. Once the guard exists, **a leader is not
@@ -138,6 +166,14 @@ Easier:
   serve all three.
 - A later SaaS control plane is an ordinary relational schema — tenants,
   quotas, billing — with no replicated state machine to operate.
+
+- The claim itself is checkable. `multi-instance-convergence.test.ts`
+  generates command sequences over N instances sharing one store, each
+  holding its own doc, and asserts that no acknowledged write is lost and
+  that every instance agrees on re-read. It runs against the in-memory store
+  and the real libSQL one, and it asserts in `afterAll` that the sequences
+  actually reached a fold and a refused fold — a generator that drifts away
+  from the interesting arrangements fails rather than passing vacuously.
 
 Harder, or deliberately given up:
 

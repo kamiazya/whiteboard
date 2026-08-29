@@ -266,3 +266,64 @@ it('keeps its ops when another writer wins the race to fold the log', async () =
   expect(reopened?.getMap('meta').get('title')).toBe('first')
   expect((reopened?.getMap('meta').get('bulk') as string | undefined)?.length).toBe(80 * 1024)
 })
+
+/**
+ * The shrunk counterexample from the multi-instance convergence property
+ * (`mcp-server/src/server/store/multi-instance-convergence.test.ts`), pinned.
+ *
+ * The property is the generator that found it; these are the regression
+ * guards. Both are shapes the generation fence does NOT cover — no writer
+ * replaces another's snapshot, so every compare-and-swap here legitimately
+ * succeeds and the record still loses an op.
+ */
+it('a writer whose doc never read the record does not replace it with its own partial view', async () => {
+  const store = new FakeDocumentStore()
+  const docs = new DocumentStoreWorkspaceDocs(store)
+
+  const first = new LoroDoc()
+  first.getMap('meta').set('first', '1')
+  first.commit()
+  await docs.save('ws-a', first)
+
+  // A second instance holding a doc that never opened this record — a process
+  // whose cache is cold, which is the ordinary state of a second daemon.
+  const second = new LoroDoc()
+  // Big enough to take the FOLD branch: the append branch was never the
+  // problem, and a small edit here would pass against the unfixed code.
+  second.getMap('meta').set('second', 'y'.repeat(80 * 1024))
+  second.commit()
+  await docs.save('ws-a', second)
+
+  const reopened = await docs.open('ws-a')
+  expect(reopened?.getMap('meta').get('first')).toBe('1')
+  expect((reopened?.getMap('meta').get('second') as string | undefined)?.length).toBe(80 * 1024)
+})
+
+it('a fold does not supersede a delta its own doc never saw', async () => {
+  const store = new FakeDocumentStore()
+  const docs = new DocumentStoreWorkspaceDocs(store)
+
+  const seed = new LoroDoc()
+  seed.getMap('meta').set('seed', '1')
+  seed.commit()
+  await docs.save('ws-a', seed)
+
+  // Opened BEFORE the append below, so its doc is missing that op — the
+  // ordinary consequence of two processes, not a contrived state.
+  const stale = (await docs.open('ws-a')) as LoroDoc
+
+  const other = (await docs.open('ws-a')) as LoroDoc
+  other.getMap('meta').set('appended', '1')
+  other.commit()
+  await docs.save('ws-a', other)
+
+  // The stale instance now folds. Its superseded count covers the append it
+  // cannot see, so an unfixed fold drops it.
+  stale.getMap('meta').set('bulk', 'z'.repeat(80 * 1024))
+  stale.commit()
+  await docs.save('ws-a', stale)
+
+  const reopened = await docs.open('ws-a')
+  expect(reopened?.getMap('meta').get('appended')).toBe('1')
+  expect(reopened?.getMap('meta').get('seed')).toBe('1')
+})
