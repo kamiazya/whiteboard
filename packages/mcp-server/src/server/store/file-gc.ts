@@ -21,6 +21,7 @@ import {
   loadDocument,
 } from './document-store.js'
 import { assertPathWithinDir } from './path-guard.js'
+import { parseFileGcGraceMs } from './storage-env.js'
 import type { VersionStore } from './version-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -256,11 +257,11 @@ const DEFAULT_GRACE_MS = 60 * 60 * 1000
  */
 function resolveGraceMs(options: PurgeFilesOptions): number {
   if (typeof options.graceMs === 'number') return Math.max(0, options.graceMs)
-  const envRaw = process.env.WHITEBOARD_FILE_GC_GRACE_MS
-  if (typeof envRaw === 'string' && /^\d+$/.test(envRaw)) {
-    const parsed = Number(envRaw)
-    if (Number.isSafeInteger(parsed)) return parsed
-  }
+  // One definition of the rule, in storage-env.ts, which startup also uses to
+  // refuse a value it cannot understand — so a started server never reaches
+  // the fallback below.
+  const parsed = parseFileGcGraceMs(process.env)
+  if (parsed.ok && parsed.value !== null) return parsed.value
   return DEFAULT_GRACE_MS
 }
 

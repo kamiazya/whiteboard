@@ -225,10 +225,26 @@ nothing was ever collectable. The guard is now the arrangement itself
 - **Encryption at rest of the durable copy**, and credentials for the
   destination. Deliberately deferred: it interacts with the hosted-deployment
   secret story rather than with this one.
-- **What the operator-facing configuration surface actually looks like.** This
-  ADR fixes the model; naming the settings is the next increment, and doing it
-  one environment variable at a time while implementing S3 is precisely what
-  this ADR exists to prevent.
+- **What the operator-facing configuration surface actually looks like** —
+  the setting names themselves. Doing that one environment variable at a time
+  while implementing S3 is precisely what this ADR exists to prevent.
+
+  What IS settled is the rule those settings will follow: **an unset setting
+  takes its default; a setting that is present but cannot be understood
+  aborts startup.** Setting a value is how an operator states a requirement,
+  and starting on the default answers it with behaviour they did not ask for
+  while saying so nowhere — `WHITEBOARD_FILE_GC_GRACE_MS=1h` meant one
+  millisecond, and the window protecting an in-flight upload was gone with no
+  error anywhere.
+
+  This is not a new posture. `server/index.ts` already fails fast on a
+  malformed `WHITEBOARD_ALLOWED_WEB_ORIGINS` and OAuth client registry, for
+  the reason its own comment gives — a silent fallback "would look identical
+  to 'the operator never configured it'". The storage settings had simply
+  never been held to it, and had drifted into four different answers for a
+  malformed value: default, `Number.parseInt` prefix, off, and abort.
+  `storage-env.ts` is now the one definition of each rule, used by both the
+  startup gate and the call sites.
 
 ## Alternatives considered
 
