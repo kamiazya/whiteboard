@@ -5,10 +5,12 @@ import type { ServerModeRecordReadResult } from '../server/security/server-mode-
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { restoreServerModeDataDir } from '../server/server-mode-backup-restore.js'
+import { databaseIsInsideDataDir } from '../server/store/db/location.js'
 import type { ServerRestoreArgs } from './server-restore-args.js'
 
 export interface RunServerRestoreOptions {
   args: ServerRestoreArgs & { kind: 'ok' }
+  env?: NodeJS.ProcessEnv
   isPidAlive?: (pid: number) => boolean
   doReadRecord?: (dataDir: string) => ServerModeRecordReadResult
   doRestore?: (backup: string, target: string, opts: BackupRestoreOptions) => Promise<void>
@@ -17,6 +19,7 @@ export interface RunServerRestoreOptions {
 export type ServerRestoreOutcome =
   | { kind: 'ok'; result: ServerRestoreResult }
   | { kind: 'running-target' }
+  | { kind: 'external-database' }
   | { kind: 'invalid-target-path' }
   | { kind: 'error'; message: string }
 
@@ -40,6 +43,7 @@ export async function runServerRestore(
 ): Promise<ServerRestoreOutcome> {
   const {
     args,
+    env = process.env,
     isPidAlive = defaultIsPidAlive,
     doReadRecord = readServerModeRecord,
     doRestore = restoreServerModeDataDir,
@@ -52,6 +56,13 @@ export async function runServerRestore(
   const record = doReadRecord(targetDir)
   if (record.kind === 'ok' && isPidAlive(record.record.pid)) {
     return { kind: 'running-target' }
+  }
+
+  // The mirror of the backup guard: putting a directory back cannot restore
+  // rows that live outside it, so succeeding here would leave the operator
+  // starting a server against blobs alone.
+  if (!databaseIsInsideDataDir(targetDir, env)) {
+    return { kind: 'external-database' }
   }
 
   // Reject if the target path itself is a symlink or a plain file.

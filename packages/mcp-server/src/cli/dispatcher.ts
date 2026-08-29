@@ -372,6 +372,12 @@ async function dispatchServerBackup(rest: readonly string[]): Promise<number> {
         'backup refused: server is running. Stop the server before taking a backup.\n',
       )
       return 1
+    case 'external-database':
+      process.stderr.write(
+        'backup refused: the database is not in the data directory, so copying it would ' +
+          'capture blobs alone. Back the database up where it lives.\n',
+      )
+      return 1
     case 'invalid-output-path':
       process.stderr.write('backup refused: output path is not an empty directory.\n')
       return 1
@@ -388,7 +394,7 @@ async function dispatchServerRestore(rest: readonly string[]): Promise<number> {
     return 64
   }
   const { runServerRestore } = await import('./server-restore.js')
-  const outcome = await runServerRestore({ args: parsed })
+  const outcome = await runServerRestore({ args: parsed, env: process.env })
   switch (outcome.kind) {
     case 'ok':
       writeJsonObject(outcome.result)
@@ -396,6 +402,12 @@ async function dispatchServerRestore(rest: readonly string[]): Promise<number> {
     case 'running-target':
       process.stderr.write(
         'restore refused: target is a running server. Stop the server before restoring.\n',
+      )
+      return 1
+    case 'external-database':
+      process.stderr.write(
+        'restore refused: the database is not in the target data directory, so restoring it ' +
+          'would put back blobs alone. Restore the database where it lives.\n',
       )
       return 1
     case 'invalid-target-path':

@@ -1,4 +1,5 @@
 import { join } from 'node:path'
+import { fileURLToPath } from 'node:url'
 
 export const DB_FILENAME = 'whiteboard.db'
 export const DB_URL_ENV = 'WHITEBOARD_DATABASE_URL'
@@ -65,4 +66,40 @@ export function resolveDatabaseLocation(
 
   const authToken = env[DB_URL_AUTH_TOKEN_ENV]?.trim()
   return { url: raw, ...(authToken === undefined || authToken === '' ? {} : { authToken }) }
+}
+
+/**
+ * Whether copying `dataDir` would carry the rows with it.
+ *
+ * Every whole-directory operation — `whiteboard server backup` and its
+ * restore — rests on an assumption it never states: that the database is a
+ * file inside the directory being copied. That held for every install until
+ * `WHITEBOARD_DATABASE_URL` made the location configurable, and nothing
+ * re-asked it. Measured: with a remote database configured, `server backup`
+ * reported `{"ok":true}` over a backup holding blobs alone.
+ *
+ * **Fail closed.** `true` is the answer that lets a whole-directory copy
+ * proceed, so anything unreadable answers `false` — a refused backup is
+ * recoverable, one the operator believes in is not.
+ */
+export function databaseIsInsideDataDir(
+  dataDir: string,
+  env: NodeJS.ProcessEnv = process.env,
+): boolean {
+  let url: string
+  try {
+    url = resolveDatabaseLocation(dataDir, env).url
+  } catch {
+    // An unusable value aborts startup elsewhere; here it simply is not a
+    // path inside the directory.
+    return false
+  }
+  if (!url.startsWith('file:')) return false
+  try {
+    return fileURLToPath(url) === join(dataDir, DB_FILENAME)
+  } catch {
+    // A relative or otherwise non-path file: URL. Whatever it names, this
+    // function cannot show it is inside.
+    return false
+  }
 }

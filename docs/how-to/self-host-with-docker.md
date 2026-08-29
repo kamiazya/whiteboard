@@ -140,6 +140,12 @@ provide the operator-facing surface for data backup and restore.
 - Stop the container before taking a backup. Never run backup against a live
   data volume — the CLI checks for a running `server-mode.json` record and
   refuses if the server process is still alive.
+- **These commands cover the data directory only.** They copy a directory, so
+  they capture the database only while it *is* a file in that directory. If
+  you have set [`WHITEBOARD_DATABASE_URL`](../reference/configuration.md) to a
+  libSQL server or any other path, both commands refuse rather than copy blobs
+  alone and report success — back that database up where it lives, using the
+  facilities of whatever hosts it.
 - Restore only into a missing or empty target directory. A non-empty target
   is rejected to prevent silent merging of stale state with the backup.
 - After restore, `server-mode.json` is removed from the target. The

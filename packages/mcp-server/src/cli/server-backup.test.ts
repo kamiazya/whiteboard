@@ -233,3 +233,53 @@ describe('runServerBackup', () => {
     }
   })
 })
+
+/**
+ * A backup that reports success while carrying no rows is worse than no
+ * backup: the operator believes they have one. Measured before this guard
+ * existed — with a remote database configured, `runServerBackup` answered
+ * `{"ok":true}` over a backup directory containing `[ 'blobs' ]` alone.
+ *
+ * The whole-directory copy is what assumes the rows are in the directory.
+ * That assumption held for every install until the database could be pointed
+ * elsewhere, and nothing re-asked it when that changed.
+ */
+describe('runServerBackup with the database outside the data directory', () => {
+  it('refuses rather than copying blobs alone and calling it a backup', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir)
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    // Refused BEFORE copying: a half-backup left on disk is the thing an
+    // operator would later restore from.
+    expect(mockDoBackup).not.toHaveBeenCalled()
+  })
+
+  it('still backs up normally when the database is the data directory file', async () => {
+    const dataDir = join(tmpRoot, 'data')
+    const outputDir = join(tmpRoot, 'backup')
+    await mkdir(dataDir)
+
+    const mockDoBackup = vi.fn(async () => {})
+    const outcome = await runServerBackup({
+      args: { kind: 'ok', json: true, outputDir, dataDir },
+      env: { WHITEBOARD_DATABASE_URL: `file:${join(dataDir, 'whiteboard.db')}` },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doBackup: mockDoBackup,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoBackup).toHaveBeenCalledTimes(1)
+  })
+})

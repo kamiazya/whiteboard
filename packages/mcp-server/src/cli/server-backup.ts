@@ -6,6 +6,7 @@ import type { ServerModeRecordReadResult } from '../server/security/server-mode-
 import { readServerModeRecord } from '../server/security/server-mode-record.js'
 import type { BackupRestoreOptions } from '../server/server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server/server-mode-backup-restore.js'
+import { databaseIsInsideDataDir } from '../server/store/db/location.js'
 import type { ServerBackupArgs } from './server-backup-args.js'
 
 export interface RunServerBackupOptions {
@@ -19,6 +20,7 @@ export interface RunServerBackupOptions {
 export type ServerBackupOutcome =
   | { kind: 'ok'; result: ServerBackupResult }
   | { kind: 'running-server' }
+  | { kind: 'external-database' }
   | { kind: 'invalid-output-path' }
   | { kind: 'error'; message: string }
 
@@ -55,6 +57,14 @@ export async function runServerBackup(
   const record = doReadRecord(dataDir)
   if (record.kind === 'ok' && isPidAlive(record.record.pid)) {
     return { kind: 'running-server' }
+  }
+
+  // Refuse when the rows are not in the directory being copied. This command
+  // copies a directory, so a database configured to live anywhere else is
+  // simply absent from the result — and reporting success over blobs alone
+  // hands the operator a backup they will trust and cannot restore from.
+  if (!databaseIsInsideDataDir(dataDir, env)) {
+    return { kind: 'external-database' }
   }
 
   // Reject if the output path itself is a symlink or a plain file.

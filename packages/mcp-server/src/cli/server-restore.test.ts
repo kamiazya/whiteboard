@@ -232,3 +232,47 @@ describe('runServerRestore', () => {
     }
   })
 })
+
+/**
+ * The mirror of the backup guard. Restoring a whole-directory backup into a
+ * data directory whose rows live elsewhere puts the blobs back and nothing
+ * else, while reporting success — and the operator's next act is to start a
+ * server against it.
+ */
+describe('runServerRestore with the database outside the data directory', () => {
+  it('refuses rather than restoring blobs alone and calling it a restore', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(backupDir)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      env: { WHITEBOARD_DATABASE_URL: 'libsql://db.example.com' },
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('external-database')
+    expect(mockDoRestore).not.toHaveBeenCalled()
+  })
+
+  it('still restores normally when the database is the data directory file', async () => {
+    const backupDir = join(tmpRoot, 'backup')
+    const targetDir = join(tmpRoot, 'restored')
+    await mkdir(backupDir)
+
+    const mockDoRestore = vi.fn(async () => {})
+    const outcome = await runServerRestore({
+      args: { kind: 'ok', json: true, backupDir, targetDir },
+      env: {},
+      isPidAlive: () => false,
+      doReadRecord: () => ({ kind: 'missing' }),
+      doRestore: mockDoRestore,
+    })
+
+    expect(outcome.kind).toBe('ok')
+    expect(mockDoRestore).toHaveBeenCalledTimes(1)
+  })
+})
