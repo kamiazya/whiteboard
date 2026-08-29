@@ -45,18 +45,34 @@ import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
 import { createViewportSetTool } from './tools/viewport-set.js'
+import { resolveWorkspaceId, withResolvedWorkspaceHandles } from './workspace-handle.js'
 
 export function createServer(deps: ServerDeps) {
-  const app = new Hono()
+  const app = new Hono<{ Variables: { workspaceId: string } }>()
   // One stamp-validated content-facts cache per server: backlinks/mentions,
   // tags, and search all read through it, so a request after a quiet period
   // reloads only what changed — regardless of which write path changed it.
   const factsCache = new ContentFactsCache()
 
+  /**
+   * The workspace handle is resolved HERE, once per request, and every handler
+   * below reads the result rather than the raw path parameter.
+   *
+   * Middleware rather than a call in each handler: resolving twice in one
+   * request is the failure this ordering exists to prevent — everything
+   * downstream keys on the resolved id (write locks, document caches, sync
+   * docKeys), and two independent resolutions can disagree the moment a
+   * segment moves between workspaces mid-flight.
+   */
+  app.use('/api/v1/workspaces/:workspaceId/*', async (c, next) => {
+    c.set('workspaceId', await resolveWorkspaceId(deps.documentIndex, c.req.param('workspaceId')))
+    await next()
+  })
+
   app.post('/api/v1/workspaces/:workspaceId/documents', async (c) => {
     const body = await c.req.json().catch(() => ({}))
     const parsed = wbDocumentCreateInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       ...body,
     })
     if (!parsed.success) {
@@ -71,7 +87,7 @@ export function createServer(deps: ServerDeps) {
   })
 
   app.get('/api/v1/workspaces/:workspaceId/documents', async (c) => {
-    const parsed = wbDocumentListInputSchema.safeParse({ workspaceId: c.req.param('workspaceId') })
+    const parsed = wbDocumentListInputSchema.safeParse({ workspaceId: c.get('workspaceId') })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
@@ -85,7 +101,7 @@ export function createServer(deps: ServerDeps) {
 
   app.get('/api/v1/workspaces/:workspaceId/documents/:documentId', async (c) => {
     const parsed = wbDocumentResolveInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
@@ -101,7 +117,7 @@ export function createServer(deps: ServerDeps) {
 
   app.delete('/api/v1/workspaces/:workspaceId/documents/:documentId', async (c) => {
     const parsed = wbDocumentDeleteInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
@@ -121,7 +137,7 @@ export function createServer(deps: ServerDeps) {
   // the tree wants markdown regardless of what wb_document_get would choose.
   app.get('/api/v1/workspaces/:workspaceId/search', async (c) => {
     const parsed = documentSearchInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       query: c.req.query('q'),
       ...(c.req.query('kind') === undefined ? {} : { kind: c.req.query('kind') }),
       ...(c.req.queries('tag') === undefined || c.req.queries('tag')?.length === 0
@@ -140,7 +156,7 @@ export function createServer(deps: ServerDeps) {
   })
 
   app.get('/api/v1/workspaces/:workspaceId/document-tags', async (c) => {
-    const parsed = documentTagsInputSchema.safeParse({ workspaceId: c.req.param('workspaceId') })
+    const parsed = documentTagsInputSchema.safeParse({ workspaceId: c.get('workspaceId') })
     if (!parsed.success) {
       return c.json({ error: 'invalid input', issues: parsed.error.issues }, 400)
     }
@@ -154,7 +170,7 @@ export function createServer(deps: ServerDeps) {
   app.post('/api/v1/workspaces/:workspaceId/documents/:documentId/linkify-mentions', async (c) => {
     const body = await c.req.json().catch(() => ({}))
     const parsed = linkifyMentionsInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
       ...body,
     })
@@ -173,7 +189,7 @@ export function createServer(deps: ServerDeps) {
 
   app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/backlinks', async (c) => {
     const parsed = backlinksInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
@@ -188,7 +204,7 @@ export function createServer(deps: ServerDeps) {
 
   app.get('/api/v1/workspaces/:workspaceId/documents/:documentId/okf', async (c) => {
     const parsed = exportOkfInputSchema.safeParse({
-      workspaceId: c.req.param('workspaceId'),
+      workspaceId: c.get('workspaceId'),
       documentId: c.req.param('documentId'),
     })
     if (!parsed.success) {
@@ -225,7 +241,7 @@ export function createServer(deps: ServerDeps) {
     versionList: createVersionListTool(deps),
     versionRestore: createVersionRestoreTool(deps),
   }
-  return { app, tools }
+  return { app, tools: withResolvedWorkspaceHandles(tools, deps.documentIndex) }
 }
 
 function mapDocumentError(c: Context, err: unknown) {
