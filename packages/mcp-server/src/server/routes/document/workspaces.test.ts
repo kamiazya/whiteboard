@@ -501,8 +501,9 @@ describe('DELETE /api/workspaces/:workspaceId/documents/:path', () => {
   it('evicts the doc-cache on delete, so re-creating the same path after a warm cache read yields a fresh empty doc', async () => {
     // Registered up front so the POST below is not the thing that creates it:
     // that route passes `createWorkspace: true`, which is ADR-0019's mint
-    // boundary, and a mint would key the workspace by a ULID and file `ws1`
-    // as its segment — leaving the store reads further down naming nothing.
+    // boundary, and a mint would key the workspace by a ULID and file
+    // `session1` as its segment — leaving the store reads further down
+    // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createDocumentRouter()
     await app.request('/api/workspaces/session1/documents', {
@@ -759,8 +760,9 @@ describe('PUT /api/workspaces/:workspaceId/documents/:path/path', () => {
   it('evicts the doc-cache on rename: updating via the OLD path afterward lazily creates a FRESH canvas rather than resurrecting the warmed doc, while the new path keeps the real content', async () => {
     // Registered up front so the POST below is not the thing that creates it:
     // that route passes `createWorkspace: true`, which is ADR-0019's mint
-    // boundary, and a mint would key the workspace by a ULID and file `ws1`
-    // as its segment — leaving the store reads further down naming nothing.
+    // boundary, and a mint would key the workspace by a ULID and file
+    // `session1` as its segment — leaving the store reads further down
+    // naming nothing.
     await seedWorkspaceRow(tmp.dir, 'session1')
     const app = createDocumentRouter()
     await app.request('/api/workspaces/session1/documents', {

@@ -1,7 +1,10 @@
 import { parseOkf } from '@kamiazya/whiteboard-codec'
 import { writeDocumentKind } from '@kamiazya/whiteboard-loro-adapter'
 import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
-import { WorkspaceNotFoundError as PortWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
+import {
+  isWorkspaceSegmentTakenError,
+  WorkspaceNotFoundError as PortWorkspaceNotFoundError,
+} from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { ServerDeps } from '../server-deps.js'
@@ -66,7 +69,28 @@ async function mintWorkspace(deps: ServerDeps, handle: string): Promise<string> 
     throw new WorkspaceSegmentUnusableError(handle)
   }
   const workspaceId = generateDocumentId()
-  await deps.documentIndex.createWorkspace({ workspaceId, segment: handle })
+  try {
+    await deps.documentIndex.createWorkspace({ workspaceId, segment: handle })
+  } catch (err) {
+    if (!isWorkspaceSegmentTakenError(err)) throw err
+    // Another create bootstrapped this handle between the resolve above and
+    // this write. The two cannot serialise on their own: each generates its
+    // id BEFORE writing, and the keeper's write lock is keyed by that id, so
+    // two mints of one handle take two different locks and only the unique
+    // `segment` index notices. Converging on the winner is what keeps the
+    // flag the idempotent bootstrap callers are told they may always set —
+    // rethrowing would make it fail on timing alone.
+    //
+    // The loser leaves nothing behind: a keeper claims the registry identity
+    // BEFORE the tree record precisely so a refused segment cannot strand a
+    // half-created workspace.
+    const winner = await deps.documentIndex.resolveWorkspace(handle)
+    // Nothing answers to a segment the write just reported as taken: the row
+    // is gone again, or this keeper does not resolve what it stores. Either
+    // way it is not a race this can settle, so the original error stands.
+    if (winner === null) throw err
+    return winner.workspaceId
+  }
   return workspaceId
 }
 
