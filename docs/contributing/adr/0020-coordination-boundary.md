@@ -227,6 +227,16 @@ barrier is in-process and another instance's write never takes it.
 
 ## Consequences
 
+Running more than one instance needs one thing this design does not
+supply on its own: the instances have to be looking at ONE record.
+`WHITEBOARD_DATABASE_URL` is what makes that possible — SQLite's locking
+does not survive a network filesystem and two machines cannot share a local
+file at all, so several instances point at one libSQL server. Blobs are a
+different question and a smaller one: `FsBlobStore` is content-addressed and
+version thumbnails are keyed by version id, so two instances write identical
+bytes to the same path and a shared volume genuinely serves them. An object
+store is an optimisation, not a prerequisite.
+
 Easier:
 
 - Multi-instance operation needs no new infrastructure. The first increment

@@ -254,3 +254,37 @@ describe('dispose hooks (registerDbDisposeHook / runDbDisposeHooks)', () => {
     })
   })
 })
+
+/**
+ * The resolver is unit-tested next door; this is the WIRING, which is the
+ * half a unit test of a pure function cannot reach. An invalid URL is the
+ * cheapest end-to-end probe available: it proves `getDb` consults the
+ * environment at all, without needing a libSQL server to connect to.
+ */
+describe('getDb honours WHITEBOARD_DATABASE_URL', () => {
+  const ENV = 'WHITEBOARD_DATABASE_URL'
+  let previous: string | undefined
+
+  beforeEach(async () => {
+    previous = process.env[ENV]
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-db-url-test-'))
+  })
+
+  afterEach(async () => {
+    if (previous === undefined) delete process.env[ENV]
+    else process.env[ENV] = previous
+    await clearDbCache()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('refuses to open a database at an unusable URL, rather than the local file', async () => {
+    process.env[ENV] = 'postgres://nope'
+    await expect(getDb(tempDir)).rejects.toThrow(/WHITEBOARD_DATABASE_URL/)
+  })
+
+  it('still opens the data directory\u2019s file when the variable is unset', async () => {
+    delete process.env[ENV]
+    const db = await getDb(tempDir)
+    expect(db).toBeDefined()
+  })
+})

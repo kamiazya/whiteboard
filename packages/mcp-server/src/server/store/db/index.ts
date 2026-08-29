@@ -1,5 +1,4 @@
 import { mkdir } from 'node:fs/promises'
-import { join } from 'node:path'
 // @libsql/client is not imported directly anywhere in src — LibsqlDialect
 // pulls it in transitively — but package.json still declares it as a direct
 // dependency pinned newer (^0.17.3) than @libsql/kysely-libsql's own range
@@ -9,11 +8,14 @@ import { join } from 'node:path'
 import { LibsqlDialect } from '@libsql/kysely-libsql'
 import { Kysely, sql } from 'kysely'
 import { getDataDir } from '../../config.js'
+import { resolveDatabaseLocation } from './location.js'
 import type { DatabaseSchema } from './schema.js'
 
 export type Database = Kysely<DatabaseSchema>
 
-export const DB_FILENAME = 'whiteboard.db'
+// Re-exported so the many callers that only want the filename do not have to
+// know a resolver exists.
+export { DB_FILENAME } from './location.js'
 
 // One Kysely instance per getDataDir(). Tests swap getDataDir() via vi.mock so multiple
 // distinct DBs may be opened across the lifetime of the process; each gets its
@@ -29,10 +31,13 @@ export const DB_FILENAME = 'whiteboard.db'
 const cache = new Map<string, Promise<Database>>()
 
 async function buildDb(dataDir: string): Promise<Database> {
+  // The data directory is still made whatever the database is: blobs, version
+  // thumbnails and the daemon's identity marker live there regardless of
+  // where the rows do.
   await mkdir(dataDir, { recursive: true })
-  const url = `file:${join(dataDir, DB_FILENAME)}`
+  const location = resolveDatabaseLocation(dataDir)
   const db = new Kysely<DatabaseSchema>({
-    dialect: new LibsqlDialect({ url }),
+    dialect: new LibsqlDialect(location),
   })
   // libsql currently defaults `PRAGMA foreign_keys = ON` per connection (the
   // store/db/index.test FK case verifies this), so this call is belt-and-
