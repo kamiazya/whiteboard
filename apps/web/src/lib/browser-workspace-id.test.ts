@@ -4,9 +4,10 @@
  */
 import 'fake-indexeddb/auto'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { setWhiteboardDbNameForTests } from './browser-idb.js'
+import { BROWSER_DEFAULT_SEGMENT, setWhiteboardDbNameForTests } from './browser-idb.js'
 import {
   getBrowserWorkspaceId,
+  getBrowserWorkspaceIdentity,
   resetBrowserWorkspaceIdForTests,
   resolveBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
@@ -52,5 +53,41 @@ describe('browser workspace id accessor', () => {
   it('the test seam sets a resolved value directly, without opening a database', () => {
     setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV')
     expect(getBrowserWorkspaceId()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('resolves the whole identity, so an address can name this workspace', async () => {
+    // The id alone was enough while the browser had no addressable name. It
+    // is not enough to BUILD an address: ADR-0019 puts the segment in the
+    // URL, and reading the registry row's key gives only the fallback form.
+    const id = await resolveBrowserWorkspaceId(DB_NAME)
+    expect(getBrowserWorkspaceIdentity()).toEqual({
+      workspaceId: id,
+      segment: BROWSER_DEFAULT_SEGMENT,
+    })
+  })
+
+  it('the identity accessor throws the same actionable message when unresolved', () => {
+    expect(() => getBrowserWorkspaceIdentity()).toThrow(/resolveBrowserWorkspaceId/)
+  })
+
+  it('the test seam can set a segment, since callers now address by one', () => {
+    setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV', 'design-team')
+    expect(getBrowserWorkspaceIdentity()).toEqual({
+      workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      segment: 'design-team',
+    })
+    // The id accessor is unchanged — every existing caller reads through it.
+    expect(getBrowserWorkspaceId()).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('a workspace with no segment resolves to an identity carrying none', () => {
+    // Not hypothetical: the seam's one-argument form is what most tests use,
+    // and a row written before v15 has no segment either. An identity that
+    // invented one here would make every such caller address a workspace by
+    // a name its registry does not hold.
+    setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    expect(getBrowserWorkspaceIdentity()).toEqual({
+      workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    })
   })
 })

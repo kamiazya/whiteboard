@@ -23,8 +23,22 @@ import { openWhiteboardDb, WORKSPACES_STORE } from './browser-idb.js'
 
 type ResolutionState =
   | { readonly kind: 'unresolved' }
-  | { readonly kind: 'resolved'; readonly workspaceId: string }
+  | { readonly kind: 'resolved'; readonly identity: BrowserWorkspaceIdentity }
   | { readonly kind: 'failed'; readonly cause: unknown }
+
+/**
+ * The browser workspace's own record of ADR-0019's layers — the canonical id
+ * every store keys on, and the segment an address shows.
+ *
+ * `segment` is optional because absent is a state a workspace can really be
+ * in: a registry row written before the v15 carrier has none, and the
+ * one-argument test seam mints none. A caller addressing such a workspace
+ * falls back to the id, which is what that layer is for.
+ */
+export interface BrowserWorkspaceIdentity {
+  readonly workspaceId: string
+  readonly segment?: string
+}
 
 let state: ResolutionState = { kind: 'unresolved' }
 
@@ -43,9 +57,21 @@ function causeMessage(cause: unknown): string {
  * message it can act on instead of a generic IndexedDB error.
  */
 export function getBrowserWorkspaceId(): string {
+  return getBrowserWorkspaceIdentity().workspaceId
+}
+
+/**
+ * The whole identity, for the callers that need to ADDRESS this workspace
+ * rather than key storage by it.
+ *
+ * Separate from `getBrowserWorkspaceId` rather than replacing it: some twenty
+ * call sites read the id to build a `DocRef` or an IndexedDB key, and none of
+ * them has any business knowing the workspace has a name.
+ */
+export function getBrowserWorkspaceIdentity(): BrowserWorkspaceIdentity {
   switch (state.kind) {
     case 'resolved':
-      return state.workspaceId
+      return state.identity
     case 'unresolved':
       throw new Error(
         'browser workspace id read before resolveBrowserWorkspaceId() completed — ' +
@@ -56,12 +82,15 @@ export function getBrowserWorkspaceId(): string {
   }
 }
 
-async function readSoleWorkspaceId(dbName: string | undefined): Promise<string> {
+async function readSoleWorkspaceIdentity(
+  dbName: string | undefined,
+): Promise<BrowserWorkspaceIdentity> {
   const db = await openWhiteboardDb(dbName)
   try {
-    return await new Promise<string>((resolve, reject) => {
+    return await new Promise<BrowserWorkspaceIdentity>((resolve, reject) => {
       const tx = db.transaction(WORKSPACES_STORE, 'readonly')
-      const req = tx.objectStore(WORKSPACES_STORE).getAllKeys()
+      const store = tx.objectStore(WORKSPACES_STORE)
+      const req = store.getAllKeys()
       req.onsuccess = () => {
         const keys = req.result
         // The v14 migration converges on exactly one row (see browser-idb.ts's
@@ -83,7 +112,21 @@ async function readSoleWorkspaceId(dbName: string | undefined): Promise<string> 
           reject(new Error(`browser workspace is not keyed by a canonical id: ${sole}`))
           return
         }
-        resolve(canonical.data)
+        // A second read, rather than `getAll()` alone: the shape check above
+        // is on the KEY, and that is deliberate — a row keyed `'local'` is
+        // exactly what a rekey that never ran leaves behind, and its VALUE
+        // says `'local'` too, so validating the value would pass the check
+        // for the same reason it should fail.
+        const valueReq = store.get(sole)
+        valueReq.onsuccess = () => {
+          const row = valueReq.result as { segment?: unknown } | undefined
+          const segment = typeof row?.segment === 'string' ? row.segment : undefined
+          resolve({
+            workspaceId: canonical.data,
+            ...(segment === undefined ? {} : { segment }),
+          })
+        }
+        valueReq.onerror = () => reject(valueReq.error)
       }
       req.onerror = () => reject(req.error)
       tx.onerror = () => reject(tx.error)
@@ -100,13 +143,13 @@ async function readSoleWorkspaceId(dbName: string | undefined): Promise<string> 
  * concurrent unresolved calls share one open.
  */
 export async function resolveBrowserWorkspaceId(dbName?: string): Promise<string> {
-  if (state.kind === 'resolved') return state.workspaceId
+  if (state.kind === 'resolved') return state.identity.workspaceId
   if (inFlight !== null) return inFlight
-  const attempt = readSoleWorkspaceId(dbName)
-    .then((workspaceId) => {
-      state = { kind: 'resolved', workspaceId }
+  const attempt = readSoleWorkspaceIdentity(dbName)
+    .then((identity) => {
+      state = { kind: 'resolved', identity }
       inFlight = null
-      return workspaceId
+      return identity.workspaceId
     })
     .catch((cause: unknown) => {
       state = { kind: 'failed', cause }
@@ -134,9 +177,12 @@ export function browserWorkspaceIdOrNull(): string | null {
   }
 }
 
-/** Test seam: resolve synchronously to a fixed id, without opening a database. */
-export function setBrowserWorkspaceIdForTests(workspaceId: string): void {
-  state = { kind: 'resolved', workspaceId }
+/** Test seam: resolve synchronously to a fixed identity, without opening a database. */
+export function setBrowserWorkspaceIdForTests(workspaceId: string, segment?: string): void {
+  state = {
+    kind: 'resolved',
+    identity: { workspaceId, ...(segment === undefined ? {} : { segment }) },
+  }
   inFlight = null
 }
 
