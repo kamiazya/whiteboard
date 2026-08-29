@@ -20,6 +20,7 @@ export function unusedDocumentIndex(): DocumentIndex {
   return {
     createWorkspace: refuse('createWorkspace'),
     listWorkspaces: refuse('listWorkspaces'),
+    resolveWorkspace: refuse('resolveWorkspace'),
     createDocument: refuse('createDocument'),
     resolveDocument: refuse('resolveDocument'),
     resolveDocumentById: refuse('resolveDocumentById'),

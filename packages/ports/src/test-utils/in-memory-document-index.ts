@@ -19,6 +19,7 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  resolveWorkspaceHandle,
   WorkspaceNotFoundError,
 } from '../index.js'
 
@@ -34,7 +35,7 @@ import {
  * awaits mid-operation has to arrange it deliberately.
  */
 export class InMemoryDocumentIndex implements DocumentIndex {
-  readonly #workspaces = new Set<string>()
+  readonly #workspaces = new Map<string, WorkspaceEntry>()
   /** Keyed by workspace, then by path — so a workspace's set is one lookup. */
   readonly #documents = new Map<string, Map<string, DocumentEntry>>()
 
@@ -57,16 +58,34 @@ export class InMemoryDocumentIndex implements DocumentIndex {
    */
   seed(entry: DocumentEntry & { workspaceId: string }): void {
     const { workspaceId, ...rest } = entry
-    this.#workspaces.add(workspaceId)
+    if (!this.#workspaces.has(workspaceId)) this.#workspaces.set(workspaceId, { workspaceId })
     this.#inWorkspace(workspaceId).set(rest.path, rest)
   }
 
-  async createWorkspace({ workspaceId }: CreateWorkspaceInput): Promise<void> {
-    this.#workspaces.add(workspaceId)
+  /**
+   * Stores the whole entry, not just the id: `segment` is what an address
+   * resolves through, so a double that dropped it would satisfy the
+   * interface while making `resolveWorkspace` unable to answer — the exact
+   * gap the conformance suite exists to close.
+   */
+  async createWorkspace({
+    workspaceId,
+    segment,
+    displayName,
+  }: CreateWorkspaceInput): Promise<void> {
+    this.#workspaces.set(workspaceId, {
+      workspaceId,
+      ...(segment === undefined ? {} : { segment }),
+      ...(displayName === undefined ? {} : { displayName }),
+    })
   }
 
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
-    return [...this.#workspaces].map((workspaceId) => ({ workspaceId }))
+    return [...this.#workspaces.values()]
+  }
+
+  async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
+    return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
   }
 
   async createDocument({

@@ -29,6 +29,7 @@ import {
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
   type SetDocumentNameInput,
+  type WorkspaceEntry,
 } from '@kamiazya/whiteboard-ports'
 import { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { getAppLogger } from './app-logger.js'
@@ -90,9 +91,14 @@ export class FoldingBrowserIndex implements DocumentIndex {
     return skipped
   }
 
-  async listWorkspaces(): Promise<{ workspaceId: string }[]> {
+  async listWorkspaces(): Promise<WorkspaceEntry[]> {
     await this.ensureFolded()
     return this.inner.listWorkspaces()
+  }
+
+  async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
+    await this.ensureFolded()
+    return this.inner.resolveWorkspace(handle)
   }
 
   private ensureFolded(): Promise<void> {

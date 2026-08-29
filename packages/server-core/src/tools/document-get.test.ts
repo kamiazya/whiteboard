@@ -23,6 +23,7 @@ function withResolveOverride(
   return {
     createWorkspace: index.createWorkspace.bind(index),
     listWorkspaces: index.listWorkspaces.bind(index),
+    resolveWorkspace: index.resolveWorkspace.bind(index),
     createDocument: index.createDocument.bind(index),
     resolveDocument: index.resolveDocument.bind(index),
     resolveDocumentById,

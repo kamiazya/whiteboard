@@ -472,5 +472,63 @@ export function describeDocumentIndexConformance(
         }
       })
     })
+
+    describe('resolveWorkspace', () => {
+      /**
+       * `createWorkspace` IS the seam: the port already accepts a segment, so
+       * an implementation that cannot resolve one is an implementation that
+       * did not store it, and both halves are worth failing on here rather
+       * than in whichever surface first tries to address by segment.
+       */
+      async function withSegmented(body: (index: DocumentIndex) => Promise<void>): Promise<void> {
+        await withIndex(async (index) => {
+          await index.createWorkspace({ workspaceId: 'ws-segmented', segment: 'design' })
+          // Assert the subject is PRESENT before asserting anything about it:
+          // an implementation that silently drops `segment` would otherwise
+          // make every case below pass by resolving nothing but ids.
+          const stored = (await index.listWorkspaces()).find(
+            (w) => w.workspaceId === 'ws-segmented',
+          )
+          expect(stored?.segment).toBe('design')
+          await body(index)
+        })
+      }
+
+      it('resolves a workspace by its segment', async () => {
+        await withSegmented(async (index) => {
+          expect((await index.resolveWorkspace('design'))?.workspaceId).toBe('ws-segmented')
+        })
+      })
+
+      it('resolves a segment-bearing workspace by its id too', async () => {
+        await withSegmented(async (index) => {
+          expect((await index.resolveWorkspace('ws-segmented'))?.workspaceId).toBe('ws-segmented')
+        })
+      })
+
+      it('resolves a workspace that has no segment by its id', async () => {
+        await withIndex(async (index) => {
+          expect((await index.resolveWorkspace(WS))?.workspaceId).toBe(WS)
+        })
+      })
+
+      it("prefers a segment over another workspace's id", async () => {
+        await withIndex(async (index) => {
+          // `ws-other` exists as an id in the shared fixture; giving a
+          // DIFFERENT workspace that same string as its segment is the one
+          // collision the resolution order has to decide.
+          await index.createWorkspace({ workspaceId: 'ws-shadowing', segment: 'ws-other' })
+          expect((await index.resolveWorkspace('ws-other'))?.workspaceId).toBe('ws-shadowing')
+          // The shadowed workspace stays reachable as itself.
+          expect((await index.resolveWorkspace('ws-shadowing'))?.workspaceId).toBe('ws-shadowing')
+        })
+      })
+
+      it('answers null for a handle nothing answers to', async () => {
+        await withIndex(async (index) => {
+          expect(await index.resolveWorkspace('no-such-workspace')).toBeNull()
+        })
+      })
+    })
   })
 }
