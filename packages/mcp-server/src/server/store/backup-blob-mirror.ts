@@ -14,8 +14,9 @@
 // is the whole point of decision 5 — file-GC must never delete from the
 // backup, and the backup must never delete on GC's behalf.
 
+import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { join } from 'node:path'
+import { join, posix, relative, sep } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
 
@@ -42,11 +43,30 @@ export const BLOB_MANIFEST_FILENAME = 'blobs.json'
  * question — what is live now. A blob no live document references any more is
  * still referenced by every retained backup taken while it was live.
  */
+const DIGEST = /^[0-9a-f]{64}$/
+
 const manifestSchema = z.object({
-  schemaVersion: z.literal(1),
-  /** Full 64-hex digests, the same identity the store addresses by. */
-  blobs: z.array(z.string().regex(/^[0-9a-f]{64}$/)),
+  schemaVersion: z.literal(2),
+  /**
+   * The sharded content-addressed store, by digest — the same identity
+   * `FsBlobStore` addresses by, so the mirror path follows from the digest
+   * and nothing needs recording twice.
+   */
+  blobs: z.array(z.string().regex(DIGEST)),
+  /**
+   * Everything else under `blobs/`, as `<relative path>` to the digest of
+   * what that path held AT THIS PASS. Version thumbnails are addressed by
+   * name, so the path alone does not say which bytes a backup needs — two
+   * backups can legitimately want different content at the same path.
+   */
+  files: z.record(z.string(), z.string().regex(DIGEST)),
 })
+
+/** What one backup references, in the two shapes the mirror stores. */
+export interface BackupBlobReferences {
+  blobs: ReadonlySet<string>
+  files: Readonly<Record<string, string>>
+}
 
 export interface MirrorBlobsOptions {
   /** Write the manifest into this backup directory. */
@@ -74,10 +94,10 @@ export async function mirrorBlobsIntoBackup(
   dataDir: string,
   backupRoot: string,
   options: MirrorBlobsOptions = {},
-): Promise<ReadonlySet<string>> {
+): Promise<BackupBlobReferences> {
   const sourceRoot = join(dataDir, 'blobs')
-  const mirrorRoot = join(backupRoot, 'blobs')
-  const referenced = new Set<string>()
+  const blobs = new Set<string>()
+  const files: Record<string, string> = {}
 
   let shards: string[]
   try {
@@ -88,29 +108,110 @@ export async function mirrorBlobsIntoBackup(
     shards = []
   }
 
-  for (const shard of shards) {
-    if (!SHARD_NAME.test(shard)) continue
-    let entries: string[]
-    try {
-      entries = await readdir(join(sourceRoot, shard))
-    } catch (err) {
-      log.warning({ shard, err }, 'could not list a blob shard; leaving it out of the mirror')
-      continue
-    }
-    for (const rest of entries) {
-      if (!REST_OF_DIGEST.test(rest)) continue
-      referenced.add(`${shard}${rest}`)
-      const destination = join(mirrorRoot, shard, rest)
-      if (await exists(destination)) continue
-      await mkdir(join(mirrorRoot, shard), { recursive: true })
-      await copyAtomically(join(sourceRoot, shard, rest), destination)
+  for (const entry of shards) {
+    if (SHARD_NAME.test(entry)) {
+      await mirrorShard(sourceRoot, backupRoot, entry, blobs)
+    } else {
+      await mirrorNamedTree(sourceRoot, backupRoot, entry, files)
     }
   }
 
+  const references: BackupBlobReferences = { blobs, files }
   if (options.manifestInto) {
-    await writeManifest(options.manifestInto, referenced)
+    await writeManifest(options.manifestInto, references)
   }
-  return referenced
+  return references
+}
+
+/**
+ * One shard of the content-addressed store.
+ *
+ * No file is read: the path already is the content address, so a blob already
+ * at that path in the mirror is already the right blob. That is what keeps a
+ * nightly pass from re-reading a store that has not changed.
+ */
+async function mirrorShard(
+  sourceRoot: string,
+  backupRoot: string,
+  shard: string,
+  into: Set<string>,
+): Promise<void> {
+  let entries: string[]
+  try {
+    entries = await readdir(join(sourceRoot, shard))
+  } catch (err) {
+    log.warning({ shard, err }, 'could not list a blob shard; leaving it out of the mirror')
+    return
+  }
+  for (const rest of entries) {
+    if (!REST_OF_DIGEST.test(rest)) continue
+    into.add(`${shard}${rest}`)
+    const destination = join(backupRoot, 'blobs', shard, rest)
+    if (await exists(destination)) continue
+    await mkdir(join(backupRoot, 'blobs', shard), { recursive: true })
+    await copyAtomically(join(sourceRoot, shard, rest), destination)
+  }
+}
+
+/**
+ * Everything under `blobs/` that is not the sharded store — today, a
+ * workspace's version thumbnails.
+ *
+ * Keyed on CONTENT, not on path. Keying on path is what the old whole-tree
+ * copy effectively did, and it is wrong here for a reason a size measurement
+ * never shows: `saveThumbnail` writes to `<workspaceId>/versions/<id>.png`,
+ * and nothing stops the same path being written again. Mirroring by path
+ * would let a later pass overwrite bytes an older retained backup still
+ * depends on — a backup that was restorable yesterday and is not today, with
+ * no error anywhere.
+ *
+ * Reading each file to hash it is the cost of that safety. It is paid against
+ * the alternative of COPYING each file every night, which is what happens
+ * without this.
+ */
+async function mirrorNamedTree(
+  sourceRoot: string,
+  backupRoot: string,
+  entry: string,
+  into: Record<string, string>,
+): Promise<void> {
+  let found: Array<{ absolute: string; relative: string }>
+  try {
+    found = await walkFiles(join(sourceRoot, entry), sourceRoot)
+  } catch (err) {
+    log.warning({ entry, err }, 'could not walk a named blob tree; leaving it out of the mirror')
+    return
+  }
+  for (const file of found) {
+    let bytes: Buffer
+    try {
+      bytes = await readFile(file.absolute)
+    } catch (err) {
+      log.warning({ path: file.relative, err }, 'could not read a file for the mirror')
+      continue
+    }
+    const digest = createHash('sha256').update(bytes).digest('hex')
+    into[file.relative] = digest
+    const destination = join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2))
+    if (await exists(destination)) continue
+    await mkdir(join(backupRoot, 'files', digest.slice(0, 2)), { recursive: true })
+    await copyAtomically(file.absolute, destination)
+  }
+}
+
+async function walkFiles(
+  dir: string,
+  root: string,
+): Promise<Array<{ absolute: string; relative: string }>> {
+  const found: Array<{ absolute: string; relative: string }> = []
+  for (const entry of await readdir(dir, { withFileTypes: true, recursive: true })) {
+    if (!entry.isFile()) continue
+    const absolute = join(entry.parentPath, entry.name)
+    // POSIX separators in the manifest, so a backup taken on one platform
+    // restores on another. The manifest is an artifact an operator can carry.
+    found.push({ absolute, relative: relative(root, absolute).split(sep).join(posix.sep) })
+  }
+  return found
 }
 
 /**
@@ -126,7 +227,7 @@ export async function mirrorBlobsIntoBackup(
  */
 export async function readBackupBlobManifest(
   backupDir: string,
-): Promise<ReadonlySet<string> | null> {
+): Promise<BackupBlobReferences | null> {
   let raw: string
   try {
     raw = await readFile(join(backupDir, BLOB_MANIFEST_FILENAME), 'utf8')
@@ -139,19 +240,22 @@ export async function readBackupBlobManifest(
       log.warning({ backupDir }, 'blob manifest does not parse; treating the backup as unmirrored')
       return null
     }
-    return new Set(parsed.data.blobs)
+    return { blobs: new Set(parsed.data.blobs), files: parsed.data.files }
   } catch {
     log.warning({ backupDir }, 'blob manifest is not readable JSON; treating it as unmirrored')
     return null
   }
 }
 
-async function writeManifest(backupDir: string, blobs: ReadonlySet<string>): Promise<void> {
+async function writeManifest(backupDir: string, references: BackupBlobReferences): Promise<void> {
   const manifest = {
-    schemaVersion: 1,
+    schemaVersion: 2,
     // Sorted, so two backups of the same store produce the same bytes and a
     // diff between manifests reads as what changed rather than as reordering.
-    blobs: [...blobs].sort(),
+    blobs: [...references.blobs].sort(),
+    files: Object.fromEntries(
+      Object.entries(references.files).sort(([a], [b]) => (a < b ? -1 : 1)),
+    ),
   } satisfies z.infer<typeof manifestSchema>
   await mkdir(backupDir, { recursive: true })
   await writeFile(join(backupDir, BLOB_MANIFEST_FILENAME), `${JSON.stringify(manifest, null, 2)}\n`)

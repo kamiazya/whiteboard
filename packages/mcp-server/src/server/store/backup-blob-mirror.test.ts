@@ -55,10 +55,10 @@ describe('the backup blob mirror', () => {
     const one = await mirrorBlobsIntoBackup(dataDir, backupRoot)
     const two = await mirrorBlobsIntoBackup(dataDir, backupRoot)
 
-    expect([...one].sort()).toEqual([first, second].sort())
+    expect([...one.blobs].sort()).toEqual([first, second].sort())
     // The second pass reports the same references — a backup references
     // every blob it needs, not only the ones it happened to copy.
-    expect([...two].sort()).toEqual([first, second].sort())
+    expect([...two.blobs].sort()).toEqual([first, second].sort())
 
     // …and the store holds one copy, not two.
     const mirrored = await dirBytes(join(backupRoot, 'blobs'))
@@ -141,7 +141,87 @@ describe('the backup blob mirror', () => {
   })
 
   it('has nothing to say about a data directory with no blobs', async () => {
-    expect([...(await mirrorBlobsIntoBackup(dataDir, backupRoot))]).toEqual([])
+    const empty = await mirrorBlobsIntoBackup(dataDir, backupRoot)
+    expect([...empty.blobs]).toEqual([])
+    expect(empty.files).toEqual({})
+  })
+
+  /**
+   * Version thumbnails are addressed by NAME, so the mirror cannot key them
+   * on their path the way it keys a blob — the same path can hold different
+   * bytes over time, and a later pass would silently overwrite what an older
+   * backup still depends on. They are keyed on their CONTENT instead, in a
+   * store of their own, and the manifest records which digest each path had
+   * at that pass.
+   *
+   * Two stores rather than one because the two halves know different things.
+   * A sharded blob's path already IS its content address, so presence at that
+   * path settles identity without reading the file — which is what keeps a
+   * nightly pass from re-reading the whole store. A named file has to be
+   * hashed to answer the same question, and hashing thumbnails is cheap
+   * against copying them all every night, which is what happens today.
+   */
+  describe('files addressed by name', () => {
+    async function putThumbnail(workspaceId: string, version: string, contents: string) {
+      const dir = join(dataDir, 'blobs', workspaceId, 'versions')
+      await mkdir(dir, { recursive: true })
+      await writeFile(join(dir, `${version}.png`), contents)
+      return createHash('sha256').update(contents).digest('hex')
+    }
+
+    it('mirrors a named file under its content digest', async () => {
+      const digest = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'thumb bytes')
+      const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir })
+
+      const stored = await readFile(
+        join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2)),
+        'utf8',
+      )
+      expect(stored).toBe('thumb bytes')
+
+      const manifest = await readBackupBlobManifest(backupDir)
+      expect(manifest?.files).toEqual({
+        '01JWORKSPACE00000000000000/versions/v1.png': digest,
+      })
+    })
+
+    /**
+     * The case path-keying gets wrong. Two backups, the same path, different
+     * bytes: both must still be restorable, which means the mirror has to be
+     * holding both.
+     */
+    it('keeps both versions when the same path is rewritten', async () => {
+      const dayOne = join(backupRoot, '2026-03-04T00-00-00.000Z')
+      const first = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'the first bytes')
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: dayOne })
+
+      const dayTwo = join(backupRoot, '2026-03-05T00-00-00.000Z')
+      const second = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'rewritten bytes')
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: dayTwo })
+
+      expect(first).not.toBe(second)
+      const path = '01JWORKSPACE00000000000000/versions/v1.png'
+      expect((await readBackupBlobManifest(dayOne))?.files[path]).toBe(first)
+      expect((await readBackupBlobManifest(dayTwo))?.files[path]).toBe(second)
+      for (const digest of [first, second]) {
+        expect(
+          await readFile(join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2)), 'utf8'),
+        ).toBeTruthy()
+      }
+    })
+
+    it('does not re-copy a named file whose content has not changed', async () => {
+      const digest = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'stable bytes')
+      await mirrorBlobsIntoBackup(dataDir, backupRoot)
+      const stored = join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2))
+      const before = await stat(stored)
+
+      await new Promise((r) => setTimeout(r, 20))
+      await mirrorBlobsIntoBackup(dataDir, backupRoot)
+
+      expect((await stat(stored)).mtimeMs).toBe(before.mtimeMs)
+    })
   })
 
   describe('the manifest', () => {
@@ -158,8 +238,8 @@ describe('the backup blob mirror', () => {
       await mkdir(backupDir, { recursive: true })
       const refs = await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir })
 
-      expect(await readBackupBlobManifest(backupDir)).toEqual(refs)
-      expect([...refs]).toEqual([digest])
+      expect((await readBackupBlobManifest(backupDir))?.blobs).toEqual(refs.blobs)
+      expect([...refs.blobs]).toEqual([digest])
     })
 
     /**
