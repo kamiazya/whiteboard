@@ -20,7 +20,16 @@ export function formatCoord(value: number): string {
   if (!Number.isFinite(value)) {
     throw new RangeError(`formatCoord: non-finite value ${value}`)
   }
-  const rounded = value === 0 ? 0 : value // normalize -0 up front
+  // Three of the four guards below are belt-and-braces, and each is only
+  // unobservable because of a property of the other two — worth saying, so a
+  // reader who notices does not have to re-derive it. Normalizing `-0` here is
+  // redundant with the `'-0'` test at the end, which catches it after rounding
+  // as well; `includes('.')` is always true while COORD_PRECISION is positive;
+  // and `stripped` cannot be empty, because there is always a digit before the
+  // dot. The one that DOES work for its living is `'-0'`: a small negative
+  // rounds to `-0.000` and strips to `-0`, which reaches the document as a
+  // coordinate differing from `0` byte for byte.
+  const rounded = value === 0 ? 0 : value
   const fixed = rounded.toFixed(COORD_PRECISION)
   const stripped = fixed.includes('.') ? fixed.replace(/0+$/, '').replace(/\.$/, '') : fixed
   return stripped === '' || stripped === '-0' ? '0' : stripped

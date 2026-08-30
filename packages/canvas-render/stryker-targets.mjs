@@ -65,6 +65,22 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // The `default` arm returns `undefined`, which is also what falling out of
+  // the switch returns — so removing it changes nothing. Hand-verified
+  // against the full suite.
+  'src/scene-bounds.ts': {
+    'ConditionalExpression: default: return undefined -> default:': 1,
+  },
+  // `formatCoord`'s three belt-and-braces guards, each unobservable because of
+  // a property of the other two — the reasoning is on the function itself.
+  // Hand-verified: removing any one of them leaves all 1002 canvas-render
+  // tests green.
+  'src/svg/format.ts': {
+    "ConditionalExpression: stripped === '' -> false": 1,
+    'ConditionalExpression: value === 0 -> false': 1,
+    'StringLiteral: \'\' -> "Stryker was here!"': 1,
+    'StringLiteral: \'.\' -> ""': 1,
+  },
   // Every one of these is the broad phase, whose comparisons cannot change
   // the answer in either direction, or a narrow-phase boundary whose two
   // sides compute the same value. The invariant is on `buildPairwiseScores`;
