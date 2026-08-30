@@ -26,7 +26,7 @@ import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
-import { workspaceHandle } from '../lib/workspace-handle.js'
+import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
 // time — the one the ADDRESS names. Choosing which is the shell switcher's,
@@ -505,10 +505,30 @@ export function DaemonIndexPage({
     }
   }, [daemonFetch, daemonBaseUrl, selectedWorkspace, pendingDelete, closeDeleteDialog])
 
+  // What the page calls itself. `selectedWorkspace` holds a HANDLE, not an id,
+  // so the row is found through `resolveWorkspaceHandle` — the same reason the
+  // loader above gives, one layer up. `workspaceLabel` owns the precedence
+  // across ADR-0019's three layers; re-deriving it here is how a site ends up
+  // knowing about fewer layers than there are.
+  //
+  // The fallbacks are each a true statement about where you are, in order of
+  // how much they say: the name, then the handle the address carries, then
+  // the generic word for the moments before any workspace is known (this page
+  // also mounts at `/`, where there is no handle to fall back to). The
+  // heading is never absent — a document browser with no h1 is a worse
+  // outcome than a generic one.
+  const activeWorkspace =
+    selectedWorkspace === null ? null : resolveWorkspaceHandle(workspaces, selectedWorkspace)
+  const pageHeading =
+    (activeWorkspace ? workspaceLabel(activeWorkspace) : null) ??
+    selectedWorkspace ??
+    workspace ??
+    'Documents'
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <div className="flex h-full flex-col overflow-y-auto p-4">
-        <h1 className="sr-only">Documents</h1>
+        <h1 className="mb-3 truncate text-lg font-semibold">{pageHeading}</h1>
         {createError && (
           <div role="alert" className="mb-2 text-sm text-destructive">
             {createError}

@@ -1692,3 +1692,50 @@ describe('DaemonIndexPage', () => {
     expect(screen.queryByRole('button', { name: 'Tree view' })).toBeNull()
   })
 })
+
+// "Mark as Switcher" answers "where does the workspace name appear at all?"
+// with: not in the shell row — the document browser names it, as its own
+// heading. The shell half shipped first, which left the name nowhere a
+// sighted reader could see it; this is the other half.
+describe('the workspace names the page', () => {
+  it('heads the page with the workspace name, and keeps Documents as the list label', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team', displayName: 'Marketing' }],
+      // Keyed by the SEGMENT, because that is what the page addresses with:
+      // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
+      documentsByWorkspace: {
+        'marketing-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Marketing')
+    // Not merely absent from the h1 — the generic word moves to the region
+    // that actually holds the list, so nothing announces the page as
+    // "Documents" while the heading names the workspace.
+    expect(heading.className).not.toContain('sr-only')
+    expect(screen.getByRole('region', { name: 'Documents' })).toBeTruthy()
+  })
+
+  it('falls back through the identity layers rather than showing a raw id', async () => {
+    // A workspace with a segment and no display name: the middle layer is
+    // what a person chose, so it is what they read. workspaceLabel owns this
+    // precedence — the page must not re-derive it and skip a layer.
+    installFetchMock({
+      workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team' }],
+      // Keyed by the SEGMENT, because that is what the page addresses with:
+      // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
+      documentsByWorkspace: {
+        'marketing-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('marketing-team')
+  })
+})

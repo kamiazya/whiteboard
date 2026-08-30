@@ -186,6 +186,44 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   Each layer is written on its own, never as a form submitting both: an
   unchanged URL sent back would put every name edit behind the one write that
   can be refused for a collision.
+- **The document browser heads itself with the workspace name.** The other
+  half of the answer above, and the only place a sighted reader sees the name
+  at all — the shell states it in the mark's accessible name and draws it only
+  inside the popover. Both index pages carry it as a visible `h1`, and the
+  generic word did not disappear when it left that heading: it moved to the
+  panel's own region label (`role="region" aria-label="Documents"`), which is
+  where it was always true.
+
+  What it reads is `workspaceLabel` — display name, else segment, else id —
+  never a per-site re-derivation, because a site that re-derives ends up
+  knowing about fewer layers than there are. Before the row lands the heading
+  falls back to the handle the address carries, and past that to the generic
+  word: a document browser with no `h1` at all is a worse outcome than a
+  generic one.
+
+  **`createWorkspace` on a workspace that exists leaves it alone.** Not merely
+  "is not an error" — not an overwrite either. A blind `put` of the input let
+  the bare `{ workspaceId }` call an "ensure it exists" caller makes clear the
+  identity layers a rename had written. `IdbDocumentIndex` and the in-memory
+  double both did this; the daemon never did, because its identity lives in a
+  registry its `createWorkspace` does not touch.
+
+  **This was latent, not live, and the distinction is on the record because it
+  was first reported the other way round.** Reading the code found a real
+  contract violation, and a conformance mutation check confirmed the contract
+  was broken — neither says anything about REACHABILITY, and the consequence
+  narrated from them ("visiting the document list undoes a rename") turned out
+  to be false. An A/B of the built bundle before and after refuted it: the
+  segment survived on both. `FoldingBrowserIndex` routes `createWorkspace` to
+  the tree index and keeps the IndexedDB one only for `listWorkspaces`,
+  `renameWorkspace`, `listDocuments` and `deleteDocument`, so no caller reaches
+  the overwrite at all. It is still worth fixing — the row it would clobber is
+  the one `renameWorkspace` writes on that same store — but as debt, not as a
+  defect anyone hit.
+
+  Pinned for every implementation by the port's conformance suite, whose
+  earlier idempotency case re-created with the SAME layers and so could not
+  tell an overwriting implementation from a leaving-alone one.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over

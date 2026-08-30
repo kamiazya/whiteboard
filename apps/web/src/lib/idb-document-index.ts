@@ -93,9 +93,24 @@ export class IdbDocumentIndex implements DocumentIndex {
     displayName,
   }: CreateWorkspaceInput): Promise<void> {
     await this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
-      // put, not add: creating one that exists is explicitly not an error.
+      const store = tx.objectStore(WORKSPACES_STORE)
+      // Creating one that exists is not an error — and not an overwrite. A
+      // blind `put` of the input let the bare `{ workspaceId }` call clear
+      // whatever identity layers the row already carried.
+      //
+      // No caller reaches that today: `FoldingBrowserIndex` routes
+      // `createWorkspace` to the tree index and keeps this one for
+      // `listWorkspaces`/`renameWorkspace`/`listDocuments`/`deleteDocument`
+      // only. It is fixed because the row it would clobber is the one
+      // `renameWorkspace` — right below, on this same store — writes, so the
+      // two halves of one registry sat one call apart from disagreeing.
+      //
+      // Read and return inside the SAME transaction, so the check and the
+      // write cannot be split by a concurrent create.
+      const existing = await request(store.get(workspaceId))
+      if (existing !== undefined) return
       await request(
-        tx.objectStore(WORKSPACES_STORE).put(
+        store.put(
           {
             workspaceId,
             ...(segment === undefined ? {} : { segment }),

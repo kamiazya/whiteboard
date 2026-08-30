@@ -75,6 +75,11 @@ export class InMemoryDocumentIndex implements DocumentIndex {
     segment,
     displayName,
   }: CreateWorkspaceInput): Promise<void> {
+    // Creating one that exists leaves it ALONE — it is not an error, and it is
+    // not an overwrite either. The bare `{ workspaceId }` call is what an
+    // "ensure it exists" caller makes, and treating it as a full row would
+    // clear the identity layers a rename put there.
+    if (this.#workspaces.has(workspaceId)) return
     this.#workspaces.set(workspaceId, {
       workspaceId,
       ...(segment === undefined ? {} : { segment }),

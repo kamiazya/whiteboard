@@ -444,3 +444,55 @@ describe('BrowserIndexPage', () => {
     expect((await screen.findByTestId('okf-preview')).textContent).toContain('diagrams/structure')
   })
 })
+
+// The other keeper, same rule. "Mark as Switcher": the shell does not name the
+// workspace — the document browser does, as its own heading.
+describe('the workspace names the page', () => {
+  it('heads the page with the workspace name, and keeps Documents as the list label', async () => {
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: getBrowserWorkspaceId(),
+        path: 'alpha',
+        name: 'Alpha',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      segment: 'studio',
+      displayName: 'Studio',
+    })
+
+    renderPage(store)
+    await screen.findByText('Alpha')
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Studio')
+    expect(heading.className).not.toContain('sr-only')
+    expect(screen.getByRole('region', { name: 'Documents' })).toBeTruthy()
+  })
+
+  it('falls back through the identity layers rather than showing a raw id', async () => {
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: getBrowserWorkspaceId(),
+        path: 'alpha',
+        name: 'Alpha',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      segment: 'studio',
+    })
+
+    renderPage(store)
+    await screen.findByText('Alpha')
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('studio')
+  })
+})
