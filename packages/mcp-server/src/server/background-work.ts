@@ -47,27 +47,38 @@ type InstanceReach =
 /**
  * What this costs the loop that is serving requests.
  *
- * `in-process` carries a MEASURED figure, what was measured, and when: the
- * whole reason this field exists is that a blocking call is
- * indistinguishable from a non-blocking one in the source. Produce it with
- * `measureLoopAvailability` (shared/test-utils/loop-availability.ts), and
- * note that a sampler which records nothing is reporting total blockage, not
- * none — that mistake is why the number has to come from a shared instrument
- * rather than a hand-rolled one.
+ * `in-process` carries a CEILING a test asserts on every run, what that test
+ * exercises, and when it was set. The whole reason this exists is that a
+ * blocking call is indistinguishable from a non-blocking one in the source.
+ * Produce the figure with `measureLoopAvailability`
+ * (shared/test-utils/loop-availability.ts), and note that a sampler which
+ * records nothing is reporting total blockage, not none — that mistake is
+ * why it has to come from a shared instrument rather than a hand-rolled one.
  *
- * `worstStallMs` is the LONGEST SINGLE stretch the loop ran nothing, not the
- * total. A pass that costs a second of CPU in twenty-millisecond pieces is a
- * daemon that is busy; the same second unbroken is a daemon that is gone, and
- * only the second one is visible to whoever is waiting on a request.
+ * `stallCeilingMs` is the LONGEST SINGLE stretch the loop may run nothing,
+ * never the total. A pass that costs a second of CPU in twenty-millisecond
+ * pieces is a daemon that is busy; the same second unbroken is a daemon that
+ * is gone, and only the second is visible to whoever is waiting on a request.
  *
- * `fixture` says what produced the number, and it is the field that stops
- * this being decoration. Three of these declarations said `0` with a date
- * beside it and no measurement behind any of them; both were wrong, and the
- * file-GC one was wrong by three orders of magnitude — 7404ms unbroken.
- * A number with nothing named next to it is a guess wearing a date.
+ * **A ceiling rather than a reading, because a reading goes stale in
+ * silence.** This field first held `0` on three declarations, with a date
+ * beside each and no measurement behind any — the file-GC one wrong by three
+ * orders of magnitude, at 7404ms unbroken. Adding a `fixture` naming the test
+ * was supposed to fix that and did not: the workspace tail then declared
+ * 283ms and cited a test that measures 20-29ms, because the number came from
+ * a scratch script at a bigger fixture and the citation was written from
+ * memory. A number with a source named beside it is still unbacked if
+ * nothing reads the source.
+ *
+ * So the contract is mechanical: the test named in `fixture` imports this
+ * declaration and asserts its own measurement stays under the ceiling. A
+ * regression fails there, on every run, instead of leaving prose that is
+ * quietly wrong. Larger hand-measured points belong in `fixture` too, said
+ * plainly to be hand measurements — they are what a reader sizing a
+ * deployment needs, and exactly what a test on a small fixture cannot check.
  */
-type LoopCost =
-  | { runs: 'in-process'; worstStallMs: number; fixture: string; measuredOn: string }
+export type LoopCost =
+  | { runs: 'in-process'; stallCeilingMs: number; fixture: string; measuredOn: string }
   | { runs: 'subprocess'; because: string }
 
 export interface BackgroundWork {

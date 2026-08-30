@@ -11,6 +11,7 @@ import { serve } from '@hono/node-server'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
+import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
@@ -127,12 +128,7 @@ export async function startServerModeHttp(
       name: 'backup-scheduler',
       trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
       instances: { runs: 'leader-only', lease: 'backup' },
-      loop: {
-        runs: 'subprocess',
-        because:
-          'the snapshot step blocks the event loop for its whole duration — measured 1242ms ' +
-          'at a 103MB database and 4767ms at 421MB, growing with the data',
-      },
+      loop: LOOP_COSTS['backup-scheduler'],
       worker: createBackupScheduler({
         dataDir: getDataDir(),
         backupDir: backupDir.ok ? backupDir.value : null,
@@ -152,15 +148,7 @@ export async function startServerModeHttp(
           'racing the same file is the benign half — the second unlink answers ENOENT and ' +
           'is logged and skipped.',
       },
-      loop: {
-        runs: 'in-process',
-        worstStallMs: 39,
-        fixture:
-          '6 documents at 8 versions each, by file-gc-loop-availability.test.ts; the same ' +
-          'pass without its yields stalled 1342ms unbroken, and 5 documents at 20 versions ' +
-          'each stalled 7404ms',
-        measuredOn: '2026-08-30',
-      },
+      loop: LOOP_COSTS['file-gc-sweeper'],
       worker: {
         start: () => fileGcSweeper.start(),
         stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
@@ -173,18 +161,7 @@ export async function startServerModeHttp(
         runs: 'every-instance',
         because: 'each instance catches ITS OWN cached documents up with what another wrote',
       },
-      loop: {
-        runs: 'in-process',
-        worstStallMs: 283,
-        fixture:
-          '10 workspaces at 300 commits of history with a 50-commit gain, file-backed ' +
-          'libSQL, by workspace-tail-loop-availability.test.ts. Tracks ONE workspace ' +
-          'catch-up, not how many there are: 7.7ms at 30 history and a 10 gain, 105ms at ' +
-          '100/50, 283ms at 300/50 — so 300 commits being a small workspace makes this a ' +
-          'floor, not a ceiling. Without the yield the same pass stalls 2927ms unbroken. ' +
-          'An import is one call, so batching what catchUp imports is the only way lower.',
-        measuredOn: '2026-08-30',
-      },
+      loop: LOOP_COSTS['workspace-tail'],
       // Nothing to catch up: server mode has no WebSocket subscribers in this
       // slice, and the tail exists to serve a browser attached to THIS
       // instance. It arms when server mode grows the subscription surface.

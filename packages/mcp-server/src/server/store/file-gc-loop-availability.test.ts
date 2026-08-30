@@ -22,6 +22,7 @@ const { purgeDanglingFiles } = await import('./file-gc.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { makeSpatialDoc } = await import('../../shared/test-utils/spatial-doc.js')
+const { stallCeilingMs } = await import('../background-work-costs.js')
 const { loopTurnShare, measureLoopAvailability } = await import(
   '../../shared/test-utils/loop-availability.js'
 )
@@ -172,5 +173,10 @@ describe('a file-GC pass', () => {
     // And no single stall swallowed the pass. Without the yields this ratio
     // was 0.96; with them it is 0.04 on the same fixture.
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
+
+    // The declaration, checked rather than written down — see the same line
+    // in workspace-tail-loop-availability.test.ts for what went wrong when
+    // nothing read it.
+    expect(availability.worstStallMs).toBeLessThanOrEqual(stallCeilingMs('file-gc-sweeper'))
   }, 120_000)
 })
