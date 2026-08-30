@@ -58,6 +58,13 @@ export const MUTATED = [
  * that a genuinely new survivor of the SAME mutation on the SAME expression
  * hides until it exceeds the count.
  *
+ * An entry cannot outlive what it names: `mutation-lane-coverage.test.ts`
+ * fails on one whose file the lane no longer mutates, and equally on one
+ * whose ORIGINAL EXPRESSION is no longer in that file. The second is how this
+ * decays in practice — rewrite a condition here and its entries match no
+ * mutant ever again, while the ledger goes on claiming the findings are
+ * settled.
+ *
  * Nothing here is taken on trust: each was verified either algebraically or
  * by applying the edit and running the suite. Add an entry only with that
  * done, and put the REASON next to the code as an invariant, not here — a
