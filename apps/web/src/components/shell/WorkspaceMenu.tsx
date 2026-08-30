@@ -65,8 +65,13 @@ export interface WorkspaceSwitcherSource {
 }
 
 export interface WorkspaceMenuProps {
-  /** The handle the address currently carries. */
-  readonly current: string
+  /**
+   * The handle the address currently carries, or `null` when it carries none
+   * — a daemon holding no workspaces yet serves `/`. With no current handle
+   * no row is marked and the rename section does not render, which is right:
+   * there is nothing to rename, and creation is what the reader needs.
+   */
+  readonly current: string | null
   /** The rows, loaded by the shell so its head can name the current one. */
   readonly workspaces: readonly WorkspaceRow[]
   readonly source: WorkspaceSwitcherSource

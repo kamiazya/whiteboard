@@ -186,6 +186,23 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   Each layer is written on its own, never as a form submitting both: an
   unchanged URL sent back would put every name edit behind the one write that
   can be refused for a collision.
+- **The switcher is offered even when the address names no workspace.** A
+  daemon holding nothing serves `/`, and the switcher is the only place
+  creation lives — so requiring a handle before rendering it left a fresh
+  daemon with no way to make its first workspace. With no handle the menu has
+  no current row, which is already how it behaves for an address it cannot
+  resolve: the rename section sits behind a resolved row, so what is left is a
+  list and a create button, which is exactly what that state needs.
+
+  The empty-daemon copy moved with it. It used to say the write was someone
+  else's, and that was true while every create path addressed a
+  (workspace, path) pair the page could not name; `POST /api/workspaces`
+  retired the premise by minting the id itself.
+- **A rename changes identity and nothing else.** The switcher's rename
+  answers with the three identity layers, and the row it lands on also carries
+  what the keeper counted — so the answer is MERGED into the row, never
+  substituted for it. Replacing dropped the count until something else
+  happened to reload the list.
 - **Each switcher row says how much is in that workspace.** A list of names
   gives no reason to pick one; the count is what makes it readable. It reads
   as part of the row rather than as a column, so a keeper that does not count

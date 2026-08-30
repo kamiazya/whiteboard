@@ -164,16 +164,31 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         daemonBaseUrl={daemonBaseUrl}
         {...(activeName === undefined ? {} : { workspaceName: activeName })}
         workspaceMenu={
-          workspaces && workspaceHandleInAddress !== null ? (
+          // Rendered whenever a keeper published a switcher, INCLUDING when
+          // the address names no workspace. A daemon holding nothing serves
+          // `/`, and this menu is the only place creation is offered — so
+          // requiring a handle here left a fresh daemon with no way to make
+          // its first workspace, which is the one thing this increment set out
+          // to make possible. With no handle the menu simply has no current
+          // row: the rename section is already behind `active !== undefined`,
+          // so it degrades to a list and a create button on its own.
+          workspaces ? (
             <WorkspaceMenu
               current={workspaceHandleInAddress}
               workspaces={rows}
               source={workspaces.source}
               onSwitch={workspaces.onSwitch}
               sessionLabel={connectionLabel(connection?.state ?? null)}
+              // MERGED, not replaced. A rename answers with a WorkspaceEntry —
+              // the three identity layers and nothing else — while the row it
+              // lands on is a WorkspaceRow that also carries what the keeper
+              // counted. Replacing dropped that count until something else
+              // reloaded the list.
               onRenamed={(entry) =>
                 setRows((current) =>
-                  current.map((row) => (row.workspaceId === entry.workspaceId ? entry : row)),
+                  current.map((row) =>
+                    row.workspaceId === entry.workspaceId ? { ...row, ...entry } : row,
+                  ),
                 )
               }
             />

@@ -598,18 +598,22 @@ export function DaemonIndexPage({
           // the documents fetch that ends the loading state never runs and the
           // skeleton below would spin for as long as the page stays open.
           //
-          // There is no create control here on purpose: every create path
-          // addresses a (workspace, path) pair, and this page has no way to
-          // name a workspace the daemon would agree with — the daemon keeps
-          // its own current workspace id and does not publish it. So the one
-          // honest action is to look again, because the write that fixes this
-          // is someone else's.
+          // Creation is offered by the SWITCHER, not here — one carrier, the
+          // same one every other page uses. This state points at it rather
+          // than growing a second create control beside it.
+          //
+          // It used to say the write was someone else's, and that was true
+          // while every create path addressed a (workspace, path) pair this
+          // page could not name. `POST /api/workspaces` retired that: the
+          // daemon mints the id and derives the address from a display name,
+          // so the client no longer has to guess an identifier the daemon
+          // would agree with.
           <div className="flex flex-col items-start gap-3">
             <div>
               <p className="text-sm font-medium">This daemon has no workspaces.</p>
               <p className="text-sm text-muted-foreground">
-                A workspace appears once something creates a document in it — an agent over MCP, or
-                the whiteboard CLI.
+                Create one from the workspace menu in the header — or one appears on its own once an
+                agent over MCP, or the whiteboard CLI, writes a document.
               </p>
             </div>
             <button
