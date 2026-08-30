@@ -150,6 +150,30 @@ describe('WorkspaceMenu — creating', () => {
     expect(create).toHaveBeenCalledTimes(1)
   })
 
+  it('closes the create form once the workspace exists, rather than leaving it disabled', async () => {
+    // `onSwitch` is an in-SPA route change for the browser keeper, so the
+    // shell does NOT remount — the same menu instance survives the
+    // navigation with `busy` still true and the submit guard still held.
+    // Only the failure path used to release them, so a SUCCESSFUL create
+    // left the form open with Create disabled forever, until the popover
+    // happened to be closed and reopened.
+    const onSwitch = vi.fn()
+    renderMenu(
+      [{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }],
+      { create: () => Promise.resolve({ workspaceId: NOTES, segment: 'notes' }) },
+      { onSwitch },
+    )
+    fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
+    fireEvent.change(screen.getByLabelText(/new workspace name/i), { target: { value: 'Notes' } })
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
+
+    await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('notes'))
+    // Back to the menu: the form served its purpose and the workspace it
+    // made is the one being switched to.
+    await waitFor(() => expect(screen.queryByLabelText(/new workspace name/i)).toBeNull())
+    expect(screen.getByRole('menuitem', { name: /new workspace/i })).toBeTruthy()
+  })
+
   it('surfaces a create failure in the form and stays put', async () => {
     // Navigating away from a workspace that was not created would land on a
     // fallback and read as success.

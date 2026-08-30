@@ -11,7 +11,7 @@
  * `[mark] ALPHA <spacer> gear`.
  */
 
-import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
+import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
 
@@ -48,7 +48,7 @@ export interface WorkspaceSwitcherSource {
    */
   rename?(
     workspaceId: string,
-    input: { segment?: string; displayName?: string },
+    input: Omit<RenameWorkspaceInput, 'workspaceId'>,
   ): Promise<WorkspaceEntry>
 }
 
@@ -78,6 +78,8 @@ function messageOf(cause: unknown, fallback: string): string {
  * to clear a layer, and a workspace without one is a state it arrives in,
  * not one to offer as an edit.
  */
+type RenamedLayers = Omit<RenameWorkspaceInput, 'workspaceId'>
+
 function unchanged(next: string, current: string | undefined): boolean {
   const trimmed = next.trim()
   return trimmed === '' || trimmed === current
@@ -136,7 +138,7 @@ export function WorkspaceMenu({
     setBusy(false)
   }
 
-  const write = (input: { segment?: string; displayName?: string }) => {
+  const write = (input: RenamedLayers) => {
     if (rename === undefined || active === undefined) return
     setError(null)
     rename(active.workspaceId, input)
@@ -169,11 +171,21 @@ export function WorkspaceMenu({
     setBusy(true)
     setError(null)
     create(displayName)
-      // The handle CREATE answered with, never the name that was typed: a
-      // segment is derived from the name and may be suffixed past a
-      // collision, or absent entirely, in which case the address is the
-      // canonical id. Navigating to what was typed addresses nothing.
-      .then((created) => onSwitch(workspaceHandle(created)))
+      .then((created) => {
+        // Released on SUCCESS too, not only on failure. `onSwitch` is an
+        // in-SPA route change for the browser keeper, so the shell does not
+        // remount and this instance survives the navigation — holding the
+        // guard would leave the form open with Create disabled until the
+        // popover happened to be closed and reopened.
+        submitting.current = false
+        setBusy(false)
+        setCreating(false)
+        // The handle CREATE answered with, never the name that was typed: a
+        // segment is derived from the name and may be suffixed past a
+        // collision, or absent entirely, in which case the address is the
+        // canonical id. Navigating to what was typed addresses nothing.
+        onSwitch(workspaceHandle(created))
+      })
       .catch((cause: unknown) => failed(cause, 'Could not create the workspace.'))
   }
 
