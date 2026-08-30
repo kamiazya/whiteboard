@@ -22,8 +22,14 @@ function renderMenu(
   {
     onSwitch = vi.fn(),
     onRenamed = vi.fn(),
+    onCounted = vi.fn(),
     current = 'design',
-  }: { onSwitch?: () => void; onRenamed?: (entry: WorkspaceEntry) => void; current?: string } = {},
+  }: {
+    onSwitch?: () => void
+    onRenamed?: (entry: WorkspaceEntry) => void
+    onCounted?: (counts: ReadonlyMap<string, number>) => void
+    current?: string
+  } = {},
 ) {
   render(
     <WorkspaceMenu
@@ -32,6 +38,7 @@ function renderMenu(
       source={{ ...listOnly, ...source }}
       onSwitch={onSwitch}
       onRenamed={onRenamed}
+      onCounted={onCounted}
     />,
   )
 }
@@ -363,5 +370,70 @@ describe('WorkspaceMenu — how much is in each workspace', () => {
     renderMenu([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }])
     const row = screen.getByRole('menuitem', { name: /design team/i })
     expect(row.textContent).not.toMatch(/\d/)
+  })
+})
+
+describe('WorkspaceMenu — counts a keeper can only produce expensively', () => {
+  it('asks for counts when it mounts, which is when the popover opened', async () => {
+    // The mark's popover renders this component as its CONTENT, with no
+    // forceMount, so Radix mounts it on open and unmounts it on close.
+    // Mounting IS the open signal — there is no open flag to thread through
+    // ConnectionStatus, and adding one would be a second source of truth for
+    // a fact the tree already states.
+    const counts = vi.fn(() => Promise.resolve(new Map([[DESIGN, 3]])))
+    const onCounted = vi.fn()
+    renderMenu(
+      [{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }],
+      { counts },
+      { onCounted },
+    )
+    await waitFor(() => expect(onCounted).toHaveBeenCalledTimes(1))
+    expect(counts).toHaveBeenCalledTimes(1)
+    expect(onCounted.mock.calls[0][0]).toEqual(new Map([[DESIGN, 3]]))
+  })
+
+  it('does not ask a keeper that answers its counts in the list', async () => {
+    // The daemon counts in `list()` because one HTTP round trip already
+    // carries it. Absent `counts` is that keeper saying so, and calling a
+    // method it does not publish is the bug this pins.
+    const onCounted = vi.fn()
+    renderMenu(
+      [{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team', documentCount: 7 }],
+      {},
+      { onCounted },
+    )
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: /design team/i })).toBeTruthy())
+    expect(onCounted).not.toHaveBeenCalled()
+  })
+
+  it('does not re-count rows that already carry one', async () => {
+    // Reopening the popover remounts this component. The shell keeps the
+    // counts it was given, so a second open must be free — otherwise every
+    // open pays the loro load again.
+    const counts = vi.fn(() => Promise.resolve(new Map([[DESIGN, 3]])))
+    const onCounted = vi.fn()
+    renderMenu(
+      [{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team', documentCount: 3 }],
+      { counts },
+      { onCounted },
+    )
+    await waitFor(() => expect(screen.getByRole('menuitem', { name: /design team/i })).toBeTruthy())
+    expect(counts).not.toHaveBeenCalled()
+  })
+
+  it('leaves the rows readable when counting fails', async () => {
+    // A count is an ornament on a row whose job is switching. Failing to
+    // produce one must not take the list down with it — the row still
+    // addresses its workspace, which is what a person opened this for.
+    const counts = vi.fn(() => Promise.reject(new Error('loro chunk unreachable')))
+    const onCounted = vi.fn()
+    renderMenu(
+      [{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }],
+      { counts },
+      { onCounted },
+    )
+    await waitFor(() => expect(counts).toHaveBeenCalledTimes(1))
+    expect(screen.getByRole('menuitem', { name: /design team/i })).toBeTruthy()
+    expect(onCounted).not.toHaveBeenCalled()
   })
 })
