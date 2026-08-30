@@ -122,3 +122,112 @@ describe('switching documents while the next one is still loading', () => {
     store.release()
   })
 })
+
+/**
+ * A store whose SAVE for one id never settles until the test releases it, so
+ * a test can stand between the outgoing document's flush being dispatched and
+ * its completion being reported.
+ */
+function heldSaveStore(
+  heldId: string,
+  opts: { fail?: boolean } = {},
+): LoroStoreLike & { dispatched: Promise<void>; release: () => void } {
+  let release = (): void => {}
+  const held = new Promise<void>((resolve) => {
+    release = () => {
+      resolve()
+    }
+  })
+  let markDispatched = (): void => {}
+  const dispatched = new Promise<void>((resolve) => {
+    markDispatched = resolve
+  })
+  return {
+    dispatched,
+    release: () => release(),
+    async save(id: string) {
+      if (id !== heldId) return
+      markDispatched()
+      await held
+      if (opts.fail === true) throw new Error('quota exceeded')
+    },
+    createEmptySnapshot() {
+      return new Uint8Array()
+    },
+    async load() {
+      return { kind: 'missing' } as never
+    },
+  } as LoroStoreLike & { dispatched: Promise<void>; release: () => void }
+}
+
+/**
+ * Who the save indicator is ABOUT while the outgoing document's flush is
+ * still in flight.
+ *
+ * The switch flushes the departed document's pending debounce — deliberately,
+ * so the last 500ms of typing is not lost. That write then reports through
+ * `setSaveStateRef`, which by the time it settles belongs to the NEXT
+ * document. So the indicator the user is reading answers about a document
+ * they are no longer looking at.
+ *
+ * It is not merely stale. `saved` is a durability claim, and it lands on a
+ * document whose own edit is still sitting in its debounce — the user reads
+ * "safe" over text that is not written yet. The failure branch is the same
+ * defect said out loud: a write that failed for the document that left
+ * accuses the one on screen.
+ */
+describe('the save indicator while the departed document is still writing', () => {
+  async function switchWithHeldSave(store: ReturnType<typeof heldSaveStore>) {
+    const view = renderHook(({ id }: { id: string }) => useMarkdownDocument(store, id, true), {
+      initialProps: { id: 'c1' },
+    })
+    await waitFor(() => expect(view.result.current.doc).not.toBeNull())
+    await act(async () => {
+      view.result.current.setBody('written in c1')
+    })
+
+    // The switch: the load effect's cleanup flushes c1's debounce, which
+    // dispatches the save this store holds open.
+    view.rerender({ id: 'c2' })
+    await store.dispatched
+    await waitFor(() => expect(view.result.current.doc).not.toBeNull())
+
+    // An edit under c2, still inside its own debounce — nothing about c2 has
+    // been written.
+    await act(async () => {
+      view.result.current.setBody('typed in c2')
+    })
+    await waitFor(() => expect(view.result.current.saveState.kind).toBe('pending'))
+    return view
+  }
+
+  it('does not call the new document saved because the old one finished writing', async () => {
+    const store = heldSaveStore('c1')
+    const view = await switchWithHeldSave(store)
+
+    await act(async () => {
+      store.release()
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    expect(
+      view.result.current.saveState.kind,
+      'c2’s own edit is still in its debounce, and the indicator says saved — the claim belongs to c1’s flush, and the user reads it as their text being safe',
+    ).toBe('pending')
+  })
+
+  it('does not accuse the new document of the old one’s failed write', async () => {
+    const store = heldSaveStore('c1', { fail: true })
+    const view = await switchWithHeldSave(store)
+
+    await act(async () => {
+      store.release()
+      await new Promise((r) => setTimeout(r, 0))
+    })
+
+    expect(
+      view.result.current.saveState.kind,
+      'the write that failed was c1’s, and the error is on screen under c2 — a document with nothing wrong with it',
+    ).not.toBe('degraded')
+  })
+})
