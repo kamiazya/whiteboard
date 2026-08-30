@@ -23,7 +23,7 @@ import {
 import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
-import { workspaceLabel } from '../lib/workspace-handle.js'
+import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 import { createSeededDocument, type LoroStoreLike } from './use-browser-document-controller.js'
 
 export interface BrowserIndexPageProps {
@@ -260,6 +260,10 @@ export function BrowserIndexPage({
       ) : snapshots !== null ? (
         <WorkspaceFilesPanel
           source={filesSource}
+          // Read from the subscribed identity rather than the address: this
+          // page stays mounted across an in-SPA workspace switch, and the
+          // identity is what moves with it.
+          workspace={activeWorkspace === null ? undefined : workspaceHandle(activeWorkspace)}
           initialFolder={routedFolder}
           onFolderChange={setRoutedFolder}
           onOpenDocument={onOpenDocument}

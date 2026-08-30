@@ -37,6 +37,7 @@ import { NewDocumentDialog } from './NewDocumentDialog.js'
 export function NewDocumentMenu({
   onCreate,
   disabled,
+  workspace,
   defaultPath,
   createError,
   onDismiss,
@@ -58,6 +59,8 @@ export function NewDocumentMenu({
    * than a dead button does.
    */
   disabled?: boolean
+  /** The handle the new document's URL will carry, when the page knows it. */
+  workspace?: string | undefined
   /**
    * Where a create with no opinion would put the document. Its absence is
    * what hides the dialog entry: with nothing to pre-fill `Path` with, the
@@ -143,6 +146,7 @@ export function NewDocumentMenu({
       {defaultPath !== undefined && (
         <NewDocumentDialog
           open={dialogOpen}
+          workspace={workspace}
           defaultPath={defaultPath}
           busy={disabled}
           error={createError}

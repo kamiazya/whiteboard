@@ -186,6 +186,31 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   Each layer is written on its own, never as a form submitting both: an
   unchanged URL sent back would put every name edit behind the one write that
   can be refused for a collision.
+- **A document's path is drawn as the URL too — but it keeps its label.** The
+  create and rename forms put the head of the document's address in front of
+  the box (`/w/<handle>/d/`), so the text a person types is visibly a URL and
+  not a loose string. That head is sliced from `app-routes`' own builders,
+  separators included: a literal written into the component would go on
+  reading correctly long after the grammar moved, and a form that shows the
+  wrong address confidently is worse than one showing none. With no handle
+  yet resolved it shows nothing, because `/w//d/` is not half an address, it
+  is a wrong one.
+
+  What does NOT carry over from the switcher is dropping the label. There the
+  whole popover is unlabelled and the layer's only name is `segment`, which is
+  not a word to put in front of somebody. Here the form has two labelled
+  fields, `Path` is the word ADR-0008 already uses, and stripping one label of
+  the pair reads as breakage rather than as consistency. The prefix is added
+  to what the field SAYS, not swapped in for it — and it is part of the
+  field's accessible description rather than `aria-hidden`, since it is the
+  only thing on the form stating that a path is an address.
+
+  The handle is the one part allowed to truncate. A workspace with no segment
+  is addressed by its 26-character canonical id, and that prefix measured
+  269px of a 398px row — enough to push the dialog's form past its own max
+  width and overflow on every viewport. Truncating the prefix as one string
+  would eat `/d/` off the end, which is the half that says where the text
+  lands; truncating only the handle keeps the grammar legible at any width.
 - **The switcher is offered even when the address names no workspace.** A
   daemon holding nothing serves `/`, and the switcher is the only place
   creation lives — so requiring a handle before rendering it left a fresh
