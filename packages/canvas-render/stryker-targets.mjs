@@ -65,6 +65,32 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // Belt-and-braces guards whose removal is masked by a guarantee the caller
+  // already makes, plus type tests that a second test repeats. The load-bearing
+  // ones are pinned by examples in `hoist.test.ts`; these are not, because
+  // nothing can distinguish them. Hand-verified one at a time against the full
+  // 1008-test suite. Two neighbours of these are NOT here and were pinned
+  // instead — writing every hoistable name unconditionally erases a container's
+  // own attribute, and the every-child comparison throws on an attr-less child.
+  'src/svg/hoist.ts': {
+    'ConditionalExpression: !isVNode(child) -> false': 1,
+    'ConditionalExpression: attrs === undefined -> false': 1,
+    'ConditionalExpression: child !== null -> true': 1,
+    'ConditionalExpression: children === undefined -> false': 1,
+    'ConditionalExpression: elements.length === 0 -> false': 1,
+    'ConditionalExpression: hoisted.size === 0 -> false': 1,
+    'ConditionalExpression: names.size === 0 -> false': 1,
+    'ConditionalExpression: node.attrs === undefined -> false': 1,
+    'ConditionalExpression: node.attrs === undefined || names.size === 0 -> false': 1,
+    'ConditionalExpression: node.defs === undefined -> false': 1,
+    "ConditionalExpression: typeof child === 'object' && child !== null && 'tag' in child -> true": 1,
+    "ConditionalExpression: typeof child === 'string' -> false": 1,
+    'LogicalOperator: node.attrs === undefined || names.size === 0 -> node.attrs === undefined && names.size === 0': 1,
+    'MethodExpression: children.filter(isVNode) -> children': 1,
+    'ObjectLiteral: { changed: false } -> {}': 1,
+    'OptionalChaining: elements[0]?.attrs -> elements[0].attrs': 1,
+    'StringLiteral: \'string\' -> ""': 1,
+  },
   // The `default` arm returns `undefined`, which is also what falling out of
   // the switch returns — so removing it changes nothing. Hand-verified
   // against the full suite.
