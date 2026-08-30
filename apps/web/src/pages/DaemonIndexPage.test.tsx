@@ -1252,14 +1252,18 @@ describe('DaemonIndexPage', () => {
     await selectCard('Meeting notes')
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     let dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/removes the note, including its versions/)).toBeTruthy()
+    // A daemon delete is recoverable — document-store.ts routes it through
+    // the index's evacuate-first path — so the dialog names the Trash. What
+    // it still warns about is the half that really is destroyed.
+    expect(within(dialog).getByText(/The note moves to the Trash/)).toBeTruthy()
+    expect(within(dialog).getByText(/versions and branches are deleted/)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 
     await selectCard('Trip plan')
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/removes the canvas, including its versions/)).toBeTruthy()
+    expect(within(dialog).getByText(/The canvas moves to the Trash/)).toBeTruthy()
   })
 
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
