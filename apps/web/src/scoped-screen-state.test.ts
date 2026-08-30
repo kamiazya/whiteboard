@@ -38,6 +38,7 @@
  * browser-only and `web-app-boundary.test.ts` enforces it.
  */
 import { describe, expect, it } from 'vitest'
+import { assertScannedLedger } from './test-utils/coverage-ledger.js'
 
 const sources = import.meta.glob(
   [
@@ -342,20 +343,23 @@ describe('scoped screen state is classified', () => {
     expect(scanned(sources[file], scanRefs).length).toBeGreaterThan(4)
   })
 
-  it.each(CASES)('$label: every piece of state is classified', ({ file, ledger, scanRefs }) => {
-    const unclassified = scanned(sources[file], scanRefs)
-      .map((slot) => slot.name)
-      .filter((name) => !(name in ledger))
-    expect(
-      unclassified,
-      'new state or ref must say whether it is bound to this screen\'s SCOPE — the workspace for a browser, the document for the top bar and the markdown hook. If it is, reset it in the // SCOPE RESET effect and mark it "cleared on switch"; if it is not, say why; if it is and stays anyway, say `survives:` and what a fix would need. A path, an entry or a write handle always is',
-    ).toEqual([])
-  })
-
-  it.each(CASES)('$label: every classified name still exists', ({ file, ledger, scanRefs }) => {
-    const present = new Set(scanned(sources[file], scanRefs).map((slot) => slot.name))
-    const stale = Object.keys(ledger).filter((name) => !present.has(name))
-    expect(stale, 'these entries name state the screen no longer holds').toEqual([])
+  // Both directions in one `it`, through the shared helper: they are the same
+  // judgement, and a scan that ends up with only one of them reads exactly
+  // like a scan that checked.
+  it.each(CASES)('$label: every name is classified, and every entry still exists', ({
+    file,
+    ledger,
+    scanRefs,
+  }) => {
+    assertScannedLedger(
+      scanned(sources[file], scanRefs).map((slot) => slot.name),
+      ledger,
+      {
+        unclassified:
+          'new state or ref must say whether it is bound to this screen\'s SCOPE — the workspace for a browser, the document for the top bar and the markdown hook. If it is, reset it in the // SCOPE RESET effect and mark it "cleared on switch"; if it is not, say why; if it is and stays anyway, say `survives:` and what a fix would need. A path, an entry or a write handle always is',
+        stale: 'these entries name state the screen no longer holds',
+      },
+    )
   })
 
   // The half that makes this more than a list of names. An entry claiming to

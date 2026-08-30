@@ -30,6 +30,7 @@
  * starts holding an element id.
  */
 import { describe, expect, it } from 'vitest'
+import { assertScannedLedger } from '../../test-utils/coverage-ledger.js'
 
 const sources = import.meta.glob('./SpatialEditor.tsx', {
   query: '?raw',
@@ -110,19 +111,10 @@ describe('SpatialEditor state surface', () => {
   })
 
   it('classifies every piece of state the component holds', () => {
-    const held = new Set(scanStateNames(source))
-    const declared = new Set(Object.keys(EDITOR_STATE_COVERAGE))
-
-    const undeclared = [...held].filter((name) => !declared.has(name))
-    expect(
-      undeclared,
-      'new SpatialEditor state is unclassified — add it to EDITOR_STATE_COVERAGE as "modelled", "view only: <reason>" or "not modelled: <reason>", and if it holds an element id, read what the two selection defects cost first',
-    ).toEqual([])
-
-    const stale = [...declared].filter((name) => !held.has(name))
-    expect(
-      stale,
-      'EDITOR_STATE_COVERAGE names state SpatialEditor no longer holds — drop the entry',
-    ).toEqual([])
+    assertScannedLedger(scanStateNames(source), EDITOR_STATE_COVERAGE, {
+      unclassified:
+        'new SpatialEditor state is unclassified — add it to EDITOR_STATE_COVERAGE as "modelled", "view only: <reason>" or "not modelled: <reason>", and if it holds an element id, read what the two selection defects cost first',
+      stale: 'EDITOR_STATE_COVERAGE names state SpatialEditor no longer holds — drop the entry',
+    })
   })
 })
