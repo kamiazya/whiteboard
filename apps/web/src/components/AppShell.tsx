@@ -191,6 +191,19 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
                   ),
                 )
               }
+              // Kept HERE rather than in the menu, because the menu is the
+              // popover's content and Radix unmounts it on close. Holding the
+              // counts beside the rows is what makes the second open free —
+              // the browser keeper buys them by loading loro-crdt's WASM, and
+              // paying that once per session is the whole design.
+              onCounted={(counted) =>
+                setRows((current) =>
+                  current.map((row) => {
+                    const count = counted.get(row.workspaceId)
+                    return count === undefined ? row : { ...row, documentCount: count }
+                  }),
+                )
+              }
             />
           ) : undefined
         }

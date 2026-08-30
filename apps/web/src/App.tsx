@@ -475,6 +475,12 @@ export function App({ providerState }: AppProps) {
     () => ({
       source: {
         list: () => import('./lib/browser-workspaces.js').then((m) => m.listBrowserWorkspaces()),
+        // A SEPARATE module from the three below, and the separation is the
+        // point: this is the only one that reads the workspace tree, so it is
+        // the only one that pulls loro-crdt's WASM. The switcher asks for it
+        // when its popover opens, never on the shell's render path.
+        counts: () =>
+          import('./lib/browser-document-counts.js').then((m) => m.browserDocumentCounts()),
         create: (displayName: string) =>
           import('./lib/browser-workspaces.js').then((m) =>
             m.createBrowserWorkspaceNamed(displayName),

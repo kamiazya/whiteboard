@@ -28,10 +28,14 @@ import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
  *
  * `documentCount` is optional and absent is NOT zero — zero says the
  * workspace is empty, which is exactly the row a person needs to recognise,
- * while absent says this keeper did not count. The browser keeper is the
- * absent case today: documents live in the workspace tree, so counting them
- * means loading loro-crdt behind a control that renders in the app shell,
- * which `browser-workspaces.ts` deliberately avoids.
+ * while absent says nobody has counted this row YET. Both keepers count now,
+ * at different moments: the daemon in `list()`, since one HTTP round trip
+ * already carries the number; the browser through `counts()` when the
+ * popover opens, because its documents live in the workspace tree and
+ * reading that means loro-crdt's WASM, which must not load on the shell's
+ * render path. So absent is a real and ordinary state — the rows are
+ * readable the instant they arrive, and the browser's numbers land a moment
+ * later without a spinner or a reflow beyond the number itself.
  */
 export type WorkspaceRow = WorkspaceEntry & { readonly documentCount?: number }
 
@@ -62,6 +66,24 @@ export interface WorkspaceSwitcherSource {
     workspaceId: string,
     input: Omit<RenameWorkspaceInput, 'workspaceId'>,
   ): Promise<WorkspaceEntry>
+  /**
+   * Counts, for a keeper that cannot afford to produce them in `list()`.
+   *
+   * OPTIONAL, and its absence is not a lesser keeper: the daemon counts in
+   * `list()` because one HTTP round trip already carries the number. The
+   * browser cannot, because its documents live in the workspace tree and
+   * reading that means loading loro-crdt's WASM — 3039.5 KB, behind a
+   * control that renders in the app shell. So the browser publishes the
+   * count HERE, where it is paid on open rather than on every startup.
+   *
+   * Measured (CPU x4, 10Mbps/40ms, the LCP rig's profile): 1850 ms over the
+   * network, 65 ms out of Cache Storage — and Cache Storage is where this
+   * lands on every visit after the first, because the service worker
+   * precaches the WASM for offline editing (`check-pwa-precache.mjs` has a
+   * guard asserting exactly that). Opening the switcher rides a cost the
+   * product already pays; it does not create one.
+   */
+  counts?(): Promise<ReadonlyMap<string, number>>
 }
 
 export interface WorkspaceMenuProps {
@@ -80,6 +102,13 @@ export interface WorkspaceMenuProps {
   readonly onRenamed: (entry: WorkspaceEntry) => void
   /** The session word, shown beside the name. `null` where no page holds one. */
   readonly sessionLabel?: string | null
+  /**
+   * Hands the shell what `source.counts()` answered, so the counts live
+   * beside the rows they belong to rather than in this component. Closing
+   * the popover unmounts this; the shell keeps them, and the next open is
+   * free.
+   */
+  readonly onCounted?: (counts: ReadonlyMap<string, number>) => void
 }
 
 function messageOf(cause: unknown, fallback: string): string {
@@ -109,6 +138,7 @@ export function WorkspaceMenu({
   onSwitch,
   onRenamed,
   sessionLabel,
+  onCounted,
 }: WorkspaceMenuProps) {
   const [creating, setCreating] = useState(false)
   const [newName, setNewName] = useState('')
@@ -148,6 +178,31 @@ export function WorkspaceMenu({
   useEffect(() => {
     if (creating) newNameRef.current?.focus()
   }, [creating])
+
+  // Held in a ref so the effect below depends on the FACT of counting rather
+  // than on the identity of a callback the shell writes inline. Depending on
+  // the function itself re-runs the effect on every shell render, and the
+  // shell re-renders as a direct result of what this effect reports.
+  const countedRef = useRef(onCounted)
+  countedRef.current = onCounted
+  // One ask per mount. Radix unmounts this content when the popover closes,
+  // so mounting IS the open, and re-opening while counts are still missing
+  // is a deliberate retry rather than a loop.
+  const asked = useRef(false)
+  useEffect(() => {
+    const counts = source.counts
+    if (counts === undefined || asked.current) return
+    // Rows that already carry a count are the second open, or a keeper that
+    // counted in `list()`. Either way there is nothing to buy.
+    if (!workspaces.some((w) => w.documentCount === undefined)) return
+    asked.current = true
+    counts()
+      .then((counted) => countedRef.current?.(counted))
+      // A count is an ornament on a row whose job is switching. The rows
+      // stay exactly as readable without it, so a failure here is silent by
+      // design — the alternative is an error banner over a working list.
+      .catch(() => {})
+  }, [source, workspaces])
 
   const failed = (cause: unknown, fallback: string) => {
     submitting.current = false
