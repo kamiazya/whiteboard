@@ -17,8 +17,10 @@ import { NewDocumentDialog } from './NewDocumentDialog.js'
  *
  * A kind is fixed for the document's life — nothing in the codebase writes
  * `kind` a second time, so the only way back from the wrong one is delete
- * (behind a "there is no undo" confirmation) and start again. An
- * irreversible choice must not be committed by a single press on an
+ * and start again, carrying whatever was written across by hand. (The delete
+ * itself is recoverable — it evacuates to the Trash — but the KIND is not:
+ * restoring returns the same document, of the same wrong kind.) A choice
+ * that cannot be taken back must not be committed by a single press on an
  * unlabeled glyph, which is what the two icon buttons this replaces did:
  * their names lived in tooltips, and a tooltip needs a pointer that a phone
  * does not have.
@@ -127,7 +129,13 @@ export function NewDocumentMenu({
               className="gap-2"
             >
               <SlidersHorizontal aria-hidden="true" className="size-4" />
-              Name and location…
+              {/* Says "folder" because that is the word someone looking for
+                  one searches the menu for, and this entry is the only place
+                  they can put a document in one. Folders here ARE the path
+                  (the dialog's Path help says so, and an emptied one is
+                  pruned), so there is no "New folder" to offer instead — a
+                  folder with nothing in it cannot exist to be created. */}
+              Name and folder…
             </DropdownMenuItem>
           </>
         )}
