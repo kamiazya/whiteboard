@@ -356,8 +356,9 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
       // The caller wants it gone and it is.
       if (target === undefined) return
       // Every document here can hold children, so a cascade is reachable from
-      // one call naming one path — and deletion is the operation with nothing
-      // to undo it. Refusing makes the caller name what it is destroying.
+      // one call naming one path, and only the NAMED path is evacuated below —
+      // a cascade would destroy the descendants with no trash row to bring
+      // them back. Refusing makes the caller name what it is destroying.
       const descendants = nodes.filter(
         (node) => node.path !== input.path && isSelfOrDescendant(node.path, input.path),
       )

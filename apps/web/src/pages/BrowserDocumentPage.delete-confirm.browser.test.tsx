@@ -85,7 +85,12 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
 
     const dialog = await openDeleteDialog()
     expect(dialog).toHaveAccessibleName('Delete this note?')
-    expect(dialog).toHaveAccessibleDescription(/permanently removes the note/i)
+    // The delete EVACUATES to the trash (loro-workspace-document-index's
+    // "EVACUATE FIRST"), and the Trash section offers Restore — so a dialog
+    // claiming the opposite talks a reader out of a safe action.
+    expect(dialog).toHaveAccessibleDescription(/Trash/i)
+    expect(dialog).toHaveAccessibleDescription(/restore/i)
+    expect(dialog).not.toHaveAccessibleDescription(/no undo|cannot be undone/i)
   })
 
   it('opening the delete dialog does not delete the canvas yet', async () => {
@@ -146,7 +151,8 @@ describe('BrowserDocumentPage delete confirmation (browser — real IndexedDB)',
     const dialog = await openDeleteDialog()
 
     expect(dialog).toHaveAccessibleName('Delete this canvas?')
-    expect(dialog).toHaveAccessibleDescription(/permanently removes the canvas.*cannot be undone/i)
+    expect(dialog).toHaveAccessibleDescription(/Trash/i)
+    expect(dialog).not.toHaveAccessibleDescription(/no undo|cannot be undone/i)
   })
 
   it('focus moves into the dialog on open and returns to the kebab on close', async () => {

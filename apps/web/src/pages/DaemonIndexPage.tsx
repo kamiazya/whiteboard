@@ -633,7 +633,14 @@ export function DaemonIndexPage({
           pending={pendingDelete}
           busy={deleting}
           error={deleteError}
-          description={`This permanently removes the ${kindNoun(pendingDelete?.kind)}, including its versions and branches. There is no undo.`}
+          // Recoverable, like the browser's: document-store.ts routes the
+          // delete through the index, which evacuates into the trash and
+          // "keeps the same recoverability promise the agent-facing port
+          // makes". What genuinely does NOT come back is the versions and
+          // branches — documentTeardown deletes those rows, and the trash
+          // holds only the tree subtree — so that is the half worth warning
+          // about, instead of a blanket "no undo" that is simply false.
+          description={`The ${kindNoun(pendingDelete?.kind)} moves to the Trash, where you can restore it. Its versions and branches are deleted, and restoring does not bring them back.`}
           onCancel={closeDeleteDialog}
           onConfirm={() => void handleConfirmDelete()}
         />
