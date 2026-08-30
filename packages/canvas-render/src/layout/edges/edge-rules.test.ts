@@ -113,10 +113,12 @@ describe('zero-bend-facing-first', () => {
     // A structural fact, not a coincidence of this domain: a horizontal
     // zero-bend needs an x-GAP plus a y-span overlap, and a vertical one needs
     // a y-gap plus an x-span overlap — but a pair with an x-gap has no x-span
-    // overlap, so at most one can hold. Whichever does is also the dominant
-    // axis, since an axis with a gap carries the larger centre offset, so the
-    // rule's SECOND push is unreachable. Measured over 20000 pairs before it
-    // was written: lengths were 0 or 1, never 2.
+    // overlap, so at most one can hold. Measured over 20000 pairs: lengths
+    // were 0 or 1, never 2.
+    //
+    // It does NOT follow that the qualifying axis is the dominant one, which
+    // is what this property was first written believing. Measured separately:
+    // of 7893 single-pair results, 242 answered with the non-dominant pair.
     const ranked = rule.generate({
       dx: toRect.x + toRect.w / 2 - (fromRect.x + fromRect.w / 2),
       dy: toRect.y + toRect.h / 2 - (fromRect.y + fromRect.h / 2),
@@ -126,6 +128,21 @@ describe('zero-bend-facing-first', () => {
     })
 
     expect(ranked.length).toBeLessThanOrEqual(1)
+  })
+
+  it('offers the NON-dominant pair when only its facing qualifies', () => {
+    // Horizontally dominant (|dx| 40 > |dy| 30) while only the VERTICAL facing
+    // is a real zero-bend lane: the boxes overlap in x, so the horizontal gap
+    // is invalid, and they are separated in y with 140px of shared x span.
+    // This is the rule's second push, which no test reached — and which a
+    // reading of "the qualifying axis is always the dominant one" says cannot
+    // happen. It happens in 242 of 7893 single-pair results.
+    const fromRect: Rect = { x: 0, y: 0, w: 200, h: 20 }
+    const toRect: Rect = { x: 40, y: 30, w: 200, h: 20 }
+
+    expect(rule.generate({ dx: 40, dy: 30, fromRect, toRect, crowd: () => 0 })).toEqual([
+      { fromSide: 'bottom', toSide: 'top' },
+    ])
   })
 
   it('excludes an interpenetrating pair even with ample span overlap', () => {

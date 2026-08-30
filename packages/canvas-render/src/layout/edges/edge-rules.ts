@@ -166,14 +166,13 @@ const zeroBendFacingFirst = {
     const zeroV = facingGapOk(ctx, 'v') && facingSpansOverlap(ctx.fromRect, ctx.toRect, 'v')
     const [pairFirst, pairSecond] = dominantAxisOrder(ctx.dx, ctx.dy, opposingH, opposingV)
     const [okFirst, okSecond] = dominantAxisOrder(ctx.dx, ctx.dy, zeroH, zeroV)
-    // `okSecond` is unreachable, and the pair is kept because the SYMMETRY is
-    // the rule: a horizontal zero-bend needs an x-gap plus a y-span overlap
-    // and a vertical one the mirror, so a pair with a gap on one axis has no
-    // span overlap on it and at most one can hold — and whichever does is the
-    // dominant axis, since an axis with a gap carries the larger centre
-    // offset. Pinned by a property beside the examples in `edge-rules.test.ts`
-    // (at most one pair, ever), so a change that makes both reachable fails
-    // there rather than silently relying on this branch never having run.
+    // At most ONE of these ever pushes: a horizontal zero-bend needs an x-gap
+    // plus a y-span overlap and a vertical one the mirror, so a pair with a
+    // gap on one axis has no span overlap on it. Which one is NOT decided by
+    // dominance, though — a pair can be horizontally dominant while only its
+    // vertical facing qualifies, and then the non-dominant pair is the answer.
+    // Both pushes are live; the property beside the examples in
+    // `edge-rules.test.ts` pins the "at most one" half.
     const zero: SidePair[] = []
     if (okFirst) zero.push(pairFirst)
     if (okSecond) zero.push(pairSecond)
@@ -214,19 +213,22 @@ const uHookWhenDegenerate = {
   kind: 'candidates' as const,
   name: 'u-hook-when-degenerate',
   generate: (ctx: PreferenceRuleContext): readonly SidePair[] => {
-    const { h } = hvSides(ctx.dx, ctx.dy)
     const zero = zeroBendFacingFirst.generate(ctx)
     const ls = lPairCrowdingTieBreak.generate(ctx)
     const anyGapValid = facingGapOk(ctx, 'h') || facingGapOk(ctx, 'v')
     if (zero.length !== 0 || ls.length !== 0 || anyGapValid) return []
-    // The `'bottom'` arm is unreachable as the rule stands, and the ternary
-    // keeps it because the ARM is what says which side the hook goes over —
-    // deleting it would leave a bare `'top'` that reads as a coincidence.
-    // Reaching it needs `dy > 0` together with `|dx| >= |dy|`, and getting
-    // this far already needs one offset to be zero (the L-pair rule steps
-    // aside for nothing else), so `dy` is zero whenever the inner test runs.
-    // A future rule that stops requiring a collinear offset would open it.
-    const across: Side = Math.abs(ctx.dx) >= Math.abs(ctx.dy) ? (ctx.dy > 0 ? 'bottom' : 'top') : h
+    // Getting here means ONE offset is zero — the L-pair rule steps aside for
+    // nothing else — so the hook goes over the pair of sides perpendicular to
+    // that offset, and which of the pair leads is an arbitrary but fixed
+    // choice. A concentric pair has no offset at all and reads as horizontal.
+    //
+    // Written as the two cases that can occur rather than as a dominance test
+    // over a direction: the earlier form asked `|dx| >= |dy|` and then which
+    // way `dy` pointed, and the second question could never be answered — with
+    // one offset zero, `dy` is zero whenever the first test passes. Measured
+    // before rewriting: over 11806 firings it ran 11793 times and saw `dy > 0`
+    // exactly never.
+    const across: Side = ctx.dy === 0 ? 'top' : 'right'
     return [
       { fromSide: across, toSide: across },
       { fromSide: oppositeSide(across), toSide: oppositeSide(across) },
