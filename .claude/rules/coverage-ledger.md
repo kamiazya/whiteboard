@@ -115,16 +115,34 @@ Assert the scan found a plausible COUNT in its own `it`. A regex that stops
 matching otherwise reports itself as "every entry is stale", which sends the
 reader to the wrong file entirely.
 
-There are two scans now, and they still do NOT share a helper. What they
-have in common is four lines — the `?raw` glob and the plausible-count
-assertion — and past that they diverge completely: `editor-state-surface`
-CLASSIFIES each thing it finds against a three-value vocabulary it needs a
-`view only:` state for, while `destructive-copy-surface` asserts a
-single-definition rule and has no vocabulary at all. A helper over that is
-a glob with a parameter. Extract when two call sites want the same
-JUDGEMENT, not when two of them read files.
+There are **four** scans now, and they fall into two families that want
+different things:
 
-### The second one: copy declared once
+| family | scans | what it does with what it finds |
+|---|---|---|
+| **classify** | `editor-state-surface`, `scoped-screen-state` | every name found is entered in a `Record<string, Vocabulary>`, with a three-value vocabulary per surface |
+| **assert a rule** | `destructive-copy-surface`, `App.shell-workspaces-surface` | every occurrence found must satisfy one rule; no per-item entries, no vocabulary |
+
+The classify family shares a real JUDGEMENT — every scanned name is
+classified, and every entry still names something the source holds — so
+`assertScannedLedger` in `test-utils/coverage-ledger.ts` now holds it, beside
+`assertLedger`. That is the criterion working, not a change to it: **extract
+when two call sites want the same judgement, not when two of them read
+files.** The `?raw` glob and the plausible-count assertion are still four
+lines nobody should share, because a helper over those is a glob with a
+parameter.
+
+The MESSAGES stay at the call site. What a reader needs is the name of the
+actual table and the actual vocabulary — a shared wording would name neither.
+That is the opposite of `assertLedger`, where the wording IS the value; the
+two helpers differ because what they have to say differs.
+
+Why it earned an extraction at all: the union form gets two of its four
+directions from the type system, and a scanned surface has to do both by
+hand. Doing them by hand is how a scan ends up with only one — which reads
+exactly like a scan that checked. The helper makes them travel together.
+
+### The assert-a-rule family: copy declared once
 
 `lib/destructive-copy.ts` + `destructive-copy-surface.test.ts` is the worked
 example for a surface that earns a scan and explicitly does NOT earn a
