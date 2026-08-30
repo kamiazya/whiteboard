@@ -18,7 +18,7 @@
  * 4.7-second call reports 4.7 seconds blocked, which is what happened.
  */
 
-interface LoopAvailability {
+export interface LoopAvailability {
   elapsedMs: number
   /** Wall clock in which the loop ran nothing: elapsed minus what ticked. */
   blockedMs: number
@@ -90,4 +90,28 @@ export async function measureLoopAvailability<T>(
 
 function round(value: number): number {
   return Math.round(value * 10) / 10
+}
+
+/**
+ * The share of the ticks the sampler ASKED for that actually landed.
+ *
+ * The scale-free way to say "the loop kept getting turns", and the one to
+ * assert on. A raw `samples` count is a statement about how busy the machine
+ * is: both loop-availability tests floored it at an absolute number
+ * calibrated on an idle machine, and both failed in CI at exactly their
+ * threshold (`expected 20 to be greater than 20`, `expected 5 to be greater
+ * than 5`) without anything being wrong with the code under them.
+ *
+ * Measured across three regimes, which is what the 0.05 floor those tests use
+ * is picked from:
+ *
+ *   blocked (the defect)   file-GC 3 of 279 = 0.011  ·  workspace-tail 0
+ *   under load             0.18 - 0.24              ·  0.37 - 0.64
+ *   idle                   0.35                     ·  0.55
+ *
+ * Read it beside `worstStallMs`, never instead: this says the loop ran
+ * something, that says no single stall swallowed the pass.
+ */
+export function loopTurnShare(availability: LoopAvailability): number {
+  return availability.samples / (availability.elapsedMs / availability.intervalMs)
 }

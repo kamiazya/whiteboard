@@ -4,7 +4,10 @@ import { newImageRef } from '@kamiazya/whiteboard-model'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { measureLoopAvailability } from '../../shared/test-utils/loop-availability.js'
+import {
+  loopTurnShare,
+  measureLoopAvailability,
+} from '../../shared/test-utils/loop-availability.js'
 import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
 import { createWorkspaceTail } from './workspace-tail.js'
 
@@ -109,8 +112,12 @@ describe('a workspace-tail pass', () => {
     expect(emitted).toBeGreaterThan(0)
 
     // Without the yield this fixture produced ZERO samples: the loop ran
-    // nothing at all for the whole pass.
-    expect(availability.samples).toBeGreaterThan(5)
+    // nothing at all for the whole pass. A SHARE rather than a count, for the
+    // reason `loopTurnShare` gives -- this pass is short enough that the ideal
+    // sample count is around ten, so the absolute 5 it replaces demanded half
+    // of them, and CI failed on `expected 5 to be greater than 5`. Measured
+    // here: 0.55 idle, 0.37 under load.
+    expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
   }, 120_000)
 })
