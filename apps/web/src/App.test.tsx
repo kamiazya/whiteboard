@@ -1324,6 +1324,36 @@ describe('App /settings routing', () => {
     }
   })
 
+  it('opens a mark popover with something in it on /settings, in both keepers', async () => {
+    // The shell states this as an invariant: the mark "opens on every page —
+    // the workspace is a fact everywhere, so there is always something for
+    // the popover to say". /settings broke it. Every child of the popover is
+    // conditional, and on this route all of them were false at once: the
+    // route passed no `workspaces`, and only DOCUMENT pages publish shell
+    // status, so the connection was null too. The control opened onto
+    // nothing — measured at innerHTML.length === 0 in a real browser.
+    for (const state of [BROWSER_STATE, DAEMON_STATE]) {
+      renderAppWithRouter(state, '/settings')
+      await screen.findByTestId('settings-page')
+      fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+      const popover = await screen.findByTestId('shell-mark-popover')
+      // Emptiness is the defect, so emptiness is what this asserts against —
+      // not any particular wording, which would pin the copy instead of the
+      // invariant.
+      //
+      // What this does NOT pin, said plainly because the loop looks like it
+      // does: WHICH source each keeper gets. Both lists come back empty here,
+      // so both states render the identical "Switch to＋New workspace" —
+      // measured. Swapping the daemon arm for the browser one leaves this
+      // green. The two iterations still earn their place, since an absent or
+      // throwing source on either arm fails them; the source CHOICE is keyed
+      // off the same `settingsDaemon` as the `daemon` prop beside it, and
+      // that pairing is what keeps them from disagreeing.
+      expect(popover.textContent?.trim()).not.toBe('')
+      cleanup()
+    }
+  })
+
   it('does not rewrite /settings to the daemon route (the URL-sync guard)', async () => {
     const router = renderAppWithRouter(DAEMON_STATE, '/settings')
     await screen.findByTestId('settings-page')
