@@ -61,6 +61,17 @@ test('reachability runs by default, so an unwired increment cannot pass unremark
   assert.ok(defaultWorkflowDimensions().includes('reachability'))
 })
 
+// `background-work` is the same shape of gate, one layer down: work the server does on its own
+// that runs on every instance instead of one, or blocks the loop that answers requests. Both are
+// CORRECT code — tests pass, behaviour matches the design — so no other dimension has a reason to
+// look, and neither is visible in a diff. Pinned into the DEFAULT list for that reason; dropping
+// it back to opt-in is the same as removing it, since opt-in depends on a reviewer thinking to ask.
+test('background-work runs by default, so recurring or blocking work cannot pass unremarked', () => {
+  assert.ok(resourceDimensionNames().includes('background-work'))
+  assert.ok(agentDimensionNames().includes('background-work'))
+  assert.ok(defaultWorkflowDimensions().includes('background-work'))
+})
+
 // `agentType` is a plain string the Workflow runtime resolves at spawn time: a repo-owned agent
 // renamed or typo'd here is not a load error, it is a lane that quietly runs as something else.
 // Namespaced ids (`plugin:agent`) come from installed plugins and are not ours to check.

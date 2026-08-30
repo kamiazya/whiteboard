@@ -43,7 +43,7 @@ Stack only when each lower layer is worth reviewing on its own. One layer, or la
 Launch via `Workflow({scriptPath})` — they are NOT name-registered. `args` arrives as a JSON **string** → `JSON.parse` it (see `workflow-authoring` skill). Composition nesting is one level (dev-loop → review only).
 
 - **dev-loop**: design → PlanReview gate → TDD implement → simplify → review (composed) → triage/fix → (optional) docs sync. Returns `needsHumanGate`.
-- **review**: multi-dimension review + adversarial verify + QA (+ optional live dogfood). Composable child of dev-loop.
+- **review**: multi-dimension review + adversarial verify + QA (+ optional live dogfood). Composable child of dev-loop. Two of its default dimensions are default for one reason and no other — what they catch is CORRECT code, so no other lane has cause to look: `reachability` (built but never wired) and `background-work` (a worker that runs on every instance instead of one, or blocks the loop that answers requests; criteria in `review-gate/resources/background-work.md`, registry at `server/background-work.ts`).
 - **dogfood-triage**: persona browser dogfooding → triage into whiteboard canvases (issue type).
 - **reconcile**: textual + intent conflict detection across branches → serial merge plan (judgement only; integrator does the fold).
 - **plan-initiative**: expert panel → synthesize sliced plan → gate → visualize on the local whiteboard. Returns `openQuestions` for the main session to ask via AskUserQuestion.

@@ -602,3 +602,84 @@ describe('workspace tail wiring', () => {
     expect(counts.stopped).toBe(1)
   })
 })
+
+/**
+ * ADR-0021 decision 4's wiring. The scheduler's own tests cover when and
+ * where; what only composition can answer is whether it is CONNECTED — and a
+ * durability feature that is built and never started is the failure mode this
+ * whole area exists to remove, since every unit test passes by calling it
+ * directly.
+ */
+describe('startHttpServer: backup scheduler wiring', () => {
+  const DIR_ENV = 'WHITEBOARD_BACKUP_DIR'
+  let running: Awaited<ReturnType<typeof startHttpServer>> | undefined
+  let previous: string | undefined
+
+  beforeEach(() => {
+    previous = process.env[DIR_ENV]
+  })
+  afterEach(async () => {
+    if (previous === undefined) delete process.env[DIR_ENV]
+    else process.env[DIR_ENV] = previous
+    await running?.close()
+    running = undefined
+  })
+
+  function countingSchedulerFactory() {
+    const counts = { created: 0, started: 0, stopped: 0 }
+    const seen: Array<string | null> = []
+    const factory = (options: { backupDir: string | null }) => {
+      counts.created += 1
+      seen.push(options.backupDir)
+      return {
+        start: () => {
+          counts.started += 1
+        },
+        stop: async () => {
+          counts.stopped += 1
+        },
+        runOnceForTests: async () => {},
+      }
+    }
+    return { counts, seen, factory }
+  }
+
+  /**
+   * Constructed either way — the scheduler decides for itself that a null
+   * destination means do nothing — but it must be told the destination is
+   * absent rather than being handed a guessed one.
+   */
+  it('passes a null destination through when nothing is configured', async () => {
+    delete process.env[DIR_ENV]
+    const port = await findAvailablePort(4620)
+    const { counts, seen, factory } = countingSchedulerFactory()
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      backupSchedulerFactory: factory as never,
+    })
+    await fetch(`http://127.0.0.1:${port}/api/runtime/ping`)
+    expect(counts.created).toBe(1)
+    expect(seen).toEqual([null])
+  })
+
+  it('starts and stops exactly one scheduler when a destination is set', async () => {
+    process.env[DIR_ENV] = '/srv/whiteboard-backups'
+    const port = await findAvailablePort(4630)
+    const { counts, seen, factory } = countingSchedulerFactory()
+    running = await startHttpServer({
+      port,
+      host: '127.0.0.1',
+      backupSchedulerFactory: factory as never,
+    })
+    await fetch(`http://127.0.0.1:${port}/api/runtime/ping`)
+    expect(counts.created).toBe(1)
+    expect(counts.started).toBe(1)
+    expect(counts.stopped).toBe(0)
+    expect(seen).toEqual(['/srv/whiteboard-backups'])
+
+    await running.close()
+    running = undefined
+    expect(counts.stopped).toBe(1)
+  })
+})
