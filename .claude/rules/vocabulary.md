@@ -87,12 +87,13 @@ a later sweep does not "fix" them.
 
 - **The spatial surface.** `SpatialCanvas`, `CanvasEdge`, `CanvasColor`,
   `CanvasViewer`, `canvasRef`, `screenToCanvas`, `wb_canvas_tidy`, the
-  render/layout helpers, and the MCP Apps UI tool `canvas_view`. The word
-  means the surface; only the CONTAINER sense was retired. (This said
-  `canvas_open`/`canvas_view` until 2026-08-30; `canvas_open` is registered
-  nowhere and had not been for some time — a rule naming a tool is one more
-  place a tool name can go stale, which is why the guidance text the server
-  itself hands out now names none.)
+  render/layout helpers, and the MCP Apps UI tools. The word means the
+  surface; only the CONTAINER sense was retired.
+
+  This entry no longer lists tool NAMES. A rule that names a tool is one more
+  place a rename has to reach, and it had already gone stale here — the same
+  reason the guidance the server hands to clients names none either. The
+  registered list is `ALL_REGISTERED_TOOLS` in `mcp-smoke-coverage.ts`.
 - **Judge by the RETURN TYPE, not the owner.** `documentSyncSession.getCanvas()`
   answers with a `SpatialCanvas`, so `Canvas` is correct even though a
   document-shaped object owns the method.

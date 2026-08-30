@@ -26,8 +26,8 @@ const ENTITIES = [
   // belongs to a client, not to stored content — but `wb_viewport_set` is
   // still an agent asking the DAEMON to do something, which is what the
   // `wb_` plane is. ADR-0009 point 7's exemption does not apply: that one is
-  // for tools the MCP Apps HOST renders (`canvas_view`, `canvas_open`), and
-  // this one talks to the daemon's own WebSocket clients.
+  // for the tools the MCP Apps HOST renders (UI_LINKED_TOOLS), and this one
+  // talks to the daemon's own WebSocket clients.
   'viewport',
   'version',
   // ADR-0009's own table stops at the nouns a document is made of, because
@@ -55,10 +55,11 @@ const PENDING_FORMAT_MERGE = [] as const
 
 /**
  * MCP Apps UI tools are exempt from the `wb_` scheme by ADR-0009 point 7:
- * `canvas_open` and `canvas_view` are a UI contract with the MCP Apps host,
- * not part of this data plane. Read from UI_LINKED_TOOLS rather than
- * restated here, so the exemption and the linkage guard cannot disagree
- * about which tools are UI tools.
+ * they are a UI contract with the MCP Apps host, not part of this data
+ * plane. Read from UI_LINKED_TOOLS rather than restated here, so the
+ * exemption and the linkage guard cannot disagree about which tools are UI
+ * tools — restating them is how this comment came to name one that is not
+ * registered.
  */
 
 describe('ADR-0009 tool naming', () => {

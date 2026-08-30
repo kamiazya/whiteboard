@@ -67,13 +67,11 @@ describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', ()
   })
 
   /**
-   * Retargeted: this required the hint to name `canvas_open`, a tool that had
-   * stopped existing. The error meant to unblock a caller was telling it to
-   * run two tools it could not have (`canvas_open`, then `viewport_set`), and
-   * a test held that in place.
+   * Asserts what the hint tells the caller to DO, not which tool to call.
    *
-   * The hint now says what to DO and names no tool —
-   * `mcp/mcp-guidance-tool-names.test.ts` fails if one comes back.
+   * It used to require a tool name, which is how a hint kept naming one that
+   * no longer existed. `mcp/mcp-guidance-tool-names.test.ts` fails if a tool
+   * name comes back into this text.
    */
   it('tells the caller how to unblock itself, without naming a tool', async () => {
     mockGetClientCount.mockReturnValue(0)

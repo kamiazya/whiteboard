@@ -563,18 +563,15 @@ describe('createApp daemon mutation auth', () => {
   })
 
   /**
-   * Retargeted, not deleted, and what it used to assert is the point.
+   * Orientation rides `instructions` on the initialize result — the
+   * protocol's own channel, which a client injects into the model's system
+   * prompt rather than having to know to fetch a resource.
    *
-   * This pinned a `whiteboard://help/getting-started` RESOURCE whose body had
-   * to contain "Start with `canvas_create`" — through a real MCP client, over
-   * a real transport. So an end-to-end test verified that the server tells
-   * agents to call a tool that does not exist, and had done since the `wb_*`
-   * rename. Ten names in that text, none registered.
-   *
-   * The resource is gone. Orientation now rides `instructions` on the
-   * initialize result — the protocol's own channel for it, which a client
-   * injects into the model's system prompt rather than having to know to
-   * fetch — and it names no tool at all, so there is nothing left to drift.
+   * This case used to pin a help RESOURCE, and required its body to name a
+   * specific tool. That is worth knowing before anyone asserts on the text
+   * again: an end-to-end test through a real MCP client will hold whatever
+   * the text says, including a tool that no longer exists. Assert the channel
+   * and the shape, not the wording.
    */
   it('hands the client its instructions at initialize, and still offers the draw prompt', async () => {
     const app = createApp(createRuntimeOptions('secret'))

@@ -1,14 +1,11 @@
 // A composite root script names other scripts by string, and pnpm only finds
 // out at the moment it runs one.
 //
-// `pnpm smoke:template` sat inside `test:e2e:distribution:only` — and so
-// inside `check:release-candidate` — for long enough that the package script
-// it delegated to had been deleted. The whole template feature was gone:
-// `template_list`/`template_insert` are registered nowhere. Running the
-// release-candidate gate answered
-// `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT: None of the selected packages has a
-// "smoke:template" script`, at the eighth of fifteen steps, so everything
-// after it never ran either.
+// One such name sat inside `test:e2e:distribution:only` — and so inside
+// `check:release-candidate` — long after the package script it delegated to
+// had been deleted with the feature it smoked. Running the release-candidate
+// gate answered `ERR_PNPM_RECURSIVE_RUN_NO_SCRIPT` partway down the chain, so
+// every step after it never ran either.
 //
 // Nothing could have noticed. A dangling name typechecks, lints, and is
 // invisible to every test that does not execute the whole chain — which is

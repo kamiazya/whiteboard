@@ -26,10 +26,8 @@ const GUIDANCE = [
  * The `message:` and `hint:` strings a route hands back to its caller.
  *
  * Not the whole file: a source file also carries WebSocket message types
- * (`viewport_response`) and comments that must SPELL a retired name in order
- * to explain that it is retired — this test's own subject includes one. Both
- * are tool-shaped and neither is guidance, so reading the file wholesale
- * reports them and buries the real thing.
+ * (`viewport_response`), which are tool-shaped and are not guidance. Reading
+ * wholesale reports those and buries the real thing.
  */
 function callerFacingStrings(relativePath: string): string {
   const source = readFileSync(join(SERVER_SRC, relativePath), 'utf-8')
@@ -51,18 +49,14 @@ const TOOL_SHAPED = /\b(?:wb|canvas|annotate|export|template|viewport)_[a-z_]+\b
 const REGISTERED = new Set<string>(ALL_REGISTERED_TOOLS)
 
 /**
- * A tool name in guidance text is an instruction to call it, and nothing
- * checked that the tool existed.
+ * A tool name in guidance text is an instruction to call it, so it has to be
+ * a tool that exists.
  *
- * The `whiteboard://help/getting-started` resource named TEN tools and not one
- * of them was registered — the `wb_*` rename (ADR-0009) and the deleted
- * templates feature had left every name behind. `routes/viewport.ts` told a
- * caller, at the moment it was blocked, to "call canvas_open first, then run
- * viewport_set": two more that do not exist.
- *
- * Both were correct-looking prose in files nobody had reason to reopen. The
- * fix that lasts is not renaming them — it is that guidance names no tool
- * unless the tool is real, checked on every run.
+ * Renaming a tool leaves its old name behind in every piece of prose that
+ * mentioned it, and prose is where nobody looks — correct-looking text in a
+ * file no one has reason to reopen. The rule that lasts is not a careful
+ * rename: it is that guidance names no tool unless the tool is registered,
+ * checked on every run.
  */
 describe('MCP guidance text', () => {
   for (const { where, text } of GUIDANCE) {

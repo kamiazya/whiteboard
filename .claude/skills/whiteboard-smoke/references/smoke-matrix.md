@@ -10,7 +10,7 @@ This repo splits smoke tests into five kinds. Pick the **smallest one** that mat
 | Canvas routes / checkpoints / store / MCP tool wiring | `pnpm smoke:e2e` | `pnpm smoke:claude` or `pnpm smoke:codex` if needed |
 | Claude Code subprocess compatibility | `pnpm smoke:claude` | `pnpm typecheck` |
 | Codex subprocess compatibility / strict output / tmp persistence | `pnpm smoke:codex` | `pnpm typecheck` |
-| Rendering quality that requires a connected browser | Manual check after smoke | `canvas_open` / browser export |
+| Rendering quality that requires a connected browser | Manual check after smoke | open the canvas in a browser, then export |
 
 ## What Each Smoke Test Actually Runs
 
