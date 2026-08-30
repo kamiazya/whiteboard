@@ -1,12 +1,14 @@
-// Arg parser for `whiteboard server backup --json --output-dir=<path> [--data-dir=<path>]`.
+// Arg parser for `whiteboard server backup --json --output-dir=<path>
+// [--data-dir=<path>] [--mirror-dir=<path>]`.
 //
 // All value flags use inline form only (`--flag=<value>`). Space form is
 // rejected to prevent silent token swallowing. Raw values are never echoed
 // in error messages. --json is required.
 
+import { isAbsolute } from 'node:path'
 import { redactFlagValue, takeInlineValue } from './argv.js'
 
-const SERVER_BACKUP_INLINE_FLAGS = new Set(['--output-dir', '--data-dir'])
+const SERVER_BACKUP_INLINE_FLAGS = new Set(['--output-dir', '--data-dir', '--mirror-dir'])
 
 export type ServerBackupArgs =
   | {
@@ -14,6 +16,13 @@ export type ServerBackupArgs =
       json: true
       outputDir: string
       dataDir: string | undefined
+      /**
+       * Where the blob mirror lives, when it is shared with other backups.
+       * Absent means the backup keeps its own mirror inside `outputDir` and
+       * stays carryable on its own; the scheduler passes the backup root so
+       * its retained runs share one.
+       */
+      mirrorDir: string | undefined
     }
   | { kind: 'usage-error'; message: string }
 
@@ -21,6 +30,7 @@ export function parseServerBackupArgs(args: readonly string[]): ServerBackupArgs
   let json = false
   let outputDir: string | undefined
   let dataDir: string | undefined
+  let mirrorDir: string | undefined
 
   for (const arg of args) {
     if (arg === '--json') {
@@ -53,6 +63,22 @@ export function parseServerBackupArgs(args: readonly string[]): ServerBackupArgs
       continue
     }
 
+    if (arg.startsWith('--mirror-dir=')) {
+      const taken = takeInlineValue(arg, '--mirror-dir=')
+      if ('kind' in taken) return taken
+      if (mirrorDir !== undefined)
+        return { kind: 'usage-error', message: '--mirror-dir specified more than once' }
+      if (!isAbsolute(taken.value)) {
+        return {
+          kind: 'usage-error',
+          message:
+            '--mirror-dir must be an absolute path; a relative one resolves against a working directory you did not choose',
+        }
+      }
+      mirrorDir = taken.value
+      continue
+    }
+
     return { kind: 'usage-error', message: `Unknown argument: ${redactFlagValue(arg)}` }
   }
 
@@ -71,5 +97,5 @@ export function parseServerBackupArgs(args: readonly string[]): ServerBackupArgs
     }
   }
 
-  return { kind: 'ok', json: true, outputDir, dataDir }
+  return { kind: 'ok', json: true, outputDir, dataDir, mirrorDir }
 }

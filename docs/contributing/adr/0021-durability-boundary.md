@@ -1,12 +1,18 @@
 # ADR-0021: Durability is a property of each store, not an operation on a directory
 
-**Status:** Accepted — decisions 2, 3 and 4 implemented (a database we do not
+**Status:** Accepted — decisions 2, 3, 4, 5 and the far end of 6 implemented (a database we do not
 host is reported out of scope rather than refused wholesale; the rows are
 captured by a hot snapshot, so backup no longer requires stopping the
 server; backups run on a schedule, taken by one instance per deployment
 under ADR-0020's leader lease), plus the first slice of decision 1's
-per-store record. Decisions 5 and 6 are not: `backup-retention.ts` and its
-property hold decision 6's invariant but nothing wires them yet.
+per-store record. Decision 5's mirror is in place and `collectableFromBackup`
+now governs what leaves it, so decision 6's FAR end (retention must not delete
+behind) is enforced by the running code rather than only by its property. The
+NEAR end (a snapshot is not offered until the mirror has passed it) is not
+wired: today's mirror completes inside the same pass that writes the manifest,
+so there is no window to seal against, and `sealableSnapshots` stays unwired
+until the mirror becomes asynchronous — which is what an S3 blob backup would
+make it.
 
 ## Context
 

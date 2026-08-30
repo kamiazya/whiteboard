@@ -374,6 +374,23 @@ try {
       if (!existsSync(full) || statSync(full).isDirectory()) continue
       assertNoLeak(`scenario 3 backup file ${name}`, readFileSync(full, 'utf8'), SMOKE_LITERALS)
     }
+    // The blob manifest is part of the published artifact now (ADR-0021
+    // decision 5): it is what restore reads to know which blobs to
+    // materialise, and what retention reads to know what a backup still
+    // needs. A backup without it restores nothing from the mirror.
+    if (!backedUp.includes('blobs.json')) {
+      fail('scenario 3: backup carries no blob manifest')
+    }
+    let manifest
+    try {
+      manifest = JSON.parse(readFileSync(join(backupDir, 'blobs.json'), 'utf8'))
+    } catch {
+      fail('scenario 3: blob manifest is not valid JSON')
+    }
+    if (manifest.schemaVersion !== 2) fail('scenario 3: blob manifest schemaVersion mismatch')
+    // No `--mirror-dir`, so this backup keeps its own mirror and stays a
+    // directory an operator can carry away.
+    if (manifest.mirror !== 'self') fail('scenario 3: a one-off backup is not self-contained')
     console.log('[server-cli-smoke] scenario 3 PASS: backup CLI succeeded, no credential copied')
   }
 
@@ -792,6 +809,60 @@ try {
     }
   }
   console.log('[server-cli-smoke] scenario 14 PASS: dispatcher routing ok')
+
+  // ── Scenario 14b: a shared blob mirror, and a restore from it ────────────
+
+  // What the SCHEDULE does: every retained backup shares one copy of each
+  // blob instead of carrying its own. The published CLI is what the scheduler
+  // runs, so `--mirror-dir` is part of this contract — and a backup that is
+  // smaller is worth nothing if it cannot be put back, so this restores it.
+  {
+    const sharedRoot = join(tmpRoot, 'shared-backups')
+    const nightOne = join(sharedRoot, '2026-03-04T00-00-00.000Z')
+    const r = cli([
+      'server',
+      'backup',
+      '--json',
+      `--data-dir=${srcDataDir}`,
+      `--output-dir=${nightOne}`,
+      `--mirror-dir=${sharedRoot}`,
+    ])
+    if (r.status !== 0) {
+      fail('scenario 14b: shared-mirror backup failed', { stderrBytes: (r.stderr ?? '').length })
+    }
+    let manifest
+    try {
+      manifest = JSON.parse(readFileSync(join(nightOne, 'blobs.json'), 'utf8'))
+    } catch {
+      fail('scenario 14b: blob manifest is not valid JSON')
+    }
+    if (manifest.mirror !== 'parent')
+      fail('scenario 14b: manifest does not point at the shared mirror')
+    // Discriminating: the bytes would come back from a whole-tree copy too.
+    // What says the mirror is carrying them is that the backup directory does
+    // not.
+    if (readdirSync(nightOne).includes('blobs')) {
+      fail('scenario 14b: a mirrored backup still carries its own blob tree')
+    }
+
+    const restoredFromShared = join(tmpRoot, 'restored-shared')
+    const rr = cli([
+      'server',
+      'restore',
+      '--json',
+      `--backup-dir=${nightOne}`,
+      `--target-dir=${restoredFromShared}`,
+    ])
+    if (rr.status !== 0) {
+      fail('scenario 14b: restore from the shared mirror failed', {
+        stderrBytes: (rr.stderr ?? '').length,
+      })
+    }
+    if (!existsSync(join(restoredFromShared, 'whiteboard.db'))) {
+      fail('scenario 14b: restored data dir has no database')
+    }
+    console.log('[server-cli-smoke] scenario 14b PASS: shared mirror backed up and restored')
+  }
 
   // ── Scenario 15: server support-bundle: missing record → success ────────
 

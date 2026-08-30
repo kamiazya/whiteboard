@@ -167,6 +167,42 @@ describe('the backup subprocess', () => {
     expect(seen).toContain('--json')
   })
 
+  /**
+   * The schedule shares one blob mirror between its retained backups; a
+   * one-off does not. The child is the same program either way, so the
+   * difference has to travel as an argument — and it is absent by default,
+   * because a backup that keeps its own mirror is one an operator can carry
+   * away.
+   */
+  it('passes the shared mirror through to the child, and only when there is one', async () => {
+    let withMirror: readonly string[] = []
+    await runBackupInSubprocess({
+      dataDir: '/data',
+      outputDir: '/backups/one',
+      mirrorRoot: '/backups',
+      spawnBackup: spawnReturning({
+        stdout: OK_JSON,
+        onSpawn: (_command, args) => {
+          withMirror = args
+        },
+      }),
+    })
+    expect(withMirror).toContain('--mirror-dir=/backups')
+
+    let without: readonly string[] = []
+    await runBackupInSubprocess({
+      dataDir: '/data',
+      outputDir: '/backups/one',
+      spawnBackup: spawnReturning({
+        stdout: OK_JSON,
+        onSpawn: (_command, args) => {
+          without = args
+        },
+      }),
+    })
+    expect(without.some((arg) => arg.startsWith('--mirror-dir'))).toBe(false)
+  })
+
   describe('buildBackupSpawnArgs', () => {
     it('runs the packaged CLI by default', () => {
       const { command, args } = buildBackupSpawnArgs({

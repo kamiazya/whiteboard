@@ -75,17 +75,27 @@ describe('runServerBackup', () => {
     // case at the bottom of this file), so the happy paths seed one.
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
+    // Checked AT the moment of delegation, not after the pass. Pre-creating
+    // is what would break `backupDataDir`'s `errorOnExist` guard, and that
+    // guard is consulted when the helper runs — so this is the instant the
+    // question is about. Later steps legitimately write into the directory
+    // the helper created: the snapshot lands there, and so does the blob
+    // manifest.
+    let existedWhenDelegated: boolean | null = null
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      doBackup: vi.fn(async () => {}),
+      doBackup: vi.fn(async () => {
+        existedWhenDelegated = await lstat(outputDir).then(
+          () => true,
+          () => false,
+        )
+      }),
       doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
-    // CLI must not pre-create the dir; the mock doBackup does not create it
-    // either, so the directory must still be absent after the call.
-    await expect(lstat(join(tmpRoot, 'new-backup'))).rejects.toThrow()
+    expect(existedWhenDelegated).toBe(false)
   })
 
   it('ancestor-symlink: path through a symlink ancestor is rejected (fail-closed)', async () => {

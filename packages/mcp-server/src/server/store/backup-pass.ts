@@ -2,12 +2,16 @@ import { lstat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { hasAncestorSymlink } from '../backup-restore.js'
+import { getLogger } from '../log.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server-mode-backup-restore.js'
+import { mirrorBlobsIntoBackup } from './backup-blob-mirror.js'
 import { withBackupMarker } from './backup-in-progress.js'
 import { DB_FILENAME, databaseIsInsideDataDir, dataDirHasDatabaseFile } from './db/location.js'
 import { readDatabaseLocationRecord } from './db/location-record.js'
 import { snapshotDatabaseInto } from './db/snapshot.js'
+
+const log = getLogger('backup-pass')
 
 export type ServerBackupOutcome =
   | { kind: 'ok'; result: ServerBackupResult }
@@ -65,9 +69,18 @@ type ServerBackupResult = z.infer<typeof serverBackupResultSchema>
 export interface BackupPassOptions {
   dataDir: string
   outputDir: string
+  /**
+   * Where the blob mirror lives (ADR-0021 decision 5). Defaults to
+   * `outputDir`, which makes a one-off `whiteboard server backup` a
+   * self-contained directory an operator can carry — the affordance a shared
+   * mirror would otherwise take away. The SCHEDULE passes the backup root, so
+   * its retained backups share one mirror and stop costing a full copy each.
+   */
+  mirrorRoot?: string
   env?: NodeJS.ProcessEnv
   doBackup?: (src: string, dest: string, opts: BackupRestoreOptions) => Promise<void>
   doSnapshot?: (dataDir: string, destPath: string) => Promise<void>
+  doMirror?: typeof mirrorBlobsIntoBackup
 }
 
 /**
@@ -83,9 +96,11 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
   const {
     dataDir,
     outputDir,
+    mirrorRoot = options.outputDir,
     env = process.env,
     doBackup = backupServerModeDataDir,
     doSnapshot = snapshotDatabaseInto,
+    doMirror = mirrorBlobsIntoBackup,
   } = options
 
   // A running server is no longer a refusal (ADR-0021 decision 3). "A backup
@@ -188,6 +203,10 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
         // from before the move, and copying it would put pre-migration rows in
         // the backup for restore to put back as current.
         excludeDatabaseFile: true,
+        // The blobs travel through the mirror below, not as a tree copy.
+        // Copying them here as well would put back exactly the per-backup
+        // duplication the mirror exists to remove.
+        excludeBlobs: true,
       })
     } catch {
       return { kind: 'error', message: 'backup failed' }
@@ -204,6 +223,20 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
         // exists to remove, and it would arrive by simply not checking.
         return { kind: 'error', message: 'backup failed' }
       }
+    }
+
+    // After the copy: `backupDataDir` requires an empty destination, and for a
+    // self-contained backup the mirror writes inside that same directory.
+    try {
+      await doMirror(dataDir, mirrorRoot, {
+        manifestInto: outputDir,
+        mirror: mirrorRoot === outputDir ? 'self' : 'parent',
+      })
+    } catch (err) {
+      // A backup whose blobs did not travel is not a backup, however complete
+      // the rows are — restoring it gives documents that point at nothing.
+      log.error({ err }, 'could not mirror the blobs; the backup is not usable')
+      return { kind: 'error', message: 'backup failed' }
     }
 
     return {
