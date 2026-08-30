@@ -1056,6 +1056,23 @@ the table alone.
   22-33, the middle conjunct alone, which needs a segment that BEGINS on a
   lane and slants away to distinguish. Read the columns before concluding the
   tool is wrong.
+  **A survivor can mean the file has no INSTRUMENT, not that it has no
+  test.** `tidy.ts` sat at 52.63% with a suite that pins separation,
+  grid-snapping, idempotence and determinism — every one of them true, and
+  none of them able to see the thing most of that file does. Measured:
+  forcing the overlap-resolution axis to one direction keeps all of those
+  green while total displacement over a fixed corpus goes 51647 -> 77469, a
+  50% regression in how far tidy drags a person's boxes. The file was a
+  QUALITY heuristic wearing correctness clothing, and the answer was the
+  instrument this package already prescribes — `tidy-quality.test.ts`, debt
+  metrics targeting zero and price metrics pinned exactly, over a seeded
+  corpus chosen to CROWD. 52.63% -> 80.70%, and the residue moved from the
+  heuristic into `buildUnits`. Unlike the routing and wrapping scoreboards it
+  runs inside the mutation lane, because it costs a second: a cheap
+  scoreboard belongs there, and the exclusions in `vitest.stryker.config.ts`
+  are about price, not about kind. When a file's survivors cluster in a cost
+  model, a tie-break or a search, reach for a scoreboard before writing more
+  properties.
   **An equivalent mutant is a real answer, and the reason belongs in the
   source.** Of the 18 left on that file after the second oracle, 14 cannot be
   killed by any test: the broad phase is an optimisation whose comparisons are
