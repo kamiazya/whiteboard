@@ -1421,6 +1421,56 @@ describe('DaemonIndexPage', () => {
     ).toBeTruthy()
   })
 
+  // State that NAMES A DOCUMENT must not outlive the workspace it names.
+  // `pendingDelete` holds a path, and `handleConfirmDelete` reads
+  // `selectedWorkspace` at CONFIRM time rather than at open time — so a
+  // switch with the dialog still open addresses the departed workspace's
+  // path into the one now on screen. Paths are per-workspace and collide
+  // freely, so the DELETE lands on whatever sits at that path here.
+  //
+  // A modal does not make this unreachable: ADR-0019 makes the switch an
+  // in-SPA route change, and browser Back is not blocked by a dialog.
+  it('a delete dialog left open across a workspace switch sends no DELETE into the new workspace', async () => {
+    const deleted: Array<{ workspaceId: string; path: string }> = []
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        // The SAME path in both, which is the ordinary case rather than a
+        // contrived one: every workspace's first document is `untitled`.
+        'ws-a': [{ path: 'untitled', displayName: 'Mine', updatedAt: new Date().toISOString() }],
+        'ws-b': [
+          { path: 'untitled', displayName: 'Someone else', updatedAt: new Date().toISOString() },
+        ],
+      },
+      onDeleteCanvas: (workspaceId, path) => {
+        deleted.push({ workspaceId, path })
+        return undefined
+      },
+    })
+    const { rerender } = render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
+    )
+
+    await selectCard('Mine')
+    fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
+    await screen.findByRole('alertdialog')
+
+    switchWorkspace(rerender, 'ws-b')
+    await waitFor(() => expect(screen.queryByText('Someone else')).toBeTruthy())
+
+    const dialog = screen.queryByRole('alertdialog')
+    if (dialog !== null) {
+      const confirm = within(dialog).getAllByRole('button', { name: 'Delete' }).at(-1)
+      if (confirm) fireEvent.click(confirm)
+      await waitFor(() => expect(deleted.length).toBe(0))
+    }
+
+    expect(
+      deleted,
+      'the confirm was addressed at the workspace now on screen using a path from the one that left — `untitled` exists in both, so this deletes a document nobody asked about',
+    ).toEqual([])
+  })
+
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {
     const deleted: string[] = []
     installFetchMock({
