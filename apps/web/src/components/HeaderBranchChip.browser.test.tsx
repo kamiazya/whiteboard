@@ -100,6 +100,45 @@ describe('HeaderBranchChip (real Radix dropdown/dialog)', () => {
     expect(stateHolder.current.deleteBranch).toHaveBeenCalledWith('feature-x')
   })
 
+  // State that names a VARIATION must not outlive the document it belongs to.
+  // The chip stays mounted across a document switch (no key; `path` is a prop)
+  // and holds `pendingDelete` as a captured BranchMeta, while `useBranches`
+  // rebinds to the new document — so confirming addresses the departed
+  // document's variation name at the one now on screen. Names collide freely:
+  // every document has `main`, and a working name like `draft` repeats.
+  //
+  // `VersionTimeline`, rendered from the same top bar, already keeps this rule
+  // and says why in its own comment ("confirming a dialog opened on the
+  // previous canvas would POST that version id to the NEW canvas"). This chip
+  // was the one that did not.
+  it('a delete dialog left open across a document switch deletes nothing on the new document', async () => {
+    stateHolder.current.state = { head: 'feature-x', branches }
+    const { rerender } = render(<HeaderBranchChip workspaceId="s1" path="c1" />)
+    await userEvent.click(screen.getByTestId('header-branch-kebab'))
+    await userEvent.click(await screen.findByText(/Delete/))
+    await screen.findByText(/Delete «feature-x»\?/)
+
+    // The switch. `useBranches(workspaceId, path)` rebinds, so every verb the
+    // chip can still reach now points at the second document.
+    const second = makeState()
+    second.state = { head: 'feature-x', branches }
+    stateHolder.current = second
+    rerender(<HeaderBranchChip workspaceId="s1" path="c2" />)
+
+    // The dialog going away is the invariant, not a refused click: with no
+    // confirm to press, the misaddressed delete is unreachable rather than
+    // merely declined. Asserting on the button instead is also flaky — during
+    // Radix's exit animation it is present, disabled and moving, and a click
+    // on it hangs until the test times out (measured: 59s).
+    await waitFor(() =>
+      expect(
+        screen.queryByText(/Delete «feature-x»\?/),
+        'the dialog still stages a delete for the departed document, and confirming would address the one now on screen',
+      ).toBeNull(),
+    )
+    expect(second.deleteBranch).not.toHaveBeenCalled()
+  })
+
   it('inline "New variation…" form submits createBranch with the typed name', async () => {
     render(<HeaderBranchChip workspaceId="s1" path="c1" />)
     const chip = screen.getByTestId('header-branch-chip')

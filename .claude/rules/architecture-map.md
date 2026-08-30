@@ -96,7 +96,7 @@ questions the diff would otherwise never ask:
   (naming the lease) or `every-instance` (saying why that is right, since it
   is also what a worker gets by accident);
 - **what it costs the serving loop** — `subprocess`, or `in-process` with a
-  MEASURED figure and the date, taken with
+  `stallCeilingMs` **a test asserts on every run**, taken with
   `shared/test-utils/loop-availability.ts` rather than by hand;
 - **what triggers it**.
 
@@ -108,6 +108,28 @@ database, 4767ms at 421MB, and rising with the data. Nothing in the source says
 a call blocks: an `await` on a native binding reads exactly like an `await` on a
 socket. `snapshot-blocking.test.ts` pins that one so the decision that put a
 subprocess in the way fails loudly if the call ever stops blocking.
+
+A ceiling rather than a reading, because a reading goes stale in silence. The
+field first held `0` on three declarations, each with a date and no
+measurement behind it. Naming the source test in a `fixture` string was meant
+to fix that and did not: the workspace tail then declared 283ms while citing a
+test that measures 20-29ms — the number came from a scratch script at a larger
+fixture, and the citation was written from memory. **A number with a source
+named beside it is still unbacked if nothing reads the source.** So the
+declarations live in `background-work-costs.ts` where a test can import them,
+each loop-availability test asserts its own measurement stays under its
+ceiling, and `background-work-costs.test.ts` fails on a declared ceiling no
+test asserts — with an exemption list guarded from both sides, for the one
+worker (`idle-shutdown`) that compares two timestamps and has no call to
+measure. Larger hand-measured points stay in `fixture`, said plainly to be
+hand measurements: they are what a reader sizing a deployment needs and
+exactly what a test on a small fixture cannot check.
+
+The instrument itself is calibrated against known truths in
+`loop-availability.test.ts`, which is not ceremony — it was written, trusted
+for three declarations, and only calibrated after the fact, at which point
+`worstStallMs` turned out to report **0.3ms for a 200ms stall** whenever the
+stall ran to the end of the body.
 
 The registry is load-bearing rather than advisory — an undeclared worker does
 not typecheck, and `background-work.guard.test.ts` fails on a `.start()` in a

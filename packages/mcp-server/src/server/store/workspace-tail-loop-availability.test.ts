@@ -11,6 +11,7 @@ import {
   loopTurnShare,
   measureLoopAvailability,
 } from '../../shared/test-utils/loop-availability.js'
+import { stallCeilingMs } from '../background-work-costs.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { createWorkspaceTail } from './workspace-tail.js'
@@ -164,5 +165,13 @@ describe('a workspace-tail pass', () => {
     // one more way that fixture flattered the picture.
     expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
+
+    // The declaration, checked rather than written down. `background-work.ts`
+    // publishes what this worker may cost the serving loop, and before this
+    // line nothing read it: the number said 283ms while this fixture reads
+    // 20-29ms, because it came from a scratch script at a bigger fixture and
+    // the citation beside it was written from memory. A ceiling a test
+    // asserts cannot drift that way.
+    expect(availability.worstStallMs).toBeLessThanOrEqual(stallCeilingMs('workspace-tail'))
   }, 300_000)
 })

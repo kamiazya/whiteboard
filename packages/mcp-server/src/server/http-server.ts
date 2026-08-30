@@ -12,6 +12,7 @@ import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
+import { LOOP_COSTS } from './background-work-costs.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
@@ -314,12 +315,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         runs: 'every-instance',
         because: 'it is about THIS process being idle, which no other process can answer for it',
       },
-      loop: {
-        runs: 'in-process',
-        worstStallMs: 0,
-        fixture: 'a comparison of two timestamps; there is no call here to measure',
-        measuredOn: '2026-08-30',
-      },
+      loop: LOOP_COSTS['idle-shutdown'],
       worker: { start: () => idleTimer.start(), stop: async () => idleTimer.stop() },
     },
     {
@@ -332,19 +328,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           'GC-versus-WRITE untouched, since the write barrier is in-process and another ' +
           "instance's write never takes it. The grace period is what covers that window.",
       },
-      loop: {
-        runs: 'in-process',
-        // Not a subprocess, even though the cost is the backup's shape: the
-        // write barrier that stops a concurrent save inserting a reference
-        // between the scan and the unlinks is in-process, and a child would
-        // not take it. So the pass yields between scan units instead.
-        worstStallMs: 39,
-        fixture:
-          '6 documents at 8 versions each, by file-gc-loop-availability.test.ts; the same ' +
-          'pass without its yields stalled 1342ms unbroken, and 5 documents at 20 versions ' +
-          'each stalled 7404ms',
-        measuredOn: '2026-08-30',
-      },
+      loop: LOOP_COSTS['file-gc-sweeper'],
       // Wrapped rather than passed straight through: its own `stop` takes a
       // cap on how long shutdown waits for an in-flight pass, and a pass can
       // be expensive. Handing the bare method to a caller that passes no
@@ -363,33 +347,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           'each instance is catching ITS OWN cached documents up with what another instance ' +
           'wrote; a leader doing it would leave every follower serving stale reads',
       },
-      loop: {
-        runs: 'in-process',
-        // Paid on the operator's interval rather than once a night, which is
-        // why it yields per workspace too — and why the number below is the
-        // one that matters rather than the aggregate.
-        worstStallMs: 283,
-        fixture:
-          '10 workspaces at 300 commits of history with a 50-commit gain, file-backed ' +
-          'libSQL, by workspace-tail-loop-availability.test.ts. Tracks ONE workspace ' +
-          'catch-up, not how many there are: 7.7ms at 30 history and a 10 gain, 105ms at ' +
-          '100/50, 283ms at 300/50 — so 300 commits being a small workspace makes this a ' +
-          'floor, not a ceiling. Without the yield the same pass stalls 2927ms unbroken. ' +
-          'An import is one call, so batching what catchUp imports is the only way lower.',
-        measuredOn: '2026-08-30',
-      },
+      loop: LOOP_COSTS['workspace-tail'],
       worker: workspaceTail,
     },
     {
       name: 'backup-scheduler',
       trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
       instances: { runs: 'leader-only', lease: 'backup' },
-      loop: {
-        runs: 'subprocess',
-        because:
-          'the snapshot step blocks the event loop for its whole duration — measured 1242ms ' +
-          'at a 103MB database and 4767ms at 421MB, growing with the data',
-      },
+      loop: LOOP_COSTS['backup-scheduler'],
       worker: backupScheduler,
     },
   ])
