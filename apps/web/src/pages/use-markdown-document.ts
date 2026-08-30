@@ -193,18 +193,31 @@ export interface MarkdownDocumentState {
  * addendum retracted it. Seeding the name leaves the address alone, so a
  * heading edit can never move a document out from under a link.
  *
- * Runs on every save rather than only the first: both gates shut the moment
- * it succeeds, and a note whose heading arrives after its first paragraph
- * still gets named.
+ * Runs on every save, and KEEPS UP with a heading still being typed. Typing
+ * outlasts the 500ms debounce on a loaded machine, so a save lands while the
+ * title is half written — and a first version of this stopped there, because
+ * a name being present was what closed its gate. Measured in a real browser:
+ * `# From` … ` the list` produced a document called "From", forever. A wrong
+ * name is worse than `untitled`, because it looks deliberate.
+ *
+ * So a name this function produced may be replaced, and the test for "this
+ * one is ours" is that the title still STARTS WITH it — which is exactly the
+ * shape a half-typed heading leaves behind. Any other name is a person's, and
+ * is never touched: rename to "Meeting" over a body reading `# From the list`
+ * and the seeding is finished with this document.
  */
 function seedNameFromTitle(workspace: Loro, documentId: string): void {
   const entry = resolveWorkspaceDocumentById(workspace, documentId)
-  if (entry === null || entry.name !== undefined) return
+  if (entry === null) return
   if (!isGeneratedDocumentPath(entry.path)) return
   const title = titleFromMarkdownBody(
     documentContainers(workspace, documentId).getText(MARKDOWN_BODY_KEY).toString(),
   )
-  if (title === undefined) return
+  if (title === undefined || title === entry.name) return
+  // Absent: nobody has named it. A strict prefix of the title: we named it,
+  // from a heading that has since grown.
+  const ours = entry.name === undefined || title.startsWith(entry.name)
+  if (!ours) return
   setWorkspaceDocumentName(workspace, { documentId, name: title })
 }
 

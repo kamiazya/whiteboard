@@ -116,7 +116,11 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     expect(noteIndex).toBeGreaterThanOrEqual(0)
 
     // Reopening the note restores the typed body from the same store.
-    await userEvent.click(screen.getAllByTestId('card-title')[noteIndex]!)
+    // The ROW, not its title span: a title span is located by its text, and
+    // the row's decorative SVG miniature renders the same words once the note
+    // carries a real name — two matches, and a strict-mode violation that
+    // reads like the card is missing.
+    await userEvent.click(screen.getAllByTestId('card-title')[noteIndex]!.closest('button')!)
     await userEvent.click(await screen.findByRole('button', { name: 'Open' }))
     await waitFor(
       () => {
