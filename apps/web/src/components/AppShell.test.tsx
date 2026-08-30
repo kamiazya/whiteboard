@@ -66,13 +66,27 @@ describe('AppShell', () => {
     // Replaces "brand mark links home while no page holds a session". The
     // mark IS the switcher (the "Mark as Switcher" design record), and the
     // workspace is a fact on every page — so there is always something for
-    // the popover to say, and the plain-link-home shape cannot survive. Home
-    // survives as an item inside, which is the amendment that record makes
-    // to `brand/home-mark.svg`'s "click = go home".
+    // the popover to say, and the plain-link-home shape cannot survive.
     renderShell(true, '/w/default', undefined, WORKSPACES)
     expect(screen.queryByRole('link', { name: 'Home' })).toBeNull()
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
-    expect(await screen.findByRole('menuitem', { name: /all documents/i })).toBeTruthy()
+    expect(await screen.findByRole('menuitem', { name: /design team/i })).toBeTruthy()
+  })
+
+  it('offers no cross-workspace destination, because there is no such place', async () => {
+    // The design record's mock ends the popover with `All documents`, and
+    // that item is dropped deliberately: a whole-account view of every
+    // document is a STATE this product does not have, and a menu entry is
+    // the most expensive way to promise one. Leaving a document is the
+    // page's own affordance (`WorkspaceTopBar`'s back), and every workspace
+    // is reachable from the list above.
+    renderShell(true, '/w/default', undefined, WORKSPACES)
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    // The subject is PRESENT — the popover really opened — so the absence
+    // below is a decision and not a menu that never rendered.
+    expect(await screen.findByRole('menuitem', { name: /design team/i })).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /all documents/i })).toBeNull()
+    expect(screen.queryByTestId('shell-mark-home')).toBeNull()
   })
 
   it('keeps the workspace name out of the header row', async () => {

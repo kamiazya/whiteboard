@@ -234,22 +234,6 @@ export function ConnectionStatus({
             </div>
           </div>
         )}
-        {/* Going home was the mark's whole job before it became this
-            trigger. It keeps it, one level in, rather than leaving the shell
-            with no way back to the index. */}
-        <div role="menu" aria-label="Go to" className="mt-3 border-t pt-2">
-          <Link
-            to="/"
-            role="menuitem"
-            data-testid="shell-mark-home"
-            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
-          >
-            <span aria-hidden="true" className="w-3.5 shrink-0 text-muted-foreground">
-              ⌂
-            </span>
-            All documents
-          </Link>
-        </div>
       </PopoverContent>
     </Popover>
   )

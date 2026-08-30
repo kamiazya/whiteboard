@@ -152,8 +152,10 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
           popover that lists the others, and carries the session state when a
           page published one. It opens on every page — the workspace is a fact
           everywhere, so there is always something for the popover to say —
-          which is why the plain-link-home shape is gone and Home lives inside
-          as "All documents". */}
+          which is why the plain-link-home shape is gone. It gained no
+          replacement destination: a whole-account view of every document is a
+          state this product does not have, and leaving a document is the
+          page's own affordance. */}
       <ConnectionStatus
         state={connection?.state ?? null}
         daemonBaseUrl={daemonBaseUrl}

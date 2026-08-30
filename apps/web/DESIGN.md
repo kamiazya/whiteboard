@@ -127,10 +127,13 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   anyway.
 
   The popover reads head, then `Switch to`, then the workspaces (a tick on
-  the current one, `aria-current` for anyone not reading ticks), then the
-  actions — rename, new — then `All documents`. Home is that last item: the
-  mark's own source calls it "click = go home", and becoming a trigger is an
-  amendment to that, not an accident.
+  the current one, `aria-current` for anyone not reading ticks), then `New
+  workspace`. It deliberately ends there. The mark's own source calls it
+  "click = go home", and becoming a trigger amends that — but the amendment is
+  that the mark stops being a destination, NOT that the popover gains one. A
+  cross-workspace "all documents" entry would promise a state this product
+  does not have, and the ways out already exist: `WorkspaceTopBar`'s back
+  leaves a document, and every workspace is reachable from the list.
 
   It opens on EVERY page, including one holding no session. The workspace is
   a fact everywhere, so there is always something for the popover to say, and

@@ -1223,12 +1223,11 @@ describe('App shell (single instance above the routed pages)', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
-    // Home lives one level in now, as "All documents" in the mark's popover
-    // — the amendment the "Mark as Switcher" record makes to the mark's own
-    // "click = go home". What must survive every entry path is the WAY home,
-    // not the shape of the control.
-    fireEvent.click(screen.getByTestId('shell-mark-trigger'))
-    expect(await screen.findByRole('menuitem', { name: /all documents/i })).toBeTruthy()
+    // The mark stopped being a destination and gained no replacement: a
+    // cross-workspace "all documents" view is a state this product does not
+    // have. What must survive every entry path is the SHELL — the gear below
+    // and the mark's own popover — not a link home that no longer exists.
+    expect(screen.getByTestId('shell-mark-trigger')).toBeTruthy()
 
     fireEvent.click(screen.getByTestId('shell-settings'))
     expect(router.state.location.pathname).toBe('/settings')
@@ -1260,12 +1259,11 @@ describe('App shell (single instance above the routed pages)', () => {
     )
     await screen.findByTestId('daemon-document-page')
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
-    // Home lives one level in now, as "All documents" in the mark's popover
-    // — the amendment the "Mark as Switcher" record makes to the mark's own
-    // "click = go home". What must survive every entry path is the WAY home,
-    // not the shape of the control.
-    fireEvent.click(screen.getByTestId('shell-mark-trigger'))
-    expect(await screen.findByRole('menuitem', { name: /all documents/i })).toBeTruthy()
+    // The mark stopped being a destination and gained no replacement: a
+    // cross-workspace "all documents" view is a state this product does not
+    // have. What must survive every entry path is the SHELL — the gear below
+    // and the mark's own popover — not a link home that no longer exists.
+    expect(screen.getByTestId('shell-mark-trigger')).toBeTruthy()
   })
 
   it('daemon branch renders the shell and a reported auth error lights its attention dot', async () => {
