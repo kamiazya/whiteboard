@@ -30,6 +30,7 @@ import {
 import { getAppLogger } from '@/lib/app-logger'
 import { createDaemonFetch, listWorkspaces } from '@/lib/daemon-api-client'
 import type { PromotionResultRecord, UserSettings } from '@/lib/user-settings-store'
+import { type WorkspaceIdentity, workspaceLabel } from '@/lib/workspace-handle'
 
 const log = getAppLogger('promote-workspace-section')
 
@@ -53,7 +54,7 @@ type PromoteFlow =
   | {
       step: 'confirm'
       documentCount: number
-      targets: { workspaceId: string; displayName?: string }[]
+      targets: WorkspaceIdentity[]
       targetId: string
     }
   | { step: 'running'; phase: 'record' | 'blobs' }
@@ -134,8 +135,9 @@ export function PromoteWorkspaceSection({
         log.warn('startup fold failed; continuing without it', err)
       }
       const documentCount = await countBrowserWorkspaceDocuments(new BrowserWorkspaceDocs())
-      const targets = workspaces.workspaces.map((ws) => ({
+      const targets: WorkspaceIdentity[] = workspaces.workspaces.map((ws) => ({
         workspaceId: ws.workspaceId,
+        ...(ws.segment === undefined ? {} : { segment: ws.segment }),
         ...(ws.displayName === undefined ? {} : { displayName: ws.displayName }),
       }))
       if (documentCount === 0) {
@@ -320,7 +322,7 @@ export function PromoteWorkspaceSection({
                   <p className="text-xs">
                     <span className="font-medium">Daemon workspace: </span>
                     <span data-testid="promote-target-single">
-                      {flow.targets[0]?.displayName ?? flow.targets[0]?.workspaceId}
+                      {flow.targets[0] ? workspaceLabel(flow.targets[0]) : null}
                     </span>
                   </p>
                 ) : (
@@ -337,7 +339,7 @@ export function PromoteWorkspaceSection({
                     >
                       {flow.targets.map((target) => (
                         <option key={target.workspaceId} value={target.workspaceId}>
-                          {target.displayName ?? target.workspaceId}
+                          {workspaceLabel(target)}
                         </option>
                       ))}
                     </select>

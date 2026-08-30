@@ -30,6 +30,7 @@ export type ShortcutId =
   | 'reorder-front'
   | 'reorder-back'
   | 'delete-selection'
+  | 'commit-text-edit'
   | 'cancel'
   | 'space-pan'
   | 'nudge-selection'
@@ -189,6 +190,24 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     tools: ['select'],
   },
   // Pre-table bindings, declared for catalog completeness.
+  //
+  // The text-edit pair below live in the OVERLAY EDITORS
+  // (`MarkdownNodeEditor` for a node's body, `TextNodeEditor` for an edge
+  // or group label), not in `handleKeyDown`, and they were absent from
+  // this catalog until someone went looking for "how do I save?" and
+  // could not find it. `findShortcut` would refuse them anyway —
+  // `isTextEntryEvent` returns before any spec is matched, which is
+  // exactly right for a binding whose whole job is to work while typing —
+  // so they are declared, never dispatched, like the clipboard family
+  // above.
+  {
+    id: 'commit-text-edit',
+    keys: ['Enter'],
+    mod: true,
+    display: 'Cmd+Enter',
+    description: 'Save the text being edited and close the editor',
+    handledInline: true,
+  },
   {
     id: 'delete-selection',
     keys: ['Delete', 'Backspace'],
@@ -196,11 +215,19 @@ export const EDITOR_SHORTCUTS: readonly ShortcutSpec[] = [
     description: 'Delete the selected node(s) or edge',
     handledInline: true,
   },
+  // Escape does NOT clear a node selection, which this entry used to
+  // claim: `handleKeyDown`'s gesture arm requires a gesture in flight, and
+  // its earlier arms only retire an edge selection or a pending cut. What
+  // it cancels is the gesture — and in a text edit that means DISCARDING
+  // what was typed, with three outcomes worth knowing: an existing node
+  // keeps its committed text, a just-created note carrying typed text goes
+  // with the discard, and a just-created note with nothing typed survives
+  // as the empty box someone sketching a layout meant to leave.
   {
     id: 'cancel',
     keys: ['Escape'],
     display: 'Esc',
-    description: 'Cancel the gesture / clear the selection',
+    description: 'Cancel the gesture, discarding text being edited',
     handledInline: true,
   },
   {

@@ -30,7 +30,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
 import { seedSyncDocument } from '../test-utils/seed-sync-document.js'
 import { BrowserBackend, type BrowserBackendTarget } from './browser-backend.js'
-import { openWhiteboardDb } from './browser-idb.js'
+import { BROWSER_DEFAULT_SEGMENT, openWhiteboardDb } from './browser-idb.js'
+
+/** A canonical id no fixture mints, so a save under it can only be the bug. */
+const ELSEWHERE_ULID = '7ZZZZZZZZZZZZZZZZZZZZZZZZZ'
+
+import { BrowserWorkspaceDocs } from './browser-workspace-docs.js'
+import { getBrowserWorkspaceId, setBrowserWorkspaceIdForTests } from './browser-workspace-id.js'
 
 const ISOLATED_DB = claimIsolatedWhiteboardDb('browser-backend')
 
@@ -391,6 +397,98 @@ describe('BrowserBackend', () => {
       .sort()
     expect(ids).toEqual(['n-1', 'n-2'])
     backend2.disconnect()
+  })
+
+  it('a write still on the queue when disconnect() runs is not dropped', async () => {
+    // flush-before-switch (ADR-0019). `disconnect()` nulled `workspaceDoc`
+    // synchronously and `_doWrite` returned early on a null doc, so anything
+    // still queued reached storage never. The code called that "a
+    // disconnected straggler"; from the person's side it is the edit they
+    // just made, gone — and a workspace switch unmounts the session at
+    // exactly the moment one is in flight.
+    const backend = new BrowserBackend(target(ID_C))
+    const handlers = makeHandlers()
+    await connectAndWait(backend, handlers)
+
+    const doc = new LoroDoc()
+    doc.import(deliveredSnapshot(handlers))
+    const v0 = doc.version()
+    writeSpatialNode(documentContainers(doc, ID_C), {
+      id: 'n-late',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 40,
+      text: 'late',
+    })
+    const delta = doc.export({ mode: 'update', from: v0 })
+
+    // Deliberately NOT awaited before disconnecting — that ordering is the
+    // whole case.
+    const pending = backend.pushLocalUpdate(delta)
+    backend.disconnect()
+    await pending
+
+    const h2 = makeHandlers()
+    const backend2 = new BrowserBackend(target(ID_C))
+    await connectAndWait(backend2, h2)
+    const reloaded = new LoroDoc()
+    reloaded.import(deliveredSnapshot(h2))
+    expect(readSpatialCanvas(documentContainers(reloaded, ID_C)).nodes.map((n) => n.id)).toContain(
+      'n-late',
+    )
+    backend2.disconnect()
+  })
+
+  it('a queued write lands in the workspace it was made in, not the one switched to', async () => {
+    // The sharper half, and the one a switcher makes reachable. `_doWrite`
+    // read `getBrowserWorkspaceId()` at EXECUTION time, so re-pointing the
+    // active workspace while a write was in flight filed that write under
+    // the INCOMING workspace. Losing an edit is bad; writing it into someone
+    // else's workspace is worse.
+    // Subclassed rather than hand-stubbed: `WorkspaceDocs` has more members
+    // than this case cares about, and a partial literal would only compile by
+    // being cast — which is how a double stops standing for the real thing.
+    class RecordingDocs extends BrowserWorkspaceDocs {
+      readonly saves: string[] = []
+      override save(workspaceId: string, doc: LoroDoc) {
+        this.saves.push(workspaceId)
+        return super.save(workspaceId, doc)
+      }
+    }
+    const recording = new RecordingDocs()
+    const origin = getBrowserWorkspaceId()
+    const backend = new BrowserBackend(target(ID_C), recording)
+    const handlers = makeHandlers()
+    await connectAndWait(backend, handlers)
+
+    const doc = new LoroDoc()
+    doc.import(deliveredSnapshot(handlers))
+    const v0 = doc.version()
+    writeSpatialNode(documentContainers(doc, ID_C), {
+      id: 'n-origin',
+      type: 'text',
+      x: 0,
+      y: 0,
+      width: 80,
+      height: 40,
+      text: 'origin',
+    })
+    const delta = doc.export({ mode: 'update', from: v0 })
+
+    const pending = backend.pushLocalUpdate(delta)
+    // The switch, mid-flight.
+    setBrowserWorkspaceIdForTests(ELSEWHERE_ULID, 'elsewhere')
+    await pending
+    setBrowserWorkspaceIdForTests(origin, BROWSER_DEFAULT_SEGMENT)
+
+    // The invariant is not how MANY saves happen — connect writes too — but
+    // that none of them files this session's bytes under the workspace the
+    // address moved to.
+    expect(recording.saves).not.toContain(ELSEWHERE_ULID)
+    expect(recording.saves).toContain(origin)
+    backend.disconnect()
   })
 
   it('an unreadable legacy record surfaces its own failure and is NOT shadowed by an empty node', async () => {

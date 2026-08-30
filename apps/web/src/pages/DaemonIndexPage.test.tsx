@@ -21,7 +21,33 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(<MemoryRouter initialEntries={['/']}>{ui}</MemoryRouter>, options)
 }
 
+/**
+ * Switches the workspace the way the app now does it: the shell moves the
+ * address, and the page follows the prop. Through the same wrapper `render`
+ * uses — the page reads `useSearchParams`, so a bare rerender of the page
+ * alone throws before it can follow anything.
+ */
+function switchWorkspace(
+  rerender: (ui: ReactElement) => void,
+  workspace: string,
+  onOpenDocument = vi.fn(),
+) {
+  rerender(
+    <MemoryRouter initialEntries={['/']}>
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace={workspace}
+        onOpenDocument={onOpenDocument}
+      />
+    </MemoryRouter>,
+  )
+}
+
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
+
+// A real canonical id, so a test that says "not the raw identifier" is
+// checking against the shape ADR-0019 actually mints.
+const WS_ULID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 function jsonResponse(body: unknown, status = 200): Response {
   return new Response(JSON.stringify(body), {
@@ -46,7 +72,7 @@ function withSummaryDefaults(
 }
 
 interface MockRoutes {
-  workspaces: Array<{ workspaceId: string }>
+  workspaces: Array<{ workspaceId: string; segment?: string; displayName?: string }>
   documentsByWorkspace: Record<
     string,
     Array<{ path: string; updatedAt: string; id?: string; kind?: string; displayName?: string }>
@@ -289,17 +315,22 @@ describe('DaemonIndexPage', () => {
     }
     installFetchMock(routes)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    const onWorkspaceResolved = vi.fn()
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
 
     // Lands on ws-b's documents rather than an empty state for a workspace
     // that is not there.
     expect(await screen.findByText('beta')).toBeTruthy()
-    await waitFor(() => {
-      expect(
-        (screen.queryByRole('combobox', { name: 'Workspace' }) as HTMLSelectElement | null)
-          ?.value ?? 'ws-b',
-      ).toBe('ws-b')
-    })
+    // And REPORTS it, which is now the only way the choice becomes visible:
+    // the page owns no control of its own, so what it settled on reaches the
+    // address bar through this callback or not at all.
+    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('ws-b'))
   })
 
   // The loop guard, which the case above does NOT exercise: there the server
@@ -380,7 +411,7 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('beta')).toBeTruthy()
   })
 
-  it('honors initialWorkspaceId over the daemon-listed first workspace', async () => {
+  it('honors the addressed workspace over the daemon-listed first workspace', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
@@ -390,21 +421,14 @@ describe('DaemonIndexPage', () => {
     })
 
     render(
-      <DaemonIndexPage
-        daemonBaseUrl={DAEMON_BASE_URL}
-        initialWorkspaceId="ws-b"
-        onOpenDocument={vi.fn()}
-      />,
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-b" onOpenDocument={vi.fn()} />,
     )
 
     expect(await screen.findByText('beta')).toBeTruthy()
     expect(screen.queryByText('alpha')).toBeNull()
-    expect((screen.getByRole('combobox', { name: 'Workspace' }) as HTMLSelectElement).value).toBe(
-      'ws-b',
-    )
   })
 
-  it('falls back to the first-listed workspace when initialWorkspaceId is not in the daemon list', async () => {
+  it('falls back to the first-listed workspace when the addressed workspace is not in the daemon list', async () => {
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
@@ -416,7 +440,7 @@ describe('DaemonIndexPage', () => {
     render(
       <DaemonIndexPage
         daemonBaseUrl={DAEMON_BASE_URL}
-        initialWorkspaceId="stale-deleted-workspace"
+        workspace="stale-deleted-workspace"
         onOpenDocument={vi.fn()}
       />,
     )
@@ -424,7 +448,53 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('alpha')).toBeTruthy()
   })
 
-  it('switching the workspace selector replaces the visible cards', async () => {
+  it('reports the fallback when the address moves to a workspace the daemon does not have', async () => {
+    // A bookmark of a deleted workspace, opened while the app is already
+    // running. The page falls back to first-listed, which is the standing
+    // behaviour — but the FALLBACK has to reach the address, or the page
+    // serves one workspace under an address naming another and every document
+    // created lands somewhere the URL does not say.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-b': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onWorkspaceResolved = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="ws-a"
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    onWorkspaceResolved.mockClear()
+
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-gone"
+          onWorkspaceResolved={onWorkspaceResolved}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    // The selection does not move — ws-a is still the right answer — so the
+    // report is the ONLY signal, and it has to fire anyway.
+    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('ws-a'))
+    expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
+  it('follows the workspace the address names when it changes under the page', async () => {
+    // The switcher is the SHELL's now, and it changes the address; the page
+    // renders whatever workspace the address names. Until this, `workspace`
+    // was an INITIAL value — read once at mount — so a switch from outside
+    // moved the URL and left the cards where they were.
     installFetchMock({
       workspaces: [{ workspaceId: 'ws-a' }, { workspaceId: 'ws-b' }],
       documentsByWorkspace: {
@@ -433,12 +503,23 @@ describe('DaemonIndexPage', () => {
       },
     })
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    const { rerender } = render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
+    )
     expect(await screen.findByText('alpha')).toBeTruthy()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
-      target: { value: 'ws-b' },
-    })
+    // Through the same MemoryRouter wrapper the helper renders with: the page
+    // reads `useSearchParams`, so a bare rerender of the page alone throws
+    // before it can follow anything.
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-b"
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
 
     expect(await screen.findByText('beta')).toBeTruthy()
     expect(screen.queryByText('alpha')).toBeNull()
@@ -488,12 +569,12 @@ describe('DaemonIndexPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    const { rerender } = render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
+    )
     expect(await screen.findByText('alpha')).toBeTruthy()
 
-    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
-      target: { value: 'ws-b' },
-    })
+    switchWorkspace(rerender, 'ws-b')
 
     // ws-b's documents request is still pending — the old grid must be gone NOW.
     expect(screen.queryByText('alpha')).toBeNull()
@@ -607,12 +688,11 @@ describe('DaemonIndexPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    const { rerender } = render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
+    )
 
-    await waitFor(() => expect(screen.getByRole('combobox', { name: 'Workspace' })).toBeTruthy())
-    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
-      target: { value: 'ws-b' },
-    })
+    switchWorkspace(rerender, 'ws-b')
     expect(await screen.findByText('beta')).toBeTruthy()
 
     resolveA?.(
@@ -640,6 +720,74 @@ describe('DaemonIndexPage', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Open' }))
 
     expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-a', 'alpha')
+  })
+
+  it('opens a document under the workspace segment, not its canonical id', async () => {
+    // ADR-0019: the visible URL carries the human-readable segment. This page
+    // is where a daemon URL is born — `onOpenDocument` is what App.tsx turns
+    // into `/w/:handle/d/:path` — so a raw ULID handed over here is a
+    // raw ULID in the address bar.
+    installFetchMock({
+      workspaces: [{ workspaceId: WS_ULID, segment: 'design-team' }],
+      documentsByWorkspace: {
+        // Keyed under BOTH so this test is about the handle `onOpenDocument`
+        // receives, and not about which one the fetch used.
+        [WS_ULID]: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'design-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onOpenDocument = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+    await selectCard('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('design-team', 'alpha')
+  })
+
+  it('a canonical-id address still finds the workspace it names', async () => {
+    // The durable half of segment-first resolution: an id-form URL is the
+    // link that survives a rename, so it must keep selecting the workspace
+    // even once that workspace answers to a name.
+    installFetchMock({
+      workspaces: [
+        { workspaceId: 'ws-a', segment: 'alpha-space' },
+        { workspaceId: WS_ULID, segment: 'design-team' },
+      ],
+      documentsByWorkspace: {
+        'alpha-space': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'design-team': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace={WS_ULID}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+
+    expect(await screen.findByText('beta')).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+  })
+
+  it('a workspace with no segment is still addressed by its id', async () => {
+    // 0019 left a legacy workspace's segment NULL rather than inventing one,
+    // so the id-as-handle path is not a legacy curiosity — it is live.
+    installFetchMock({
+      workspaces: [{ workspaceId: 'ws-unnamed' }],
+      documentsByWorkspace: {
+        'ws-unnamed': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+    const onOpenDocument = vi.fn()
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={onOpenDocument} />)
+    await selectCard('alpha')
+    fireEvent.click(screen.getByRole('button', { name: 'Open' }))
+
+    expect(onOpenDocument).toHaveBeenCalledExactlyOnceWith('ws-unnamed', 'alpha')
   })
 
   it('duplicates a canvas via the preview Duplicate action without opening it', async () => {
@@ -824,14 +972,14 @@ describe('DaemonIndexPage', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    const { rerender } = render(
+      <DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} workspace="ws-a" onOpenDocument={vi.fn()} />,
+    )
     await selectCard('alpha')
     fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
 
     // Switch workspaces while the duplicate (still reading alpha's snapshot) is in flight.
-    fireEvent.change(screen.getByRole('combobox', { name: 'Workspace' }), {
-      target: { value: 'ws-b' },
-    })
+    switchWorkspace(rerender, 'ws-b')
     expect(await screen.findByText('beta')).toBeTruthy()
 
     resolveSnapshot?.(
@@ -1283,22 +1431,6 @@ describe('DaemonIndexPage', () => {
     // reached through the App-mounted shell's gear — the page itself owns no
     // settings affordance at all (AppShell ownership rule in DESIGN.md).
     expect(screen.queryByRole('button', { name: 'Settings' })).toBeNull()
-  })
-
-  it('hides the workspace selector when there is only one workspace (raw id demoted, D3)', async () => {
-    installFetchMock({
-      workspaces: [{ workspaceId: 'dTMMrBP3c5ah8_SXTRVvC' }],
-      documentsByWorkspace: {
-        dTMMrBP3c5ah8_SXTRVvC: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
-      },
-    })
-
-    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
-    await screen.findByText('alpha')
-
-    // One workspace = nothing to choose; the raw id has no reason to be
-    // page chrome. Multi-workspace daemons keep the selector.
-    expect(screen.queryByRole('combobox', { name: 'Workspace' })).toBeNull()
   })
 
   it('names the create control in text and hides its glyph from the accessible name', async () => {

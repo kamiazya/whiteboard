@@ -39,3 +39,11 @@ pre-push:
       run: pnpm lint:noconsole
     lint:
       run: pnpm lint
+    # ~1s, and it is the only check anywhere that notices the mutation lane
+    # going stale. The lane covers a LIST of modules, so a new one is simply
+    # not covered and the weekly report still looks healthy — the failure is
+    # silence, which no other gate here can see. Failing at push time is the
+    # right moment: whether the lane should cover the module is a decision for
+    # the diff that adds it, not for whoever reads the report months later.
+    mutation-lane:
+      run: pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts

@@ -12,5 +12,10 @@
     "noFallthroughCasesInSwitch": true,
     "skipLibCheck": true
   },
-  "include": ["src", "vitest.node.config.ts", "vitest.browser.config.ts"]
+  "include": [
+    "src",
+    "vitest.node.config.ts",
+    "vitest.browser.config.ts",
+    "vitest.stryker.config.ts"
+  ]
 }

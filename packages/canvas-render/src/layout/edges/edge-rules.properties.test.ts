@@ -40,10 +40,21 @@ const rectArb: fc.Arbitrary<Rect> = fc.record({
   h: fc.integer({ min: 0, max: 120 }),
 })
 
-// Dense enough to land on every branch composeSidePairs takes: aligned
-// (dx or dy === 0), diagonal (both nonzero), interpenetrating rects
-// (overlapping ranges within [-100,100]/[10,120]), and disjoint rects.
-const contextArb: fc.Arbitrary<PreferenceRuleContext> = fc
+/**
+ * An offset drawn INDEPENDENTLY of the two rects, so what a rule reads
+ * (`dx`/`dy`) and what it measures (the rect coordinates) may disagree. That
+ * is the right domain for the FRAMEWORK invariants below — totality,
+ * determinism, tier placement — because a caller can hand `composeSidePairs`
+ * any pair of numbers, and a rule may not throw on an incoherent one.
+ *
+ * It is the wrong domain for the removal properties, and measurably so: with
+ * `dx`/`dy` uniform over [-300,300] against rects placed independently,
+ * `zero-bend-facing-first` contributed a candidate in 16 of 200 draws and
+ * `u-hook-when-degenerate` in 1 of 200, so a property about removing either
+ * was a no-op in over 90% of its runs. `coherentContextArb` below is what
+ * those use instead.
+ */
+const incoherentContextArb: fc.Arbitrary<PreferenceRuleContext> = fc
   .record({
     dx: fc.integer({ min: -300, max: 300 }),
     dy: fc.integer({ min: -300, max: 300 }),
@@ -51,6 +62,64 @@ const contextArb: fc.Arbitrary<PreferenceRuleContext> = fc
     toRect: rectArb,
   })
   .map(({ dx, dy, fromRect, toRect }) => ({ dx, dy, fromRect, toRect, crowd: () => 0 }))
+
+/** Zero, then small (interpenetrating at these box sizes), then far. */
+const centreOffsetArb = fc.oneof(
+  { arbitrary: fc.constant(0), weight: 2 },
+  { arbitrary: fc.integer({ min: -60, max: 60 }), weight: 3 },
+  { arbitrary: fc.integer({ min: -300, max: 300 }), weight: 2 },
+)
+
+/**
+ * The offset IS the two rects' centre delta, which is what
+ * `composeSidePairs` assumes of a real canvas — so `hvSides` and
+ * `facingGapOk` agree about which way `to` lies, and the branches that need
+ * that agreement become reachable. Both axes are biased toward zero and
+ * toward small offsets relative to the box sizes, because the aligned
+ * (`dx === 0`) and interpenetrating arrangements are exactly where
+ * `zero-bend-facing-first` and `u-hook-when-degenerate` live: a uniform
+ * offset reaches `dx === 0` once in 601 draws.
+ *
+ * `the domain reaches every candidate rule` below pins that this stays true.
+ */
+const coherentContextArb: fc.Arbitrary<PreferenceRuleContext> = fc
+  .record({
+    fromRect: rectArb,
+    toSize: fc.record({
+      w: fc.integer({ min: 0, max: 120 }),
+      h: fc.integer({ min: 0, max: 120 }),
+    }),
+    dx: centreOffsetArb,
+    dy: centreOffsetArb,
+  })
+  .map(({ fromRect, toSize, dx, dy }) => {
+    const centreX = fromRect.x + fromRect.w / 2
+    const centreY = fromRect.y + fromRect.h / 2
+    const toRect = {
+      x: Math.round(centreX + dx - toSize.w / 2),
+      y: Math.round(centreY + dy - toSize.h / 2),
+      w: toSize.w,
+      h: toSize.h,
+    }
+    // The rounding above moves a centre by at most half a pixel, so the
+    // offset the rules read is re-derived from the rects rather than
+    // asserted, keeping the context self-consistent by construction.
+    return {
+      dx: toRect.x + toRect.w / 2 - centreX,
+      dy: toRect.y + toRect.h / 2 - centreY,
+      fromRect,
+      toRect,
+      crowd: () => 0,
+    }
+  })
+
+/** Both shapes, for the invariants that must hold whatever a caller passes. */
+const contextArb: fc.Arbitrary<PreferenceRuleContext> = fc.oneof(
+  incoherentContextArb,
+  coherentContextArb,
+)
+
+type CandidateRule = Extract<(typeof SIDE_PREFERENCE_RULES)[number], { kind: 'candidates' }>
 
 const pairKey = (p: SidePair) => `${p.fromSide} ${p.toSide}`
 const asSet = (pairs: readonly SidePair[]) => new Set(pairs.map(pairKey))
@@ -74,12 +143,31 @@ describe('composeSidePairs: candidate generation is deterministic', () => {
 })
 
 describe('composeSidePairs: preference-rule removal', () => {
+  // A removal property over a domain that never makes the rule fire is a
+  // no-op dressed as a check, and both properties below are removals. This
+  // is the reachability half, asserted per rule rather than in aggregate so
+  // one rule falling out of the domain cannot hide behind the other four.
+  it('the domain reaches every candidate rule', () => {
+    const samples = fc.sample(coherentContextArb, 400)
+    const reached = SIDE_PREFERENCE_RULES.filter((rule) => rule.kind === 'candidates').map(
+      (rule) => ({
+        name: rule.name,
+        // A floor, not the measurement: the thinnest rule here sits an order
+        // of magnitude above it, so a real loss of reach fails and ordinary
+        // sampling noise does not.
+        reachedEnough:
+          samples.filter((ctx) => (rule as CandidateRule).generate(ctx).length > 0).length >= 8,
+      }),
+    )
+    expect(reached).toEqual(reached.map(({ name }) => ({ name, reachedEnough: true })))
+  })
+
   // zero-bend-facing-first is the one rule whose own candidates are ALWAYS
   // a subset of what gap-valid-opposing-before-invalid contributes anyway
   // (both draw from {opposingH, opposingV}, and gap-valid-opposing-before-
   // invalid includes both unconditionally) — so removing it changes ORDER
   // only, never the candidate SET.
-  fcTest.prop([contextArb], withDefaults())(
+  fcTest.prop([coherentContextArb], withDefaults())(
     'removing zero-bend-facing-first changes ordering but never the candidate set',
     (ctx) => {
       const withRule = asSet(composeSidePairs(ctx))
@@ -100,7 +188,7 @@ describe('composeSidePairs: preference-rule removal', () => {
   // shrinks the set, so they are not order-only. What DOES hold for every
   // candidate rule, always, is monotonicity: removing one can only drop
   // candidates, never introduce one the full composition never had.
-  fcTest.prop([contextArb], withDefaults())(
+  fcTest.prop([coherentContextArb], withDefaults())(
     'removing any single candidate rule never introduces a candidate absent from the full composition',
     (ctx) => {
       const full = asSet(composeSidePairs(ctx))
@@ -128,7 +216,36 @@ const pointArb: fc.Arbitrary<Point> = fc.record({
   y: fc.integer({ min: -200, max: 200 }),
 })
 
-const pathArb: fc.Arbitrary<readonly Point[]> = fc.array(pointArb, { minLength: 0, maxLength: 6 })
+const axisMoveArb = fc.record({
+  axis: fc.constantFrom<'h' | 'v'>('h', 'v'),
+  delta: fc.integer({ min: -20, max: 20 }),
+})
+
+const orthogonalPathArb: fc.Arbitrary<readonly Point[]> = fc
+  .array(axisMoveArb, { minLength: 0, maxLength: 10 })
+  .map((moves) => {
+    let x = 0
+    let y = 0
+    const path: Point[] = [{ x, y }]
+    for (const move of moves) {
+      if (move.axis === 'h') x += move.delta
+      else y += move.delta
+      path.push({ x, y })
+    }
+    return path
+  })
+
+/**
+ * Free-form points AND an axis-aligned walk. Every ink term rejects by axis
+ * before it measures anything, so a domain of free-form points prices
+ * nothing: measured, five of the seven rules contributed 0 in 200 of 200
+ * runs, which left the tier-placement property below comparing zero to zero
+ * — a composition that never wrote a rule's slot would have passed it.
+ */
+const pathArb: fc.Arbitrary<readonly Point[]> = fc.oneof(
+  fc.array(pointArb, { minLength: 0, maxLength: 6 }),
+  orthogonalPathArb.map((path) => path.map((p) => ({ x: p.x * 4, y: p.y * 4 }))),
+)
 
 const foreignRectArb: fc.Arbitrary<Rect> = fc.record({
   x: fc.integer({ min: -200, max: 200 }),
@@ -148,10 +265,21 @@ const foreignBodiesArb: fc.Arbitrary<readonly Rect[]> = fc.array(foreignRectArb,
 // foreign-body domain (mutually overlapping and zero-size rects included).
 const nodeBordersArb = foreignBodiesArb
 
-const tripleArb: fc.Arbitrary<readonly [number, number, number]> = fc.tuple(
-  fc.integer({ min: 0, max: 1000 }),
-  fc.integer({ min: 0, max: 1000 }),
-  fc.integer({ min: 0, max: 1000 }),
+/**
+ * A narrow-phase term, zero often enough that a cost tuple with NOTHING in
+ * it is reachable. `hasRepairableProblem`'s whole job is to answer false for
+ * that tuple, and a uniform `integer(0..1000)` per slot puts three
+ * simultaneous zeroes at one draw in a billion — measured 0 of 200 runs, and
+ * the property stayed green with the function replaced by `return true`.
+ */
+const termArb = fc.oneof(
+  { arbitrary: fc.constant(0), weight: 1 },
+  { arbitrary: fc.integer({ min: 0, max: 1000 }), weight: 2 },
+)
+
+const tripleArb: fc.Arbitrary<readonly [number, number, number]> = fc.oneof(
+  { arbitrary: fc.constant([0, 0, 0] as const), weight: 1 },
+  { arbitrary: fc.tuple(termArb, termArb, termArb), weight: 5 },
 )
 
 describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
@@ -163,15 +291,41 @@ describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
     },
   )
 
-  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb], withDefaults())(
-    'selfPenalty places every rule contribution at rule.tier, for any path/foreign-body/node-border triple',
-    (path, foreignBodies, nodeBorders) => {
-      const cost = selfPenalty(path, foreignBodies, nodeBorders)
+  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb, foreignBodiesArb], withDefaults())(
+    'selfPenalty places every rule contribution at rule.tier, for any path/foreign-body/node-border/endpoint-rect quadruple',
+    (path, foreignBodies, nodeBorders, endpointRects) => {
+      const cost = selfPenalty(path, foreignBodies, nodeBorders, endpointRects)
       for (const rule of PENALTY_RULES) {
-        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies, nodeBorders, []))
+        expect(cost[rule.tier]).toBe(rule.selfTerm(path, foreignBodies, nodeBorders, endpointRects))
       }
     },
   )
+
+  /**
+   * The tier-placement properties compare a composed slot against the rule's
+   * own term, so a domain where every term is zero compares zero to zero and
+   * a composition that never wrote a slot passes. This is the reachability
+   * half: each rule has to be seen contributing something, at least once,
+   * through the same composed call.
+   */
+  it('the domain makes every penalty rule contribute a nonzero term', () => {
+    const samples = fc.sample(
+      fc.tuple(pathArb, foreignBodiesArb, nodeBordersArb, foreignBodiesArb),
+      600,
+    )
+    const reached = PENALTY_RULES.map((rule) => ({
+      name: rule.name,
+      contributes:
+        samples.some(
+          ([path, foreign, borders, endpoints]) =>
+            selfPenalty(path, foreign, borders, endpoints)[rule.tier] !== 0,
+        ) ||
+        // pairTerm-only rules (overlap, illegibility, crossings) read the
+        // narrow-phase triple instead, and have no self contribution at all.
+        rule.pairTerm([1, 1, 1]) !== 0,
+    }))
+    expect(reached).toEqual(reached.map(({ name }) => ({ name, contributes: true })))
+  })
 })
 
 describe('PENALTY_RULES: scorers are deterministic', () => {
@@ -179,11 +333,11 @@ describe('PENALTY_RULES: scorers are deterministic', () => {
     expect(pairPenalty(triple)).toEqual(pairPenalty(triple))
   })
 
-  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb], withDefaults())(
+  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb, foreignBodiesArb], withDefaults())(
     'selfPenalty is pure',
-    (path, foreignBodies, nodeBorders) => {
-      expect(selfPenalty(path, foreignBodies, nodeBorders)).toEqual(
-        selfPenalty(path, foreignBodies, nodeBorders),
+    (path, foreignBodies, nodeBorders, endpointRects) => {
+      expect(selfPenalty(path, foreignBodies, nodeBorders, endpointRects)).toEqual(
+        selfPenalty(path, foreignBodies, nodeBorders, endpointRects),
       )
     },
   )
@@ -200,10 +354,10 @@ describe('PENALTY_RULES: totals are finite non-negative integers', () => {
     },
   )
 
-  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb], withDefaults())(
+  fcTest.prop([pathArb, foreignBodiesArb, nodeBordersArb, foreignBodiesArb], withDefaults())(
     'selfPenalty totality, incl. zero-size rects, empty/single-point/zero-length paths',
-    (path, foreignBodies, nodeBorders) => {
-      for (const n of selfPenalty(path, foreignBodies, nodeBorders)) {
+    (path, foreignBodies, nodeBorders, endpointRects) => {
+      for (const n of selfPenalty(path, foreignBodies, nodeBorders, endpointRects)) {
         expect(Number.isInteger(n)).toBe(true)
         expect(n).toBeGreaterThanOrEqual(0)
       }
@@ -507,25 +661,6 @@ describe('border-tracing / endpoint-body-ink: no double-charge', () => {
 // signs (passes vacuously — see AGENTS.md's PBT discipline), so this domain
 // builds a path as an explicit walk of alternating-or-not axis moves, dense
 // enough that a same-axis sign flip (a reversal) is common rather than rare.
-const axisMoveArb = fc.record({
-  axis: fc.constantFrom<'h' | 'v'>('h', 'v'),
-  delta: fc.integer({ min: -20, max: 20 }),
-})
-
-const orthogonalPathArb: fc.Arbitrary<readonly Point[]> = fc
-  .array(axisMoveArb, { minLength: 0, maxLength: 10 })
-  .map((moves) => {
-    let x = 0
-    let y = 0
-    const path: Point[] = [{ x, y }]
-    for (const move of moves) {
-      if (move.axis === 'h') x += move.delta
-      else y += move.delta
-      path.push({ x, y })
-    }
-    return path
-  })
-
 // All generator coordinates here are integers, so COST_QUANTUM rounding in
 // the production rule never changes a sign — no quantization drift to
 // account for against the oracle, unlike the ink-length oracles above.

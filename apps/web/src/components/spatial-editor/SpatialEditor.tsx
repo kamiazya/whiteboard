@@ -660,7 +660,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // synchronous slot costs nothing and removes the need to reason about when
     // React flushes passive effects relative to input.
     useLayoutEffect(() => {
-      if (prevCanvasRef.current === canvas) return
+      const previous = prevCanvasRef.current
+      if (previous === canvas) return
       prevCanvasRef.current = canvas
       const isExternal =
         externalVersion !== undefined && externalVersion !== prevExternalVersionRef.current
@@ -671,6 +672,40 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         origin: isExternal ? 'external' : 'local',
       })
       setGestureState(result.state)
+      // The gesture is not the only state pinned to a node id: a selection
+      // outlives the node it named unless something retires it, and every
+      // site that READS the selection filters by laid-out box, so the stale
+      // id stays invisible while quietly disabling the verbs. A primary
+      // whose node an undo removed leaves `selection` undefined, and the
+      // Delete key's own branches are gated on it — two extras keep drawing
+      // their outlines while Delete does nothing.
+      const held = new Set(canvas.nodes.map((node) => node.id))
+      const missingIds = new Set(
+        previous.nodes.map((node) => node.id).filter((id) => !held.has(id)),
+      )
+      if (missingIds.size > 0) applySelection({ type: 'drop-missing', missingIds })
+      // The edge selection is the same story with none of the machinery:
+      // no reducer, eighteen hand-maintained writes, and nothing anywhere
+      // comparing it against `canvas.edges`. A selected edge that an undo
+      // or a peer's delete removed still consumes the Delete key — the
+      // edge branch runs first in `handleKeyDown` and returns — so the
+      // keypress does nothing at all. Phrased as what VANISHED, like the
+      // node half above and for the same reason.
+      const heldEdges = new Set(canvas.edges.map((edge) => edge.id))
+      const missingEdges = new Set(
+        previous.edges.map((edge) => edge.id).filter((id) => !heldEdges.has(id)),
+      )
+      // Only the SELECTION needs retiring here. The edge label editor
+      // resolves its edge in the render and returns null when it is
+      // missing, so a second rule for it would be a second mechanism for
+      // one invariant — the kind that drifts. The selection has no such
+      // gate: every site that reads it filters by what is laid out, which
+      // is why a stale id there is invisible rather than inert.
+      if (missingEdges.size > 0) {
+        setSelectedEdgeId((current) =>
+          current !== null && missingEdges.has(current) ? null : current,
+        )
+      }
       // Mirror gestures.ts's canvas-replaced abort/continue answer into the
       // preview: an abort (result.state no longer in-flight) must retire the
       // preview too, or it would keep drawing a gesture the reducer already
@@ -1372,6 +1407,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setGestureState(result.state)
       if (result.selectedId !== undefined) {
         applySelection({ type: 'set-primary', id: result.selectedId })
+        // A node becoming primary means no edge is selected. Enforced HERE,
+        // at the one place a gesture result's selection is applied, rather
+        // than by remembering `setSelectedEdgeId(null)` beside every call —
+        // the omission this replaces let a double-click on empty space
+        // create and select a note while an edge stayed selected, and
+        // Delete answers the EDGE first.
+        //
+        // `null` is excluded deliberately: it means the gesture cleared the
+        // node selection, which is the same `pointerdown-empty` the edge
+        // hit-test uses to SELECT an edge. Clearing here would undo that
+        // selection a line after it was made.
+        if (result.selectedId !== null) setSelectedEdgeId(null)
       }
       let running = canvasRef.current
       for (const command of result.commands) {
@@ -3339,59 +3386,75 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               missingFileRef={missingFileRef}
             />
           )}
-          {canvasPicker !== null && fileRefOptions !== undefined && (
-            <DocumentPickerDialog
-              title={
-                canvasPicker.mode === 'create' ? `Add ${CREATION_LABELS.document}` : 'Change target'
-              }
-              options={fileRefOptions}
-              currentFile={
-                canvasPicker.mode === 'retarget'
-                  ? (() => {
-                      const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
-                      return target?.type === 'file' ? target.file : undefined
-                    })()
-                  : undefined
-              }
-              onPick={(file) => {
-                if (canvasPicker.mode === 'create') {
-                  createFileRefAtViewportCenter(file, canvasPicker.point)
-                } else {
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
-                  })
+          {canvasPicker !== null &&
+            fileRefOptions !== undefined &&
+            // A retarget edits ONE node, so it may not outlive it: an undo,
+            // an import or a peer's delete can take the node while the
+            // dialog is open, and `set-node-file` for a node that is gone
+            // is a no-op the user cannot see. Resolved in the render like
+            // the two label editors below rather than cleared by an effect
+            // — a gate the dialog cannot render without passing is one no
+            // future canvas-changing path can forget.
+            (canvasPicker.mode === 'create' ||
+              canvas.nodes.some((node) => node.id === canvasPicker.nodeId)) && (
+              <DocumentPickerDialog
+                title={
+                  canvasPicker.mode === 'create'
+                    ? `Add ${CREATION_LABELS.document}`
+                    : 'Change target'
                 }
-                setDocumentPicker(null)
-              }}
-              onCancel={() => setDocumentPicker(null)}
-            />
-          )}
-          {linkDialog !== null && (
-            <LinkUrlDialog
-              title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
-              initialUrl={
-                linkDialog.mode === 'edit'
-                  ? (() => {
-                      const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
-                      return target?.type === 'link' ? target.url : undefined
-                    })()
-                  : undefined
-              }
-              onSubmit={(url) => {
-                if (linkDialog.mode === 'create') {
-                  createLinkAtViewportCenter(url, linkDialog.point)
-                } else {
-                  applyResult({
-                    state: { kind: 'idle' },
-                    commands: [{ kind: 'set-node-url', id: linkDialog.nodeId, url }],
-                  })
+                options={fileRefOptions}
+                currentFile={
+                  canvasPicker.mode === 'retarget'
+                    ? (() => {
+                        const target = canvas.nodes.find((n) => n.id === canvasPicker.nodeId)
+                        return target?.type === 'file' ? target.file : undefined
+                      })()
+                    : undefined
                 }
-                setLinkDialog(null)
-              }}
-              onCancel={() => setLinkDialog(null)}
-            />
-          )}
+                onPick={(file) => {
+                  if (canvasPicker.mode === 'create') {
+                    createFileRefAtViewportCenter(file, canvasPicker.point)
+                  } else {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [{ kind: 'set-node-file', id: canvasPicker.nodeId, file }],
+                    })
+                  }
+                  setDocumentPicker(null)
+                }}
+                onCancel={() => setDocumentPicker(null)}
+              />
+            )}
+          {linkDialog !== null &&
+            // Same rule as the picker above: an Edit URL that outlived its
+            // link shows an empty field and writes nothing on OK.
+            (linkDialog.mode === 'create' ||
+              canvas.nodes.some((node) => node.id === linkDialog.nodeId)) && (
+              <LinkUrlDialog
+                title={linkDialog.mode === 'create' ? `Add ${CREATION_LABELS.link}` : 'Edit URL'}
+                initialUrl={
+                  linkDialog.mode === 'edit'
+                    ? (() => {
+                        const target = canvas.nodes.find((n) => n.id === linkDialog.nodeId)
+                        return target?.type === 'link' ? target.url : undefined
+                      })()
+                    : undefined
+                }
+                onSubmit={(url) => {
+                  if (linkDialog.mode === 'create') {
+                    createLinkAtViewportCenter(url, linkDialog.point)
+                  } else {
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [{ kind: 'set-node-url', id: linkDialog.nodeId, url }],
+                    })
+                  }
+                  setLinkDialog(null)
+                }}
+                onCancel={() => setLinkDialog(null)}
+              />
+            )}
           <div
             data-testid="viewport-transform"
             style={{

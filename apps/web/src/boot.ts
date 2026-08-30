@@ -26,6 +26,7 @@ import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
 import { dismissBootSplash } from './boot-splash.js'
 import { getAppLogger } from './lib/app-logger.js'
+import { parseWorkspaceRoute } from './lib/app-routes.js'
 import { resolveBrowserWorkspaceId } from './lib/browser-workspace-id.js'
 
 const log = getAppLogger('boot')
@@ -53,7 +54,11 @@ function renderApp(root: HTMLElement): void {
 
 export async function startBootSequence({
   rootEl,
-  resolveWorkspaceId = () => resolveBrowserWorkspaceId(),
+  // The DEFAULT is the only caller that can hand the resolver a handle, and
+  // the address is where a handle comes from: which workspace this session
+  // opens is the URL's to say (ADR-0019), not the registry's to pick.
+  resolveWorkspaceId = () =>
+    resolveBrowserWorkspaceId(undefined, parseWorkspaceRoute(window.location.pathname)?.workspace),
   loadFont = ensureViewerFontLoaded,
   dismissSplash = () => dismissBootSplash(),
   render = renderApp,

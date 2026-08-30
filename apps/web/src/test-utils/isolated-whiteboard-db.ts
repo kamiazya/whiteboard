@@ -1,5 +1,5 @@
 import { generateDocumentId } from '@kamiazya/whiteboard-model'
-import { setWhiteboardDbNameForTests } from '../lib/browser-idb.js'
+import { BROWSER_DEFAULT_SEGMENT, setWhiteboardDbNameForTests } from '../lib/browser-idb.js'
 import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
 
 /**
@@ -28,6 +28,6 @@ import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
 export function claimIsolatedWhiteboardDb(fileTag: string): string {
   const name = `whiteboard-${fileTag}`
   setWhiteboardDbNameForTests(name)
-  setBrowserWorkspaceIdForTests(generateDocumentId())
+  setBrowserWorkspaceIdForTests(generateDocumentId(), BROWSER_DEFAULT_SEGMENT)
   return name
 }

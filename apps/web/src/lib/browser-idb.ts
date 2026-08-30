@@ -156,7 +156,7 @@ export function whiteboardDbName(): string {
  * shape. See `rekeyBrowserWorkspace` for why this cannot be a plain
  * rename-and-done.
  */
-export const DB_VERSION = 14
+export const DB_VERSION = 15
 
 /** The `DocumentIndex` port's two stores. Exported so the implementation and
  * the opener cannot disagree about a name. */
@@ -548,6 +548,54 @@ function rekeyLegacySyncTree(
   }
 }
 
+/**
+ * The name the browser's own workspace answers to in a URL.
+ *
+ * A fixed word rather than something derived, because there is nothing to
+ * derive from: the registry row carries no display name, and this is the one
+ * workspace nobody chose to create. `default` asserts only what is true — the
+ * workspace you get without choosing one — where `personal` or `home` would
+ * assert a use the app cannot know. ADR-0019 makes a segment renameable, so a
+ * word its owner dislikes costs exactly one rename.
+ */
+export const BROWSER_DEFAULT_SEGMENT = 'default'
+
+/**
+ * Gives the browser's sole workspace a segment, so an address can name it
+ * instead of spelling its canonical ULID (ADR-0019: the visible URL carries
+ * the segment, and the id resolves as the durable fallback).
+ *
+ * Convergent, like every carrier in this chain, and for a sharper reason than
+ * the others: a rename is the FIRST thing anyone does to this value, and a
+ * step that minted unconditionally would revert it on the next version bump —
+ * the chain has no memory of having run. A segment already present is left
+ * alone.
+ *
+ * Acts on a LONE segment-less row only. Once workspaces can be created in the
+ * app, each one carries a segment chosen at creation, so a segment-less row
+ * among several is an anomaly this step has no basis to name; it keeps the
+ * canonical-id URL, which is what that fallback exists for.
+ *
+ * Exported for the same reason `rekeyBrowserWorkspace` is: the convergence
+ * property can only be observed by running the step a second time, and
+ * replaying the whole upgrade chain is not possible against stores later
+ * versions have already dropped.
+ */
+export function mintBrowserWorkspaceSegment(tx: IDBTransaction, done: () => void): void {
+  const workspaces = tx.objectStore(WORKSPACES_STORE)
+  const rowsReq = workspaces.getAll()
+  rowsReq.onsuccess = () => {
+    const rows = rowsReq.result as Record<string, unknown>[]
+    const sole = rows.length === 1 ? rows[0] : undefined
+    if (sole === undefined || typeof sole.segment === 'string') {
+      done()
+      return
+    }
+    workspaces.put({ ...sole, segment: BROWSER_DEFAULT_SEGMENT }, String(sole.workspaceId))
+    done()
+  }
+}
+
 function backfillDocumentIndex(tx: IDBTransaction, done: () => void): void {
   const documents = tx.objectStore('documents')
   const workspaces = tx.objectStore(WORKSPACES_STORE)
@@ -644,7 +692,9 @@ export function openWhiteboardDb(dbName: string = activeDbName): Promise<IDBData
           discardPrePathDocuments(tx, () =>
             backfillDocumentIndex(tx, () =>
               carryLoroDocuments(tx, () =>
-                splitInlineSnapshotChunks(tx, () => rekeyBrowserWorkspace(tx, () => {})),
+                splitInlineSnapshotChunks(tx, () =>
+                  rekeyBrowserWorkspace(tx, () => mintBrowserWorkspaceSegment(tx, () => {})),
+                ),
               ),
             ),
           )

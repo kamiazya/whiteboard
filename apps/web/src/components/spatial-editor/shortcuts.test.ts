@@ -120,3 +120,33 @@ describe('findShortcutIn modifier semantics', () => {
     }
   })
 })
+
+// The catalog calls itself "the ONE place every binding is declared", and
+// the overlay editors' exit verbs were missing from it — which is how
+// someone hunting for "how do I save while editing?" found nothing. They
+// are declared now, and this pins the part that matters: declaring them
+// changed no behaviour.
+//
+// There is deliberately no scan enforcing the catalog's own claim. The
+// overlay editors' keymaps carry the markdown grammar's style bindings
+// (Mod-b, Mod-i, list continuation) alongside the two exit verbs, and a
+// scan that cannot tell them apart would demand declaring every one — a
+// guard that cries wolf is worse than the prose it replaces.
+describe('the overlay editors bindings are declared but never dispatched', () => {
+  const declared = (id: string) => EDITOR_SHORTCUTS.find((spec) => spec.id === id)
+
+  it('the node editor commit and cancel are both in the catalog', () => {
+    expect(declared('commit-text-edit')?.display).toBe('Cmd+Enter')
+    expect(declared('cancel')?.display).toBe('Esc')
+  })
+
+  it('both are inline-handled, so the matcher never claims them', () => {
+    for (const id of ['commit-text-edit', 'cancel']) {
+      expect(declared(id)?.handledInline, `${id} must stay declared-only`).toBe(true)
+    }
+    // Cmd+Enter from anywhere: the matcher skips inline-handled specs.
+    expect(
+      findShortcutIn(EDITOR_SHORTCUTS, event({ key: 'Enter', metaKey: true }), 'select'),
+    ).toBeUndefined()
+  })
+})

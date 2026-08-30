@@ -1,11 +1,15 @@
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState, useSyncExternalStore } from 'react'
 import { DeleteDocumentDialog } from '../components/document-list/DeleteDocumentDialog.js'
 import { EmptyWorkspaceState } from '../components/workspace-files/EmptyWorkspaceState.js'
 import { WorkspaceFilesPanel } from '../components/workspace-files/WorkspaceFilesPanel.js'
 import { useRoutedFolder } from '../hooks/useRoutedFolder.js'
-import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
+import {
+  browserWorkspaceIdentitySnapshot,
+  getBrowserWorkspaceId,
+  subscribeBrowserWorkspaceIdentity,
+} from '../lib/browser-workspace-id.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import {
@@ -79,6 +83,16 @@ export function BrowserIndexPage({
   // panel re-reads whenever this identity changes, exactly as on the daemon
   // page.
   const [filesRevision, setFilesRevision] = useState(0)
+  // The workspace this page is listing. Subscribed, not read: ADR-0019's
+  // switch is an in-SPA route change, so this page stays mounted across one,
+  // and the load effect below keyed on the index and the clock — neither of
+  // which moves when the workspace does. It kept showing the documents of the
+  // workspace the person had just left, under an address naming the one they
+  // went to.
+  const activeWorkspace = useSyncExternalStore(
+    subscribeBrowserWorkspaceIdentity,
+    browserWorkspaceIdentitySnapshot,
+  )
 
   useEffect(() => {
     let cancelled = false
@@ -103,7 +117,11 @@ export function BrowserIndexPage({
     return () => {
       cancelled = true
     }
-  }, [index, clock, filesSource])
+    // `activeWorkspace` is not read in the body — the helpers below read the
+    // accessor themselves — but it IS what this effect follows. Depending on
+    // the value rather than calling it is the difference between a list that
+    // re-reads on a switch and one that does not.
+  }, [index, clock, filesSource, activeWorkspace])
 
   // The index deletes by PATH, and the list already addresses rows that way,
   // so this carries the path rather than the id it used to need.
