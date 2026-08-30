@@ -97,6 +97,19 @@ interface DocumentFrontiersTable {
   frontier: Uint8Array
 }
 
+interface LeasesTable {
+  // The lease's subject, e.g. `backup`. One row per name.
+  name: string
+  // Whichever instance currently holds it — the daemon's own `instanceId`,
+  // which is minted per process, so it survives nothing and identifies
+  // exactly one live process.
+  holder: string
+  // Unix milliseconds. A holder that stops renewing lapses here; nothing
+  // else frees it, because nothing else can tell a dead instance from a slow
+  // one across a container boundary.
+  expiresAt: Timestamp
+}
+
 export interface DatabaseSchema {
   workspaces: WorkspacesTable
   branches: BranchesTable
@@ -106,4 +119,5 @@ export interface DatabaseSchema {
   documentSnapshotChunks: DocumentSnapshotChunksTable
   documentDeltas: DocumentDeltasTable
   documentFrontiers: DocumentFrontiersTable
+  leases: LeasesTable
 }

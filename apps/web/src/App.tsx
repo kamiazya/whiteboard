@@ -1,4 +1,5 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
+import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { AppShellWorkspaces } from './components/AppShell.js'
@@ -408,11 +409,10 @@ export function App({ providerState }: AppProps) {
   // branch is talking to. Dynamic import for the same reason the browser's
   // is: the shell is lazy, App is not.
   //
-  // No `create`: the daemon publishes `GET /api/workspaces` and nothing that
-  // writes one, so the switcher offers no creation there. DESIGN.md's
-  // standing rule — never offer what the keeper cannot honour — and absent
-  // rather than disabled, because a disabled control says "not right now"
-  // about something that is not there at all.
+  // Creation and renaming are offered here now that the daemon publishes a
+  // write surface for workspaces. DESIGN.md's standing rule is what decided
+  // that both ways round: they were ABSENT — not disabled — while the keeper
+  // could not honour them, and they appear the moment it can.
   //
   // Switching is an in-app navigation, unlike the browser's: this keeper has
   // no synchronous singleton to re-point, so setting the view is enough. The
@@ -431,6 +431,27 @@ export function App({ providerState }: AppProps) {
                       daemonShellTarget.baseUrl,
                     )
                     .then((res) => res.workspaces),
+                ),
+              // Both halves are present now that the daemon publishes a write
+              // surface. They take the same arguments as the browser's, which
+              // is the point: the switcher asks its source, and the source is
+              // the only thing that knows which keeper answered.
+              create: (displayName: string) =>
+                import('./lib/daemon-api-client.js').then((m) =>
+                  m.createWorkspace(
+                    m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                    daemonShellTarget.baseUrl,
+                    displayName,
+                  ),
+                ),
+              rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
+                import('./lib/daemon-api-client.js').then((m) =>
+                  m.renameWorkspace(
+                    m.createDaemonFetch(daemonShellTarget.baseUrl, daemonShellTarget.token),
+                    daemonShellTarget.baseUrl,
+                    workspaceId,
+                    input,
+                  ),
                 ),
             },
             onSwitch: (workspace: string) => setDaemonView({ kind: 'index', workspace }),
@@ -457,6 +478,10 @@ export function App({ providerState }: AppProps) {
         create: (displayName: string) =>
           import('./lib/browser-workspaces.js').then((m) =>
             m.createBrowserWorkspaceNamed(displayName),
+          ),
+        rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
+          import('./lib/browser-workspaces.js').then((m) =>
+            m.renameBrowserWorkspace(workspaceId, input),
           ),
       },
       // An in-SPA route change (ADR-0019), not a document load. The address

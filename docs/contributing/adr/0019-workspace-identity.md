@@ -247,13 +247,58 @@ minting another.
   read the workspace id at execution time — so the invariant is guarded by
   tests that went red, not by a load that happened to make the hazard
   unreachable.
-- **Rename is not in the v1 that shipped.** The Decision's v1 is create +
-  switch + rename; `DocumentIndex` has no `renameWorkspace`, so rename needs
-  the port, three implementations, the conformance suite, a daemon route and
-  a client — its own increment rather than a corner of the switcher's.
-- **Creation is browser-only.** The daemon publishes `GET /api/workspaces`
-  and nothing that writes one, so the switcher offers creation only where a
-  keeper can honour it. The daemon's create surface is its own increment too.
+- **Rename landed in the increment after.** It needed the port, three
+  implementations and the conformance suite, which is why it was not a
+  corner of the switcher's own increment. The conformance suite asks more of
+  it than of `createWorkspace`: an implementation may accept-and-ignore the
+  identity layers on create, but a rename that ignored them would pass every
+  case vacuously while doing the one thing it exists for to nothing.
+
+  There is no rename FORM. The three-layer model is visible in the mark's
+  popover head, which is itself the editor: the name in a box, the URL
+  directly beneath it, no Save button. That follows the document layer, where
+  this repo had already replaced a pencil-menu rename with a title you edit in
+  place, and ADR-0006's "an object is generated first and named in place
+  afterwards".
+
+  **The two layers commit differently.** The name commits on the keystroke and
+  Escape writes the previous name BACK, matching the document title exactly.
+  The segment waits for Enter or blur, because committing it moves the address
+  and navigates — per-keystroke would move it once per character, through
+  intermediate values that are real addresses and can collide. That asymmetry
+  is the honest consequence of one layer being an address and the other not.
+
+  The segment field names no layer: it is drawn as the URL it lands in, `/w/`
+  and the editable part, with no visible label. `segment` is the right word in
+  this document and the wrong one in front of a person, and every plainer
+  substitute invents a FOURTH name for a layer that has three.
+
+  Each layer is written alone. An unchanged segment submitted back would put
+  every name edit behind the one write that can be refused for a collision.
+
+  Renaming on the daemon still needs its route, and waits with creation
+  below.
+- **The shell does not name the workspace; the mark does, and only to
+  assistive tech.** The switcher first shipped as a labelled control beside
+  the mark, which contradicted a design record this initiative already had:
+  "Mark as Switcher" answers "where does the workspace name appear at all?"
+  with *the shell need not name it — the document browser probably should, as
+  its own heading*, and draws the row as `[mark] ALPHA <spacer> gear`. The
+  mark is the trigger, its accessible name carries
+  `Workspace: <name> — <session>`, and the popover is where the name is
+  drawn. `apps/web/DESIGN.md` holds the shape; the index-page heading is a
+  named follow-up, not shipped here.
+
+  Recorded because the correction is the interesting part: the record existed
+  and the increment did not read it. A decision that lives only in an
+  artifact nobody re-opens is a decision the next increment contradicts.
+- **Writing a workspace is browser-only.** The daemon publishes
+  `GET /api/workspaces` and nothing that writes one, so the switcher offers
+  creation and renaming only where a keeper can honour them. Its own
+  increment, and a published-contract change: the routes belong beside the
+  daemon, in `@kamiazya/whiteboard-mcp/api-contracts`. The daemon's
+  `DocumentIndex` already implements `renameWorkspace` — only the HTTP
+  surface in front of it is missing.
 - **`workspaces` stopped being a capability.** The Consequences above
   predicted the flag would flip to `true` for the browser. It did not flip —
   it was deleted. Once both keepers set it the same way it gated nothing, and

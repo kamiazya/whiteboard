@@ -1,3 +1,4 @@
+import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import {
   AlertDialog,
   AlertDialogCancel,
@@ -8,13 +9,21 @@ import {
   AlertDialogTitle,
 } from '@/components/ui/alert-dialog'
 import { Button } from '@/components/ui/button'
+import { DESTRUCTIVE_COPY, type DestructiveActionId } from '@/lib/destructive-copy'
+import { kindNoun } from '@/lib/kind-noun'
 
 export interface DeleteDocumentDialogProps {
-  // The canvas pending deletion, or null when the dialog is closed.
-  pending: { displayName: string } | null
+  // The document pending deletion, or null when the dialog is closed.
+  pending: { displayName: string; kind?: DocumentKind } | null
   busy: boolean
   error: string | null
-  description: string
+  /**
+   * Which promise this delete makes about the user's data. The dialog builds
+   * the sentence itself rather than taking one: a caller that can pass a
+   * string is a caller that can write a second copy of it, which is how the
+   * browser sentence came to exist in two files. See lib/destructive-copy.ts.
+   */
+  action: DestructiveActionId
   onCancel: () => void
   onConfirm: () => void
 }
@@ -27,7 +36,7 @@ export function DeleteDocumentDialog({
   pending,
   busy,
   error,
-  description,
+  action,
   onCancel,
   onConfirm,
 }: DeleteDocumentDialogProps) {
@@ -45,7 +54,7 @@ export function DeleteDocumentDialog({
             {pending ? `Delete "${pending.displayName}"?` : 'Delete canvas?'}
           </AlertDialogTitle>
           <AlertDialogDescription>
-            {description}
+            {DESTRUCTIVE_COPY[action](kindNoun(pending?.kind))}
             {error && <span className="mt-2 block text-destructive">{error}</span>}
           </AlertDialogDescription>
         </AlertDialogHeader>

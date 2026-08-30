@@ -11,6 +11,8 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
+import { startBackgroundWork } from './background-work.js'
+import { LOOP_COSTS } from './background-work-costs.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
@@ -28,6 +30,7 @@ import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
 import { createPairingGrantStore } from './security/pairing-grant-store.js'
 import { createPairingCodeStore, createPairingTokenStore } from './security/pairing-session.js'
 import { createWsTicketStore } from './security/ws-ticket-store.js'
+import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { getDb } from './store/db/index.js'
 import { prepareDataDir } from './store/db/prepare.js'
 import {
@@ -36,6 +39,7 @@ import {
   getWorkspaceDoc,
 } from './store/document-store.js'
 import { createFileGcSweeper, type FileGcSweeper } from './store/file-gc-sweeper.js'
+import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 import { createWorkspaceTail, resolveWorkspaceTailIntervalMs } from './store/workspace-tail.js'
 import { validationErrorBody } from './validators.js'
 
@@ -63,6 +67,11 @@ export interface StartHttpServerOptions {
    *  exactly once, and only when configured" is the part that would fail
    *  silently. */
   workspaceTailFactory?: typeof createWorkspaceTail
+  /** Test seam, matching the two above. Composition is the one thing a unit
+   *  test of the scheduler itself cannot reach, and "started and stopped
+   *  exactly once, and only when a destination is configured" is the part
+   *  that would fail silently. */
+  backupSchedulerFactory?: typeof createBackupScheduler
   /** Test-only seam: overrides `process.exit` for the fatal-bind-error path
    *  below, so a test can observe the exit call instead of actually killing
    *  the test process. */
@@ -111,6 +120,30 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // Off unless an operator turns it on: one daemon learns about its own
   // writes through `onWorkspaceDocUpdated` already, and polling for a second
   // instance that does not exist is pure cost. See ADR-0020.
+  // Off unless a destination is configured (ADR-0021 decision 4). The ADR
+  // asks for backups to be handled rather than remembered, and this is what
+  // handles them — but there is no destination worth guessing, so an operator
+  // still has to say where. `collectStorageEnvIssues` refuses an interval or
+  // a retention count set without one, so a half-configured schedule fails at
+  // startup rather than silently doing nothing.
+  const backupDir = parseBackupDir(process.env)
+  const backupSchedule = parseBackupSchedule(process.env)
+  const backupKeep = parseBackupKeep(process.env)
+  const backupScheduler = (options.backupSchedulerFactory ?? createBackupScheduler)({
+    dataDir: getDataDir(),
+    backupDir: backupDir.ok ? backupDir.value : null,
+    ...(backupSchedule.ok ? { schedule: backupSchedule.value } : {}),
+    ...(backupKeep.ok && backupKeep.value !== null ? { keep: backupKeep.value } : {}),
+    // ADR-0020's leader election, so a deployment running several instances
+    // over one data directory takes ONE backup a night rather than one per
+    // instance — whose retention passes would each delete from a set the
+    // others are changing. A single daemon takes the lease unopposed, so
+    // this is not conditional on being multi-instance: nothing here knows
+    // whether it is, and a deployment that grows a second instance must not
+    // depend on someone remembering to turn coordination on.
+    runExclusively: createBackupLease({ holder: instanceId }),
+  })
+
   const workspaceTailIntervalMs = resolveWorkspaceTailIntervalMs()
   const workspaceTail =
     workspaceTailIntervalMs === null
@@ -166,9 +199,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   }
 
   const performClose = async (): Promise<void> => {
-    idleTimer.stop()
-    await workspaceTail?.stop()
-    await fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
+    await backgroundWork.stopAll()
     setRuntimeTouchFn(() => {})
 
     await new Promise<void>((resolve, reject) => {
@@ -273,9 +304,60 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   })
 
   setRuntimeTouchFn(touch)
-  idleTimer.start()
-  fileGcSweeper.start()
-  workspaceTail?.start()
+  // Everything the daemon runs on its own goes through the registry, which is
+  // where each one answers who runs it and what it costs the serving loop.
+  // See background-work.ts for why that is a registry rather than four calls.
+  const backgroundWork = startBackgroundWork([
+    {
+      name: 'idle-shutdown',
+      trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms`,
+      instances: {
+        runs: 'every-instance',
+        because: 'it is about THIS process being idle, which no other process can answer for it',
+      },
+      loop: LOOP_COSTS['idle-shutdown'],
+      worker: { start: () => idleTimer.start(), stop: async () => idleTimer.stop() },
+    },
+    {
+      name: 'file-gc-sweeper',
+      trigger: `every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it`,
+      instances: {
+        runs: 'every-instance',
+        because:
+          'ADR-0020 rejects a GC leader explicitly: it removes GC-versus-GC races and leaves ' +
+          'GC-versus-WRITE untouched, since the write barrier is in-process and another ' +
+          "instance's write never takes it. The grace period is what covers that window.",
+      },
+      loop: LOOP_COSTS['file-gc-sweeper'],
+      // Wrapped rather than passed straight through: its own `stop` takes a
+      // cap on how long shutdown waits for an in-flight pass, and a pass can
+      // be expensive. Handing the bare method to a caller that passes no
+      // options would silently take the sweeper's default instead.
+      worker: {
+        start: () => fileGcSweeper.start(),
+        stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
+      },
+    },
+    {
+      name: 'workspace-tail',
+      trigger: `every ${workspaceTailIntervalMs ?? 0}ms`,
+      instances: {
+        runs: 'every-instance',
+        because:
+          'each instance is catching ITS OWN cached documents up with what another instance ' +
+          'wrote; a leader doing it would leave every follower serving stale reads',
+      },
+      loop: LOOP_COSTS['workspace-tail'],
+      worker: workspaceTail,
+    },
+    {
+      name: 'backup-scheduler',
+      trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
+      instances: { runs: 'leader-only', lease: 'backup' },
+      loop: LOOP_COSTS['backup-scheduler'],
+      worker: backupScheduler,
+    },
+  ])
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
   // `serve()` returns before the underlying bind resolves, so a bind failure
@@ -292,9 +374,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     // a no-op stub), so without an explicit stop here the 15-min idle timer
     // and the GC sweeper's interval would keep firing in whatever process
     // hosts this call for the seam's lifetime.
-    idleTimer.stop()
-    void workspaceTail?.stop()
-    void fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
+    void backgroundWork.stopAll()
     ;(options.exitProcess ?? process.exit)(1)
   })
   server.on('connection', (socket) => {

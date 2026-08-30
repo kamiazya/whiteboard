@@ -1,7 +1,9 @@
-import { cp, lstat, readdir, realpath } from 'node:fs/promises'
+import { cp, lstat, mkdir, readdir, realpath } from 'node:fs/promises'
 import { dirname, join, resolve, sep } from 'node:path'
 import { DAEMON_RECORD_FILENAME } from '../daemon/daemon-registry.js'
 import { PENDING_WRITES_DIRNAME } from './atomic-write.js'
+import type { BackupBlobReferences } from './store/backup-blob-mirror.js'
+import { mirrorRootFor, readBackupBlobManifest } from './store/backup-blob-mirror.js'
 import { BACKUP_MARKER_FILENAME } from './store/backup-in-progress.js'
 import { DB_FILENAME } from './store/db/location.js'
 
@@ -43,6 +45,12 @@ export interface BackupRestoreOptions {
   // restore would put its pre-migration rows back as though they were
   // current. Backup only.
   excludeDatabaseFile?: boolean
+  /**
+   * Leave `blobs/` out of the tree copy, because the mirror carries it
+   * (ADR-0021 decision 5). Set by `performBackup`; restore puts the tree back
+   * and then materialises the blobs from the manifest.
+   */
+  excludeBlobs?: boolean
 }
 
 // Canonicalize `p` by resolving symlinks on the deepest existing ancestor.
@@ -188,6 +196,11 @@ const NEVER_COPIED = [PENDING_WRITES_DIRNAME, DAEMON_RECORD_FILENAME, BACKUP_MAR
  * exactly the pre-migration rows the exclusion exists to keep out — and
  * SQLite replays a `-wal` into any database later placed beside it.
  */
+function isUnderBlobs(dataDir: string, path: string): boolean {
+  const blobs = join(dataDir, 'blobs')
+  return path === blobs || path.startsWith(`${blobs}${sep}`)
+}
+
 function isDatabaseFile(dataDir: string, path: string): boolean {
   return path === join(dataDir, DB_FILENAME) || path.startsWith(join(dataDir, `${DB_FILENAME}-`))
 }
@@ -239,7 +252,8 @@ export async function backupDataDir(
     // file renamed away in between raises ENOENT for the whole backup.
     filter: (src: string) =>
       !NEVER_COPIED.some((name) => src === join(srcDataDir, name)) &&
-      !(options.excludeDatabaseFile === true && isDatabaseFile(srcDataDir, src)),
+      !(options.excludeDatabaseFile === true && isDatabaseFile(srcDataDir, src)) &&
+      !(options.excludeBlobs === true && isUnderBlobs(srcDataDir, src)),
   })
 }
 
@@ -266,10 +280,91 @@ export async function restoreDataDir(
   // dereference on read.
   await assertNoSymlinks(backupDir, 'Backup directory')
 
+  // Read before copying, because it decides what the copy must leave out.
+  const references = await readBackupBlobManifest(backupDir)
+
   await cp(backupDir, targetDataDir, {
     recursive: true,
     dereference: false,
     errorOnExist: true,
     force: false,
+    // A mirrored backup's own `blobs/`+`files/` are the MIRROR's stores, not
+    // a data directory's contents — they are keyed by digest, and `files/`
+    // has no meaning in a data dir at all. Copying them would also collide
+    // with the materialisation below, which writes each blob to where it
+    // actually belongs. A backup with no manifest predates the mirror and
+    // carries its real `blobs/` tree, so nothing is excluded there.
+    filter: (src: string) =>
+      references === null ||
+      !MIRROR_STORE_DIRNAMES.some(
+        (name) => src === join(backupDir, name) || src.startsWith(join(backupDir, name) + sep),
+      ),
   })
+
+  if (references) {
+    await materialiseMirroredBlobs(backupDir, targetDataDir, references)
+  }
+}
+
+const MIRROR_STORE_DIRNAMES = ['blobs', 'files']
+
+/**
+ * Put back the blobs the mirror holds on this backup's behalf.
+ *
+ * Only called for a backup that HAS a manifest. One with none predates the
+ * mirror and carries its blobs inside itself, so the copy above already
+ * restored them — which is why `readBackupBlobManifest` answers `null` rather
+ * than an empty set for that case.
+ *
+ * Checked before anything is written, not as it goes: a restore that fails
+ * halfway leaves a data directory that looks restored and is missing files,
+ * and the operator finds out when a document renders a hole. That check is
+ * `snapshotIsRestorable`, and ADR-0021 decision 6 names a restore attempt as
+ * the moment to call it.
+ */
+async function materialiseMirroredBlobs(
+  backupDir: string,
+  targetDataDir: string,
+  references: BackupBlobReferences,
+): Promise<void> {
+  const mirrorRoot = mirrorRootFor(backupDir, references)
+  const wanted: Array<{ from: string; to: string }> = []
+  for (const digest of references.blobs) {
+    wanted.push({
+      from: join(mirrorRoot, 'blobs', digest.slice(0, 2), digest.slice(2)),
+      to: join(targetDataDir, 'blobs', digest.slice(0, 2), digest.slice(2)),
+    })
+  }
+  for (const [relativePath, digest] of Object.entries(references.files)) {
+    wanted.push({
+      from: join(mirrorRoot, 'files', digest.slice(0, 2), digest.slice(2)),
+      to: join(targetDataDir, 'blobs', ...relativePath.split('/')),
+    })
+  }
+
+  const missing = (
+    await Promise.all(
+      wanted.map(async (item) => ((await pathExists(item.from)) ? null : item.from)),
+    )
+  ).filter((path): path is string => path !== null)
+  if (missing.length > 0) {
+    throw new BackupError(
+      `Backup refers to ${missing.length} blob(s) the mirror does not hold. ` +
+        'Restore refused rather than producing a data directory with holes in it.',
+    )
+  }
+
+  for (const item of wanted) {
+    await mkdir(dirname(item.to), { recursive: true })
+    await cp(item.from, item.to, { dereference: false, errorOnExist: true, force: false })
+  }
+}
+
+async function pathExists(path: string): Promise<boolean> {
+  try {
+    await lstat(path)
+    return true
+  } catch {
+    return false
+  }
 }

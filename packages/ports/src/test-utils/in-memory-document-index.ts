@@ -8,6 +8,7 @@ import type {
   DocumentIndex,
   ListDocumentsInput,
   MoveDocumentInput,
+  RenameWorkspaceInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
@@ -21,6 +22,7 @@ import {
   DocumentPathTakenError,
   resolveWorkspaceHandle,
   WorkspaceNotFoundError,
+  WorkspaceSegmentTakenError,
 } from '../index.js'
 
 /**
@@ -73,6 +75,11 @@ export class InMemoryDocumentIndex implements DocumentIndex {
     segment,
     displayName,
   }: CreateWorkspaceInput): Promise<void> {
+    // Creating one that exists leaves it ALONE — it is not an error, and it is
+    // not an overwrite either. The bare `{ workspaceId }` call is what an
+    // "ensure it exists" caller makes, and treating it as a full row would
+    // clear the identity layers a rename put there.
+    if (this.#workspaces.has(workspaceId)) return
     this.#workspaces.set(workspaceId, {
       workspaceId,
       ...(segment === undefined ? {} : { segment }),
@@ -82,6 +89,30 @@ export class InMemoryDocumentIndex implements DocumentIndex {
 
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return [...this.#workspaces.values()]
+  }
+
+  async renameWorkspace({
+    workspaceId,
+    segment,
+    displayName,
+  }: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    const current = this.#workspaces.get(workspaceId)
+    if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
+    if (
+      segment !== undefined &&
+      [...this.#workspaces.values()].some(
+        (entry) => entry.segment === segment && entry.workspaceId !== workspaceId,
+      )
+    ) {
+      throw new WorkspaceSegmentTakenError(segment)
+    }
+    const renamed: WorkspaceEntry = {
+      ...current,
+      ...(segment === undefined ? {} : { segment }),
+      ...(displayName === undefined ? {} : { displayName }),
+    }
+    this.#workspaces.set(workspaceId, renamed)
+    return renamed
   }
 
   async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {

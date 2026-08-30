@@ -6,6 +6,7 @@ import { Kysely, type MigrationProvider, Migrator, SqliteDialect, sql } from 'ky
 import LibsqlNativeDatabase from 'libsql'
 import { encodeFrontiers, LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../../../shared/test-utils/can-deny-file-read.js'
 import type { DatabaseSchema } from '../schema.js'
 
 let dataDir = ''
@@ -391,35 +392,41 @@ describe('0011-import-fs-blobs', () => {
     await db.destroy()
   })
 
-  it('warns and skips a blob that fails to read (e.g. permission denied) without aborting the rest of the import', async () => {
-    const db = await memoryDb()
-    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
-    await seedWorkspace(db, 'ws-1')
+  // Skipped where this process cannot be denied read access to its own
+  // files -- root, or a filesystem that ignores the mode. `shared/test-utils/can-deny-file-read.ts`
+  // PROBES that rather than inferring it from the uid, and says why.
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'warns and skips a blob that fails to read (e.g. permission denied) without aborting the rest of the import',
+    async () => {
+      const db = await memoryDb()
+      expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+      await seedWorkspace(db, 'ws-1')
 
-    const unreadablePath = await writeBlob(dataDir, 'ws-1', 'doc-unreadable', snapshotBytes('x'))
-    const { chmod } = await import('node:fs/promises')
-    await chmod(unreadablePath, 0o000)
+      const unreadablePath = await writeBlob(dataDir, 'ws-1', 'doc-unreadable', snapshotBytes('x'))
+      const { chmod } = await import('node:fs/promises')
+      await chmod(unreadablePath, 0o000)
 
-    const okBytes = snapshotBytes('the sibling document')
-    await writeBlob(dataDir, 'ws-1', 'doc-ok', okBytes)
+      const okBytes = snapshotBytes('the sibling document')
+      await writeBlob(dataDir, 'ws-1', 'doc-ok', okBytes)
 
-    const capture = captureLogsForTests()
-    try {
-      expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
-      const warnings = capture.records.filter(
-        (r) => r.level === 'warning' && r.data?.documentId === 'doc-unreadable',
-      )
-      expect(warnings).toHaveLength(1)
-    } finally {
-      capture.restore()
-      await chmod(unreadablePath, 0o644)
-    }
+      const capture = captureLogsForTests()
+      try {
+        expect((await migratorFor(db).migrateTo(THIS_ONE)).error).toBeUndefined()
+        const warnings = capture.records.filter(
+          (r) => r.level === 'warning' && r.data?.documentId === 'doc-unreadable',
+        )
+        expect(warnings).toHaveLength(1)
+      } finally {
+        capture.restore()
+        await chmod(unreadablePath, 0o644)
+      }
 
-    expect(await reassembledRow(db, 'canvas:doc-unreadable')).toBeNull()
-    expect(await reassembledRow(db, 'canvas:doc-ok')).toEqual(okBytes)
+      expect(await reassembledRow(db, 'canvas:doc-unreadable')).toBeNull()
+      expect(await reassembledRow(db, 'canvas:doc-ok')).toEqual(okBytes)
 
-    await db.destroy()
-  })
+      await db.destroy()
+    },
+  )
 
   it('backfills a missing documentFrontiers row when the snapshot+chunks pair already matches the FS blob', async () => {
     const db = await memoryDb()
@@ -472,26 +479,32 @@ describe('0011-import-fs-blobs', () => {
     await db.destroy()
   })
 
-  it('rethrows an unexpected readdir error (e.g. permission denied on a canvas directory) so the whole migration aborts', async () => {
-    const db = await memoryDb()
-    expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
-    await seedWorkspace(db, 'ws-1')
+  // Skipped where this process cannot be denied read access to its own
+  // files -- root, or a filesystem that ignores the mode. `shared/test-utils/can-deny-file-read.ts`
+  // PROBES that rather than inferring it from the uid, and says why.
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'rethrows an unexpected readdir error (e.g. permission denied on a canvas directory) so the whole migration aborts',
+    async () => {
+      const db = await memoryDb()
+      expect((await migratorFor(db).migrateTo(BEFORE)).error).toBeUndefined()
+      await seedWorkspace(db, 'ws-1')
 
-    const canvasDir = join(dataDir, 'blobs', 'ws-1', 'canvas')
-    await writeBlob(dataDir, 'ws-1', 'doc-a', snapshotBytes('unreachable'))
-    const { chmod } = await import('node:fs/promises')
-    await chmod(canvasDir, 0o000)
+      const canvasDir = join(dataDir, 'blobs', 'ws-1', 'canvas')
+      await writeBlob(dataDir, 'ws-1', 'doc-a', snapshotBytes('unreachable'))
+      const { chmod } = await import('node:fs/promises')
+      await chmod(canvasDir, 0o000)
 
-    try {
-      const result = await migratorFor(db).migrateTo(THIS_ONE)
-      expect(result.error).toBeInstanceOf(Error)
-      expect((result.error as NodeJS.ErrnoException).code).toBe('EACCES')
-    } finally {
-      await chmod(canvasDir, 0o755)
-    }
+      try {
+        const result = await migratorFor(db).migrateTo(THIS_ONE)
+        expect(result.error).toBeInstanceOf(Error)
+        expect((result.error as NodeJS.ErrnoException).code).toBe('EACCES')
+      } finally {
+        await chmod(canvasDir, 0o755)
+      }
 
-    await db.destroy()
-  })
+      await db.destroy()
+    },
+  )
 
   it('exports the migration object wrapping the same routine', () => {
     expect(typeof migration.up).toBe('function')

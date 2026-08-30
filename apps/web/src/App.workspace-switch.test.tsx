@@ -78,7 +78,53 @@ describe('browser workspace switch', () => {
     expect(router.state.location.pathname).toBe('/w/second')
   })
 
+  it('a rename that moves the address takes the address and the runtime with it', async () => {
+    // The rename goes through the same library function the shell's switcher
+    // calls, then the address moves the way its `onSwitch` moves it. What
+    // this pins is the half after that: `/w/renamed` has to RESOLVE, against
+    // a registry row whose segment was `default` when this page loaded.
+    // Renaming only the display name instead leaves the address unresolvable
+    // and the rewrite guard sends the page back to `/w/default` — which is
+    // what the assertion below would report.
+    const { renameBrowserWorkspace } = await import('./lib/browser-workspaces.js')
+    const router = createMemoryRouter(
+      [{ path: '*', element: <App providerState={BROWSER_STATE} /> }],
+      { initialEntries: ['/w/default'] },
+    )
+    render(<RouterProvider router={router} />)
+    await screen.findByTestId('browser-index-page')
+
+    const renamed = await renameBrowserWorkspace(settled, {
+      segment: 'renamed',
+      displayName: 'Renamed',
+    })
+    expect(renamed.segment).toBe('renamed')
+    await act(async () => {
+      await router.navigate('/w/renamed')
+    })
+
+    await waitFor(() => expect(getBrowserWorkspaceId()).toBe(settled))
+    // Kept, not rewritten: a rewrite here would mean the new address failed
+    // to resolve, which is the same failure as a rename nobody stored.
+    expect(router.state.location.pathname).toBe('/w/renamed')
+  })
+
   it('rewrites an address the registry cannot resolve, and stays where it was', async () => {
+    // The active identity, set HERE rather than left to `afterEach`, because
+    // `afterEach` is not the last write and cannot be. `switchBrowserWorkspace`
+    // stores the identity in module state through an IndexedDB read that
+    // nothing cancels when the component that started it unmounts — so a read
+    // still in flight from the rename above lands in whichever test is
+    // running when it finishes, overwriting the reset that already ran.
+    //
+    // What that costs is this assertion, and it says nothing about a switch:
+    // the rewrite goes to the active workspace's handle, so a leaked
+    // `renamed` makes the address below `/w/renamed` and reads as a rewrite
+    // that went somewhere nobody asked for. Measured — standing in for one
+    // such late write reproduces it exactly, and it is what failed on CI
+    // while passing five runs out of five locally.
+    setBrowserWorkspaceIdForTests(settled, 'default')
+
     // The other half, and why the switch resolve is STRICT while the boot one
     // is lenient. A lenient switch would answer any unknown handle with
     // first-listed; this effect would then leave the address alone believing

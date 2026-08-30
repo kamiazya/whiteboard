@@ -21,6 +21,7 @@ export function unusedDocumentIndex(): DocumentIndex {
     createWorkspace: refuse('createWorkspace'),
     listWorkspaces: refuse('listWorkspaces'),
     resolveWorkspace: refuse('resolveWorkspace'),
+    renameWorkspace: refuse('renameWorkspace'),
     createDocument: refuse('createDocument'),
     resolveDocument: refuse('resolveDocument'),
     resolveDocumentById: refuse('resolveDocumentById'),

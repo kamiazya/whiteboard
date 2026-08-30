@@ -58,7 +58,12 @@ export function isSyncOff(state: ConnectionState): boolean {
 }
 
 export interface ConnectionStatusProps {
-  readonly state: ConnectionState
+  /**
+   * `null` on a page that holds no live session. The mark still opens —
+   * the workspace is a fact on every page, so there is always something to
+   * say — it simply has no session word to carry.
+   */
+  readonly state: ConnectionState | null
   /** Shown in the synced popover so the user knows which daemon holds the data. */
   readonly daemonBaseUrl?: string
   /** sync-off only: starts the pairing grant flow on the daemon's /pair page. */
@@ -67,6 +72,10 @@ export interface ConnectionStatusProps {
   readonly onWorkInBrowser?: () => void
   /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
+  /** What the mark's accessible name states. The popover's head is the menu's own. */
+  readonly workspaceName?: string
+  /** The workspace section, composed by the shell and rendered above the session's own. */
+  readonly workspaceMenu?: ReactNode
 }
 
 /**
@@ -85,15 +94,27 @@ const SESSION_LABEL: Record<SessionHealth, string> = {
   'sync-off': 'Sync off',
 }
 
+/**
+ * The word the mark cannot say, for whoever needs to render it. Exported
+ * because the popover's head moved into `WorkspaceMenu` — the head is an
+ * editable name now — and the session word sits on that same row.
+ */
+export function connectionLabel(state: ConnectionState | null): string | null {
+  if (state === null) return null
+  return state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
+}
+
 export function ConnectionStatus({
   state,
   daemonBaseUrl,
   onRepair,
   onWorkInBrowser,
   children,
+  workspaceName,
+  workspaceMenu,
 }: ConnectionStatusProps) {
-  const label = state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
-  const syncOff = isSyncOff(state)
+  const label = connectionLabel(state)
+  const syncOff = state !== null && isSyncOff(state)
   // Empty while sync is on: the region has to exist BEFORE the message, but
   // an empty one must not claim a name either.
   const syncOffAnnouncement = syncOff ? 'Live sync off' : ''
@@ -113,18 +134,34 @@ export function ConnectionStatus({
           // The state has no word on screen, so the accessible name carries
           // it — the one place a colour-and-motion signal must not be the
           // only signal.
-          aria-label={`Workspace — ${label}`}
-          title={label}
+          // The workspace's NAME rather than the bare word: the design
+          // record puts the name here precisely so the shell states it
+          // without drawing it, and the session word joins it when a page
+          // published one.
+          aria-label={
+            workspaceName === undefined
+              ? `Workspace${label === null ? '' : ` — ${label}`}`
+              : `Workspace: ${workspaceName}${label === null ? '' : ` — ${label}`}`
+          }
+          {...(label === null ? {} : { title: label })}
           className="flex shrink-0 items-center justify-center rounded-md p-1 text-foreground/70 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground"
         >
-          <ShellMark state={state} />
+          {state === null ? <ShellMark /> : <ShellMark state={state} />}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" data-testid="connection-popover">
-        {/* The state's word, stated once at the top for every branch below:
-            the mark cannot say it, and two of the four states share a tone. */}
-        <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
-        {state.keeper === 'daemon' && state.session === 'synced' && (
+      <PopoverContent align="start" data-testid="shell-mark-popover">
+        {/* The workspace block comes FIRST and carries its own head, because
+            that head is an editable name and editing belongs to the component
+            that owns the rename. Without one — no workspace known — the
+            session word still needs stating, so the bare head stands in. */}
+        {workspaceMenu === undefined ? (
+          label !== null && (
+            <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
+          )
+        ) : (
+          <div className="mb-2 text-sm">{workspaceMenu}</div>
+        )}
+        {state?.keeper === 'daemon' && state.session === 'synced' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>
             <p className="text-muted-foreground">
@@ -150,7 +187,7 @@ export function ConnectionStatus({
             </Link>
           </div>
         )}
-        {state.keeper === 'daemon' && state.session === 'reconnecting' && (
+        {state?.keeper === 'daemon' && state.session === 'reconnecting' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is not running</p>
             <p className="text-muted-foreground">
@@ -159,7 +196,7 @@ export function ConnectionStatus({
             </p>
           </div>
         )}
-        {state.keeper === 'browser' && (
+        {state?.keeper === 'browser' && (
           <div className="flex flex-col gap-2 text-sm">
             <p className="font-medium">Kept in this browser</p>
             <p className="text-muted-foreground">
@@ -197,16 +234,6 @@ export function ConnectionStatus({
             </div>
           </div>
         )}
-        {/* Going home was the mark's whole job before it became this
-            trigger. It keeps it, one level in, rather than leaving the shell
-            with no way back to the index. */}
-        <Link
-          to="/"
-          data-testid="shell-mark-home"
-          className="mt-3 block border-t pt-2 text-xs font-medium text-primary hover:underline"
-        >
-          Home
-        </Link>
       </PopoverContent>
     </Popover>
   )

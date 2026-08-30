@@ -61,6 +61,7 @@ import {
   recordReconnection,
   writeClipboardFragment,
 } from '../../lib/clipboard-store.js'
+import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
   applyCommand,
@@ -253,32 +254,23 @@ function initialCanvas(): SpatialCanvas {
 }
 
 /**
- * Whether this model exercises a surface, or deliberately does not.
+ * The three ledgers below are what keeps this file honest as the editor
+ * grows: each rides on a closed union the editor already maintains, so
+ * ADDING A MEMBER FAILS THE BUILD until someone writes down which it is.
+ * A new `EditorCommand` kind is what "added a feature to the canvas"
+ * almost always means, and without this the property stays green while
+ * covering none of it — the exact vacuity the effect-counters were
+ * introduced to catch one layer down.
  *
- * The three ledgers below are the mechanism that keeps this file honest
- * as the editor grows. Each is `satisfies Record<Union, SurfaceCoverage>`
- * over a closed union the editor already maintains, so ADDING A MEMBER
- * FAILS THE BUILD until someone writes down which it is. A new
- * `EditorCommand` kind is what "added a feature to the canvas" almost
- * always means, and without this the property stays green while covering
- * none of it — the exact vacuity the effect-counters were introduced to
- * catch one layer down.
- *
- * Guarded from BOTH sides at runtime, the way this repo's other
- * allowlists are (`ADAPTERS_REACHING_MECHANICS`, `KNOWN_IMPORT_CYCLES`):
- * a `covered` entry that never fired is a lie, and a `not modelled` entry
- * that DID fire is stale. Neither can outlive what it claims.
- *
- * `not modelled` requires a reason, for the same purpose `blastRadius:
- * none:` does — a bare exemption is the omission with a word in front of
- * it.
+ * The four-direction contract and the reason it has to be four lives with
+ * the helper (`test-utils/coverage-ledger.ts`); when a ledger is worth
+ * writing at all is `.claude/rules/coverage-ledger.md`.
  *
  * A fourth ledger lives in `editor-state-surface.test.ts`, covering the
- * one surface that is not a union: every piece of React state
+ * one surface here that is not a union: every piece of React state
  * `SpatialEditor` holds. It scans the source instead of riding on the
  * type system, but carries the same both-sides contract.
  */
-type SurfaceCoverage = 'covered' | `not modelled: ${string}`
 
 /**
  * Every canvas mutation the editor can perform. The uncovered half is
@@ -365,35 +357,6 @@ const SHORTCUT_COVERAGE = {
   'zoom-to-selection': 'not modelled: viewport only',
   'space-pan': 'not modelled: viewport only',
 } satisfies Record<ShortcutId, SurfaceCoverage>
-
-function emptyTally<K extends string>(ledger: Record<K, SurfaceCoverage>): Record<K, number> {
-  return Object.fromEntries(Object.keys(ledger).map((key) => [key, 0])) as Record<K, number>
-}
-
-/**
- * Asserts a ledger against what the run actually did, from both sides.
- * The messages name the fix, because the person reading them is usually
- * someone who just added a feature and has never opened this file.
- */
-function assertLedger<K extends string>(
-  what: string,
-  ledger: Record<K, SurfaceCoverage>,
-  tally: Record<K, number>,
-): void {
-  for (const [key, coverage] of Object.entries(ledger) as [K, SurfaceCoverage][]) {
-    if (coverage === 'covered') {
-      expect(
-        tally[key],
-        `${what} "${key}" is marked covered but the run never produced it — either drive it from a command, or change its entry to "not modelled: <reason>"`,
-      ).toBeGreaterThan(0)
-    } else {
-      expect(
-        tally[key],
-        `${what} "${key}" is marked "${coverage}" but the run produced it ${tally[key]} times — the entry is stale, mark it covered`,
-      ).toBe(0)
-    }
-  }
-}
 
 interface Stats {
   moveCommits: number
@@ -2458,6 +2421,20 @@ describe('editor composite state (command-based)', () => {
       }
       fc.modelRun(freshState, commands)
     },
+    // An explicit budget, sized on a measurement rather than left at
+    // vitest's 5000ms default, which this property has never fit inside.
+    // Measured with the budget lifted: 5.22-5.27s, and the SAME 5.23-5.26s
+    // at `5ceac722`, the commit that raised `numRuns` to 500 — so it was
+    // over from the day it was written, on a machine slower than CI's. CI
+    // passes it; what the default cost was a local full-suite run
+    // reporting a failure that is purely this machine's speed, and a
+    // failing-file count that changed between two runs of one tree.
+    //
+    // The lever is the budget, NOT `numRuns`: the coverage floors above
+    // record that 300 left two counters sitting exactly ON their floor,
+    // so cutting runs trades a spurious failure for a property that
+    // asserts less. A pinned seed would be worse than either.
+    15_000,
   )
 })
 

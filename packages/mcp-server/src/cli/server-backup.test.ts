@@ -58,10 +58,15 @@ describe('runServerBackup', () => {
     expect(capturedCalls).toHaveLength(1)
     const [src, dest, opts] = capturedCalls[0]
     expect(src).toBe(join(tmpRoot, 'data'))
-    expect(dest).toBe(join(tmpRoot, 'backup'))
+    // The STAGING name, not the operator's. Nothing is assembled under a
+    // backup's own name until every store has finished with it, so the helper
+    // is handed somewhere else and the rename is what publishes the result
+    // (ADR-0021 decision 6's near end).
+    expect(dest).toBe(`${join(tmpRoot, 'backup')}.incomplete`)
 
     // allowedRoots uses dirname(outputDir), NOT outputDir itself, so the
-    // helper's assertWithinAllowed check is non-tautological.
+    // helper's assertWithinAllowed check is non-tautological — and the
+    // staging directory is a sibling, so it stays inside that root.
     expect(opts.allowedRoots).toContain(join(tmpRoot, 'data'))
     expect(opts.allowedRoots).toContain(tmpRoot) // dirname of outputDir
     expect(opts.allowedRoots).not.toContain(join(tmpRoot, 'backup')) // NOT self
@@ -75,17 +80,27 @@ describe('runServerBackup', () => {
     // case at the bottom of this file), so the happy paths seed one.
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
 
+    // Checked AT the moment of delegation, not after the pass. Pre-creating
+    // is what would break `backupDataDir`'s `errorOnExist` guard, and that
+    // guard is consulted when the helper runs — so this is the instant the
+    // question is about. Later steps legitimately write into the directory
+    // the helper created: the snapshot lands there, and so does the blob
+    // manifest.
+    let existedWhenDelegated: boolean | null = null
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
       env: {},
-      doBackup: vi.fn(async () => {}),
+      doBackup: vi.fn(async () => {
+        existedWhenDelegated = await lstat(outputDir).then(
+          () => true,
+          () => false,
+        )
+      }),
       doSnapshot: async () => {},
     })
 
     expect(outcome.kind).toBe('ok')
-    // CLI must not pre-create the dir; the mock doBackup does not create it
-    // either, so the directory must still be absent after the call.
-    await expect(lstat(join(tmpRoot, 'new-backup'))).rejects.toThrow()
+    expect(existedWhenDelegated).toBe(false)
   })
 
   it('ancestor-symlink: path through a symlink ancestor is rejected (fail-closed)', async () => {
@@ -105,15 +120,23 @@ describe('runServerBackup', () => {
     expect(outcome.kind).toBe('invalid-output-path')
   })
 
-  it('error: doBackup throws BackupError (non-empty outputDir) → generic error, no path leak', async () => {
+  /**
+   * The subject is what happens to a `BackupError` the copy helper throws —
+   * it must reach the operator as a generic failure with no path in it.
+   *
+   * A non-empty output directory used to be the way to provoke one, and no
+   * longer is: that is refused up front now, so the helper never runs (see
+   * `backup-seal.test.ts`). The helper still throws for its own reasons — a
+   * symlink inside the data directory, a failed copy — so the trigger is
+   * injected directly and the output directory is left empty.
+   */
+  it('error: doBackup throws BackupError → generic error, no path leak', async () => {
     const dataDir = join(tmpRoot, 'data')
-    const outputDir = join(tmpRoot, 'non-empty')
+    const outputDir = join(tmpRoot, 'empty-out')
     await mkdir(dataDir)
     // A data directory with no database is refused now (see the host-shell
     // case at the bottom of this file), so the happy paths seed one.
     await writeFile(join(dataDir, 'whiteboard.db'), 'rows')
-    await mkdir(outputDir)
-    await writeFile(join(outputDir, 'canary.txt'), 'content')
 
     const outcome = await runServerBackup({
       args: { kind: 'ok', json: true, outputDir, dataDir },
@@ -576,7 +599,11 @@ describe('runServerBackup captures the rows through the database', () => {
     // The copy never carries the database, even when it is ours — the
     // snapshot is what carries it.
     expect(mockDoBackup.mock.calls[0][2]).toMatchObject({ excludeDatabaseFile: true })
-    expect(mockDoSnapshot).toHaveBeenCalledWith(dataDir, join(outputDir, 'whiteboard.db'))
+    // Into the staging directory, for the same reason the copy goes there.
+    expect(mockDoSnapshot).toHaveBeenCalledWith(
+      dataDir,
+      join(`${outputDir}.incomplete`, 'whiteboard.db'),
+    )
   })
 
   it('takes no snapshot of a database that is not ours', async () => {

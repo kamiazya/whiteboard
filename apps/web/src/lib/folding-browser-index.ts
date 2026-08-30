@@ -26,6 +26,7 @@ import {
   isWorkspaceNotFoundError,
   type ListDocumentsInput,
   type MoveDocumentInput,
+  type RenameWorkspaceInput,
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
   type SetDocumentNameInput,
@@ -53,7 +54,10 @@ export class FoldingBrowserIndex implements DocumentIndex {
       // The browser's workspaces registry lives in the same IndexedDB store
       // the legacy index keeps it in — registration, not placement, so it is
       // not part of what the fold retires.
-      { listWorkspaces: () => this.legacy.listWorkspaces() },
+      {
+        listWorkspaces: () => this.legacy.listWorkspaces(),
+        renameWorkspace: (input) => this.legacy.renameWorkspace(input),
+      },
     )
   }
 
@@ -99,6 +103,15 @@ export class FoldingBrowserIndex implements DocumentIndex {
   async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
     await this.ensureFolded()
     return this.inner.resolveWorkspace(handle)
+  }
+
+  /**
+   * No fold first: a rename writes a registry row, and the fold is about
+   * DOCUMENTS. Waiting on it would make renaming a workspace pay for
+   * migrating another one's contents.
+   */
+  async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    return this.inner.renameWorkspace(input)
   }
 
   private ensureFolded(): Promise<void> {

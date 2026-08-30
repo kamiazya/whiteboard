@@ -1,5 +1,5 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
-import type { Extension } from '@codemirror/state'
+import type { Extension, StateCommand } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
 import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canvas-render'
@@ -10,6 +10,7 @@ import { Bold, Code, Italic, Link2, SquareCheck } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
+  type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -25,6 +26,13 @@ import { ContextMenu, type ContextMenuItem } from '../spatial-editor/ContextMenu
 import { documentYForLine, lineForDocumentY } from './anchor-mapping.js'
 import { DocumentHeader } from './DocumentHeader.js'
 import { EditorToolbar, type MarkdownViewMode } from './EditorToolbar.js'
+import {
+  levelCommand,
+  MARKDOWN_EDITOR_VERBS,
+  type MarkdownVerbBand,
+  type MarkdownVerbId,
+  selfContainedCommand,
+} from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
 import type { LinkTarget } from './link-target.js'
 import { MinimapRail } from './MinimapRail.js'
@@ -39,14 +47,32 @@ import {
 import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
-import { setHeadingLevel } from './set-heading-level.js'
-import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { useDebouncedValue } from './use-debounced-value.js'
 import {
   wikiLinkCompletionSource,
   wikiLinkCompletionTheme,
   wikiLinkTouchAccept,
 } from './wiki-link-completion.js'
+
+/**
+ * The catalog's leading glyphs, keyed by verb so adding a verb also has to
+ * answer "what does it look like?" — `satisfies Record<MarkdownVerbId, …>`
+ * fails the build otherwise. Kept out of `editor-verbs.ts` on purpose: that
+ * file stays React-free so a node test can import the table and drive every
+ * verb without a renderer.
+ *
+ * `heading` renders as an options band with no leading glyph, so its entry
+ * is `null` rather than absent — an optional key would let a real icon go
+ * missing silently.
+ */
+const VERB_ICONS = {
+  heading: null,
+  bold: <Bold aria-hidden className="size-4" />,
+  italic: <Italic aria-hidden className="size-4" />,
+  code: <Code aria-hidden className="size-4" />,
+  link: <Link2 aria-hidden className="size-4" />,
+  'toggle-task': <SquareCheck aria-hidden className="size-4" />,
+} satisfies Record<MarkdownVerbId, ReactNode>
 
 export interface MarkdownEditorProps {
   value: string
@@ -640,57 +666,65 @@ export function MarkdownEditor({
   }, [openCatalogAt])
 
   const catalogItems = useMemo((): readonly ContextMenuItem[] => {
-    const api = sourceApiRef.current
-    const level = api?.headingLevel() ?? 0
-    const run = (command: Parameters<NonNullable<typeof api>['run']>[0]) => () => {
+    const level = sourceApiRef.current?.headingLevel() ?? 0
+    const run = (command: StateCommand) => () => {
       sourceApiRef.current?.run(command)
-      sourceApiRef.current?.focus()
       setCatalog(null)
     }
-    const wrap = (open: string, close?: string) => () => {
-      sourceApiRef.current?.wrapSelection(open, close)
-      sourceApiRef.current?.focus()
-      setCatalog(null)
+    // Every row is derived from MARKDOWN_EDITOR_VERBS, so a verb added
+    // there reaches both the catalog and the source pane's keymap without a
+    // second edit — which is what the two hand-kept lists this replaced
+    // could not promise.
+    const items: ContextMenuItem[] = []
+    let band: MarkdownVerbBand | null = null
+    for (const spec of MARKDOWN_EDITOR_VERBS) {
+      if (band !== null && spec.band !== band) items.push({ kind: 'separator' })
+      band = spec.band
+
+      if (spec.action.kind === 'levels') {
+        items.push({
+          kind: 'options',
+          label: spec.label,
+          options: spec.action.levels.map((option) => ({
+            label: option.label,
+            selected: level === option.level,
+            onSelect: run(levelCommand(option.level)),
+          })),
+        })
+        continue
+      }
+
+      // The one verb that asks before it writes. With nothing to pick from
+      // there is nothing to ask, and it falls through to the wrap the table
+      // declares for exactly that case.
+      const icon = VERB_ICONS[spec.id]
+      if (
+        spec.action.kind === 'interactive' &&
+        linkTargets !== undefined &&
+        linkTargets.length > 0
+      ) {
+        items.push({
+          label: spec.label,
+          icon,
+          onSelect: () => {
+            const scope = sourceApiRef.current?.pinScope()
+            if (scope === undefined) return
+            setCatalog(null)
+            setLinkPicker({ query: scope.text, text: scope.text })
+          },
+        })
+        continue
+      }
+
+      const command = selfContainedCommand(spec)
+      // A verb with neither a dialog nor a self-contained command has no
+      // plain row to render. Only `levels` is that today, and it returned
+      // above; this is what keeps a future action kind from rendering a
+      // dead menu item.
+      if (command === null) continue
+      items.push({ label: spec.label, icon, onSelect: run(command) })
     }
-    return [
-      {
-        kind: 'options',
-        label: 'Heading',
-        options: [
-          { label: 'Body', selected: level === 0, onSelect: run(setHeadingLevel(0)) },
-          { label: 'H1', selected: level === 1, onSelect: run(setHeadingLevel(1)) },
-          { label: 'H2', selected: level === 2, onSelect: run(setHeadingLevel(2)) },
-          { label: 'H3', selected: level === 3, onSelect: run(setHeadingLevel(3)) },
-        ],
-      },
-      { kind: 'separator' },
-      { label: 'Bold', icon: <Bold aria-hidden className="size-4" />, onSelect: wrap('**') },
-      { label: 'Italic', icon: <Italic aria-hidden className="size-4" />, onSelect: wrap('*') },
-      { label: 'Code', icon: <Code aria-hidden className="size-4" />, onSelect: wrap('`') },
-      {
-        // One verb for both kinds of link: the picker's search box decides
-        // where it goes, so nothing asks the author to classify a
-        // destination before typing it. With no targets to pick from there
-        // is nothing to open, and the verb keeps its bracket wrap.
-        label: 'Link',
-        icon: <Link2 aria-hidden className="size-4" />,
-        onSelect:
-          linkTargets === undefined || linkTargets.length === 0
-            ? wrap('[[', ']]')
-            : () => {
-                const scope = sourceApiRef.current?.pinScope()
-                if (scope === undefined) return
-                setCatalog(null)
-                setLinkPicker({ query: scope.text, text: scope.text })
-              },
-      },
-      { kind: 'separator' },
-      {
-        label: 'Toggle task',
-        icon: <SquareCheck aria-hidden className="size-4" />,
-        onSelect: run(toggleTaskCheckbox),
-      },
-    ]
+    return items
   }, [catalog, linkTargets])
 
   const wordCount = useMemo(() => countWords(debouncedValue), [debouncedValue])

@@ -815,7 +815,7 @@ describe('App daemon provider state', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('daemon-index-page')
 
-    fireEvent.click(await screen.findByTestId('workspace-switcher-trigger'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     fireEvent.click(await screen.findByRole('menuitem', { name: /sandbox/i }))
 
     await waitFor(() => expect(router.state.location.pathname).toBe('/w/sandbox'))
@@ -876,8 +876,12 @@ describe('App daemon provider state', () => {
         <App providerState={BROWSER_STATE} />
       </MemoryRouter>,
     )
-    const trigger = await screen.findByTestId('workspace-switcher-trigger')
-    expect(trigger.textContent).toContain('default')
+    // On the MARK, and in its accessible name: the shell does not draw the
+    // workspace's name in the row (the "Mark as Switcher" record answers
+    // "where does the workspace name appear at all?" with "the shell need
+    // not name it"), so the wiring shows up as the name the mark states.
+    const trigger = await screen.findByTestId('shell-mark-trigger')
+    expect(trigger.getAttribute('aria-label')).toContain('default')
   })
 
   it('rewrites an address naming a workspace this browser does not keep', async () => {
@@ -1045,7 +1049,7 @@ describe('App daemon-pairing routing (index vs canvas)', () => {
     )
     await screen.findByTestId('daemon-index-page')
 
-    fireEvent.click(await screen.findByTestId('workspace-switcher-trigger'))
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     expect(await screen.findByRole('menuitem', { name: /sandbox/i })).toBeTruthy()
   })
 
@@ -1219,7 +1223,11 @@ describe('App shell (single instance above the routed pages)', () => {
     render(<RouterProvider router={router} />)
     await screen.findByTestId('browser-index-page')
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+    // The mark stopped being a destination and gained no replacement: a
+    // cross-workspace "all documents" view is a state this product does not
+    // have. What must survive every entry path is the SHELL — the gear below
+    // and the mark's own popover — not a link home that no longer exists.
+    expect(screen.getByTestId('shell-mark-trigger')).toBeTruthy()
 
     fireEvent.click(screen.getByTestId('shell-settings'))
     expect(router.state.location.pathname).toBe('/settings')
@@ -1251,7 +1259,11 @@ describe('App shell (single instance above the routed pages)', () => {
     )
     await screen.findByTestId('daemon-document-page')
     expect(screen.getAllByTestId('shell-settings')).toHaveLength(1)
-    expect(screen.getByRole('link', { name: 'Home' })).toBeTruthy()
+    // The mark stopped being a destination and gained no replacement: a
+    // cross-workspace "all documents" view is a state this product does not
+    // have. What must survive every entry path is the SHELL — the gear below
+    // and the mark's own popover — not a link home that no longer exists.
+    expect(screen.getByTestId('shell-mark-trigger')).toBeTruthy()
   })
 
   it('daemon branch renders the shell and a reported auth error lights its attention dot', async () => {

@@ -1,3 +1,4 @@
+import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import type { WorkspaceDocCursor, WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { LoroDoc } from 'loro-crdt'
 import { getLogger } from '../log.js'
@@ -110,6 +111,22 @@ export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTai
       if (!subscribed.includes(known)) cursors.delete(known)
     }
     for (const workspaceId of subscribed) {
+      // One yield per workspace. `catchUp` imports the record's new updates
+      // into the live document, which is a synchronous WASM call, and the
+      // `await`s around it never reach the timer phase — so without this a
+      // pass is one unbroken stall for as long as every subscribed workspace
+      // takes together. Measured over 10 workspaces against a file-backed
+      // libSQL store: 2927ms elapsed, 2927ms blocked, and the 5ms sampler
+      // landed ZERO times, at 300 commits of history with a 50-commit gain.
+      //
+      // Yielding costs nothing here (a pass is a timer callback, not a
+      // request) and caps what a request arriving mid-pass waits at one
+      // workspace instead of all of them — 283ms on that fixture. That is
+      // also the FLOOR: an import is a single call and cannot be subdivided,
+      // so anything lower means batching what `catchUp` imports. Same
+      // reasoning as file-gc.ts's collectReferencedFileIds, and the same
+      // trap: the blocking is invisible in the source.
+      await yieldToLoop()
       try {
         await follow(workspaceId)
       } catch (err) {

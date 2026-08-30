@@ -29,6 +29,20 @@ export function newDocumentPathIn(folder: string, existingPaths: readonly string
 }
 
 /**
+ * Whether a path is one this function chose, rather than one a person did.
+ *
+ * The pair matters because "nobody has named this yet" is not something the
+ * tree records: clearing a name in the rename dialog leaves the same absent
+ * `name` a brand-new document has. A still-generated path is the closest
+ * honest proxy — someone who cleared the name of a document they had also
+ * placed somewhere has engaged with naming, and must not be overridden.
+ */
+export function isGeneratedDocumentPath(path: string): boolean {
+  const last = path.slice(path.lastIndexOf('/') + 1)
+  return /^untitled(?:-(?:[2-9]|[1-9]\d+))?$/.test(last)
+}
+
+/**
  * The paths a new document must number around, for the two callers where a
  * failed read must not dead-end the user: the list page's create button and
  * the editor's first-boot create.

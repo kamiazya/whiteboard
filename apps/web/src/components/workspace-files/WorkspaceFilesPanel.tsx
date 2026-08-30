@@ -38,6 +38,16 @@ export interface WorkspaceFilesPanelProps {
    * which is what lets one browser serve both.
    */
   source: WorkspaceFilesSource
+  /**
+   * The handle this workspace's URLs carry, when the host knows it.
+   *
+   * Used only to draw the head of a document's URL in front of the path
+   * fields, so a person can see where their text lands. Absent while a page
+   * is still resolving its address, and on a host that has no address to
+   * give — the fields simply lose the prefix, which is why this is optional
+   * rather than something the panel refuses to render without.
+   */
+  workspace?: string | undefined
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
   /**
@@ -138,6 +148,7 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  */
 export function WorkspaceFilesPanel({
   source,
+  workspace,
   onOpenDocument,
   initialFolder,
   onFolderChange,
@@ -298,11 +309,33 @@ export function WorkspaceFilesPanel({
     storeColumns(next)
   }
 
+  // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
+    // Everything here NAMES A DOCUMENT, and a document belongs to exactly one
+    // workspace. `submitRename` and the card menu's verbs close over the
+    // CURRENT source while holding a captured entry, so anything left behind
+    // addresses the departed workspace's path into the one now on screen —
+    // and paths collide freely across workspaces, `untitled` most of all.
+    // Measured before this: a rename dialog left open across a switch called
+    // `setDocumentName` on the new workspace's store.
     setSelected(null)
+    setCardMenu(null)
+    setRenaming(null)
+    setRenameError(null)
+    setRenameBusy(false)
+    // Results computed against the departed workspace's content, still
+    // clickable. The search effect does re-run on a source change, but only
+    // after its debounce — until then these rows name documents that are not
+    // here.
+    setHits(null)
+    setSearchDegraded(false)
+    // Both name a path, and their message is about a write that happened
+    // somewhere else.
+    setRefreshError(null)
+    setPinError(null)
     // Guarded by the source's IDENTITY, not by a first-run flag: an
     // `initialFolder` is a deliberate address and must survive mounting,
     // while StrictMode replays this effect with the SAME readList — which a
@@ -677,8 +710,13 @@ export function WorkspaceFilesPanel({
         ]
 
   return (
-    <div
+    // The panel names ITSELF, because the page heading above it now names the
+    // workspace ("Mark as Switcher"). The generic word did not disappear when
+    // it left the h1 — it moved to the region that actually holds the list,
+    // which is where it was always true.
+    <section
       ref={rootRef}
+      aria-label="Documents"
       className="relative flex min-h-0 flex-1 flex-col gap-2"
       data-testid="workspace-files-panel"
     >
@@ -708,6 +746,7 @@ export function WorkspaceFilesPanel({
         </div>
         <NewDocumentMenu
           disabled={creating}
+          workspace={workspace}
           defaultPath={derivedNewPath}
           createError={createError?.reason ?? null}
           onCreate={createHere}
@@ -930,6 +969,7 @@ export function WorkspaceFilesPanel({
       )}
       <RenameDocumentDialog
         document={renaming}
+        workspace={workspace}
         busy={renameBusy}
         error={renameError}
         onCancel={() => {
@@ -950,6 +990,6 @@ export function WorkspaceFilesPanel({
           onClose={() => setCardMenu(null)}
         />
       )}
-    </div>
+    </section>
   )
 }

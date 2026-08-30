@@ -28,9 +28,13 @@ Workflow({ scriptPath: '.claude/workflows/review.workflow.mjs',
   review at an isolated worktree. When set, agents run git as `git -C <cwd>
   ...` and Read files at that absolute path.
 - **dimensions**: defaults to `['correctness', 'contract', 'boundary',
-  'test-coverage']` (a 4-dimension subset of the 6 documented in
-  `.claude/agents/reviewer-dimension.md`; `dead-code` and `auth` are opt-in
-  extras — pass them explicitly when relevant). `security` always runs in
+  'test-coverage', 'reachability', 'background-work']` (`dead-code`, `auth`
+  and `accessibility` are opt-in extras — pass them explicitly when
+  relevant). The last two are default rather than opt-in for the same single
+  reason: what they catch is CORRECT code. An unwired slice and a worker that
+  runs on every instance both pass their tests and read as finished to every
+  other dimension, so the only reliable catch is a lane that always asks.
+  They answer `notApplicable` cheaply when the diff has nothing for them. `security` always runs in
   addition, unconditionally. Each entry is either a legacy plain string
   (criteria stays embedded in `reviewer-dimension.md`) or `{name, content}`
   where `content` is authoritative externalized criteria injected into the

@@ -185,6 +185,15 @@ function listSourceFiles(dir: string): string[] {
   const files: string[] = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
     if (entry.name === 'node_modules') continue
+    // `.claude/worktrees/` holds whole CHECKOUTS of other branches — the
+    // parallel-development flow `.claude/rules/dev-flow.md` prescribes — and
+    // it is gitignored per-machine state, not this repo's source. Walking
+    // into one scans some other branch's history (and its CHANGELOG, which
+    // records every retired word by construction), so the guard fails on
+    // what a developer has lying around rather than on what they wrote.
+    // Measured: four stale worktrees produced 382 hits, none of them a file
+    // in this checkout.
+    if (entry.name === 'worktrees' && dir.endsWith('.claude')) continue
     const full = join(dir, entry.name)
     if (entry.isDirectory()) {
       if (EXCLUDED_SEGMENTS.includes(entry.name)) continue

@@ -112,32 +112,231 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   exception gets documented here.
 - **What belongs in the shell is what does not change when you open a
   different document.** Which workspace you are in, and who keeps it, are
-  such facts, so the mark and the workspace switcher beside it are the
-  shell's; the document's own title, actions and history are the page's. The
-  dividing question is not importance, it is whether the answer survives
-  navigation.
-- **The switcher reads the address; it never holds a second opinion about
-  it.** `WorkspaceSwitcher` takes the workspace it names from
-  `parseWorkspaceRoute(location.pathname)`, because the workspace is the
-  outermost layer of `/w/:workspace/d/:path` and the URL is what decides
-  which one is active. That is also why it sits in the shell rather than on
-  the document list: the layer is present on every page, and a control
-  reachable only from the list could not change it from a document.
+  such facts, so the mark is the shell's; the document's own title, actions
+  and history are the page's. The dividing question is not importance, it is
+  whether the answer survives navigation.
+- **The mark IS the switcher, and the row does not name the workspace.** The
+  strip is `[mark] ALPHA <spacer> gear` and nothing else. The mark states
+  which workspace you are in through its ACCESSIBLE name
+  (`Workspace: Design team — Synced`), and its popover is where that name is
+  drawn, beside the session word. "Where does the workspace name appear at
+  all?" was answered deliberately: the shell need not name it, and the
+  document browser should, as its own heading — because the four places
+  content cannot tell you (the index, settings, an empty workspace, and the
+  moment after a switch) are exactly where a page heading is looking at you
+  anyway.
 
-  Until the list of workspaces answers, the trigger shows the handle the
-  address carries. A handle is a true statement about where you are, and a
-  blank or a spinner in a 40px row is not an improvement on one.
+  The popover reads head, then `Switch to`, then the workspaces (a tick on
+  the current one, `aria-current` for anyone not reading ticks), then `New
+  workspace`. It deliberately ends there. The mark's own source calls it
+  "click = go home", and becoming a trigger amends that — but the amendment is
+  that the mark stops being a destination, NOT that the popover gains one. A
+  cross-workspace "all documents" entry would promise a state this product
+  does not have, and the ways out already exist: `WorkspaceTopBar`'s back
+  leaves a document, and every workspace is reachable from the list.
 
-  It is shown even when there is exactly one workspace. That is the
-  difference between a switcher and a filter: the daemon list control it
-  replaced hid itself below two, which is right for narrowing rows and wrong
-  for the only door out of one workspace.
+  It opens on EVERY page, including one holding no session. The workspace is
+  a fact everywhere, so there is always something for the popover to say, and
+  the older shape — a plain link home until a page published a session — would
+  put the only door out of a workspace behind having opened a document first.
 
-  What it OFFERS follows the keeper. Creation appears only where the keeper
-  can actually create — the browser mints its own workspaces, the daemon
-  publishes no write surface for them yet — which is the standing rule below
-  applied to this control. Absent, not disabled: a disabled control says "not
-  right now" about something that is not there at all.
+  What the popover reads FROM is the address: the workspace is the outermost
+  layer of `/w/:workspace/d/:path`, and the URL is what decides which one is
+  active. Until the rows load, the mark names the handle the address carries —
+  a true statement about where you are, and better than a blank in an
+  accessible name.
+
+  The list is shown even at exactly one workspace. That is the difference
+  between a switcher and a filter: the daemon list control it replaced hid
+  itself below two, which is right for narrowing rows and wrong for the only
+  door out of one workspace.
+
+  What it OFFERS follows the keeper. Creation and renaming appear only where
+  the keeper can honour them — the browser mints and renames its own, the
+  daemon publishes no write surface for workspaces yet. Absent, not disabled:
+  a disabled control says "not right now" about something that is not there at
+  all. Renaming additionally waits for the rows, because its form starts from
+  the name and URL the workspace HAS, and one pre-filled from a handle alone
+  would offer to overwrite a display name it never read.
+
+  **The head IS the editor — there is no rename form.** This repo already
+  retired the pencil-menu rename for a document title you edit in place, and
+  ADR-0006 says an object is "named in place afterwards"; a `Rename workspace`
+  item would be that shape rebuilt one layer up. So the popover opens on the
+  name in a box, with the URL directly beneath it, and no Save button
+  anywhere. Where the keeper cannot write, both are `readOnly` rather than
+  hidden — the name is the head, and hiding the subject to say "you cannot
+  edit it" removes the subject.
+
+  **The two fields commit differently, and the difference is the point.** The
+  name commits on the keystroke, exactly as the document title does, and
+  Escape writes the PREVIOUS name back because there is nothing left to
+  discard. The URL waits for Enter or blur: committing it moves the address
+  and navigates, so per-keystroke would move it once per character, through
+  intermediate values that are real addresses and can collide. Escape there
+  reverts the box without writing.
+
+  The URL is drawn as the URL — a `/w/` prefix and the editable part — and
+  carries no visible label. ADR-0019 calls the layer the `segment`, which is
+  not a word to put in front of somebody, and every plainer substitute
+  invents a FOURTH name for a layer that has three. The warning that old
+  links will break appears only once the box actually differs from what is
+  stored; permanently visible, it is furniture nobody reads.
+
+  Each layer is written on its own, never as a form submitting both: an
+  unchanged URL sent back would put every name edit behind the one write that
+  can be refused for a collision.
+- **A document's path is drawn as the URL too — but it keeps its label.** The
+  create and rename forms put the head of the document's address in front of
+  the box (`/w/<handle>/d/`), so the text a person types is visibly a URL and
+  not a loose string. That head is sliced from `app-routes`' own builders,
+  separators included: a literal written into the component would go on
+  reading correctly long after the grammar moved, and a form that shows the
+  wrong address confidently is worse than one showing none. With no handle
+  yet resolved it shows nothing, because `/w//d/` is not half an address, it
+  is a wrong one.
+
+  What does NOT carry over from the switcher is dropping the label. There the
+  whole popover is unlabelled and the layer's only name is `segment`, which is
+  not a word to put in front of somebody. Here the form has two labelled
+  fields, `Path` is the word ADR-0008 already uses, and stripping one label of
+  the pair reads as breakage rather than as consistency. The prefix is added
+  to what the field SAYS, not swapped in for it — and it is part of the
+  field's accessible description rather than `aria-hidden`, since it is the
+  only thing on the form stating that a path is an address.
+
+  The handle is the one part allowed to truncate. A workspace with no segment
+  is addressed by its 26-character canonical id, and that prefix measured
+  269px of a 398px row — enough to push the dialog's form past its own max
+  width and overflow on every viewport. Truncating the prefix as one string
+  would eat `/d/` off the end, which is the half that says where the text
+  lands; truncating only the handle keeps the grammar legible at any width.
+- **The switcher is offered even when the address names no workspace.** A
+  daemon holding nothing serves `/`, and the switcher is the only place
+  creation lives — so requiring a handle before rendering it left a fresh
+  daemon with no way to make its first workspace. With no handle the menu has
+  no current row, which is already how it behaves for an address it cannot
+  resolve: the rename section sits behind a resolved row, so what is left is a
+  list and a create button, which is exactly what that state needs.
+
+  The empty-daemon copy moved with it. It used to say the write was someone
+  else's, and that was true while every create path addressed a
+  (workspace, path) pair the page could not name; `POST /api/workspaces`
+  retired the premise by minting the id itself.
+- **An address the page cannot resolve yet leaves NOTHING selected.** The
+  daemon page re-reads its list once when the address names a workspace the
+  list does not hold, because the switcher may have just created it. That
+  re-read can fail — and keeping the previous workspace selected through the
+  failure puts the page on one workspace under an address naming another,
+  which is the mismatch the stale-address fallback already refuses to leave
+  behind. The error state offers `Create a canvas` only while something is
+  selected, so the stale selection is not cosmetic: a create there posts the
+  document to the workspace the URL does not name.
+- **A rename changes identity and nothing else.** The switcher's rename
+  answers with the three identity layers, and the row it lands on also carries
+  what the keeper counted — so the answer is MERGED into the row, never
+  substituted for it. Replacing dropped the count until something else
+  happened to reload the list.
+- **The version timeline shows every lane, and offers restore on one.** It
+  used to filter its rows to the branch HEAD is on, which made `mini-graph.ts`'s
+  own documented rule — "rows on other branches use a ring dot" — unreachable
+  from production: every row it drew was active by construction, and the
+  renderer did not even branch on it. The only way to see another variation's
+  history was to switch onto it first.
+
+  Now the lane carries the answer: solid on the lane you are on, a ring on the
+  others, each keeping its own `BranchMeta.color` on the stroke so a ring still
+  reads as its lane.
+
+  **Restore stays on HEAD's lane.** Showing another variation's history is not
+  the same as offering to restore from it, and what restoring one variation's
+  version INTO another means is undecided — an affordance acting on an
+  undecided semantic is worse than none. So a row on another lane is a plain
+  container, not a disabled button: disabled announces "unavailable", which is
+  the wrong story about a row that is doing its job.
+
+  The empty state moved with the filter. It is the document's history now, not
+  one lane's, so an empty list means there is nothing anywhere.
+
+  **A row on another lane says which lane, and a row on yours does not.** The
+  ring answers "not the one you are on" and stops there; colour is not a name,
+  so with two variations open a reader has a row of history and no way to tell
+  whose. The lane you ARE on is the frame the whole panel is read in — naming
+  it on every row states the obvious and makes the exceptions harder to find,
+  which is the same reason the shell names the current workspace once rather
+  than on each document.
+- **Each switcher row says how much is in that workspace.** A list of names
+  gives no reason to pick one; the count is what makes it readable. It reads
+  as part of the row rather than as a column, so a keeper that does not count
+  leaves no hole where a number would be.
+
+  **Absent is not zero, and the difference is the whole rule.** Zero says the
+  workspace is empty — the row a person most needs to recognise — while absent
+  says this keeper did not count. So the render is guarded on `undefined`,
+  never on falsiness, which would hide exactly the empty ones. Today the
+  daemon counts and the browser does not: documents live in the workspace
+  tree, and reading it from the shell would put loro-crdt behind a control
+  that renders on every page, which `browser-workspaces.ts` deliberately
+  avoids. That asymmetry is a keeper difference with a recorded cost, not an
+  oversight — and it is the reason the field is optional rather than
+  defaulted.
+
+  The count includes SHADOWED documents. A concurrent create can leave two
+  documents on one path and the listing shows both, one marked, precisely so
+  the convergent state is visible; a count that quietly omitted the marked one
+  would put back the disagreement the mark exists to prevent.
+
+  Measured before it was added, because the cost is invisible in the diff: the
+  tree index answers a document listing by OPENING each workspace's record, so
+  this turns one registry read into N. Against a live daemon holding 11
+  workspaces and 38 documents, the whole call is 4.2ms end-to-end over HTTP —
+  on a control a person opens by clicking.
+
+  The daemon counts the rows ONE AT A TIME, and that is not an oversight. The
+  obvious `Promise.all` opens N workspace records at once against the one
+  SQLite file, and on that same daemon it failed the entire listing with
+  `SQLITE_BUSY` — every row lost to contention the count itself introduced.
+  A/B against the running daemon: concurrent 500, sequential 200. No unit test
+  reaches it, because each gets a fresh database with nothing else touching it;
+  this is the class of defect only a real keeper with real data shows.
+- **The document browser heads itself with the workspace name.** The other
+  half of the answer above, and the only place a sighted reader sees the name
+  at all — the shell states it in the mark's accessible name and draws it only
+  inside the popover. Both index pages carry it as a visible `h1`, and the
+  generic word did not disappear when it left that heading: it moved to the
+  panel's own region label (`role="region" aria-label="Documents"`), which is
+  where it was always true.
+
+  What it reads is `workspaceLabel` — display name, else segment, else id —
+  never a per-site re-derivation, because a site that re-derives ends up
+  knowing about fewer layers than there are. Before the row lands the heading
+  falls back to the handle the address carries, and past that to the generic
+  word: a document browser with no `h1` at all is a worse outcome than a
+  generic one.
+
+  **`createWorkspace` on a workspace that exists leaves it alone.** Not merely
+  "is not an error" — not an overwrite either. A blind `put` of the input let
+  the bare `{ workspaceId }` call an "ensure it exists" caller makes clear the
+  identity layers a rename had written. `IdbDocumentIndex` and the in-memory
+  double both did this; the daemon never did, because its identity lives in a
+  registry its `createWorkspace` does not touch.
+
+  **This was latent, not live, and the distinction is on the record because it
+  was first reported the other way round.** Reading the code found a real
+  contract violation, and a conformance mutation check confirmed the contract
+  was broken — neither says anything about REACHABILITY, and the consequence
+  narrated from them ("visiting the document list undoes a rename") turned out
+  to be false. An A/B of the built bundle before and after refuted it: the
+  segment survived on both. `FoldingBrowserIndex` routes `createWorkspace` to
+  the tree index and keeps the IndexedDB one only for `listWorkspaces`,
+  `renameWorkspace`, `listDocuments` and `deleteDocument`, so no caller reaches
+  the overwrite at all. It is still worth fixing — the row it would clobber is
+  the one `renameWorkspace` writes on that same store — but as debt, not as a
+  defect anyone hit.
+
+  Pinned for every implementation by the port's conformance suite, whose
+  earlier idempotency case re-created with the SAME layers and so could not
+  tell an overwriting implementation from a leaving-alone one.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over

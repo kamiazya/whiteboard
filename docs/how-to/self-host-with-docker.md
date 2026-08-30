@@ -91,6 +91,24 @@ volumes:
 Data written to `/data` is owned by UID 1001 (`whiteboard` user). Ensure the
 volume has the correct ownership if you pre-populate it.
 
+### Reclaiming unreferenced uploads
+
+Once a day the server deletes uploaded images that no live document, branch
+tip or saved version points at any more. Two settings govern it, both in
+[Configuration](../reference/configuration.md):
+`WHITEBOARD_FILE_GC_INTERVAL_MS` (how often, `0` to switch it off) and
+`WHITEBOARD_FILE_GC_GRACE_MS` (how old an unreferenced file must be — this is
+what protects an upload in the gap before the save that references it lands).
+
+This ran only in the local daemon until 2026-08-30, so a server-mode volume
+that has been running for a while will shed some space on its first pass.
+
+Running more than one instance needs no configuration for this either, and
+unlike the backup there is no lease: every instance sweeps. Each pass reads
+the shared record before deciding and stands down if it moves underneath it,
+so two instances reaching the same file is a wasted unlink rather than a
+wrong one. A pass also stands down for the duration of a backup.
+
 ## Healthcheck
 
 The image configures a Docker healthcheck that polls
@@ -135,6 +153,63 @@ waits for it to exit cleanly. The server handles SIGTERM gracefully.
 
 The `whiteboard server backup` and `whiteboard server restore` CLI commands
 provide the operator-facing surface for data backup and restore.
+
+**You can have this handled rather than remembered.** Set
+`WHITEBOARD_BACKUP_DIR` to an absolute path on a volume that is not the data
+volume, and the daemon takes a backup on a schedule — the same pass
+`whiteboard server backup` runs, into one timestamped directory per run, with
+`WHITEBOARD_BACKUP_KEEP` older ones retained.
+
+`WHITEBOARD_BACKUP_CRON` puts it in a window you choose (default `0 3 * * *`,
+daily at 03:00). Whose 03:00 is your container's own clock — set `TZ` (or
+Compose's `environment: [TZ=Asia/Tokyo]`) and the schedule follows it along
+with every timestamp in your logs. A container with no `TZ` runs on UTC, so
+the quiet hour you picked may be someone else's afternoon.
+`WHITEBOARD_BACKUP_TZ` overrides the zone for this schedule alone, for when
+backups should run on a different clock from the rest of the deployment. The
+daemon logs the zone it resolved and the exact instant the next pass falls on
+when it starts, so you can check which 03:00 you got rather than infer it. A
+backup is a database snapshot plus a copy of every blob, so putting it where
+the load is low is worth the setting. The explicit command keeps its
+value for a migration, a support copy, or a snapshot before a risky change,
+but it stops being the only way anything gets backed up. A backup you have to
+remember to take is one taken rarely or never, and the interval between
+backups is the data you lose.
+
+Setting an interval or a retention count WITHOUT a destination aborts startup:
+that combination configures nothing while looking exactly like one that works.
+
+**Backups share one copy of each blob.** A timestamped directory holds that
+night's rows and a `blobs.json` naming what it needs; the blobs live once in a
+shared `blobs/`+`files/` beside those directories. On a 51MB store growing 5% a
+day, seven retained backups cost 403MB as whole copies and 66MB as a mirror,
+and the nightly pass stopped lengthening as the store grew. Retention removes a
+blob only once no retained backup references it.
+
+A backup only takes its timestamped name once every store has finished — until
+then it is assembled under `<name>.incomplete`. So anything you see with a
+timestamped name is complete, and an `.incomplete` left by a killed process is
+ignored by retention and cleared by the next pass.
+
+The trade: **one timestamped directory is not restorable on its own** — back up
+or move the whole `WHITEBOARD_BACKUP_DIR`, not a single night out of it. A
+one-off `whiteboard server backup --output-dir=X` is unaffected and stays a
+self-contained directory you can carry anywhere.
+
+The pass runs as a child process rather than inside the daemon, so the
+snapshot step does not stall the server that is answering your requests. You
+will see a second short-lived `whiteboard` process while a backup runs; that
+is expected.
+
+**Running more than one instance changes nothing about how you configure
+this.** Set the same variables on every instance; they agree among themselves
+through a lease row in the database they already share, so one instance takes
+each night's backup and the rest stand down. That matters more under cron than
+it would under an interval — an interval drifts apart from each container's own
+restart, while `0 3 * * *` fires on all of them in the same minute. Retention
+runs inside the same lease, because N instances pruning independently would
+each be deleting from a set the others are changing. An instance that cannot
+reach the shared database skips the pass rather than assuming it is alone.
 
 **Constraints:**
 - **You no longer need to stop the container to take a backup.** The rows are

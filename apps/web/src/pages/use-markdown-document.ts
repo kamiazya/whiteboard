@@ -31,25 +31,34 @@ import {
   readCoreFacets,
   readMarkdownBody,
   resolveWorkspaceDocumentById,
+  setWorkspaceDocumentName,
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
-import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
+import { titleFromMarkdownBody } from '../lib/title-from-body.js'
+import { createSaveScheduler, type SaveScheduler } from './save-scheduler.js'
 import type { BrowserPersistenceState, LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
 
 const pendingFlushes = new Map<string, Promise<unknown>>()
 
-const SAVE_DEBOUNCE_MS = 500
+/**
+ * Exported so a test waiting on a save waits on the REAL period rather than
+ * a copy of it. A browser test that hardcodes 500 goes quietly wrong the day
+ * this changes — and what it goes wrong as is a lost-keystrokes failure, not
+ * a timing one.
+ */
+export const SAVE_DEBOUNCE_MS = 500
 
 /**
  * Where this document's content lives for the lifetime of one load: the doc
@@ -79,32 +88,6 @@ interface ContentHost {
  * Never rejects: a failed save is swallowed here exactly as a fire-and-forget
  * one was, so it cannot leave the queue permanently poisoned.
  */
-/**
- * One write, with the indicator told what happened to it.
- *
- * `queueSave` swallows failures so the queue cannot be poisoned, which also
- * means a failed write is invisible — the degraded branch here is the only
- * thing that surfaces it. The error is re-thrown so `queueSave` still absorbs
- * it exactly as before.
- */
-async function reportingSave(
-  host: ContentHost,
-  report: Dispatch<SetStateAction<BrowserPersistenceState>>,
-): Promise<void> {
-  report((p) => ({ kind: 'saving', lastSavedAt: p.lastSavedAt }))
-  try {
-    await host.save()
-    report({ kind: 'saved', lastSavedAt: new Date().toISOString() })
-  } catch (err) {
-    report((p) => ({
-      kind: 'degraded',
-      reason: 'write-failed',
-      message: 'The last write to this browser failed. Your edits stay in memory for this session.',
-      lastSavedAt: p.lastSavedAt,
-    }))
-    throw err
-  }
-}
 
 function queueSave(documentId: string, save: () => Promise<void>): Promise<void> {
   const previous = pendingFlushes.get(documentId)
@@ -162,6 +145,56 @@ export interface MarkdownDocumentState {
   readonly bodyTextOf: (doc: Loro) => LoroText
 }
 
+/**
+ * Names a document after the title its body announces, while nobody has
+ * named it and nobody has placed it.
+ *
+ * Someone who opens a note and types `# Weekly review` has said what it is
+ * called. Without this the workspace keeps calling it `untitled`, in the
+ * card, the URL and every search result, and the only way to fix that is to
+ * type the same words a second time into the rename dialog.
+ *
+ * Two gates, and the second is the load-bearing one. `name` absent means
+ * "nobody named it" — but it is ALSO what the rename dialog leaves behind
+ * when someone deliberately clears a name to show the path instead, and
+ * re-seeding over that would be this codebase's recurring defect: state
+ * keyed on something that has since changed. A still-generated path is the
+ * proxy that separates them, since anyone who cleared a name on a document
+ * they had also placed has engaged with naming.
+ *
+ * The PATH is never touched. ADR-0008 measured deriving one from a display
+ * name and found every non-Latin title collapsing to `untitled-N`; ADR-0007's
+ * addendum retracted it. Seeding the name leaves the address alone, so a
+ * heading edit can never move a document out from under a link.
+ *
+ * Runs on every save, and KEEPS UP with a heading still being typed. Typing
+ * outlasts the 500ms debounce on a loaded machine, so a save lands while the
+ * title is half written — and a first version of this stopped there, because
+ * a name being present was what closed its gate. Measured in a real browser:
+ * `# From` … ` the list` produced a document called "From", forever. A wrong
+ * name is worse than `untitled`, because it looks deliberate.
+ *
+ * So a name this function produced may be replaced, and the test for "this
+ * one is ours" is that the title still STARTS WITH it — which is exactly the
+ * shape a half-typed heading leaves behind. Any other name is a person's, and
+ * is never touched: rename to "Meeting" over a body reading `# From the list`
+ * and the seeding is finished with this document.
+ */
+function seedNameFromTitle(workspace: Loro, documentId: string): void {
+  const entry = resolveWorkspaceDocumentById(workspace, documentId)
+  if (entry === null) return
+  if (!isGeneratedDocumentPath(entry.path)) return
+  const title = titleFromMarkdownBody(
+    documentContainers(workspace, documentId).getText(MARKDOWN_BODY_KEY).toString(),
+  )
+  if (title === undefined || title === entry.name) return
+  // Absent: nobody has named it. A strict prefix of the title: we named it,
+  // from a heading that has since grown.
+  const ours = entry.name === undefined || title.startsWith(entry.name)
+  if (!ours) return
+  setWorkspaceDocumentName(workspace, { documentId, name: title })
+}
+
 async function openWorkspaceHost(documentId: string): Promise<ContentHost | null> {
   // The fold first: the markdown page has no BrowserBackend, so this is the
   // one place a markdown-only visit carries an older build's per-document
@@ -180,6 +213,7 @@ async function openWorkspaceHost(documentId: string): Promise<ContentHost | null
     doc: workspace,
     containers: documentContainers(workspace, documentId),
     save: async () => {
+      seedNameFromTitle(workspace, documentId)
       await docs.save(getBrowserWorkspaceId(), workspace)
       await touchContentTimestamp(documentId)
     },
@@ -222,7 +256,6 @@ export function useMarkdownDocument(
   const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
   const hostRef = useRef<ContentHost | null>(null)
-  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null)
   const loroRef = useRef(loro)
   loroRef.current = loro
 
@@ -288,18 +321,10 @@ export function useMarkdownDocument(
       // title that is worse than lost text: `renameDocument` writes the
       // snapshot name immediately, so a cancelled facet save leaves the list
       // name and the OKF title disagreeing about what the document is called.
-      if (timerRef.current !== null) {
-        clearTimeout(timerRef.current)
-        timerRef.current = null
-        const host = hostRef.current
-        if (host !== null && documentId !== null) {
-          // Reports like any other write. The component is going away, so
-          // nothing renders the result — but this share the queue with the
-          // next load, and a silent branch here is how the two call sites
-          // drift apart later.
-          void queueSave(documentId, () => reportingSave(host, setSaveStateRef.current))
-        }
-      }
+      // Reports like any other write. The component is going away, so
+      // nothing renders the result — but this shares the queue with the next
+      // load, and a silent branch here is how the two call sites drift apart.
+      if (documentId !== null) schedulerRef.current?.scheduler.flush()
     }
   }, [documentId, enabled])
 
@@ -308,23 +333,40 @@ export function useMarkdownDocument(
   // ref from the doc subscription, which is created inside the load effect
   // before this binding initializes on the first render.
   const scheduleSaveRef = useRef<(() => void) | null>(null)
+  // Created per document rather than in an effect: the load effect's cleanup
+  // has to be able to FLUSH it, and effect cleanups run in reverse order —
+  // an effect owning the scheduler could be torn down first.
+  const schedulerRef = useRef<{ id: string; scheduler: SaveScheduler } | null>(null)
+  const schedulerFor = useCallback((id: string): SaveScheduler => {
+    if (schedulerRef.current?.id !== id) {
+      schedulerRef.current = {
+        id,
+        scheduler: createSaveScheduler({
+          debounceMs: SAVE_DEBOUNCE_MS,
+          now: () => new Date().toISOString(),
+          report: (update) => setSaveStateRef.current(update),
+          // Bound here, so the write goes through the handle this document
+          // had when the debounce elapsed — not whatever the next load has
+          // put in the ref by the time the queue reaches it.
+          beginSave: () => {
+            const host = hostRef.current
+            return host === null ? null : () => host.save()
+          },
+          enqueue: (save) => {
+            void queueSave(id, save)
+          },
+          setTimer: (fire, ms) => setTimeout(fire, ms),
+          clearTimer: (timer) => clearTimeout(timer as ReturnType<typeof setTimeout>),
+        }),
+      }
+    }
+    return schedulerRef.current.scheduler
+  }, [])
+
   const scheduleSave = useCallback(() => {
     if (documentId === null) return
-    if (timerRef.current !== null) clearTimeout(timerRef.current)
-    // Unsaved from this instant, not from when the timer fires: the window
-    // between the keystroke and the debounce is exactly when the old
-    // indicator claimed everything was safe.
-    setSaveStateRef.current((p) => ({ kind: 'pending', lastSavedAt: p.lastSavedAt }))
-    timerRef.current = setTimeout(() => {
-      // Clearing the ref first means a cleanup arriving after this point
-      // finds no timer to flush — so this save has to enqueue itself, or the
-      // next load has nothing to wait on.
-      timerRef.current = null
-      const host = hostRef.current
-      if (host === null) return
-      void queueSave(documentId, () => reportingSave(host, setSaveStateRef.current))
-    }, SAVE_DEBOUNCE_MS)
-  }, [documentId])
+    schedulerFor(documentId).edit()
+  }, [documentId, schedulerFor])
   scheduleSaveRef.current = scheduleSave
 
   const setBody = useCallback(

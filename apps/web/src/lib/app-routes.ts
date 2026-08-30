@@ -25,13 +25,25 @@ export function workspacePath(workspace: string): string {
   return `/w/${encodeURIComponent(workspace)}`
 }
 
+// Everything in a document's URL that its path does not decide.
+//
+// Exported because the forms that EDIT a path draw it in front of the box, so
+// the field reads as the URL the text lands in rather than as a bare string.
+// That affordance is only honest while it is the same value the router emits,
+// which is why it is derived here instead of written out at the two form
+// sites: a literal `/w/${w}/d/` in a component keeps looking right for as
+// long as it takes somebody to move the grammar.
+export function documentPathPrefix(workspace: string): string {
+  return `${workspacePath(workspace)}/d/`
+}
+
 // Nested under the workspace it belongs to, so the URL reads as placement.
 // The tail is the document's path, one URL segment per path segment: each
 // segment is encoded, the separators are not — encoding them would collapse
 // the hierarchy the workspace shows into one opaque URL segment.
 export function documentPath(workspace: string, path: string): string {
   const tail = path.split('/').map(encodeURIComponent).join('/')
-  return `${workspacePath(workspace)}/d/${tail}`
+  return `${documentPathPrefix(workspace)}${tail}`
 }
 
 export type WorkspaceRoute =

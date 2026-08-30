@@ -300,6 +300,13 @@ jobs:
       - name: Web app PWA precache gate
         run: pnpm --filter @kamiazya/whiteboard-web smoke:pwa-precache
 
+      # An ABSOLUTE floor, not a regression stop — the bundle-size gate above
+      # is the regression stop and is seven times finer. This one only refuses
+      # a shell that takes over a second to appear on a mid-range phone
+      # profile; the reasoning and the measurements are in the script.
+      - name: Web app LCP floor
+        run: pnpm --filter @kamiazya/whiteboard-web smoke:lcp-floor
+
       - name: Web app preview-origin behavioral smoke
         run: pnpm --filter @kamiazya/whiteboard-web smoke:preview-origin
 

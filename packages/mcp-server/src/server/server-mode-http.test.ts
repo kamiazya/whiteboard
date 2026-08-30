@@ -104,6 +104,39 @@ describe('startServerModeHttp', () => {
     })
   })
 
+  /**
+   * Server mode is the MULTI-INSTANCE deployment, and until this it was the
+   * one taking no garbage collection at all — uploads that no document
+   * references any more accumulated forever, with the sweeper declared and
+   * `worker: null`.
+   *
+   * The reason it stayed unarmed was a question about running a deleter with
+   * several instances against one data directory, and the answer is that
+   * nothing about the pass is single-instance: it catches up on the record
+   * before deciding, fences on the position it decided at, stands down while
+   * a backup is assembling the directory, and leaves anything younger than
+   * the grace window alone. Two passes racing the same file is the benign
+   * half — the loser's unlink answers ENOENT and is logged and skipped.
+   */
+  it('arms the file-GC sweeper, and stops it when the server closes', async () => {
+    const sweeper = { start: vi.fn(), tick: vi.fn(async () => {}), stop: vi.fn(async () => {}) }
+    const startPromise = startServerModeHttp({
+      ...makeOptions(),
+      fileGcSweeperFactory: () => sweeper,
+    })
+    const server = getLastServer()!
+    setImmediate(() => server.emit('listening'))
+    const { close } = await startPromise
+
+    expect(sweeper.start).toHaveBeenCalledTimes(1)
+
+    await close()
+
+    // With a cap, not bare: a full pass can be expensive and shutdown must
+    // not wait out the whole of one.
+    expect(sweeper.stop).toHaveBeenCalledWith({ timeoutMs: 5_000 })
+  })
+
   it('rejects when the server emits an error before listening', async () => {
     const options = makeOptions()
     const startPromise = startServerModeHttp(options)

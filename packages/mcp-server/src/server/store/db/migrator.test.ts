@@ -3,6 +3,7 @@ import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Migrator } from 'kysely'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { CAN_DENY_FILE_READ } from '../../../shared/test-utils/can-deny-file-read.js'
 
 let tempDir: string
 
@@ -113,21 +114,27 @@ describe('runMigrations', () => {
   // errno error. runMigrations must reframe it the same way it reframes
   // the corrupted-migrations case, instead of surfacing the bare
   // "EACCES ... scandir '<path>'" message with no recovery guidance.
-  it('reframes an EACCES readdir failure during migration into an actionable message', async () => {
-    const canvasDir = join(tempDir, 'blobs', 'ws-1', 'canvas')
-    await mkdir(canvasDir, { recursive: true })
-    await writeFile(join(canvasDir, 'doc-a.loro'), 'irrelevant')
-    await chmod(canvasDir, 0o000)
+  // Skipped where this process cannot be denied read access to its own
+  // files -- root, or a filesystem that ignores the mode. `shared/test-utils/can-deny-file-read.ts`
+  // PROBES that rather than inferring it from the uid, and says why.
+  it.skipIf(!CAN_DENY_FILE_READ)(
+    'reframes an EACCES readdir failure during migration into an actionable message',
+    async () => {
+      const canvasDir = join(tempDir, 'blobs', 'ws-1', 'canvas')
+      await mkdir(canvasDir, { recursive: true })
+      await writeFile(join(canvasDir, 'doc-a.loro'), 'irrelevant')
+      await chmod(canvasDir, 0o000)
 
-    try {
-      const db = await getDb(tempDir)
-      await expect(runMigrations(db)).rejects.toThrow(/permission|blobs/i)
-      const err = await runMigrations(db).catch((e: unknown) => e)
-      expect((err as { cause?: unknown }).cause).toMatchObject({ code: 'EACCES' })
-    } finally {
-      await chmod(canvasDir, 0o755)
-    }
-  })
+      try {
+        const db = await getDb(tempDir)
+        await expect(runMigrations(db)).rejects.toThrow(/permission|blobs/i)
+        const err = await runMigrations(db).catch((e: unknown) => e)
+        expect((err as { cause?: unknown }).cause).toMatchObject({ code: 'EACCES' })
+      } finally {
+        await chmod(canvasDir, 0o755)
+      }
+    },
+  )
 
   it('exposes the expected workspaces + branches + versions schema after init, with no documents row required (0016/0017)', async () => {
     await prepareDataDir(tempDir)

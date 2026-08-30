@@ -134,6 +134,28 @@ export function resolveWorkspaceHandle(
   )
 }
 
+/**
+ * A rename of ADR-0019's two CHOSEN layers. The canonical `workspaceId` is
+ * not among them — it is what everything keys on, and a rename that moved it
+ * would be a different workspace wearing the same name.
+ *
+ * Each field ABSENT means "leave this layer as it is", not "clear it". The
+ * two are renamed through one call because a form edits them together, and
+ * the destructive reading — a display-name edit that silently drops the
+ * address — is the one a caller would never intend. There is deliberately no
+ * way to clear a layer back to absent: absent is a state a workspace arrives
+ * in (a legacy row, a display name whose script the segment charset cannot
+ * spell), not one anybody has asked to return to.
+ */
+export const renameWorkspaceInputSchema = z
+  .object({
+    workspaceId: workspaceIdSchema,
+    segment: workspaceSegmentSchema.optional(),
+    displayName: workspaceDisplayNameSchema.optional(),
+  })
+  .strict()
+export type RenameWorkspaceInput = z.infer<typeof renameWorkspaceInputSchema>
+
 export const resolveDocumentByIdInputSchema = z
   .object({ workspaceId: workspaceIdSchema, documentId: documentIdSchema })
   .strict()
@@ -375,6 +397,25 @@ export interface DocumentIndex {
    * indistinguishable from working until the day a segment exists.
    */
   resolveWorkspace(handle: string): Promise<WorkspaceEntry | null>
+  /**
+   * Renames the layers their owner chooses — `segment`, `displayName`, or
+   * both — and answers the workspace as it now stands, so a caller that has
+   * just moved an ADDRESS does not have to re-list to learn the handle it
+   * should be using.
+   *
+   * Fails `WorkspaceNotFoundError` for a workspace that does not exist:
+   * unlike `createWorkspace` there is nothing to be idempotent about, and a
+   * rename that quietly created what it was asked to rename would put a
+   * typo'd id in the registry wearing the name meant for something else.
+   *
+   * Fails `WorkspaceSegmentTakenError` when ANOTHER workspace in this
+   * keeper's registry holds the segment, and refuses as one operation — the
+   * workspace keeps the address it had rather than ending up with neither.
+   * The workspace's OWN current segment is accepted, because a form that
+   * submits every field would otherwise refuse to save a display-name edit
+   * by reporting the workspace's own address as taken.
+   */
+  renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
   /**
    * Fails `WorkspaceNotFoundError` if the workspace does not exist. Fails if
    * the path is taken. Creating never silently adopts an existing

@@ -7,6 +7,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DocumentPathField } from './DocumentPathField.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 
 /**
@@ -21,6 +22,7 @@ import type { WorkspaceDocumentEntry } from './document-entry.js'
  */
 export function RenameDocumentDialog({
   document,
+  workspace,
   busy,
   error,
   onCancel,
@@ -28,6 +30,8 @@ export function RenameDocumentDialog({
 }: {
   /** The document being renamed, or null when the dialog is closed. */
   document: WorkspaceDocumentEntry | null
+  /** The handle its URL carries, so the path field can show where it lands. */
+  workspace?: string | undefined
   busy: boolean
   /** Shown verbatim — the server names the path that actually collided. */
   error: string | null
@@ -49,6 +53,14 @@ export function RenameDocumentDialog({
     <Dialog open={document !== null} onOpenChange={(open) => (open ? undefined : onCancel())}>
       <DialogContent className="sm:max-w-md">
         <form
+          // `min-w-0`: this form is a GRID item of DialogContent, so its
+          // automatic minimum size is its min-content width — and the path
+          // field's URL prefix is unbreakable text. Measured without it, a
+          // segment-less workspace's 26-character handle pushed the form to
+          // 464px inside a 448px dialog, overflowing on every viewport
+          // including a phone. With it the row is bounded and the handle
+          // truncates instead.
+          className="min-w-0"
           onSubmit={(event) => {
             event.preventDefault()
             const trimmedName = name.trim()
@@ -78,18 +90,12 @@ export function RenameDocumentDialog({
                 path instead.
               </span>
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium">Path</span>
-              <input
-                type="text"
-                value={path}
-                onChange={(event) => setPath(event.target.value)}
-                className="rounded-md border bg-background px-2 py-1.5 font-mono text-sm"
-              />
-              <span className="text-muted-foreground text-xs">
-                Where it lives in the workspace. Moving it takes everything under it along.
-              </span>
-            </label>
+            <DocumentPathField
+              workspace={workspace}
+              value={path}
+              onChange={setPath}
+              hint="Where it lives in the workspace. Moving it takes everything under it along."
+            />
             {error !== null && (
               <p role="alert" className="text-destructive text-sm">
                 {error}

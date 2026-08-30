@@ -6,6 +6,7 @@ import {
   DocumentMoveIntoSelfError,
   isWorkspaceNotFoundError,
   isWorkspaceSegmentTakenError,
+  WorkspaceNotFoundError,
 } from '@kamiazya/whiteboard-ports'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -1018,6 +1019,115 @@ describe('createWorkspace — ADR-0019 identity (segment/displayName)', () => {
 
     const rows = await deps.documentIndex.listWorkspaces()
     expect(rows.find((r) => r.workspaceId === 'ws-rejected-2')).toBeUndefined()
+  })
+})
+
+// The daemon's registry is the one `renameWorkspace` implementation the
+// shared conformance suite does not run: its runners are the in-memory
+// double, the browser's IndexedDB index, and the tree index over an
+// in-memory registry. What is specific here is the mechanism — a single
+// UPDATE against the `workspaces_segment_unique` index — so the cases below
+// are about that, not about restating the contract.
+describe('renameWorkspace — the daemon registry', () => {
+  beforeEach(async () => {
+    tempDir = await mkdtemp(join(tmpdir(), 'whiteboard-ws-rename-test-'))
+    await setupIsolatedDb()
+  })
+
+  afterEach(async () => {
+    await teardownIsolatedDb()
+    await rm(tempDir, { recursive: true, force: true })
+  })
+
+  it('writes both layers and serves them back through listWorkspaces', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-rename', segment: 'before' })
+
+    const renamed = await deps.documentIndex.renameWorkspace({
+      workspaceId: 'ws-rename',
+      segment: 'after',
+      displayName: 'After',
+    })
+
+    expect(renamed).toEqual({
+      workspaceId: 'ws-rename',
+      segment: 'after',
+      displayName: 'After',
+    })
+    const rows = await deps.documentIndex.listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'ws-rename')).toEqual(renamed)
+    expect((await deps.documentIndex.resolveWorkspace('after'))?.workspaceId).toBe('ws-rename')
+    expect(await deps.documentIndex.resolveWorkspace('before')).toBeNull()
+  })
+
+  // The unique index refuses the UPDATE itself, so there is no window
+  // between a check and the write it authorises — and the row the refused
+  // statement targeted is untouched, rather than half renamed.
+  it('is refused by the unique index, leaving the row as it was', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-holder', segment: 'contested' })
+    await deps.documentIndex.createWorkspace({
+      workspaceId: 'ws-asking',
+      segment: 'asking',
+      displayName: 'Asking',
+    })
+
+    const err = await deps.documentIndex
+      .renameWorkspace({ workspaceId: 'ws-asking', segment: 'contested', displayName: 'Renamed' })
+      .catch((e: unknown) => e)
+    expect(isWorkspaceSegmentTakenError(err)).toBe(true)
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    // The displayName the same call carried must not have landed either: a
+    // refused rename is one operation refused, not a partial write.
+    expect(rows.find((r) => r.workspaceId === 'ws-asking')).toEqual({
+      workspaceId: 'ws-asking',
+      segment: 'asking',
+      displayName: 'Asking',
+    })
+  })
+
+  it('names a workspace that had none, leaving its address alone', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-unnamed', segment: 'keep-me' })
+
+    const renamed = await deps.documentIndex.renameWorkspace({
+      workspaceId: 'ws-unnamed',
+      displayName: 'Now named',
+    })
+
+    expect(renamed).toEqual({
+      workspaceId: 'ws-unnamed',
+      segment: 'keep-me',
+      displayName: 'Now named',
+    })
+  })
+
+  // Zero rows updated is the only signal a single UPDATE gives, and it has
+  // to mean "no such workspace" rather than "done".
+  it('fails WorkspaceNotFoundError for a workspace the registry does not hold', async () => {
+    const deps = await getDefaultServerDeps()
+    await expect(
+      deps.documentIndex.renameWorkspace({ workspaceId: 'ws-absent', displayName: 'nobody' }),
+    ).rejects.toThrow(WorkspaceNotFoundError)
+  })
+
+  it('rejects a ULID-shaped segment at the boundary, before any row is written', async () => {
+    const deps = await getDefaultServerDeps()
+    await deps.documentIndex.createWorkspace({ workspaceId: 'ws-guarded', segment: 'fine' })
+
+    await expect(
+      deps.documentIndex.renameWorkspace({
+        workspaceId: 'ws-guarded',
+        segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+      }),
+    ).rejects.toThrow()
+
+    const rows = await deps.documentIndex.listWorkspaces()
+    expect(rows.find((r) => r.workspaceId === 'ws-guarded')).toEqual({
+      workspaceId: 'ws-guarded',
+      segment: 'fine',
+    })
   })
 })
 
