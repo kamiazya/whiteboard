@@ -50,6 +50,7 @@
     "smoke:docker": "pnpm --filter @kamiazya/whiteboard-mcp smoke:docker",
     "smoke:docker-backup-restore": "pnpm --filter @kamiazya/whiteboard-mcp smoke:docker-backup-restore",
     "mutation:contracts": "pnpm --filter @kamiazya/whiteboard-mcp mutation:contracts",
+    "mutation:render": "pnpm --filter @kamiazya/whiteboard-canvas-render mutation:render",
     "publish:dry-run:npm": "pnpm --filter @kamiazya/whiteboard-mcp publish:dry-run:npm",
     "publish:dry-run:docker": "pnpm --filter @kamiazya/whiteboard-mcp publish:dry-run:docker",
     "publish:dry-run": "pnpm publish:dry-run:npm && pnpm publish:dry-run:docker",

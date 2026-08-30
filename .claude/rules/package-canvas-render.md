@@ -994,6 +994,51 @@ the table alone.
   live in `src/test-utils/routing-metrics.ts` and never call `edge-rules.ts`
   (the `reversal-count.ts` independent-oracle contract); layouts live in
   `src/test-utils/routing-corpus.ts`.
+- `stryker-targets.mjs` + `stryker.config.mjs` + `vitest.stryker.config.ts` are the MUTATION
+  lane (`pnpm mutation:render`, `.github/workflows/mutation.yml`), and they
+  answer the question no per-diff gate can: **is a property asserting
+  anything at all?** Two here were not — a cache-hit branch no generated run
+  reached, and a predicate whose false case a uniform generator produced once
+  in a billion draws — and both read as thorough prose while passing under a
+  deliberately broken implementation. A surviving mutant is exactly that
+  fact, found mechanically instead of by suspicion.
+  It is REPORT-ONLY in both of its shapes, never a gate. Triage a survivor the
+  way a review finding is triaged — most are a generator that never reaches
+  the case, and the fix is a denser domain plus a reachability guard, not more
+  runs.
+  **On a PR it mutates only the curated files THAT DIFF CHANGED and posts the
+  survivors as a sticky comment**; weekly it runs the whole list into an
+  artifact. The PR half is what makes the lane real: a weekly artifact is a
+  number nobody opens, and this repo has already watched a prose rule decay
+  until a hook made it mechanical. Scoping to the diff also answers the
+  fairness objection to reporting a score at all — an author is shown their
+  own files, not somebody else's debt — and it is why the score is never a
+  merge condition: a survivor can be the correct state of the world, and only
+  a reader can say.
+  **Verify a survivor by hand before acting on it.** The tool can report one
+  falsely: measured, `src/layout/seed.ts` is imported by its own test and
+  nothing else, so Stryker's related-test selection runs 7 tests against it
+  (`svg/format.ts` gets 458), and in that narrow selection its runtime
+  mutants come back SURVIVED even where the same edit applied by hand fails
+  the suite. That file is excluded from `mutate` for exactly that reason, and
+  the general habit is the one `diagnosis-evidence` already asks for — apply
+  the edit, run the suite, watch it stay green.
+  **The list is a BUDGET, and `src/mutation-lane-coverage.test.ts` is what
+  keeps it honest.** Mutating every production source file is 9089 mutants
+  against the list's ~1300 — several hours at this package's measured rate —
+  so the lane covers 9 of 47 modules. A list's failure mode is silence: a
+  module added next month is not covered, the report still looks healthy, and
+  nothing says the lane has been looking at less and less of the code. So both
+  numbers are pinned EXACTLY, the same instrument shape as the scoreboards
+  below, and adding a source file fails that test until someone decides in the
+  diff whether the lane should cover it. The answer may be no; then the count
+  moves and the decision is on the record. It also runs on `pre-push`, because
+  that decision belongs to the diff that adds the module rather than to
+  whoever reads a report months later.
+  Two exclusions in the vitest config are about run TIME, not value: the
+  routing and text-wrapping SCOREBOARDS above are re-run once per mutant that
+  touches their code, and `edge-routing-quality.test.ts` alone is ~22s of the
+  project's ~30s.
 
 ## Common mistakes (append as review finds them)
 
