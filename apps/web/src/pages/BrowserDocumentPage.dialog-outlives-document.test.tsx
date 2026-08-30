@@ -100,6 +100,39 @@ async function openDeleteDialog(): Promise<HTMLElement> {
   return screen.findByRole('alertdialog')
 }
 
+/**
+ * An index whose duplicate-time create never settles until the test releases
+ * it, so a test can stand between a duplicate failing for one document and
+ * its error being reported.
+ *
+ * Only the duplicate's create is held. Seeding goes through the same method,
+ * so the switch is armed explicitly rather than by counting calls.
+ */
+class HeldDuplicateIndex extends IdbDocumentIndex {
+  holdNextCreate = false
+  private release: () => void = () => {}
+  private readonly gate = new Promise<void>((resolve) => {
+    this.release = resolve
+  })
+  private markAttempted: () => void = () => {}
+  readonly attempted = new Promise<void>((resolve) => {
+    this.markAttempted = resolve
+  })
+
+  releaseFailure(): void {
+    this.release()
+  }
+
+  override async createDocument(
+    input: Parameters<IdbDocumentIndex['createDocument']>[0],
+  ): ReturnType<IdbDocumentIndex['createDocument']> {
+    if (!this.holdNextCreate) return super.createDocument(input)
+    this.markAttempted()
+    await this.gate
+    throw new Error('the browser refused the write')
+  }
+}
+
 // fake-indexeddb behind the DocumentStore port costs several round trips per
 // read; the sibling multi-document suite carries the same budgets for the
 // same reason.
@@ -200,5 +233,60 @@ describe('a destructive dialog does not outlive its document', () => {
       paths,
       'the delete was confirmed on a dialog opened about another document, and it took this one — the dialog said its name and the action never looked',
     ).toContain('arrived-after')
+  })
+  it('a duplicate that fails for one document does not report under the one now on screen', async () => {
+    const store = new HeldDuplicateIndex()
+    await seedIdbDocument(store, {
+      path: 'opened-about',
+      name: OPENED_ABOUT,
+      kind: 'spatial',
+      makeDefault: true,
+    })
+    await seedIdbDocument(store, {
+      path: 'arrived-after',
+      name: ARRIVED_AFTER,
+      kind: 'spatial',
+    })
+
+    render(<BrowserDocumentPage store={store} />)
+    await waitFor(() =>
+      expect(
+        editorMounted,
+        'the page is not wired yet; a switch now would be dropped',
+      ).not.toBeNull(),
+    )
+    await waitFor(async () => {
+      expect((await listLocalDocuments(store)).map((r) => r.path)).toHaveLength(2)
+    })
+
+    store.holdNextCreate = true
+    const kebab = await screen.findByRole('button', { name: 'More actions' })
+    fireEvent.pointerDown(kebab, { button: 0, ctrlKey: false })
+    fireEvent.pointerUp(await screen.findByRole('menuitem', { name: /^duplicate$/i }))
+    await store.attempted
+
+    await act(async () => {
+      navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+    })
+    for (let i = 0; i < 100 && !document.body.textContent?.includes(ARRIVED_AFTER); i++) {
+      await new Promise((r) => setTimeout(r, 50))
+    }
+    await act(async () => {})
+    expect(
+      document.body.textContent,
+      'the page never switched, so this case would pass without exercising anything',
+    ).toContain(ARRIVED_AFTER)
+
+    store.releaseFailure()
+    for (let i = 0; i < 40; i++) {
+      await new Promise((r) => setTimeout(r, 50))
+      if (screen.queryByRole('alert') !== null) break
+    }
+    await act(async () => {})
+
+    expect(
+      screen.queryByText(/refused the write/i),
+      'the duplicate that failed was the other document’s, and its error is on screen under this one — which has nothing wrong with it',
+    ).toBeNull()
   })
 })
