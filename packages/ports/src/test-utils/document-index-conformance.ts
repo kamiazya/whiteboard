@@ -485,6 +485,40 @@ export function describeDocumentIndexConformance(
       })
     })
 
+    // The case the idempotency test above cannot reach: it re-creates with the
+    // SAME layers, so an implementation that overwrites is indistinguishable
+    // from one that leaves the row alone. A BARE re-create is what separates
+    // them, and it is the shape an "ensure it exists" caller has — apps/web's
+    // `ensureLocalWorkspace` passes `{ workspaceId }` alone.
+    //
+    // Seeded through `renameWorkspace` rather than `createWorkspace` because
+    // that one is REQUIRED to echo its layers back, so the precondition below
+    // is real in every implementation instead of vacuous in the ones that
+    // accept and ignore them on create.
+    it('leaves an existing workspace identity alone when re-created bare', async () => {
+      await withIndex(async (index) => {
+        await index.createWorkspace({ workspaceId: 'ws-keep-layers' })
+        await index.renameWorkspace({
+          workspaceId: 'ws-keep-layers',
+          segment: 'keep-me',
+          displayName: 'Keep me',
+        })
+        const before = await index.resolveWorkspace('ws-keep-layers')
+        // The subject has to be PRESENT for the assertion below to mean
+        // anything: a row with no layers survives an overwrite unchanged.
+        expect(before?.segment).toBe('keep-me')
+        expect(before?.displayName).toBe('Keep me')
+
+        await index.createWorkspace({ workspaceId: 'ws-keep-layers' })
+
+        const after = await index.resolveWorkspace('ws-keep-layers')
+        expect(after?.segment).toBe('keep-me')
+        expect(after?.displayName).toBe('Keep me')
+        // And the address still resolves through the layer it was given.
+        expect((await index.resolveWorkspace('keep-me'))?.workspaceId).toBe('ws-keep-layers')
+      })
+    })
+
     it('every listWorkspaces row parses against workspaceEntrySchema', async () => {
       await withIndex(async (index) => {
         const rows = await index.listWorkspaces()

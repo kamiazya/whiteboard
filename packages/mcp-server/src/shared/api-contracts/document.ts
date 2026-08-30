@@ -175,14 +175,67 @@ export const canvasExistsResponseSchema = z.object({
 // is none. Both fields are additive to keep an old daemon's response and a
 // new client — and a new daemon's response and an old client — mutually
 // parseable.
+// Both WRITES answer with this same shape, deliberately: a create and a rename
+// each hand back the workspace as it now stands, so a caller that has just
+// moved an address does not have to re-list to learn the handle it should use
+// next. One workspace is one workspace whichever call produced it, and a
+// second name for the identical schema would be a synonym to keep in step.
 export const workspaceSummarySchema = z.object({
   workspaceId: z.string(),
   segment: workspaceSegmentSchema.optional(),
   displayName: workspaceDisplayNameSchema.optional(),
+  /**
+   * How many documents the workspace holds — what makes a switcher row worth
+   * reading, since a list of names alone gives no reason to pick one.
+   *
+   * SHADOWED documents count. A concurrent create can leave two documents on
+   * one path, and the listing shows both (one marked) precisely so the
+   * convergent state is visible rather than hidden; a count that quietly
+   * omitted the marked one would put back the disagreement the mark exists to
+   * prevent.
+   *
+   * Optional for the same additive reason as the two layers above, and
+   * absent is not zero: zero means "this workspace is empty", which is
+   * exactly the row a person needs to recognise, while absent means the
+   * responder did not count. Only a keeper that cannot count leaves it out.
+   */
+  documentCount: z.number().int().nonnegative().optional(),
 })
 
 export const listWorkspacesResponseSchema = z.object({
   workspaces: z.array(workspaceSummarySchema),
+})
+
+/**
+ * POST /api/workspaces — create one.
+ *
+ * What a person supplies is a DISPLAY NAME, and only that. The other two
+ * layers are not the caller's to choose: ADR-0019 makes `workspaceId` a
+ * machine-minted ULID, and the segment is DERIVED from the name here so the
+ * one switcher control behaves the same on either keeper — the browser's
+ * `createBrowserWorkspace` has taken a display name and derived from it since
+ * it shipped, and two creation surfaces that disagree about what a caller
+ * supplies is the asymmetry this contract exists to avoid.
+ *
+ * Choosing the address is what RENAME is for, one call later, where a
+ * collision can be reported against a workspace that already exists.
+ */
+export const createWorkspaceRequestSchema = z.object({
+  displayName: workspaceDisplayNameSchema,
+})
+
+/**
+ * PATCH /api/workspaces/:workspaceId — rename the two chosen layers.
+ *
+ * PATCH rather than PUT because the port's contract is partial in a way PUT
+ * cannot express: a field ABSENT means "leave this layer alone", never "clear
+ * it". Under PUT, a client sending only a display name would be asking to drop
+ * the segment — which is the one reading a caller would never intend, and the
+ * reason `RenameWorkspaceInput` has no way to clear a layer at all.
+ */
+export const renameWorkspaceRequestSchema = z.object({
+  segment: workspaceSegmentSchema.optional(),
+  displayName: workspaceDisplayNameSchema.optional(),
 })
 
 export const documentSummarySchema = z.object({
@@ -238,6 +291,8 @@ export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
 export type SaveVersionResponse = z.infer<typeof saveVersionResponseSchema>
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>
 export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>
+export type CreateWorkspaceRequest = z.infer<typeof createWorkspaceRequestSchema>
+export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
 export type CreateDocumentResponse = z.infer<typeof createDocumentResponseSchema>

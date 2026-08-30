@@ -115,6 +115,65 @@ describe('AppShell', () => {
     expect(screen.getByRole('menuitem', { name: /notes/i })).toBeTruthy()
   })
 
+  it('still offers creation when the address names no workspace, which is the empty daemon', async () => {
+    // A daemon holding nothing serves `/`, so the address carries no handle.
+    // The switcher is the ONLY place creation is offered, so hiding it there
+    // left a fresh daemon with no way to make its first workspace — while
+    // this increment's whole point is that the keeper can now honour one.
+    const create = vi.fn(() =>
+      Promise.resolve({ workspaceId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', segment: 'first' }),
+    )
+    renderShell(true, '/', undefined, {
+      source: { list: () => Promise.resolve([]), create },
+      onSwitch: () => {},
+    })
+
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    expect(await screen.findByRole('menuitem', { name: /new workspace/i })).toBeTruthy()
+  })
+
+  it('keeps a row document count through a rename, which only changes identity', async () => {
+    // `onRenamed` is handed a WorkspaceEntry — the three identity layers and
+    // nothing else — while the row it replaces is a WorkspaceRow carrying the
+    // count this increment added. Replacing rather than merging dropped the
+    // count until the shell happened to reload the list.
+    const rename = vi.fn(() =>
+      Promise.resolve({
+        workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+        segment: 'default',
+        displayName: 'Renamed team',
+      }),
+    )
+    renderShell(true, '/w/default', undefined, {
+      source: {
+        list: () =>
+          Promise.resolve([
+            {
+              workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+              segment: 'default',
+              displayName: 'Design team',
+              documentCount: 7,
+            },
+          ]),
+        rename,
+      },
+      onSwitch: () => {},
+    })
+
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    const row = await screen.findByRole('menuitem', { name: /design team/i })
+    expect(row.textContent).toContain('7')
+
+    const nameField = await screen.findByLabelText(/^workspace name$/i)
+    fireEvent.change(nameField, { target: { value: 'Renamed team' } })
+    fireEvent.blur(nameField)
+
+    await waitFor(() => expect(rename).toHaveBeenCalled())
+    await waitFor(() =>
+      expect(screen.getByRole('menuitem', { name: /renamed team/i }).textContent).toContain('7'),
+    )
+  })
+
   it('switches from the mark popover by handle, and closes it', async () => {
     const onSwitch = vi.fn()
     renderShell(true, '/w/default', undefined, { ...WORKSPACES, onSwitch })

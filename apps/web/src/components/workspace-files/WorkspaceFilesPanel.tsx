@@ -677,8 +677,13 @@ export function WorkspaceFilesPanel({
         ]
 
   return (
-    <div
+    // The panel names ITSELF, because the page heading above it now names the
+    // workspace ("Mark as Switcher"). The generic word did not disappear when
+    // it left the h1 — it moved to the region that actually holds the list,
+    // which is where it was always true.
+    <section
       ref={rootRef}
+      aria-label="Documents"
       className="relative flex min-h-0 flex-1 flex-col gap-2"
       data-testid="workspace-files-panel"
     >
@@ -950,6 +955,6 @@ export function WorkspaceFilesPanel({
           onClose={() => setCardMenu(null)}
         />
       )}
-    </div>
+    </section>
   )
 }

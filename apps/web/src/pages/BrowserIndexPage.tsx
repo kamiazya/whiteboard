@@ -23,6 +23,7 @@ import {
 import { createLocalFilesSource } from '../lib/local-files-source.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { workspaceLabel } from '../lib/workspace-handle.js'
 import { createSeededDocument, type LoroStoreLike } from './use-browser-document-controller.js'
 
 export interface BrowserIndexPageProps {
@@ -94,8 +95,31 @@ export function BrowserIndexPage({
     browserWorkspaceIdentitySnapshot,
   )
 
+  // What this page calls itself. The identity the accessor publishes carries
+  // no display name (it is the ADDRESSING half), so the row has to be read —
+  // in the same effect, which already re-runs on a switch.
+  const [workspaceName, setWorkspaceName] = useState<string | null>(null)
+
   useEffect(() => {
     let cancelled = false
+    // Cleared BEFORE the lookup, not merely overwritten after it. On a switch
+    // this state still holds the workspace the person just left, and the
+    // `.catch` below deliberately swallows a failed read — so without this the
+    // new workspace renders under the old one's name, indefinitely and with
+    // nothing saying so. Dropping to the handle fallback for the round trip is
+    // the right trade: the handle is what the address already carries, and it
+    // is true about the workspace on screen.
+    setWorkspaceName(null)
+    // Its own chain, deliberately not folded into the documents load below: a
+    // name that will not load leaves the heading on the handle, which is still
+    // true, and must not surface as "Failed to load documents from this
+    // browser."
+    Promise.resolve()
+      .then(() => index.resolveWorkspace(getBrowserWorkspaceId()))
+      .then((row) => {
+        if (!cancelled) setWorkspaceName(row === null ? null : workspaceLabel(row))
+      })
+      .catch(() => undefined)
     // On a device that has never created a document there is no workspace to
     // list, and the port answers that with an error rather than an empty
     // list. Ensuring it here is what makes a first visit render the empty
@@ -201,7 +225,12 @@ export function BrowserIndexPage({
 
   return (
     <div className="flex h-full flex-col overflow-y-auto p-4">
-      <h1 className="sr-only">Documents</h1>
+      {/* The generic word moved to the panel's own region label. Before the
+          row lands the segment is what the address carries, and the last
+          fallback keeps the page from ever having no h1 at all. */}
+      <h1 className="mb-3 truncate text-lg font-semibold">
+        {workspaceName ?? activeWorkspace?.segment ?? 'Documents'}
+      </h1>
       {error && (
         <div role="alert" className="mb-2 text-sm text-destructive">
           {error}

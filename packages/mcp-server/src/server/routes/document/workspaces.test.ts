@@ -8,6 +8,7 @@ import {
   deleteDocumentResponseSchema,
   listWorkspacesResponseSchema,
   renameDocumentPathResponseSchema,
+  workspaceSummarySchema,
 } from '../../../shared/api-contracts/document.js'
 import { seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
 
@@ -92,9 +93,12 @@ describe('GET /api/workspaces', () => {
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string }>
+      workspaces: Array<{ workspaceId: string; documentCount?: number }>
     }
-    expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a' }])
+    // `documentCount` joined the row when the switcher started showing it.
+    // This case pins WHICH workspaces are listed, so it carries the field
+    // rather than asserting a shape the route no longer has.
+    expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a', documentCount: 1 }])
   })
 
   // ADR-0019: segment/displayName flow from the registry row through this
@@ -123,9 +127,14 @@ describe('GET /api/workspaces', () => {
       workspaceId: 'workspace-named',
       segment: 'team-notes',
       displayName: 'Team notes',
+      documentCount: 0,
     })
     const bare = parsed.workspaces.find((w) => w.workspaceId === 'workspace-bare')
-    expect(bare).toEqual({ workspaceId: 'workspace-bare' })
+    // Zero, and PRESENT: an empty workspace is counted, not left uncounted.
+    // Which is the distinction the two assertions below are about — those
+    // layers are absent because nobody chose them, and this test's subject is
+    // that absence, not the row's total width.
+    expect(bare).toEqual({ workspaceId: 'workspace-bare', documentCount: 0 })
     expect('segment' in (bare ?? {})).toBe(false)
     expect('displayName' in (bare ?? {})).toBe(false)
   })
@@ -920,5 +929,287 @@ describe('GET /api/workspaces/:workspaceId/documents', () => {
     expect(res.status).toBe(200)
     const json = (await res.json()) as { documents: { path: string }[] }
     expect(json.documents).toEqual([expect.objectContaining({ path: 'canvas-a' })])
+  })
+})
+
+// The write half of the workspace resource. Until this, the daemon published
+// `GET /api/workspaces` and nothing that changes one, so the shell's switcher
+// offered neither creation nor renaming there — the keeper could not honour
+// them, so it did not promise them.
+describe('POST /api/workspaces', () => {
+  async function create(app: ReturnType<typeof createWorkspacesRouter>, body: unknown) {
+    return app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('mints the canonical id and derives the address from the name it was given', async () => {
+    const app = createWorkspacesRouter()
+    const res = await create(app, { displayName: 'Marketing Team' })
+
+    expect(res.status).toBe(201)
+    const created = workspaceSummarySchema.parse(await res.json())
+    expect(created.displayName).toBe('Marketing Team')
+    expect(created.segment).toBe('marketing-team')
+    // ADR-0019's canonical layer is minted HERE. A caller naming one would be
+    // choosing the single identity that is not theirs to choose.
+    expect(created.workspaceId).toMatch(/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/)
+
+    const listed = listWorkspacesResponseSchema.parse(
+      await (await app.request('/api/workspaces')).json(),
+    )
+    expect(listed.workspaces.map((w) => w.workspaceId)).toContain(created.workspaceId)
+  })
+
+  it('gives the second workspace of the same name an address of its own', async () => {
+    const app = createWorkspacesRouter()
+    const first = workspaceSummarySchema.parse(
+      await (await create(app, { displayName: 'Notes' })).json(),
+    )
+    const second = workspaceSummarySchema.parse(
+      await (await create(app, { displayName: 'Notes' })).json(),
+    )
+
+    // A display name may repeat as often as its owner likes; the address it
+    // derives may not.
+    expect(first.displayName).toBe('Notes')
+    expect(second.displayName).toBe('Notes')
+    expect(first.segment).toBe('notes')
+    expect(second.segment).not.toBe('notes')
+    expect(second.segment).toBeDefined()
+  })
+
+  it('creates a workspace with NO segment when the name yields none', async () => {
+    const app = createWorkspacesRouter()
+    // A name the segment charset cannot spell. ADR-0019 leaves the layer
+    // absent rather than writing a mangled approximation — the workspace is
+    // addressed by its canonical id until a rename gives it one.
+    const created = workspaceSummarySchema.parse(
+      await (await create(app, { displayName: '設計ノート' })).json(),
+    )
+    expect(created.displayName).toBe('設計ノート')
+    expect(created.segment).toBeUndefined()
+  })
+
+  it('refuses a name that is empty once trimmed', async () => {
+    const app = createWorkspacesRouter()
+    expect((await create(app, { displayName: '   ' })).status).toBe(400)
+    expect((await create(app, {})).status).toBe(400)
+  })
+})
+
+describe('PATCH /api/workspaces/:workspaceId', () => {
+  async function created(app: ReturnType<typeof createWorkspacesRouter>, displayName: string) {
+    const res = await app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName }),
+    })
+    return workspaceSummarySchema.parse(await res.json())
+  }
+
+  async function patch(
+    app: ReturnType<typeof createWorkspacesRouter>,
+    handle: string,
+    body: unknown,
+  ) {
+    return app.request(`/api/workspaces/${handle}`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(body),
+    })
+  }
+
+  it('renames both layers and answers with the workspace as it now stands', async () => {
+    const app = createWorkspacesRouter()
+    const before = await created(app, 'Before')
+
+    const res = await patch(app, before.workspaceId, { segment: 'after', displayName: 'After' })
+    expect(res.status).toBe(200)
+    expect(workspaceSummarySchema.parse(await res.json())).toEqual({
+      workspaceId: before.workspaceId,
+      segment: 'after',
+      displayName: 'After',
+    })
+  })
+
+  it('leaves a layer the body omits alone, rather than clearing it', async () => {
+    const app = createWorkspacesRouter()
+    const before = await created(app, 'Keeps its url')
+    expect(before.segment).toBe('keeps-its-url')
+
+    const res = await patch(app, before.workspaceId, { displayName: 'Renamed' })
+    const renamed = workspaceSummarySchema.parse(await res.json())
+    expect(renamed.displayName).toBe('Renamed')
+    expect(renamed.segment).toBe('keeps-its-url')
+  })
+
+  it('accepts the SEGMENT in the address, like every other addressed surface', async () => {
+    const app = createWorkspacesRouter()
+    const before = await created(app, 'Addressed by segment')
+
+    const res = await patch(app, 'addressed-by-segment', { displayName: 'Renamed through it' })
+    expect(res.status).toBe(200)
+    expect(workspaceSummarySchema.parse(await res.json()).workspaceId).toBe(before.workspaceId)
+  })
+
+  it('answers 404 for a workspace that does not exist', async () => {
+    const app = createWorkspacesRouter()
+    const res = await patch(app, '01ARZ3NDEKTSV4RRFFQ69G5FAV', { displayName: 'Nobody' })
+    expect(res.status).toBe(404)
+  })
+
+  it('refuses a segment another workspace holds, and changes nothing', async () => {
+    const app = createWorkspacesRouter()
+    const other = await created(app, 'Held by someone else')
+    const mine = await created(app, 'Mine')
+
+    const res = await patch(app, mine.workspaceId, {
+      segment: other.segment,
+      displayName: 'Renamed anyway',
+    })
+    expect(res.status).toBe(409)
+
+    // One refused OPERATION, not a partial one: the display name in the same
+    // body must not have landed either.
+    const listed = listWorkspacesResponseSchema.parse(
+      await (await app.request('/api/workspaces')).json(),
+    )
+    const after = listed.workspaces.find((w) => w.workspaceId === mine.workspaceId)
+    expect(after?.segment).toBe('mine')
+    expect(after?.displayName).toBe('Mine')
+  })
+
+  it('accepts the workspace its OWN segment names, which is not a collision', async () => {
+    const app = createWorkspacesRouter()
+    const before = await created(app, 'Unchanged')
+
+    const res = await patch(app, before.workspaceId, {
+      segment: before.segment,
+      displayName: 'Named at last',
+    })
+    expect(res.status).toBe(200)
+    expect(workspaceSummarySchema.parse(await res.json()).displayName).toBe('Named at last')
+  })
+})
+
+// A switcher row that says only a name gives no reason to pick one workspace
+// over another. The count is what makes the list readable — and it must agree
+// with the list the document browser then shows, which is why a SHADOWED
+// document counts: it is a document in the workspace, it appears in the
+// listing with its mark, and a number that quietly omitted it would recreate
+// the disagreement the mark exists to prevent.
+describe('GET /api/workspaces document counts', () => {
+  async function created(app: ReturnType<typeof createWorkspacesRouter>, displayName: string) {
+    const res = await app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName }),
+    })
+    return workspaceSummarySchema.parse(await res.json())
+  }
+
+  async function listed(app: ReturnType<typeof createWorkspacesRouter>) {
+    return listWorkspacesResponseSchema.parse(await (await app.request('/api/workspaces')).json())
+  }
+
+  it('counts each workspace its own documents', async () => {
+    const app = createWorkspacesRouter()
+    const two = await created(app, 'Two docs')
+    const none = await created(app, 'No docs')
+
+    for (const path of ['alpha', 'beta']) {
+      await app.request(`/api/workspaces/${two.workspaceId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+    }
+
+    const { workspaces } = await listed(app)
+    expect(workspaces.find((w) => w.workspaceId === two.workspaceId)?.documentCount).toBe(2)
+    // Zero is a real answer and must be REPORTED, not left absent: an empty
+    // workspace is exactly the one a person needs to recognise in the list.
+    expect(workspaces.find((w) => w.workspaceId === none.workspaceId)?.documentCount).toBe(0)
+  })
+
+  it('counts documents in folders, not just at the root', async () => {
+    const app = createWorkspacesRouter()
+    const ws = await created(app, 'Nested')
+    for (const path of ['top', 'folder/one', 'folder/deeper/two']) {
+      await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+    }
+
+    const { workspaces } = await listed(app)
+    expect(workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount).toBe(3)
+  })
+
+  it('stops counting a document once it is deleted', async () => {
+    const app = createWorkspacesRouter()
+    const ws = await created(app, 'Deletes')
+    await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'gone' }),
+    })
+    expect(
+      (await listed(app)).workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount,
+    ).toBe(1)
+
+    await app.request(`/api/workspaces/${ws.workspaceId}/documents/gone`, { method: 'DELETE' })
+
+    expect(
+      (await listed(app)).workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount,
+    ).toBe(0)
+  })
+})
+
+// Found by hitting a REAL daemon, not by any test here: a workspace can sit in
+// the registry with no workspace TREE yet. `listWorkspaces` returns the row and
+// `listDocuments` throws for it, so counting every row turned one such
+// workspace into a 500 for the WHOLE list — a listing that worked before the
+// count was added.
+//
+// Every case above creates its workspaces THROUGH the route, which makes the
+// tree as a side effect, so none of them could reach this state. The registry
+// row is written directly here for exactly that reason.
+describe('GET /api/workspaces with a registry row that has no tree', () => {
+  async function registryRowOnly(workspaceId: string) {
+    const { getDb } = await import('../../store/db/index.js')
+    const { upsertWorkspaceRow } = await import('../../store/db/upsert-workspace.js')
+    await upsertWorkspaceRow(await getDb(tmp.dir), workspaceId, {})
+  }
+
+  it('counts it as empty instead of failing the whole listing', async () => {
+    const app = createWorkspacesRouter()
+    const withTree = workspaceSummarySchema.parse(
+      await (
+        await app.request('/api/workspaces', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ displayName: 'Has a tree' }),
+        })
+      ).json(),
+    )
+    await registryRowOnly('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+
+    const res = await app.request('/api/workspaces')
+    expect(res.status).toBe(200)
+    const { workspaces } = listWorkspacesResponseSchema.parse(await res.json())
+
+    // The row is LISTED — dropping it would hide a workspace that exists.
+    const treeless = workspaces.find((w) => w.workspaceId === '01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    expect(treeless).toBeDefined()
+    // And counted as what it is: a workspace holding nothing.
+    expect(treeless?.documentCount).toBe(0)
+    // Its neighbour is unaffected — one row's missing tree must not cost the
+    // others their counts.
+    expect(workspaces.find((w) => w.workspaceId === withTree.workspaceId)?.documentCount).toBe(0)
   })
 })

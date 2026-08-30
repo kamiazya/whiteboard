@@ -27,6 +27,7 @@ import {
   listWorkspacesResponseSchema,
   type RenameDocumentPathRequest,
   type RenameDocumentPathResponse,
+  type RenameWorkspaceRequest,
   type RestoreTrashResponse,
   renameDocumentPathResponseSchema,
   restoreTrashResponseSchema,
@@ -36,8 +37,10 @@ import {
   updateDocumentResponseSchema,
   type WorkspaceDocumentTagsResponse,
   type WorkspaceNames,
+  type WorkspaceSummary,
   workspaceDocumentTagsResponseSchema,
   workspaceNamesSchema,
+  workspaceSummarySchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
@@ -93,6 +96,52 @@ export function listWorkspaces(
   daemonBaseUrl: string,
 ): Promise<ListWorkspacesResponse> {
   return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/workspaces`, listWorkspacesResponseSchema)
+}
+
+/**
+ * Create a workspace the daemon keeps.
+ *
+ * Takes a DISPLAY NAME and nothing else, because the other two of ADR-0019's
+ * layers are the server's: it mints the canonical id and derives the segment.
+ * That is what lets one switcher control call `create(displayName)` without
+ * knowing which keeper is answering.
+ */
+export function createWorkspace(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  displayName: string,
+): Promise<WorkspaceSummary> {
+  return fetchAndParse(fetchFn, `${daemonBaseUrl}/api/workspaces`, workspaceSummarySchema, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ displayName }),
+  })
+}
+
+/**
+ * Rename the two layers a workspace's owner chooses.
+ *
+ * PATCH, and a field left out is left ALONE — never cleared. The caller passes
+ * only what it is changing, which is why the switcher can write the name and
+ * the address independently instead of submitting one form that would put
+ * every name edit behind the write that can be refused for a collision.
+ */
+export function renameWorkspace(
+  fetchFn: typeof globalThis.fetch,
+  daemonBaseUrl: string,
+  handle: string,
+  input: RenameWorkspaceRequest,
+): Promise<WorkspaceSummary> {
+  return fetchAndParse(
+    fetchFn,
+    `${daemonBaseUrl}/api/workspaces/${encodeURIComponent(handle)}`,
+    workspaceSummarySchema,
+    {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(input),
+    },
+  )
 }
 
 export function listDocuments(

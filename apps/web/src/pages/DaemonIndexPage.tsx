@@ -26,7 +26,7 @@ import { deriveCopyPath } from '../lib/derive-copy-path.js'
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { WhiteboardCapabilities } from '../lib/provider.js'
-import { workspaceHandle } from '../lib/workspace-handle.js'
+import { workspaceHandle, workspaceLabel } from '../lib/workspace-handle.js'
 
 // The document browser for a connected daemon, scoped to ONE workspace at a
 // time — the one the ADDRESS names. Choosing which is the shell switcher's,
@@ -229,9 +229,36 @@ export function DaemonIndexPage({
   // -address branch above has to clear this deliberately.
   const reportedWorkspaceRef = useRef<string | null>(null)
 
+  // The handles this page has already re-read the list for. A miss has two
+  // causes that look identical from here, and only one of them is stale.
+  const refetchedForRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (workspace === undefined || !workspacesLoaded) return
     const wanted = resolveWorkspaceHandle(workspaces, workspace)
+    // A handle this list does not hold is EITHER a stale bookmark or a
+    // workspace the switcher created or renamed a moment ago. The switcher is
+    // the SHELL's and writes through its own source, so this page's list is a
+    // snapshot taken before that write — and treating every miss as stale
+    // meant creating a workspace landed on a DIFFERENT one and rewrote the
+    // address to name it. So a miss re-reads the list once per handle; a
+    // handle still missing after that is genuinely stale and gets the
+    // first-listed fallback below, unchanged.
+    if (wanted === null && refetchedForRef.current !== workspace) {
+      refetchedForRef.current = workspace
+      // Unselected for the duration, and that is the load-bearing half. The
+      // re-read can FAIL, and leaving the previous workspace selected under an
+      // address naming another is the mismatch the stale-address branch below
+      // exists to refuse: the error state offers `Create a canvas` while
+      // something is selected, so a create there would post the document to
+      // the workspace the URL does not name. With nothing selected the same
+      // state offers `Try again`, which is the only honest action while the
+      // address is unresolved. On success `loadWorkspaces` selects the
+      // addressed workspace itself, since there is no current value to keep.
+      setSelectedWorkspace(null)
+      void loadWorkspaces()
+      return
+    }
     const fallback = workspaces[0]
     const target = wanted ?? fallback
     if (target === undefined) return
@@ -252,7 +279,7 @@ export function DaemonIndexPage({
     // when the fallback IS a different workspace and that effect does fire.
     reportedWorkspaceRef.current = handle
     onWorkspaceResolved?.(handle)
-  }, [workspace, workspaces, workspacesLoaded, onWorkspaceResolved])
+  }, [workspace, workspaces, workspacesLoaded, onWorkspaceResolved, loadWorkspaces])
 
   useEffect(() => {
     if (selectedWorkspace === null) return
@@ -505,10 +532,30 @@ export function DaemonIndexPage({
     }
   }, [daemonFetch, daemonBaseUrl, selectedWorkspace, pendingDelete, closeDeleteDialog])
 
+  // What the page calls itself. `selectedWorkspace` holds a HANDLE, not an id,
+  // so the row is found through `resolveWorkspaceHandle` — the same reason the
+  // loader above gives, one layer up. `workspaceLabel` owns the precedence
+  // across ADR-0019's three layers; re-deriving it here is how a site ends up
+  // knowing about fewer layers than there are.
+  //
+  // The fallbacks are each a true statement about where you are, in order of
+  // how much they say: the name, then the handle the address carries, then
+  // the generic word for the moments before any workspace is known (this page
+  // also mounts at `/`, where there is no handle to fall back to). The
+  // heading is never absent — a document browser with no h1 is a worse
+  // outcome than a generic one.
+  const activeWorkspace =
+    selectedWorkspace === null ? null : resolveWorkspaceHandle(workspaces, selectedWorkspace)
+  const pageHeading =
+    (activeWorkspace ? workspaceLabel(activeWorkspace) : null) ??
+    selectedWorkspace ??
+    workspace ??
+    'Documents'
+
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
       <div className="flex h-full flex-col overflow-y-auto p-4">
-        <h1 className="sr-only">Documents</h1>
+        <h1 className="mb-3 truncate text-lg font-semibold">{pageHeading}</h1>
         {createError && (
           <div role="alert" className="mb-2 text-sm text-destructive">
             {createError}
@@ -561,18 +608,22 @@ export function DaemonIndexPage({
           // the documents fetch that ends the loading state never runs and the
           // skeleton below would spin for as long as the page stays open.
           //
-          // There is no create control here on purpose: every create path
-          // addresses a (workspace, path) pair, and this page has no way to
-          // name a workspace the daemon would agree with — the daemon keeps
-          // its own current workspace id and does not publish it. So the one
-          // honest action is to look again, because the write that fixes this
-          // is someone else's.
+          // Creation is offered by the SWITCHER, not here — one carrier, the
+          // same one every other page uses. This state points at it rather
+          // than growing a second create control beside it.
+          //
+          // It used to say the write was someone else's, and that was true
+          // while every create path addressed a (workspace, path) pair this
+          // page could not name. `POST /api/workspaces` retired that: the
+          // daemon mints the id and derives the address from a display name,
+          // so the client no longer has to guess an identifier the daemon
+          // would agree with.
           <div className="flex flex-col items-start gap-3">
             <div>
               <p className="text-sm font-medium">This daemon has no workspaces.</p>
               <p className="text-sm text-muted-foreground">
-                A workspace appears once something creates a document in it — an agent over MCP, or
-                the whiteboard CLI.
+                Create one from the workspace menu in the header — or one appears on its own once an
+                agent over MCP, or the whiteboard CLI, writes a document.
               </p>
             </div>
             <button

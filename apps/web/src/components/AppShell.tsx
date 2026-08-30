@@ -1,4 +1,3 @@
-import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { Settings } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -10,7 +9,11 @@ import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-sto
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
 import { ConnectionStatus, connectionLabel, isSyncOff } from './connection/ConnectionStatus.js'
-import { WorkspaceMenu, type WorkspaceSwitcherSource } from './shell/WorkspaceMenu.js'
+import {
+  WorkspaceMenu,
+  type WorkspaceRow,
+  type WorkspaceSwitcherSource,
+} from './shell/WorkspaceMenu.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -116,7 +119,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   // The rows live HERE rather than in the menu, because the popover's head
   // names the current workspace and the head is the shell's. One fetch, two
   // readers.
-  const [rows, setRows] = useState<readonly WorkspaceEntry[]>([])
+  const [rows, setRows] = useState<readonly WorkspaceRow[]>([])
   const source = workspaces?.source
   useEffect(() => {
     if (source === undefined) return
@@ -161,16 +164,31 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         daemonBaseUrl={daemonBaseUrl}
         {...(activeName === undefined ? {} : { workspaceName: activeName })}
         workspaceMenu={
-          workspaces && workspaceHandleInAddress !== null ? (
+          // Rendered whenever a keeper published a switcher, INCLUDING when
+          // the address names no workspace. A daemon holding nothing serves
+          // `/`, and this menu is the only place creation is offered — so
+          // requiring a handle here left a fresh daemon with no way to make
+          // its first workspace, which is the one thing this increment set out
+          // to make possible. With no handle the menu simply has no current
+          // row: the rename section is already behind `active !== undefined`,
+          // so it degrades to a list and a create button on its own.
+          workspaces ? (
             <WorkspaceMenu
               current={workspaceHandleInAddress}
               workspaces={rows}
               source={workspaces.source}
               onSwitch={workspaces.onSwitch}
               sessionLabel={connectionLabel(connection?.state ?? null)}
+              // MERGED, not replaced. A rename answers with a WorkspaceEntry —
+              // the three identity layers and nothing else — while the row it
+              // lands on is a WorkspaceRow that also carries what the keeper
+              // counted. Replacing dropped that count until something else
+              // reloaded the list.
               onRenamed={(entry) =>
                 setRows((current) =>
-                  current.map((row) => (row.workspaceId === entry.workspaceId ? entry : row)),
+                  current.map((row) =>
+                    row.workspaceId === entry.workspaceId ? { ...row, ...entry } : row,
+                  ),
                 )
               }
             />

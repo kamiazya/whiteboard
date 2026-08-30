@@ -444,3 +444,124 @@ describe('BrowserIndexPage', () => {
     expect((await screen.findByTestId('okf-preview')).textContent).toContain('diagrams/structure')
   })
 })
+
+// The other keeper, same rule. "Mark as Switcher": the shell does not name the
+// workspace — the document browser does, as its own heading.
+describe('the workspace names the page', () => {
+  it('heads the page with the workspace name, and keeps Documents as the list label', async () => {
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: getBrowserWorkspaceId(),
+        path: 'alpha',
+        name: 'Alpha',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      segment: 'studio',
+      displayName: 'Studio',
+    })
+
+    renderPage(store)
+    await screen.findByText('Alpha')
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Studio')
+    expect(heading.className).not.toContain('sr-only')
+    expect(screen.getByRole('region', { name: 'Documents' })).toBeTruthy()
+  })
+
+  it('drops the previous name on a switch, even when the new lookup does not answer', async () => {
+    // The heading is a projection of a workspace, so it has to move WITH the
+    // workspace. The name lookup is deliberately its own chain — a name that
+    // will not load must not surface as "Failed to load documents" — and its
+    // `.catch` swallowed the failure without clearing what was on screen. The
+    // result is the worst reading available: the new workspace, under the old
+    // workspace's name, indefinitely and with nothing saying so.
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: getBrowserWorkspaceId(),
+        path: 'alpha',
+        name: 'Alpha',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      segment: 'studio',
+      displayName: 'Studio',
+    })
+
+    // Answers the first read and fails every one after it: the name has to be
+    // ON screen before a stale one can be the defect.
+    let reads = 0
+    const flakyIndex = new Proxy(store.index, {
+      get(target, prop, receiver) {
+        if (prop === 'resolveWorkspace') {
+          return (input: Parameters<typeof store.index.resolveWorkspace>[0]) => {
+            reads += 1
+            return reads === 1
+              ? store.index.resolveWorkspace(input)
+              : Promise.reject(new Error('index read failed'))
+          }
+        }
+        const value = Reflect.get(target, prop, receiver)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <BrowserIndexPage
+          index={flakyIndex}
+          loro={store.loro}
+          pointer={store.pointer}
+          clock={store.clock}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+      { container: document.body },
+    )
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('Studio'),
+    )
+
+    await act(async () => {
+      setBrowserWorkspaceIdForTests('0DGKPSWZ258BEHM1CFJNRVY147', 'other-space')
+    })
+
+    await waitFor(() =>
+      expect(screen.getByRole('heading', { level: 1 }).textContent).not.toBe('Studio'),
+    )
+    // Not merely "not Studio": the handle is what the address carries, and it
+    // is true about the workspace now on screen.
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('other-space')
+  })
+
+  it('falls back through the identity layers rather than showing a raw id', async () => {
+    const store = await seededStore([
+      {
+        documentId: '0CFJNRVY147ADGKPSWZ258BEHM',
+        workspaceId: getBrowserWorkspaceId(),
+        path: 'alpha',
+        name: 'Alpha',
+        updatedAt: '2026-08-01T00:00:00Z',
+        kind: 'spatial',
+      },
+    ])
+    await store.index.renameWorkspace({
+      workspaceId: getBrowserWorkspaceId(),
+      segment: 'studio',
+    })
+
+    renderPage(store)
+    await screen.findByText('Alpha')
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('studio')
+  })
+})

@@ -186,6 +186,104 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   Each layer is written on its own, never as a form submitting both: an
   unchanged URL sent back would put every name edit behind the one write that
   can be refused for a collision.
+- **The switcher is offered even when the address names no workspace.** A
+  daemon holding nothing serves `/`, and the switcher is the only place
+  creation lives — so requiring a handle before rendering it left a fresh
+  daemon with no way to make its first workspace. With no handle the menu has
+  no current row, which is already how it behaves for an address it cannot
+  resolve: the rename section sits behind a resolved row, so what is left is a
+  list and a create button, which is exactly what that state needs.
+
+  The empty-daemon copy moved with it. It used to say the write was someone
+  else's, and that was true while every create path addressed a
+  (workspace, path) pair the page could not name; `POST /api/workspaces`
+  retired the premise by minting the id itself.
+- **An address the page cannot resolve yet leaves NOTHING selected.** The
+  daemon page re-reads its list once when the address names a workspace the
+  list does not hold, because the switcher may have just created it. That
+  re-read can fail — and keeping the previous workspace selected through the
+  failure puts the page on one workspace under an address naming another,
+  which is the mismatch the stale-address fallback already refuses to leave
+  behind. The error state offers `Create a canvas` only while something is
+  selected, so the stale selection is not cosmetic: a create there posts the
+  document to the workspace the URL does not name.
+- **A rename changes identity and nothing else.** The switcher's rename
+  answers with the three identity layers, and the row it lands on also carries
+  what the keeper counted — so the answer is MERGED into the row, never
+  substituted for it. Replacing dropped the count until something else
+  happened to reload the list.
+- **Each switcher row says how much is in that workspace.** A list of names
+  gives no reason to pick one; the count is what makes it readable. It reads
+  as part of the row rather than as a column, so a keeper that does not count
+  leaves no hole where a number would be.
+
+  **Absent is not zero, and the difference is the whole rule.** Zero says the
+  workspace is empty — the row a person most needs to recognise — while absent
+  says this keeper did not count. So the render is guarded on `undefined`,
+  never on falsiness, which would hide exactly the empty ones. Today the
+  daemon counts and the browser does not: documents live in the workspace
+  tree, and reading it from the shell would put loro-crdt behind a control
+  that renders on every page, which `browser-workspaces.ts` deliberately
+  avoids. That asymmetry is a keeper difference with a recorded cost, not an
+  oversight — and it is the reason the field is optional rather than
+  defaulted.
+
+  The count includes SHADOWED documents. A concurrent create can leave two
+  documents on one path and the listing shows both, one marked, precisely so
+  the convergent state is visible; a count that quietly omitted the marked one
+  would put back the disagreement the mark exists to prevent.
+
+  Measured before it was added, because the cost is invisible in the diff: the
+  tree index answers a document listing by OPENING each workspace's record, so
+  this turns one registry read into N. Against a live daemon holding 11
+  workspaces and 38 documents, the whole call is 4.2ms end-to-end over HTTP —
+  on a control a person opens by clicking.
+
+  The daemon counts the rows ONE AT A TIME, and that is not an oversight. The
+  obvious `Promise.all` opens N workspace records at once against the one
+  SQLite file, and on that same daemon it failed the entire listing with
+  `SQLITE_BUSY` — every row lost to contention the count itself introduced.
+  A/B against the running daemon: concurrent 500, sequential 200. No unit test
+  reaches it, because each gets a fresh database with nothing else touching it;
+  this is the class of defect only a real keeper with real data shows.
+- **The document browser heads itself with the workspace name.** The other
+  half of the answer above, and the only place a sighted reader sees the name
+  at all — the shell states it in the mark's accessible name and draws it only
+  inside the popover. Both index pages carry it as a visible `h1`, and the
+  generic word did not disappear when it left that heading: it moved to the
+  panel's own region label (`role="region" aria-label="Documents"`), which is
+  where it was always true.
+
+  What it reads is `workspaceLabel` — display name, else segment, else id —
+  never a per-site re-derivation, because a site that re-derives ends up
+  knowing about fewer layers than there are. Before the row lands the heading
+  falls back to the handle the address carries, and past that to the generic
+  word: a document browser with no `h1` at all is a worse outcome than a
+  generic one.
+
+  **`createWorkspace` on a workspace that exists leaves it alone.** Not merely
+  "is not an error" — not an overwrite either. A blind `put` of the input let
+  the bare `{ workspaceId }` call an "ensure it exists" caller makes clear the
+  identity layers a rename had written. `IdbDocumentIndex` and the in-memory
+  double both did this; the daemon never did, because its identity lives in a
+  registry its `createWorkspace` does not touch.
+
+  **This was latent, not live, and the distinction is on the record because it
+  was first reported the other way round.** Reading the code found a real
+  contract violation, and a conformance mutation check confirmed the contract
+  was broken — neither says anything about REACHABILITY, and the consequence
+  narrated from them ("visiting the document list undoes a rename") turned out
+  to be false. An A/B of the built bundle before and after refuted it: the
+  segment survived on both. `FoldingBrowserIndex` routes `createWorkspace` to
+  the tree index and keeps the IndexedDB one only for `listWorkspaces`,
+  `renameWorkspace`, `listDocuments` and `deleteDocument`, so no caller reaches
+  the overwrite at all. It is still worth fixing — the row it would clobber is
+  the one `renameWorkspace` writes on that same store — but as debt, not as a
+  defect anyone hit.
+
+  Pinned for every implementation by the port's conformance suite, whose
+  earlier idempotency case re-created with the SAME layers and so could not
+  tell an overwriting implementation from a leaving-alone one.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over

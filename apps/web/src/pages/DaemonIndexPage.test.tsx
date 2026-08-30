@@ -97,6 +97,10 @@ interface MockRoutes {
    *  default. Consulted per call, so a test can answer 404 once and then
    *  behave normally — a workspace deleted out from under the page. */
   onListDocuments?: (workspaceId: string) => Response | undefined
+  /** Override the workspaces GET. Return undefined to fall through to the
+   *  default. Consulted per call, so a test can answer 500 only on the
+   *  re-list a switch triggers. */
+  onListWorkspaces?: () => Response | undefined
   /** Rows the trash GET answers with; defaults to an empty trash. */
   trashByWorkspace?: Record<string, Array<{ documentId: string; path: string; deletedAt: number }>>
 }
@@ -105,6 +109,8 @@ function installFetchMock(routes: MockRoutes) {
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
+      const override = routes.onListWorkspaces?.()
+      if (override) return Promise.resolve(override)
       const respond = () => jsonResponse({ workspaces: routes.workspaces })
       // Held open so a test can inspect what renders WHILE the re-list is in
       // flight — the window in which a deleted workspace is still selected.
@@ -488,6 +494,151 @@ describe('DaemonIndexPage', () => {
     // report is the ONLY signal, and it has to fire anyway.
     await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('ws-a'))
     expect(screen.getByText('alpha')).toBeTruthy()
+  })
+
+  it('finds a workspace created since its list was read, instead of falling back off it', async () => {
+    // The switcher is the SHELL's, and it writes through its own source. This
+    // page's `workspaces` is a snapshot taken before that write, so a freshly
+    // created workspace is ABSENT from it — and a handle the list does not
+    // hold used to mean one thing only: a stale bookmark, fall back to
+    // first-listed. So creating a workspace from the switcher landed on a
+    // different workspace and rewrote the address to name it.
+    const routes = {
+      workspaces: [{ workspaceId: 'ws-a' }] as Array<{ workspaceId: string; segment?: string }>,
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-new': [{ path: 'freshly-made', updatedAt: new Date().toISOString() }],
+      },
+    }
+    installFetchMock(routes)
+    const onWorkspaceResolved = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="ws-a"
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    onWorkspaceResolved.mockClear()
+
+    // What the switcher's create did: the daemon now holds it, and the
+    // address moved onto it.
+    routes.workspaces.push({ workspaceId: 'ws-new' })
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-new"
+          onWorkspaceResolved={onWorkspaceResolved}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('freshly-made')).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+    expect(onWorkspaceResolved).not.toHaveBeenCalledWith('ws-a')
+  })
+
+  it('does not leave the old workspace usable when the re-list for a new one fails', async () => {
+    // The refetch above is a second chance, not a guarantee. When it fails the
+    // page still holds the PREVIOUS workspace selected while the address names
+    // the new one — and a create from that state posts the document to the
+    // workspace the URL does not name. The same mismatch the stale-address
+    // branch below already refuses to leave behind.
+    let workspaceCalls = 0
+    const routes = {
+      workspaces: [{ workspaceId: 'ws-a' }] as Array<{ workspaceId: string; segment?: string }>,
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      onListWorkspaces: () => {
+        workspaceCalls += 1
+        // The first load settles the page; the re-list a switch triggers fails.
+        return workspaceCalls === 1 ? undefined : jsonResponse({ message: 'nope' }, 500)
+      },
+    }
+    installFetchMock(routes)
+    const onOpenDocument = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="ws-a"
+        onOpenDocument={onOpenDocument}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-new"
+          onOpenDocument={onOpenDocument}
+        />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    // The error state offers `Create a canvas` only while a workspace is still
+    // SELECTED, and that selection would be the one the address just left. So
+    // the affordance itself is the evidence: a create here posts the document
+    // to `ws-a` under an address naming `ws-new`.
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+  })
+
+  it('follows a segment the workspace was renamed to a moment ago', async () => {
+    // The rename half of the same shape. `onSwitch` carries the NEW segment,
+    // which the page's pre-rename snapshot spells the old way — so the
+    // resolve missed and the page fell off the workspace the person had just
+    // renamed, onto first-listed.
+    const routes = {
+      workspaces: [
+        { workspaceId: WS_ULID, segment: 'studio' },
+        { workspaceId: 'ws-other' },
+      ] as Array<{ workspaceId: string; segment?: string }>,
+      // Keyed by HANDLE, which for a workspace holding a segment is that
+      // segment — the page addresses the daemon by what it settled on, not by
+      // the canonical id. Both spellings are present because the rename below
+      // moves which one it asks for.
+      documentsByWorkspace: {
+        studio: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        marketing: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-other': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    }
+    installFetchMock(routes)
+    const onWorkspaceResolved = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="studio"
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    onWorkspaceResolved.mockClear()
+
+    routes.workspaces[0] = { workspaceId: WS_ULID, segment: 'marketing' }
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="marketing"
+          onWorkspaceResolved={onWorkspaceResolved}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('marketing'))
+    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(screen.queryByText('beta')).toBeNull()
   })
 
   it('follows the workspace the address names when it changes under the page', async () => {
@@ -1694,5 +1845,52 @@ describe('DaemonIndexPage', () => {
     expect(screen.getByTestId('workspace-files-panel')).toBeTruthy()
     expect(screen.queryByRole('button', { name: 'Grid view' })).toBeNull()
     expect(screen.queryByRole('button', { name: 'Tree view' })).toBeNull()
+  })
+})
+
+// "Mark as Switcher" answers "where does the workspace name appear at all?"
+// with: not in the shell row — the document browser names it, as its own
+// heading. The shell half shipped first, which left the name nowhere a
+// sighted reader could see it; this is the other half.
+describe('the workspace names the page', () => {
+  it('heads the page with the workspace name, and keeps Documents as the list label', async () => {
+    installFetchMock({
+      workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team', displayName: 'Marketing' }],
+      // Keyed by the SEGMENT, because that is what the page addresses with:
+      // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
+      documentsByWorkspace: {
+        'marketing-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    const heading = screen.getByRole('heading', { level: 1 })
+    expect(heading.textContent).toBe('Marketing')
+    // Not merely absent from the h1 — the generic word moves to the region
+    // that actually holds the list, so nothing announces the page as
+    // "Documents" while the heading names the workspace.
+    expect(heading.className).not.toContain('sr-only')
+    expect(screen.getByRole('region', { name: 'Documents' })).toBeTruthy()
+  })
+
+  it('falls back through the identity layers rather than showing a raw id', async () => {
+    // A workspace with a segment and no display name: the middle layer is
+    // what a person chose, so it is what they read. workspaceLabel owns this
+    // precedence — the page must not re-derive it and skip a layer.
+    installFetchMock({
+      workspaces: [{ workspaceId: WS_ULID, segment: 'marketing-team' }],
+      // Keyed by the SEGMENT, because that is what the page addresses with:
+      // `selectedWorkspace` holds `workspaceHandle(...)`, not the id.
+      documentsByWorkspace: {
+        'marketing-team': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+    })
+
+    render(<DaemonIndexPage daemonBaseUrl={DAEMON_BASE_URL} onOpenDocument={vi.fn()} />)
+    await screen.findByText('alpha')
+
+    expect(screen.getByRole('heading', { level: 1 }).textContent).toBe('marketing-team')
   })
 })
