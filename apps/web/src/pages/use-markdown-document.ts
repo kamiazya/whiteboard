@@ -49,7 +49,13 @@ const log = getAppLogger('markdown-document')
 
 const pendingFlushes = new Map<string, Promise<unknown>>()
 
-const SAVE_DEBOUNCE_MS = 500
+/**
+ * Exported so a test waiting on a save waits on the REAL period rather than
+ * a copy of it. A browser test that hardcodes 500 goes quietly wrong the day
+ * this changes — and what it goes wrong as is a lost-keystrokes failure, not
+ * a timing one.
+ */
+export const SAVE_DEBOUNCE_MS = 500
 
 /**
  * Where this document's content lives for the lifetime of one load: the doc

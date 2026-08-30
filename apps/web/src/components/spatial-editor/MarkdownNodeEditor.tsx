@@ -32,8 +32,9 @@ import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { GFM } from '@lezer/markdown'
 import { type CSSProperties, useLayoutEffect, useRef } from 'react'
+import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
-import { markdownHighlightStyle, markdownStyleKeymap } from '../markdown-editor/SourcePane.js'
+import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
 import type { Box } from './geometry.js'
 
 export interface MarkdownNodeEditorProps {

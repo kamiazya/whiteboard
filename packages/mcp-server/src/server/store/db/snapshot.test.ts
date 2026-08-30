@@ -52,7 +52,15 @@ describe('snapshotDatabaseInto', () => {
     } finally {
       reader.close()
     }
-  })
+    // 60s, not the project's 10s. Seeding 3000 rows is 3000 sequential
+    // awaited round-trips — I/O- and IPC-bound work, which degrades hard
+    // under CPU contention rather than in proportion to it. Measured: 966ms
+    // on an idle tree, 1266ms with the whole mcp-node project running in
+    // parallel, and a 10s timeout on a CI shard. The budget is here to catch
+    // a hang, and at ~1.3s of real work it still does; sized on those
+    // numbers rather than on the failure, and only this case needs it (the
+    // other two seed 50 and 10 rows).
+  }, 60_000)
 
   /**
    * One file, not three. A backup holding a bare `whiteboard.db` needs no

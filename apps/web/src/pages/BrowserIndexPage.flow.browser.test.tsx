@@ -15,6 +15,7 @@ import { userEvent } from 'vitest/browser'
 import { clearWhiteboardDb } from '../test-utils/browser-document.js'
 import '../index.css'
 import { claimIsolatedWhiteboardDb } from '../test-utils/isolated-whiteboard-db.js'
+import { waitForMarkdownSaved } from '../test-utils/wait-for-saved.js'
 
 claimIsolatedWhiteboardDb('browserindexpage-flow')
 
@@ -36,31 +37,6 @@ function renderApp() {
     </div>,
   )
   return router
-}
-
-/**
- * Waits until a debounced save has actually LANDED for this document.
- *
- * Not `getByRole('button', { name: 'Saved' })`. A document that has never
- * been written is already `Saved` — correct for a reader, and useless as
- * proof that a write completed. That wait matched the state the page was
- * already in, so these tests navigated away with the write still pending and
- * read the loss later as lost keystrokes: `expected '# ' to contain
- * '# From the list'` after reopening, with a 15s budget the write never
- * needed because it was never going to happen.
- *
- * `data-last-saved-at` is absent until a write lands, so requiring it
- * together with a settled `saved` state is a TRANSITION rather than a label.
- */
-async function waitForSaved(): Promise<void> {
-  await waitFor(
-    () => {
-      const chip = document.querySelector('[data-testid="save-status-chip"]')
-      expect(chip?.getAttribute('data-save-state')).toBe('saved')
-      expect(chip?.getAttribute('data-last-saved-at')).toBeTruthy()
-    },
-    { timeout: 15_000 },
-  )
 }
 
 describe('browser list landing (browser — real IndexedDB)', () => {
@@ -129,7 +105,7 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toBe('# From the list')
     })
-    await waitForSaved()
+    await waitForMarkdownSaved()
 
     // Back again: both documents listed, the note marked as markdown.
     await router.navigate(-1)
