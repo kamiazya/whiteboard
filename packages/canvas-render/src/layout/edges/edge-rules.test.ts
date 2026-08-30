@@ -1,10 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
   addCost,
   COST_QUANTUM,
   dominantAxisOrder,
   facingLaneWindow,
+  fullyContains,
   hasRepairableProblem,
   lessCost,
   PENALTY_RULES,
@@ -89,6 +91,41 @@ describe('zero-bend-facing-first', () => {
     // One pixel of interpenetration and the same pair is gone: the straight
     // segment would run backwards through the overlap.
     expect(rule.generate(ctxFor(overlapping))).toEqual([])
+  })
+
+  fcTest.prop(
+    [
+      fc.record({
+        x: fc.integer({ min: -300, max: 300 }),
+        y: fc.integer({ min: -300, max: 300 }),
+        w: fc.integer({ min: 1, max: 200 }),
+        h: fc.integer({ min: 1, max: 200 }),
+      }),
+      fc.record({
+        x: fc.integer({ min: -300, max: 300 }),
+        y: fc.integer({ min: -300, max: 300 }),
+        w: fc.integer({ min: 1, max: 200 }),
+        h: fc.integer({ min: 1, max: 200 }),
+      }),
+    ],
+    withDefaults({ numRuns: 300 }),
+  )('offers at most ONE pair, because the two axes exclude each other', (fromRect, toRect) => {
+    // A structural fact, not a coincidence of this domain: a horizontal
+    // zero-bend needs an x-GAP plus a y-span overlap, and a vertical one needs
+    // a y-gap plus an x-span overlap — but a pair with an x-gap has no x-span
+    // overlap, so at most one can hold. Whichever does is also the dominant
+    // axis, since an axis with a gap carries the larger centre offset, so the
+    // rule's SECOND push is unreachable. Measured over 20000 pairs before it
+    // was written: lengths were 0 or 1, never 2.
+    const ranked = rule.generate({
+      dx: toRect.x + toRect.w / 2 - (fromRect.x + fromRect.w / 2),
+      dy: toRect.y + toRect.h / 2 - (fromRect.y + fromRect.h / 2),
+      fromRect,
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(ranked.length).toBeLessThanOrEqual(1)
   })
 
   it('excludes an interpenetrating pair even with ample span overlap', () => {
@@ -258,6 +295,34 @@ describe('SIDE_PREFERENCE_RULES', () => {
       'u-hook-span-exposed-first',
       'incumbent-wins-ties',
     ])
+  })
+})
+
+describe('fullyContains', () => {
+  const outer = rectAt(0, 0)
+
+  // All four comparisons are INCLUSIVE, so a rect sharing an edge with its
+  // container is still inside it — which is what lets a group frame hold a
+  // member flush against its own border. Nothing reached a coincident edge,
+  // and each side is its own comparison.
+  it.each([
+    ['left', rectAt(0, 10, 50, 50)],
+    ['top', rectAt(10, 0, 50, 50)],
+    ['right', rectAt(50, 10, 50, 50)],
+    ['bottom', rectAt(10, 50, 50, 50)],
+  ])('contains a rect flush against its %s edge', (_edge, inner) => {
+    expect(fullyContains(outer, inner)).toBe(true)
+  })
+
+  it('contains an identical rect — every edge coincident at once', () => {
+    expect(fullyContains(outer, rectAt(0, 0))).toBe(true)
+  })
+
+  it('rejects a rect that pokes out by a single pixel, on each side', () => {
+    expect(fullyContains(outer, rectAt(-1, 10, 50, 50))).toBe(false)
+    expect(fullyContains(outer, rectAt(10, -1, 50, 50))).toBe(false)
+    expect(fullyContains(outer, rectAt(51, 10, 50, 50))).toBe(false)
+    expect(fullyContains(outer, rectAt(10, 51, 50, 50))).toBe(false)
   })
 })
 

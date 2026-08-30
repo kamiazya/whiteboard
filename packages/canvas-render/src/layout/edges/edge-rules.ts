@@ -166,6 +166,14 @@ const zeroBendFacingFirst = {
     const zeroV = facingGapOk(ctx, 'v') && facingSpansOverlap(ctx.fromRect, ctx.toRect, 'v')
     const [pairFirst, pairSecond] = dominantAxisOrder(ctx.dx, ctx.dy, opposingH, opposingV)
     const [okFirst, okSecond] = dominantAxisOrder(ctx.dx, ctx.dy, zeroH, zeroV)
+    // `okSecond` is unreachable, and the pair is kept because the SYMMETRY is
+    // the rule: a horizontal zero-bend needs an x-gap plus a y-span overlap
+    // and a vertical one the mirror, so a pair with a gap on one axis has no
+    // span overlap on it and at most one can hold — and whichever does is the
+    // dominant axis, since an axis with a gap carries the larger centre
+    // offset. Pinned by a property beside the examples in `edge-rules.test.ts`
+    // (at most one pair, ever), so a change that makes both reachable fails
+    // there rather than silently relying on this branch never having run.
     const zero: SidePair[] = []
     if (okFirst) zero.push(pairFirst)
     if (okSecond) zero.push(pairSecond)
