@@ -52,3 +52,50 @@ export async function upsertWorkspaceRow(
     throw err
   }
 }
+
+/**
+ * The registry half of a workspace rename: an UPDATE of the two layers
+ * ADR-0019 lets a workspace's owner choose.
+ *
+ * Distinct from `upsertWorkspaceRow` rather than a flag on it, because the
+ * two want opposite things from an existing row — the upsert must never
+ * clobber identity (see above), and this must write it. Answers the row as
+ * it now stands so a caller does not read back through a second statement
+ * that another writer could have landed between.
+ *
+ * The unique index is what makes the collision check indivisible: SQLite
+ * refuses the UPDATE itself, so there is no window between a check and the
+ * write it authorises. The workspace's OWN segment is not a conflict —
+ * the row it collides with is itself, and `where id = ?` means the update
+ * is the row.
+ */
+export async function renameWorkspaceRow(
+  db: Database,
+  workspaceId: string,
+  identity: WorkspaceIdentity,
+): Promise<{ segment: string | null; displayName: string | null } | null> {
+  try {
+    const updated = await db
+      .updateTable('workspaces')
+      .set({
+        ...(identity.segment === undefined ? {} : { segment: identity.segment }),
+        ...(identity.displayName === undefined ? {} : { displayName: identity.displayName }),
+        updatedAt: Date.now(),
+      })
+      .where('id', '=', workspaceId)
+      .returning(['segment', 'displayName'])
+      .executeTakeFirst()
+    return updated ?? null
+  } catch (err) {
+    if (
+      identity.segment !== undefined &&
+      err instanceof Error &&
+      'code' in err &&
+      (err as { code?: unknown }).code === 'SQLITE_CONSTRAINT_UNIQUE' &&
+      err.message.includes('workspaces.segment')
+    ) {
+      throw new WorkspaceSegmentTakenError(identity.segment)
+    }
+    throw err
+  }
+}

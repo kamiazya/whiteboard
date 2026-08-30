@@ -28,12 +28,14 @@ import {
   type ListDocumentsInput,
   type MoveDocumentInput,
   planSubtreeMove,
+  type RenameWorkspaceInput,
   type ResolveDocumentByIdInput,
   type ResolveDocumentInput,
   resolveWorkspaceHandle,
   type SetDocumentNameInput,
   type WorkspaceEntry,
   WorkspaceNotFoundError,
+  WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '@kamiazya/whiteboard-ports'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
@@ -125,6 +127,40 @@ export class IdbDocumentIndex implements DocumentIndex {
 
   async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
     return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
+  }
+
+  /**
+   * Read, check and write inside ONE readwrite transaction, so the
+   * uniqueness check and the write it authorises cannot be separated. An
+   * IndexedDB transaction is the only thing available here that makes that
+   * true — there is no unique index on `segment` in this store, and a check
+   * followed by a separate `put` would let two renames both find the segment
+   * free.
+   */
+  async renameWorkspace({
+    workspaceId,
+    segment,
+    displayName,
+  }: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    return this.tx([WORKSPACES_STORE], 'readwrite', async (tx) => {
+      const store = tx.objectStore(WORKSPACES_STORE)
+      const rows = (await request(store.getAll())).map((row) => workspaceEntrySchema.parse(row))
+      const current = rows.find((row) => row.workspaceId === workspaceId)
+      if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
+      if (
+        segment !== undefined &&
+        rows.some((row) => row.segment === segment && row.workspaceId !== workspaceId)
+      ) {
+        throw new WorkspaceSegmentTakenError(segment)
+      }
+      const renamed: WorkspaceEntry = {
+        ...current,
+        ...(segment === undefined ? {} : { segment }),
+        ...(displayName === undefined ? {} : { displayName }),
+      }
+      await request(store.put(renamed, workspaceId))
+      return renamed
+    })
   }
 
   async createDocument(input: CreateDocumentInput): Promise<DocumentEntry> {

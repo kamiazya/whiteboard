@@ -98,7 +98,10 @@ describe('shell mark over a real document kept in this browser', () => {
         <AppShell daemon={false} />
       </MemoryRouter>,
     )
-    expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
+    // The CLAIM, not the control: the mark is the workspace switcher and
+    // stays on every page. What must clear is the keeper paint it was
+    // carrying for the document that just went away.
+    expect(screen.getByTestId('shell-mark-trigger')).toBeInTheDocument()
     expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBeNull()
   })
 })

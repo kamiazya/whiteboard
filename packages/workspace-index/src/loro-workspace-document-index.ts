@@ -43,6 +43,7 @@ import type {
   DocumentIndex,
   ListDocumentsInput,
   MoveDocumentInput,
+  RenameWorkspaceInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
@@ -68,6 +69,14 @@ import type { WorkspaceDocs } from './workspace-docs.js'
  */
 export interface WorkspaceRegistry {
   listWorkspaces(): Promise<WorkspaceEntry[]>
+  /**
+   * The registry's own write, for the same reason the read is here: a
+   * workspace's NAME and ADDRESS are registry rows, and the tree holds
+   * neither. Required rather than optional — an optional rename is one a
+   * composition root can leave unwired, and the failure would not be a
+   * missing feature but a rename that silently does nothing.
+   */
+  renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry>
 }
 
 /** `a/b/c` -> `a/b/x` when the subtree at `a/b` moves to `a/b/x`. */
@@ -109,6 +118,16 @@ export class LoroWorkspaceDocumentIndex implements DocumentIndex {
    */
   async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {
     return resolveWorkspaceHandle(await this.listWorkspaces(), handle)
+  }
+
+  /**
+   * Delegated for the same reason `listWorkspaces` is: identity lives in the
+   * registry, and the tree document this class owns holds a workspace's
+   * PLACEMENT, never its name. Nothing tree-shaped changes when a workspace
+   * is renamed.
+   */
+  async renameWorkspace(input: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    return this.registry.renameWorkspace(input)
   }
 
   /** A document's containers, for the content bridge. */

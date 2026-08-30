@@ -8,6 +8,7 @@ import type {
   DocumentIndex,
   ListDocumentsInput,
   MoveDocumentInput,
+  RenameWorkspaceInput,
   ResolveDocumentByIdInput,
   ResolveDocumentInput,
   SetDocumentNameInput,
@@ -21,6 +22,7 @@ import {
   DocumentPathTakenError,
   resolveWorkspaceHandle,
   WorkspaceNotFoundError,
+  WorkspaceSegmentTakenError,
 } from '../index.js'
 
 /**
@@ -82,6 +84,30 @@ export class InMemoryDocumentIndex implements DocumentIndex {
 
   async listWorkspaces(): Promise<WorkspaceEntry[]> {
     return [...this.#workspaces.values()]
+  }
+
+  async renameWorkspace({
+    workspaceId,
+    segment,
+    displayName,
+  }: RenameWorkspaceInput): Promise<WorkspaceEntry> {
+    const current = this.#workspaces.get(workspaceId)
+    if (current === undefined) throw new WorkspaceNotFoundError(workspaceId)
+    if (
+      segment !== undefined &&
+      [...this.#workspaces.values()].some(
+        (entry) => entry.segment === segment && entry.workspaceId !== workspaceId,
+      )
+    ) {
+      throw new WorkspaceSegmentTakenError(segment)
+    }
+    const renamed: WorkspaceEntry = {
+      ...current,
+      ...(segment === undefined ? {} : { segment }),
+      ...(displayName === undefined ? {} : { displayName }),
+    }
+    this.#workspaces.set(workspaceId, renamed)
+    return renamed
   }
 
   async resolveWorkspace(handle: string): Promise<WorkspaceEntry | null> {

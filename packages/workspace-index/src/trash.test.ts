@@ -16,6 +16,13 @@ import { beforeEach, describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
+/**
+ * A registry double for a test that never renames. Rejects rather than
+ * answering: a silent no-op would let a rename test pass against a double
+ * that cannot rename.
+ */
+const notRenamed = (): Promise<never> => Promise.reject(new Error('not implemented'))
+
 const WS = 'ws-trash'
 
 function inMemoryBlobStore(): BlobStore & { size: () => number } {
@@ -83,7 +90,10 @@ describe('deleting a document', () => {
   beforeEach(async () => {
     blobs = inMemoryBlobStore()
     docs = inMemoryWorkspaceDocs()
-    index = new LoroWorkspaceDocumentIndex(docs, blobs, { listWorkspaces: async () => [] })
+    index = new LoroWorkspaceDocumentIndex(docs, blobs, {
+      listWorkspaces: async () => [],
+      renameWorkspace: notRenamed,
+    })
     await index.createWorkspace({ workspaceId: WS })
   })
 

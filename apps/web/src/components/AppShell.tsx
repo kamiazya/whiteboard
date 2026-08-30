@@ -1,5 +1,6 @@
+import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { Settings } from 'lucide-react'
-import { lazy, Suspense, useState, useSyncExternalStore } from 'react'
+import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSettingsNudge } from '@/hooks/useSettingsNudge'
@@ -7,9 +8,9 @@ import { parseWorkspaceRoute, settingsPath } from '@/lib/app-routes'
 import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
-import { ConnectionStatus, isSyncOff } from './connection/ConnectionStatus.js'
-import { ShellMark } from './shell/ShellMark.js'
-import { WorkspaceSwitcher, type WorkspaceSwitcherSource } from './shell/WorkspaceSwitcher.js'
+import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
+import { ConnectionStatus, connectionLabel, isSyncOff } from './connection/ConnectionStatus.js'
+import { WorkspaceMenu, type WorkspaceSwitcherSource } from './shell/WorkspaceMenu.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -112,71 +113,100 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   // reconnect does not — it recovers on its own.
   const nudge = useSettingsNudge(daemon && !(connection !== null && isSyncOff(connection.state)))
   const daemonBaseUrl = connection?.daemonBaseUrl
+  // The rows live HERE rather than in the menu, because the popover's head
+  // names the current workspace and the head is the shell's. One fetch, two
+  // readers.
+  const [rows, setRows] = useState<readonly WorkspaceEntry[]>([])
+  const source = workspaces?.source
+  useEffect(() => {
+    if (source === undefined) return
+    let cancelled = false
+    source
+      .list()
+      .then((loaded) => {
+        if (!cancelled) setRows(loaded)
+      })
+      // A list that will not load leaves the mark naming the handle the
+      // address carries, which is still true. Failing the whole shell over
+      // it would take the settings gear down with it.
+      .catch(() => {})
+    return () => {
+      cancelled = true
+    }
+  }, [source])
+  const workspaceHandleInAddress = parseWorkspaceRoute(location.pathname)?.workspace ?? null
+  // The handle until the row lands: a true statement about where you are,
+  // and better than a blank in an accessible name.
+  const activeName =
+    workspaceHandleInAddress === null
+      ? undefined
+      : (() => {
+          const row = rows.find((w) => workspaceHandle(w) === workspaceHandleInAddress)
+          return row === undefined ? workspaceHandleInAddress : workspaceLabel(row)
+        })()
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
-      {connection ? (
-        // The ONE connection affordance: the mark signals the state and its
-        // popover carries the explanation and every recovery path. Re-pairing
-        // navigates top-level to the daemon's own /pair consent page, the
-        // same trust anchor first-time pairing uses.
-        <ConnectionStatus
-          state={connection.state}
-          daemonBaseUrl={daemonBaseUrl}
-          onRepair={
-            daemonBaseUrl === undefined
-              ? undefined
-              : () => {
-                  void beginPairingGrant({
-                    daemonBaseUrl,
-                    hostedOrigin: window.location.origin,
-                    sessionStorage: window.sessionStorage,
-                    navigate: (url) => window.location.assign(url),
-                  })
-                }
-          }
-          onWorkInBrowser={onWorkInBrowser}
-        >
-          {connection.state.keeper === 'browser' && (
-            <>
-              <p className="text-muted-foreground">
-                Connect a daemon (MCP) for version history, variations and merging. Once connected,
-                you can move this workspace to it from Settings — documents, their history and
-                images together.
-              </p>
-              <PromotedElsewhereNotice settingsStore={settingsStore} />
-              <Suspense fallback={null}>
-                <DaemonDetectedBanner
-                  settingsStore={settingsStore}
-                  fetch={window.fetch.bind(window)}
-                />
-              </Suspense>
-            </>
-          )}
-        </ConnectionStatus>
-      ) : (
-        // No page holds a live session, so there is no state to carry and
-        // nothing for a popover to say. The mark is then what it has always
-        // been — the way home — rather than a menu with one item in it.
-        <Link
-          to="/"
-          aria-label="Home"
-          className="shrink-0 rounded-md p-1 text-foreground/70 hover:bg-accent hover:text-foreground"
-        >
-          <ShellMark />
-        </Link>
-      )}
-      {workspaces && (
-        // The row's subject, right after the mark that carries its state.
-        // The workspace is the outermost layer of `/w/:workspace/d/:path`,
-        // so the address is where it is read from — the shell states what the
-        // URL says, and never a second opinion about it.
-        <WorkspaceSwitcher
-          current={parseWorkspaceRoute(location.pathname)?.workspace ?? null}
-          source={workspaces.source}
-          onSwitch={workspaces.onSwitch}
-        />
-      )}
+      {/* ONE carrier, and one trigger. The mark IS the switcher ("Mark as
+          Switcher"): it names the workspace in its accessible name, opens the
+          popover that lists the others, and carries the session state when a
+          page published one. It opens on every page — the workspace is a fact
+          everywhere, so there is always something for the popover to say —
+          which is why the plain-link-home shape is gone. It gained no
+          replacement destination: a whole-account view of every document is a
+          state this product does not have, and leaving a document is the
+          page's own affordance. */}
+      <ConnectionStatus
+        state={connection?.state ?? null}
+        daemonBaseUrl={daemonBaseUrl}
+        {...(activeName === undefined ? {} : { workspaceName: activeName })}
+        workspaceMenu={
+          workspaces && workspaceHandleInAddress !== null ? (
+            <WorkspaceMenu
+              current={workspaceHandleInAddress}
+              workspaces={rows}
+              source={workspaces.source}
+              onSwitch={workspaces.onSwitch}
+              sessionLabel={connectionLabel(connection?.state ?? null)}
+              onRenamed={(entry) =>
+                setRows((current) =>
+                  current.map((row) => (row.workspaceId === entry.workspaceId ? entry : row)),
+                )
+              }
+            />
+          ) : undefined
+        }
+        onRepair={
+          daemonBaseUrl === undefined
+            ? undefined
+            : () => {
+                void beginPairingGrant({
+                  daemonBaseUrl,
+                  hostedOrigin: window.location.origin,
+                  sessionStorage: window.sessionStorage,
+                  navigate: (url) => window.location.assign(url),
+                })
+              }
+        }
+        onWorkInBrowser={onWorkInBrowser}
+      >
+        {connection?.state.keeper === 'browser' && (
+          <>
+            <p className="text-muted-foreground">
+              Connect a daemon (MCP) for version history, variations and merging. Once connected,
+              you can move this workspace to it from Settings — documents, their history and images
+              together.
+            </p>
+            <PromotedElsewhereNotice settingsStore={settingsStore} />
+            <Suspense fallback={null}>
+              <DaemonDetectedBanner
+                settingsStore={settingsStore}
+                fetch={window.fetch.bind(window)}
+              />
+            </Suspense>
+          </>
+        )}
+      </ConnectionStatus>
       <Popover>
         <PopoverTrigger asChild>
           <button

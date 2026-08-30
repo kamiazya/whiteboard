@@ -1,4 +1,5 @@
 import { readDaemonTokenOnce } from '@kamiazya/whiteboard-mcp/api-client'
+import type { RenameWorkspaceInput } from '@kamiazya/whiteboard-ports'
 import { lazy, Suspense, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import type { AppShellWorkspaces } from './components/AppShell.js'
@@ -457,6 +458,10 @@ export function App({ providerState }: AppProps) {
         create: (displayName: string) =>
           import('./lib/browser-workspaces.js').then((m) =>
             m.createBrowserWorkspaceNamed(displayName),
+          ),
+        rename: (workspaceId: string, input: Omit<RenameWorkspaceInput, 'workspaceId'>) =>
+          import('./lib/browser-workspaces.js').then((m) =>
+            m.renameBrowserWorkspace(workspaceId, input),
           ),
       },
       // An in-SPA route change (ADR-0019), not a document load. The address

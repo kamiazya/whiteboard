@@ -112,32 +112,80 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   exception gets documented here.
 - **What belongs in the shell is what does not change when you open a
   different document.** Which workspace you are in, and who keeps it, are
-  such facts, so the mark and the workspace switcher beside it are the
-  shell's; the document's own title, actions and history are the page's. The
-  dividing question is not importance, it is whether the answer survives
-  navigation.
-- **The switcher reads the address; it never holds a second opinion about
-  it.** `WorkspaceSwitcher` takes the workspace it names from
-  `parseWorkspaceRoute(location.pathname)`, because the workspace is the
-  outermost layer of `/w/:workspace/d/:path` and the URL is what decides
-  which one is active. That is also why it sits in the shell rather than on
-  the document list: the layer is present on every page, and a control
-  reachable only from the list could not change it from a document.
+  such facts, so the mark is the shell's; the document's own title, actions
+  and history are the page's. The dividing question is not importance, it is
+  whether the answer survives navigation.
+- **The mark IS the switcher, and the row does not name the workspace.** The
+  strip is `[mark] ALPHA <spacer> gear` and nothing else. The mark states
+  which workspace you are in through its ACCESSIBLE name
+  (`Workspace: Design team — Synced`), and its popover is where that name is
+  drawn, beside the session word. "Where does the workspace name appear at
+  all?" was answered deliberately: the shell need not name it, and the
+  document browser should, as its own heading — because the four places
+  content cannot tell you (the index, settings, an empty workspace, and the
+  moment after a switch) are exactly where a page heading is looking at you
+  anyway.
 
-  Until the list of workspaces answers, the trigger shows the handle the
-  address carries. A handle is a true statement about where you are, and a
-  blank or a spinner in a 40px row is not an improvement on one.
+  The popover reads head, then `Switch to`, then the workspaces (a tick on
+  the current one, `aria-current` for anyone not reading ticks), then `New
+  workspace`. It deliberately ends there. The mark's own source calls it
+  "click = go home", and becoming a trigger amends that — but the amendment is
+  that the mark stops being a destination, NOT that the popover gains one. A
+  cross-workspace "all documents" entry would promise a state this product
+  does not have, and the ways out already exist: `WorkspaceTopBar`'s back
+  leaves a document, and every workspace is reachable from the list.
 
-  It is shown even when there is exactly one workspace. That is the
-  difference between a switcher and a filter: the daemon list control it
-  replaced hid itself below two, which is right for narrowing rows and wrong
-  for the only door out of one workspace.
+  It opens on EVERY page, including one holding no session. The workspace is
+  a fact everywhere, so there is always something for the popover to say, and
+  the older shape — a plain link home until a page published a session — would
+  put the only door out of a workspace behind having opened a document first.
 
-  What it OFFERS follows the keeper. Creation appears only where the keeper
-  can actually create — the browser mints its own workspaces, the daemon
-  publishes no write surface for them yet — which is the standing rule below
-  applied to this control. Absent, not disabled: a disabled control says "not
-  right now" about something that is not there at all.
+  What the popover reads FROM is the address: the workspace is the outermost
+  layer of `/w/:workspace/d/:path`, and the URL is what decides which one is
+  active. Until the rows load, the mark names the handle the address carries —
+  a true statement about where you are, and better than a blank in an
+  accessible name.
+
+  The list is shown even at exactly one workspace. That is the difference
+  between a switcher and a filter: the daemon list control it replaced hid
+  itself below two, which is right for narrowing rows and wrong for the only
+  door out of one workspace.
+
+  What it OFFERS follows the keeper. Creation and renaming appear only where
+  the keeper can honour them — the browser mints and renames its own, the
+  daemon publishes no write surface for workspaces yet. Absent, not disabled:
+  a disabled control says "not right now" about something that is not there at
+  all. Renaming additionally waits for the rows, because its form starts from
+  the name and URL the workspace HAS, and one pre-filled from a handle alone
+  would offer to overwrite a display name it never read.
+
+  **The head IS the editor — there is no rename form.** This repo already
+  retired the pencil-menu rename for a document title you edit in place, and
+  ADR-0006 says an object is "named in place afterwards"; a `Rename workspace`
+  item would be that shape rebuilt one layer up. So the popover opens on the
+  name in a box, with the URL directly beneath it, and no Save button
+  anywhere. Where the keeper cannot write, both are `readOnly` rather than
+  hidden — the name is the head, and hiding the subject to say "you cannot
+  edit it" removes the subject.
+
+  **The two fields commit differently, and the difference is the point.** The
+  name commits on the keystroke, exactly as the document title does, and
+  Escape writes the PREVIOUS name back because there is nothing left to
+  discard. The URL waits for Enter or blur: committing it moves the address
+  and navigates, so per-keystroke would move it once per character, through
+  intermediate values that are real addresses and can collide. Escape there
+  reverts the box without writing.
+
+  The URL is drawn as the URL — a `/w/` prefix and the editable part — and
+  carries no visible label. ADR-0019 calls the layer the `segment`, which is
+  not a word to put in front of somebody, and every plainer substitute
+  invents a FOURTH name for a layer that has three. The warning that old
+  links will break appears only once the box actually differs from what is
+  stored; permanently visible, it is furniture nobody reads.
+
+  Each layer is written on its own, never as a form submitting both: an
+  unchanged URL sent back would put every name edit behind the one write that
+  can be refused for a collision.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over

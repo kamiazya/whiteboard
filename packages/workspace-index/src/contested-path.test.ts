@@ -16,6 +16,13 @@ import { describe, expect, it } from 'vitest'
 import { LoroWorkspaceDocumentIndex } from './loro-workspace-document-index.js'
 import type { WorkspaceDocs } from './workspace-docs.js'
 
+/**
+ * A registry double for a test that never renames. Rejects rather than
+ * answering: a silent no-op would let a rename test pass against a double
+ * that cannot rename.
+ */
+const notRenamed = (): Promise<never> => Promise.reject(new Error('not implemented'))
+
 const OWNER_ID = '01ARZ3NDEKTSV4RRFFQ69G5FA1'
 const RIVAL_ID = '01ARZ3NDEKTSV4RRFFQ69G5FA2'
 
@@ -58,6 +65,7 @@ async function contestedIndex(): Promise<LoroWorkspaceDocumentIndex> {
 
   return new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
     listWorkspaces: async () => [],
+    renameWorkspace: notRenamed,
   })
 }
 
@@ -91,6 +99,7 @@ describe('contested paths', () => {
     createWorkspaceDocumentAtPath(doc, { path: 'solo', documentId: OWNER_ID, kind: 'spatial' })
     const index = new LoroWorkspaceDocumentIndex(singleDocWorkspaceDocs(doc), unusedBlobStore, {
       listWorkspaces: async () => [],
+      renameWorkspace: notRenamed,
     })
     const entry = await index.resolveDocument({ workspaceId: 'ws', path: 'solo' })
     expect(entry?.documentId).toBe(OWNER_ID)
