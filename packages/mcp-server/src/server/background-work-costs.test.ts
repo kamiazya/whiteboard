@@ -6,6 +6,9 @@ import { LOOP_COSTS, stallCeilingMs } from './background-work-costs.js'
 
 const SERVER_SRC = fileURLToPath(new URL('.', import.meta.url))
 
+/** Where workers are declared and armed. Same pair `background-work.guard.test.ts` walks. */
+const COMPOSITION_ROOTS = ['http-server.ts', 'server-mode-http.ts'] as const
+
 /**
  * Workers whose ceiling no test asserts, and why that is right rather than
  * missing.
@@ -86,6 +89,41 @@ describe('every declared stall ceiling is asserted by a test', () => {
       expect(cost, `${name} is exempted but is not a declared worker`).toBeDefined()
       expect(cost?.runs, `${name} is exempted but does not run in-process`).toBe('in-process')
       expect(asserted.has(name), `${name} is exempted but a test asserts it anyway`).toBe(false)
+    }
+  })
+
+  /**
+   * The bypass, and it is the one that matters: `BackgroundWork.loop` takes a
+   * `LoopCost`, so a new worker can declare `{ runs: 'in-process',
+   * stallCeilingMs: 0, ... }` INLINE in a composition root and never appear
+   * in `LOOP_COSTS` at all. That typechecks, passes the arming guard, and
+   * passes the coverage test above — reinstating the unbacked number this
+   * whole file exists to prevent, one level to the side.
+   *
+   * So every declaration has to come through the map, and has to come through
+   * its OWN entry: a worker named `x` reaching for `LOOP_COSTS['y']` would
+   * publish the wrong worker's ceiling and be asserted by the wrong test.
+   */
+  it('leaves no worker declaring its cost inline, or under another name', async () => {
+    for (const root of COMPOSITION_ROOTS) {
+      const source = await readFile(join(SERVER_SRC, root), 'utf8')
+      // Comments first: these files discuss `loop:` and the registry in prose.
+      const code = source.replace(/\/\*[\s\S]*?\*\//g, '').replace(/\/\/[^\n]*/g, '')
+
+      const declarations = [...code.matchAll(/name: '([^']+)',[\s\S]*?loop: ([^,\n]+)/g)]
+      // The scan reached something: a pattern that stopped matching would
+      // otherwise report every root as clean.
+      expect(declarations.length, `${root} declares no workers`).toBeGreaterThan(0)
+
+      for (const declaration of declarations) {
+        const [, name, loop] = declaration
+        expect(
+          loop,
+          `${root}: ${name} must read LOOP_COSTS['${name}'] — an inline literal is a number ` +
+            "nothing asserts, and another worker's entry publishes the wrong ceiling and is " +
+            'checked by the wrong test',
+        ).toBe(`LOOP_COSTS['${name}']`)
+      }
     }
   })
 
