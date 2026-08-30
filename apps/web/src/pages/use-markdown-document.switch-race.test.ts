@@ -26,10 +26,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { act } from 'react'
 import { describe, expect, it } from 'vitest'
 import type { LoroStoreLike } from './use-browser-document-controller.js'
-import { useMarkdownDocument } from './use-markdown-document.js'
-
-/** Debounce the hook's scheduler uses; waited out rather than faked. */
-const SAVE_DEBOUNCE_MS = 500
+import { SAVE_DEBOUNCE_MS, useMarkdownDocument } from './use-markdown-document.js'
 
 interface GatedStore extends LoroStoreLike {
   /** Every save, with the id it was addressed to. */
