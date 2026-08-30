@@ -150,6 +150,41 @@ test('a report of nothing BUT recorded equivalents says so instead of going quie
   assert.doesNotMatch(body, /\| where \|/)
 })
 
+test('an entry the run did not produce is reported, not silently kept', () => {
+  // The ledger's other decay, and the half a source scan cannot see: the
+  // expression is still in the file, so the entry looks live, while the run
+  // no longer produces the survivor it records — most likely because a test
+  // now kills it, which makes the entry assert something false.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { unspent } = summarize(sourced(SOURCE, [gt('Killed', 1, 11, 16)]), known)
+
+  assert.deepEqual(unspent, [
+    { file: 'src/a.ts', key: 'EqualityOperator: a > b -> a >= b', left: 1 },
+  ])
+
+  const body = renderComment(sourced(SOURCE, [gt('Killed', 1, 11, 16)]), MARKER, known)
+  assert.match(body, /did not show up/)
+  assert.match(body, /a > b -> a >= b/)
+})
+
+test('a ledger the run spends in full reports no leftovers', () => {
+  // The other direction, so the check above cannot pass by reporting always.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const body = renderComment(sourced(SOURCE, [gt('Survived', 1, 11, 16)]), MARKER, known)
+
+  assert.doesNotMatch(body, /did not show up/)
+})
+
+test('leftovers are counted only for a file this run actually mutated', () => {
+  // A diff-scoped PR run mutates a subset of the lane. Reading the ledger
+  // instead of the report would flag every entry of every file the diff did
+  // not touch, on every PR.
+  const known = { 'src/b.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { unspent } = summarize(sourced(SOURCE, [gt('Killed', 1, 11, 16)]), known)
+
+  assert.deepEqual(unspent, [])
+})
+
 test('an empty ledger leaves the comment exactly as it was', () => {
   const mutants = [gt('Survived', 1, 11, 16)]
   assert.equal(

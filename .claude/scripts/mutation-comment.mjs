@@ -52,6 +52,7 @@ const UNDETECTED = new Set(['Survived', 'NoCoverage'])
 export function summarize(report, knownEquivalent = {}) {
   const counts = { Killed: 0, Timeout: 0, Survived: 0, NoCoverage: 0, other: 0 }
   const survivors = []
+  const unspent = []
   let settled = 0
   for (const [file, entry] of Object.entries(report.files ?? {})) {
     // A ceiling per key, spent in report order: the (N+1)th of a mutation
@@ -78,6 +79,13 @@ export function summarize(report, knownEquivalent = {}) {
         })
       }
     }
+    // Budget this run did not spend: the ledger claims N survivors of this
+    // mutation and the run produced fewer. Only meaningful for a file the run
+    // actually mutated, which is why it is collected inside the loop over
+    // `report.files` rather than over the ledger.
+    for (const [key, left] of budget) {
+      if (left > 0) unspent.push({ file, key, left })
+    }
   }
   const detected = counts.Killed + counts.Timeout
   const undetected = counts.Survived + counts.NoCoverage
@@ -89,6 +97,7 @@ export function summarize(report, knownEquivalent = {}) {
     score: scored === 0 ? null : (detected / scored) * 100,
     survivors,
     settled,
+    unspent,
   }
 }
 
@@ -105,7 +114,7 @@ function cell(text) {
 }
 
 export function renderComment(report, marker, knownEquivalent = {}) {
-  const { counts, score, survivors, settled, total } = summarize(report, knownEquivalent)
+  const { counts, score, survivors, settled, total, unspent } = summarize(report, knownEquivalent)
   if (total === 0) return ''
 
   const recorded = settled === 0 ? '' : ` · ${settled} already recorded as equivalent`
@@ -137,6 +146,27 @@ export function renderComment(report, marker, knownEquivalent = {}) {
     }
     if (survivors.length > MAX_ROWS) {
       lines.push('', `…and ${survivors.length - MAX_ROWS} more — the full report is the artifact.`)
+    }
+  }
+  if (unspent.length > 0) {
+    // The ledger's own decay, and the half a source scan cannot see: the
+    // expression is still in the file, so the entry looks live, but the run
+    // no longer produces the survivor it records. Either the mutant is killed
+    // now — in which case the entry asserts something false and should go —
+    // or it is the noise floor, which is why this is a prompt and not a
+    // failure.
+    lines.push(
+      '',
+      `**${unspent.length} recorded equivalent${unspent.length === 1 ? '' : 's'} did not show up`,
+      'in this run.** The entry says this mutation survives and cannot be killed; the run says it',
+      'was not there to settle. If a test now kills it, the entry is asserting something false —',
+      'drop it. Re-run before acting: an entry can go missing to the same noise floor as a score.',
+      '',
+      '| file | recorded mutation | unspent |',
+      '| --- | --- | --- |',
+    )
+    for (const entry of unspent.slice(0, MAX_ROWS)) {
+      lines.push(`| \`${entry.file}\` | ${cell(entry.key)} | ${entry.left} |`)
     }
   }
   lines.push('', '_Report-only: this never blocks the merge._')

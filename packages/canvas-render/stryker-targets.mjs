@@ -63,7 +63,11 @@ export const MUTATED = [
  * whose ORIGINAL EXPRESSION is no longer in that file. The second is how this
  * decays in practice — rewrite a condition here and its entries match no
  * mutant ever again, while the ledger goes on claiming the findings are
- * settled.
+ * settled. The third case a source scan cannot reach — the expression is still
+ * there but a test now KILLS the mutation, so the entry asserts something
+ * false — is reported by the sticky comment, which lists the recorded
+ * equivalents a run did not produce. It is a prompt rather than a failure,
+ * because an entry can go missing to the same noise floor as a score.
  *
  * Nothing here is taken on trust: each was verified either algebraically or
  * by applying the edit and running the suite. Add an entry only with that
