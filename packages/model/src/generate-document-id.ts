@@ -4,8 +4,13 @@ const TIME_CHARS = 10
 const RANDOM_CHARS = 16
 
 /**
- * Generates a canonical ULID matching model's `documentIdSchema`
- * (`/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/`). The 48-bit millisecond timestamp is
+ * Generates a canonical ULID matching model's `documentIdSchema` — and
+ * `workspaceCanonicalIdSchema`, which ADR-0019 gave the same shape on
+ * purpose. Both delegate to `ULID_PATTERN`, and the guard against confusing
+ * the two is those distinct schemas rather than distinct generators, so a
+ * caller minting a workspace id calls this one. (`/^[0-7][0-9A-HJKMNP-TV-Z]{25}$/`.)
+ *
+ * The 48-bit millisecond timestamp is
  * encoded big-endian into the first 10 base32 characters; 80 bits of
  * cryptographic entropy fill the remaining 16.
  *
