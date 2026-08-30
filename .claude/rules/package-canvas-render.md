@@ -1049,6 +1049,17 @@ the table alone.
   the suite. That file is excluded from `mutate` for exactly that reason, and
   the general habit is the one `diagnosis-evidence` already asks for — apply
   the edit, run the suite, watch it stay green.
+  A NARROW selection is not required for that to happen, which is the part
+  the `seed.ts` story understates. Measured on `scene-digest.ts`: the mutant
+  turning `minY = Math.min(...)` into `Math.max(...)` came back Survived from
+  a run that Stryker itself lists as covered by 33 tests across five files —
+  including a differential oracle that catches it 6 times out of 6 when the
+  same edit is applied by hand. Within that one file the number of tests
+  actually completed per mutant ranged from 1 to 57 (the five files hold 57),
+  with 75 mutants judged on a single test. So read the SCORE of a file whose
+  module few tests import as a weak signal, and treat its survivor list as a
+  set of hypotheses to check rather than a worklist to burn down — the
+  difference is measured in hours.
   It also pays the other way: a survivor whose LOCATION looks obviously
   killable is often a sub-expression, not the statement. `edge-crossing-
   sweep.ts:85` reported `ConditionalExpression -> true` on a three-way `&&`,
