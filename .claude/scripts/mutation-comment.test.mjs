@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { renderComment, summarize } from './mutation-comment.mjs'
+import { mutantKey, renderComment, summarize } from './mutation-comment.mjs'
 
 const MARKER = '<!-- test-marker -->'
 
@@ -75,4 +75,85 @@ test('a replacement cannot break out of its table cell', () => {
   // Four UNESCAPED pipes: the three column separators plus the closing one.
   assert.equal(row.replaceAll('\\|', '').split('|').length - 1, 4)
   assert.match(row, /a \\\|b\\\| 'c'/)
+})
+
+// --- KNOWN_EQUIVALENT ---------------------------------------------------
+//
+// A survivor that cannot be killed is a settled finding, and re-reporting it
+// on every PR is how a comment teaches its readers to skip it — one file
+// carries 23, more than the whole table holds. What must NOT happen is a mute:
+// a recorded count is a ceiling, and the mutant past it is news again.
+
+const sourced = (source, mutants) => ({ files: { 'src/a.ts': { source, mutants } } })
+const SOURCE = 'const x = a > b\nconst y = c > d\n'
+const gt = (status, line, column, endColumn) =>
+  mutant(status, {
+    replacement: 'a >= b',
+    location: { start: { line, column }, end: { line, column: endColumn } },
+  })
+
+test('the mutant key names the ORIGINAL expression, not the line it sat on', () => {
+  // A line number identifies a mutant only until something is inserted above
+  // it, at which point every entry goes stale at once and the whole list comes
+  // back as new survivors.
+  assert.equal(
+    mutantKey(SOURCE, gt('Survived', 1, 11, 16)),
+    'EqualityOperator: a > b -> a >= b',
+  )
+})
+
+test('a recorded equivalent is counted, not listed', () => {
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { survivors, settled } = summarize(sourced(SOURCE, [gt('Survived', 1, 11, 16)]), known)
+
+  assert.equal(survivors.length, 0)
+  assert.equal(settled, 1)
+})
+
+test('the recorded count is a CEILING — one more of the same mutation is news', () => {
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { survivors, settled } = summarize(
+    sourced(SOURCE, [gt('Survived', 1, 11, 16), gt('Survived', 1, 11, 16)]),
+    known,
+  )
+
+  assert.equal(settled, 1)
+  assert.equal(survivors.length, 1)
+})
+
+test('a different expression is never covered by another entry', () => {
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 5 } }
+  const { survivors } = summarize(sourced(SOURCE, [gt('Survived', 2, 11, 16)]), known)
+
+  assert.equal(survivors.length, 1)
+})
+
+test('a recorded survivor still counts against the SCORE', () => {
+  // Equivalent or not, the tests did not detect it. Discounting it would turn
+  // the ledger into a way to buy a better number.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { score } = summarize(
+    sourced(SOURCE, [gt('Survived', 1, 11, 16), gt('Killed', 2, 11, 16)]),
+    known,
+  )
+
+  assert.equal(score, 50)
+})
+
+test('a report of nothing BUT recorded equivalents says so instead of going quiet', () => {
+  // Silence would read as "the lane did not run"; a table would read as debt.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const body = renderComment(sourced(SOURCE, [gt('Survived', 1, 11, 16)]), MARKER, known)
+
+  assert.match(body, /Nothing NEW survived/)
+  assert.match(body, /already recorded as equivalent/)
+  assert.doesNotMatch(body, /\| where \|/)
+})
+
+test('an empty ledger leaves the comment exactly as it was', () => {
+  const mutants = [gt('Survived', 1, 11, 16)]
+  assert.equal(
+    renderComment(sourced(SOURCE, mutants), MARKER, {}),
+    renderComment(sourced(SOURCE, mutants), MARKER),
+  )
 })

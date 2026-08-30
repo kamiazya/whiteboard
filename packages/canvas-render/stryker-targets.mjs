@@ -41,3 +41,58 @@ export const MUTATED = [
   // report is known wrong does not belong in a lane whose whole output is a
   // list of survivors to trust.
 ]
+
+/**
+ * Survivors that NO test can kill, because the mutation does not change what
+ * the code does. They are a real triage answer rather than debt, and without
+ * somewhere to record them the same set is re-investigated every time the
+ * lane runs — `edge-crossing-sweep.ts` alone reports 23 of them on every
+ * report, which is more than the PR comment's whole table holds, so one file's
+ * settled findings would hide every other file's live one.
+ *
+ * An entry is a CEILING, not a mute: the count is how many of that exact
+ * mutation were seen and shown to be equivalent, and the (N+1)th is reported
+ * like any other survivor. The key names the original expression as well as
+ * the replacement so it survives edits elsewhere in the file — a line number
+ * would resurrect the whole list on the next unrelated commit — at the cost
+ * that a genuinely new survivor of the SAME mutation on the SAME expression
+ * hides until it exceeds the count.
+ *
+ * Nothing here is taken on trust: each was verified either algebraically or
+ * by applying the edit and running the suite. Add an entry only with that
+ * done, and put the REASON next to the code as an invariant, not here — a
+ * list of survivors goes stale, and an invariant is what a reader needs
+ * anyway.
+ */
+export const KNOWN_EQUIVALENT = {
+  // Every one of these is the broad phase, whose comparisons cannot change
+  // the answer in either direction, or a narrow-phase boundary whose two
+  // sides compute the same value. The invariant is on `buildPairwiseScores`;
+  // the algebra for `hi > lo`, `denom < 0` and `axisLength` is in the clause
+  // each sits in. Hand-verified: deleting the y-gate, dropping the parallel
+  // early return, and seeding either array with junk each leave all 983
+  // canvas-render tests green.
+  'src/layout/edges/edge-crossing-sweep.ts': {
+    'ArithmeticOperator: 1 / COST_QUANTUM -> 1 * COST_QUANTUM': 1,
+    'ArithmeticOperator: s1.edge - s2.edge -> s1.edge + s2.edge': 1,
+    'ArithmeticOperator: s1.maxX - s2.maxX -> s1.maxX + s2.maxX': 1,
+    'ArrayDeclaration: [] -> ["Stryker was here"]': 2,
+    'ConditionalExpression: active[i]!.maxX >= segment.minX -> true': 1,
+    'ConditionalExpression: denom === 0 -> false': 1,
+    'ConditionalExpression: dx === 0 -> false': 1,
+    'ConditionalExpression: dy === 0 -> false': 1,
+    'ConditionalExpression: illegible === 0 -> true': 1,
+    'ConditionalExpression: other.maxY < segment.minY -> false': 1,
+    'ConditionalExpression: other.maxY < segment.minY || other.minY > segment.maxY -> false': 1,
+    'ConditionalExpression: other.minY > segment.maxY -> false': 1,
+    'ConditionalExpression: overlap === 0 && illegible === 0 && crossings === 0 -> false': 1,
+    'EqualityOperator: active[i]!.maxX >= segment.minX -> active[i]!.maxX > segment.minX': 1,
+    'EqualityOperator: denom < 0 -> denom <= 0': 1,
+    'EqualityOperator: hi > lo -> hi >= lo': 2,
+    'EqualityOperator: illegible === 0 -> illegible !== 0': 1,
+    'EqualityOperator: other.edge < segment.edge -> other.edge <= segment.edge': 1,
+    'EqualityOperator: other.maxY < segment.minY -> other.maxY <= segment.minY': 1,
+    'EqualityOperator: other.minY > segment.maxY -> other.minY >= segment.maxY': 1,
+    'LogicalOperator: other.maxY < segment.minY || other.minY > segment.maxY -> other.maxY < segment.minY && other.minY > segment.maxY': 1,
+  },
+}

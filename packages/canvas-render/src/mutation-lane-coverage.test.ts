@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MUTATED } from '../stryker-targets.mjs'
+import { KNOWN_EQUIVALENT, MUTATED } from '../stryker-targets.mjs'
 
 /**
  * The mutation lane covers a LIST of modules, not the package, and a list's
@@ -50,6 +50,25 @@ describe('the mutation lane covers what it says it covers', () => {
     // silently mutates nothing, which reads exactly like a covered file.
     const onDisk = new Set(production.map((path) => path.replace(/^\.\//, 'src/')))
     expect(MUTATED.filter((entry: string) => !onDisk.has(entry))).toEqual([])
+  })
+
+  it('records equivalents only for files the lane actually mutates', () => {
+    // An entry for a file outside `MUTATED` suppresses nothing and reads as
+    // triage that happened. The likely way to get one is renaming a module and
+    // updating only the list above.
+    const covered = new Set(MUTATED)
+    expect(Object.keys(KNOWN_EQUIVALENT).filter((file) => !covered.has(file))).toEqual([])
+  })
+
+  it('records a positive count for every equivalent it names', () => {
+    // A zero or negative count suppresses nothing while looking like it does,
+    // which is the one way this ledger can quietly stop working.
+    const bad = Object.entries(KNOWN_EQUIVALENT).flatMap(([file, mutants]) =>
+      Object.entries(mutants)
+        .filter(([, count]) => !Number.isInteger(count) || count < 1)
+        .map(([key]) => `${file} :: ${key}`),
+    )
+    expect(bad).toEqual([])
   })
 
   it('excludes seed.ts, whose survivors this tool reports falsely', () => {
