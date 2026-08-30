@@ -46,6 +46,7 @@ const sources = import.meta.glob(
     './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
     './pages/use-markdown-document.ts',
+    './pages/BrowserDocumentPage.tsx',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -73,6 +74,7 @@ const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
 const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
+const BROWSER_DOCUMENT_PAGE = './pages/BrowserDocumentPage.tsx'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
@@ -239,6 +241,23 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
     'no subject: keyed BY the document id — `schedulerFor` replaces it whenever the id differs, so it corrects itself rather than going stale',
 }
 
+// The page itself, not a panel inside it. It keeps its own document
+// switching rather than remounting — `App.tsx` says so at the mount site —
+// so everything it holds about a document has to be dropped by hand.
+const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  // The one that bit: a bare boolean over `triggerCleanup()`, which acts on
+  // whatever document the controller currently holds. Confirmed after a
+  // switch, it deleted the document that had arrived.
+  confirmDelete: 'cleared on switch',
+  duplicateError: 'cleared on switch',
+  isDuplicating: 'cleared on switch',
+
+  isFullscreen:
+    'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
+  documents:
+    'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
+}
+
 const CASES = [
   { file: PANEL, ledger: PANEL_STATE, label: 'WorkspaceFilesPanel', scanRefs: false },
   { file: DAEMON_INDEX, ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: false },
@@ -254,6 +273,12 @@ const CASES = [
     ledger: MARKDOWN_DOCUMENT_STATE,
     label: 'useMarkdownDocument',
     scanRefs: true,
+  },
+  {
+    file: BROWSER_DOCUMENT_PAGE,
+    ledger: BROWSER_DOCUMENT_PAGE_STATE,
+    label: 'BrowserDocumentPage',
+    scanRefs: false,
   },
 ] as const
 
