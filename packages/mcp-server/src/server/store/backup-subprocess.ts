@@ -43,6 +43,8 @@ type SpawnBackup = (
 export interface BackupSubprocessOptions {
   dataDir: string
   outputDir: string
+  /** Shared blob mirror for the schedule; absent keeps the backup self-contained. */
+  mirrorRoot?: string
   env?: NodeJS.ProcessEnv
   spawnBackup?: SpawnBackup
 }
@@ -58,8 +60,9 @@ export function buildBackupSpawnArgs(options: {
   env: NodeJS.ProcessEnv
   dataDir: string
   outputDir: string
+  mirrorRoot?: string
 }): { command: string; args: string[] } {
-  const { env, dataDir, outputDir } = options
+  const { env, dataDir, outputDir, mirrorRoot } = options
   // Inline form only — the CLI rejects the space form outright, to stop a
   // missing value silently swallowing the next token.
   const cliArgs = [
@@ -68,6 +71,7 @@ export function buildBackupSpawnArgs(options: {
     '--json',
     `--data-dir=${dataDir}`,
     `--output-dir=${outputDir}`,
+    ...(mirrorRoot ? [`--mirror-dir=${mirrorRoot}`] : []),
   ]
   if (env.WHITEBOARD_DEV === '1') {
     return {
@@ -92,14 +96,19 @@ export function buildBackupSpawnArgs(options: {
 export async function runBackupInSubprocess(
   options: BackupSubprocessOptions,
 ): Promise<ServerBackupOutcome> {
-  const { dataDir, outputDir } = options
+  const { dataDir, outputDir, mirrorRoot } = options
   const env = options.env ?? process.env
   const spawnBackup: SpawnBackup =
     options.spawnBackup ??
     ((command, args, opts) =>
       spawn(command, [...args], { ...opts, stdio: ['ignore', 'pipe', 'pipe'] }))
 
-  const { command, args } = buildBackupSpawnArgs({ env, dataDir, outputDir })
+  const { command, args } = buildBackupSpawnArgs({
+    env,
+    dataDir,
+    outputDir,
+    ...(mirrorRoot ? { mirrorRoot } : {}),
+  })
 
   let child: BackupChildProcess
   try {

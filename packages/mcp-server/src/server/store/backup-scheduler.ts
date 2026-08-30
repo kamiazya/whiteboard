@@ -19,6 +19,7 @@ import { mkdir, readdir, rm } from 'node:fs/promises'
 import { join } from 'node:path'
 import { Cron } from 'croner'
 import { getLogger } from '../log.js'
+import { collectMirroredBlobs } from './backup-mirror-retention.js'
 import type { ServerBackupOutcome } from './backup-pass.js'
 import { runBackupInSubprocess } from './backup-subprocess.js'
 import type { Database } from './db/index.js'
@@ -131,7 +132,11 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
   // is the same code doing the work.
   const runBackup =
     options.runBackup ??
-    ((src: string, dest: string) => runBackupInSubprocess({ dataDir: src, outputDir: dest }))
+    ((src: string, dest: string) =>
+      // The backup root, so every retained run shares ONE blob mirror rather
+      // than carrying a full copy each. A one-off `whiteboard server backup`
+      // passes nothing here and stays self-contained.
+      runBackupInSubprocess({ dataDir: src, outputDir: dest, mirrorRoot: backupDir ?? undefined }))
   const runExclusively =
     options.runExclusively ??
     (async <T>(body: () => Promise<T>) => ({ ok: true as const, value: await body() }))
@@ -183,6 +188,18 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
     // the pass but still pruned would be deleting on the strength of a count
     // it did not take.
     await pruneOldBackups(backupDir, keep)
+    // Then the mirror, in that order: what a blob is still needed BY is the
+    // set of backups that survived the prune, so collecting first would be
+    // asking the question of a set that is about to change (ADR-0021
+    // decision 6's far end).
+    try {
+      const collected = await collectMirroredBlobs(backupDir)
+      if (collected > 0) log.info({ collected }, 'collected unreferenced entries from the mirror')
+    } catch (err) {
+      // Never fatal: a mirror that keeps more than it needs costs disk, and
+      // the backups it protects are all still there.
+      log.warning({ err }, 'could not collect from the blob mirror')
+    }
   }
 
   async function pruneOldBackups(dir: string, keepCount: number): Promise<void> {

@@ -30,6 +30,7 @@ export async function runServerBackup(
   return performBackup({
     dataDir: resolve(args.dataDir ?? resolveDefaultDataDir(env)),
     outputDir: resolve(args.outputDir),
+    ...(args.mirrorDir ? { mirrorRoot: resolve(args.mirrorDir) } : {}),
     env,
     ...(doBackup ? { doBackup } : {}),
     ...(doSnapshot ? { doSnapshot } : {}),

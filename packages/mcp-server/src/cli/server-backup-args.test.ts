@@ -21,6 +21,57 @@ describe('parseServerBackupArgs', () => {
     }
   })
 
+  /**
+   * The flag that makes a scheduled backup share one blob mirror between its
+   * retained runs. Absent, the backup keeps its mirror inside itself and
+   * stays a directory an operator can carry — which is why this is a flag
+   * rather than the default.
+   */
+  it('success: --mirror-dir points the blob mirror somewhere shared', () => {
+    expect(
+      parseServerBackupArgs([
+        '--json',
+        '--output-dir=/backups/2026-03-04T05-06-07.000Z',
+        '--mirror-dir=/backups',
+      ]),
+    ).toEqual({
+      kind: 'ok',
+      json: true,
+      outputDir: '/backups/2026-03-04T05-06-07.000Z',
+      dataDir: undefined,
+      mirrorDir: '/backups',
+    })
+  })
+
+  /**
+   * Absolute only, for the reason `WHITEBOARD_BACKUP_DIR` is: a relative path
+   * resolves against a working directory the operator did not choose, so it
+   * would mean one thing to them and land somewhere else.
+   */
+  it('usage-error: --mirror-dir must be absolute', () => {
+    const parsed = parseServerBackupArgs([
+      '--json',
+      '--output-dir=/backups/one',
+      '--mirror-dir=./m',
+    ])
+    expect(parsed.kind).toBe('usage-error')
+  })
+
+  it('usage-error: --mirror-dir duplicated', () => {
+    const parsed = parseServerBackupArgs([
+      '--json',
+      '--output-dir=/backups/one',
+      '--mirror-dir=/a',
+      '--mirror-dir=/b',
+    ])
+    expect(parsed.kind).toBe('usage-error')
+  })
+
+  it('usage-error: --mirror-dir without = (space form)', () => {
+    const parsed = parseServerBackupArgs(['--json', '--output-dir=/backups/one', '--mirror-dir'])
+    expect(parsed.kind).toBe('usage-error')
+  })
+
   it('usage-error: --json missing', () => {
     const r = parseServerBackupArgs(['--output-dir=/backup'])
     expect(r.kind).toBe('usage-error')
