@@ -72,9 +72,30 @@ test('a replacement cannot break out of its table cell', () => {
     MARKER,
   )
   const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
-  // Four UNESCAPED pipes: the three column separators plus the closing one.
-  assert.equal(row.replaceAll('\\|', '').split('|').length - 1, 4)
+  // Five UNESCAPED pipes: the four column separators plus the closing one.
+  assert.equal(row.replaceAll('\\|', '').split('|').length - 1, 5)
   assert.match(row, /a \\\|b\\\| 'c'/)
+})
+
+test('a survivor says how many tests judged it', () => {
+  // Stryker selects tests by relatedness, so a module few test files import is
+  // judged by a handful — and its survivors are hypotheses rather than
+  // findings. That distinction cost hours before the number was printed.
+  const body = renderComment(report([mutant('Survived', { testsCompleted: 3 })]), MARKER)
+  const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
+
+  assert.match(row, /\| 3 tests \|$/)
+  assert.match(body, /judged by/)
+})
+
+test('a mutant with no test count is marked as such, not as zero', () => {
+  // A Timeout carries no count because it never finished. Rendering that as
+  // `0 tests` would read as "nothing covers this line", which is the opposite
+  // of what a timeout means.
+  const body = renderComment(report([mutant('Survived')]), MARKER)
+  const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
+
+  assert.match(row, /\| — \|$/)
 })
 
 // --- KNOWN_EQUIVALENT ---------------------------------------------------

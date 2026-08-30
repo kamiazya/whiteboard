@@ -1056,7 +1056,10 @@ the table alone.
   including a differential oracle that catches it 6 times out of 6 when the
   same edit is applied by hand. Within that one file the number of tests
   actually completed per mutant ranged from 1 to 57 (the five files hold 57),
-  with 75 mutants judged on a single test. So read the SCORE of a file whose
+  with 75 mutants judged on a single test. That number is now PRINTED — the
+  sticky comment's `judged by` column is the mutant's own `testsCompleted`,
+  so the weak signal is visible on the row rather than inferred from knowing
+  which files import what. So read the SCORE of a file whose
   module few tests import as a weak signal, and treat its survivor list as a
   set of hypotheses to check rather than a worklist to burn down — the
   difference is measured in hours.

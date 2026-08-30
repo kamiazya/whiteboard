@@ -76,6 +76,9 @@ export function summarize(report, knownEquivalent = {}) {
           mutator: mutant.mutatorName ?? 'unknown',
           replacement: mutant.replacement ?? '',
           status: mutant.status,
+          // How many tests Stryker ran against this mutant. Absent on a
+          // NoCoverage (there were none) and on a Timeout (it never finished).
+          tests: typeof mutant.testsCompleted === 'number' ? mutant.testsCompleted : undefined,
         })
       }
     }
@@ -137,12 +140,17 @@ export function renderComment(report, marker, knownEquivalent = {}) {
       'mutant or so between identical runs, so read a small change as nothing. Settled cases are',
       'in `KNOWN_EQUIVALENT`; the reasoning is `package-canvas-render.md`.',
       '',
-      '| where | mutator | survives as |',
-      '| --- | --- | --- |',
+      '`judged by` is how many tests actually ran against that mutant. Stryker picks them by',
+      'relatedness, so a module few test files import is judged by a handful and its survivors are',
+      'a much weaker claim than ones judged by hundreds — check those by hand first.',
+      '',
+      '| where | mutator | survives as | judged by |',
+      '| --- | --- | --- | --- |',
     )
     for (const s of survivors.slice(0, MAX_ROWS)) {
       const status = s.status === 'NoCoverage' ? `${s.mutator} (no coverage)` : s.mutator
-      lines.push(`| \`${s.file}:${s.line}\` | ${status} | ${cell(s.replacement)} |`)
+      const judged = s.tests === undefined ? '—' : `${s.tests} test${s.tests === 1 ? '' : 's'}`
+      lines.push(`| \`${s.file}:${s.line}\` | ${status} | ${cell(s.replacement)} | ${judged} |`)
     }
     if (survivors.length > MAX_ROWS) {
       lines.push('', `…and ${survivors.length - MAX_ROWS} more — the full report is the artifact.`)
