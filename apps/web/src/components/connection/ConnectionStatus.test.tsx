@@ -32,7 +32,7 @@ describe('ConnectionStatus chip', () => {
     )
     fireEvent.click(screen.getByTestId('shell-mark-trigger'))
 
-    const popover = screen.getByTestId('connection-popover')
+    const popover = screen.getByTestId('shell-mark-popover')
     expect(screen.queryByTestId('connection-disconnect')).toBeNull()
     // It still says where the data is, and points at where the action lives.
     expect(popover.textContent).toMatch(/127\.0\.0\.1:3099/)
@@ -51,7 +51,7 @@ describe('ConnectionStatus chip', () => {
     })
     fireEvent.click(screen.getByTestId('shell-mark-trigger'))
 
-    const popover = screen.getByTestId('connection-popover')
+    const popover = screen.getByTestId('shell-mark-popover')
     expect(popover.textContent).toMatch(/not running/i)
     // The recovery promise is only sound because the session re-sends the whole
     // document on reconnect; a backend hands a closed socket one delta and it

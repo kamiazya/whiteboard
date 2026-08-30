@@ -254,18 +254,38 @@ minting another.
   identity layers on create, but a rename that ignored them would pass every
   case vacuously while doing the one thing it exists for to nothing.
 
-  The FORM is where the three-layer model becomes visible to a person. Name
-  and address are two fields, edited separately, because the segment is what
-  every existing link already says — deriving it from the display name would
-  break those links each time somebody fixed a typo in a name. Only what
-  changed is sent, since the address write is the one that can be refused for
-  a collision, and an unchanged field submitted back would put every name
-  edit at that risk for nothing. Moving the address moves the URL with it; a
-  name-only rename navigates nowhere, so the switcher re-reads its subject
-  from what the rename ANSWERED rather than from a re-list.
+  The FORM is where the three-layer model becomes visible to a person, and
+  it names no layer at all. `segment` is the right word in this document and
+  the wrong one in front of a user; every plainer substitute invents a FOURTH
+  name for a layer that has three. So the field is drawn as the URL it lands
+  in — a `/w/` prefix and the editable part — with no visible label, which
+  also makes the consequence self-evident in a way a label never did.
+
+  It is a separate field from the display name because the segment is what
+  every existing link already says: deriving it from the name would break
+  those links each time somebody fixed a typo. Only what changed is sent,
+  since the segment write is the one that can be refused for a collision, and
+  an unchanged field submitted back would put every name edit at that risk
+  for nothing. Moving it moves the address with it; a name-only rename
+  navigates nowhere, so the popover head re-reads its subject from what the
+  rename ANSWERED rather than from a re-list.
 
   Renaming on the daemon still needs its route, and waits with creation
   below.
+- **The shell does not name the workspace; the mark does, and only to
+  assistive tech.** The switcher first shipped as a labelled control beside
+  the mark, which contradicted a design record this initiative already had:
+  "Mark as Switcher" answers "where does the workspace name appear at all?"
+  with *the shell need not name it — the document browser probably should, as
+  its own heading*, and draws the row as `[mark] ALPHA <spacer> gear`. The
+  mark is the trigger, its accessible name carries
+  `Workspace: <name> — <session>`, and the popover is where the name is
+  drawn. `apps/web/DESIGN.md` holds the shape; the index-page heading is a
+  named follow-up, not shipped here.
+
+  Recorded because the correction is the interesting part: the record existed
+  and the increment did not read it. A decision that lives only in an
+  artifact nobody re-opens is a decision the next increment contradicts.
 - **Writing a workspace is browser-only.** The daemon publishes
   `GET /api/workspaces` and nothing that writes one, so the switcher offers
   creation and renaming only where a keeper can honour them. Its own

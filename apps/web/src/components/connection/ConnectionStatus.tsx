@@ -58,7 +58,12 @@ export function isSyncOff(state: ConnectionState): boolean {
 }
 
 export interface ConnectionStatusProps {
-  readonly state: ConnectionState
+  /**
+   * `null` on a page that holds no live session. The mark still opens —
+   * the workspace is a fact on every page, so there is always something to
+   * say — it simply has no session word to carry.
+   */
+  readonly state: ConnectionState | null
   /** Shown in the synced popover so the user knows which daemon holds the data. */
   readonly daemonBaseUrl?: string
   /** sync-off only: starts the pairing grant flow on the daemon's /pair page. */
@@ -67,6 +72,10 @@ export interface ConnectionStatusProps {
   readonly onWorkInBrowser?: () => void
   /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
+  /** What the popover's head calls this workspace, and what the mark's accessible name states. */
+  readonly workspaceName?: string
+  /** The workspace section, composed by the shell and rendered above the session's own. */
+  readonly workspaceMenu?: ReactNode
 }
 
 /**
@@ -91,9 +100,12 @@ export function ConnectionStatus({
   onRepair,
   onWorkInBrowser,
   children,
+  workspaceName,
+  workspaceMenu,
 }: ConnectionStatusProps) {
-  const label = state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
-  const syncOff = isSyncOff(state)
+  const label =
+    state === null ? null : state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
+  const syncOff = state !== null && isSyncOff(state)
   // Empty while sync is on: the region has to exist BEFORE the message, but
   // an empty one must not claim a name either.
   const syncOffAnnouncement = syncOff ? 'Live sync off' : ''
@@ -113,18 +125,38 @@ export function ConnectionStatus({
           // The state has no word on screen, so the accessible name carries
           // it — the one place a colour-and-motion signal must not be the
           // only signal.
-          aria-label={`Workspace — ${label}`}
-          title={label}
+          // The workspace's NAME rather than the bare word: the design
+          // record puts the name here precisely so the shell states it
+          // without drawing it, and the session word joins it when a page
+          // published one.
+          aria-label={
+            workspaceName === undefined
+              ? `Workspace${label === null ? '' : ` — ${label}`}`
+              : `Workspace: ${workspaceName}${label === null ? '' : ` — ${label}`}`
+          }
+          {...(label === null ? {} : { title: label })}
           className="flex shrink-0 items-center justify-center rounded-md p-1 text-foreground/70 transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground"
         >
-          <ShellMark state={state} />
+          {state === null ? <ShellMark /> : <ShellMark state={state} />}
         </button>
       </PopoverTrigger>
-      <PopoverContent align="start" data-testid="connection-popover">
-        {/* The state's word, stated once at the top for every branch below:
-            the mark cannot say it, and two of the four states share a tone. */}
-        <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
-        {state.keeper === 'daemon' && state.session === 'synced' && (
+      <PopoverContent align="start" data-testid="shell-mark-popover">
+        {/* The head: what this workspace is called, and the state's word
+            beside it. The mark can say neither — it has room for a 26x16
+            signature and nothing else — and two of the four states share a
+            tone, so the word is the only thing that separates them. */}
+        <div className="mb-2 flex items-baseline justify-between gap-2 border-b pb-2">
+          {workspaceName !== undefined && (
+            <span data-testid="shell-workspace-name" className="truncate text-sm font-semibold">
+              {workspaceName}
+            </span>
+          )}
+          {label !== null && (
+            <span className="shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
+          )}
+        </div>
+        {workspaceMenu !== undefined && <div className="mb-2 text-sm">{workspaceMenu}</div>}
+        {state?.keeper === 'daemon' && state.session === 'synced' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>
             <p className="text-muted-foreground">
@@ -150,7 +182,7 @@ export function ConnectionStatus({
             </Link>
           </div>
         )}
-        {state.keeper === 'daemon' && state.session === 'reconnecting' && (
+        {state?.keeper === 'daemon' && state.session === 'reconnecting' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is not running</p>
             <p className="text-muted-foreground">
@@ -159,7 +191,7 @@ export function ConnectionStatus({
             </p>
           </div>
         )}
-        {state.keeper === 'browser' && (
+        {state?.keeper === 'browser' && (
           <div className="flex flex-col gap-2 text-sm">
             <p className="font-medium">Kept in this browser</p>
             <p className="text-muted-foreground">
@@ -200,13 +232,19 @@ export function ConnectionStatus({
         {/* Going home was the mark's whole job before it became this
             trigger. It keeps it, one level in, rather than leaving the shell
             with no way back to the index. */}
-        <Link
-          to="/"
-          data-testid="shell-mark-home"
-          className="mt-3 block border-t pt-2 text-xs font-medium text-primary hover:underline"
-        >
-          Home
-        </Link>
+        <div role="menu" aria-label="Go to" className="mt-3 border-t pt-2">
+          <Link
+            to="/"
+            role="menuitem"
+            data-testid="shell-mark-home"
+            className="flex items-center gap-2 rounded-md px-2 py-1.5 text-sm hover:bg-accent"
+          >
+            <span aria-hidden="true" className="w-3.5 shrink-0 text-muted-foreground">
+              ⌂
+            </span>
+            All documents
+          </Link>
+        </div>
       </PopoverContent>
     </Popover>
   )

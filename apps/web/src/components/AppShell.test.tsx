@@ -5,7 +5,7 @@ import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
 import { resetShellStatusForTests, setShellConnection } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { resetSwStatusForTests } from '../pwa/sw-status-store.js'
-import { AppShell } from './AppShell.js'
+import { AppShell, type AppShellWorkspaces } from './AppShell.js'
 
 beforeEach(() => {
   localStorage.clear()
@@ -19,16 +19,38 @@ afterEach(() => {
   Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
 })
 
+const WORKSPACES = {
+  source: {
+    list: () =>
+      Promise.resolve([
+        {
+          workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+          segment: 'default',
+          displayName: 'Design team',
+        },
+        { workspaceId: '01BX5ZZKBKACTAV9WEVGEMMVRZ', segment: 'notes', displayName: 'Notes' },
+      ]),
+  },
+  onSwitch: () => {},
+}
+
 function renderShell(
   daemonConnected: boolean,
   at = '/w/default/d/c1',
   onWorkInBrowser?: () => void,
+  workspaces?: AppShellWorkspaces,
 ) {
   const router = createMemoryRouter(
     [
       {
         path: '*',
-        element: <AppShell daemon={daemonConnected} onWorkInBrowser={onWorkInBrowser} />,
+        element: (
+          <AppShell
+            daemon={daemonConnected}
+            onWorkInBrowser={onWorkInBrowser}
+            workspaces={workspaces}
+          />
+        ),
       },
     ],
     {
@@ -40,14 +62,53 @@ function renderShell(
 }
 
 describe('AppShell', () => {
-  it('brand mark links home while no page holds a session', () => {
-    // With nothing to report the mark is not a menu: it is the way home,
-    // exactly as before. The popover appears only once there is a state for
-    // it to explain.
-    renderShell(true)
-    const home = screen.getByRole('link', { name: 'Home' })
-    expect(home.getAttribute('href')).toBe('/')
-    expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBeNull()
+  it('the mark opens its popover even where no page holds a session', async () => {
+    // Replaces "brand mark links home while no page holds a session". The
+    // mark IS the switcher (the "Mark as Switcher" design record), and the
+    // workspace is a fact on every page — so there is always something for
+    // the popover to say, and the plain-link-home shape cannot survive. Home
+    // survives as an item inside, which is the amendment that record makes
+    // to `brand/home-mark.svg`'s "click = go home".
+    renderShell(true, '/w/default', undefined, WORKSPACES)
+    expect(screen.queryByRole('link', { name: 'Home' })).toBeNull()
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    expect(await screen.findByRole('menuitem', { name: /all documents/i })).toBeTruthy()
+  })
+
+  it('keeps the workspace name out of the header row', async () => {
+    // The design record's strip is `[mark] ALPHA <spacer> gear` and answers
+    // "where does the workspace name appear at all?" with "the shell need
+    // not name it". The name rides the mark's ACCESSIBLE name, so it is
+    // stated without being drawn.
+    renderShell(true, '/w/default', undefined, WORKSPACES)
+    const trigger = await screen.findByTestId('shell-mark-trigger')
+    expect(trigger.getAttribute('aria-label')).toContain('Design team')
+    // Asserted on the header itself, not on the document: the popover names
+    // the workspace too, and a document-wide query would pass on that.
+    const header = trigger.closest('header')
+    expect(header).not.toBeNull()
+    expect(header?.textContent).not.toContain('Design team')
+  })
+
+  it('names and lists the workspaces inside the mark popover', async () => {
+    renderShell(true, '/w/default', undefined, WORKSPACES)
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    // The head states the current one; the list is what you switch to.
+    expect(await screen.findByTestId('shell-workspace-name')).toHaveProperty(
+      'textContent',
+      'Design team',
+    )
+    const current = await screen.findByRole('menuitem', { name: /design team/i })
+    expect(current.getAttribute('aria-current')).toBe('true')
+    expect(screen.getByRole('menuitem', { name: /notes/i })).toBeTruthy()
+  })
+
+  it('switches from the mark popover by handle, and closes it', async () => {
+    const onSwitch = vi.fn()
+    renderShell(true, '/w/default', undefined, { ...WORKSPACES, onSwitch })
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    fireEvent.click(await screen.findByRole('menuitem', { name: /notes/i }))
+    expect(onSwitch).toHaveBeenCalledWith('notes')
   })
 
   it('alpha chip opens the honesty popover with a protect link', async () => {
@@ -114,9 +175,14 @@ describe('AppShell — the mark as the connection carrier', () => {
   const CTA_LIMIT = /move this workspace to it from Settings/i
 
   it('carries no state until a page publishes a live session', () => {
+    // The TRIGGER is always there now — the mark is the switcher, and the
+    // workspace is a fact on every page. What is absent without a session is
+    // the STATE: no keeper paint on the mark, and no session word beside the
+    // workspace name in the popover's head.
     renderShell(true)
-    expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
+    expect(screen.getByTestId('shell-mark-trigger')).toBeTruthy()
     expect(screen.getByTestId('shell-mark').getAttribute('data-keeper')).toBeNull()
+    expect(screen.getByTestId('shell-mark-trigger').getAttribute('title')).toBeNull()
   })
 
   it('leaves exactly one state carrier in the row, not two', async () => {
@@ -176,11 +242,16 @@ describe('AppShell — the mark as the connection carrier', () => {
     )
     expect(screen.getByTestId('shell-mark').getAttribute('data-session')).toBe('reconnecting')
 
-    // Leaving the document takes the claim with it: nothing on an index page
-    // is synced, and a latched mark would say otherwise.
+    // Leaving the document takes the CLAIM with it: nothing on an index page
+    // is synced, and a latched mark would say otherwise. The trigger stays —
+    // it is the switcher, and the workspace does not stop existing — so what
+    // has to go is the paint and the word, not the control.
     act(() => setShellConnection(null))
-    expect(screen.queryByTestId('shell-mark-trigger')).toBeNull()
+    expect(screen.getByTestId('shell-mark-trigger')).toBeTruthy()
     expect(screen.getByTestId('shell-mark').getAttribute('data-session')).toBeNull()
+    expect(screen.getByTestId('shell-mark-trigger').getAttribute('aria-label')).not.toMatch(
+      /reconnecting/i,
+    )
   })
 
   it('carries the capability CTA inside the Local popover, not in page chrome', async () => {
@@ -271,7 +342,7 @@ describe('AppShell — the mark as the connection carrier', () => {
     })
     renderShell(true)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
-    await waitFor(() => expect(screen.getByTestId('connection-popover')).toBeTruthy())
+    await waitFor(() => expect(screen.getByTestId('shell-mark-popover')).toBeTruthy())
 
     expect(screen.queryByTestId('connection-disconnect')).toBeNull()
     expect(screen.getByRole('link', { name: /manage in settings/i }).getAttribute('href')).toBe(
