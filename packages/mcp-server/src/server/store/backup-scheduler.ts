@@ -3,7 +3,9 @@
 // "What an operator wants is not a command they must remember to run. It is
 // for this to be handled." So the schedule is the mechanism and
 // `whiteboard server backup` is a manual trigger of the same pass — this
-// module owns only WHEN and WHERE, and `performBackup` owns the backup.
+// module owns only WHEN, WHERE, and WHICH INSTANCE. The backup itself is that
+// same CLI, run as a child process (see `backup-subprocess.ts` for the
+// measurement that put it there).
 //
 // The timer is the shape `file-gc-sweeper` already uses, for its reasons: a
 // completion-rescheduled unref'd ONE-SHOT, never `setInterval`. A pass that
@@ -18,7 +20,7 @@ import { join } from 'node:path'
 import { Cron } from 'croner'
 import { getLogger } from '../log.js'
 import type { ServerBackupOutcome } from './backup-pass.js'
-import { performBackup } from './backup-pass.js'
+import { runBackupInSubprocess } from './backup-subprocess.js'
 import type { Database } from './db/index.js'
 import { getDb } from './db/index.js'
 import type { LeaseOutcome } from './lease.js'
@@ -121,9 +123,15 @@ export function createBackupScheduler(options: BackupSchedulerOptions): BackupSc
   const schedule = options.schedule ?? DEFAULT_SCHEDULE
   const keep = options.keep ?? DEFAULT_KEEP
   const now = options.now ?? (() => new Date())
+  // The default is the SUBPROCESS, not `performBackup`, because this is the
+  // daemon's path: the snapshot step blocks the event loop for as long as it
+  // runs (measured: a 5ms sampler fired zero times across a 4767ms snapshot
+  // of a 421MB database), and inside the daemon that is every request stopped
+  // for seconds. `performBackup` stays what the CLI runs — in the child, it
+  // is the same code doing the work.
   const runBackup =
     options.runBackup ??
-    ((src: string, dest: string) => performBackup({ dataDir: src, outputDir: dest }))
+    ((src: string, dest: string) => runBackupInSubprocess({ dataDir: src, outputDir: dest }))
   const runExclusively =
     options.runExclusively ??
     (async <T>(body: () => Promise<T>) => ({ ok: true as const, value: await body() }))

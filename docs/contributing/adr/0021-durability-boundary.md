@@ -225,6 +225,33 @@ survives as: setting an interval or a retention count WITHOUT a destination
 aborts startup, because that combination configures nothing while looking from
 the outside exactly like one that works.
 
+**The pass runs in its own process, and one instance runs it.** Both were
+found by measurement rather than argued.
+
+`VACUUM INTO` through `@libsql/client` blocks the Node event loop for its
+whole duration: a 5ms sampler fired ZERO times across a 4767ms snapshot of a
+421MB database, and the cost is roughly linear below that (33ms empty, 314ms
+at 25MB, 1242ms at 103MB). In the daemon's own process that is every HTTP
+request, WebSocket frame and MCP call stopped for seconds, nightly, growing
+with the data — so decision 3's "the server keeps serving" holds for the
+LOCKS and not for the loop. Same data, same pass, measured the same way:
+in-process, 1787ms wall of which 1107ms the loop could serve nothing and a
+single 1105ms stall; as a child process, 100ms of unavailability across the
+whole pass and a worst stall of 7ms. The child is the CLI itself, so the
+scheduled path and the manual one remain one program. The blob copy was
+never the problem (under 3.1ms of lag across a 200MB tree); the pass moves
+whole because splitting it would need the two halves to agree about the
+marker, the lease and the output directory, for nothing.
+
+Several instances over one data directory took N backups a night, and their
+retention passes each deleted from a set the others were changing. This is
+the discardable-but-expensive work ADR-0020 reserves leader election for, so
+that ADR's own first option is taken: a `leases` table in the database the
+instances already share, one conditional statement, expiry rather than
+liveness because a pid means nothing across a container boundary. Cron makes
+the coordination matter MORE, not less — an interval drifts apart from each
+instance's restart while `0 3 * * *` fires on all of them in the same minute.
+
 Retention ships with it. An automatic daily backup with no bound fills the
 disk, which costs the operator the running server as well as the backups. It
 counts only directories the scheduler wrote, and does not run at all after a

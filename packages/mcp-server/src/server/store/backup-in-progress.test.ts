@@ -105,10 +105,14 @@ describe('the backup-in-progress marker', () => {
     await withBackupMarker(
       dir,
       async () => {
-        await new Promise((r) => setTimeout(r, 120))
+        await new Promise((r) => setTimeout(r, 900))
         seenLate = await backupIsInProgress(dir)
       },
-      { ttlMs: 40, refreshEveryMs: 5 },
+      // Three times the TTL of waiting, and ten refreshes' worth of headroom
+      // inside each TTL. A tighter pair (40ms / 5ms) fails under a full
+      // parallel suite, where a 5ms timer routinely slips — the test would be
+      // measuring the machine's load rather than whether the marker refreshes.
+      { ttlMs: 300, refreshEveryMs: 30 },
     )
     expect(seenLate).toBe(true)
   })

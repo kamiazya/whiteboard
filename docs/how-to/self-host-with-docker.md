@@ -161,6 +161,11 @@ backups is the data you lose.
 Setting an interval or a retention count WITHOUT a destination aborts startup:
 that combination configures nothing while looking exactly like one that works.
 
+The pass runs as a child process rather than inside the daemon, so the
+snapshot step does not stall the server that is answering your requests. You
+will see a second short-lived `whiteboard` process while a backup runs; that
+is expected.
+
 **Running more than one instance changes nothing about how you configure
 this.** Set the same variables on every instance; they agree among themselves
 through a lease row in the database they already share, so one instance takes

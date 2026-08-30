@@ -1,5 +1,6 @@
 import { lstat } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
+import { z } from 'zod'
 import { hasAncestorSymlink } from '../backup-restore.js'
 import type { BackupRestoreOptions } from '../server-mode-backup-restore.js'
 import { backupServerModeDataDir } from '../server-mode-backup-restore.js'
@@ -24,12 +25,24 @@ export type ServerBackupOutcome =
  * to be maintained against every provider. Saying so plainly is what stops
  * the operator trusting a copy that cannot restore them.
  */
-type StoreDurability = { captured: true } | { captured: false; reason: 'hosted-elsewhere' }
+const storeDurabilitySchema = z.union([
+  z.object({ captured: z.literal(true) }),
+  z.object({ captured: z.literal(false), reason: z.literal('hosted-elsewhere') }),
+])
 
-interface ServerBackupResult {
-  schemaVersion: 2
-  ok: true
-  operation: 'backup'
+/**
+ * The shape `whiteboard server backup --json` prints, declared once.
+ *
+ * A schema rather than an interface because this result now crosses a process
+ * boundary: the scheduled pass runs the CLI as a child and reads this off its
+ * stdout, so something has to check that what came back is what was expected
+ * rather than trusting a `JSON.parse`. The type is inferred from the schema so
+ * the two cannot drift.
+ */
+export const serverBackupResultSchema = z.object({
+  schemaVersion: z.literal(2),
+  ok: z.literal(true),
+  operation: z.literal('backup'),
   /**
    * Per store, because one boolean cannot answer this once a deployment can
    * keep its stores in different places. The previous shape reported
@@ -41,11 +54,13 @@ interface ServerBackupResult {
    * responsible for. What it no longer claims is COMPLETENESS, which is what
    * `stores` is for.
    */
-  stores: {
-    database: StoreDurability
-    blobs: StoreDurability
-  }
-}
+  stores: z.object({
+    database: storeDurabilitySchema,
+    blobs: storeDurabilitySchema,
+  }),
+})
+
+type ServerBackupResult = z.infer<typeof serverBackupResultSchema>
 
 export interface BackupPassOptions {
   dataDir: string
