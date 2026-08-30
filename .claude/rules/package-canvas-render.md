@@ -1002,12 +1002,19 @@ the table alone.
   in a billion draws — and both read as thorough prose while passing under a
   deliberately broken implementation. A surviving mutant is exactly that
   fact, found mechanically instead of by suspicion.
-  It is REPORT-ONLY and scheduled, never a gate on a PR: a mutation score is
-  a property of the whole suite, so failing an author's diff on a gap someone
-  else left is a bill sent to the wrong person. Triage a survivor the way a
-  review finding is triaged — most are a generator that never reaches the
-  case, and the fix is a denser domain plus a reachability guard, not more
+  It is REPORT-ONLY in both of its shapes, never a gate. Triage a survivor the
+  way a review finding is triaged — most are a generator that never reaches
+  the case, and the fix is a denser domain plus a reachability guard, not more
   runs.
+  **On a PR it mutates only the curated files THAT DIFF CHANGED and posts the
+  survivors as a sticky comment**; weekly it runs the whole list into an
+  artifact. The PR half is what makes the lane real: a weekly artifact is a
+  number nobody opens, and this repo has already watched a prose rule decay
+  until a hook made it mechanical. Scoping to the diff also answers the
+  fairness objection to reporting a score at all — an author is shown their
+  own files, not somebody else's debt — and it is why the score is never a
+  merge condition: a survivor can be the correct state of the world, and only
+  a reader can say.
   **Verify a survivor by hand before acting on it.** The tool can report one
   falsely: measured, `src/layout/seed.ts` is imported by its own test and
   nothing else, so Stryker's related-test selection runs 7 tests against it

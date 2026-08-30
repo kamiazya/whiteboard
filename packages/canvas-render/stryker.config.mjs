@@ -64,9 +64,15 @@ export default {
     // `vitest run`. A file whose report is known wrong does not belong in a
     // lane whose whole output is a list of survivors to trust.
   ],
-  reporters: ['progress', 'clear-text', 'html'],
+  reporters: ['progress', 'clear-text', 'html', 'json'],
   htmlReporter: {
     fileName: 'tmp/stryker-reports/mutation.html',
+  },
+  // The machine-readable half, for the PR comment: a weekly HTML artifact is
+  // a number nobody opens, and the lane is worth nothing unless somebody sees
+  // its survivors.
+  jsonReporter: {
+    fileName: 'tmp/stryker-reports/mutation.json',
   },
   coverageAnalysis: 'off',
   // A property runs 200 cases, so the default 5s budget times out on slow but

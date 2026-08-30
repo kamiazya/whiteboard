@@ -1,22 +1,24 @@
-# Weekly mutation testing for canvas-render, and it is a REPORT rather than a
-# gate — the job stays green whatever the score, because a survivor is a
-# hypothesis for a human to check, not a build failure.
+# Mutation testing for canvas-render, in two shapes, and REPORT-ONLY in both:
+# neither job fails on a score, because a survivor is a hypothesis for a human
+# to check rather than a build failure.
 #
 # It exists because the per-diff gates cannot see this class of defect at all.
-# A property that asserts nothing passes every run, every lint, every review
-# that reads it as prose; two in this package were found that way by hand
-# (a cache-hit branch no generated run reached, and a predicate whose false
-# case one draw in a billion could produce), and both are exactly what a
+# A property that asserts nothing passes every run, every lint, and every
+# review that reads it as prose; two in this package were found that way by
+# hand (a cache-hit branch no generated run reached, and a predicate whose
+# false case one draw in a billion could produce), and both are exactly what a
 # surviving mutant reports.
 #
-# NOT on pull_request, for two reasons: the run is measured in tens of
-# minutes, and a score is a property of the whole suite rather than of one
-# diff — gating a PR on it makes an unrelated author responsible for a gap
-# somebody else left.
+#   pr      — mutates only the curated files THIS DIFF changed, and posts the
+#             survivors as a sticky comment. Most diffs touch none of them and
+#             the job exits in under a minute having said nothing.
+#   weekly  — the whole curated list, uploaded as an artifact.
 #
-# ponytail: a full re-run every week. Stryker's `--incremental` cache would
-# cut it to the changed files, and needs actions/cache plus a cache-key
-# policy; worth doing when the run outgrows its timeout, not before.
+# The PR half is not a nicety. A weekly artifact is a number nobody opens, and
+# a lane whose findings nobody reads is the same as no lane: this repo's own
+# history has a prose rule decaying until a hook made it mechanical. Scoping
+# the PR run to the diff also settles the fairness objection to gating on a
+# score — you are shown your own files, not somebody else's debt.
 name: Mutation
 
 on:
@@ -25,26 +27,106 @@ on:
     # else that runs at :00.
     - cron: '23 4 * * 1'
   workflow_dispatch:
-  # A PR that changes the lane's own wiring runs the SMOKE step below. A
-  # scheduled workflow is otherwise unverifiable until it is already on the
-  # default branch — `workflow_dispatch` cannot reach a branch's copy — so
-  # without this the first proof that the lane runs at all arrives a week
-  # after it merges.
   pull_request:
-    paths:
-      - '.github/workflows/mutation.yml'
-      - 'packages/canvas-render/stryker.config.mjs'
-      - 'packages/canvas-render/vitest.stryker.config.ts'
 
 permissions:
   contents: read
 
 concurrency:
   group: mutation-${{ github.ref }}
-  cancel-in-progress: false
+  cancel-in-progress: true
 
 jobs:
-  canvas-render:
+  pr:
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+      pull-requests: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # The diff is the input, so the base branch has to be reachable.
+          fetch-depth: 0
+
+      - uses: ./.github/actions/setup-pnpm
+
+      # Before the scoping step, not after: that step imports the Stryker
+      # config, which resolves its plugin at load time and throws without a
+      # node_modules to resolve it from.
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Scope the run to the curated files this diff changed
+        id: scope
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          set -euo pipefail
+          git diff --name-only "$BASE" "$HEAD" > /tmp/changed.txt
+          scoped=$(node .claude/scripts/mutation-scope.mjs \
+            --config ./packages/canvas-render/stryker.config.mjs \
+            --prefix packages/canvas-render/ \
+            --changed-from /tmp/changed.txt)
+          echo "files=$scoped" >> "$GITHUB_OUTPUT"
+          if [ -z "$scoped" ]; then
+            echo "No curated canvas-render module changed — nothing to mutate."
+          else
+            echo "Mutating: $scoped"
+          fi
+
+      - name: Mutate the changed files
+        if: steps.scope.outputs.files != ''
+        working-directory: packages/canvas-render
+        run: pnpm exec stryker run --mutate "${{ steps.scope.outputs.files }}"
+
+      - name: Render the comment
+        id: comment
+        if: steps.scope.outputs.files != ''
+        run: |
+          set -euo pipefail
+          node .claude/scripts/mutation-comment.mjs \
+            packages/canvas-render/tmp/stryker-reports/mutation.json \
+            --marker '<!-- canvas-render-mutation -->' > /tmp/mutation-comment.md
+          if [ -s /tmp/mutation-comment.md ]; then echo "has=1" >> "$GITHUB_OUTPUT"; fi
+
+      # Same sticky shape as the preview-URL comment: one comment per PR,
+      # edited in place, so a ten-push branch does not grow ten of them.
+      # Skipped from a fork, where the token is read-only by design.
+      - name: Comment the survivors on the PR
+        if: >-
+          steps.comment.outputs.has == '1' &&
+          github.event.pull_request.head.repo.full_name == github.repository
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR: ${{ github.event.pull_request.number }}
+          REPO: ${{ github.repository }}
+        run: |
+          set -euo pipefail
+          MARKER='<!-- canvas-render-mutation -->'
+          CID=$(gh api "repos/$REPO/issues/$PR/comments" \
+            --jq "[.[] | select(.body | contains(\"$MARKER\"))][0].id // empty")
+          if [ -n "$CID" ]; then
+            gh api --method PATCH "repos/$REPO/issues/comments/$CID" \
+              -F body=@/tmp/mutation-comment.md >/dev/null
+          else
+            gh api --method POST "repos/$REPO/issues/$PR/comments" \
+              -F body=@/tmp/mutation-comment.md >/dev/null
+          fi
+
+      - name: Upload mutation report
+        if: always() && steps.scope.outputs.files != ''
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: mutation-canvas-render-pr
+          path: packages/canvas-render/tmp/stryker-reports/
+          if-no-files-found: warn
+          retention-days: 14
+
+  weekly:
+    if: github.event_name != 'pull_request'
     runs-on: ubuntu-latest
     timeout-minutes: 180
     steps:
@@ -56,19 +138,7 @@ jobs:
         run: pnpm install --frozen-lockfile
 
       - name: Mutation test canvas-render
-        if: github.event_name != 'pull_request'
         run: pnpm mutation:render
-
-      # What breaks about this lane is its WIRING, not its verdicts: the
-      # plugin has to resolve out of a pnpm workspace, the tsconfig-rewriting
-      # step has to stay skipped, and the vitest config has to load. One cheap
-      # module exercises all three in about a minute, so a PR touching the
-      # lane proves it still starts without paying for the full run.
-      - name: Smoke the lane's wiring
-        if: github.event_name == 'pull_request'
-        run: >-
-          pnpm --filter @kamiazya/whiteboard-canvas-render exec
-          stryker run --mutate 'src/layout/nodes/truncate.ts'
 
       - name: Upload mutation report
         if: always()
@@ -76,5 +146,4 @@ jobs:
         with:
           name: mutation-canvas-render
           path: packages/canvas-render/tmp/stryker-reports/
-          if-no-files-found: warn
           retention-days: 30
