@@ -42,7 +42,20 @@ const GIT = CWD ? `git -C ${CWD}` : 'git'
 // `reachability` is in the DEFAULT set, not opt-in: an increment that builds, typechecks and
 // passes its tests while nothing registers/mounts/renders it reads as finished to every other
 // dimension, so the only reliable catch is a lane that always asks.
-const RAW_DIMENSIONS = A.dimensions || ['correctness', 'contract', 'boundary', 'test-coverage', 'reachability']
+// `background-work` is default for the same reason and no other: a worker that runs on every
+// instance, or that blocks the serving loop, is CORRECT — it passes its tests and behaves as
+// designed, it just does the work N times or freezes the process while doing it. Neither is
+// visible to any other dimension, and neither is visible in the diff. Most runs answer
+// `notApplicable` cheaply; that is the cost, and it is one lane. Drop it explicitly via
+// `dimensions` for a diff that plainly cannot touch server-side work.
+const RAW_DIMENSIONS = A.dimensions || [
+  'correctness',
+  'contract',
+  'boundary',
+  'test-coverage',
+  'reachability',
+  'background-work',
+]
 // Mirrors .claude/workflows/lib/normalize-dimensions.mjs (unit-tested via node:test — the
 // workflow runtime executes this file as a standalone function body with no module resolution,
 // so it cannot `import` that file; keep the two in sync). Throws on a malformed non-string entry
