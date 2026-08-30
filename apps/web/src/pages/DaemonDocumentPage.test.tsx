@@ -1024,13 +1024,13 @@ describe('DaemonDocumentPage', () => {
       await act(async () => {
         toggle.click()
       })
-      await screen.findByText(/no versions on/i)
+      await screen.findByText(/no versions yet/i)
 
       await act(async () => {
         toggle.click()
       })
 
-      expect(screen.queryByText(/no versions on/i)).toBeNull()
+      expect(screen.queryByText(/no versions yet/i)).toBeNull()
 
       vi.unstubAllGlobals()
     })
