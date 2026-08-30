@@ -286,13 +286,7 @@ export function BrowserIndexPage({
         pending={pendingDelete}
         busy={deleting}
         error={deleteError}
-        // The delete evacuates into the trash before removing anything
-        // (loro-workspace-document-index's "EVACUATE FIRST"), and the Trash
-        // section restores it. The old copy said "There is no undo", which
-        // talks a reader out of tidying up. A browser workspace keeps no
-        // versions — those are a daemon feature — so the trash is the whole
-        // story here.
-        description={`The ${kindNoun(pendingDelete?.kind)} moves to the Trash, where you can restore it.`}
+        action="delete-document-browser"
         onCancel={() => {
           setPendingDelete(null)
           setDeleteError(null)
