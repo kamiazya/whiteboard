@@ -110,6 +110,21 @@ describe('browser workspace switch', () => {
   })
 
   it('rewrites an address the registry cannot resolve, and stays where it was', async () => {
+    // The active identity, set HERE rather than left to `afterEach`, because
+    // `afterEach` is not the last write and cannot be. `switchBrowserWorkspace`
+    // stores the identity in module state through an IndexedDB read that
+    // nothing cancels when the component that started it unmounts — so a read
+    // still in flight from the rename above lands in whichever test is
+    // running when it finishes, overwriting the reset that already ran.
+    //
+    // What that costs is this assertion, and it says nothing about a switch:
+    // the rewrite goes to the active workspace's handle, so a leaked
+    // `renamed` makes the address below `/w/renamed` and reads as a rewrite
+    // that went somewhere nobody asked for. Measured — standing in for one
+    // such late write reproduces it exactly, and it is what failed on CI
+    // while passing five runs out of five locally.
+    setBrowserWorkspaceIdForTests(settled, 'default')
+
     // The other half, and why the switch resolve is STRICT while the boot one
     // is lenient. A lenient switch would answer any unknown handle with
     // first-listed; this effect would then leave the address alone believing

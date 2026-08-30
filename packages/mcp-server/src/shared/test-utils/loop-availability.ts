@@ -2,7 +2,7 @@
  * How much of a piece of work's wall clock the event loop could still serve
  * anything in.
  *
- * This is the instrument behind `background-work.ts`'s `measuredBlockMs`.
+ * This is the instrument behind `background-work.ts`'s `worstStallMs`.
  * Blocking is invisible in source — an `await` on a native binding reads
  * exactly like an `await` on a socket — so "does this stall the daemon" is
  * only ever answerable by measurement, and a measurement everyone rolls
