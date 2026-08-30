@@ -370,6 +370,22 @@ describe('wb_canvas_snapshot — overflows', () => {
     expect(result.nodes[0].text).toBe(CRAMPED)
   })
 
+  test('marks a node whose content is all there but too wide for its box', async () => {
+    // The case `truncated` alone could not express: an atomic run of one code
+    // point cannot be cut, so it is painted whole, overflowing. Nothing is
+    // hidden — the render carries no fade and the digest does not call it
+    // truncated — and the box is still too small, which is the only thing
+    // this field claims. Reading the digest's `truncated` here would have
+    // reported it too, but only by also telling the caller prose was hidden.
+    const result = await snapshotOf(
+      [{ id: 'narrow', type: 'text', x: 0, y: 0, width: 30, height: 200, text: '`國`' }],
+      true,
+    )
+
+    expect(result.nodes[0].overflows).toBe(true)
+    expect(result.nodes[0]).not.toHaveProperty('textTruncated')
+  })
+
   test('leaves a node with room to spare unmarked', async () => {
     const result = await snapshotOf(
       [{ id: 'roomy', type: 'text', x: 0, y: 0, width: 400, height: 400, text: CRAMPED }],

@@ -82,6 +82,14 @@ export interface TextRunNode {
    * because width is scarce, and three dots spend the width they save.
    */
   readonly truncated?: true
+  /**
+   * The run's own text is wider than the width it was fitted to, because it
+   * is a single code point and nothing narrower exists. Nothing is missing,
+   * so it draws no fade; it is carried because "does this node's content fit
+   * its box" is a different question from "is there more of it", and an agent
+   * asks the first one.
+   */
+  readonly overflows?: true
   readonly appearance?: Appearance
   /**
    * A filled box painted BEHIND this run, inset from `bbox` by
@@ -132,6 +140,15 @@ export interface ShapeSceneNode {
    * the only way a reader that is not looking at pixels can learn it.
    */
   readonly truncated?: true
+  /**
+   * The node's content does not fit this box — either because some of it was
+   * cut (`truncated`) or because what remains is one irreducible code point
+   * wider than the space for it. The weaker of the two claims, and the one an
+   * agent acts on: the fix is to resize the node or shorten its text, which
+   * is true in both cases. `truncated` alone would miss the second, and the
+   * fade alone would over-report it.
+   */
+  readonly overflows?: true
   /**
    * The DOCUMENT node this chrome belongs to, when the scene was built from
    * one. Semantic provenance in the same sense as a heading's `level` — the

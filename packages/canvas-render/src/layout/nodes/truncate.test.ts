@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import type { FontDescriptor, MeasureText } from '../../measure.js'
 import { createFakeMeasure } from '../../test-utils/fake-measure.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -47,9 +47,24 @@ describe('fitToWidth: text that already fits', () => {
     expect(fit('ab', 100)).toEqual({ text: 'ab' })
   })
 
+  it('answers from a single measurement instead of walking the text', () => {
+    // After the truncated/overflows split the `<=` boundary is no longer
+    // visible in the RESULT: at `<`, text exactly as wide as its box falls
+    // through to the loop, which keeps every code point and reports neither
+    // flag — the same object. What the early return buys is one measure call
+    // rather than one per code point, and that is now the only thing the
+    // branch does, so it is the only thing worth asserting about it.
+    let calls = 0
+    const counting: MeasureText = (text, f) => {
+      calls += 1
+      return measure(text, f)
+    }
+
+    expect(fitToWidth('ab', font, counting, 20)).toEqual({ text: 'ab' })
+    expect(calls).toBe(1)
+  })
+
   it('counts text exactly as wide as the box as fitting', () => {
-    // The boundary `advance <= maxWidth`: at `<` this returns a cut 'a',
-    // which is a visible glyph lost to a rounding-width label.
     expect(fit('ab', 20)).toEqual({ text: 'ab' })
   })
 })
@@ -71,34 +86,37 @@ describe('fitToWidth: never empty', () => {
     // The clause the docstring gives a reason for — "one glyph over the edge
     // still says a label is there, and nothing at all does not" — and the
     // one nothing checked: deleting the fallback left every test green.
-    expect(fit('abc', 5)).toEqual({ text: 'a', truncated: true })
+    expect(fit('abc', 5)).toEqual({ text: 'a', truncated: true, overflows: true })
   })
 
   it('keeps a whole astral code point rather than half a surrogate pair', () => {
     // `[...text][0]`, not `text[0]`: the latter returns a lone high surrogate,
     // which is not a character and is not valid XML content either.
     const emoji = String.fromCodePoint(0x1f600)
-    expect(fit(`${emoji}x`, 5)).toEqual({ text: emoji, truncated: true })
+    expect(fit(`${emoji}x`, 5).text).toBe(emoji)
   })
 
   it('still answers for the empty string', () => {
     expect(fit('', 20)).toEqual({ text: '' })
   })
 
-  it('marks a kept-but-overflowing single code point as truncated (pinned counterexample)', () => {
+  it('reports a kept-but-overflowing single code point as overflowing, not truncated', () => {
     // Found by the property below, shrunk to `(' ', 1)`: the one code point
     // does not fit, the never-empty rule keeps it anyway, and NOTHING was
-    // dropped — yet the result says `truncated`.
-    //
-    // Pinned as the current behaviour rather than changed, because which
-    // reading is right is a product question, not a test one. `truncated` is
-    // one fact with three readers: the SVG backend paints a FADE on it, and
-    // `sceneDigest` reports it to an agent as "the document holds more than
-    // the canvas shows" — which here is not true. Under that second reading
-    // this is a small false signal; under "the content does not fit its box"
-    // it is correct. Nothing in the codebase settles it, so this test states
-    // what happens and the asymmetry is left visible in the property.
-    expect(fit(' ', 1)).toEqual({ text: ' ', truncated: true })
+    // dropped. It used to answer `truncated: true`, which two readers then
+    // disagreed about in their own docstrings — `sceneDigest.truncated` says
+    // "the document holds more than the canvas shows" (false here) while
+    // `wb_canvas_snapshot`'s `overflows` says "the content does not fit its
+    // box" (true here). One flag cannot be both, so they are two.
+    expect(fit(' ', 1)).toEqual({ text: ' ', overflows: true })
+  })
+
+  it('reports both when the first code point overflows AND more follows', () => {
+    // 20px for one astral code point against a 5px box: the emoji is kept
+    // because nothing narrower exists, and the `x` after it is genuinely
+    // dropped. Both facts are true and neither implies the other.
+    const emoji = String.fromCodePoint(0x1f600)
+    expect(fit(`${emoji}x`, 5)).toEqual({ text: emoji, truncated: true, overflows: true })
   })
 })
 
@@ -119,13 +137,50 @@ describe('fitToWidth: a measurer that misreports the empty string', () => {
       descent: 0,
       lineGap: 0,
     })
-    expect(fitToWidth('', font, liar, 20)).toEqual({ text: '', truncated: true })
+    expect(fitToWidth('', font, liar, 20)).toEqual({ text: '', overflows: true })
   })
 })
 
 describe('fitToWidth properties', () => {
-  const textArb = fc.string({ minLength: 1, maxLength: 12 })
-  const widthArb = fc.integer({ min: 1, max: 130 })
+  // Both axes are biased SMALL on purpose. Everything interesting here is at
+  // the boundary — a text of one code point, and a width under the 10px a
+  // single glyph advances — and drawn uniformly from 1..130 such a width is
+  // ~7% of draws. Measured: with the uniform pair, the four-way ledger below
+  // missed `false/true` in roughly one run in seven, which is a flaky test
+  // that reads as a real regression. Denser generator, not more runs.
+  const textArb = fc.oneof(
+    fc.string({ minLength: 1, maxLength: 2 }),
+    fc.string({ minLength: 1, maxLength: 12 }),
+  )
+  const widthArb = fc.oneof(fc.integer({ min: 1, max: 9 }), fc.integer({ min: 1, max: 130 }))
+
+  // `truncated`/`overflows` as the generator actually reached them. Guarded
+  // from both sides: a combination the domain never produces fails as an
+  // unreached entry, and a combination not declared here fails as an excess
+  // one — so the pair cannot quietly collapse back into a single flag.
+  const COMBINATIONS = {
+    'false/false': 'the whole text fits, or there was no usable width',
+    'true/false': 'a prefix was cut, and that prefix fits',
+    'false/true': 'the whole input is one code point too wide to cut',
+    'true/true': 'the first code point is too wide AND more followed it',
+  } as const
+  const seenCombinations = new Map<string, number>()
+  // A floor, not merely presence: one lucky draw in 200 would satisfy a
+  // presence check while proving almost nothing, and is the state the uniform
+  // generator above was in. Measured over 200 runs with this generator —
+  // false/false 60, false/true 33, true/false 24, true/true 83 — so the floor
+  // sits well under the scarcest without pinning a distribution that a
+  // fast-check version bump is free to shift.
+  const COMBINATION_FLOOR = 5
+  afterAll(() => {
+    expect([...seenCombinations.keys()].sort()).toEqual(Object.keys(COMBINATIONS).sort())
+    for (const [combination, count] of seenCombinations) {
+      expect({ combination, atLeast: count >= COMBINATION_FLOOR }).toEqual({
+        combination,
+        atLeast: true,
+      })
+    }
+  })
 
   fcTest.prop([textArb, widthArb], withDefaults())(
     'the result is always a prefix of the input',
@@ -151,13 +206,35 @@ describe('fitToWidth properties', () => {
   )
 
   fcTest.prop([textArb, widthArb], withDefaults())(
-    'anything it shortened is marked truncated',
+    '`truncated` says exactly whether anything was dropped',
     (text, maxWidth) => {
-      // ONE direction only. The converse is false, and the property found the
-      // case: a single code point too wide for the box is kept and still
-      // marked — see the pinned counterexample above.
+      // BOTH directions, which is what the split bought: the flag is now
+      // equivalent to "the result is a strict prefix", with no case where one
+      // holds and the other does not.
       const fitted = fit(text, maxWidth)
-      if (fitted.text !== text) expect(fitted.truncated).toBe(true)
+      expect(fitted.truncated === true).toBe(fitted.text !== text)
+    },
+  )
+
+  fcTest.prop([textArb, widthArb], withDefaults())(
+    '`overflows` says exactly whether what is returned still does not fit',
+    (text, maxWidth) => {
+      const fitted = fit(text, maxWidth)
+      const spills = measure(fitted.text, font).advanceWidth > maxWidth
+      expect(fitted.overflows === true).toBe(spills)
+    },
+  )
+
+  fcTest.prop([textArb, widthArb], withDefaults())(
+    'the two flags are independent — every combination the domain allows occurs',
+    (text, maxWidth) => {
+      // A guard against the split collapsing back into one flag by accident:
+      // if `overflows` were only ever set alongside `truncated`, the property
+      // above would still pass and nothing would have been gained. The
+      // afterAll below is what actually checks the domain reaches all four.
+      const { truncated, overflows } = fit(text, maxWidth)
+      const combination = `${truncated === true}/${overflows === true}`
+      seenCombinations.set(combination, (seenCombinations.get(combination) ?? 0) + 1)
     },
   )
 
