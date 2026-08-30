@@ -22,6 +22,13 @@ afterEach(async () => {
 })
 
 /**
+ * Ten sampler intervals. Long enough that "no tick landed" is a statement
+ * about the call rather than about timer granularity, and short enough that
+ * the growth loop reaches it in a round or two on any machine.
+ */
+const MIN_SNAPSHOT_MS = 50
+
+/**
  * The measurement the backup's architecture rests on, pinned.
  *
  * `backup-scheduler` runs its pass in a CHILD PROCESS, and the whole reason is
@@ -41,24 +48,39 @@ afterEach(async () => {
  */
 describe('the hot snapshot', () => {
   it('blocks the event loop for its whole duration', async () => {
-    // ~16MB. Sized from a measurement, not a guess: 4MB snapshots in about
-    // 29ms, which is six sampler intervals and close enough to the floor
-    // below to fail on a fast run. This is comfortably clear of it.
+    // The fixture GROWS until the snapshot is long enough for the answer to
+    // mean anything, rather than being a size someone measured once.
+    //
+    // "How many milliseconds is 16MB" is a property of the machine, not of
+    // the fixture. This floor was a constant and it failed on CI at the first
+    // attempt: 16MB snapshotted in 51.3ms there against a 60ms floor written
+    // from a slower local run — a green local suite and a red CI job over the
+    // same code. Raising the constant only moves the cliff to the next faster
+    // runner; measuring until the subject is reached has no cliff.
     await sql`create table bulk (id integer primary key, payload blob)`.execute(handle.db)
     const payload = Buffer.alloc(64 * 1024, 7)
-    for (let i = 0; i < 256; i++) {
-      await sql`insert into bulk (payload) values (${payload})`.execute(handle.db)
+    let availability: Awaited<ReturnType<typeof measureLoopAvailability<void>>>['availability'] =
+      undefined as never
+    for (let attempt = 0; attempt < 5; attempt++) {
+      // Doubling, so a fast machine reaches the floor in a couple of rounds
+      // instead of creeping. `VACUUM INTO` refuses an existing target, so
+      // each attempt writes its own.
+      for (let i = 0; i < 64 * 2 ** attempt; i++) {
+        await sql`insert into bulk (payload) values (${payload})`.execute(handle.db)
+      }
+      availability = (
+        await measureLoopAvailability(
+          () => snapshotDatabaseInto(join(root, 'data'), join(root, `snapshot-${attempt}.db`)),
+          { intervalMs: 5 },
+        )
+      ).availability
+      if (availability.elapsedMs > MIN_SNAPSHOT_MS) break
     }
 
-    const { availability } = await measureLoopAvailability(
-      () => snapshotDatabaseInto(join(root, 'data'), join(root, 'snapshot.db')),
-      { intervalMs: 5 },
-    )
-
-    // The fixture has to be big enough for the answer to mean anything: a
-    // snapshot finishing inside a couple of sampler intervals would report
-    // "fully blocked" whether it blocked or not.
-    expect(availability.elapsedMs).toBeGreaterThan(60)
+    // Reached, not assumed: a snapshot finishing inside a couple of sampler
+    // intervals would report "fully blocked" whether it blocked or not, so
+    // this asserts the growth loop actually got the subject in range.
+    expect(availability.elapsedMs).toBeGreaterThan(MIN_SNAPSHOT_MS)
     // Fully blocked, allowing a little slack for a tick landing at either
     // edge. Were this call to become non-blocking, `blockedMs` would collapse
     // toward zero and this is where that shows up.
