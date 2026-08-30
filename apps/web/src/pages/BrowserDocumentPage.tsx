@@ -45,6 +45,7 @@ import {
 import { BrowserBackend } from '../lib/browser-backend.js'
 import { browserWorkspaceHandleOrNull } from '../lib/browser-workspace-id.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
+import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
@@ -712,7 +713,7 @@ export function BrowserDocumentPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
             <AlertDialogDescription>
-              The {kindNoun(documentKind)} moves to the Trash, where you can restore it.
+              {DESTRUCTIVE_COPY['delete-document-browser'](kindNoun(documentKind))}
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

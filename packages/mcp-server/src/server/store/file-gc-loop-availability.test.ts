@@ -22,7 +22,9 @@ const { purgeDanglingFiles } = await import('./file-gc.js')
 const { FileVersionStore } = await import('./version-store.js')
 const { createIsolatedDb } = await import('./db/test-helpers.js')
 const { makeSpatialDoc } = await import('../../shared/test-utils/spatial-doc.js')
-const { measureLoopAvailability } = await import('../../shared/test-utils/loop-availability.js')
+const { loopTurnShare, measureLoopAvailability } = await import(
+  '../../shared/test-utils/loop-availability.js'
+)
 
 let handle: Awaited<ReturnType<typeof createIsolatedDb>>
 
@@ -159,8 +161,14 @@ describe('a file-GC pass', () => {
     expect(measured.result).toMatchObject({ purgedCount: 1 })
 
     // The loop ran something many times over, rather than once at each edge.
-    // Without the yields this fixture produced 3 samples across 1394ms.
-    expect(availability.samples).toBeGreaterThan(20)
+    //
+    // A SHARE of the ticks the sampler asked for, not a count, for the same
+    // reason the stall assertion below is a ratio. Measured on this fixture:
+    // without the yields, 3 samples of an ideal 279 (0.011); with them, 0.35
+    // idle and 0.18 under eight CPU hogs on four cores. The absolute 20 this
+    // replaces had no margin -- a loaded run landed on exactly 20, and CI
+    // failed `expected 20 to be greater than 20`.
+    expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
     // And no single stall swallowed the pass. Without the yields this ratio
     // was 0.96; with them it is 0.04 on the same fixture.
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)

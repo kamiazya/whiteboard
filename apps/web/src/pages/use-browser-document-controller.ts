@@ -5,6 +5,7 @@ import { newDocumentPathIn } from '../components/workspace-files/new-document-pa
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { browserWorkspaceIdOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { deriveCopyName } from '../lib/derive-copy-name.js'
+import { kindNoun } from '../lib/kind-noun.js'
 import {
   type ContentClock,
   type DefaultDocumentPointer,
@@ -383,15 +384,18 @@ export function useBrowserDocumentController(
 
   const triggerCleanup = useCallback(async () => {
     setCleanupError(null)
+    // Copy below names the document, and a note is not a canvas — kindNoun is
+    // the single place that mapping lives (vocabulary.md).
+    const noun = kindNoun(snapshotRef.current?.kind)
     // Abort if flush fails — unsaved edits must not be silently discarded.
     const flushed = await flushSave()
     if (!flushed) {
-      setCleanupError('Your changes could not be saved. The canvas copy has been kept.')
+      setCleanupError(`Your changes could not be saved. The ${noun} copy has been kept.`)
       return
     }
     // Abort if a previous save already failed; data integrity is uncertain.
     if (persistenceRef.current.kind === 'degraded') {
-      setCleanupError('The canvas could not be safely removed. Your copy has been kept.')
+      setCleanupError(`The ${noun} could not be safely removed. Your copy has been kept.`)
       return
     }
     const id = await pointerRef.current.get()
