@@ -8,6 +8,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from '@/components/ui/dialog'
+import { DocumentPathField } from './DocumentPathField.js'
 import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
 
 /**
@@ -32,6 +33,7 @@ import { DOCUMENT_KIND_CHOICES } from './document-kind-choice.js'
  */
 export function NewDocumentDialog({
   open,
+  workspace,
   defaultPath,
   busy,
   error,
@@ -39,6 +41,8 @@ export function NewDocumentDialog({
   onSubmit,
 }: {
   open: boolean
+  /** The handle the new document's URL will carry, when the page knows it. */
+  workspace?: string | undefined
   /** Where a create with no opinion would have put it. */
   defaultPath: string
   busy?: boolean
@@ -81,6 +85,14 @@ export function NewDocumentDialog({
     <Dialog open={open} onOpenChange={(next) => (next ? undefined : onCancel())}>
       <DialogContent className="sm:max-w-md">
         <form
+          // `min-w-0`: this form is a GRID item of DialogContent, so its
+          // automatic minimum size is its min-content width — and the path
+          // field's URL prefix is unbreakable text. Measured without it, a
+          // segment-less workspace's 26-character handle pushed the form to
+          // 464px inside a 448px dialog, overflowing on every viewport
+          // including a phone. With it the row is bounded and the handle
+          // truncates instead.
+          className="min-w-0"
           onSubmit={(event) => {
             event.preventDefault()
             const trimmedPath = path.trim()
@@ -145,22 +157,15 @@ export function NewDocumentDialog({
                 path instead.
               </span>
             </label>
-            <label className="flex flex-col gap-1">
-              <span className="text-sm font-medium">Path</span>
-              <input
-                type="text"
-                value={path}
-                onChange={(event) => {
-                  setPath(event.target.value)
-                  setPathIssue(null)
-                }}
-                className="rounded-md border bg-background px-2 py-1.5 font-mono text-sm"
-              />
-              <span className="text-muted-foreground text-xs">
-                Where it lives in the workspace. Folders are the path, so design/login sits under
-                design.
-              </span>
-            </label>
+            <DocumentPathField
+              workspace={workspace}
+              value={path}
+              onChange={(next) => {
+                setPath(next)
+                setPathIssue(null)
+              }}
+              hint="Where it lives in the workspace. Folders are the path, so design/login sits under design."
+            />
             {/* The form's own refusal wins: it names the field the person is
                 looking at, while `error` describes a submission that has
                 already been superseded by whatever they typed next. */}

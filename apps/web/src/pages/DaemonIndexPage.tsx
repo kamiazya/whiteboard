@@ -663,6 +663,9 @@ export function DaemonIndexPage({
           <div className="animate-in fade-in-0 duration-(--motion-duration-normal) ease-(--motion-ease-out)">
             <WorkspaceFilesPanel
               source={filesSource}
+              // The handle the address carries, which is exactly what a
+              // document's URL under this workspace is built from.
+              workspace={selectedWorkspace}
               initialFolder={routedFolder}
               onFolderChange={setRoutedFolder}
               onOpenDocument={(path) => onOpenDocument(selectedWorkspace, path)}

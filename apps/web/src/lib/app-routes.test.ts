@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   documentPath,
+  documentPathPrefix,
   indexPath,
   isKnownAppPath,
   parseSettingsRoute,
@@ -240,5 +241,21 @@ describe('parseSettingsRoute', () => {
   it('returns null for an unknown section or unrelated path', () => {
     expect(parseSettingsRoute('/settings/nope')).toBeNull()
     expect(parseSettingsRoute('/w/w1')).toBeNull()
+  })
+})
+
+describe('documentPathPrefix', () => {
+  // The form fields that edit a document's path draw this in front of the
+  // box, so a person can see the URL their text lands in. That only stays
+  // true if it is the SAME string the router builds — a hand-written `/w/…/d/`
+  // in a component would keep reading right long after the grammar moved.
+  it('is the literal head of the URL a document is addressed at', () => {
+    expect(documentPath('design-team', 'design/login')).toBe(
+      `${documentPathPrefix('design-team')}design/login`,
+    )
+  })
+
+  it('encodes the handle the same way the full URL does', () => {
+    expect(documentPathPrefix('w 1')).toBe('/w/w%201/d/')
   })
 })

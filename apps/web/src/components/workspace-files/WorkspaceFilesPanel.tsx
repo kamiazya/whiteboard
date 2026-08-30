@@ -38,6 +38,16 @@ export interface WorkspaceFilesPanelProps {
    * which is what lets one browser serve both.
    */
   source: WorkspaceFilesSource
+  /**
+   * The handle this workspace's URLs carry, when the host knows it.
+   *
+   * Used only to draw the head of a document's URL in front of the path
+   * fields, so a person can see where their text lands. Absent while a page
+   * is still resolving its address, and on a host that has no address to
+   * give — the fields simply lose the prefix, which is why this is optional
+   * rather than something the panel refuses to render without.
+   */
+  workspace?: string | undefined
   /** Absent means the preview shows no way in — looking still works. */
   onOpenDocument?: (path: string) => void
   /**
@@ -138,6 +148,7 @@ const REFRESH_FAILURE_VERB: Record<'created' | 'pinned' | 'unpinned', string> = 
  */
 export function WorkspaceFilesPanel({
   source,
+  workspace,
   onOpenDocument,
   initialFolder,
   onFolderChange,
@@ -713,6 +724,7 @@ export function WorkspaceFilesPanel({
         </div>
         <NewDocumentMenu
           disabled={creating}
+          workspace={workspace}
           defaultPath={derivedNewPath}
           createError={createError?.reason ?? null}
           onCreate={createHere}
@@ -935,6 +947,7 @@ export function WorkspaceFilesPanel({
       )}
       <RenameDocumentDialog
         document={renaming}
+        workspace={workspace}
         busy={renameBusy}
         error={renameError}
         onCancel={() => {
