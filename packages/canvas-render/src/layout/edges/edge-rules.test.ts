@@ -63,6 +63,32 @@ describe('zero-bend-facing-first', () => {
     expect(ZERO_LANE_MIN_OVERLAP_PX).toBe(20)
   })
 
+  // The facing-gap test is FOUR comparisons — one per direction — and each is
+  // an inclusive bound, so boxes that touch edge to edge still face each
+  // other. Nothing reached that boundary, nor two of the four directions at
+  // all: measured, `facingGapOk` carried 26 surviving mutants, more than any
+  // other function in the file. Each row is the boundary and the first case
+  // past it, so a comparison that moves is caught whichever way it moves.
+  it.each([
+    ['right', rectAt(0, 0), rectAt(100, 0), rectAt(99, 0), { fromSide: 'right', toSide: 'left' }],
+    ['left', rectAt(100, 0), rectAt(0, 0), rectAt(1, 0), { fromSide: 'left', toSide: 'right' }],
+    ['bottom', rectAt(0, 0), rectAt(0, 100), rectAt(0, 99), { fromSide: 'bottom', toSide: 'top' }],
+    ['top', rectAt(0, 100), rectAt(0, 0), rectAt(0, 1), { fromSide: 'top', toSide: 'bottom' }],
+  ])('counts boxes touching edge to edge as facing, leaving %s', (_direction, fromRect, touching, overlapping, pair) => {
+    const ctxFor = (toRect: Rect) => ({
+      dx: toRect.x + toRect.w / 2 - (fromRect.x + fromRect.w / 2),
+      dy: toRect.y + toRect.h / 2 - (fromRect.y + fromRect.h / 2),
+      fromRect,
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(rule.generate(ctxFor(touching))).toEqual([pair])
+    // One pixel of interpenetration and the same pair is gone: the straight
+    // segment would run backwards through the overlap.
+    expect(rule.generate(ctxFor(overlapping))).toEqual([])
+  })
+
   it('excludes an interpenetrating pair even with ample span overlap', () => {
     // to's leading edge sits inside from's body on BOTH axes: no genuine facing gap.
     const fromRect = rectAt(0, 0)
