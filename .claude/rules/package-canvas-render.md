@@ -994,7 +994,7 @@ the table alone.
   live in `src/test-utils/routing-metrics.ts` and never call `edge-rules.ts`
   (the `reversal-count.ts` independent-oracle contract); layouts live in
   `src/test-utils/routing-corpus.ts`.
-- `stryker.config.mjs` + `vitest.stryker.config.ts` are the WEEKLY MUTATION
+- `stryker-targets.mjs` + `stryker.config.mjs` + `vitest.stryker.config.ts` are the MUTATION
   lane (`pnpm mutation:render`, `.github/workflows/mutation.yml`), and they
   answer the question no per-diff gate can: **is a property asserting
   anything at all?** Two here were not — a cache-hit branch no generated run
@@ -1023,6 +1023,18 @@ the table alone.
   the suite. That file is excluded from `mutate` for exactly that reason, and
   the general habit is the one `diagnosis-evidence` already asks for — apply
   the edit, run the suite, watch it stay green.
+  **The list is a BUDGET, and `src/mutation-lane-coverage.test.ts` is what
+  keeps it honest.** Mutating every production source file is 9089 mutants
+  against the list's ~1300 — several hours at this package's measured rate —
+  so the lane covers 9 of 47 modules. A list's failure mode is silence: a
+  module added next month is not covered, the report still looks healthy, and
+  nothing says the lane has been looking at less and less of the code. So both
+  numbers are pinned EXACTLY, the same instrument shape as the scoreboards
+  below, and adding a source file fails that test until someone decides in the
+  diff whether the lane should cover it. The answer may be no; then the count
+  moves and the decision is on the record. It also runs on `pre-push`, because
+  that decision belongs to the diff that adds the module rather than to
+  whoever reads a report months later.
   Two exclusions in the vitest config are about run TIME, not value: the
   routing and text-wrapping SCOREBOARDS above are re-run once per mutant that
   touches their code, and `edge-routing-quality.test.ts` alone is ~22s of the

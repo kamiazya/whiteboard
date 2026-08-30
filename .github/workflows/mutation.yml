@@ -52,12 +52,6 @@ jobs:
 
       - uses: ./.github/actions/setup-pnpm
 
-      # Before the scoping step, not after: that step imports the Stryker
-      # config, which resolves its plugin at load time and throws without a
-      # node_modules to resolve it from.
-      - name: Install dependencies
-        run: pnpm install --frozen-lockfile
-
       - name: Scope the run to the curated files this diff changed
         id: scope
         env:
@@ -67,7 +61,7 @@ jobs:
           set -euo pipefail
           git diff --name-only "$BASE" "$HEAD" > /tmp/changed.txt
           scoped=$(node .claude/scripts/mutation-scope.mjs \
-            --config ./packages/canvas-render/stryker.config.mjs \
+            --targets ./packages/canvas-render/stryker-targets.mjs \
             --prefix packages/canvas-render/ \
             --changed-from /tmp/changed.txt)
           echo "files=$scoped" >> "$GITHUB_OUTPUT"
@@ -76,6 +70,13 @@ jobs:
           else
             echo "Mutating: $scoped"
           fi
+
+      # Only once there is something to mutate: the scoping step reads a plain
+      # list module, so a PR that reaches none of the lane's files finishes
+      # without an install at all.
+      - name: Install dependencies
+        if: steps.scope.outputs.files != ''
+        run: pnpm install --frozen-lockfile
 
       - name: Mutate the changed files
         if: steps.scope.outputs.files != ''
