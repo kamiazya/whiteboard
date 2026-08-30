@@ -1,4 +1,4 @@
-import { lstat, rename, rm } from 'node:fs/promises'
+import { lstat, readdir, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { hasAncestorSymlink } from '../backup-restore.js'
@@ -132,7 +132,15 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     if (st.isSymbolicLink() || st.isFile()) {
       return { kind: 'invalid-output-path' }
     }
-    // Existing directory (empty or not): let helper enforce the non-empty check.
+    // An existing directory must be EMPTY, and that is checked here rather
+    // than left to the copy helper. The helper only ever sees the staging
+    // directory now — one this pass just cleared — so it has nothing to
+    // refuse, and without this the refusal would fall through to the final
+    // rename: after a full copy, a snapshot, and writes into the shared
+    // mirror, with `rename`'s own error naming both paths.
+    if ((await readdir(outputDir)).length > 0) {
+      return { kind: 'invalid-output-path' }
+    }
   } catch (err) {
     if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
       return { kind: 'error', message: 'backup failed' }
@@ -281,7 +289,13 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
       await rename(staging, outputDir)
     } catch (err) {
       await rm(staging, { recursive: true, force: true }).catch(() => {})
-      log.error({ err }, 'could not put the finished backup in place')
+      // The code, never the error: `rename` puts BOTH paths in its message,
+      // and this package does not write filesystem paths to its log — the
+      // packaged smoke asserts stderr carries none.
+      log.error(
+        { code: (err as NodeJS.ErrnoException).code ?? 'unknown' },
+        'could not put the finished backup in place',
+      )
       return { kind: 'error', message: 'backup failed' }
     }
 

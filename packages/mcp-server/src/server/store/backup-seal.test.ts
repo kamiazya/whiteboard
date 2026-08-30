@@ -134,6 +134,40 @@ describe('a backup is not offered until it is complete', () => {
     expect(left).toEqual([])
   })
 
+  /**
+   * The refusal has to happen BEFORE any work, and it used to by accident:
+   * `backupDataDir` was handed the operator's own path and enforced its
+   * non-empty rule there. Staging moved that check onto a directory this pass
+   * had just cleared, so the refusal fell through to the rename at the very
+   * end — after a full copy, a snapshot, and writes into the shared mirror.
+   *
+   * Caught by the packaged smoke rather than by anything here, and not for
+   * this reason: `rename` refusing a non-empty destination puts BOTH paths in
+   * its message, and the logged error carried them to stderr, which the
+   * smoke's no-leak assertion failed on. The ordering defect was underneath.
+   */
+  it('refuses a non-empty output directory before doing any work', async () => {
+    const occupied = join(backupRoot, NIGHT)
+    await mkdir(occupied, { recursive: true })
+    await writeFile(join(occupied, 'canary.txt'), 'something the operator put here')
+
+    let copied = false
+    const outcome = await performBackup({
+      dataDir,
+      outputDir: occupied,
+      mirrorRoot: backupRoot,
+      doBackup: async () => {
+        copied = true
+      },
+    })
+
+    expect(outcome.kind).toBe('invalid-output-path')
+    expect(copied).toBe(false)
+    // Nothing staged, and the operator's own file untouched.
+    expect(await pathExists(`${occupied}${'.incomplete'}`)).toBe(false)
+    expect(await pathExists(join(occupied, 'canary.txt'))).toBe(true)
+  })
+
   it('completes over a staging directory an earlier pass abandoned', async () => {
     // Whatever the staging name is, a directory already sitting there must not
     // stop the next attempt: `backupDataDir` refuses a non-empty destination,
