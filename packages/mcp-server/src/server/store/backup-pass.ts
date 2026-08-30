@@ -1,4 +1,4 @@
-import { lstat } from 'node:fs/promises'
+import { lstat, rename, rm } from 'node:fs/promises'
 import { dirname, join } from 'node:path'
 import { z } from 'zod'
 import { hasAncestorSymlink } from '../backup-restore.js'
@@ -12,6 +12,15 @@ import { readDatabaseLocationRecord } from './db/location-record.js'
 import { snapshotDatabaseInto } from './db/snapshot.js'
 
 const log = getLogger('backup-pass')
+
+/**
+ * What an unfinished backup is called.
+ *
+ * Deliberately not a name `BACKUP_DIR_NAME` matches, so retention and the
+ * mirror's collector both pass over it — a fragment must not be counted as a
+ * backup by anything.
+ */
+const STAGING_SUFFIX = '.incomplete'
 
 export type ServerBackupOutcome =
   | { kind: 'ok'; result: ServerBackupResult }
@@ -189,8 +198,31 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
   // pointing at nothing — silently, since every step reported success. That
   // is ADR-0021 decision 6's far end in the shape this system has today.
   return withBackupMarker(dataDir, async () => {
+    // Everything is assembled under a name that is NOT a backup, and renamed
+    // into place only once every store has finished (ADR-0021 decision 6's
+    // near end: a snapshot is not offered until the mirror has passed it).
+    //
+    // "Offered" is concrete here — it is appearing under a backup name. A
+    // pass that died partway used to leave a directory whose name says backup
+    // and whose contents are a fragment, and three readers took it at its
+    // name: retention counted it and pushed a real backup out of the window,
+    // the mirror's collector found it manifest-less and stopped collecting
+    // for good, and restore read the missing manifest as "taken before the
+    // mirror" and restored a data directory with no rows and no blobs in it,
+    // reporting success.
+    //
+    // Same move the mirror already makes for one blob, for the same reason:
+    // the rename is what makes appearing and being complete one event, so no
+    // reader has to ask whether what it found is finished.
+    const staging = `${outputDir}${STAGING_SUFFIX}`
+    // A staging directory on disk is always one an abandoned pass left: the
+    // leader lease admits one pass at a time, and `backupDataDir` refuses a
+    // destination that is not empty, so a leftover would otherwise wedge
+    // every future attempt.
+    await rm(staging, { recursive: true, force: true }).catch(() => {})
+
     try {
-      await doBackup(dataDir, outputDir, {
+      await doBackup(dataDir, staging, {
         // dirname is non-tautological: the helper's assertWithinAllowed verifies
         // outputDir against its parent, not against itself.
         allowedRoots: [dataDir, dirname(outputDir)],
@@ -209,6 +241,7 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
         excludeBlobs: true,
       })
     } catch {
+      await rm(staging, { recursive: true, force: true }).catch(() => {})
       return { kind: 'error', message: 'backup failed' }
     }
 
@@ -216,8 +249,9 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // and `VACUUM INTO` refuses to overwrite. Neither can go first twice.
     if (configuredInside) {
       try {
-        await doSnapshot(dataDir, join(outputDir, DB_FILENAME))
+        await doSnapshot(dataDir, join(staging, DB_FILENAME))
       } catch {
+        await rm(staging, { recursive: true, force: true }).catch(() => {})
         // A snapshot that failed must fail the BACKUP. Reporting success over a
         // directory holding blobs and no rows is precisely the defect this area
         // exists to remove, and it would arrive by simply not checking.
@@ -228,14 +262,26 @@ export async function performBackup(options: BackupPassOptions): Promise<ServerB
     // After the copy: `backupDataDir` requires an empty destination, and for a
     // self-contained backup the mirror writes inside that same directory.
     try {
-      await doMirror(dataDir, mirrorRoot, {
-        manifestInto: outputDir,
+      // A self-contained backup keeps its mirror inside itself, so while the
+      // pass runs that is the staging directory — the rename carries it.
+      await doMirror(dataDir, mirrorRoot === outputDir ? staging : mirrorRoot, {
+        manifestInto: staging,
         mirror: mirrorRoot === outputDir ? 'self' : 'parent',
       })
     } catch (err) {
+      await rm(staging, { recursive: true, force: true }).catch(() => {})
       // A backup whose blobs did not travel is not a backup, however complete
       // the rows are — restoring it gives documents that point at nothing.
       log.error({ err }, 'could not mirror the blobs; the backup is not usable')
+      return { kind: 'error', message: 'backup failed' }
+    }
+
+    // The seal. Every store has answered, so this is a backup now.
+    try {
+      await rename(staging, outputDir)
+    } catch (err) {
+      await rm(staging, { recursive: true, force: true }).catch(() => {})
+      log.error({ err }, 'could not put the finished backup in place')
       return { kind: 'error', message: 'backup failed' }
     }
 

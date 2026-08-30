@@ -1,18 +1,25 @@
 # ADR-0021: Durability is a property of each store, not an operation on a directory
 
-**Status:** Accepted — decisions 2, 3, 4, 5 and the far end of 6 implemented (a database we do not
-host is reported out of scope rather than refused wholesale; the rows are
-captured by a hot snapshot, so backup no longer requires stopping the
-server; backups run on a schedule, taken by one instance per deployment
-under ADR-0020's leader lease), plus the first slice of decision 1's
-per-store record. Decision 5's mirror is in place and `collectableFromBackup`
-now governs what leaves it, so decision 6's FAR end (retention must not delete
-behind) is enforced by the running code rather than only by its property. The
-NEAR end (a snapshot is not offered until the mirror has passed it) is not
-wired: today's mirror completes inside the same pass that writes the manifest,
-so there is no window to seal against, and `sealableSnapshots` stays unwired
-until the mirror becomes asynchronous — which is what an S3 blob backup would
-make it.
+**Status:** Accepted — implemented.
+
+Each store answers for itself and says so in the backup's own result
+(decision 1), a database the product does not host is reported out of scope
+rather than refused wholesale (2), the rows are captured by a hot snapshot so
+a backup no longer requires stopping the server (3), backups run on a cron
+schedule taken by one instance per deployment under ADR-0020's leader lease
+(4), a blob's durable copy is an append-only mirror shared across backups (5),
+and both ends of a backup's validity interval are enforced — retention deletes
+only what no retained backup references, and a backup is assembled under
+`<name>.incomplete` and renamed into place only once every store has finished,
+so appearing and being complete are one event (6).
+
+One predicate written for decision 6 stays unused, and that is the correct
+state rather than a gap. `sealableSnapshots` filters a set of PENDING
+snapshots against what the mirror has copied, which presumes a mirror running
+BEHIND the snapshot. Here the mirror finishes inside the same pass, so that
+set is always empty and the seal is the rename instead. It becomes the right
+tool when a blob backup is remote and asynchronous — an S3 mirror — and is
+kept for that, with its property test holding the invariant meanwhile.
 
 ## Context
 
@@ -294,6 +301,15 @@ someone restores.
   confirms it has passed T.** Until then the backup is incomplete, and must be
   labelled so — an incomplete backup presented as a complete one is the same
   defect this ADR opened with, in a new place.
+
+  *Implemented as the pass's own atomicity, since today's mirror is
+  synchronous:* the backup is assembled under a name nothing recognises and
+  renamed into place last, so "offered" and "complete" cannot come apart. The
+  hole this closed was real and had three silent readers — a fragment left by
+  a failed pass was counted by retention (pushing a real backup out of the
+  window), read as manifest-less by the mirror's collector (stopping
+  collection for good), and read by restore as a pre-mirror backup, restoring
+  a data directory with no rows and no blobs while reporting success.
 - **The far end (retention must not delete behind).** A blob that no live
   document references any more is still referenced by every retained snapshot
   taken while it was live. So deletion from the blob backup is governed by

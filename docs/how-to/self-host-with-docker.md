@@ -168,6 +168,11 @@ day, seven retained backups cost 403MB as whole copies and 66MB as a mirror,
 and the nightly pass stopped lengthening as the store grew. Retention removes a
 blob only once no retained backup references it.
 
+A backup only takes its timestamped name once every store has finished — until
+then it is assembled under `<name>.incomplete`. So anything you see with a
+timestamped name is complete, and an `.incomplete` left by a killed process is
+ignored by retention and cleared by the next pass.
+
 The trade: **one timestamped directory is not restorable on its own** — back up
 or move the whole `WHITEBOARD_BACKUP_DIR`, not a single night out of it. A
 one-off `whiteboard server backup --output-dir=X` is unaffected and stays a

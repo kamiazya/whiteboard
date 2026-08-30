@@ -58,10 +58,15 @@ describe('runServerBackup', () => {
     expect(capturedCalls).toHaveLength(1)
     const [src, dest, opts] = capturedCalls[0]
     expect(src).toBe(join(tmpRoot, 'data'))
-    expect(dest).toBe(join(tmpRoot, 'backup'))
+    // The STAGING name, not the operator's. Nothing is assembled under a
+    // backup's own name until every store has finished with it, so the helper
+    // is handed somewhere else and the rename is what publishes the result
+    // (ADR-0021 decision 6's near end).
+    expect(dest).toBe(`${join(tmpRoot, 'backup')}.incomplete`)
 
     // allowedRoots uses dirname(outputDir), NOT outputDir itself, so the
-    // helper's assertWithinAllowed check is non-tautological.
+    // helper's assertWithinAllowed check is non-tautological — and the
+    // staging directory is a sibling, so it stays inside that root.
     expect(opts.allowedRoots).toContain(join(tmpRoot, 'data'))
     expect(opts.allowedRoots).toContain(tmpRoot) // dirname of outputDir
     expect(opts.allowedRoots).not.toContain(join(tmpRoot, 'backup')) // NOT self
@@ -586,7 +591,11 @@ describe('runServerBackup captures the rows through the database', () => {
     // The copy never carries the database, even when it is ours — the
     // snapshot is what carries it.
     expect(mockDoBackup.mock.calls[0][2]).toMatchObject({ excludeDatabaseFile: true })
-    expect(mockDoSnapshot).toHaveBeenCalledWith(dataDir, join(outputDir, 'whiteboard.db'))
+    // Into the staging directory, for the same reason the copy goes there.
+    expect(mockDoSnapshot).toHaveBeenCalledWith(
+      dataDir,
+      join(`${outputDir}.incomplete`, 'whiteboard.db'),
+    )
   })
 
   it('takes no snapshot of a database that is not ours', async () => {
