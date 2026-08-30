@@ -107,7 +107,30 @@ const RUNS = Number(process.env.MEASURE_RUNS ?? 10)
 // Set by the GATE caller only. Absent, this script reports and fails nothing,
 // which is what it was built to be; the assertion belongs to whoever states a
 // floor, not to the instrument.
-const FLOOR_MS = process.env.LCP_FLOOR_MS === undefined ? null : Number(process.env.LCP_FLOOR_MS)
+//
+// A value that is PRESENT but not a positive finite number is refused rather
+// than tolerated, because tolerating it fails in the direction that reads as
+// success: `Number('1000ms')` is NaN, `NaN === null` is false so the gate
+// arms, and `median > NaN` is false so every run passes. A typo in the env
+// var would disable enforcement while the job stayed green — measured, and it
+// prints `LCP floor: OK ... floor NaNms`. That is the same
+// guard-that-never-reaches-its-subject shape the mount check below refuses,
+// one level up in the gate's own configuration.
+//
+// Pure and exported so both directions are testable without a browser: the
+// caller does the exiting.
+export function parseFloorMs(raw) {
+  if (raw === undefined || raw === '') return { floor: null }
+  const parsed = Number(raw)
+  if (!Number.isFinite(parsed) || parsed <= 0) {
+    return {
+      error:
+        `LCP_FLOOR_MS must be a positive number of milliseconds; got ${JSON.stringify(raw)}.` +
+        ' Refusing to run, because an unparseable floor would arm the gate and pass everything.',
+    }
+  }
+  return { floor: parsed }
+}
 // A mid-range phone on a decent connection, fixed so two runs are comparable.
 // The absolute numbers are only meaningful against each other.
 const CPU_THROTTLE = Number(process.env.MEASURE_CPU_THROTTLE ?? 4)
@@ -220,6 +243,15 @@ function row(name, s, unit) {
 }
 
 async function main() {
+  // First, so a misconfigured gate costs nothing and cannot be mistaken for a
+  // measurement that ran.
+  const floor = parseFloorMs(process.env.LCP_FLOOR_MS)
+  if (floor.error !== undefined) {
+    console.error(floor.error)
+    process.exit(1)
+  }
+  const FLOOR_MS = floor.floor
+
   if (!existsSync(join(DIST, 'index.html'))) {
     console.error(
       'dist/index.html not found — run `pnpm --filter @kamiazya/whiteboard-web build` first',
@@ -293,4 +325,8 @@ async function main() {
   console.log(`\nLCP floor: OK — median ${lcp.median.toFixed(0)}ms, floor ${FLOOR_MS}ms`)
 }
 
-await main()
+// Importable for its own tests; runs only when executed directly, exactly as
+// `smoke-bundle-size.mjs` does.
+if (import.meta.url === `file://${process.argv[1]}`) {
+  await main()
+}
