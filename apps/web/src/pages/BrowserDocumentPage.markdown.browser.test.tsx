@@ -1,3 +1,4 @@
+import { FoldingBrowserIndex } from '../lib/folding-browser-index.js'
 import { IdbDocumentIndex } from '../lib/idb-document-index.js'
 import { listLocalDocuments } from '../lib/local-document-summary.js'
 import { seedIdbDocument } from '../test-utils/seed-idb-document.js'
@@ -697,5 +698,71 @@ describe('BrowserDocumentPage markdown 導線 (real IndexedDB)', () => {
         { timeout: 10_000 },
       )
     })
+  })
+
+  /**
+   * Someone who types `# Weekly review` has said what the note is called.
+   * Before this the workspace kept calling it `untitled` — in the card, the
+   * URL and every search result — and the only fix was typing the same words
+   * again into the rename dialog. The two cases below are the seed and its
+   * gate; the pure halves are covered by title-from-body and
+   * new-document-path, so what these pin is the WIRING through a real save.
+   */
+  it('names an unnamed note after the title its body announces', async () => {
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'untitled', kind: 'markdown', makeDefault: true })
+    render(<BrowserDocumentPage store={store} />)
+
+    const resolveEditable = () => document.querySelector('[contenteditable="true"]')
+    await waitFor(() => expect(resolveEditable()).not.toBeNull())
+    await focusEditable(resolveEditable)
+    await userEvent.keyboard('# Weekly review')
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toBe('# Weekly review')
+    })
+
+    await waitFor(
+      async () => {
+        const row = (await listLocalDocuments(new FoldingBrowserIndex())).find(
+          (r) => r.kind === 'markdown',
+        )
+        expect(row?.name).toBe('Weekly review')
+      },
+      { timeout: 10_000 },
+    )
+  })
+
+  it('leaves a note with no title unnamed rather than inventing one', async () => {
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, { path: 'untitled', kind: 'markdown', makeDefault: true })
+    render(<BrowserDocumentPage store={store} />)
+
+    const markdownRow = async () =>
+      (await listLocalDocuments(new FoldingBrowserIndex())).find((r) => r.kind === 'markdown')
+    const before = (await markdownRow())?.updatedAt
+
+    const resolveEditable = () => document.querySelector('[contenteditable="true"]')
+    await waitFor(() => expect(resolveEditable()).not.toBeNull())
+    await focusEditable(resolveEditable)
+    await userEvent.keyboard('just some prose')
+    await waitFor(() => {
+      expect(document.querySelector('.cm-content')?.textContent).toBe('just some prose')
+    })
+
+    // Wait for a save to LAND before asserting the absence, rather than
+    // waiting a fixed time and hoping: `touchContentTimestamp` moves
+    // updatedAt on every save, so a changed stamp is proof the seeding path
+    // ran and declined. Asserting the negative any earlier passes for the
+    // wrong reason — nothing had happened yet.
+    await waitFor(
+      async () => {
+        expect((await markdownRow())?.updatedAt).not.toBe(before)
+      },
+      { timeout: 10_000 },
+    )
+
+    // Still the path, projected by `entry.name ?? entry.path` — nobody named
+    // it, and prose is not a title.
+    expect((await markdownRow())?.name).toBe('untitled')
   })
 })

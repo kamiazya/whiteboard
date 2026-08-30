@@ -31,6 +31,7 @@ import {
   readCoreFacets,
   readMarkdownBody,
   resolveWorkspaceDocumentById,
+  setWorkspaceDocumentName,
   writeCoreFacets,
   writeMarkdownBody,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -38,11 +39,13 @@ import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Loro, type LoroText } from 'loro-crdt'
 import type { Dispatch, SetStateAction } from 'react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { isGeneratedDocumentPath } from '../components/workspace-files/new-document-path.js'
 import { getAppLogger } from '../lib/app-logger.js'
 import { BrowserWorkspaceDocs, openWorkspaceOrNull } from '../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { foldWorkspaceDocuments } from '../lib/fold-workspace.js'
 import { touchContentTimestamp } from '../lib/loro-store.js'
+import { titleFromMarkdownBody } from '../lib/title-from-body.js'
 import type { BrowserPersistenceState, LoroStoreLike } from './use-browser-document-controller.js'
 
 const log = getAppLogger('markdown-document')
@@ -168,6 +171,43 @@ export interface MarkdownDocumentState {
   readonly bodyTextOf: (doc: Loro) => LoroText
 }
 
+/**
+ * Names a document after the title its body announces, while nobody has
+ * named it and nobody has placed it.
+ *
+ * Someone who opens a note and types `# Weekly review` has said what it is
+ * called. Without this the workspace keeps calling it `untitled`, in the
+ * card, the URL and every search result, and the only way to fix that is to
+ * type the same words a second time into the rename dialog.
+ *
+ * Two gates, and the second is the load-bearing one. `name` absent means
+ * "nobody named it" — but it is ALSO what the rename dialog leaves behind
+ * when someone deliberately clears a name to show the path instead, and
+ * re-seeding over that would be this codebase's recurring defect: state
+ * keyed on something that has since changed. A still-generated path is the
+ * proxy that separates them, since anyone who cleared a name on a document
+ * they had also placed has engaged with naming.
+ *
+ * The PATH is never touched. ADR-0008 measured deriving one from a display
+ * name and found every non-Latin title collapsing to `untitled-N`; ADR-0007's
+ * addendum retracted it. Seeding the name leaves the address alone, so a
+ * heading edit can never move a document out from under a link.
+ *
+ * Runs on every save rather than only the first: both gates shut the moment
+ * it succeeds, and a note whose heading arrives after its first paragraph
+ * still gets named.
+ */
+function seedNameFromTitle(workspace: Loro, documentId: string): void {
+  const entry = resolveWorkspaceDocumentById(workspace, documentId)
+  if (entry === null || entry.name !== undefined) return
+  if (!isGeneratedDocumentPath(entry.path)) return
+  const title = titleFromMarkdownBody(
+    documentContainers(workspace, documentId).getText(MARKDOWN_BODY_KEY).toString(),
+  )
+  if (title === undefined) return
+  setWorkspaceDocumentName(workspace, { documentId, name: title })
+}
+
 async function openWorkspaceHost(documentId: string): Promise<ContentHost | null> {
   // The fold first: the markdown page has no BrowserBackend, so this is the
   // one place a markdown-only visit carries an older build's per-document
@@ -186,6 +226,7 @@ async function openWorkspaceHost(documentId: string): Promise<ContentHost | null
     doc: workspace,
     containers: documentContainers(workspace, documentId),
     save: async () => {
+      seedNameFromTitle(workspace, documentId)
       await docs.save(getBrowserWorkspaceId(), workspace)
       await touchContentTimestamp(documentId)
     },

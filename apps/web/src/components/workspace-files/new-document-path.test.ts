@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import { newDocumentPathIn } from './new-document-path.js'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
+import { isGeneratedDocumentPath, newDocumentPathIn } from './new-document-path.js'
 
 describe('newDocumentPathIn', () => {
   it('creates in the folder the browser is standing in', () => {
@@ -37,4 +38,30 @@ describe('newDocumentPathIn', () => {
     expect(newDocumentPathIn('design', ['design-untitled'])).toBe('design/untitled')
     expect(newDocumentPathIn('design', ['design-system/untitled'])).toBe('design/untitled')
   })
+})
+
+describe('isGeneratedDocumentPath', () => {
+  it('recognises what newDocumentPathIn produces, at the root and in a folder', () => {
+    expect(isGeneratedDocumentPath('untitled')).toBe(true)
+    expect(isGeneratedDocumentPath('untitled-2')).toBe(true)
+    expect(isGeneratedDocumentPath('design/untitled-17')).toBe(true)
+  })
+
+  it('does not claim a path a person chose', () => {
+    expect(isGeneratedDocumentPath('weekly-review')).toBe(false)
+    expect(isGeneratedDocumentPath('untitled-notes')).toBe(false)
+    expect(isGeneratedDocumentPath('design/untitled/child')).toBe(false)
+    // `-1` and `-0` are never generated: the counter starts at 2.
+    expect(isGeneratedDocumentPath('untitled-1')).toBe(false)
+  })
+
+  // The pair has to agree, or the seeding gate opens on paths nobody generated.
+  fcTest.prop([fc.integer({ min: 0, max: 30 })], withDefaults())(
+    'every path the generator produces is recognised by the predicate',
+    (howMany) => {
+      const taken: string[] = []
+      for (let i = 0; i < howMany; i++) taken.push(newDocumentPathIn('design', taken))
+      for (const path of taken) expect(isGeneratedDocumentPath(path)).toBe(true)
+    },
+  )
 })
