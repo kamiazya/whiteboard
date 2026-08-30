@@ -38,7 +38,11 @@ export function createViewportRouter(options: CreateViewportRouterOptions = {}) 
         error: 'no_client',
         message:
           'No browser client is connected to this canvas. Open the canvas in a browser and retry.',
-        hint: 'Call canvas_open first to open the canvas in a browser, then run viewport_set.',
+        // Names no tool. This hint said "Call canvas_open first … then run
+        // viewport_set" long after both names stopped existing — the caller
+        // was told to run two tools it could not have, by the very error
+        // meant to unblock it.
+        hint: 'Open the canvas in a browser first — the whiteboard viewport tools act on a connected client — then retry.',
       }
       return c.json(noClient, 503)
     }

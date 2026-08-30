@@ -87,8 +87,12 @@ a later sweep does not "fix" them.
 
 - **The spatial surface.** `SpatialCanvas`, `CanvasEdge`, `CanvasColor`,
   `CanvasViewer`, `canvasRef`, `screenToCanvas`, `wb_canvas_tidy`, the
-  render/layout helpers, and the MCP Apps UI tools `canvas_open`/`canvas_view`.
-  The word means the surface; only the CONTAINER sense was retired.
+  render/layout helpers, and the MCP Apps UI tool `canvas_view`. The word
+  means the surface; only the CONTAINER sense was retired. (This said
+  `canvas_open`/`canvas_view` until 2026-08-30; `canvas_open` is registered
+  nowhere and had not been for some time — a rule naming a tool is one more
+  place a tool name can go stale, which is why the guidance text the server
+  itself hands out now names none.)
 - **Judge by the RETURN TYPE, not the owner.** `documentSyncSession.getCanvas()`
   answers with a `SpatialCanvas`, so `Canvas` is correct even though a
   document-shaped object owns the method.
