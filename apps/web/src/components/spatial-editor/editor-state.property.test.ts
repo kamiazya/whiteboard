@@ -2421,6 +2421,20 @@ describe('editor composite state (command-based)', () => {
       }
       fc.modelRun(freshState, commands)
     },
+    // An explicit budget, sized on a measurement rather than left at
+    // vitest's 5000ms default, which this property has never fit inside.
+    // Measured with the budget lifted: 5.22-5.27s, and the SAME 5.23-5.26s
+    // at `5ceac722`, the commit that raised `numRuns` to 500 — so it was
+    // over from the day it was written, on a machine slower than CI's. CI
+    // passes it; what the default cost was a local full-suite run
+    // reporting a failure that is purely this machine's speed, and a
+    // failing-file count that changed between two runs of one tree.
+    //
+    // The lever is the budget, NOT `numRuns`: the coverage floors above
+    // record that 300 left two counters sitting exactly ON their floor,
+    // so cutting runs trades a spurious failure for a property that
+    // asserts less. A pinned seed would be worse than either.
+    15_000,
   )
 })
 
