@@ -23,9 +23,16 @@ import { workspaceSegmentSchema } from './ids.js'
  * knows. Callers take this candidate and ask their own registry.
  */
 export function deriveWorkspaceSegment(displayName: string): string | undefined {
+  // The trims take no `+`, and that is a statement rather than a shortcut: the
+  // collapse above replaces each maximal RUN of non-alphanumerics with one
+  // dash, so the candidate can never hold two adjacent dashes and at most one
+  // can be leading or trailing. Writing `^-+|-+$` claimed a run might be there
+  // — a claim CodeQL reads, correctly, as polynomial backtracking on a name
+  // that arrives in a request body.
   const candidate = displayName
     .toLowerCase()
     .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
+    .replace(/^-/, '')
+    .replace(/-$/, '')
   return workspaceSegmentSchema.safeParse(candidate).success ? candidate : undefined
 }

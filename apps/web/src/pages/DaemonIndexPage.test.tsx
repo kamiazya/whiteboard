@@ -490,6 +490,102 @@ describe('DaemonIndexPage', () => {
     expect(screen.getByText('alpha')).toBeTruthy()
   })
 
+  it('finds a workspace created since its list was read, instead of falling back off it', async () => {
+    // The switcher is the SHELL's, and it writes through its own source. This
+    // page's `workspaces` is a snapshot taken before that write, so a freshly
+    // created workspace is ABSENT from it — and a handle the list does not
+    // hold used to mean one thing only: a stale bookmark, fall back to
+    // first-listed. So creating a workspace from the switcher landed on a
+    // different workspace and rewrote the address to name it.
+    const routes = {
+      workspaces: [{ workspaceId: 'ws-a' }] as Array<{ workspaceId: string; segment?: string }>,
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-new': [{ path: 'freshly-made', updatedAt: new Date().toISOString() }],
+      },
+    }
+    installFetchMock(routes)
+    const onWorkspaceResolved = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="ws-a"
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    onWorkspaceResolved.mockClear()
+
+    // What the switcher's create did: the daemon now holds it, and the
+    // address moved onto it.
+    routes.workspaces.push({ workspaceId: 'ws-new' })
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-new"
+          onWorkspaceResolved={onWorkspaceResolved}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    expect(await screen.findByText('freshly-made')).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
+    expect(onWorkspaceResolved).not.toHaveBeenCalledWith('ws-a')
+  })
+
+  it('follows a segment the workspace was renamed to a moment ago', async () => {
+    // The rename half of the same shape. `onSwitch` carries the NEW segment,
+    // which the page's pre-rename snapshot spells the old way — so the
+    // resolve missed and the page fell off the workspace the person had just
+    // renamed, onto first-listed.
+    const routes = {
+      workspaces: [
+        { workspaceId: WS_ULID, segment: 'studio' },
+        { workspaceId: 'ws-other' },
+      ] as Array<{ workspaceId: string; segment?: string }>,
+      // Keyed by HANDLE, which for a workspace holding a segment is that
+      // segment — the page addresses the daemon by what it settled on, not by
+      // the canonical id. Both spellings are present because the rename below
+      // moves which one it asks for.
+      documentsByWorkspace: {
+        studio: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        marketing: [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+        'ws-other': [{ path: 'beta', updatedAt: new Date().toISOString() }],
+      },
+    }
+    installFetchMock(routes)
+    const onWorkspaceResolved = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="studio"
+        onWorkspaceResolved={onWorkspaceResolved}
+        onOpenDocument={vi.fn()}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+    onWorkspaceResolved.mockClear()
+
+    routes.workspaces[0] = { workspaceId: WS_ULID, segment: 'marketing' }
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="marketing"
+          onWorkspaceResolved={onWorkspaceResolved}
+          onOpenDocument={vi.fn()}
+        />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(onWorkspaceResolved).toHaveBeenCalledWith('marketing'))
+    expect(screen.getByText('alpha')).toBeTruthy()
+    expect(screen.queryByText('beta')).toBeNull()
+  })
+
   it('follows the workspace the address names when it changes under the page', async () => {
     // The switcher is the SHELL's now, and it changes the address; the page
     // renders whatever workspace the address names. Until this, `workspace`

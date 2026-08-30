@@ -102,6 +102,14 @@ export function BrowserIndexPage({
 
   useEffect(() => {
     let cancelled = false
+    // Cleared BEFORE the lookup, not merely overwritten after it. On a switch
+    // this state still holds the workspace the person just left, and the
+    // `.catch` below deliberately swallows a failed read — so without this the
+    // new workspace renders under the old one's name, indefinitely and with
+    // nothing saying so. Dropping to the handle fallback for the round trip is
+    // the right trade: the handle is what the address already carries, and it
+    // is true about the workspace on screen.
+    setWorkspaceName(null)
     // Its own chain, deliberately not folded into the documents load below: a
     // name that will not load leaves the heading on the handle, which is still
     // true, and must not surface as "Failed to load documents from this

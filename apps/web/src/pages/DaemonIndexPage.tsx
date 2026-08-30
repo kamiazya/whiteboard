@@ -229,9 +229,26 @@ export function DaemonIndexPage({
   // -address branch above has to clear this deliberately.
   const reportedWorkspaceRef = useRef<string | null>(null)
 
+  // The handles this page has already re-read the list for. A miss has two
+  // causes that look identical from here, and only one of them is stale.
+  const refetchedForRef = useRef<string | null>(null)
+
   useEffect(() => {
     if (workspace === undefined || !workspacesLoaded) return
     const wanted = resolveWorkspaceHandle(workspaces, workspace)
+    // A handle this list does not hold is EITHER a stale bookmark or a
+    // workspace the switcher created or renamed a moment ago. The switcher is
+    // the SHELL's and writes through its own source, so this page's list is a
+    // snapshot taken before that write — and treating every miss as stale
+    // meant creating a workspace landed on a DIFFERENT one and rewrote the
+    // address to name it. So a miss re-reads the list once per handle; a
+    // handle still missing after that is genuinely stale and gets the
+    // first-listed fallback below, unchanged.
+    if (wanted === null && refetchedForRef.current !== workspace) {
+      refetchedForRef.current = workspace
+      void loadWorkspaces()
+      return
+    }
     const fallback = workspaces[0]
     const target = wanted ?? fallback
     if (target === undefined) return
@@ -252,7 +269,7 @@ export function DaemonIndexPage({
     // when the fallback IS a different workspace and that effect does fire.
     reportedWorkspaceRef.current = handle
     onWorkspaceResolved?.(handle)
-  }, [workspace, workspaces, workspacesLoaded, onWorkspaceResolved])
+  }, [workspace, workspaces, workspacesLoaded, onWorkspaceResolved, loadWorkspaces])
 
   useEffect(() => {
     if (selectedWorkspace === null) return
