@@ -1,15 +1,35 @@
+import { mkdtemp, rm } from 'node:fs/promises'
+import { tmpdir } from 'node:os'
+import { join } from 'node:path'
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { newImageRef } from '@kamiazya/whiteboard-model'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
-import { describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import {
   loopTurnShare,
   measureLoopAvailability,
 } from '../../shared/test-utils/loop-availability.js'
-import { InMemoryDocumentStore } from './inmemory/in-memory-document-store.js'
+import { createIsolatedDb } from './db/test-helpers.js'
+import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { createWorkspaceTail } from './workspace-tail.js'
+
+let root: string
+let handle: Awaited<ReturnType<typeof createIsolatedDb>>
+
+beforeEach(async () => {
+  root = await mkdtemp(join(tmpdir(), 'wb-tail-loop-'))
+  // File-backed, through the production dialect. An in-memory store measured
+  // this at 6.6ms and a real one at 8.1ms on the same fixture — close enough
+  // to look interchangeable, and they are not: what the number tracks is the
+  // size of the record being caught up, and only a real store carries one.
+  handle = await createIsolatedDb({ dataDir: join(root, 'data'), memory: false })
+})
+afterEach(async () => {
+  await handle.dispose()
+  await rm(root, { recursive: true, force: true })
+})
 
 function canvasReferencing(prefix: string, nodes: number): SpatialCanvas {
   return {
@@ -26,37 +46,49 @@ function canvasReferencing(prefix: string, nodes: number): SpatialCanvas {
   }
 }
 
-/**
- * Ten sampler intervals of work, at least — below that "the loop got a turn"
- * is a statement about timer granularity rather than about this pass.
- */
+/** Ten sampler intervals of work, at least. */
 const MIN_PASS_MS = 50
 
 /**
  * What the workspace tail costs the loop that is serving requests, which is
  * the answer `background-work.ts` declares for it.
  *
- * `catchUp` imports the record's new updates into the live document every
- * subscriber is reading, and that is a synchronous WASM call. The `await`s
- * around it read exactly like awaits on a socket and never reach the timer
- * phase, so before the per-workspace yield a pass was one unbroken stall for
- * as long as every subscribed workspace took together — measured over 10
- * workspaces with real history: 80.1ms elapsed, 80.1ms blocked, and the 5ms
- * sampler landed ZERO times. With the yield, on the same fixture, 9 samples
- * and a 6.6ms worst stall.
+ * `catchUp` imports what the record gained into the live document every
+ * subscriber is reading, and that import is a synchronous WASM call. The
+ * `await`s around it read exactly like awaits on a socket and never reach the
+ * timer phase, so before the per-workspace yield a pass was one unbroken
+ * stall for as long as every subscribed workspace took together.
  *
- * Smaller than file-GC's seconds by two orders of magnitude, and it matters
- * for the opposite reason: this one runs on the operator's chosen interval,
- * so its stall is paid over and over rather than once a night.
+ * Measured over 10 workspaces against a file-backed libSQL store, by removing
+ * the yield: at 30 commits of history and a 50-commit gain, 331.4ms elapsed
+ * and 331.4ms blocked with ZERO sampler ticks; at 300 and 50, **2927ms** —
+ * three seconds of daemon, on every interval the operator chose.
  *
- * The store here is in-memory, which makes the measurement CONSERVATIVE in
- * the direction that counts: a real libSQL read might let a tick land between
- * workspaces, but the import itself blocks either way, and it is the import
- * this bounds.
+ * With the yield the stall becomes ONE workspace's catch-up, and that is the
+ * floor: an import is a single call and cannot be subdivided, so the only way
+ * further down is to batch what `catchUp` imports. What one workspace costs
+ * is what this grows with, not how many there are:
+ *
+ * | history | gain | elapsed | blocked | worst stall |
+ * |---------|------|---------|---------|-------------|
+ * | 30      | 10   | 80.4ms  | 35.4ms  | 7.7ms       |
+ * | 100     | 10   | 227.2ms | 182.2ms | 27.3ms      |
+ * | 100     | 50   | 562.4ms | 517.4ms | 105.4ms     |
+ * | 300     | 50   | 1390ms  | 1345ms  | 282.8ms     |
+ *
+ * The aggregate stays ~97% blocked and is meant to: the work is CPU-bound and
+ * the yield buys BOUNDED LATENCY, not less load. 300 commits of history is a
+ * small workspace, so 282.8ms is a floor on what a real one pays rather than
+ * a ceiling — which is why the declaration names the fixture instead of
+ * carrying a bare number.
+ *
+ * A ratio rather than a duration, for the reason `snapshot-blocking.test.ts`
+ * gives: "the loop keeps getting turns" is stable across machines in a way a
+ * millisecond figure is not.
  */
 describe('a workspace-tail pass', () => {
   it('keeps handing the event loop back between workspaces', async () => {
-    const docs = new DocumentStoreWorkspaceDocs(new InMemoryDocumentStore())
+    const docs = new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(handle.db))
     const live = new Map<string, LoroDoc>()
     const subscribed: string[] = []
     let emitted = 0
@@ -71,12 +103,12 @@ describe('a workspace-tail pass', () => {
     })
 
     // The fixture GROWS until a pass is long enough for the answer to mean
-    // anything: a pass finishing inside a couple of sampler intervals would
+    // anything: one finishing inside a couple of sampler intervals would
     // report a tiny worst-stall whether it yielded or not.
     let availability: Awaited<ReturnType<typeof measureLoopAvailability<void>>>['availability'] =
       undefined as never
-    for (let round = 0; round < 5; round++) {
-      for (let i = 0; i < 8 * 2 ** round; i++) {
+    for (let round = 0; round < 4; round++) {
+      for (let i = 0; i < 4 * 2 ** round; i++) {
         const workspaceId = `ws-${round}-${i}`
         const doc = new LoroDoc()
         for (let r = 0; r < 30; r++) {
@@ -88,7 +120,7 @@ describe('a workspace-tail pass', () => {
         subscribed.push(workspaceId)
       }
       // A first pass over a newly subscribed workspace BASELINES rather than
-      // catching up, so the measured pass below has to be the second one —
+      // catching up, so the measured pass has to be the second one —
       // otherwise this measures `readCursor` and nothing else, which is the
       // vacuous version of this test.
       await tail.pollOnce()
@@ -110,14 +142,27 @@ describe('a workspace-tail pass', () => {
     // than baselining past every workspace.
     expect(availability.elapsedMs).toBeGreaterThan(MIN_PASS_MS)
     expect(emitted).toBeGreaterThan(0)
+    expect(subscribed.length).toBeGreaterThanOrEqual(4)
 
-    // Without the yield this fixture produced ZERO samples: the loop ran
-    // nothing at all for the whole pass. A SHARE rather than a count, for the
-    // reason `loopTurnShare` gives -- this pass is short enough that the ideal
-    // sample count is around ten, so the absolute 5 it replaces demanded half
-    // of them, and CI failed on `expected 5 to be greater than 5`. Measured
-    // here: 0.55 idle, 0.37 under load.
+    // A SHARE of the ticks the sampler asked for, not a count — the scale-free
+    // form `loopTurnShare` exists for, and the one both loop-availability
+    // tests now use. A count is a statement about how busy the machine is:
+    // this assertion was `samples > 5`, and the growth loop above exits on
+    // ELAPSED time while the sample count tracks the WORKSPACE count, so
+    // whether round 0's four workspaces landed above or below the floor
+    // silently decided whether it was reachable. Measured: 42.9ms with 3
+    // samples locally, which continued to round 1 and passed, against four
+    // workspaces and 3 samples on CI, which exited and failed. Same code,
+    // same assertion, opposite verdicts, and neither run was about the yield.
+    //
+    // Without the yield this produces ZERO samples at any fixture size, which
+    // is what the assertion is really for. Measured on THIS fixture, against
+    // the real store: 0.23-0.26 idle over three runs, 0.27 under the full
+    // mcp-node suite, 0 with the yield removed. Lower than the 0.55 / 0.37
+    // the in-memory version of this test recorded, because a real store makes
+    // each workspace's catch-up dearer and proportionally fewer ticks land —
+    // one more way that fixture flattered the picture.
     expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
-  }, 120_000)
+  }, 300_000)
 })
