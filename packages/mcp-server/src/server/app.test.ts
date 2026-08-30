@@ -1,6 +1,7 @@
 import { mkdir, rm, writeFile } from 'node:fs/promises'
 import { join } from 'node:path'
 import { deleteSpatialNode } from '@kamiazya/whiteboard-loro-adapter'
+import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import {
   Client,
   LATEST_PROTOCOL_VERSION,
@@ -750,7 +751,12 @@ describe('createApp daemon mutation auth', () => {
       .select(['value'])
       .where('key', '=', 'currentWorkspaceId')
       .executeTakeFirst()
-    expect(runtimeRow?.value).toMatch(/^[A-Za-z0-9_-]{21}$/)
+    // Concurrency is this test's subject — 32 initializes must settle on ONE
+    // id — and the shape is incidental to that. It asserts the canonical
+    // schema rather than a literal pattern so it does not quietly become a
+    // second place the id format is pinned; `current-workspace.test.ts` owns
+    // that.
+    expect(workspaceCanonicalIdSchema.safeParse(runtimeRow?.value).success).toBe(true)
   })
 
   it('protects newly added /api routes by default, GET included', async () => {
