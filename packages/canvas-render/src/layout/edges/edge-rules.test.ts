@@ -159,6 +159,34 @@ describe('u-hook-when-degenerate', () => {
     ])
   })
 
+  it('hooks over the DOMINANT axis when the offset is purely vertical', () => {
+    // dx = 0 keeps the L-pair rule empty, and the y-overlap invalidates both
+    // gaps — the same degenerate shape as above with the axes swapped. The
+    // dominant axis is now vertical, so the hook goes over the horizontal
+    // side, and the test above (dy = 0) cannot tell that branch from its
+    // sibling.
+    const fromRect = rectAt(0, 0)
+    const toRect = rectAt(0, 50)
+
+    expect(rule.generate({ dx: 0, dy: 50, fromRect, toRect, crowd: () => 0 })).toEqual([
+      { fromSide: 'right', toSide: 'right' },
+      { fromSide: 'left', toSide: 'left' },
+    ])
+  })
+
+  it('treats an exactly concentric pair as horizontally dominant', () => {
+    // |dx| === |dy| === 0, the tie the dominance test resolves with `>=`. At
+    // `>` the hook silently swaps to the other axis, and no other degenerate
+    // arrangement can produce the tie: the L-pair rule only steps aside when
+    // one offset is zero, so equal magnitudes mean both are.
+    const rect = rectAt(0, 0)
+
+    expect(rule.generate({ dx: 0, dy: 0, fromRect: rect, toRect: rect, crowd: () => 0 })).toEqual([
+      { fromSide: 'top', toSide: 'top' },
+      { fromSide: 'bottom', toSide: 'bottom' },
+    ])
+  })
+
   it('yields nothing once a valid zero-bend alternative exists', () => {
     const fromRect = rectAt(0, 0)
     const toRect = rectAt(200, 60)

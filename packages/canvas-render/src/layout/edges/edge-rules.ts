@@ -211,6 +211,13 @@ const uHookWhenDegenerate = {
     const ls = lPairCrowdingTieBreak.generate(ctx)
     const anyGapValid = facingGapOk(ctx, 'h') || facingGapOk(ctx, 'v')
     if (zero.length !== 0 || ls.length !== 0 || anyGapValid) return []
+    // The `'bottom'` arm is unreachable as the rule stands, and the ternary
+    // keeps it because the ARM is what says which side the hook goes over —
+    // deleting it would leave a bare `'top'` that reads as a coincidence.
+    // Reaching it needs `dy > 0` together with `|dx| >= |dy|`, and getting
+    // this far already needs one offset to be zero (the L-pair rule steps
+    // aside for nothing else), so `dy` is zero whenever the inner test runs.
+    // A future rule that stops requiring a collinear offset would open it.
     const across: Side = Math.abs(ctx.dx) >= Math.abs(ctx.dy) ? (ctx.dy > 0 ? 'bottom' : 'top') : h
     return [
       { fromSide: across, toSide: across },
