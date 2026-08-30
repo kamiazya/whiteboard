@@ -26,6 +26,15 @@ export const sceneDigestSchema = z.object({
        * which a reader of this JSON never sees.
        */
       truncated: z.literal(true).optional(),
+      /**
+       * Present when the content does not fit the box AT ALL — a superset of
+       * `truncated`, which also covers content kept whole at a width it
+       * exceeds because it is one irreducible code point. Nothing is hidden
+       * in that case, so it draws no fade and is not `truncated`; the box is
+       * still too small, which is what a reader deciding whether to resize
+       * needs to know.
+       */
+      overflows: z.literal(true).optional(),
     }),
   ),
   overlaps: z.array(z.tuple([z.string(), z.string()])),
@@ -78,6 +87,7 @@ interface DigestEntry {
   readonly bbox: BoundingBox
   readonly z: number
   readonly truncated?: true
+  readonly overflows?: true
 }
 
 function overlapArea(a: BoundingBox, b: BoundingBox): number {
@@ -255,12 +265,22 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
  * every bbox-carrying node, named by position. There is nothing better to
  * name them by, and the alternative is answering with nothing.
  */
-function collectEntries(
-  scene: Scene,
-): { readonly id?: string; readonly bbox: BoundingBox; readonly truncated?: true }[] {
+function collectEntries(scene: Scene): {
+  readonly id?: string
+  readonly bbox: BoundingBox
+  readonly truncated?: true
+  readonly overflows?: true
+}[] {
   const identified = scene.nodes.flatMap((node) =>
     node.kind === 'shape' && node.id !== undefined
-      ? [{ id: node.id, bbox: node.bbox, ...(node.truncated ? { truncated: true as const } : {}) }]
+      ? [
+          {
+            id: node.id,
+            bbox: node.bbox,
+            ...(node.truncated ? { truncated: true as const } : {}),
+            ...(node.overflows ? { overflows: true as const } : {}),
+          },
+        ]
       : [],
   )
   if (identified.length > 0) return identified
@@ -279,6 +299,7 @@ export function sceneDigest(scene: Scene): SceneDigest {
     bbox: entry.bbox,
     z: index,
     ...(entry.truncated ? { truncated: true as const } : {}),
+    ...(entry.overflows ? { overflows: true as const } : {}),
   }))
 
   const freeRegions = computeFreeRegions(entries)
@@ -288,6 +309,7 @@ export function sceneDigest(scene: Scene): SceneDigest {
       bbox: e.bbox,
       z: e.z,
       ...(e.truncated ? { truncated: true as const } : {}),
+      ...(e.overflows ? { overflows: true as const } : {}),
     })),
     overlaps: computeOverlaps(entries),
     containment: computeContainment(entries),

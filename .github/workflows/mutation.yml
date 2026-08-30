@@ -96,7 +96,8 @@ jobs:
           set -euo pipefail
           node .claude/scripts/mutation-comment.mjs \
             packages/canvas-render/tmp/stryker-reports/mutation.json \
-            --marker '<!-- canvas-render-mutation -->' > /tmp/mutation-comment.md
+            --marker '<!-- canvas-render-mutation -->' \
+            --equivalents packages/canvas-render/stryker-targets.mjs > /tmp/mutation-comment.md
           if [ -s /tmp/mutation-comment.md ]; then echo "has=1" >> "$GITHUB_OUTPUT"; fi
 
       # Same sticky shape as the preview-URL comment: one comment per PR,

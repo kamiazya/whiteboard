@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { MUTATED } from '../stryker-targets.mjs'
+import { KNOWN_EQUIVALENT, MUTATED } from '../stryker-targets.mjs'
 
 /**
  * The mutation lane covers a LIST of modules, not the package, and a list's
@@ -29,6 +29,27 @@ function isProductionSource(path: string): boolean {
   return !path.includes('.test.') && !path.startsWith('./test-utils/')
 }
 
+const flatten = (text: string): string => text.replace(/\s+/g, ' ').trim()
+
+/**
+ * The original halves a `KNOWN_EQUIVALENT` key could be split into.
+ *
+ * A key is `Mutator: <original> -> <replacement>` and BOTH halves may contain
+ * a literal ` -> ` of their own — an arrow function is the obvious case — so
+ * there is no split that is right by construction. Every candidate is returned
+ * and the caller accepts the entry if any of them is in the file. That is
+ * deliberately permissive in the ambiguous case and exact in the one that
+ * matters: when the expression is gone from the file, no split matches.
+ */
+function originalsOf(key: string): readonly string[] {
+  const body = key.replace(/^[A-Za-z]+: /, '')
+  const splits: string[] = []
+  for (let at = body.indexOf(' -> '); at !== -1; at = body.indexOf(' -> ', at + 1)) {
+    splits.push(body.slice(0, at))
+  }
+  return splits
+}
+
 describe('the mutation lane covers what it says it covers', () => {
   const production = Object.keys(sources).filter(isProductionSource).sort()
 
@@ -50,6 +71,46 @@ describe('the mutation lane covers what it says it covers', () => {
     // silently mutates nothing, which reads exactly like a covered file.
     const onDisk = new Set(production.map((path) => path.replace(/^\.\//, 'src/')))
     expect(MUTATED.filter((entry: string) => !onDisk.has(entry))).toEqual([])
+  })
+
+  it('records equivalents only for files the lane actually mutates', () => {
+    // An entry for a file outside `MUTATED` suppresses nothing and reads as
+    // triage that happened. The likely way to get one is renaming a module and
+    // updating only the list above.
+    const covered = new Set(MUTATED)
+    expect(Object.keys(KNOWN_EQUIVALENT).filter((file) => !covered.has(file))).toEqual([])
+  })
+
+  it('records a positive count for every equivalent it names', () => {
+    // A zero or negative count suppresses nothing while looking like it does,
+    // which is the one way this ledger can quietly stop working.
+    const bad = Object.entries(KNOWN_EQUIVALENT).flatMap(([file, mutants]) =>
+      Object.entries(mutants)
+        .filter(([, count]) => !Number.isInteger(count) || count < 1)
+        .map(([key]) => `${file} :: ${key}`),
+    )
+    expect(bad).toEqual([])
+  })
+
+  it('names an expression that is still in the file it names', () => {
+    // The way this ledger actually decays. The two guards above catch a moved
+    // FILE; nothing catches a moved EXPRESSION, and that is the common edit —
+    // rewrite a condition in `edge-crossing-sweep.ts` and its entries match no
+    // mutant ever again, while the ledger goes on claiming 23 settled findings
+    // and the report goes on being read as if they were still true.
+    //
+    // Same both-sides discipline as `arch-lint`'s allowlists: an entry cannot
+    // outlive the thing it names. The check is a whitespace-flattened
+    // substring, which is what `mutantKey` compares anyway — Stryker reports
+    // the original slice from its own location, so an expression the file
+    // still contains is present verbatim modulo indentation.
+    const stale = Object.entries(KNOWN_EQUIVALENT).flatMap(([file, mutants]) => {
+      const source = flatten(sources[file.replace(/^src\//, './')] ?? '')
+      return Object.keys(mutants)
+        .filter((key) => !originalsOf(key).some((original) => source.includes(original)))
+        .map((key) => `${file} :: ${key}`)
+    })
+    expect(stale).toEqual([])
   })
 
   it('excludes seed.ts, whose survivors this tool reports falsely', () => {

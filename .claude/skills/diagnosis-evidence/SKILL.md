@@ -12,6 +12,38 @@ evidence, and nothing in it says what was actually exercised.
 
 Every rule below cost a wrong public conclusion in one session.
 
+## Pick an observation that could REFUTE the claim
+
+The rule the others are instances of. Three wrong conclusions in one session
+shared this shape: the observation taken was CONSISTENT with the claim and
+could not have contradicted it, so it read as confirmation while testing
+nothing.
+
+- A mutant reported `failed 1 test` and was read as killed. The failing test
+  was a flake, in a file the mutated line cannot reach; three full runs of the
+  mutated build all passed. One failure is equally consistent with killed and
+  with a flake — only WHICH test failed tells them apart.
+- A survivor at `elements[0]?.attrs?.[name]` was hand-checked by mutating both
+  optional chains. It went red, and the reported mutant was only one of them.
+  Mutating more than what was reported can only produce red; red then says
+  nothing about the reported mutant.
+- `okSecond` was called unreachable after measuring that `zeroBendFacingFirst`
+  never returns two pairs. True, and about a different question: the two pushes
+  are mutually exclusive, so a single pair can arrive from either. Measured on
+  the branch that actually answers the claim, 242 of 7893 firings came from the
+  non-dominant one.
+
+So before running the observation, name the outcome that would make you say the
+claim is WRONG. If no outcome of this observation would, you are about to
+confirm rather than test — take the discriminator instead: the failing test's
+NAME rather than the count, the reported mutant's exact line and columns rather
+than the expression around it, the branch the claim is about rather than the one
+beside it.
+
+This is also why a diagnosis is cheapest to check while it is still a sentence.
+Each of the three cost one extra command to settle, and each was published
+first.
+
 ## Read the stack line before explaining the message
 
 `expected '' to be 'Fast switch'` was diagnosed from the string alone, blamed on

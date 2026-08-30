@@ -1,9 +1,12 @@
 import { describe, expect, it } from 'vitest'
+import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import { scoreSegmentPair } from './edge-crossing-sweep.js'
 import {
   addCost,
   COST_QUANTUM,
   dominantAxisOrder,
+  facingLaneWindow,
+  fullyContains,
   hasRepairableProblem,
   lessCost,
   PENALTY_RULES,
@@ -12,6 +15,7 @@ import {
   pairPenalty,
   type Rect,
   SIDE_PREFERENCE_RULES,
+  SLIDE_CORNER_INSET_PX,
   selfPenalty,
   shouldAdoptCandidate,
   ZERO_LANE_MIN_OVERLAP_PX,
@@ -61,6 +65,84 @@ describe('zero-bend-facing-first', () => {
     const toRect = rectAt(200, 61) // overlap 19px, one under ZERO_LANE_MIN_OVERLAP_PX
     expect(rule.generate({ dx: 200, dy: 61, fromRect, toRect, crowd: () => 0 })).toEqual([])
     expect(ZERO_LANE_MIN_OVERLAP_PX).toBe(20)
+  })
+
+  // The facing-gap test is FOUR comparisons — one per direction — and each is
+  // an inclusive bound, so boxes that touch edge to edge still face each
+  // other. Nothing reached that boundary, nor two of the four directions at
+  // all: measured, `facingGapOk` carried 26 surviving mutants, more than any
+  // other function in the file. Each row is the boundary and the first case
+  // past it, so a comparison that moves is caught whichever way it moves.
+  it.each([
+    ['right', rectAt(0, 0), rectAt(100, 0), rectAt(99, 0), { fromSide: 'right', toSide: 'left' }],
+    ['left', rectAt(100, 0), rectAt(0, 0), rectAt(1, 0), { fromSide: 'left', toSide: 'right' }],
+    ['bottom', rectAt(0, 0), rectAt(0, 100), rectAt(0, 99), { fromSide: 'bottom', toSide: 'top' }],
+    ['top', rectAt(0, 100), rectAt(0, 0), rectAt(0, 1), { fromSide: 'top', toSide: 'bottom' }],
+  ])('counts boxes touching edge to edge as facing, leaving %s', (_direction, fromRect, touching, overlapping, pair) => {
+    const ctxFor = (toRect: Rect) => ({
+      dx: toRect.x + toRect.w / 2 - (fromRect.x + fromRect.w / 2),
+      dy: toRect.y + toRect.h / 2 - (fromRect.y + fromRect.h / 2),
+      fromRect,
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(rule.generate(ctxFor(touching))).toEqual([pair])
+    // One pixel of interpenetration and the same pair is gone: the straight
+    // segment would run backwards through the overlap.
+    expect(rule.generate(ctxFor(overlapping))).toEqual([])
+  })
+
+  fcTest.prop(
+    [
+      fc.record({
+        x: fc.integer({ min: -300, max: 300 }),
+        y: fc.integer({ min: -300, max: 300 }),
+        w: fc.integer({ min: 1, max: 200 }),
+        h: fc.integer({ min: 1, max: 200 }),
+      }),
+      fc.record({
+        x: fc.integer({ min: -300, max: 300 }),
+        y: fc.integer({ min: -300, max: 300 }),
+        w: fc.integer({ min: 1, max: 200 }),
+        h: fc.integer({ min: 1, max: 200 }),
+      }),
+    ],
+    withDefaults({ numRuns: 300 }),
+  )('offers at most ONE pair, because the two axes exclude each other', (fromRect, toRect) => {
+    // A structural fact, not a coincidence of this domain: a horizontal
+    // zero-bend needs an x-GAP plus a y-span overlap, and a vertical one needs
+    // a y-gap plus an x-span overlap — but a pair with an x-gap has no x-span
+    // overlap, so at most one can hold. Measured over 20000 pairs: lengths
+    // were 0 or 1, never 2.
+    //
+    // It does NOT follow that the qualifying axis is the dominant one, which
+    // is what this property was first written believing. Measured separately:
+    // of 7893 single-pair results, 242 answered with the non-dominant pair.
+    const ranked = rule.generate({
+      dx: toRect.x + toRect.w / 2 - (fromRect.x + fromRect.w / 2),
+      dy: toRect.y + toRect.h / 2 - (fromRect.y + fromRect.h / 2),
+      fromRect,
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(ranked.length).toBeLessThanOrEqual(1)
+  })
+
+  it('offers the NON-dominant pair when only its facing qualifies', () => {
+    // Horizontally dominant (|dx| 40 > |dy| 30) while only the VERTICAL facing
+    // is a real zero-bend lane: the boxes overlap in x, so the horizontal gap
+    // is invalid, and they are separated in y with 140px of shared x span.
+    // This is the rule's second push, which no test reached — and which a
+    // reading of "the qualifying axis is always the dominant one" says cannot
+    // happen. It happens in 242 of 7893 single-pair results.
+    const fromRect: Rect = { x: 0, y: 0, w: 200, h: 20 }
+    const toRect: Rect = { x: 40, y: 30, w: 200, h: 20 }
+
+    expect(rule.generate({ dx: 40, dy: 30, fromRect, toRect, crowd: () => 0 })).toEqual([
+      { fromSide: 'bottom', toSide: 'top' },
+    ])
   })
 
   it('excludes an interpenetrating pair even with ample span overlap', () => {
@@ -126,6 +208,34 @@ describe('u-hook-when-degenerate', () => {
     const fromRect = rectAt(0, 0)
     const toRect = rectAt(50, 0)
     expect(rule.generate({ dx: 50, dy: 0, fromRect, toRect, crowd: () => 0 })).toEqual([
+      { fromSide: 'top', toSide: 'top' },
+      { fromSide: 'bottom', toSide: 'bottom' },
+    ])
+  })
+
+  it('hooks over the DOMINANT axis when the offset is purely vertical', () => {
+    // dx = 0 keeps the L-pair rule empty, and the y-overlap invalidates both
+    // gaps — the same degenerate shape as above with the axes swapped. The
+    // dominant axis is now vertical, so the hook goes over the horizontal
+    // side, and the test above (dy = 0) cannot tell that branch from its
+    // sibling.
+    const fromRect = rectAt(0, 0)
+    const toRect = rectAt(0, 50)
+
+    expect(rule.generate({ dx: 0, dy: 50, fromRect, toRect, crowd: () => 0 })).toEqual([
+      { fromSide: 'right', toSide: 'right' },
+      { fromSide: 'left', toSide: 'left' },
+    ])
+  })
+
+  it('treats an exactly concentric pair as horizontally dominant', () => {
+    // |dx| === |dy| === 0, the tie the dominance test resolves with `>=`. At
+    // `>` the hook silently swaps to the other axis, and no other degenerate
+    // arrangement can produce the tie: the L-pair rule only steps aside when
+    // one offset is zero, so equal magnitudes mean both are.
+    const rect = rectAt(0, 0)
+
+    expect(rule.generate({ dx: 0, dy: 0, fromRect: rect, toRect: rect, crowd: () => 0 })).toEqual([
       { fromSide: 'top', toSide: 'top' },
       { fromSide: 'bottom', toSide: 'bottom' },
     ])
@@ -205,8 +315,88 @@ describe('SIDE_PREFERENCE_RULES', () => {
   })
 })
 
+describe('fullyContains', () => {
+  const outer = rectAt(0, 0)
+
+  // All four comparisons are INCLUSIVE, so a rect sharing an edge with its
+  // container is still inside it — which is what lets a group frame hold a
+  // member flush against its own border. Nothing reached a coincident edge,
+  // and each side is its own comparison.
+  it.each([
+    ['left', rectAt(0, 10, 50, 50)],
+    ['top', rectAt(10, 0, 50, 50)],
+    ['right', rectAt(50, 10, 50, 50)],
+    ['bottom', rectAt(10, 50, 50, 50)],
+  ])('contains a rect flush against its %s edge', (_edge, inner) => {
+    expect(fullyContains(outer, inner)).toBe(true)
+  })
+
+  it('contains an identical rect — every edge coincident at once', () => {
+    expect(fullyContains(outer, rectAt(0, 0))).toBe(true)
+  })
+
+  it('rejects a rect that pokes out by a single pixel, on each side', () => {
+    expect(fullyContains(outer, rectAt(-1, 10, 50, 50))).toBe(false)
+    expect(fullyContains(outer, rectAt(10, -1, 50, 50))).toBe(false)
+    expect(fullyContains(outer, rectAt(51, 10, 50, 50))).toBe(false)
+    expect(fullyContains(outer, rectAt(10, 51, 50, 50))).toBe(false)
+  })
+})
+
+describe('facingLaneWindow', () => {
+  // The window is a pair of numbers this module PROMISES to `slideAlongSide`,
+  // which then places a real anchor inside it — so the interval itself is the
+  // contract, not merely whether one exists. Every test of it went through the
+  // routing pipeline and asserted the route, so the numbers were unpinned.
+  it('insets both ends by the corner inset, then intersects the two spans', () => {
+    // y spans [10, 90] and [50, 130]; the shared lane is [50, 90].
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(200, 40), 'h')).toEqual([50, 90])
+    expect(SLIDE_CORNER_INSET_PX).toBe(10)
+  })
+
+  it('reads the x spans on the vertical axis', () => {
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(40, 200), 'v')).toEqual([50, 90])
+  })
+
+  it('qualifies a lane of exactly the minimum, and rejects the pixel below', () => {
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(200, 60), 'h')).toEqual([70, 90])
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(200, 61), 'h')).toBeUndefined()
+    expect(ZERO_LANE_MIN_OVERLAP_PX).toBe(20)
+  })
+
+  it('clamps the inset on a side shorter than twice it, rather than inverting the span', () => {
+    // A 12px-tall box inset by 10 at both ends would run backwards. The clamp
+    // collapses it to its midpoint instead — and a collapsed span hosts no
+    // lane, so the pair does not qualify however tall its partner is.
+    expect(facingLaneWindow(rectAt(0, 0, 100, 12), rectAt(200, 0), 'h')).toBeUndefined()
+  })
+})
+
 describe('u-hook-span-exposed-first', () => {
   const rule = candidateRule('u-hook-span-exposed-first')
+
+  // The span is built by a four-branch switch whose every coordinate was
+  // unpinned — 18 surviving mutants, one per corner term — and this rule's
+  // ORDER is a direct read of all four. Each row places the target to taint
+  // exactly ONE side, so a branch computing the wrong border stops matching.
+  it.each([
+    ['top', rectAt(20, -50, 60, 60), ['right', 'bottom', 'left', 'top']],
+    ['bottom', rectAt(20, 90, 60, 60), ['top', 'right', 'left', 'bottom']],
+    ['left', rectAt(-50, 20, 60, 60), ['top', 'right', 'bottom', 'left']],
+    ['right', rectAt(90, 20, 60, 60), ['top', 'bottom', 'left', 'right']],
+  ])('demotes the %s hook when that border span enters the target', (_side, toRect, order) => {
+    const ranked = rule.generate({
+      dx: toRect.x + toRect.w / 2 - 50,
+      dy: toRect.y + toRect.h / 2 - 50,
+      fromRect: rectAt(0, 0),
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(ranked.map((p) => p.fromSide)).toEqual(order)
+    // Same-side hooks throughout: this rule never proposes a crossing pair.
+    expect(ranked.every((p) => p.fromSide === p.toSide)).toBe(true)
+  })
 
   it('is total: always offers all four same-side hooks, only reordered', () => {
     const fromRect = rectAt(0, 0)

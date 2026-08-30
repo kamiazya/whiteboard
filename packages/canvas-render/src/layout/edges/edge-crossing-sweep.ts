@@ -146,6 +146,18 @@ interface SweepSegment {
  * `i * paths.length + j` with `i < j` (the caller's pairKey formula).
  * Pairs whose every candidate segment pair scores zero may be absent —
  * consumers default absent keys to zero, as evaluateTrial already does.
+ *
+ * None of the pruning comparisons below is load-bearing on its own, which is
+ * why none is pinned by a test of its own and why a reader should not add
+ * one. Widening the candidate set cannot change the answer: a non-interacting
+ * pair scores zero and an all-zero pair is skipped, so the extra work is the
+ * only cost. Narrowing it by one slack step cannot either: two boxes that
+ * meet exactly after a quarter-pixel inflation on each side were half a pixel
+ * apart before it, and share no point to score. Nor can inflating one edge of
+ * a box the wrong way, which translates it rather than shrinking it and so
+ * preserves every genuine overlap. What the answer DOES depend
+ * on is the completeness lemma above — that slack never removes a candidate —
+ * and that is pinned end to end by the differential property.
  */
 export function buildPairwiseScores(
   paths: readonly (readonly Point[])[],

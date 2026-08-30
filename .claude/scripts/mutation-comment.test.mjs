@@ -8,7 +8,7 @@
 
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
-import { renderComment, summarize } from './mutation-comment.mjs'
+import { mutantKey, renderComment, summarize } from './mutation-comment.mjs'
 
 const MARKER = '<!-- test-marker -->'
 
@@ -72,7 +72,144 @@ test('a replacement cannot break out of its table cell', () => {
     MARKER,
   )
   const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
-  // Four UNESCAPED pipes: the three column separators plus the closing one.
-  assert.equal(row.replaceAll('\\|', '').split('|').length - 1, 4)
+  // Five UNESCAPED pipes: the four column separators plus the closing one.
+  assert.equal(row.replaceAll('\\|', '').split('|').length - 1, 5)
   assert.match(row, /a \\\|b\\\| 'c'/)
+})
+
+test('a survivor says how many tests judged it', () => {
+  // Stryker selects tests by relatedness, so a module few test files import is
+  // judged by a handful — and its survivors are hypotheses rather than
+  // findings. That distinction cost hours before the number was printed.
+  const body = renderComment(report([mutant('Survived', { testsCompleted: 3 })]), MARKER)
+  const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
+
+  assert.match(row, /\| 3 tests \|$/)
+  assert.match(body, /judged by/)
+})
+
+test('a mutant with no test count is marked as such, not as zero', () => {
+  // A Timeout carries no count because it never finished. Rendering that as
+  // `0 tests` would read as "nothing covers this line", which is the opposite
+  // of what a timeout means.
+  const body = renderComment(report([mutant('Survived')]), MARKER)
+  const row = body.split('\n').find((line) => line.startsWith('| `src/a.ts'))
+
+  assert.match(row, /\| — \|$/)
+})
+
+// --- KNOWN_EQUIVALENT ---------------------------------------------------
+//
+// A survivor that cannot be killed is a settled finding, and re-reporting it
+// on every PR is how a comment teaches its readers to skip it — one file
+// carries 23, more than the whole table holds. What must NOT happen is a mute:
+// a recorded count is a ceiling, and the mutant past it is news again.
+
+const sourced = (source, mutants) => ({ files: { 'src/a.ts': { source, mutants } } })
+const SOURCE = 'const x = a > b\nconst y = c > d\n'
+const gt = (status, line, column, endColumn) =>
+  mutant(status, {
+    replacement: 'a >= b',
+    location: { start: { line, column }, end: { line, column: endColumn } },
+  })
+
+test('the mutant key names the ORIGINAL expression, not the line it sat on', () => {
+  // A line number identifies a mutant only until something is inserted above
+  // it, at which point every entry goes stale at once and the whole list comes
+  // back as new survivors.
+  assert.equal(
+    mutantKey(SOURCE, gt('Survived', 1, 11, 16)),
+    'EqualityOperator: a > b -> a >= b',
+  )
+})
+
+test('a recorded equivalent is counted, not listed', () => {
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { survivors, settled } = summarize(sourced(SOURCE, [gt('Survived', 1, 11, 16)]), known)
+
+  assert.equal(survivors.length, 0)
+  assert.equal(settled, 1)
+})
+
+test('the recorded count is a CEILING — one more of the same mutation is news', () => {
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { survivors, settled } = summarize(
+    sourced(SOURCE, [gt('Survived', 1, 11, 16), gt('Survived', 1, 11, 16)]),
+    known,
+  )
+
+  assert.equal(settled, 1)
+  assert.equal(survivors.length, 1)
+})
+
+test('a different expression is never covered by another entry', () => {
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 5 } }
+  const { survivors } = summarize(sourced(SOURCE, [gt('Survived', 2, 11, 16)]), known)
+
+  assert.equal(survivors.length, 1)
+})
+
+test('a recorded survivor still counts against the SCORE', () => {
+  // Equivalent or not, the tests did not detect it. Discounting it would turn
+  // the ledger into a way to buy a better number.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { score } = summarize(
+    sourced(SOURCE, [gt('Survived', 1, 11, 16), gt('Killed', 2, 11, 16)]),
+    known,
+  )
+
+  assert.equal(score, 50)
+})
+
+test('a report of nothing BUT recorded equivalents says so instead of going quiet', () => {
+  // Silence would read as "the lane did not run"; a table would read as debt.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const body = renderComment(sourced(SOURCE, [gt('Survived', 1, 11, 16)]), MARKER, known)
+
+  assert.match(body, /Nothing NEW survived/)
+  assert.match(body, /already recorded as equivalent/)
+  assert.doesNotMatch(body, /\| where \|/)
+})
+
+test('an entry the run did not produce is reported, not silently kept', () => {
+  // The ledger's other decay, and the half a source scan cannot see: the
+  // expression is still in the file, so the entry looks live, while the run
+  // no longer produces the survivor it records — most likely because a test
+  // now kills it, which makes the entry assert something false.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { unspent } = summarize(sourced(SOURCE, [gt('Killed', 1, 11, 16)]), known)
+
+  assert.deepEqual(unspent, [
+    { file: 'src/a.ts', key: 'EqualityOperator: a > b -> a >= b', left: 1 },
+  ])
+
+  const body = renderComment(sourced(SOURCE, [gt('Killed', 1, 11, 16)]), MARKER, known)
+  assert.match(body, /did not show up/)
+  assert.match(body, /a > b -> a >= b/)
+})
+
+test('a ledger the run spends in full reports no leftovers', () => {
+  // The other direction, so the check above cannot pass by reporting always.
+  const known = { 'src/a.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const body = renderComment(sourced(SOURCE, [gt('Survived', 1, 11, 16)]), MARKER, known)
+
+  assert.doesNotMatch(body, /did not show up/)
+})
+
+test('leftovers are counted only for a file this run actually mutated', () => {
+  // A diff-scoped PR run mutates a subset of the lane. Reading the ledger
+  // instead of the report would flag every entry of every file the diff did
+  // not touch, on every PR.
+  const known = { 'src/b.ts': { 'EqualityOperator: a > b -> a >= b': 1 } }
+  const { unspent } = summarize(sourced(SOURCE, [gt('Killed', 1, 11, 16)]), known)
+
+  assert.deepEqual(unspent, [])
+})
+
+test('an empty ledger leaves the comment exactly as it was', () => {
+  const mutants = [gt('Survived', 1, 11, 16)]
+  assert.equal(
+    renderComment(sourced(SOURCE, mutants), MARKER, {}),
+    renderComment(sourced(SOURCE, mutants), MARKER),
+  )
 })

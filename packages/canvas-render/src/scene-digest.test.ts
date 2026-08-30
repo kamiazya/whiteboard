@@ -25,6 +25,16 @@ describe('sceneDigest', () => {
 
     const touching = sceneDigest(scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 10, y: 0, w: 10, h: 10 }))
     expect(touching.overlaps).toHaveLength(0)
+
+    // Disjoint on BOTH axes, which is the case a signed-area computation gets
+    // wrong in the flattering direction: two negative extents multiply to a
+    // positive area, and the pair is reported as overlapping. Touching boxes
+    // do not catch it — one of their extents is zero, so the product is zero
+    // either way.
+    const diagonal = sceneDigest(
+      scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 50, y: 50, w: 10, h: 10 }),
+    )
+    expect(diagonal.overlaps).toHaveLength(0)
   })
 
   it('reports overlap pairs with the lexicographically smaller id first', () => {
@@ -68,6 +78,45 @@ describe('sceneDigest', () => {
     expect(digest.clusters).toHaveLength(2)
     expect(digest.clusters[0]).toHaveLength(2)
     expect(digest.clusters[1]).toHaveLength(1)
+  })
+
+  it('measures proximity as the true diagonal gap, not one axis of it', () => {
+    // 24px is the threshold. These two are 18px apart on each axis, so either
+    // axis alone says "close" while the real distance is 25.5px — the case
+    // that tells a Euclidean gap apart from a per-axis one, and the reason the
+    // sum under the square root has to be a sum of SQUARES.
+    // A box that clusters with nothing is still a cluster of one, so these
+    // are counted as two groups rather than none.
+    const diagonal = sceneDigest(
+      scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 28, y: 28, w: 10, h: 10 }),
+    )
+    expect(diagonal.clusters).toHaveLength(2)
+
+    // The same separation on one axis only: 18px < 24px, so they cluster.
+    const straight = sceneDigest(scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 28, y: 0, w: 10, h: 10 }))
+    expect(straight.clusters).toEqual([['n0', 'n1']])
+  })
+
+  it('clusters boxes exactly at the proximity threshold', () => {
+    // `<=`, not `<`. A pair exactly 24px apart is the boundary, and the two
+    // readings differ only here.
+    const digest = sceneDigest(scene({ x: 0, y: 0, w: 10, h: 10 }, { x: 34, y: 0, w: 10, h: 10 }))
+    expect(digest.clusters).toEqual([['n0', 'n1']])
+  })
+
+  it('picks the smallest parent by AREA, not by either side alone', () => {
+    // Two candidate parents both containing the child, where the smaller-area
+    // one is the WIDER of the two: a comparison on width or height alone picks
+    // the other, and the digest then names a grandparent as the parent.
+    const digest = sceneDigest(
+      scene(
+        { x: 0, y: 0, w: 100, h: 100 },
+        { x: 0, y: 0, w: 90, h: 30 },
+        { x: 10, y: 10, w: 5, h: 5 },
+      ),
+    )
+    const child = digest.nodes[2].id
+    expect(digest.containment).toContainEqual({ parent: digest.nodes[1].id, child })
   })
 
   it('reports no free region when a single box exactly fills the grid', () => {
@@ -152,20 +201,69 @@ describe('sceneDigest', () => {
   })
 
   it('bounds pairwise overlap/containment/cluster derivation for scenes with very many nodes', () => {
-    // PAIRWISE_MAX_ENTRIES + 1 boxes, spaced far enough apart that with no
-    // cap they'd contribute zero overlaps/containment and one cluster per
-    // box anyway — the assertion is about the cap itself, not the geometry.
-    const manyBoxes = Array.from({ length: 2001 }, (_, i) => ({
-      x: i * 1000,
+    // The first three boxes overlap, nest and sit adjacent ON PURPOSE: every
+    // assertion below has to be able to FAIL if the cap is removed, and this
+    // fixture used to be spaced so that all three came back empty either way.
+    // Its own comment said so — "they'd contribute zero overlaps/containment
+    // and one cluster per box anyway" — which describes a test that cannot
+    // fail, not a test that passes. Mutation testing is what noticed.
+    const interacting = [
+      { x: 0, y: 0, w: 100, h: 100 },
+      { x: 50, y: 50, w: 100, h: 100 },
+      { x: 10, y: 10, w: 10, h: 10 },
+    ]
+    const spacedOut = Array.from({ length: 1998 }, (_, i) => ({
+      x: 100_000 + i * 1000,
       y: 0,
       w: 10,
       h: 10,
     }))
-    const digest = sceneDigest(scene(...manyBoxes))
+    const digest = sceneDigest(scene(...interacting, ...spacedOut))
+
     expect(digest.nodes).toHaveLength(2001)
     expect(digest.overlaps).toEqual([])
     expect(digest.containment).toEqual([])
     expect(digest.clusters).toEqual([])
+  })
+
+  it('still derives at exactly the cap — the bound is a maximum, not a limit', () => {
+    // `> PAIRWISE_MAX_ENTRIES`, not `>=`. A scene of exactly 2000 entries is
+    // the largest the digest promises to answer for, and reading the bound one
+    // entry too tight makes it silently answer "nothing overlaps" for it.
+    const interacting = [
+      { x: 0, y: 0, w: 100, h: 100 },
+      { x: 50, y: 50, w: 100, h: 100 },
+      { x: 10, y: 10, w: 10, h: 10 },
+    ]
+    const spacedOut = Array.from({ length: 1997 }, (_, i) => ({
+      x: 100_000 + i * 1000,
+      y: 0,
+      w: 10,
+      h: 10,
+    }))
+    const digest = sceneDigest(scene(...interacting, ...spacedOut))
+
+    expect(digest.nodes).toHaveLength(2000)
+    expect(digest.overlaps.length).toBeGreaterThan(0)
+    expect(digest.containment.length).toBeGreaterThan(0)
+  })
+
+  it('derives all three for the same fixture once it is under the cap', () => {
+    // The other half of the pin: without it the test above could pass because
+    // the fixture interacts in no way at all, which is exactly how it used to
+    // pass. Same three boxes, nothing else — so the emptiness above is the
+    // cap's doing and not the geometry's.
+    const digest = sceneDigest(
+      scene(
+        { x: 0, y: 0, w: 100, h: 100 },
+        { x: 50, y: 50, w: 100, h: 100 },
+        { x: 10, y: 10, w: 10, h: 10 },
+      ),
+    )
+
+    expect(digest.overlaps.length).toBeGreaterThan(0)
+    expect(digest.containment.length).toBeGreaterThan(0)
+    expect(digest.clusters.length).toBeGreaterThan(0)
   })
 
   it('does not cap pairwise derivation for a small scene', () => {

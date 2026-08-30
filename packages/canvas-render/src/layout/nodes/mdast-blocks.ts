@@ -562,7 +562,11 @@ function layoutPhrasing(
           : { text }
       pushRun(
         fitted.text,
-        { ...extra, ...(fitted.truncated ? { truncated: true } : {}) },
+        {
+          ...extra,
+          ...(fitted.truncated ? { truncated: true } : {}),
+          ...(fitted.overflows ? { overflows: true } : {}),
+        },
         runStyle,
         atomicFont,
       )
@@ -965,6 +969,7 @@ function layoutBlock(
             text: fitted.text,
             code: true,
             ...(fitted.truncated ? { truncated: true as const } : {}),
+            ...(fitted.overflows ? { overflows: true as const } : {}),
             appearance: {
               ...(options.textFill !== undefined ? { fill: options.textFill } : {}),
               ...(fill !== undefined ? { fill } : {}),
@@ -973,7 +978,11 @@ function layoutBlock(
             },
           })
           x += clampAdvance(metrics.advanceWidth)
-          if (fitted.truncated) break
+          // Either flag means the line's remaining width is spent: a token
+          // kept past `innerWidth` leaves the next `innerWidth - x` negative,
+          // which `fitToWidth` reads as "no width to fit against" and answers
+          // by returning the WHOLE token uncut, straight past the panel.
+          if (fitted.truncated || fitted.overflows) break
         }
         return out
       })
@@ -1276,6 +1285,12 @@ export interface FittedBlocks {
   readonly nodes: readonly SceneNode[]
   /** Something a reader cannot see was removed to make the rest fit. */
   readonly truncated: boolean
+  /**
+   * The content does not fit the box, whether or not anything was removed:
+   * `truncated`, or a run kept at a width it exceeds because it is one
+   * irreducible code point. The weaker claim, and the one an agent reads.
+   */
+  readonly overflows: boolean
 }
 
 /**
@@ -1355,14 +1370,19 @@ export function fitBlocksToHeight(nodes: readonly SceneNode[], maxHeight: number
   // one seam reports it, and only vertical loss needs `markLastRun`: a cut
   // run is already its own visible signal.
   const nodesToKeep = truncated ? markLastRun(kept) : kept
-  return { nodes: nodesToKeep, truncated: truncated || anyRunTruncated(nodesToKeep) }
+  return {
+    nodes: nodesToKeep,
+    truncated: truncated || someRun(nodesToKeep, (run) => run.truncated === true),
+    overflows:
+      truncated || someRun(nodesToKeep, (run) => run.truncated === true || run.overflows === true),
+  }
 }
 
-/** Whether any run anywhere under `nodes` was cut to fit its width. */
-function anyRunTruncated(nodes: readonly SceneNode[]): boolean {
+/** Whether any run anywhere under `nodes` satisfies `predicate`. */
+function someRun(nodes: readonly SceneNode[], predicate: (run: TextRunNode) => boolean): boolean {
   return nodes.some((node) => {
     if (node.kind === 'edge') return false
-    if (node.kind === 'textRun') return node.truncated === true
+    if (node.kind === 'textRun') return predicate(node)
     const branching = node as SceneNode & {
       runs?: readonly SceneNode[]
       children?: readonly SceneNode[]
@@ -1372,7 +1392,7 @@ function anyRunTruncated(nodes: readonly SceneNode[]): boolean {
     }
     return (['runs', 'children', 'items', 'cells', 'rows'] as const).some((key) => {
       const branch = branching[key]
-      return branch !== undefined && anyRunTruncated(branch)
+      return branch !== undefined && someRun(branch, predicate)
     })
   })
 }
@@ -1397,10 +1417,16 @@ function anyRunTruncated(nodes: readonly SceneNode[]): boolean {
  */
 export function firstLineOfBlocks(nodes: readonly SceneNode[]): FittedBlocks {
   const first = nodes[0]
-  if (first === undefined || first.kind === 'edge') return { nodes: [], truncated: false }
+  if (first === undefined || first.kind === 'edge')
+    return { nodes: [], truncated: false, overflows: false }
   const cut = firstLineOfBlock(first)
   const truncated = nodes.length > 1 || cut.dropped
-  return { nodes: truncated ? markLastRun([cut.node]) : [cut.node], truncated }
+  const kept = truncated ? markLastRun([cut.node]) : [cut.node]
+  return {
+    nodes: kept,
+    truncated,
+    overflows: truncated || someRun(kept, (run) => run.overflows === true),
+  }
 }
 
 function firstLineOfBlock(block: Exclude<SceneNode, { kind: 'edge' }>): {

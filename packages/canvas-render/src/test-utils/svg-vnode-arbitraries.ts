@@ -28,6 +28,21 @@ const paintArb = fc.record(
 const leafArb: fc.Arbitrary<SvgVNode> = fc.oneof(
   paintArb.map((paint) => vnode('text', { x: 0, y: 0, ...paint }, ['t'])),
   paintArb.map((paint) => vnode('rect', { x: 0, y: 0, width: 1, height: 1, ...paint })),
+  // An element with NO attrs at all. Every other leaf here carries at least
+  // `x`/`y`, so a pass reading a child's attributes was never handed one that
+  // has none — the input that tells an optional access from an unguarded one.
+  fc.constant(vnode('rect')),
+)
+
+/**
+ * What a container can hold BESIDES an element. A tree of nothing but
+ * elements cannot distinguish "every child is an inspectable element" from
+ * "there is at least one", which is the soundness rule hoisting rests on, and
+ * a nested array is a shape the serializer flattens and a pass must not lose.
+ */
+const opaqueChildArb: fc.Arbitrary<SvgChild> = fc.oneof(
+  fc.constantFrom('text content', ' '),
+  fc.constant(vnode('rect', { fill: '#111111' })).map((only) => [only] as SvgChild),
 )
 
 /**
@@ -44,7 +59,13 @@ export const svgPaintTreeArb: fc.Arbitrary<SvgVNode> = fc.letrec<{ tree: SvgVNod
         fc.constantFrom('g', 'a'),
         paintArb,
         fc.option(fc.constant('presentation' as const), { nil: undefined }),
-        fc.array(tie('tree'), { maxLength: 4 }),
+        fc.array(
+          fc.oneof(
+            { weight: 5, arbitrary: tie('tree') as fc.Arbitrary<SvgChild> },
+            { weight: 1, arbitrary: opaqueChildArb },
+          ),
+          { maxLength: 4 },
+        ),
       )
       .map(([tag, paint, role, children]) =>
         vnode(tag, { ...paint, ...(role === undefined ? {} : { role }) }, children),

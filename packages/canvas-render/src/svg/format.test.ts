@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref } from './format.js'
+import { escapeXmlAttr, escapeXmlText, formatCoord, sanitizeHref, trustedHref } from './format.js'
 
 describe('formatCoord', () => {
   it('rounds to the fixed decimal precision and strips trailing zeros', () => {
@@ -11,6 +11,21 @@ describe('formatCoord', () => {
   it('normalizes negative zero to zero', () => {
     expect(formatCoord(-0)).toBe('0')
     expect(formatCoord(0 * -1)).toBe('0')
+  })
+
+  it('normalizes a value that becomes negative zero only after ROUNDING', () => {
+    // The case the two above cannot reach: they are `-0` before formatting, so
+    // the up-front normalization handles them and the second, post-rounding
+    // guard never runs. A small negative is `-0.000` after `toFixed`, strips
+    // to `-0`, and reaches SVG as a coordinate that differs from `0` byte for
+    // byte — which is enough to move a scene digest and a golden.
+    expect(formatCoord(-0.0001)).toBe('0')
+    expect(formatCoord(-0.0004)).toBe('0')
+  })
+
+  it('names the offending value when it rejects one', () => {
+    expect(() => formatCoord(Number.NaN)).toThrow(/NaN/)
+    expect(() => formatCoord(Number.POSITIVE_INFINITY)).toThrow(/Infinity/)
   })
 
   it('rejects non-finite input', () => {
@@ -74,6 +89,34 @@ describe('sanitizeHref', () => {
 
   it('rejects a scheme obfuscated with a leading space', () => {
     expect(sanitizeHref(' javascript:alert(1)')).toBe('#')
+  })
+
+  it('strips EVERY tab/newline, not just the first', () => {
+    // The single-separator case above passes whether the strip is global or
+    // not, so it pins the normalization without pinning its `g`. Measured
+    // with the flag removed: this input comes back UNCHANGED — a live
+    // `javascript:` URL emitted into the document — while every other test
+    // here stays green.
+    expect(sanitizeHref('java\n\nscript:alert(1)')).toBe('#')
+    expect(sanitizeHref('j\ta\tv\ta\tscript:alert(1)')).toBe('#')
+  })
+
+  it('leaves a relative path that merely CONTAINS a colon alone', () => {
+    // The scheme pattern is anchored. Unanchored it finds `a:` in the middle
+    // of an ordinary path and rewrites a working link to `#` — failing safe,
+    // but breaking a link the author wrote.
+    expect(sanitizeHref('docs/a:b')).toBe('docs/a:b')
+    expect(sanitizeHref('#see:also')).toBe('#see:also')
+  })
+})
+
+describe('trustedHref', () => {
+  it('returns the href it was given, unchanged', () => {
+    // The whole body is a brand cast, so emptying it returns `undefined` and
+    // every caller writes `href="undefined"` into the document. Tautological
+    // to read, and the only thing standing between that and a released SVG.
+    expect(trustedHref('#node-01H')).toBe('#node-01H')
+    expect(trustedHref('')).toBe('')
   })
 })
 

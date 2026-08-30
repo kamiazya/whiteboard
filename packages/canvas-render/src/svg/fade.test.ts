@@ -33,6 +33,26 @@ describe('truncation fade', () => {
     expect(svg).toContain('maskContentUnits="objectBoundingBox"')
   })
 
+  it('leaves a run that merely OVERFLOWS unfaded', () => {
+    // The fade means "there is more of this than is painted", so a run kept
+    // whole at a width it exceeds — one irreducible code point, nothing
+    // dropped — has nothing to fade toward. `overflows` carries that case to
+    // the digest instead, where the reader is deciding whether the box is big
+    // enough rather than looking at pixels.
+    const overflowing: TextRunNode = { ...run('W'), overflows: true }
+    const svg = renderSceneToSvg({ nodes: [overflowing] } as Scene)
+
+    expect(svg).not.toContain('mask=')
+    expect(svg).not.toContain('<defs>')
+  })
+
+  it('still fades a run that overflows AND lost something', () => {
+    const both: TextRunNode = { ...run('W', true), overflows: true }
+    const svg = renderSceneToSvg({ nodes: [both] } as Scene)
+
+    expect(svg.match(/mask="url\(#/g)).toHaveLength(1)
+  })
+
   it('puts the defs ahead of the scene body, inside the root', () => {
     const svg = renderSceneToSvg({ nodes: [run('cut', true)] } as Scene)
     expect(svg.indexOf('<defs>')).toBeLessThan(svg.indexOf('<text'))

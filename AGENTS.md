@@ -54,6 +54,16 @@ denser generator, not more runs. Never pin a fast-check seed to make a flaky pro
 failures under load as a signal to reduce `numRuns`, not to fix the RNG. Put arbitraries shared
 across test files in the owning package's `test-utils`, not duplicated per file.
 
+**A differential oracle is blind to whatever it SHARES with its subject**, and this is the failure
+mode that reads as the strongest kind of property rather than the weakest. `edge-crossing-sweep`'s
+oracle is the full O(E^2) scan its sweep claims exact equality with — but both sides called the same
+scoring helper, so a mutation inside that helper changed the oracle and the subject together and the
+property stayed green: 22 survivors in one function, under a property nobody would have doubted. So
+when you write an A-vs-B property, ask what B IMPORTS, not what it asserts. A reference solved with
+different machinery (exact BigInt rationals against the subject's floating-point cross-multiplication,
+cell-by-cell rasterisation against its interval algebra) is what makes the comparison mean anything;
+calling the production helper from the test is the same code twice.
+
 ## Required Workflow
 
 ### 1. Write the red test first
