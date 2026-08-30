@@ -11,6 +11,7 @@ import {
 import type { ReactElement } from 'react'
 import { createMemoryRouter, MemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DESTRUCTIVE_COPY } from '@/lib/destructive-copy'
 import { pickNewDocumentKind } from '../test-utils/new-document-menu.js'
 import { DaemonIndexPage } from './DaemonIndexPage.js'
 
@@ -1406,15 +1407,18 @@ describe('DaemonIndexPage', () => {
     // A daemon delete is recoverable — document-store.ts routes it through
     // the index's evacuate-first path — so the dialog names the Trash. What
     // it still warns about is the half that really is destroyed.
-    expect(within(dialog).getByText(/The note moves to the Trash/)).toBeTruthy()
-    expect(within(dialog).getByText(/versions and branches are deleted/)).toBeTruthy()
+    expect(
+      within(dialog).getByText(DESTRUCTIVE_COPY['delete-document-daemon']('note')),
+    ).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 
     await selectCard('Trip plan')
     fireEvent.click(screen.getByRole('button', { name: 'Delete' }))
     dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/The canvas moves to the Trash/)).toBeTruthy()
+    expect(
+      within(dialog).getByText(DESTRUCTIVE_COPY['delete-document-daemon']('canvas')),
+    ).toBeTruthy()
   })
 
   it('Delete opens an AlertDialog naming the canvas; Cancel sends no DELETE', async () => {

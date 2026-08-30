@@ -115,9 +115,43 @@ Assert the scan found a plausible COUNT in its own `it`. A regex that stops
 matching otherwise reports itself as "every entry is stale", which sends the
 reader to the wrong file entirely.
 
-This variant is deliberately NOT in the shared helper: one call site, and
-its coverage vocabulary differs (it needs a `view only:` state). Extract it
-when a second one exists, not before.
+There are two scans now, and they still do NOT share a helper. What they
+have in common is four lines — the `?raw` glob and the plausible-count
+assertion — and past that they diverge completely: `editor-state-surface`
+CLASSIFIES each thing it finds against a three-value vocabulary it needs a
+`view only:` state for, while `destructive-copy-surface` asserts a
+single-definition rule and has no vocabulary at all. A helper over that is
+a glob with a parameter. Extract when two call sites want the same
+JUDGEMENT, not when two of them read files.
+
+### The second one: copy declared once
+
+`lib/destructive-copy.ts` + `destructive-copy-surface.test.ts` is the worked
+example for a surface that earns a scan and explicitly does NOT earn a
+ledger. Nothing models confirmation copy — there is no property or
+table-driven run to tally — so a ledger would be the hand-maintained list of
+names this rule exists to replace. Step 1 of declare -> model -> pin, plus a
+scan holding it, is the whole mechanism, and that is a complete answer
+rather than a partial one.
+
+Two things it measured that generalise:
+
+- **Scan word RUNS, not whole strings.** The defect that motivated it was a
+  correction that had to reach six places and a grep that found four; both
+  misses were tests asserting a MIDDLE FRAGMENT of the sentence. Measured:
+  the first version of that scan compared whole fragments and flagged the
+  three production sites and neither test. Five-word runs, derived from the
+  copy by splitting on a sentinel subject, catch both. Four collides with
+  ordinary English; six misses the prefix case.
+- **Derive the probes, never list them.** A hand-picked "distinctive
+  phrase" beside the copy is one more string to keep in step — the same
+  defect one level up.
+
+A scan has a floor and saying so is part of the rule: a test asserting a
+three-word prefix is under any run length that avoids false positives. That
+is acceptable here because the single definition removes the SWEEP rather
+than perfecting the grep — with one source there is nothing to keep in
+step, and a stale assertion fails loudly instead of being missed quietly.
 
 ## Traps
 

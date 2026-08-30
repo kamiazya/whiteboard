@@ -5,7 +5,7 @@ import {
   type VersionEntry,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { History } from 'lucide-react'
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -72,6 +72,40 @@ function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: 
 
 // Branch operations and save controls live in the header.
 // VersionTimeline is responsible only for the version list, mini-graph, and restore flow.
+/**
+ * The card a version row sits in — a button where it can be restored, a plain
+ * container where it cannot.
+ *
+ * Split by ELEMENT rather than by a `disabled` attribute: a disabled button
+ * announces "unavailable", which is the wrong story about a row that is doing
+ * its job (telling you what happened on another lane). There is nothing to
+ * enable here later, so there is nothing to grey out.
+ */
+function RowShell({
+  interactive,
+  onActivate,
+  children,
+}: {
+  readonly interactive: boolean
+  readonly onActivate: () => void
+  readonly children: ReactNode
+}) {
+  const shared =
+    'bg-card text-card-foreground flex flex-1 min-w-0 flex-col gap-6 overflow-hidden rounded-xl border py-2 text-left shadow-sm'
+  if (!interactive) {
+    return <div className={`${shared} opacity-80`}>{children}</div>
+  }
+  return (
+    <button
+      type="button"
+      className={`${shared} cursor-pointer transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2`}
+      onClick={onActivate}
+    >
+      {children}
+    </button>
+  )
+}
+
 export default function VersionTimeline({ workspaceId, path, onRestored, refreshSignal }: Props) {
   const fetchFn = useDaemonApi()
   const [versions, setVersions] = useState<VersionEntry[]>([])
@@ -207,7 +241,11 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
 
   const head = branchesState.head
 
-  const visibleVersions = versions.filter((v) => (v.branchName ?? 'main') === head)
+  // EVERY lane, not only the one HEAD is on. The filter that used to stand
+  // here made `mini-graph.ts`'s "rows on other branches use a ring dot" rule
+  // unreachable — each row it drew was active by construction — and meant the
+  // only way to see another variation's history was to switch onto it first.
+  const visibleVersions = versions
   const miniGraphRows = buildMiniGraph({
     head,
     branches: branchesState.branches,
@@ -238,7 +276,9 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
             <SquiggleLoader label="Loading…" className="py-4 text-xs" />
           ) : visibleVersions.length === 0 ? (
             <div className="text-xs text-muted-foreground py-4 text-center">
-              No versions on «{head}» yet.
+              {/* The document's history, not one lane's: the list is no longer
+                  filtered, so an empty one means there is nothing anywhere. */}
+              No versions yet.
               <br />
               Edit this canvas to trigger auto-save (~30s), or press ⌘/Ctrl+S.
             </div>
@@ -247,7 +287,7 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
               const row = miniGraphById.get(v.id)
               const operator = getOperatorAffordance(v.operator)
               return (
-                <div key={v.id} className="flex items-stretch gap-1.5">
+                <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
                   {/* Mini-graph lane. */}
                   {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */}
                   <svg className="shrink-0" width={24} height={36} viewBox="0 0 24 36" aria-hidden>
@@ -262,17 +302,16 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                         strokeOpacity={0.6}
                       />
                     ) : null}
-                    {/* visibleVersions (and therefore every row here) is already
-                        filtered to the active HEAD branch, so the dot is always
-                        solid — the mini-graph's hollow "other branch" ring never
-                        applies at this call site. */}
+                    {/* Solid on the lane HEAD is on, a ring on the others —
+                        mini-graph's own rule, reachable now that the rows are
+                        no longer pre-filtered to HEAD. */}
                     <circle
                       cx={12}
                       cy={18}
                       r={4}
-                      fill={row?.dotColor ?? '#94a3b8'}
+                      fill={row?.active === false ? 'none' : (row?.dotColor ?? '#94a3b8')}
                       stroke={row?.dotColor ?? '#94a3b8'}
-                      strokeWidth={0}
+                      strokeWidth={row?.active === false ? 2 : 0}
                     />
                     <line
                       x1={12}
@@ -284,10 +323,15 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                       strokeOpacity={0.6}
                     />
                   </svg>
-                  <button
-                    type="button"
-                    className="bg-card text-card-foreground flex flex-1 min-w-0 cursor-pointer flex-col gap-6 overflow-hidden rounded-xl border py-2 text-left shadow-sm transition-colors hover:bg-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                    onClick={() => {
+                  {/* Restore is offered on HEAD's lane only. Showing another
+                      variation's history is not the same as offering to
+                      restore from it: what restoring one variation's version
+                      into another MEANS is undecided, and an affordance that
+                      acts on an undecided semantic is worse than none. A row
+                      on another lane is context, so it is not a control. */}
+                  <RowShell
+                    interactive={row?.active !== false}
+                    onActivate={() => {
                       setRestoreError(null)
                       setPendingRestore(v)
                     }}
@@ -308,6 +352,22 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                         <span className="text-[11px] text-muted-foreground">
                           {operator.icon} {operator.label}
                         </span>
+                        {/* Only on the lanes HEAD is NOT on. A ring says "not
+                            yours" and colour is not a name, so without this a
+                            reader with two variations open has a row of
+                            history and no way to tell whose. The lane you ARE
+                            on is the frame the whole panel is read in —
+                            repeating it on every row states the obvious and
+                            makes the exceptions harder to see. */}
+                        {row?.active === false && (
+                          <span
+                            data-testid="version-lane-name"
+                            className="text-[11px] font-medium truncate"
+                            style={{ color: row.dotColor }}
+                          >
+                            {displayBranchName(v.branchName ?? 'main')}
+                          </span>
+                        )}
                         <span className="text-[11px] text-muted-foreground">
                           {formatRelative(v.createdAt)} · {v.elementCount} els
                           {row?.branchOut ? (
@@ -326,7 +386,7 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                         </span>
                       )}
                     </CardContent>
-                  </button>
+                  </RowShell>
                 </div>
               )
             })

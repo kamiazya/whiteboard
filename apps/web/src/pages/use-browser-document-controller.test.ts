@@ -253,6 +253,42 @@ describe('useBrowserDocumentController', () => {
     expect(result.current.cleanupError).not.toMatch(/\btoken\b|\bAuthorization\b|\bBearer\b/i)
   })
 
+  it('cleanupError names the document by its own kind, not always "canvas"', async () => {
+    // `kindNoun` exists so user-visible copy never calls a note a canvas
+    // (vocabulary.md retired the container sense of the word). These two
+    // failure messages were written before it and bypassed it, so deleting a
+    // NOTE that could not be flushed reported "The canvas copy has been kept".
+    const base = new LocalStoreDouble()
+    await base.setDefaultDocumentId(C1)
+    await base.save({ ...snap, kind: 'markdown' })
+    let shouldFailSave = false
+    const setName = base.index.setDocumentName.bind(base.index)
+    base.index.setDocumentName = async (input) => {
+      if (shouldFailSave) throw new Error('save failed')
+      return setName(input)
+    }
+    const { result } = renderHook(() =>
+      useBrowserDocumentController(base.index, {
+        loro: base.loro,
+        pointer: base.pointer,
+        clock: base.clock,
+      }),
+    )
+    await act(async () => {})
+    shouldFailSave = true
+    await act(async () => {
+      result.current.renameDocument('Renamed').catch(() => {})
+      await Promise.resolve()
+      await Promise.resolve()
+    })
+    expect(result.current.persistence.kind).toBe('degraded')
+    await act(async () => {
+      await result.current.triggerCleanup()
+    })
+    expect(result.current.cleanupError).toMatch(/\bnote\b/)
+    expect(result.current.cleanupError).not.toMatch(/\bcanvas\b/i)
+  })
+
   it('renameDocument returns a promise that rejects when the underlying save fails', async () => {
     // Root cause: callers such as WorkspaceTopBar await onRenameDocument and
     // treat a rejection as "keep the rename input open for retry". Before this

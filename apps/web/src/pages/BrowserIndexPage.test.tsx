@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
+
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, describe, expect, it, vi } from 'vitest'
+import { DESTRUCTIVE_COPY } from '@/lib/destructive-copy'
 import {
   getBrowserWorkspaceId,
   setBrowserWorkspaceIdForTests,
@@ -295,14 +297,18 @@ describe('BrowserIndexPage', () => {
     await selectCard('Meeting notes')
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     let dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/^The note moves to the Trash/)).toBeTruthy()
+    expect(
+      within(dialog).getByText(DESTRUCTIVE_COPY['delete-document-browser']('note')),
+    ).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 
     await selectCard('Trip plan')
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/^The canvas moves to the Trash/)).toBeTruthy()
+    expect(
+      within(dialog).getByText(DESTRUCTIVE_COPY['delete-document-browser']('canvas')),
+    ).toBeTruthy()
   })
 
   it('Delete opens a dialog naming the canvas; Cancel removes nothing', async () => {

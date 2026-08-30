@@ -7,7 +7,10 @@ import { newImageRef } from '@kamiazya/whiteboard-model'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
-import { measureLoopAvailability } from '../../shared/test-utils/loop-availability.js'
+import {
+  loopTurnShare,
+  measureLoopAvailability,
+} from '../../shared/test-utils/loop-availability.js'
 import { createIsolatedDb } from './db/test-helpers.js'
 import { LibsqlDocumentStore } from './libsql/libsql-document-store.js'
 import { createWorkspaceTail } from './workspace-tail.js'
@@ -141,21 +144,25 @@ describe('a workspace-tail pass', () => {
     expect(emitted).toBeGreaterThan(0)
     expect(subscribed.length).toBeGreaterThanOrEqual(4)
 
-    // A turn per workspace, give or take — which is the claim, and is why
-    // this is relative to the fixture rather than an absolute count.
-    //
-    // It was `> 5` and that coupled two quantities that vary independently:
-    // the loop above exits on ELAPSED time, while with the yield the sample
-    // count tracks the WORKSPACE count. So whether round 0's four workspaces
-    // land above or below the floor silently decided whether the assertion
-    // was reachable at all. Measured: 42.9ms and 3 samples locally, which
-    // continued to round 0's twelve and passed, against 4 workspaces and 3
-    // samples on CI, which exited and failed. Same code, same assertion,
-    // opposite verdicts, and neither was about the yield.
+    // A SHARE of the ticks the sampler asked for, not a count — the scale-free
+    // form `loopTurnShare` exists for, and the one both loop-availability
+    // tests now use. A count is a statement about how busy the machine is:
+    // this assertion was `samples > 5`, and the growth loop above exits on
+    // ELAPSED time while the sample count tracks the WORKSPACE count, so
+    // whether round 0's four workspaces landed above or below the floor
+    // silently decided whether it was reachable. Measured: 42.9ms with 3
+    // samples locally, which continued to round 1 and passed, against four
+    // workspaces and 3 samples on CI, which exited and failed. Same code,
+    // same assertion, opposite verdicts, and neither run was about the yield.
     //
     // Without the yield this produces ZERO samples at any fixture size, which
-    // is what the assertion is really for.
-    expect(availability.samples).toBeGreaterThanOrEqual(subscribed.length / 2)
+    // is what the assertion is really for. Measured on THIS fixture, against
+    // the real store: 0.23-0.26 idle over three runs, 0.27 under the full
+    // mcp-node suite, 0 with the yield removed. Lower than the 0.55 / 0.37
+    // the in-memory version of this test recorded, because a real store makes
+    // each workspace's catch-up dearer and proportionally fewer ticks land —
+    // one more way that fixture flattered the picture.
+    expect(loopTurnShare(availability)).toBeGreaterThan(0.05)
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
   }, 300_000)
 })
