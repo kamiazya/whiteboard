@@ -258,6 +258,22 @@ export function BrowserDocumentPage({
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
+
+  // Everything above NAMES A DOCUMENT, and this page keeps its own document
+  // switching rather than remounting (App.tsx says so at the mount site), so
+  // none of it may outlive the document it is about.
+  //
+  // `confirmDelete` is the one that bites: it is a bare boolean, and
+  // `triggerCleanup()` acts on whatever document the controller currently
+  // holds. Nothing binds them, so a dialog opened on one document and
+  // confirmed after a switch deletes the OTHER — measured, the document that
+  // arrived while the dialog stood was the one that went to the Trash.
+  // SCOPE RESET — see scoped-screen-state.test.ts
+  useEffect(() => {
+    setConfirmDelete(false)
+    setDuplicateError(null)
+    setIsDuplicating(false)
+  }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
   // instant the id is, and so this effect does not re-fire every time the list
