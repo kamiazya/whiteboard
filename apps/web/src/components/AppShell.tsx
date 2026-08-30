@@ -9,7 +9,7 @@ import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
-import { ConnectionStatus, isSyncOff } from './connection/ConnectionStatus.js'
+import { ConnectionStatus, connectionLabel, isSyncOff } from './connection/ConnectionStatus.js'
 import { WorkspaceMenu, type WorkspaceSwitcherSource } from './shell/WorkspaceMenu.js'
 
 // React.lazy for the same reason the browser page had it: the banner
@@ -165,6 +165,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
               workspaces={rows}
               source={workspaces.source}
               onSwitch={workspaces.onSwitch}
+              sessionLabel={connectionLabel(connection?.state ?? null)}
               onRenamed={(entry) =>
                 setRows((current) =>
                   current.map((row) => (row.workspaceId === entry.workspaceId ? entry : row)),

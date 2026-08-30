@@ -94,10 +94,8 @@ describe('AppShell', () => {
     renderShell(true, '/w/default', undefined, WORKSPACES)
     fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
     // The head states the current one; the list is what you switch to.
-    expect(await screen.findByTestId('shell-workspace-name')).toHaveProperty(
-      'textContent',
-      'Design team',
-    )
+    // An editable field now, not a caption: the head IS where you rename it.
+    expect(await screen.findByLabelText(/^workspace name$/i)).toHaveProperty('value', 'Design team')
     const current = await screen.findByRole('menuitem', { name: /design team/i })
     expect(current.getAttribute('aria-current')).toBe('true')
     expect(screen.getByRole('menuitem', { name: /notes/i })).toBeTruthy()

@@ -254,21 +254,27 @@ minting another.
   identity layers on create, but a rename that ignored them would pass every
   case vacuously while doing the one thing it exists for to nothing.
 
-  The FORM is where the three-layer model becomes visible to a person, and
-  it names no layer at all. `segment` is the right word in this document and
-  the wrong one in front of a user; every plainer substitute invents a FOURTH
-  name for a layer that has three. So the field is drawn as the URL it lands
-  in — a `/w/` prefix and the editable part — with no visible label, which
-  also makes the consequence self-evident in a way a label never did.
+  There is no rename FORM. The three-layer model is visible in the mark's
+  popover head, which is itself the editor: the name in a box, the URL
+  directly beneath it, no Save button. That follows the document layer, where
+  this repo had already replaced a pencil-menu rename with a title you edit in
+  place, and ADR-0006's "an object is generated first and named in place
+  afterwards".
 
-  It is a separate field from the display name because the segment is what
-  every existing link already says: deriving it from the name would break
-  those links each time somebody fixed a typo. Only what changed is sent,
-  since the segment write is the one that can be refused for a collision, and
-  an unchanged field submitted back would put every name edit at that risk
-  for nothing. Moving it moves the address with it; a name-only rename
-  navigates nowhere, so the popover head re-reads its subject from what the
-  rename ANSWERED rather than from a re-list.
+  **The two layers commit differently.** The name commits on the keystroke and
+  Escape writes the previous name BACK, matching the document title exactly.
+  The segment waits for Enter or blur, because committing it moves the address
+  and navigates — per-keystroke would move it once per character, through
+  intermediate values that are real addresses and can collide. That asymmetry
+  is the honest consequence of one layer being an address and the other not.
+
+  The segment field names no layer: it is drawn as the URL it lands in, `/w/`
+  and the editable part, with no visible label. `segment` is the right word in
+  this document and the wrong one in front of a person, and every plainer
+  substitute invents a FOURTH name for a layer that has three.
+
+  Each layer is written alone. An unchanged segment submitted back would put
+  every name edit behind the one write that can be refused for a collision.
 
   Renaming on the daemon still needs its route, and waits with creation
   below.

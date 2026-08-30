@@ -61,6 +61,8 @@ export interface WorkspaceMenuProps {
   readonly onSwitch: (handle: string) => void
   /** Replaces a row in the shell's copy after a rename answers. */
   readonly onRenamed: (entry: WorkspaceEntry) => void
+  /** The session word, shown beside the name. `null` where no page holds one. */
+  readonly sessionLabel?: string | null
 }
 
 function messageOf(cause: unknown, fallback: string): string {
@@ -68,26 +70,17 @@ function messageOf(cause: unknown, fallback: string): string {
 }
 
 /**
- * The layers this form actually CHANGED, in the port's own shape — absent
- * meaning "leave it alone".
+ * Each layer is written on its OWN, never as a form submitting both. Sending
+ * an unchanged segment back would turn every name edit into a segment write,
+ * and the segment write is the one that can be refused for a collision.
  *
- * Submitting every field back would turn a display-name edit into a segment
- * write, and the segment write is the one that can be refused for a
- * collision. An emptied segment field is absent rather than a clear: the
- * port has no way to clear a layer, and a workspace without one is a state
- * it arrives in, not one to offer as an edit.
+ * An emptied field writes nothing rather than clearing: the port has no way
+ * to clear a layer, and a workspace without one is a state it arrives in,
+ * not one to offer as an edit.
  */
-function changedLayers(
-  current: WorkspaceEntry,
-  name: string,
-  segment: string,
-): { segment?: string; displayName?: string } {
-  const displayName = name.trim()
-  const next = segment.trim()
-  return {
-    ...(next === '' || next === current.segment ? {} : { segment: next }),
-    ...(displayName === '' || displayName === current.displayName ? {} : { displayName }),
-  }
+function unchanged(next: string, current: string | undefined): boolean {
+  const trimmed = next.trim()
+  return trimmed === '' || trimmed === current
 }
 
 export function WorkspaceMenu({
@@ -96,50 +89,46 @@ export function WorkspaceMenu({
   source,
   onSwitch,
   onRenamed,
+  sessionLabel,
 }: WorkspaceMenuProps) {
-  // One form at a time, as one state rather than two booleans: "creating and
-  // renaming" is not a state this control has, and two flags would let it be
-  // written.
-  const [form, setForm] = useState<'none' | 'create' | 'rename'>('none')
-  const [name, setName] = useState('')
-  const [segment, setSegment] = useState('')
+  const [creating, setCreating] = useState(false)
+  const [newName, setNewName] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const newNameRef = useRef<HTMLInputElement>(null)
   const nameId = useId()
-  const nameRef = useRef<HTMLInputElement>(null)
+  const urlId = useId()
   // A ref, not the `busy` state below, and the difference is the whole guard.
   // `busy` is a React SNAPSHOT: a second submit that runs before React
-  // re-renders still sees it false. The button's `disabled` covers a second
-  // CLICK — React flushes discrete events synchronously — but this form also
-  // submits on Enter and the input carries no disabled attribute.
-  //
-  // Measured rather than argued: two keydowns dispatched inside one batch
-  // call `create` twice; the same two through `fireEvent`, which flushes
-  // between them, call it once. Each browser create MINTS and persists a
-  // workspace, so a second one is a workspace nobody asked for, holding a
-  // segment that shifts the next real one to `-2`.
+  // re-renders still sees it false. Measured — two keydowns dispatched inside
+  // one batch call `create` twice; the same two through `fireEvent`, which
+  // flushes between them, call it once. Each browser create MINTS and
+  // persists a workspace.
   const submitting = useRef(false)
-
-  // Focused on REVEAL, not on mount: the form appears because the person
-  // asked for it, and typing is the only thing to do next. `autoFocus` would
-  // say the same thing to React and a different thing to a screen reader —
-  // the attribute is about a document loading with focus already moved,
-  // which is not what this is.
-  useEffect(() => {
-    if (form !== 'none') nameRef.current?.focus()
-  }, [form])
 
   const active = workspaces.find((w) => workspaceHandle(w) === current)
   const create = source.create
-  // Offered only once the list has answered: the form starts from the name
-  // and segment the workspace HAS, and one pre-filled from the handle alone
-  // would offer to overwrite a display name it never read.
   const rename = active === undefined ? undefined : source.rename
 
-  const closeForm = () => {
-    setForm('none')
-    setError(null)
-  }
+  // Null means "not being edited", so the box shows the stored value. While
+  // it is a string the box shows THAT, because a committed name comes back
+  // normalised and re-rendering the normalised form on the keystroke that
+  // typed a space erases it — "Design team" typed one key at a time would
+  // arrive as "Designteam". Same reason `DocumentProperties` holds a draft.
+  const [nameDraft, setNameDraft] = useState<string | null>(null)
+  // The URL's draft is not the same device. It is the PENDING edit: this
+  // field does not commit per keystroke, so the draft is what has not been
+  // written yet rather than a rendering workaround.
+  const [urlDraft, setUrlDraft] = useState<string | null>(null)
+  // What the name held when the current edit began. Every keystroke is
+  // already committed, so Escape has nothing to discard — it has to put the
+  // previous name BACK, or "type, change your mind, Escape" silently keeps
+  // the half-typed one.
+  const nameBaseline = useRef(active?.displayName ?? '')
+
+  useEffect(() => {
+    if (creating) newNameRef.current?.focus()
+  }, [creating])
 
   const failed = (cause: unknown, fallback: string) => {
     submitting.current = false
@@ -147,59 +136,149 @@ export function WorkspaceMenu({
     setBusy(false)
   }
 
+  const write = (input: { segment?: string; displayName?: string }) => {
+    if (rename === undefined || active === undefined) return
+    setError(null)
+    rename(active.workspaceId, input)
+      .then((renamed) => {
+        // Taken from what rename ANSWERED rather than re-listed: a name edit
+        // navigates nowhere and remounts nothing, so the shell's own copy of
+        // the row is the only thing that can restate the head.
+        onRenamed(renamed)
+        // Only when the SEGMENT moved. The old handle stops answering the
+        // moment it changes, so a page left on it addresses a workspace that
+        // is no longer there.
+        const moved = workspaceHandle(renamed)
+        if (moved !== current) onSwitch(moved)
+      })
+      .catch((cause: unknown) => setError(messageOf(cause, 'Could not rename the workspace.')))
+  }
+
+  const commitUrl = () => {
+    if (urlDraft === null) return
+    const next = urlDraft
+    setUrlDraft(null)
+    if (unchanged(next, active?.segment)) return
+    write({ segment: next.trim() })
+  }
+
   const submitCreate = () => {
-    const displayName = name.trim()
+    const displayName = newName.trim()
     if (create === undefined || displayName === '' || submitting.current) return
     submitting.current = true
     setBusy(true)
     setError(null)
     create(displayName)
-      .then((created) => {
-        // The handle CREATE answered with, never the name that was typed: a
-        // segment is derived from the name and may be suffixed past a
-        // collision, or absent entirely, in which case the address is the
-        // canonical id. Navigating to what was typed addresses nothing.
-        onSwitch(workspaceHandle(created))
-      })
+      // The handle CREATE answered with, never the name that was typed: a
+      // segment is derived from the name and may be suffixed past a
+      // collision, or absent entirely, in which case the address is the
+      // canonical id. Navigating to what was typed addresses nothing.
+      .then((created) => onSwitch(workspaceHandle(created)))
       .catch((cause: unknown) => failed(cause, 'Could not create the workspace.'))
   }
 
-  const submitRename = () => {
-    if (rename === undefined || active === undefined || submitting.current) return
-    const changed = changedLayers(active, name, segment)
-    // Nothing to write is not a failure — it is a form submitted unchanged,
-    // and the honest response is to close it rather than to report an error
-    // about an edit nobody made.
-    if (changed.segment === undefined && changed.displayName === undefined) {
-      closeForm()
-      return
-    }
-    submitting.current = true
-    setBusy(true)
-    setError(null)
-    rename(active.workspaceId, changed)
-      .then((renamed) => {
-        submitting.current = false
-        setBusy(false)
-        setForm('none')
-        // Taken from what rename ANSWERED rather than re-listed. A rename
-        // that does not move the segment navigates nowhere and remounts
-        // nothing, so the shell's own copy of the row is the only thing that
-        // can tell the head its subject has a new name.
-        onRenamed(renamed)
-        // Only when the SEGMENT moved. The old handle stops answering the
-        // moment it changes, so a page left on it is addressing a workspace
-        // that is no longer there.
-        const moved = workspaceHandle(renamed)
-        if (moved !== current) onSwitch(moved)
-      })
-      .catch((cause: unknown) => failed(cause, 'Could not rename the workspace.'))
-  }
-
-  const submitForm = form === 'create' ? submitCreate : submitRename
-
   return (
     <>
+      {active !== undefined && (
+        // The head IS the editor. This repo already retired the pencil-menu
+        // rename for a title you edit in place (ADR-0006: an object is
+        // "named in place afterwards"), and a `Rename workspace` item here
+        // would be that shape rebuilt one layer up. Read-only where the
+        // keeper cannot write, never hidden — the name is the head, and
+        // hiding the subject to say "you cannot edit it" removes the subject.
+        <div className="mb-2 flex flex-col gap-1 border-b pb-2">
+          <div className="flex items-center gap-2">
+            <label className="sr-only" htmlFor={nameId}>
+              Workspace name
+            </label>
+            <input
+              id={nameId}
+              value={nameDraft ?? active.displayName ?? ''}
+              readOnly={rename === undefined}
+              placeholder="Unnamed workspace"
+              onFocus={() => {
+                nameBaseline.current = active.displayName ?? ''
+              }}
+              onChange={(event) => {
+                if (rename === undefined) return
+                setNameDraft(event.target.value)
+                if (unchanged(event.target.value, active.displayName)) return
+                write({ displayName: event.target.value.trim() })
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key !== 'Escape' || rename === undefined) return
+                event.preventDefault()
+                const shown = nameDraft ?? active.displayName ?? ''
+                setNameDraft(null)
+                // Compared against what the BOX holds, never against the
+                // stored name: the commit is async, so the row can still
+                // carry the old name here and comparing to it would decide
+                // "nothing changed" while a rename is already in flight.
+                if (shown !== nameBaseline.current && nameBaseline.current !== '') {
+                  write({ displayName: nameBaseline.current })
+                }
+                event.currentTarget.blur()
+              }}
+              onBlur={() => setNameDraft(null)}
+              className="min-w-0 flex-1 truncate bg-transparent text-sm font-semibold outline-none placeholder:font-normal placeholder:text-muted-foreground"
+            />
+            {sessionLabel != null && (
+              <span className="shrink-0 text-xs font-medium text-muted-foreground">
+                {sessionLabel}
+              </span>
+            )}
+          </div>
+          {/* No label names this layer. ADR-0019 calls it the `segment`,
+              which is not a word to put in front of somebody, and every
+              plainer word invents a FOURTH name for a layer that has three.
+              The URL it lands in says the same thing without naming
+              anything. */}
+          <div className="flex items-center rounded-md border bg-background px-1.5 py-0.5 font-mono text-xs">
+            <span aria-hidden="true" className="text-muted-foreground">
+              /w/
+            </span>
+            <label className="sr-only" htmlFor={urlId}>
+              Workspace URL
+            </label>
+            <input
+              id={urlId}
+              value={urlDraft ?? active.segment ?? ''}
+              readOnly={rename === undefined}
+              placeholder={active.workspaceId}
+              onChange={(event) => {
+                if (rename === undefined) return
+                setUrlDraft(event.target.value)
+              }}
+              onKeyDown={(event) => {
+                event.stopPropagation()
+                if (event.key === 'Enter') {
+                  event.preventDefault()
+                  commitUrl()
+                  return
+                }
+                if (event.key !== 'Escape') return
+                event.preventDefault()
+                setUrlDraft(null)
+                event.currentTarget.blur()
+              }}
+              // Committed on blur too: leaving a field having typed in it
+              // and losing the edit silently is the worse of the two
+              // surprises.
+              onBlur={commitUrl}
+              className="min-w-0 flex-1 bg-transparent outline-none"
+            />
+          </div>
+          {urlDraft !== null && !unchanged(urlDraft, active.segment) && (
+            <p className="text-xs text-muted-foreground">Links using the old URL stop working.</p>
+          )}
+          {error && (
+            <p role="alert" className="text-xs text-destructive">
+              {error}
+            </p>
+          )}
+        </div>
+      )}
       <p className="px-1 pt-1 pb-0.5 font-mono text-[10px] tracking-wider text-muted-foreground uppercase">
         Switch to
       </p>
@@ -224,119 +303,67 @@ export function WorkspaceMenu({
               className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent aria-[current]:font-semibold"
             >
               <span aria-hidden="true" className="w-3.5 shrink-0 text-muted-foreground">
-                {isCurrent ? '✓' : ''}
+                {isCurrent ? '\u2713' : ''}
               </span>
               <span className="truncate">{workspaceLabel(w)}</span>
             </button>
           )
         })}
       </div>
-      {(create !== undefined || rename !== undefined) && (
+      {create !== undefined && (
         <div className="mt-1 border-t pt-1">
-          {form === 'none' ? (
-            <div role="menu" aria-label="Workspace actions" className="flex flex-col">
-              {rename !== undefined && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    // Pre-filled from the row, so the form starts by stating
-                    // what the workspace IS. An empty field would read as
-                    // "no name", which is a different state and not this one.
-                    setName(active?.displayName ?? '')
-                    setSegment(active?.segment ?? '')
-                    setForm('rename')
-                  }}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                >
-                  <span aria-hidden="true" className="w-3.5 shrink-0 text-muted-foreground">
-                    ✎
-                  </span>
-                  Rename workspace
-                </button>
-              )}
-              {create !== undefined && (
-                <button
-                  type="button"
-                  role="menuitem"
-                  onClick={() => {
-                    setName('')
-                    setForm('create')
-                  }}
-                  className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
-                >
-                  <span aria-hidden="true" className="w-3.5 shrink-0 text-muted-foreground">
-                    ＋
-                  </span>
-                  New workspace
-                </button>
-              )}
-            </div>
-          ) : (
+          {creating ? (
             <div className="flex flex-col gap-1.5 p-1">
-              <label htmlFor={nameId} className="text-xs text-muted-foreground">
-                Workspace name
+              <label htmlFor={`${nameId}-new`} className="text-xs text-muted-foreground">
+                New workspace name
               </label>
               <input
-                id={nameId}
-                ref={nameRef}
-                value={name}
-                onChange={(event) => setName(event.target.value)}
+                id={`${nameId}-new`}
+                ref={newNameRef}
+                value={newName}
+                onChange={(event) => setNewName(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') submitForm()
+                  if (event.key === 'Enter') submitCreate()
                 }}
                 className="rounded-md border bg-background px-2 py-1 text-sm"
               />
-              {form === 'rename' && (
-                <>
-                  {/* No label naming this layer. ADR-0019 calls it the
-                      `segment`, which is not a word to put in front of
-                      somebody, and every other word for it invents a fourth
-                      name for a layer that has three. Showing the URL it
-                      lands in says the same thing without naming anything —
-                      and it is the only rendering that makes the consequence
-                      below obvious. */}
-                  <div className="flex items-center rounded-md border bg-background px-2 py-1 font-mono text-xs">
-                    <span aria-hidden="true" className="text-muted-foreground">
-                      /w/
-                    </span>
-                    <input
-                      aria-label="Workspace URL"
-                      value={segment}
-                      onChange={(event) => setSegment(event.target.value)}
-                      onKeyDown={(event) => {
-                        if (event.key === 'Enter') submitForm()
-                      }}
-                      className="min-w-0 flex-1 bg-transparent outline-none"
-                    />
-                  </div>
-                  <p className="text-xs text-muted-foreground">
-                    Links using the old URL stop working.
-                  </p>
-                </>
-              )}
-              {error && (
-                <p role="alert" className="text-xs text-destructive">
-                  {error}
-                </p>
-              )}
               <div className="flex gap-1.5">
                 <button
                   type="button"
-                  disabled={busy || (form === 'create' && name.trim() === '')}
-                  onClick={submitForm}
+                  disabled={busy || newName.trim() === ''}
+                  onClick={submitCreate}
                   className="rounded-md border px-2 py-1 text-xs font-medium hover:bg-accent disabled:opacity-50"
                 >
-                  {form === 'create' ? 'Create' : 'Save'}
+                  Create
                 </button>
                 <button
                   type="button"
-                  onClick={closeForm}
+                  onClick={() => {
+                    setCreating(false)
+                    setError(null)
+                  }}
                   className="rounded-md px-2 py-1 text-xs text-muted-foreground hover:bg-accent"
                 >
                   Cancel
                 </button>
               </div>
+            </div>
+          ) : (
+            <div role="menu" aria-label="Workspace actions" className="flex flex-col">
+              <button
+                type="button"
+                role="menuitem"
+                onClick={() => {
+                  setNewName('')
+                  setCreating(true)
+                }}
+                className="flex items-center gap-2 rounded-md px-2 py-1.5 text-left hover:bg-accent"
+              >
+                <span aria-hidden="true" className="w-3.5 shrink-0 text-muted-foreground">
+                  ＋
+                </span>
+                New workspace
+              </button>
             </div>
           )}
         </div>

@@ -89,6 +89,20 @@ describe('WorkspaceMenu — switching', () => {
 })
 
 describe('WorkspaceMenu — creating', () => {
+  it('renders its glyphs as glyphs, not as escape sequences', () => {
+    // Caught by a screenshot, not by a test: the accessible-name queries all
+    // matched "New workspace" while a literal `\\uff0b` sat beside it, because
+    // the corruption was in a SEPARATE aria-hidden span. A query that reads
+    // the name it wants cannot see the text it did not ask for.
+    renderMenu([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }], {
+      create: () => Promise.reject(new Error('not expected')),
+      rename: () => Promise.reject(new Error('not expected')),
+    })
+    for (const menu of screen.getAllByRole('menu')) {
+      expect(menu.textContent).not.toMatch(/\\u[0-9a-f]{4}/i)
+    }
+  })
+
   it('offers creation even with a single workspace, since that is the only way to a second', () => {
     renderMenu([{ workspaceId: DESIGN, segment: 'design' }], {
       create: () => Promise.reject(new Error('not expected')),
@@ -110,7 +124,7 @@ describe('WorkspaceMenu — creating', () => {
       { onSwitch },
     )
     fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
-    fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Design' } })
+    fireEvent.change(screen.getByLabelText(/new workspace name/i), { target: { value: 'Design' } })
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
     await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('design-2'))
   })
@@ -127,7 +141,7 @@ describe('WorkspaceMenu — creating', () => {
     )
     renderMenu([{ workspaceId: DESIGN, segment: 'design' }], { create })
     fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
-    const input = screen.getByLabelText(/workspace name/i)
+    const input = screen.getByLabelText(/new workspace name/i)
     fireEvent.change(input, { target: { value: 'Design' } })
     await act(async () => {
       input.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', bubbles: true }))
@@ -146,7 +160,7 @@ describe('WorkspaceMenu — creating', () => {
       { onSwitch },
     )
     fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
-    fireEvent.change(screen.getByLabelText(/workspace name/i), { target: { value: 'Design' } })
+    fireEvent.change(screen.getByLabelText(/new workspace name/i), { target: { value: 'Design' } })
     fireEvent.click(screen.getByRole('button', { name: /^create$/i }))
     expect((await screen.findByRole('alert')).textContent).toContain('that name is taken')
     expect(onSwitch).not.toHaveBeenCalled()
@@ -166,110 +180,132 @@ describe('WorkspaceMenu — creating', () => {
   })
 })
 
-describe('WorkspaceMenu — renaming', () => {
+describe('WorkspaceMenu — naming, in place', () => {
   const DESIGN_ROW: WorkspaceEntry = {
     workspaceId: DESIGN,
     segment: 'design',
     displayName: 'Design team',
   }
 
-  function openRename() {
-    fireEvent.click(screen.getByRole('menuitem', { name: /rename workspace/i }))
-  }
-
-  it('edits the URL the workspace lives at, with no word for the layer', () => {
-    // ADR-0019 calls this layer the `segment`, which is not a word to put in
-    // front of somebody, and any other word invents a FOURTH name for a
-    // layer that has three. The field shows the URL it lands in instead.
+  it('names the workspace in an editable field, not behind a menu item', () => {
+    // The same shape the DOCUMENT layer already settled on: this repo deleted
+    // the pencil-menu rename for a title you edit directly, and ADR-0006 says
+    // an object is "named in place afterwards". A `Rename workspace` item
+    // would be that retired shape rebuilt one layer up.
     renderMenu([DESIGN_ROW], { rename: () => Promise.resolve(DESIGN_ROW) })
-    openRename()
-    expect(screen.getByText('/w/')).toBeTruthy()
+    expect(screen.getByLabelText(/^workspace name$/i)).toHaveProperty('value', 'Design team')
     expect(screen.getByLabelText(/workspace url/i)).toHaveProperty('value', 'design')
-    expect(screen.getByText(/links using the old url stop working/i)).toBeTruthy()
+    expect(screen.queryByRole('menuitem', { name: /rename workspace/i })).toBeNull()
+    expect(screen.queryByRole('button', { name: /^save$/i })).toBeNull()
   })
 
-  it('renames in place and reports the answered row, without leaving', async () => {
-    // A display-name edit does not move the URL, so nothing navigates and
-    // nothing remounts — the shell's copy of the row is the only thing that
-    // can tell the popover head its subject has a new name.
-    const onSwitch = vi.fn()
-    const onRenamed = vi.fn()
-    const renamed = { workspaceId: DESIGN, segment: 'design', displayName: 'Marketing' }
-    renderMenu([DESIGN_ROW], { rename: () => Promise.resolve(renamed) }, { onSwitch, onRenamed })
-    openRename()
-    fireEvent.change(screen.getByLabelText(/^workspace name$/i), { target: { value: 'Marketing' } })
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
-
-    await waitFor(() => expect(onRenamed).toHaveBeenCalledWith(renamed))
-    expect(onSwitch).not.toHaveBeenCalled()
-  })
-
-  it('follows the URL when a rename moves it', async () => {
-    // The segment IS the address. Renaming it while the URL still says the
-    // old one leaves the page addressing a workspace that no longer answers
-    // to that handle.
-    const onSwitch = vi.fn()
-    renderMenu(
-      [DESIGN_ROW],
-      {
-        rename: () =>
-          Promise.resolve({
-            workspaceId: DESIGN,
-            segment: 'marketing',
-            displayName: 'Design team',
-          }),
-      },
-      { onSwitch },
+  it('commits a name edit on the keystroke, the way a document title does', async () => {
+    const rename = vi.fn(() =>
+      Promise.resolve({ workspaceId: DESIGN, segment: 'design', displayName: 'Marketing' }),
     )
-    openRename()
-    fireEvent.change(screen.getByLabelText(/workspace url/i), { target: { value: 'marketing' } })
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const onRenamed = vi.fn()
+    renderMenu([DESIGN_ROW], { rename }, { onRenamed })
+    fireEvent.change(screen.getByLabelText(/^workspace name$/i), { target: { value: 'Marketing' } })
 
+    await waitFor(() => expect(onRenamed).toHaveBeenCalled())
+    expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Marketing' })
+  })
+
+  it('puts the previous name back on Escape', async () => {
+    // Every keystroke is already committed, so Escape has nothing to discard
+    // — it has to write the previous name BACK, or "type, change your mind,
+    // Escape" silently keeps the half-typed one. Same rule as the title box.
+    const rename = vi.fn((_id: string, input: { displayName?: string }) =>
+      Promise.resolve({ ...DESIGN_ROW, ...input }),
+    )
+    renderMenu([DESIGN_ROW], { rename })
+    const field = screen.getByLabelText(/^workspace name$/i)
+    fireEvent.change(field, { target: { value: 'Marketin' } })
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Marketin' }))
+
+    fireEvent.keyDown(field, { key: 'Escape' })
+    await waitFor(() =>
+      expect(rename).toHaveBeenLastCalledWith(DESIGN, { displayName: 'Design team' }),
+    )
+  })
+
+  it('holds the URL until the edit is committed, unlike the name', async () => {
+    // A segment commit MOVES the address and navigates. Per-keystroke would
+    // move it once per character, through intermediate values that are real
+    // addresses and can collide — so this field waits for Enter or blur.
+    const rename = vi.fn(() =>
+      Promise.resolve({ workspaceId: DESIGN, segment: 'marketing', displayName: 'Design team' }),
+    )
+    const onSwitch = vi.fn()
+    renderMenu([DESIGN_ROW], { rename }, { onSwitch })
+    const url = screen.getByLabelText(/workspace url/i)
+    fireEvent.change(url, { target: { value: 'marketing' } })
+    expect(rename).not.toHaveBeenCalled()
+
+    fireEvent.keyDown(url, { key: 'Enter' })
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(DESIGN, { segment: 'marketing' }))
     await waitFor(() => expect(onSwitch).toHaveBeenCalledWith('marketing'))
   })
 
-  it('sends only the layers the form actually changed', async () => {
-    // Absent means "leave this layer alone" in the port, and submitting the
-    // unchanged URL back would turn every name edit into a segment write —
-    // the one call that can fail on a collision, for no reason.
+  it('commits a URL edit on blur too, so leaving the field is not a silent discard', async () => {
     const rename = vi.fn(() =>
-      Promise.resolve({ workspaceId: DESIGN, segment: 'design', displayName: 'Renamed' }),
+      Promise.resolve({ workspaceId: DESIGN, segment: 'marketing', displayName: 'Design team' }),
     )
     renderMenu([DESIGN_ROW], { rename })
-    openRename()
-    fireEvent.change(screen.getByLabelText(/^workspace name$/i), { target: { value: 'Renamed' } })
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
-
-    await waitFor(() => expect(rename).toHaveBeenCalled())
-    expect(rename).toHaveBeenCalledWith(DESIGN, { displayName: 'Renamed' })
+    const url = screen.getByLabelText(/workspace url/i)
+    fireEvent.change(url, { target: { value: 'marketing' } })
+    fireEvent.blur(url)
+    await waitFor(() => expect(rename).toHaveBeenCalledWith(DESIGN, { segment: 'marketing' }))
   })
 
-  it('surfaces a taken URL in the form and stays put', async () => {
+  it('warns about broken links only once the URL actually differs', () => {
+    // Permanently visible, the warning is furniture nobody reads. It belongs
+    // exactly when the edit in the box would break something.
+    renderMenu([DESIGN_ROW], { rename: () => Promise.resolve(DESIGN_ROW) })
+    expect(screen.queryByText(/links using the old url stop working/i)).toBeNull()
+    fireEvent.change(screen.getByLabelText(/workspace url/i), { target: { value: 'marketing' } })
+    expect(screen.getByText(/links using the old url stop working/i)).toBeTruthy()
+  })
+
+  it('reverts an uncommitted URL edit on Escape, without writing', () => {
+    const rename = vi.fn(() => Promise.resolve(DESIGN_ROW))
+    renderMenu([DESIGN_ROW], { rename })
+    const url = screen.getByLabelText(/workspace url/i)
+    fireEvent.change(url, { target: { value: 'marketing' } })
+    fireEvent.keyDown(url, { key: 'Escape' })
+    expect(url).toHaveProperty('value', 'design')
+    expect(rename).not.toHaveBeenCalled()
+  })
+
+  it('surfaces a taken URL and stays put', async () => {
     const onSwitch = vi.fn()
     renderMenu(
       [DESIGN_ROW],
       { rename: () => Promise.reject(new Error('Workspace segment "notes" is already taken')) },
       { onSwitch },
     )
-    openRename()
-    fireEvent.change(screen.getByLabelText(/workspace url/i), { target: { value: 'notes' } })
-    fireEvent.click(screen.getByRole('button', { name: /^save$/i }))
+    const url = screen.getByLabelText(/workspace url/i)
+    fireEvent.change(url, { target: { value: 'notes' } })
+    fireEvent.keyDown(url, { key: 'Enter' })
 
     expect((await screen.findByRole('alert')).textContent).toContain('already taken')
     expect(onSwitch).not.toHaveBeenCalled()
   })
 
-  it('offers no rename when the keeper has no way to rename one', () => {
+  it('shows the name read-only where the keeper cannot rename', () => {
+    // Not hidden: the name is the popover's HEAD and has to be stated either
+    // way. `DocumentProperties` settles this the same way — `readOnly` when
+    // there is no `onTitleChange` — because hiding the subject to express
+    // "you cannot edit it" removes the subject.
     renderMenu([DESIGN_ROW, { workspaceId: NOTES, segment: 'notes', displayName: 'Notes' }])
-    expect(screen.getByRole('menuitem', { name: /notes/i })).toBeTruthy()
-    expect(screen.queryByRole('menuitem', { name: /rename workspace/i })).toBeNull()
+    const field = screen.getByLabelText(/^workspace name$/i)
+    expect(field).toHaveProperty('value', 'Design team')
+    expect(field).toHaveProperty('readOnly', true)
+    expect(screen.getByLabelText(/workspace url/i)).toHaveProperty('readOnly', true)
   })
 
-  it('offers no rename until the rows say which workspace the address names', () => {
-    // Renaming needs the row: the form starts from the name and URL the
-    // workspace HAS, and one pre-filled from a handle alone would offer to
-    // overwrite a display name it never read.
+  it('states nothing to edit until the rows say which workspace the address names', () => {
     renderMenu([], { rename: () => Promise.reject(new Error('not expected')) })
-    expect(screen.queryByRole('menuitem', { name: /rename workspace/i })).toBeNull()
+    expect(screen.queryByLabelText(/workspace name/i)).toBeNull()
   })
 })

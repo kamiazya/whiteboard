@@ -72,7 +72,7 @@ export interface ConnectionStatusProps {
   readonly onWorkInBrowser?: () => void
   /** browser only: page-supplied popover extras (daemon detection, capability hint). */
   readonly children?: ReactNode
-  /** What the popover's head calls this workspace, and what the mark's accessible name states. */
+  /** What the mark's accessible name states. The popover's head is the menu's own. */
   readonly workspaceName?: string
   /** The workspace section, composed by the shell and rendered above the session's own. */
   readonly workspaceMenu?: ReactNode
@@ -94,6 +94,16 @@ const SESSION_LABEL: Record<SessionHealth, string> = {
   'sync-off': 'Sync off',
 }
 
+/**
+ * The word the mark cannot say, for whoever needs to render it. Exported
+ * because the popover's head moved into `WorkspaceMenu` — the head is an
+ * editable name now — and the session word sits on that same row.
+ */
+export function connectionLabel(state: ConnectionState | null): string | null {
+  if (state === null) return null
+  return state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
+}
+
 export function ConnectionStatus({
   state,
   daemonBaseUrl,
@@ -103,8 +113,7 @@ export function ConnectionStatus({
   workspaceName,
   workspaceMenu,
 }: ConnectionStatusProps) {
-  const label =
-    state === null ? null : state.keeper === 'browser' ? 'Browser' : SESSION_LABEL[state.session]
+  const label = connectionLabel(state)
   const syncOff = state !== null && isSyncOff(state)
   // Empty while sync is on: the region has to exist BEFORE the message, but
   // an empty one must not claim a name either.
@@ -141,21 +150,17 @@ export function ConnectionStatus({
         </button>
       </PopoverTrigger>
       <PopoverContent align="start" data-testid="shell-mark-popover">
-        {/* The head: what this workspace is called, and the state's word
-            beside it. The mark can say neither — it has room for a 26x16
-            signature and nothing else — and two of the four states share a
-            tone, so the word is the only thing that separates them. */}
-        <div className="mb-2 flex items-baseline justify-between gap-2 border-b pb-2">
-          {workspaceName !== undefined && (
-            <span data-testid="shell-workspace-name" className="truncate text-sm font-semibold">
-              {workspaceName}
-            </span>
-          )}
-          {label !== null && (
-            <span className="shrink-0 text-xs font-medium text-muted-foreground">{label}</span>
-          )}
-        </div>
-        {workspaceMenu !== undefined && <div className="mb-2 text-sm">{workspaceMenu}</div>}
+        {/* The workspace block comes FIRST and carries its own head, because
+            that head is an editable name and editing belongs to the component
+            that owns the rename. Without one — no workspace known — the
+            session word still needs stating, so the bare head stands in. */}
+        {workspaceMenu === undefined ? (
+          label !== null && (
+            <p className="mb-2 border-b pb-2 text-xs font-medium text-muted-foreground">{label}</p>
+          )
+        ) : (
+          <div className="mb-2 text-sm">{workspaceMenu}</div>
+        )}
         {state?.keeper === 'daemon' && state.session === 'synced' && (
           <div className="flex flex-col gap-1 text-sm">
             <p className="font-medium">Live sync is on</p>

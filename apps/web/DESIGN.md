@@ -156,16 +156,33 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   the name and URL the workspace HAS, and one pre-filled from a handle alone
   would offer to overwrite a display name it never read.
 
-  **The rename form shows the URL, and names no layer.** ADR-0019 calls the
-  middle layer the `segment`, which is not a word to put in front of somebody
-  — and every plainer word invents a FOURTH name for a layer that has three.
-  So the field is rendered as the URL it lands in (`/w/` then the editable
-  part) and carries no visible label at all. Only what the form changed is
-  sent: an unchanged URL submitted back would turn every name edit into a
-  segment write, and that is the one write that can be refused for a
-  collision. Moving the URL moves the address with it; a name-only rename
-  navigates nowhere, so the popover head re-reads its subject from what the
-  rename answered.
+  **The head IS the editor — there is no rename form.** This repo already
+  retired the pencil-menu rename for a document title you edit in place, and
+  ADR-0006 says an object is "named in place afterwards"; a `Rename workspace`
+  item would be that shape rebuilt one layer up. So the popover opens on the
+  name in a box, with the URL directly beneath it, and no Save button
+  anywhere. Where the keeper cannot write, both are `readOnly` rather than
+  hidden — the name is the head, and hiding the subject to say "you cannot
+  edit it" removes the subject.
+
+  **The two fields commit differently, and the difference is the point.** The
+  name commits on the keystroke, exactly as the document title does, and
+  Escape writes the PREVIOUS name back because there is nothing left to
+  discard. The URL waits for Enter or blur: committing it moves the address
+  and navigates, so per-keystroke would move it once per character, through
+  intermediate values that are real addresses and can collide. Escape there
+  reverts the box without writing.
+
+  The URL is drawn as the URL — a `/w/` prefix and the editable part — and
+  carries no visible label. ADR-0019 calls the layer the `segment`, which is
+  not a word to put in front of somebody, and every plainer substitute
+  invents a FOURTH name for a layer that has three. The warning that old
+  links will break appears only once the box actually differs from what is
+  stored; permanently visible, it is furniture nobody reads.
+
+  Each layer is written on its own, never as a form submitting both: an
+  unchanged URL sent back would put every name edit behind the one write that
+  can be refused for a collision.
 - **The shell states a connection only while a page holds one.** Pages report
   through `lib/shell-status-store`, and `null` — an index or settings page —
   leaves the mark stateless (no dot at all). A daemon index page does talk to the daemon over
