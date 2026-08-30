@@ -53,4 +53,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0018](0018-operation-vs-mechanic.md) | An operation is a use case; the composition root holds only mechanics | Proposed |
 | [ADR-0019](0019-workspace-identity.md) | Workspace identity is three layers, in both keepers | Proposed |
 | [ADR-0020](0020-coordination-boundary.md) | The coordination boundary — a CRDT data plane and a compare-and-swap control plane | Proposed |
-| [ADR-0021](0021-durability-boundary.md) | Durability is a property of each store, not an operation on a directory | Accepted (2-4 implemented; 5-6 not) |
+| [ADR-0021](0021-durability-boundary.md) | Durability is a property of each store, not an operation on a directory | Accepted (implemented) |
