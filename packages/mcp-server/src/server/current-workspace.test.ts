@@ -1,6 +1,7 @@
 import { mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
+import { workspaceCanonicalIdSchema } from '@kamiazya/whiteboard-model'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { clearWorkspaceIdCache, ensureWorkspaceId } from './current-workspace.js'
 import { getDb } from './store/db/index.js'
@@ -27,6 +28,24 @@ describe('ensureWorkspaceId', () => {
     // ensureWorkspaceId again must return the same value.
     const cached = ids[0]
     await expect(ensureWorkspaceId(dataDir)).resolves.toBe(cached)
+  })
+
+  it('mints a canonical ULID, the shape migration 0019 re-keyed every other workspace to', async () => {
+    // ADR-0019 fixes the canonical workspace id as a bare ULID, and `0019`
+    // re-keys every workspace a daemon ALREADY holds to that shape. This is
+    // the other half: the writer that runs on a fresh install. It kept minting
+    // nanoids, so the migration corrected the data while the producer went on
+    // writing the old shape — a daemon created after 0019 shipped is never
+    // re-keyed by anything.
+    //
+    // Two consequences, both on every fresh install. The bootstrapped
+    // workspace has no segment, so its handle IS this id and the address reads
+    // `/w/<id>` — removing raw identifiers from that position is what ADR-0019
+    // is for. And segment-first resolution stays unambiguous only because a
+    // segment may not be ULID-shaped; a nanoid is not ULID-shaped either, so
+    // it lands in the same namespace segments occupy.
+    const id = await ensureWorkspaceId(dataDir)
+    expect(workspaceCanonicalIdSchema.safeParse(id).success).toBe(true)
   })
 
   it('returns the persisted id again after the in-memory cache is cleared', async () => {
@@ -80,6 +99,11 @@ describe('ensureWorkspaceId', () => {
     await expect(ensureWorkspaceId(blocked)).rejects.toBeDefined()
 
     await rm(blocked)
-    await expect(ensureWorkspaceId(blocked)).resolves.toMatch(/^[A-Za-z0-9_-]{21}$/)
+    // The subject is the eviction: the retry has to SUCCEED, and minting an
+    // id is how it shows that. Asserting the canonical shape rather than a
+    // literal pattern keeps this test out of the business of pinning the id
+    // format, which `mints a canonical ULID` above owns.
+    const retried = await ensureWorkspaceId(blocked)
+    expect(workspaceCanonicalIdSchema.safeParse(retried).success).toBe(true)
   })
 })
