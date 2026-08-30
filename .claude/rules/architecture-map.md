@@ -86,6 +86,38 @@ moment `http-server.ts` called it, so it is now `server/current-workspace.ts`
 
 `tools/arch-lint` also hosts the one part of `.claude/rules/vocabulary.md` that can be mechanical rather than prose: `vocabulary-check.test.ts` fails on a retired word appearing anywhere under `apps/web/src` or `packages/*/src`. Only words with no legitimate meaning left qualify (today: `slug`) — `canvas` never will, because it is correct for the spatial surface and wrong only as the container noun, and telling those apart needs a reader. `migrations/` is excluded as history, and `EXEMPT_FILES` carries the one other file writing history, with its reason. Extend the package list as later shared-layer packages land. Per-package details live in `.claude/rules/package-<name>.md` (path-scoped). Note: `./skills/` (product MCP skills) is unrelated to `.claude/skills/` (dev workflow skills).
 
+**Work the daemon does on its own is declared before it is armed.**
+`packages/mcp-server/src/server/background-work.ts` is the registry, and the
+composition roots start and stop everything through it. Adding a scheduler, a
+sweeper, a poller, or a dispatcher means editing that file and answering three
+questions the diff would otherwise never ask:
+
+- **who runs it** when several instances share one record — `leader-only`
+  (naming the lease) or `every-instance` (saying why that is right, since it
+  is also what a worker gets by accident);
+- **what it costs the serving loop** — `subprocess`, or `in-process` with a
+  MEASURED figure and the date, taken with
+  `shared/test-utils/loop-availability.ts` rather than by hand;
+- **what triggers it**.
+
+Both of the first two were got wrong on one worker, invisibly. The backup pass
+ran on every instance (N backups a night, and N retention passes each deleting
+from a set the others were changing) and inside the serving process, where
+`VACUUM INTO` blocks the event loop for its whole duration — 1242ms at a 103MB
+database, 4767ms at 421MB, and rising with the data. Nothing in the source says
+a call blocks: an `await` on a native binding reads exactly like an `await` on a
+socket. `snapshot-blocking.test.ts` pins that one so the decision that put a
+subprocess in the way fails loudly if the call ever stops blocking.
+
+The registry is load-bearing rather than advisory — an undeclared worker does
+not typecheck, and `background-work.guard.test.ts` fails on a `.start()` in a
+composition root that goes around it. What it does NOT catch is a worker that
+arms itself at module load or from somewhere else; that is what this paragraph
+is for, and prose is the weaker rung on purpose. The registry earned its keep
+on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one the
+backup lease was built for — was starting no background work at all, so
+scheduled backups reached only the local daemon.
+
 **A cross-package cycle is caught by nothing, so the one that exists is
 guarded where it is.** `plugin-visual` imports `canvas-render`'s scene-node
 vocabulary to build the decorations `canvas-render` then uses as its default —

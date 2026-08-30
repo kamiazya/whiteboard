@@ -11,6 +11,7 @@ import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
 import { PACKAGE_VERSION } from '../shared/package-version.js'
 import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
+import { startBackgroundWork } from './background-work.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
@@ -197,10 +198,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   }
 
   const performClose = async (): Promise<void> => {
-    idleTimer.stop()
-    await workspaceTail?.stop()
-    await backupScheduler.stop()
-    await fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
+    await backgroundWork.stopAll()
     setRuntimeTouchFn(() => {})
 
     await new Promise<void>((resolve, reject) => {
@@ -305,10 +303,65 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   })
 
   setRuntimeTouchFn(touch)
-  idleTimer.start()
-  fileGcSweeper.start()
-  workspaceTail?.start()
-  backupScheduler.start()
+  // Everything the daemon runs on its own goes through the registry, which is
+  // where each one answers who runs it and what it costs the serving loop.
+  // See background-work.ts for why that is a registry rather than four calls.
+  const backgroundWork = startBackgroundWork([
+    {
+      name: 'idle-shutdown',
+      trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms`,
+      instances: {
+        runs: 'every-instance',
+        because: 'it is about THIS process being idle, which no other process can answer for it',
+      },
+      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      worker: { start: () => idleTimer.start(), stop: async () => idleTimer.stop() },
+    },
+    {
+      name: 'file-gc-sweeper',
+      trigger: `every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it`,
+      instances: {
+        runs: 'every-instance',
+        because:
+          'ADR-0020 rejects a GC leader explicitly: it removes GC-versus-GC races and leaves ' +
+          'GC-versus-WRITE untouched, since the write barrier is in-process and another ' +
+          "instance's write never takes it. The grace period is what covers that window.",
+      },
+      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      // Wrapped rather than passed straight through: its own `stop` takes a
+      // cap on how long shutdown waits for an in-flight pass, and a pass can
+      // be expensive. Handing the bare method to a caller that passes no
+      // options would silently take the sweeper's default instead.
+      worker: {
+        start: () => fileGcSweeper.start(),
+        stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
+      },
+    },
+    {
+      name: 'workspace-tail',
+      trigger: `every ${workspaceTailIntervalMs ?? 0}ms`,
+      instances: {
+        runs: 'every-instance',
+        because:
+          'each instance is catching ITS OWN cached documents up with what another instance ' +
+          'wrote; a leader doing it would leave every follower serving stale reads',
+      },
+      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      worker: workspaceTail,
+    },
+    {
+      name: 'backup-scheduler',
+      trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',
+      instances: { runs: 'leader-only', lease: 'backup' },
+      loop: {
+        runs: 'subprocess',
+        because:
+          'the snapshot step blocks the event loop for its whole duration — measured 1242ms ' +
+          'at a 103MB database and 4767ms at 421MB, growing with the data',
+      },
+      worker: backupScheduler,
+    },
+  ])
 
   server = serve({ fetch: app.fetch, port: options.port, hostname: host })
   // `serve()` returns before the underlying bind resolves, so a bind failure
@@ -325,10 +378,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     // a no-op stub), so without an explicit stop here the 15-min idle timer
     // and the GC sweeper's interval would keep firing in whatever process
     // hosts this call for the seam's lifetime.
-    idleTimer.stop()
-    void workspaceTail?.stop()
-    void backupScheduler.stop()
-    void fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS })
+    void backgroundWork.stopAll()
     ;(options.exitProcess ?? process.exit)(1)
   })
   server.on('connection', (socket) => {
