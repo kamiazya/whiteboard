@@ -712,8 +712,7 @@ export function BrowserDocumentPage({
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this {kindNoun(documentKind)}?</AlertDialogTitle>
             <AlertDialogDescription>
-              This permanently removes the {kindNoun(documentKind)} and its content from this
-              browser. This action cannot be undone.
+              The {kindNoun(documentKind)} moves to the Trash, where you can restore it.
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>

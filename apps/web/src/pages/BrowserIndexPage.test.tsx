@@ -295,14 +295,14 @@ describe('BrowserIndexPage', () => {
     await selectCard('Meeting notes')
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     let dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/removes the note from this browser/)).toBeTruthy()
+    expect(within(dialog).getByText(/^The note moves to the Trash/)).toBeTruthy()
     fireEvent.click(within(dialog).getByRole('button', { name: 'Cancel' }))
     await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
 
     await selectCard('Trip plan')
     fireEvent.click(await screen.findByRole('button', { name: 'Delete' }))
     dialog = await screen.findByRole('alertdialog')
-    expect(within(dialog).getByText(/removes the canvas from this browser/)).toBeTruthy()
+    expect(within(dialog).getByText(/^The canvas moves to the Trash/)).toBeTruthy()
   })
 
   it('Delete opens a dialog naming the canvas; Cancel removes nothing', async () => {
