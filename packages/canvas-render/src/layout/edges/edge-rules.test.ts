@@ -4,6 +4,7 @@ import {
   addCost,
   COST_QUANTUM,
   dominantAxisOrder,
+  facingLaneWindow,
   hasRepairableProblem,
   lessCost,
   PENALTY_RULES,
@@ -12,6 +13,7 @@ import {
   pairPenalty,
   type Rect,
   SIDE_PREFERENCE_RULES,
+  SLIDE_CORNER_INSET_PX,
   selfPenalty,
   shouldAdoptCandidate,
   ZERO_LANE_MIN_OVERLAP_PX,
@@ -42,36 +44,6 @@ function candidateRule(name: string): Extract<PreferenceRule, { kind: 'candidate
 }
 
 const rectAt = (x: number, y: number, w = 100, h = 100): Rect => ({ x, y, w, h })
-
-describe('u-hook-span-exposed-first', () => {
-  const rule = candidateRule('u-hook-span-exposed-first')
-  const from = rectAt(0, 0)
-
-  // The rule sorts the four same-side hooks by whether that side's BORDER
-  // SPAN passes through the target's interior, and the span is built by a
-  // four-branch switch whose every coordinate was unpinned — 18 surviving
-  // mutants, one per corner arithmetic. Each row places the target to taint
-  // exactly ONE side, so a branch that computes the wrong border stops
-  // matching and the order changes.
-  it.each([
-    ['top', rectAt(20, -50, 60, 60), ['right', 'bottom', 'left', 'top']],
-    ['bottom', rectAt(20, 90, 60, 60), ['top', 'right', 'left', 'bottom']],
-    ['left', rectAt(-50, 20, 60, 60), ['top', 'right', 'bottom', 'left']],
-    ['right', rectAt(90, 20, 60, 60), ['top', 'bottom', 'left', 'right']],
-  ])('demotes the %s hook when that border span enters the target', (_side, toRect, order) => {
-    const ranked = rule.generate({
-      dx: toRect.x + toRect.w / 2 - 50,
-      dy: toRect.y + toRect.h / 2 - 50,
-      fromRect: from,
-      toRect,
-      crowd: () => 0,
-    })
-
-    expect(ranked.map((p) => p.fromSide)).toEqual(order)
-    // Same-side hooks throughout: this rule never proposes a crossing pair.
-    expect(ranked.every((p) => p.fromSide === p.toSide)).toBe(true)
-  })
-})
 
 describe('zero-bend-facing-first', () => {
   const rule = candidateRule('zero-bend-facing-first')
@@ -261,8 +233,60 @@ describe('SIDE_PREFERENCE_RULES', () => {
   })
 })
 
+describe('facingLaneWindow', () => {
+  // The window is a pair of numbers this module PROMISES to `slideAlongSide`,
+  // which then places a real anchor inside it — so the interval itself is the
+  // contract, not merely whether one exists. Every test of it went through the
+  // routing pipeline and asserted the route, so the numbers were unpinned.
+  it('insets both ends by the corner inset, then intersects the two spans', () => {
+    // y spans [10, 90] and [50, 130]; the shared lane is [50, 90].
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(200, 40), 'h')).toEqual([50, 90])
+    expect(SLIDE_CORNER_INSET_PX).toBe(10)
+  })
+
+  it('reads the x spans on the vertical axis', () => {
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(40, 200), 'v')).toEqual([50, 90])
+  })
+
+  it('qualifies a lane of exactly the minimum, and rejects the pixel below', () => {
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(200, 60), 'h')).toEqual([70, 90])
+    expect(facingLaneWindow(rectAt(0, 0), rectAt(200, 61), 'h')).toBeUndefined()
+    expect(ZERO_LANE_MIN_OVERLAP_PX).toBe(20)
+  })
+
+  it('clamps the inset on a side shorter than twice it, rather than inverting the span', () => {
+    // A 12px-tall box inset by 10 at both ends would run backwards. The clamp
+    // collapses it to its midpoint instead — and a collapsed span hosts no
+    // lane, so the pair does not qualify however tall its partner is.
+    expect(facingLaneWindow(rectAt(0, 0, 100, 12), rectAt(200, 0), 'h')).toBeUndefined()
+  })
+})
+
 describe('u-hook-span-exposed-first', () => {
   const rule = candidateRule('u-hook-span-exposed-first')
+
+  // The span is built by a four-branch switch whose every coordinate was
+  // unpinned — 18 surviving mutants, one per corner term — and this rule's
+  // ORDER is a direct read of all four. Each row places the target to taint
+  // exactly ONE side, so a branch computing the wrong border stops matching.
+  it.each([
+    ['top', rectAt(20, -50, 60, 60), ['right', 'bottom', 'left', 'top']],
+    ['bottom', rectAt(20, 90, 60, 60), ['top', 'right', 'left', 'bottom']],
+    ['left', rectAt(-50, 20, 60, 60), ['top', 'right', 'bottom', 'left']],
+    ['right', rectAt(90, 20, 60, 60), ['top', 'bottom', 'left', 'right']],
+  ])('demotes the %s hook when that border span enters the target', (_side, toRect, order) => {
+    const ranked = rule.generate({
+      dx: toRect.x + toRect.w / 2 - 50,
+      dy: toRect.y + toRect.h / 2 - 50,
+      fromRect: rectAt(0, 0),
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(ranked.map((p) => p.fromSide)).toEqual(order)
+    // Same-side hooks throughout: this rule never proposes a crossing pair.
+    expect(ranked.every((p) => p.fromSide === p.toSide)).toBe(true)
+  })
 
   it('is total: always offers all four same-side hooks, only reordered', () => {
     const fromRect = rectAt(0, 0)

@@ -62,6 +62,10 @@ export function facingLaneWindow(
   toRect: Rect,
   axis: 'h' | 'v',
 ): readonly [number, number] | undefined {
+  // The `min` is a clamp for a side shorter than twice the inset, and its
+  // exact form is unobservable: such a side collapses to a point or inverts
+  // either way, and neither can clear the zero-bend minimum. It is here so
+  // the span never runs backwards, not to change an answer.
   const span = (r: Rect): readonly [number, number] =>
     axis === 'h'
       ? [
