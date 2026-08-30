@@ -228,7 +228,18 @@ async function main() {
   }
   const { server, port } = await serveDist()
   const url = `http://127.0.0.1:${port}/`
-  const browser = await chromium.launch()
+  // `WHITEBOARD_CHROME_PATH` when the environment supplies its own Chrome,
+  // exactly as `smoke-preview-origin.mjs` does. CI's `verify` job installs no
+  // Playwright browsers — it sets that variable to the system Chrome — so a
+  // bare launch there fails with "Executable doesn't exist", which is a
+  // missing browser and not a slow one. Measured: that is how this gate first
+  // failed on CI, having passed every local run.
+  const browser = await chromium.launch({
+    headless: true,
+    ...(process.env.WHITEBOARD_CHROME_PATH && {
+      executablePath: process.env.WHITEBOARD_CHROME_PATH,
+    }),
+  })
   const runs = []
   try {
     for (let i = 0; i < RUNS; i++) {
