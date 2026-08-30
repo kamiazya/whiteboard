@@ -14,6 +14,7 @@ import { startBackgroundWork } from './background-work.js'
 import { getDataDir } from './config.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
+import { createFileGcSweeper } from './store/file-gc-sweeper.js'
 import { parseBackupDir, parseBackupKeep, parseBackupSchedule } from './store/storage-env.js'
 
 export interface StartServerModeHttpOptions {
@@ -22,7 +23,17 @@ export interface StartServerModeHttpOptions {
   publicBaseUrl: string
   allowedOrigins: readonly string[]
   authStrategy: AsyncAuthStrategy
+  /** Test-only seam, matching `startHttpServer`'s: overrides the real
+   *  factory so a wiring test can assert the sweeper is armed and stopped
+   *  without running a full pass. */
+  fileGcSweeperFactory?: typeof createFileGcSweeper
 }
+
+// Caps how long close() waits for an in-flight file-gc pass. Same value and
+// same reason as the local daemon's: a full pass can be expensive, and a
+// shutdown that appears to hang is worse than one that leaves a pass to
+// finish in the background.
+const FILE_GC_STOP_TIMEOUT_MS = 5_000
 
 export interface ServerModeRunning {
   port: number
@@ -107,6 +118,7 @@ export async function startServerModeHttp(
   // root started no background work whatsoever. The registry is what made
   // that visible: local-daemon declared four workers and this file declared
   // none.
+  const fileGcSweeper = (options.fileGcSweeperFactory ?? createFileGcSweeper)()
   const backupDir = parseBackupDir(process.env)
   const backupSchedule = parseBackupSchedule(process.env)
   const backupKeep = parseBackupKeep(process.env)
@@ -131,19 +143,28 @@ export async function startServerModeHttp(
     },
     {
       name: 'file-gc-sweeper',
-      trigger: 'not armed here',
+      trigger: 'every WHITEBOARD_FILE_GC_INTERVAL_MS (24h by default); the sweeper resolves it',
       instances: {
         runs: 'every-instance',
         because:
           'ADR-0020 rejects a GC leader: it removes GC-versus-GC races and leaves ' +
-          'GC-versus-WRITE untouched, since the write barrier is in-process',
+          'GC-versus-WRITE untouched, since the write barrier is in-process. Two passes ' +
+          'racing the same file is the benign half — the second unlink answers ENOENT and ' +
+          'is logged and skipped.',
       },
-      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
-      // Declared unarmed rather than left out. It has never run in server
-      // mode, and switching a deleter on as a side effect of wiring a
-      // registry is not a change to make in passing — it wants its own
-      // increment, with the multi-instance grace-period question answered.
-      worker: null,
+      loop: {
+        runs: 'in-process',
+        worstStallMs: 39,
+        fixture:
+          '6 documents at 8 versions each, by file-gc-loop-availability.test.ts; the same ' +
+          'pass without its yields stalled 1342ms unbroken, and 5 documents at 20 versions ' +
+          'each stalled 7404ms',
+        measuredOn: '2026-08-30',
+      },
+      worker: {
+        start: () => fileGcSweeper.start(),
+        stop: () => fileGcSweeper.stop({ timeoutMs: FILE_GC_STOP_TIMEOUT_MS }),
+      },
     },
     {
       name: 'workspace-tail',
@@ -152,7 +173,14 @@ export async function startServerModeHttp(
         runs: 'every-instance',
         because: 'each instance catches ITS OWN cached documents up with what another wrote',
       },
-      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      loop: {
+        runs: 'in-process',
+        worstStallMs: 7,
+        fixture:
+          '10 workspaces with real history, by workspace-tail-loop-availability.test.ts; ' +
+          'the same pass without its yield blocked for all 80.1ms of its duration',
+        measuredOn: '2026-08-30',
+      },
       // Nothing to catch up: server mode has no WebSocket subscribers in this
       // slice, and the tail exists to serve a browser attached to THIS
       // instance. It arms when server mode grows the subscription surface.

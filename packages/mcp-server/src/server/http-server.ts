@@ -314,7 +314,12 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
         runs: 'every-instance',
         because: 'it is about THIS process being idle, which no other process can answer for it',
       },
-      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      loop: {
+        runs: 'in-process',
+        worstStallMs: 0,
+        fixture: 'a comparison of two timestamps; there is no call here to measure',
+        measuredOn: '2026-08-30',
+      },
       worker: { start: () => idleTimer.start(), stop: async () => idleTimer.stop() },
     },
     {
@@ -327,7 +332,19 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           'GC-versus-WRITE untouched, since the write barrier is in-process and another ' +
           "instance's write never takes it. The grace period is what covers that window.",
       },
-      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      loop: {
+        runs: 'in-process',
+        // Not a subprocess, even though the cost is the backup's shape: the
+        // write barrier that stops a concurrent save inserting a reference
+        // between the scan and the unlinks is in-process, and a child would
+        // not take it. So the pass yields between scan units instead.
+        worstStallMs: 39,
+        fixture:
+          '6 documents at 8 versions each, by file-gc-loop-availability.test.ts; the same ' +
+          'pass without its yields stalled 1342ms unbroken, and 5 documents at 20 versions ' +
+          'each stalled 7404ms',
+        measuredOn: '2026-08-30',
+      },
       // Wrapped rather than passed straight through: its own `stop` takes a
       // cap on how long shutdown waits for an in-flight pass, and a pass can
       // be expensive. Handing the bare method to a caller that passes no
@@ -346,7 +363,16 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
           'each instance is catching ITS OWN cached documents up with what another instance ' +
           'wrote; a leader doing it would leave every follower serving stale reads',
       },
-      loop: { runs: 'in-process', measuredBlockMs: 0, measuredOn: '2026-08-30' },
+      loop: {
+        runs: 'in-process',
+        // Small, and paid on the operator's interval rather than once a
+        // night, which is why it yields per workspace too.
+        worstStallMs: 7,
+        fixture:
+          '10 workspaces with real history, by workspace-tail-loop-availability.test.ts; ' +
+          'the same pass without its yield blocked for all 80.1ms of its duration',
+        measuredOn: '2026-08-30',
+      },
       worker: workspaceTail,
     },
     {

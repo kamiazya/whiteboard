@@ -1,5 +1,6 @@
 import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
+import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import {
   projectWorkspaceDocument,
   readSpatialCanvas,
@@ -141,6 +142,34 @@ function checkoutFrontiersBase64(live: LoroDoc, frontiersBase64: string): LoroDo
   return clone
 }
 
+/**
+ * Every fileId any state of this workspace still points at.
+ *
+ * **The `yieldToLoop()` calls are load-bearing, not tidiness.** This is the
+ * expensive half of a purge — a fork and checkout of the workspace record per
+ * branch and per version of every document — and every one of those is a
+ * synchronous WASM call. The `await`s around them look like they let the
+ * daemon breathe and do not: `loadDocument` answers from the cached workspace
+ * document and `versionStore.load` goes through a native binding, so nothing
+ * in the chain ever reaches the timer phase, and the whole scan runs as one
+ * unbroken stall.
+ *
+ * Measured at 5 documents x 20 versions, a fixture smaller than a real
+ * workspace: 7690ms elapsed, 7670ms of it with the loop running nothing, in a
+ * single 7404ms stretch. That is every request, WebSocket frame and MCP call
+ * stopped for seven seconds, and it grows with the version history. With one
+ * yield per scan unit the same pass leaves the longest stall at 86ms.
+ * `file-gc-loop-availability.test.ts` pins it.
+ *
+ * The total CPU is unchanged and is not the point: what a waiting request
+ * pays is the longest CONTIGUOUS stretch, and that is what these convert from
+ * "the whole pass" into "one checkout".
+ *
+ * Yielding while holding the workspace write barrier is safe by the same
+ * argument the barrier rests on — it is an async lock, so a concurrent writer
+ * in this process waits for it rather than interleaving, and the fence around
+ * this call cannot be moved by the writes it excludes.
+ */
 async function collectReferencedFileIds(
   workspaceId: string,
   versionStore?: VersionStore,
@@ -155,6 +184,8 @@ async function collectReferencedFileIds(
   // fold could not move.
   const wsClone = await cloneStoredWorkspaceDoc(workspaceId)
   for (const { path } of documents) {
+    // One per scan unit: document, branch tip, version. See above.
+    await yieldToLoop()
     const live = await loadDocument(workspaceId, path)
     collectFromDoc(live, referenced)
 
@@ -171,6 +202,7 @@ async function collectReferencedFileIds(
 
     const { branches } = await loadDocumentBranches(workspaceId, path)
     for (const branch of branches) {
+      await yieldToLoop()
       // Every branch tip (including HEAD's, which is redundant with the
       // live scan above but harmless) is a live reference set — a file
       // is only dangling when NO branch's tip references it, not just
@@ -199,6 +231,7 @@ async function collectReferencedFileIds(
     if (!versionStore) continue
     const versions = await versionStore.list(workspaceId, path)
     for (const v of versions) {
+      await yieldToLoop()
       // load() forks the live doc internally and checks out the version's
       // frontiers. If a version cannot be inspected (missing frontier
       // rows, corrupt data, or load() itself reporting the version does
