@@ -239,23 +239,65 @@ describe('VersionTimeline', () => {
     expect(screen.queryByText(/-\d+s ago/)).toBeNull()
   })
 
-  it('filters cards and mini-graph rows to the active branch', async () => {
+  // REPLACES 'filters cards and mini-graph rows to the active branch'. That
+  // test pinned the rule this increment moves, so it is rewritten rather than
+  // adjusted until it passes — the two are indistinguishable in a diff
+  // otherwise. What it asserted (v-feat absent, two lanes) was true of a
+  // timeline that showed one lane; the timeline now shows them all.
+  it('shows every lane, not only the one HEAD is on', async () => {
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
-    // Only v-new and v-mid should render; v-feat is filtered out with the feature branch.
+    // v-new and v-mid on `main`, v-feat on `feature`. Before this, asking for
+    // the feature branch's history meant switching onto it first.
     await waitFor(() => {
       expect(screen.getAllByText(/5 els|3 els/).length).toBeGreaterThanOrEqual(2)
     })
-    expect(screen.queryByText(/4 els/)).toBeNull()
+    expect(screen.getByText(/4 els/)).toBeTruthy()
 
-    // The mini-graph should render two SVG lanes for the two visible main-branch rows.
     await waitFor(() => {
-      const svgs = document.querySelectorAll('svg[viewBox="0 0 24 36"]')
-      expect(svgs.length).toBe(2)
+      expect(document.querySelectorAll('svg[viewBox="0 0 24 36"]').length).toBe(3)
     })
 
     // Branch tabs are gone, so no tab role should exist.
     expect(screen.queryAllByRole('tab').length).toBe(0)
+  })
+
+  it('draws the rows HEAD is not on as rings, which is mini-graph own rule', async () => {
+    // `mini-graph.ts` has documented "rows on other branches use a ring dot"
+    // since it was written, and no call site could reach it: the timeline
+    // filtered to HEAD first, so every row it drew was active by
+    // construction. This is that rule becoming visible.
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+
+    await waitFor(() => {
+      expect(document.querySelectorAll('svg[viewBox="0 0 24 36"]').length).toBe(3)
+    })
+    const dots = [...document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')]
+    expect(dots.length).toBe(3)
+
+    const rings = dots.filter((c) => c.getAttribute('fill') === 'none')
+    const solid = dots.filter((c) => c.getAttribute('fill') !== 'none')
+    // Exactly the one `feature` row is a ring; the two `main` rows are solid.
+    expect(rings.length).toBe(1)
+    expect(solid.length).toBe(2)
+    expect(rings[0]?.getAttribute('stroke-width')).toBe('2')
+  })
+
+  it('offers restore only on the lane HEAD is on', async () => {
+    // Showing another variation history is not the same as offering to
+    // restore from it. What restoring one variation version into another
+    // MEANS is a question nobody has answered, so the row is context here,
+    // not a target — an affordance that acts on an undecided semantic is
+    // worse than no affordance.
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/4 els/)).toBeTruthy()
+    })
+    const buttons = screen.getAllByRole('button')
+    const labels = buttons.map((b) => b.textContent ?? '')
+    expect(labels.filter((t) => /5 els|3 els/.test(t)).length).toBe(2)
+    expect(labels.some((t) => /4 els/.test(t))).toBe(false)
   })
 
   it('renders the branchOut label on the row matching baseVersionId', async () => {
@@ -275,16 +317,21 @@ describe('VersionTimeline', () => {
     })
 
     const circles = document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')
-    expect(circles).toHaveLength(2)
-    expect(circles[0]?.getAttribute('fill')).toBe('#1971c2')
-    expect(circles[0]?.getAttribute('stroke')).toBe('#1971c2')
-    expect(circles[1]?.getAttribute('fill')).toBe('#1971c2')
-    expect(circles[1]?.getAttribute('stroke')).toBe('#1971c2')
-    // Every row shown here is on the active HEAD branch (versions are
-    // pre-filtered to head before reaching the mini-graph), so the dot is
-    // always solid — never the hollow "other branch" ring.
-    expect(circles[0]?.getAttribute('stroke-width')).toBe('0')
-    expect(circles[1]?.getAttribute('stroke-width')).toBe('0')
+    expect(circles).toHaveLength(3)
+    // Each lane keeps its own BranchMeta.color, on the stroke whichever shape
+    // the dot takes — that is what makes a ring readable as the same lane.
+    const mainDots = [...circles].filter((c) => c.getAttribute('stroke') === '#1971c2')
+    expect(mainDots).toHaveLength(2)
+    for (const dot of mainDots) {
+      expect(dot.getAttribute('fill')).toBe('#1971c2')
+      expect(dot.getAttribute('stroke-width')).toBe('0')
+    }
+    // The `feature` row carries that branch's colour and the ring shape. The
+    // previous version of this case asserted the dot is ALWAYS solid, which
+    // was true only because the rows were pre-filtered to HEAD.
+    const featureDot = [...circles].find((c) => c.getAttribute('stroke') === '#9333ea')
+    expect(featureDot?.getAttribute('fill')).toBe('none')
+    expect(featureDot?.getAttribute('stroke-width')).toBe('2')
   })
 
   it('legacy row without operator renders system fallback', async () => {
@@ -323,7 +370,9 @@ describe('VersionTimeline', () => {
     })
   })
 
-  it('renders the empty state when the active branch has no versions', async () => {
+  // The empty state is the DOCUMENT's now, not one lane's — nothing is
+  // filtered out, so an empty list means there is nothing anywhere.
+  it('renders the empty state when the document has no versions at all', async () => {
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -361,7 +410,7 @@ describe('VersionTimeline', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
     await waitFor(() => {
-      expect(screen.getByText(/No versions on «feature» yet/i)).toBeTruthy()
+      expect(screen.getByText(/No versions yet/i)).toBeTruthy()
     })
   })
 
@@ -640,11 +689,17 @@ describe('VersionTimeline HEAD polling', () => {
     // mkVersionsResponse's v-feat row (branchName: 'feature', 4 elements) is
     // the one version on the new head; the two main-branch rows must drop
     // out of the filtered view.
+    // What follows an external HEAD change is no longer WHICH rows exist —
+    // every lane is shown either way — but which of them is the active one.
+    // The `feature` row becomes solid and the two `main` rows become rings.
     await waitFor(() => {
-      expect(screen.getByText(/4 els/)).toBeTruthy()
+      const dots = [...document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')]
+      const solid = dots.filter((c) => c.getAttribute('fill') !== 'none')
+      expect(solid).toHaveLength(1)
+      expect(solid[0]?.getAttribute('stroke')).toBe('#9333ea')
     })
-    expect(screen.queryByText(/5 els/)).toBeNull()
-    expect(screen.queryByText(/3 els/)).toBeNull()
+    expect(screen.getByText(/4 els/)).toBeTruthy()
+    expect(screen.getByText(/5 els/)).toBeTruthy()
   })
 })
 
@@ -986,7 +1041,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     // Loading settles instead of spinning forever, and no unhandled rejection
     // propagates out of the effect (a rejection here would fail the test run).
     await waitFor(() => {
-      expect(screen.getByText(/No versions on/)).toBeTruthy()
+      expect(screen.getByText(/No versions yet/)).toBeTruthy()
     })
   })
 
@@ -1009,7 +1064,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
         expect.objectContaining({ status: 500 }),
       )
     })
-    expect(screen.getByText(/No versions on/)).toBeTruthy()
+    expect(screen.getByText(/No versions yet/)).toBeTruthy()
   })
 
   it('clears the previous canvas versions immediately when workspaceId/path changes', async () => {
