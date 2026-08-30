@@ -82,6 +82,31 @@ async function firstFreeSegment(index: DocumentIndex, base: string): Promise<str
   return undefined
 }
 
+/**
+ * How many documents one workspace holds, for the listing.
+ *
+ * A registry row can exist with no workspace TREE behind it — `listWorkspaces`
+ * returns it and `listDocuments` throws `WorkspaceNotFoundError` for it. That
+ * is a real state on a live daemon, and counting every row without allowing
+ * for it turned ONE such workspace into a 500 for the whole list: a listing
+ * that worked before the count was added stopped working at all.
+ *
+ * Zero, not absent: the row is a workspace, and it holds nothing. Absent means
+ * "this keeper does not count", which is a different statement and belongs to
+ * the browser, not to a daemon workspace that simply has no tree yet.
+ *
+ * Caught per ROW rather than around the whole listing, so one workspace's
+ * missing tree costs the others nothing.
+ */
+async function countDocuments(index: DocumentIndex, workspaceId: string): Promise<number> {
+  try {
+    return (await index.listDocuments({ workspaceId })).length
+  } catch (err) {
+    if (isWorkspaceNotFoundError(err)) return 0
+    throw err
+  }
+}
+
 export interface WorkspacesRouterOptions {
   /** The operations this router adapts onto. Omitted by callers that have
    *  not been given a container — see `getDefaultServerDeps`, which is the
@@ -104,22 +129,29 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       const workspaces = await deps.documentIndex.listWorkspaces()
       // The count costs a document listing per row, which the tree index
       // answers by OPENING each workspace's record — so this turns a registry
-      // read into N of them. Measured on this store at 10 workspaces holding
-      // 200 documents between them: 0.2ms for the bare list, 5.8ms with the
-      // counts. The RATIO says don't (35x) and the figure says it does not
-      // matter (5.7ms, once, on a control a person opens by clicking), which
-      // is the whole reason it was measured rather than argued. Warm cache;
-      // the first open after a restart pays more.
+      // read into N of them.
       //
-      // Revisit if this list ever feeds something that polls.
-      const counted = await Promise.all(
-        workspaces.map(async ({ workspaceId, segment, displayName }) => ({
+      // SEQUENTIAL, and that is the load-bearing part. `Promise.all` over the
+      // rows opens N workspace records at once against the one SQLite file,
+      // and on a real daemon holding real workspaces that made the whole
+      // listing fail with `SQLITE_BUSY: database is locked` — a 500 for every
+      // row because of contention this route introduced. A/B against a live
+      // daemon: concurrent 500, sequential 200. No test here reaches it; each
+      // one gets a fresh temp database with nothing else touching it.
+      //
+      // The cost that buys: measured end-to-end over HTTP against that same
+      // daemon — 11 workspaces, 38 documents — best of 7 is 4.2ms, on a
+      // control a person opens by clicking. Revisit if this list ever feeds
+      // something that polls.
+      const counted = []
+      for (const { workspaceId, segment, displayName } of workspaces) {
+        counted.push({
           workspaceId,
           ...(segment === undefined ? {} : { segment }),
           ...(displayName === undefined ? {} : { displayName }),
-          documentCount: (await deps.documentIndex.listDocuments({ workspaceId })).length,
-        })),
-      )
+          documentCount: await countDocuments(deps.documentIndex, workspaceId),
+        })
+      }
       const response: ListWorkspacesResponse = { workspaces: counted }
       return c.json(response)
     } catch (err) {

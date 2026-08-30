@@ -209,10 +209,17 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 
   Measured before it was added, because the cost is invisible in the diff: the
   tree index answers a document listing by OPENING each workspace's record, so
-  this turns one registry read into N. On the daemon store at 10 workspaces
-  holding 200 documents between them, 0.2ms became 5.8ms. The ratio says don't
-  and the figure says it does not matter, on a control a person opens by
-  clicking — which is why it was measured rather than argued.
+  this turns one registry read into N. Against a live daemon holding 11
+  workspaces and 38 documents, the whole call is 4.2ms end-to-end over HTTP —
+  on a control a person opens by clicking.
+
+  The daemon counts the rows ONE AT A TIME, and that is not an oversight. The
+  obvious `Promise.all` opens N workspace records at once against the one
+  SQLite file, and on that same daemon it failed the entire listing with
+  `SQLITE_BUSY` — every row lost to contention the count itself introduced.
+  A/B against the running daemon: concurrent 500, sequential 200. No unit test
+  reaches it, because each gets a fresh database with nothing else touching it;
+  this is the class of defect only a real keeper with real data shows.
 - **The document browser heads itself with the workspace name.** The other
   half of the answer above, and the only place a sighted reader sees the name
   at all — the shell states it in the mark's accessible name and draws it only

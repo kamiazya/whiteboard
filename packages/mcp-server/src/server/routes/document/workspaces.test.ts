@@ -1169,3 +1169,47 @@ describe('GET /api/workspaces document counts', () => {
     ).toBe(0)
   })
 })
+
+// Found by hitting a REAL daemon, not by any test here: a workspace can sit in
+// the registry with no workspace TREE yet. `listWorkspaces` returns the row and
+// `listDocuments` throws for it, so counting every row turned one such
+// workspace into a 500 for the WHOLE list — a listing that worked before the
+// count was added.
+//
+// Every case above creates its workspaces THROUGH the route, which makes the
+// tree as a side effect, so none of them could reach this state. The registry
+// row is written directly here for exactly that reason.
+describe('GET /api/workspaces with a registry row that has no tree', () => {
+  async function registryRowOnly(workspaceId: string) {
+    const { getDb } = await import('../../store/db/index.js')
+    const { upsertWorkspaceRow } = await import('../../store/db/upsert-workspace.js')
+    await upsertWorkspaceRow(await getDb(tmp.dir), workspaceId, {})
+  }
+
+  it('counts it as empty instead of failing the whole listing', async () => {
+    const app = createWorkspacesRouter()
+    const withTree = workspaceSummarySchema.parse(
+      await (
+        await app.request('/api/workspaces', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ displayName: 'Has a tree' }),
+        })
+      ).json(),
+    )
+    await registryRowOnly('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+
+    const res = await app.request('/api/workspaces')
+    expect(res.status).toBe(200)
+    const { workspaces } = listWorkspacesResponseSchema.parse(await res.json())
+
+    // The row is LISTED — dropping it would hide a workspace that exists.
+    const treeless = workspaces.find((w) => w.workspaceId === '01ARZ3NDEKTSV4RRFFQ69G5FAV')
+    expect(treeless).toBeDefined()
+    // And counted as what it is: a workspace holding nothing.
+    expect(treeless?.documentCount).toBe(0)
+    // Its neighbour is unaffected — one row's missing tree must not cost the
+    // others their counts.
+    expect(workspaces.find((w) => w.workspaceId === withTree.workspaceId)?.documentCount).toBe(0)
+  })
+})
