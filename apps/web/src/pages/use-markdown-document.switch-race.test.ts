@@ -40,6 +40,12 @@ interface GatedStore extends LoroStoreLike {
   requested: Promise<void>
 }
 
+/**
+ * A store whose load for ONE id never settles until released, so a test can
+ * stand inside the window where the next document is still loading and the
+ * hook is still holding the previous one. Every other id loads immediately,
+ * which is what lets the first document arrive normally.
+ */
 function gatedStore(heldId: string): GatedStore {
   const saves: { id: string; snapshot: Uint8Array }[] = []
   let release = (): void => {}
