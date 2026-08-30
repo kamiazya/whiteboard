@@ -139,10 +139,23 @@ describe('a workspace-tail pass', () => {
     // than baselining past every workspace.
     expect(availability.elapsedMs).toBeGreaterThan(MIN_PASS_MS)
     expect(emitted).toBeGreaterThan(0)
+    expect(subscribed.length).toBeGreaterThanOrEqual(4)
 
-    // Without the yield this fixture produces ZERO samples: the loop runs
-    // nothing at all for the whole pass.
-    expect(availability.samples).toBeGreaterThan(5)
+    // A turn per workspace, give or take — which is the claim, and is why
+    // this is relative to the fixture rather than an absolute count.
+    //
+    // It was `> 5` and that coupled two quantities that vary independently:
+    // the loop above exits on ELAPSED time, while with the yield the sample
+    // count tracks the WORKSPACE count. So whether round 0's four workspaces
+    // land above or below the floor silently decided whether the assertion
+    // was reachable at all. Measured: 42.9ms and 3 samples locally, which
+    // continued to round 0's twelve and passed, against 4 workspaces and 3
+    // samples on CI, which exited and failed. Same code, same assertion,
+    // opposite verdicts, and neither was about the yield.
+    //
+    // Without the yield this produces ZERO samples at any fixture size, which
+    // is what the assertion is really for.
+    expect(availability.samples).toBeGreaterThanOrEqual(subscribed.length / 2)
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
   }, 300_000)
 })
