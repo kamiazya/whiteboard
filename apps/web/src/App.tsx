@@ -680,7 +680,20 @@ export function App({ providerState }: AppProps) {
     return (
       <ErrorBoundary>
         <div className="flex h-dvh flex-col">
-          <AppShellLazy daemon={settingsDaemon !== undefined} />
+          {/* The switcher belongs here for the reason the shell states about
+              its own mark: it opens on every page, so there is always
+              something for the popover to say. Without a source this route
+              was the exception — every child of that popover is conditional,
+              and here they were all false at once, because only DOCUMENT
+              pages publish shell status so the connection is null too. The
+              control opened onto nothing.
+
+              Keyed off `settingsDaemon` exactly as `daemon` beside it is, so
+              the two cannot answer different keepers for one render. */}
+          <AppShellLazy
+            daemon={settingsDaemon !== undefined}
+            workspaces={settingsDaemon === undefined ? browserWorkspaces : daemonWorkspaces}
+          />
           <div className="min-h-0 flex-1">
             <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
               <SettingsPage daemon={settingsDaemon} onDisconnected={() => setForcedBrowser(true)} />
