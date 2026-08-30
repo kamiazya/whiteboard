@@ -13,32 +13,15 @@
  * address it derives has to be unique — within this browser, since the
  * registry is IndexedDB and cannot collide with anyone else's.
  */
-import { generateDocumentId, workspaceSegmentSchema } from '@kamiazya/whiteboard-model'
+import {
+  deriveWorkspaceSegment,
+  generateDocumentId,
+  workspaceSegmentSchema,
+} from '@kamiazya/whiteboard-model'
 import type { DocumentIndex, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 
 export interface CreateBrowserWorkspaceInput {
   readonly displayName: string
-}
-
-/**
- * The segment a display name yields, or `undefined` when it yields none.
- *
- * Absent is a real answer, not a failure to try. A name written in a script
- * the segment charset cannot spell produces nothing, and ADR-0019 already
- * settled what to do about that: 0019's migration left a legacy segment NULL
- * rather than writing a mangled approximation, and a workspace with no
- * segment is addressed by its canonical id — which is the whole point of
- * keeping that layer resolvable. An invented `workspace-2` would be a name
- * nobody chose, sitting in the URL for as long as the workspace lives.
- *
- * Rename is where such a workspace gets an address it likes.
- */
-function deriveSegment(displayName: string): string | undefined {
-  const candidate = displayName
-    .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '')
-  return workspaceSegmentSchema.safeParse(candidate).success ? candidate : undefined
 }
 
 /**
@@ -62,7 +45,7 @@ export async function createBrowserWorkspace(
   if (name === '') throw new Error('a workspace needs a name')
 
   const workspaceId = generateDocumentId()
-  const base = deriveSegment(name)
+  const base = deriveWorkspaceSegment(name)
   const segment = base === undefined ? undefined : await firstFreeSegment(index, base)
 
   const entry: WorkspaceEntry = {

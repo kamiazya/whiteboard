@@ -47,6 +47,9 @@ import {
   type VersionEntry,
   versionEntrySchema,
   type WorkspaceSummary,
+  type CreateWorkspaceRequest,
+  createWorkspaceRequestSchema,
+  renameWorkspaceRequestSchema,
   workspaceSummarySchema,
 } from './document.js'
 import { roundtrip } from './roundtrip.test-helper.js'
@@ -552,5 +555,67 @@ describe('purgeResultSchema', () => {
   it('rejects negative or fractional counts and byte totals', () => {
     expect(purgeResultSchema.safeParse({ purgedCount: -1, purgedBytes: 0 }).success).toBe(false)
     expect(purgeResultSchema.safeParse({ purgedCount: 0, purgedBytes: 0.5 }).success).toBe(false)
+  })
+})
+
+describe('createWorkspaceRequestSchema', () => {
+  it('parses a well-formed value', () => {
+    const result: CreateWorkspaceRequest = createWorkspaceRequestSchema.parse({
+      displayName: 'Marketing',
+    })
+    expect(result.displayName).toBe('Marketing')
+  })
+
+  it('roundtrip preserves fields', () => {
+    const valid: CreateWorkspaceRequest = { displayName: 'Marketing' }
+    expect(roundtrip(createWorkspaceRequestSchema, valid)).toEqual(valid)
+  })
+
+  it('requires a display name — a workspace with no name has nothing to show', () => {
+    expect(createWorkspaceRequestSchema.safeParse({}).success).toBe(false)
+    expect(createWorkspaceRequestSchema.safeParse({ displayName: '' }).success).toBe(false)
+    expect(createWorkspaceRequestSchema.safeParse({ displayName: '  padded  ' }).success).toBe(
+      false,
+    )
+  })
+
+  it('does not accept a caller-chosen segment or id', () => {
+    // Both are the server's to decide (ADR-0019): the id is minted, and the
+    // segment is derived so the two keepers' create surfaces agree. A body
+    // naming either parses, but the field is dropped rather than honoured —
+    // pinned so a later widening is a deliberate act.
+    const parsed = createWorkspaceRequestSchema.parse({
+      displayName: 'Marketing',
+      segment: 'chosen-by-me',
+      workspaceId: '01ARZ3NDEKTSV4RRFFQ69G5FAV',
+    })
+    expect('segment' in parsed).toBe(false)
+    expect('workspaceId' in parsed).toBe(false)
+  })
+})
+
+describe('renameWorkspaceRequestSchema', () => {
+  it('parses each layer alone, and both together', () => {
+    expect(renameWorkspaceRequestSchema.parse({ segment: 'moved' }).segment).toBe('moved')
+    expect(renameWorkspaceRequestSchema.parse({ displayName: 'Named' }).displayName).toBe('Named')
+    expect(renameWorkspaceRequestSchema.parse({ segment: 'a', displayName: 'B' })).toEqual({
+      segment: 'a',
+      displayName: 'B',
+    })
+  })
+
+  it('accepts an empty body — every layer absent means change nothing', () => {
+    expect(renameWorkspaceRequestSchema.safeParse({}).success).toBe(true)
+  })
+
+  it('rejects a segment shaped like a canonical id, which the address cannot disambiguate', () => {
+    expect(
+      renameWorkspaceRequestSchema.safeParse({ segment: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }).success,
+    ).toBe(false)
+  })
+
+  it('rejects a segment outside the path-segment charset', () => {
+    expect(renameWorkspaceRequestSchema.safeParse({ segment: 'has spaces' }).success).toBe(false)
+    expect(renameWorkspaceRequestSchema.safeParse({ segment: 'nested/path' }).success).toBe(false)
   })
 })

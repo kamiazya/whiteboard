@@ -185,6 +185,46 @@ export const listWorkspacesResponseSchema = z.object({
   workspaces: z.array(workspaceSummarySchema),
 })
 
+/**
+ * POST /api/workspaces — create one.
+ *
+ * What a person supplies is a DISPLAY NAME, and only that. The other two
+ * layers are not the caller's to choose: ADR-0019 makes `workspaceId` a
+ * machine-minted ULID, and the segment is DERIVED from the name here so the
+ * one switcher control behaves the same on either keeper — the browser's
+ * `createBrowserWorkspace` has taken a display name and derived from it since
+ * it shipped, and two creation surfaces that disagree about what a caller
+ * supplies is the asymmetry this contract exists to avoid.
+ *
+ * Choosing the address is what RENAME is for, one call later, where a
+ * collision can be reported against a workspace that already exists.
+ */
+export const createWorkspaceRequestSchema = z.object({
+  displayName: workspaceDisplayNameSchema,
+})
+
+/**
+ * PATCH /api/workspaces/:workspaceId — rename the two chosen layers.
+ *
+ * PATCH rather than PUT because the port's contract is partial in a way PUT
+ * cannot express: a field ABSENT means "leave this layer alone", never "clear
+ * it". Under PUT, a client sending only a display name would be asking to drop
+ * the segment — which is the one reading a caller would never intend, and the
+ * reason `RenameWorkspaceInput` has no way to clear a layer at all.
+ */
+export const renameWorkspaceRequestSchema = z.object({
+  segment: workspaceSegmentSchema.optional(),
+  displayName: workspaceDisplayNameSchema.optional(),
+})
+
+/**
+ * Both writes answer with the workspace AS IT NOW STANDS, so a caller that has
+ * just moved an address does not have to re-list to learn the handle it should
+ * use next. Same shape as a list row, deliberately — one workspace is one
+ * workspace whichever call produced it.
+ */
+export const workspaceMutationResponseSchema = workspaceSummarySchema
+
 export const documentSummarySchema = z.object({
   path: z.string(),
   // The immutable id behind the path (the documents row's nanoid PK).
@@ -238,6 +278,9 @@ export type ListVersionsResponse = z.infer<typeof listVersionsResponseSchema>
 export type SaveVersionResponse = z.infer<typeof saveVersionResponseSchema>
 export type WorkspaceSummary = z.infer<typeof workspaceSummarySchema>
 export type ListWorkspacesResponse = z.infer<typeof listWorkspacesResponseSchema>
+export type CreateWorkspaceRequest = z.infer<typeof createWorkspaceRequestSchema>
+export type RenameWorkspaceRequest = z.infer<typeof renameWorkspaceRequestSchema>
+export type WorkspaceMutationResponse = z.infer<typeof workspaceMutationResponseSchema>
 export type DocumentSummary = z.infer<typeof documentSummarySchema>
 export type ListDocumentsResponse = z.infer<typeof listDocumentsResponseSchema>
 export type CreateDocumentResponse = z.infer<typeof createDocumentResponseSchema>

@@ -1,9 +1,16 @@
 import {
+  deriveWorkspaceSegment,
+  generateDocumentId,
+  workspaceSegmentSchema,
+} from '@kamiazya/whiteboard-model'
+import {
+  type DocumentIndex,
   DocumentHasDescendantsError,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
   isWorkspaceNotFoundError,
+  WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
   type ServerDeps,
@@ -17,11 +24,14 @@ import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import {
   type CreateDocumentResponse,
   createDocumentRequestSchema,
+  createWorkspaceRequestSchema,
   type DeleteDocumentResponse,
   type ListDocumentsResponse,
   type ListWorkspacesResponse,
   type RenameDocumentPathResponse,
   renameDocumentPathRequestSchema,
+  renameWorkspaceRequestSchema,
+  type WorkspaceMutationResponse,
 } from '../../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
@@ -40,6 +50,36 @@ function createDocumentRequestErrorTitle(error: z.ZodError): string {
   if (field === 'kind') return 'kind must be "spatial" or "markdown"'
   if (field === 'path') return 'path is required'
   return issue?.message ?? 'invalid request body'
+}
+
+/**
+ * The first segment nobody holds, starting from the candidate a display name
+ * derived. Reads the registry rather than counting from a stored number:
+ * what makes a segment unavailable is another row holding it, and asking is
+ * the only thing that stays true after a delete or a rename.
+ *
+ * Advisory, not authoritative — two creates can both find the same candidate
+ * free. The registry's unique index is what actually decides, and the caller
+ * translates its refusal.
+ */
+async function firstFreeSegment(index: DocumentIndex, base: string): Promise<string | undefined> {
+  const taken = new Set((await index.listWorkspaces()).map((w) => w.segment))
+  if (!taken.has(base)) return base
+  // Starts at 2 because the unsuffixed segment IS the first one. A `-1` would
+  // read as the first of a series whose first member is spelled differently.
+  //
+  // Bounded, and each candidate re-validated — both mirrored from the
+  // browser's `createBrowserWorkspace`, which is the same decision one keeper
+  // over: a suffix can push a long base out of the segment charset, and a
+  // segment nothing validated is one the address layer refuses later,
+  // somewhere less obvious. Past the bound the workspace is addressed by its
+  // canonical id, which is what that layer is for.
+  for (let n = 2; n < 1000; n++) {
+    const candidate = `${base}-${n}`
+    if (!workspaceSegmentSchema.safeParse(candidate).success) return undefined
+    if (!taken.has(candidate)) return candidate
+  }
+  return undefined
 }
 
 export interface WorkspacesRouterOptions {
@@ -71,6 +111,93 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       }
       return c.json(response)
     } catch (err) {
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
+
+  // POST /api/workspaces  body: { displayName }
+  //
+  // Straight to the PORT, like the list above and for the same ADR-0018
+  // reason: creating a workspace IS the port call, and a use case here would
+  // forward its arguments and add a name.
+  app.post('/api/workspaces', async (c) => {
+    const parsed = createWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      return c.json({ title: 'displayName is required' } satisfies ApiErrorBody, 400)
+    }
+    const { displayName } = parsed.data
+
+    try {
+      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      const workspaceId = generateDocumentId()
+      const base = deriveWorkspaceSegment(displayName)
+      const segment =
+        base === undefined ? undefined : await firstFreeSegment(deps.documentIndex, base)
+
+      await deps.documentIndex.createWorkspace({
+        workspaceId,
+        ...(segment === undefined ? {} : { segment }),
+        displayName,
+      })
+      const response: WorkspaceMutationResponse = {
+        workspaceId,
+        ...(segment === undefined ? {} : { segment }),
+        displayName,
+      }
+      return c.json(response, 201)
+    } catch (err) {
+      // A segment the suffix loop believed free can still be taken by the
+      // time the insert lands. The registry's own unique index is what
+      // actually decides, and it reports the same named error a rename does.
+      if (err instanceof WorkspaceSegmentTakenError) {
+        return c.json({ title: err.message } satisfies ApiErrorBody, 409)
+      }
+      const issue = handleCorruptStoredData(err)
+      if (issue) return c.json(issue.body, issue.status)
+      throw err
+    }
+  })
+
+  // PATCH /api/workspaces/:workspaceId  body: { segment?, displayName? }
+  //
+  // PATCH, not PUT: a field ABSENT means "leave this layer alone", which is
+  // the port's contract and something PUT cannot express — under PUT a body
+  // carrying only a name would be asking to drop the address.
+  app.patch('/api/workspaces/:workspaceId', async (c) => {
+    const handle = c.req.param('workspaceId')
+    try {
+      validateWorkspaceId(handle)
+    } catch (err) {
+      const body = validationErrorBody(err)
+      if (body) return c.json(body, 400)
+      throw err
+    }
+    const parsed = renameWorkspaceRequestSchema.safeParse(await c.req.json().catch(() => null))
+    if (!parsed.success) {
+      return c.json({ title: 'segment or displayName must be valid' } satisfies ApiErrorBody, 400)
+    }
+
+    try {
+      const deps = options.serverDeps ?? (await getDefaultServerDeps())
+      // Resolved through the handle, so this route accepts either layer in
+      // the address exactly as every other addressed surface does.
+      const workspaceId = await workspaceIdFromHandle(c, handle)
+      const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
+      const response: WorkspaceMutationResponse = {
+        workspaceId: renamed.workspaceId,
+        ...(renamed.segment === undefined ? {} : { segment: renamed.segment }),
+        ...(renamed.displayName === undefined ? {} : { displayName: renamed.displayName }),
+      }
+      return c.json(response)
+    } catch (err) {
+      if (err instanceof WorkspaceSegmentTakenError) {
+        return c.json({ title: err.message } satisfies ApiErrorBody, 409)
+      }
+      if (isWorkspaceNotFoundError(err)) {
+        return c.json({ title: `Workspace "${handle}" not found` } satisfies ApiErrorBody, 404)
+      }
       const issue = handleCorruptStoredData(err)
       if (issue) return c.json(issue.body, issue.status)
       throw err
