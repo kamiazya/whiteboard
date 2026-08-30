@@ -4,13 +4,14 @@
 //
 // It is a LIST rather than "the whole package", and that is a budget decision
 // backed by a measurement: instrumenting every production source file yields
-// 9089 mutants against these 10's ~1300, and at the ~1-2s per mutant this
-// package measures, the whole package is a run of several HOURS. What a list
-// costs is that it goes stale silently — a module added next month is simply
-// not covered and nothing says so — which is why `mutation-lane-coverage.test.ts`
-// pins both this list and the package's production file count EXACTLY. Adding
-// a module then fails that test until someone decides, in the diff, whether
-// the lane should cover it.
+// 9089 mutants against these nine's 2225, and at the ~3s per mutant this
+// package measures, even the LIST is a run of nearly two hours and the whole
+// package would be most of a working day. What a list costs is that it goes
+// stale silently — a module added next month is simply not covered and
+// nothing says so — which is why `mutation-lane-coverage.test.ts` pins both
+// this list and the package's production file count EXACTLY. Adding a module
+// then fails that test until someone decides, in the diff, whether the lane
+// should cover it.
 //
 // The diff-scoped PR run reads this list too, so a file's absence here means
 // no PR feedback on it either. Weigh that when adding a module: a file with
