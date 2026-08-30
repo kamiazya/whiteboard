@@ -388,6 +388,7 @@ export function DaemonIndexPage({
     [daemonFetch, daemonBaseUrl, reselectAfterStale],
   )
 
+  // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     if (!selectedWorkspace) return
     let cancelled = false

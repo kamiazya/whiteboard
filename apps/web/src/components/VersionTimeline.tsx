@@ -155,6 +155,7 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
   // is in flight. Also drop any staged restore — confirming a dialog opened
   // on the previous canvas would POST that version id to the NEW canvas's
   // restore endpoint.
+  // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     setVersions([])
     setPendingRestore(null)

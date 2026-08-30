@@ -208,6 +208,30 @@ export function HeaderBranchChip({
   // different target than the one shown when the action was chosen.
   const [pendingMerge, setPendingMerge] = useState<PendingMerge | null>(null)
 
+  // Drop everything staged against the DEPARTED document. The chip stays
+  // mounted across a document switch (no key; `path` is a prop) while
+  // `useBranches` rebinds, so a dialog left open would address the previous
+  // document's variation name at the one now on screen — and names collide
+  // freely: every document has `main`, and a working name like `draft`
+  // repeats. Measured before this existed: opening Delete on c1's
+  // `feature-x`, switching to c2 and confirming called `deleteBranch` on c2.
+  //
+  // The same rule `VersionTimeline` keeps one component over, for the same
+  // reason its own comment gives about a staged restore.
+  //
+  // Setters only, so this never re-runs for its own writes.
+  // SCOPE RESET — see scoped-screen-state.test.ts
+  useEffect(() => {
+    setPendingDelete(null)
+    setPendingStats(null)
+    setDeleting(false)
+    setRenameOpen(false)
+    setRenameTarget(null)
+    setRenameDraft('')
+    setPendingMerge(null)
+    setErrorMessage(null)
+  }, [workspaceId, path])
+
   const chipColor = activeBranch?.color ?? '#64748b'
 
   // The chip is both a TooltipTrigger and (nested) a DropdownMenuTrigger, so
