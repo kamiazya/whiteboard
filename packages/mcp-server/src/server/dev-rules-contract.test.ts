@@ -1,4 +1,4 @@
-import { readFileSync } from 'node:fs'
+import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -77,5 +77,70 @@ describe('test-layer-selection SKILL.md agrees with reality about the web-jsdom 
 
     expect(frontmatter).toContain('web-jsdom')
     expect(frontmatter).not.toContain('apps/web jsdom')
+  })
+})
+
+// The `## Skills` line in dev-flow.md is an always-on INDEX of what is
+// loadable on demand, and nothing checked it against the directory. A skill
+// added next month is simply absent from every session's index, the index
+// still reads complete, and the skill is found only by whoever remembers it.
+// Same list-goes-stale-in-silence shape as `mutation-lane-coverage.test.ts`,
+// and it was already stale when this guard was written.
+const SKILLS_DIR = '.claude/skills'
+
+/**
+ * Skill directories deliberately NOT in the always-on index, with the reason.
+ * Guarded from both sides below, so an entry cannot outlive what it names.
+ */
+const NOT_INDEXED: Record<string, string> = {
+  'whiteboard-smoke':
+    'Superseded by whiteboard-mcp-smoke. Its own description still says "Excalidraw MCP" — a vocabulary this repo retired — and nothing in .claude/ reaches it. Left on disk pending a decision to delete it; indexing it would advertise it as current.',
+}
+
+function indexedSkills(): string[] {
+  const devFlow = read('.claude/rules/dev-flow.md')
+  const section = devFlow.split('## Skills (load for detail)')[1] ?? ''
+  // The first paragraph after the heading is the list itself.
+  const list = section.split('\n\n')[1] ?? ''
+  return [...list.matchAll(/`([a-z0-9-]+)`/g)].map((m) => m[1]!)
+}
+
+function skillDirectories(): string[] {
+  return readdirSync(join(REPO_ROOT, SKILLS_DIR), { withFileTypes: true })
+    .filter((entry) => entry.isDirectory())
+    .map((entry) => entry.name)
+}
+
+describe("dev-flow.md's skills index agrees with the skills on disk", () => {
+  it('indexes every skill directory except the ones recorded as deliberate', () => {
+    const missing = skillDirectories().filter(
+      (name) => !indexedSkills().includes(name) && !(name in NOT_INDEXED),
+    )
+    expect(missing).toEqual([])
+  })
+
+  it('indexes nothing that is no longer on disk', () => {
+    const onDisk = skillDirectories()
+    expect(indexedSkills().filter((name) => !onDisk.includes(name))).toEqual([])
+  })
+
+  it('records no exemption that is indexed anyway or no longer exists', () => {
+    const onDisk = skillDirectories()
+    const stale = Object.keys(NOT_INDEXED).filter(
+      (name) => !onDisk.includes(name) || indexedSkills().includes(name),
+    )
+    expect(stale).toEqual([])
+  })
+})
+
+describe('steward stays at the path the harness reads', () => {
+  it('exists at .claude/skills/steward/SKILL.md while dev-flow.md says the harness reads it there', () => {
+    // Unlike every other skill, this one is fetched by EXACT PATH on a PR
+    // event rather than by name. Renaming the directory keeps it invocable as
+    // a skill and silently stops the harness ever reading it, with nothing
+    // failing and no symptom to notice.
+    if (read('.claude/rules/dev-flow.md').includes('.claude/skills/steward/SKILL.md')) {
+      expect(existsSync(join(REPO_ROOT, SKILLS_DIR, 'steward/SKILL.md'))).toBe(true)
+    }
   })
 })
