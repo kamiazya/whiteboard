@@ -309,6 +309,7 @@ export function WorkspaceFilesPanel({
     storeColumns(next)
   }
 
+  // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     let cancelled = false
     setDocuments(null)
