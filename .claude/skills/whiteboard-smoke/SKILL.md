@@ -32,7 +32,6 @@ Run these from the repo root.
 ```bash
 pnpm smoke
 pnpm smoke:e2e
-pnpm smoke:template
 pnpm smoke:claude
 pnpm smoke:codex
 pnpm typecheck
@@ -42,7 +41,6 @@ pnpm typecheck
 
 - To catch entrypoint, export, or import breakage: `pnpm smoke`
 - To verify canvas, checkpoints, routes, or tool wiring: `pnpm smoke:e2e`
-- To verify templates only: `pnpm smoke:template`
 - To verify Claude Code compatibility as a zero-context client: `pnpm smoke:claude`
 - To verify Codex subprocess behavior, schema-bound output, and real file persistence: `pnpm smoke:codex`
 
@@ -50,7 +48,6 @@ pnpm typecheck
 
 - `smoke`: the process does not die immediately within 3 seconds
 - `smoke:e2e`: checkpoint save / restore, validation errors, and `no_client` rejection all behave correctly
-- `smoke:template`: built-in templates, file templates, and validation errors all behave correctly
 - `smoke:claude`: the final line includes a checkpointId
 - `smoke:codex`: returns a JSON object and leaves real canvas / checkpoint `.loro` files in the tmp directory
 

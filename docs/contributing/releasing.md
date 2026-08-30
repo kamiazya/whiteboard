@@ -177,7 +177,9 @@ lockfile-pinned at v4.x):
   OIDC material, or full build logs.
 
 - **Script**: `packages/mcp-server/scripts/release/generate-npm-sbom.mjs`
-  (called via root script `pnpm generate:sbom:npm`)
+  (a package script — `pnpm --filter @kamiazya/whiteboard-mcp generate:sbom:npm`,
+  which is how `check:release-candidate` calls it; there is no root script of
+  that name)
 
 - **When it runs in CI**: `pnpm publish-gate` (used in the `publish-mcp` job) runs
   `generate-npm-sbom.mjs` as one of the publish-tier gates, before `npm publish`. This

@@ -84,8 +84,14 @@ const rootPkg = readJson('package.json') as { scripts: Record<string, string> }
 const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
-// when a new node smoke is added to test:e2e:distribution.
-const EXPECTED_DISTRIBUTION_STEPS = 16
+// when a node smoke is added to or removed from test:e2e:distribution.
+//
+// A count is not a check that the steps RESOLVE, and the difference was live:
+// this stood at 16 while one of those steps, `pnpm smoke:template`, delegated
+// to a package script that had been deleted with the template feature. The
+// chain was the length this said and stopped at its eighth step.
+// `root-composite-scripts.test.ts` is the other half.
+const EXPECTED_DISTRIBUTION_STEPS = 15
 
 describe('release-gate-matrix.json structure', () => {
   it('has schemaVersion 1', () => {
@@ -280,8 +286,8 @@ describe('test:e2e:distribution step-count drift', () => {
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
-  it('README says "sixteen steps" matching the current chain', () => {
-    expect(readmeText).toMatch(/The chain has sixteen steps/)
+  it('README says "fifteen steps" matching the current chain', () => {
+    expect(readmeText).toMatch(/The chain has fifteen steps/)
   })
 })
 

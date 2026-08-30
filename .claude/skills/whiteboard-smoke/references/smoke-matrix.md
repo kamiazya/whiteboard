@@ -8,7 +8,6 @@ This repo splits smoke tests into five kinds. Pick the **smallest one** that mat
 |---|---|---|
 | MCP entrypoint / import-export / crash right after startup | `pnpm smoke` | `pnpm smoke:e2e` |
 | Canvas routes / checkpoints / store / MCP tool wiring | `pnpm smoke:e2e` | `pnpm smoke:claude` or `pnpm smoke:codex` if needed |
-| Template library / `template_insert` / variables | `pnpm smoke:template` | `pnpm smoke:e2e` if needed |
 | Claude Code subprocess compatibility | `pnpm smoke:claude` | `pnpm typecheck` |
 | Codex subprocess compatibility / strict output / tmp persistence | `pnpm smoke:codex` | `pnpm typecheck` |
 | Rendering quality that requires a connected browser | Manual check after smoke | `canvas_open` / browser export |
@@ -21,7 +20,6 @@ This repo splits smoke tests into five kinds. Pick the **smallest one** that mat
 - `pnpm smoke:e2e`
   - `packages/mcp-server/scripts/smoke/mcp-e2e-smoke.mjs`
   - Verifies canvas, version save/restore, and route wiring by calling stdio JSON-RPC directly
-- `pnpm smoke:template`
   - `packages/mcp-server/scripts/smoke/mcp-template-smoke.mjs`
   - Calls the template tool directly, mocking fetch and validating behavior
 - `pnpm smoke:claude`
