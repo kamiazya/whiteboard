@@ -35,6 +35,33 @@ export type SelectionEvent =
   | { type: 'clear' }
   /** A lock arrived (peer/agent) for nodes that may already be selected. */
   | { type: 'drop-locked'; lockedIds: ReadonlySet<string> }
+  /**
+   * The canvas was replaced under the selection (undo, redo, remote edit,
+   * import) and these ids went with it. Carries what VANISHED rather than
+   * what survived, because a node this component created locally is
+   * selected before the controlling parent has echoed it back — a
+   * keep-only-what-the-new-canvas-holds rule would drop that selection
+   * while the echo is still in flight.
+   */
+  | { type: 'drop-missing'; missingIds: ReadonlySet<string> }
+
+/**
+ * Drops every id in `ids` from the selection, promoting the first surviving
+ * extra when the primary itself goes. Shared by the two reasons a node stops
+ * being selectable — it was locked, or it stopped existing — so both answer
+ * with one set of semantics instead of two that can drift.
+ */
+function dropIds(state: SelectionState, ids: ReadonlySet<string>): SelectionState {
+  const surviving = [...state.extraIds].filter((id) => !ids.has(id))
+  const primaryDropped = state.primaryId !== null && ids.has(state.primaryId)
+  if (!primaryDropped) {
+    return surviving.length === state.extraIds.size
+      ? state
+      : { primaryId: state.primaryId, extraIds: new Set(surviving) }
+  }
+  const [promoted, ...rest] = surviving
+  return { primaryId: promoted ?? null, extraIds: new Set(rest) }
+}
 
 /** The pressed extra becomes primary; the old primary joins the extras. */
 function promoteExtra(state: SelectionState, id: string): SelectionState {
@@ -87,17 +114,10 @@ export function reduceSelection(state: SelectionState, event: SelectionEvent): S
       return state.extraIds.size === 0 ? state : { primaryId: state.primaryId, extraIds: new Set() }
     case 'clear':
       return state.primaryId === null && state.extraIds.size === 0 ? state : EMPTY_SELECTION
-    case 'drop-locked': {
-      const surviving = [...state.extraIds].filter((id) => !event.lockedIds.has(id))
-      const primaryLocked = state.primaryId !== null && event.lockedIds.has(state.primaryId)
-      if (!primaryLocked) {
-        return surviving.length === state.extraIds.size
-          ? state
-          : { primaryId: state.primaryId, extraIds: new Set(surviving) }
-      }
-      const [promoted, ...rest] = surviving
-      return { primaryId: promoted ?? null, extraIds: new Set(rest) }
-    }
+    case 'drop-locked':
+      return dropIds(state, event.lockedIds)
+    case 'drop-missing':
+      return dropIds(state, event.missingIds)
   }
 }
 
