@@ -18,6 +18,7 @@
     "smoke:artifact": "node scripts/smoke-artifact.mjs",
     "smoke:bundle-size": "node scripts/smoke-bundle-size.mjs",
     "measure:critical-path": "node scripts/measure-critical-path.mjs",
+    "smoke:lcp-floor": "LCP_FLOOR_MS=1000 MEASURE_RUNS=5 node scripts/measure-critical-path.mjs",
     "smoke:preview-origin": "node scripts/smoke-preview-origin.mjs",
     "smoke:pwa-precache": "node scripts/check-pwa-precache.mjs"
   },

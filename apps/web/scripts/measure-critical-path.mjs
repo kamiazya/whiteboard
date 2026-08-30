@@ -60,6 +60,41 @@ import { existsSync, readFileSync, statSync } from 'node:fs'
 // there is before the lazy page arrives. The mount check below is what
 // establishes that — it was added after the first run, where a 2% spread on
 // an unverified number read as "gateable".
+//
+// ## The floor, and why it is deliberately far away (decision 2026-08-30)
+//
+// `LCP_FLOOR_MS=1000` gates CI. Current median is 492 ms, so the floor sits at
+// roughly twice the measurement and catches only a serious accident — about
+// 100 KB gzipped of new critical path. That distance is the POINT, not slack
+// left over from picking a round number.
+//
+// The reason is what this rig actually measures. LCP here is dominated by
+// CDP-emulated transfer, and the response is linear at **4.9 ms per gzipped
+// KB** — so on this machine LCP is very nearly a function of bytes. Set close
+// to the measurement and it becomes a second byte budget, with 2.5 KB of
+// resolution against `smoke-bundle-size.mjs`'s 335 bytes, plus a noise band
+// the byte count does not have. Seven times coarser and less certain, for the
+// same question, is not a gate worth having.
+//
+// So the two are given different jobs rather than different numbers:
+// bytes DETECT CHANGE, this states an ABSOLUTE FLOOR — "a mid-range phone on
+// a decent connection sees the shell inside a second, whatever the code does".
+// A regression small enough to matter reaches the byte budget first, by
+// design; anything that reaches this one has gone badly wrong.
+//
+// What would make LCP an independent signal is the CPU-bound half — the
+// parse/execute cost bytes cannot see. `longTasks` is that quantity and it
+// carries a 14-70% spread here, measured twice: signal and noise are the same
+// size, so it gates nothing. Getting that half honestly needs a steadier
+// measurement (Lighthouse's lantern model, or real field data), which is a
+// separate piece of work and not a threshold choice.
+//
+// One measured caveat shaped the gate's mechanics rather than its number: a
+// COLD first run reads high. Two 10-run sets on the same build gave medians
+// of 492 ms both times, but the first set's opening run was 548 ms (+11%) and
+// the second set had no outlier at all. A single-shot gate would therefore
+// flake on an effect that has nothing to do with the code, which is why this
+// gates the MEDIAN of several runs and never one.
 import { createServer } from 'node:http'
 import { dirname, extname, join, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
@@ -69,6 +104,10 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const DIST = resolve(ROOT, 'dist')
 
 const RUNS = Number(process.env.MEASURE_RUNS ?? 10)
+// Set by the GATE caller only. Absent, this script reports and fails nothing,
+// which is what it was built to be; the assertion belongs to whoever states a
+// floor, not to the instrument.
+const FLOOR_MS = process.env.LCP_FLOOR_MS === undefined ? null : Number(process.env.LCP_FLOOR_MS)
 // A mid-range phone on a decent connection, fixed so two runs are comparable.
 // The absolute numbers are only meaningful against each other.
 const CPU_THROTTLE = Number(process.env.MEASURE_CPU_THROTTLE ?? 4)
@@ -209,6 +248,38 @@ async function main() {
   console.log(row('FCP', stats(runs.map((r) => r.fcp)), 'ms'))
   console.log(row('long tasks', stats(runs.map((r) => r.longTasks)), 'ms'))
   console.log(row('CLS', stats(runs.map((r) => r.cls)), ''))
+
+  if (FLOOR_MS === null) return
+
+  // The mount check is part of the GATE, not decoration, and the numbers say
+  // so. Measured by replacing the entry chunk with a no-op, so the app never
+  // mounts and only the boot splash paints: LCP 460ms, against 492ms working.
+  // A broken build is FASTER, so a floor on its own would read it as an
+  // improvement and pass. This is the one way this gate can be satisfied while
+  // measuring nothing.
+  //
+  // Both halves are needed and only one of them fires: that same run reported
+  // `rootChildren=1`, because the splash is itself a child — so the child
+  // count alone would have missed it, and `shellMark` is what refuses it.
+  const unmounted = runs.filter((r) => !r.shellMark || r.rootChildren === 0)
+  if (unmounted.length > 0) {
+    console.error(
+      `\nLCP floor: FAILED — ${unmounted.length}/${runs.length} runs never mounted the app.` +
+        ' The number above describes the boot splash, not the shell.',
+    )
+    process.exitCode = 1
+    return
+  }
+
+  const lcp = stats(runs.map((r) => r.lcp))
+  if (lcp.median > FLOOR_MS) {
+    console.error(
+      `\nLCP floor: FAILED — median ${lcp.median.toFixed(0)}ms is over the ${FLOOR_MS}ms floor.`,
+    )
+    process.exitCode = 1
+    return
+  }
+  console.log(`\nLCP floor: OK — median ${lcp.median.toFixed(0)}ms, floor ${FLOOR_MS}ms`)
 }
 
 await main()
