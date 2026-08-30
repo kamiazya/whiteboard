@@ -33,7 +33,7 @@ const log = getLogger('backup-blob-mirror')
 const SHARD_NAME = /^[0-9a-f]{2}$/
 const REST_OF_DIGEST = /^[0-9a-f]{62}$/
 
-export const BLOB_MANIFEST_FILENAME = 'blobs.json'
+const BLOB_MANIFEST_FILENAME = 'blobs.json'
 
 /**
  * Which blobs one backup references.

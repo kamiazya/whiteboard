@@ -1,5 +1,5 @@
 import { createHash } from 'node:crypto'
-import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -38,7 +38,6 @@ async function putThumbnail(version: string, contents: string): Promise<void> {
 }
 
 async function pathExists(path: string): Promise<boolean> {
-  const { stat } = await import('node:fs/promises')
   try {
     await stat(path)
     return true
@@ -112,7 +111,6 @@ describe('a mirrored backup restores what it captured', () => {
     // Moved away from where it was taken, with nothing beside it.
     const moved = join(root, 'carried', 'elsewhere')
     await mkdir(join(root, 'carried'), { recursive: true })
-    const { rename } = await import('node:fs/promises')
     await rename(backupDir, moved)
 
     const restored = await restoreInto(moved)

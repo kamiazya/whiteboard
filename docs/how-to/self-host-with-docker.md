@@ -161,6 +161,18 @@ backups is the data you lose.
 Setting an interval or a retention count WITHOUT a destination aborts startup:
 that combination configures nothing while looking exactly like one that works.
 
+**Backups share one copy of each blob.** A timestamped directory holds that
+night's rows and a `blobs.json` naming what it needs; the blobs live once in a
+shared `blobs/`+`files/` beside those directories. On a 51MB store growing 5% a
+day, seven retained backups cost 403MB as whole copies and 66MB as a mirror,
+and the nightly pass stopped lengthening as the store grew. Retention removes a
+blob only once no retained backup references it.
+
+The trade: **one timestamped directory is not restorable on its own** — back up
+or move the whole `WHITEBOARD_BACKUP_DIR`, not a single night out of it. A
+one-off `whiteboard server backup --output-dir=X` is unaffected and stays a
+self-contained directory you can carry anywhere.
+
 The pass runs as a child process rather than inside the daemon, so the
 snapshot step does not stall the server that is answering your requests. You
 will see a second short-lived `whiteboard` process while a backup runs; that
