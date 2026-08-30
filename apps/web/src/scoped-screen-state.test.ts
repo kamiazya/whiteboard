@@ -87,8 +87,9 @@ const PANEL_STATE: Record<string, ScopeCoverage> = {
   pinError: 'cleared on switch',
 
   listStatus: 'no subject: a load outcome for the list as a whole, reset by the same effect',
-  folder:
-    'no subject: an address WITHIN a workspace, reset separately and only on a real identity change — see the effect’s own note on StrictMode',
+  // Reset inside the block's identity check rather than beside the rest —
+  // only a real source change is a switch, and the effect's own note says why.
+  folder: 'cleared on switch',
   columns: 'no subject: how you look, not what at; deliberately persisted across everything',
   createError:
     'no subject: a refused create, carrying a kind and the store’s words — no path of its own',
@@ -105,9 +106,9 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   workspaces: 'no subject: the list of workspaces, which a switch does not invalidate',
   workspacesLoaded: 'no subject: whether that list has settled',
   selectedWorkspace: 'no subject: it IS the workspace — the thing every clear is keyed on',
-  trashCount: 'no subject: a count, reset by the same effect',
-  loaded: 'no subject: whether this workspace’s documents have settled',
-  loadError: 'no subject: a load outcome for the workspace, reset by the same effect',
+  trashCount: 'cleared on switch',
+  loaded: 'cleared on switch',
+  loadError: 'cleared on switch',
   createError: 'no subject: a refused create; no path of its own',
   duplicateError: 'no subject: a refused duplicate; the path it was about is `duplicatingPath`',
   creating: 'no subject: an in-flight flag for this screen’s own submit',
@@ -115,7 +116,13 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
 }
 
 /** An empty value, in any of the shapes these screens reset to. */
-const EMPTY = '(null|\\[\\]|false|0|\'\'|"")'
+// What counts as putting a slot back. An empty value, or a SCREAMING_CASE
+// module constant — the neutral state of a slot is not always empty
+// (`saveState` goes back to a `{kind:'saved', lastSavedAt:null}` record, not
+// to null). A constant spelled that way is module-level by convention, so it
+// cannot be about the scope that just left; a lowercase identifier can be,
+// which is why `setFolder(landedIn)` must not read as a reset.
+const EMPTY = '(null|\\[\\]|false|0|\'\'|""|[A-Z][A-Z0-9_]*)'
 
 /**
  * What a name is called and how a reset to it would read.
@@ -221,12 +228,13 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
   coreFacets: 'cleared on switch',
   hostRef: 'cleared on switch',
 
-  saveState:
-    'survives: it describes the DEPARTED document’s last save. Resetting it alone would not settle the question — the outgoing flush reports asynchronously through the same setter, so its result lands after any reset. Needs its own reproduction before a fix, the way the write path got one',
+  saveState: 'cleared on switch',
 
   loroRef: 'no subject: mirrors the `loro` prop, reassigned on every render',
   scheduleSaveRef: 'no subject: mirrors the current `scheduleSave`, reassigned on every render',
   setSaveStateRef: 'no subject: mirrors the state setter, reassigned on every render',
+  currentDocumentIdRef:
+    'no subject: mirrors the scope itself, reassigned on every render — it is what a scheduler outliving its document asks to find out whether its report still belongs on screen',
   schedulerRef:
     'no subject: keyed BY the document id — `schedulerFor` replaces it whenever the id differs, so it corrects itself rather than going stale',
 }
@@ -288,6 +296,33 @@ describe('scoped screen state is classified', () => {
       scopeResetBlock(sources[file]).length,
       `no ${SCOPE_RESET_MARKER} marker: the guard cannot tell what this screen drops when its scope changes`,
     ).toBeGreaterThan(0)
+  })
+
+  // The other side of the same claim, and the reason it exists is that this
+  // ledger already carried a `survives:` entry through the increment that
+  // FIXED it. `saveState` was reset and its report scoped, and nothing here
+  // went red — the entry would have gone on describing a debt that was paid.
+  // An exemption has to expire when the thing it excuses stops being true,
+  // or it decays into the decoration this ledger replaces.
+  it.each(CASES)('$label: nothing exempt is quietly reset there after all', ({
+    file,
+    ledger,
+    scanRefs,
+  }) => {
+    const block = scopeResetBlock(sources[file])
+    const exempt = new Set(
+      Object.entries(ledger)
+        .filter(([, scope]) => scope !== 'cleared on switch')
+        .map(([name]) => name),
+    )
+    const backed = scanned(sources[file], scanRefs)
+      .filter((slot) => exempt.has(slot.name))
+      .filter((slot) => slot.reset.test(block))
+      .map((slot) => slot.name)
+    expect(
+      backed,
+      'classified `no subject:` or `survives:` but the scope-reset effect resets it — the entry outlived what it described, so promote it to "cleared on switch"',
+    ).toEqual([])
   })
 
   it.each(CASES)('$label: everything marked cleared is reset IN that effect', ({
