@@ -172,7 +172,10 @@ describe('the backup blob mirror', () => {
     it('mirrors a named file under its content digest', async () => {
       const digest = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'thumb bytes')
       const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
-      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir })
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, {
+        manifestInto: backupDir,
+        mirror: 'parent',
+      })
 
       const stored = await readFile(
         join(backupRoot, 'files', digest.slice(0, 2), digest.slice(2)),
@@ -194,11 +197,11 @@ describe('the backup blob mirror', () => {
     it('keeps both versions when the same path is rewritten', async () => {
       const dayOne = join(backupRoot, '2026-03-04T00-00-00.000Z')
       const first = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'the first bytes')
-      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: dayOne })
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: dayOne, mirror: 'parent' })
 
       const dayTwo = join(backupRoot, '2026-03-05T00-00-00.000Z')
       const second = await putThumbnail('01JWORKSPACE00000000000000', 'v1', 'rewritten bytes')
-      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: dayTwo })
+      await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: dayTwo, mirror: 'parent' })
 
       expect(first).not.toBe(second)
       const path = '01JWORKSPACE00000000000000/versions/v1.png'
@@ -236,7 +239,10 @@ describe('the backup blob mirror', () => {
       const digest = await putBlob('referenced')
       const backupDir = join(backupRoot, '2026-03-04T05-06-07.000Z')
       await mkdir(backupDir, { recursive: true })
-      const refs = await mirrorBlobsIntoBackup(dataDir, backupRoot, { manifestInto: backupDir })
+      const refs = await mirrorBlobsIntoBackup(dataDir, backupRoot, {
+        manifestInto: backupDir,
+        mirror: 'parent',
+      })
 
       expect((await readBackupBlobManifest(backupDir))?.blobs).toEqual(refs.blobs)
       expect([...refs.blobs]).toEqual([digest])

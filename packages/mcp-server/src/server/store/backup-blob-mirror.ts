@@ -16,7 +16,7 @@
 
 import { createHash } from 'node:crypto'
 import { mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
-import { join, posix, relative, sep } from 'node:path'
+import { dirname, join, posix, relative, sep } from 'node:path'
 import { z } from 'zod'
 import { getLogger } from '../log.js'
 
@@ -60,17 +60,39 @@ const manifestSchema = z.object({
    * backups can legitimately want different content at the same path.
    */
   files: z.record(z.string(), z.string().regex(DIGEST)),
+  /**
+   * Where the mirror this backup reads from lives, said rather than inferred.
+   *
+   * `self` is a one-off `whiteboard server backup --output-dir=X`: the mirror
+   * is inside X, so the directory can be carried somewhere and restored on
+   * its own, which is the affordance the shared shape would otherwise take
+   * away. `parent` is the schedule, where every retained backup shares one
+   * mirror beside them.
+   *
+   * Recorded because restore would otherwise have to guess by looking for a
+   * `blobs/` directory in two places, and a guess that picks the wrong one
+   * restores the wrong bytes without saying so.
+   */
+  mirror: z.enum(['self', 'parent']),
 })
 
 /** What one backup references, in the two shapes the mirror stores. */
 export interface BackupBlobReferences {
   blobs: ReadonlySet<string>
   files: Readonly<Record<string, string>>
+  mirror: 'self' | 'parent'
+}
+
+/** Where a backup's mirror is, from what its manifest recorded. */
+export function mirrorRootFor(backupDir: string, references: BackupBlobReferences): string {
+  return references.mirror === 'self' ? backupDir : dirname(backupDir)
 }
 
 export interface MirrorBlobsOptions {
   /** Write the manifest into this backup directory. */
   manifestInto?: string
+  /** What the manifest should record about where the mirror lives. */
+  mirror?: 'self' | 'parent'
 }
 
 /**
@@ -82,13 +104,11 @@ export interface MirrorBlobsOptions {
  * earlier night. Getting that wrong would let retention collect a blob that
  * an older backup still depends on.
  *
- * What is left alone: anything under `blobs/` that is not the sharded
- * content-addressed layout — today, version thumbnails at
- * `blobs/<workspaceId>/versions/<id>.png`. Those are addressed by NAME, so
- * the same path can hold different bytes over time and mirroring them by path
- * would silently make an old backup wrong. They travel in the ordinary
- * per-backup copy, as they always have. A workspace id is never two hex
- * characters, which is what makes the two layouts separable at all.
+ * Everything under `blobs/` is mirrored, in one of two stores: the sharded
+ * content-addressed layout by path, and everything else — today, version
+ * thumbnails at `blobs/<workspaceId>/versions/<id>.png` — by the digest of
+ * its own bytes. A workspace id is never two hex characters, which is what
+ * makes the two layouts separable at all.
  */
 export async function mirrorBlobsIntoBackup(
   dataDir: string,
@@ -116,7 +136,7 @@ export async function mirrorBlobsIntoBackup(
     }
   }
 
-  const references: BackupBlobReferences = { blobs, files }
+  const references: BackupBlobReferences = { blobs, files, mirror: options.mirror ?? 'self' }
   if (options.manifestInto) {
     await writeManifest(options.manifestInto, references)
   }
@@ -240,7 +260,11 @@ export async function readBackupBlobManifest(
       log.warning({ backupDir }, 'blob manifest does not parse; treating the backup as unmirrored')
       return null
     }
-    return { blobs: new Set(parsed.data.blobs), files: parsed.data.files }
+    return {
+      blobs: new Set(parsed.data.blobs),
+      files: parsed.data.files,
+      mirror: parsed.data.mirror,
+    }
   } catch {
     log.warning({ backupDir }, 'blob manifest is not readable JSON; treating it as unmirrored')
     return null
@@ -256,6 +280,7 @@ async function writeManifest(backupDir: string, references: BackupBlobReferences
     files: Object.fromEntries(
       Object.entries(references.files).sort(([a], [b]) => (a < b ? -1 : 1)),
     ),
+    mirror: references.mirror,
   } satisfies z.infer<typeof manifestSchema>
   await mkdir(backupDir, { recursive: true })
   await writeFile(join(backupDir, BLOB_MANIFEST_FILENAME), `${JSON.stringify(manifest, null, 2)}\n`)
