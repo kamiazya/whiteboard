@@ -2,7 +2,6 @@ import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirro
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import {
-  EditorSelection,
   EditorState,
   type Extension,
   Prec,
@@ -14,39 +13,11 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
+import { markdownStyleKeymap } from './editor-verbs.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
 import { minimalChange } from './minimal-change.js'
 import { headingLevelAt } from './set-heading-level.js'
-import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { rangeToActOn } from './word-at.js'
-
-// Wraps what the caret is ON in `open`/`close` (Mod-b -> **, Mod-i -> *,
-// the catalog's [[ ]] passing two different delimiters). With a selection
-// that is the selection; without one it is the WORD under the caret, which
-// is what lets every verb work on a phone, where making a selection is the
-// hard part. A caret on whitespace has no word: that inserts an empty pair
-// and parks the cursor between the delimiters so the next keystroke lands
-// inside. Toggling (detecting an already-wrapped range and unwrapping) is
-// deliberately not attempted: markdown emphasis nesting makes reliable
-// detection lexer work, and a wrong unwrap corrupts text — insert-only is
-// predictable.
-function wrapSelectionWith(open: string, close: string = open): StateCommand {
-  return ({ state, dispatch }) => {
-    const scope = rangeToActOn(state)
-    dispatch(
-      state.update({
-        changes: [
-          { from: scope.from, insert: open },
-          { from: scope.to, insert: close },
-        ],
-        selection: EditorSelection.range(scope.from + open.length, scope.to + open.length),
-        scrollIntoView: true,
-        userEvent: 'input',
-      }),
-    )
-    return true
-  }
-}
 
 /**
  * The range a surface that ASKS the user something (the link picker) will
@@ -75,20 +46,6 @@ const pinnedRange = StateField.define<{ from: number; to: number } | null>({
     return { from: tr.changes.mapPos(value.from, 1), to: tr.changes.mapPos(value.to, -1) }
   },
 })
-
-/**
- * Shared with the spatial node editor (markdown-editor and spatial-editor
- * are sibling features of one app): the same wrap shortcuts everywhere a
- * markdown source is edited. Note Mod-Enter (task toggle) is deliberately
- * OUTRANKED by the node editor's commit binding — the overlay's exit verb
- * wins there; the document editor keeps the toggle.
- */
-export const markdownStyleKeymap = [
-  { key: 'Mod-b', run: wrapSelectionWith('**') },
-  { key: 'Mod-i', run: wrapSelectionWith('*') },
-  { key: 'Mod-e', run: wrapSelectionWith('`') },
-  { key: 'Mod-Enter', run: toggleTaskCheckbox },
-]
 
 /**
  * Markdown token styling, as class names rather than inline colors: the
@@ -128,10 +85,12 @@ export const markdownHighlightStyle = HighlightStyle.define([
  * controlled `value`/`onChange` pair.
  */
 export interface SourcePaneApi {
-  wrapSelection: (open: string, close?: string) => void
   /**
    * Runs any editing command against the live view — the seam the catalog
    * drives, so a new verb is a new command rather than a new API method.
+   * `wrapSelection` used to sit beside it, taking delimiters instead of a
+   * command; every caller now reads its delimiters from
+   * `MARKDOWN_EDITOR_VERBS` and arrives here as an ordinary command.
    */
   run: (command: StateCommand) => void
   /** Heading level of the line the caret sits on; 0 for body text. */
@@ -298,10 +257,6 @@ export function SourcePane({
     viewRef.current = view
     if (apiRef) {
       apiRef.current = {
-        wrapSelection: (open, close) => {
-          wrapSelectionWith(open, close)({ state: view.state, dispatch: view.dispatch })
-          view.focus()
-        },
         run: (command) => {
           command({ state: view.state, dispatch: view.dispatch })
           view.focus()
