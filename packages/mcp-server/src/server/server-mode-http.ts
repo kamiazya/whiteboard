@@ -175,10 +175,14 @@ export async function startServerModeHttp(
       },
       loop: {
         runs: 'in-process',
-        worstStallMs: 7,
+        worstStallMs: 283,
         fixture:
-          '10 workspaces with real history, by workspace-tail-loop-availability.test.ts; ' +
-          'the same pass without its yield blocked for all 80.1ms of its duration',
+          '10 workspaces at 300 commits of history with a 50-commit gain, file-backed ' +
+          'libSQL, by workspace-tail-loop-availability.test.ts. Tracks ONE workspace ' +
+          'catch-up, not how many there are: 7.7ms at 30 history and a 10 gain, 105ms at ' +
+          '100/50, 283ms at 300/50 — so 300 commits being a small workspace makes this a ' +
+          'floor, not a ceiling. Without the yield the same pass stalls 2927ms unbroken. ' +
+          'An import is one call, so batching what catchUp imports is the only way lower.',
         measuredOn: '2026-08-30',
       },
       // Nothing to catch up: server mode has no WebSocket subscribers in this

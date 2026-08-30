@@ -115,13 +115,17 @@ export function createWorkspaceTail(options: WorkspaceTailOptions): WorkspaceTai
       // into the live document, which is a synchronous WASM call, and the
       // `await`s around it never reach the timer phase — so without this a
       // pass is one unbroken stall for as long as every subscribed workspace
-      // takes together. Measured over 10 workspaces with real history: 80.1ms
-      // elapsed, 80.1ms blocked, and the 5ms sampler landed ZERO times.
+      // takes together. Measured over 10 workspaces against a file-backed
+      // libSQL store: 2927ms elapsed, 2927ms blocked, and the 5ms sampler
+      // landed ZERO times, at 300 commits of history with a 50-commit gain.
+      //
       // Yielding costs nothing here (a pass is a timer callback, not a
       // request) and caps what a request arriving mid-pass waits at one
-      // workspace instead of all of them. Same reasoning as file-gc.ts's
-      // collectReferencedFileIds, and the same trap: the blocking is
-      // invisible in the source.
+      // workspace instead of all of them — 283ms on that fixture. That is
+      // also the FLOOR: an import is a single call and cannot be subdivided,
+      // so anything lower means batching what `catchUp` imports. Same
+      // reasoning as file-gc.ts's collectReferencedFileIds, and the same
+      // trap: the blocking is invisible in the source.
       await yieldToLoop()
       try {
         await follow(workspaceId)
