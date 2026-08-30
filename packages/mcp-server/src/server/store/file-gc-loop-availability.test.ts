@@ -159,8 +159,18 @@ describe('a file-GC pass', () => {
     expect(measured.result).toMatchObject({ purgedCount: 1 })
 
     // The loop ran something many times over, rather than once at each edge.
-    // Without the yields this fixture produced 3 samples across 1394ms.
-    expect(availability.samples).toBeGreaterThan(20)
+    //
+    // A FRACTION of the samples the interval asked for, not a count, for the
+    // same reason the stall assertion below is a ratio: a count is a
+    // statement about how busy the machine is. Measured on this fixture --
+    // without the yields, 3 samples of an ideal 279 (1.1%); with them, 61 of
+    // 173 idle (35%) and 20 of 85 under eight CPU hogs on four cores (24%).
+    // A floor at 5% clears the blocked case by 4x and the loaded case by 5x.
+    // The absolute 20 this replaces had NO margin: a loaded run landed on
+    // exactly 20 and CI failed `expected 20 to be greater than 20`.
+    expect(availability.samples).toBeGreaterThan(
+      (availability.elapsedMs / availability.intervalMs) * 0.05,
+    )
     // And no single stall swallowed the pass. Without the yields this ratio
     // was 0.96; with them it is 0.04 on the same fixture.
     expect(availability.worstStallMs).toBeLessThan(availability.elapsedMs * 0.5)
