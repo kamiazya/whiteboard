@@ -38,6 +38,8 @@ const DAEMON = { baseUrl: BASE, token: 'tok-1' }
 interface StubOptions {
   updateDelayMs?: number
   putDelayMs?: number
+  /** An update that stays in flight until the test releases it. */
+  updateGate?: Promise<void>
   failUpdateStatus?: number
   workspaces?: { workspaceId: string; segment?: string; displayName?: string }[]
 }
@@ -53,6 +55,7 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     }
     if (url.endsWith('/workspace-document/update') && init?.method === 'POST') {
       if (opts.updateDelayMs) await new Promise((r) => setTimeout(r, opts.updateDelayMs))
+      if (opts.updateGate) await opts.updateGate
       if (opts.failUpdateStatus) {
         return Response.json(
           { title: `Workspace "ws-a" not found` },
@@ -137,6 +140,28 @@ async function seedPreFoldDocument(path: string): Promise<string> {
   doc.commit()
   await new LoroStore().save(entry.documentId, doc.export({ mode: 'snapshot' }))
   return entry.documentId
+}
+
+/**
+ * An update the test releases, rather than one that finishes on a timer.
+ *
+ * A test that has to observe the RUNNING phase is racing the flow it started:
+ * the progress element is on screen only until the update resolves, and the
+ * driver round trip that `userEvent.click` waits out afterwards is charged to
+ * that same window. A delay makes the window wide, not certain — and it is a
+ * wall-clock number sitting next to a cost that grows with the run (the same
+ * file's tests were measured at 1.5s alone and 30s+ with the whole browser
+ * project in flight). Held instead, nothing about the machine can close the
+ * window early.
+ */
+function heldUpdate(): { gate: Promise<void>; release: () => void } {
+  let release = (): void => {}
+  const gate = new Promise<void>((resolve) => {
+    release = () => {
+      resolve()
+    }
+  })
+  return { gate, release: () => release() }
 }
 
 const NO_INTERNAL_VOCABULARY = /loro|crdt|oplog|snapshot/i
@@ -272,18 +297,24 @@ describe('PromoteWorkspaceSection', () => {
     failing.unmount()
 
     localStorage.removeItem(STORAGE_KEY)
+    const running = heldUpdate()
     render(
       <PromoteWorkspaceSection
         daemon={DAEMON}
         settingsStore={createUserSettingsStore()}
-        baseFetch={daemonStub(new LoroDoc(), { updateDelayMs: 120 })}
+        baseFetch={daemonStub(new LoroDoc(), { updateGate: running.gate })}
         reload={vi.fn()}
       />,
     )
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
     await userEvent.click(await screen.findByTestId('promote-confirm'))
     await screen.findByTestId('promote-progress')
+    expect(
+      screen.queryByTestId('promote-last-result'),
+      'the update is still held, so the running phase is what is being read here — if the flow has already finished, this case is back to racing it',
+    ).toBeNull()
     expect(document.body.textContent).not.toMatch(NO_INTERNAL_VOCABULARY)
+    running.release()
     await screen.findByTestId('promote-last-result')
     expect(document.body.textContent).not.toMatch(NO_INTERNAL_VOCABULARY)
   })

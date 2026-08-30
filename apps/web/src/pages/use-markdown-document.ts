@@ -263,14 +263,28 @@ export function useMarkdownDocument(
   // for this document before reading the store.
   const pending = pendingFlushes
 
+  // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
-    if (!enabled || documentId === null) {
-      hostRef.current = null
-      setDoc(null)
-      setBodyState(null)
-      setCoreMetaState(null)
-      return
-    }
+    // Cleared synchronously, BEFORE the async load below — the same rule
+    // `DaemonIndexPage` states for its rows ("leaving the previous
+    // workspace's rows visible during the switch lets a click pair the new
+    // workspace id with an old workspace's path") and `VersionTimeline` for
+    // its versions. Unconditional, because a switch from one document to
+    // another is the case that was missing: the `cancelled` guard below stops
+    // a stale load from LANDING, and does nothing about what is still held
+    // while the next one is in flight.
+    //
+    // `hostRef` is the half that matters. `setBody` writes through it and
+    // returns early when it is null, while `scheduleSave` keys its scheduler
+    // on the NEW id — so without this, a keystroke during the next document's
+    // load is written into the previous document and queued under a name that
+    // is not its own. Measured: typing under c2 while c2 loaded produced
+    // `save('c1', …)`.
+    hostRef.current = null
+    setDoc(null)
+    setBodyState(null)
+    setCoreMetaState(null)
+    if (!enabled || documentId === null) return
     let cancelled = false
     let unsubscribe: (() => void) | undefined
     void Promise.resolve(pending.get(documentId))

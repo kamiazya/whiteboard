@@ -45,6 +45,7 @@ const sources = import.meta.glob(
     './pages/DaemonIndexPage.tsx',
     './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
+    './pages/use-markdown-document.ts',
   ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
@@ -52,6 +53,14 @@ const sources = import.meta.glob(
 type ScopeCoverage =
   /** Dropped when the scope changes, because it names something inside it. */
   | 'cleared on switch'
+  /**
+   * IS scope-bound and knowingly still survives. A first-class permanent
+   * answer, like `not modelled:` in the other ledgers — what it forbids is
+   * the UNDECIDED member, not the uncleared one. The reason has to say what
+   * would be needed, because "we'll get to it" is the omission with a
+   * sentence in front of it.
+   */
+  | `survives: ${string}`
   /**
    * Names no document, so it survives a switch harmlessly. The reason has to
    * say WHY — "it's only a boolean" is exactly what was true of
@@ -63,6 +72,7 @@ const PANEL = './components/workspace-files/WorkspaceFilesPanel.tsx'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
+const MARKDOWN_DOCUMENT = './pages/use-markdown-document.ts'
 
 const PANEL_STATE: Record<string, ScopeCoverage> = {
   documents: 'cleared on switch',
@@ -104,9 +114,52 @@ const DAEMON_INDEX_STATE: Record<string, ScopeCoverage> = {
   deleting: 'no subject: an in-flight flag; the path it is about is `pendingDelete`',
 }
 
-/** Names every `const [x, setX] = useState` declares, in source order. */
-function stateNames(source: string): string[] {
-  return [...source.matchAll(/const \[(\w+), set\w+\]\s*=\s*useState/g)].map((m) => m[1])
+/** An empty value, in any of the shapes these screens reset to. */
+const EMPTY = '(null|\\[\\]|false|0|\'\'|"")'
+
+/**
+ * What a name is called and how a reset to it would read.
+ *
+ * The setter is taken from the DECLARATION rather than derived as
+ * `set${Name}`, because that convention does not hold: `use-markdown-document`
+ * declares `[body, setBodyState]` and `[coreFacets, setCoreMetaState]`, since
+ * `setBody` is already the hook's public writer. A guard that assumed the
+ * convention would have reported both as unbacked claims and sent the reader
+ * looking for a bug in the fix.
+ */
+interface Slot {
+  name: string
+  reset: RegExp
+}
+
+/** Every `const [x, setX] = useState` a source declares, in source order. */
+function stateNames(source: string): Slot[] {
+  return [...source.matchAll(/const \[(\w+), (set\w+)\]\s*=\s*useState/g)].map((m) => ({
+    name: m[1],
+    reset: new RegExp(`${m[2]}\\(${EMPTY}\\)`),
+  }))
+}
+
+/**
+ * Names every `const x = useRef` declares.
+ *
+ * Opt-in per case, and the reason it exists at all is that a REF held the
+ * worst defect of the three this ledger has now covered: `hostRef` in
+ * `use-markdown-document` kept the departed document's write handle through
+ * the next one's load, so a keystroke under one document was saved into
+ * another. Scanning only `useState` would never have asked about it.
+ *
+ * The four screen cases do not scan refs yet — 3 to 5 each, none of them read
+ * closely enough here to classify honestly, and a wrong `no subject:` in a
+ * guard people trust is worse than an absent one. Turning it on for them is a
+ * one-word change per case and its own increment.
+ */
+function refNames(source: string): Slot[] {
+  return [...source.matchAll(/const (\w+) = useRef/g)].map((m) => ({
+    name: m[1],
+    // A ref has no setter: clearing one is an assignment to `.current`.
+    reset: new RegExp(`${m[1]}\\.current\\s*=\\s*${EMPTY}`),
+  }))
 }
 
 /**
@@ -160,31 +213,67 @@ const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   loading: 'no subject: an in-flight flag for this screen’s own fetch',
 }
 
+// Scoped on the DOCUMENT, and the one case that scans REFS too — see
+// `refNames` for why.
+const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
+  doc: 'cleared on switch',
+  body: 'cleared on switch',
+  coreFacets: 'cleared on switch',
+  hostRef: 'cleared on switch',
+
+  saveState:
+    'survives: it describes the DEPARTED document’s last save. Resetting it alone would not settle the question — the outgoing flush reports asynchronously through the same setter, so its result lands after any reset. Needs its own reproduction before a fix, the way the write path got one',
+
+  loroRef: 'no subject: mirrors the `loro` prop, reassigned on every render',
+  scheduleSaveRef: 'no subject: mirrors the current `scheduleSave`, reassigned on every render',
+  setSaveStateRef: 'no subject: mirrors the state setter, reassigned on every render',
+  schedulerRef:
+    'no subject: keyed BY the document id — `schedulerFor` replaces it whenever the id differs, so it corrects itself rather than going stale',
+}
+
 const CASES = [
-  { file: PANEL, ledger: PANEL_STATE, label: 'WorkspaceFilesPanel' },
-  { file: DAEMON_INDEX, ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage' },
-  { file: BRANCH_CHIP, ledger: BRANCH_CHIP_STATE, label: 'HeaderBranchChip' },
-  { file: VERSION_TIMELINE, ledger: VERSION_TIMELINE_STATE, label: 'VersionTimeline' },
+  { file: PANEL, ledger: PANEL_STATE, label: 'WorkspaceFilesPanel', scanRefs: false },
+  { file: DAEMON_INDEX, ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: false },
+  { file: BRANCH_CHIP, ledger: BRANCH_CHIP_STATE, label: 'HeaderBranchChip', scanRefs: false },
+  {
+    file: VERSION_TIMELINE,
+    ledger: VERSION_TIMELINE_STATE,
+    label: 'VersionTimeline',
+    scanRefs: false,
+  },
+  {
+    file: MARKDOWN_DOCUMENT,
+    ledger: MARKDOWN_DOCUMENT_STATE,
+    label: 'useMarkdownDocument',
+    scanRefs: true,
+  },
 ] as const
 
+/** Everything a case's ledger has to account for. */
+function scanned(source: string, scanRefs: boolean): Slot[] {
+  return scanRefs ? [...stateNames(source), ...refNames(source)] : stateNames(source)
+}
+
 describe('scoped screen state is classified', () => {
-  it.each(CASES)('$label: the scan reaches a plausible amount of state', ({ file }) => {
+  it.each(CASES)('$label: the scan reaches a plausible amount of state', ({ file, scanRefs }) => {
     // A regex that stops matching reports every entry as stale, which sends
     // the reader to the wrong file entirely.
     expect(sources[file], `${file} was not globbed`).toBeDefined()
-    expect(stateNames(sources[file]).length).toBeGreaterThan(4)
+    expect(scanned(sources[file], scanRefs).length).toBeGreaterThan(4)
   })
 
-  it.each(CASES)('$label: every piece of state is classified', ({ file, ledger }) => {
-    const unclassified = stateNames(sources[file]).filter((name) => !(name in ledger))
+  it.each(CASES)('$label: every piece of state is classified', ({ file, ledger, scanRefs }) => {
+    const unclassified = scanned(sources[file], scanRefs)
+      .map((slot) => slot.name)
+      .filter((name) => !(name in ledger))
     expect(
       unclassified,
-      'new screen state must say whether it NAMES A DOCUMENT. If it does, clear it in the workspace-switch effect and mark it "cleared on switch"; if it does not, say why — a path or an entry always does',
+      'new state or ref must say whether it is bound to this screen\'s SCOPE — the workspace for a browser, the document for the top bar and the markdown hook. If it is, reset it in the // SCOPE RESET effect and mark it "cleared on switch"; if it is not, say why; if it is and stays anyway, say `survives:` and what a fix would need. A path, an entry or a write handle always is',
     ).toEqual([])
   })
 
-  it.each(CASES)('$label: every classified name still exists', ({ file, ledger }) => {
-    const present = new Set(stateNames(sources[file]))
+  it.each(CASES)('$label: every classified name still exists', ({ file, ledger, scanRefs }) => {
+    const present = new Set(scanned(sources[file], scanRefs).map((slot) => slot.name))
     const stale = Object.keys(ledger).filter((name) => !present.has(name))
     expect(stale, 'these entries name state the screen no longer holds').toEqual([])
   })
@@ -204,19 +293,18 @@ describe('scoped screen state is classified', () => {
   it.each(CASES)('$label: everything marked cleared is reset IN that effect', ({
     file,
     ledger,
+    scanRefs,
   }) => {
     const block = scopeResetBlock(sources[file])
-    const unbacked = Object.entries(ledger)
-      .filter(([, scope]) => scope === 'cleared on switch')
-      .map(([name]) => name)
-      .filter((name) => {
-        const setter = `set${name[0].toUpperCase()}${name.slice(1)}`
-        // A reset to the empty value, in any of the shapes these screens use.
-        // `''` is here because leaving it out is what this guard caught on its
-        // own first run: `setRenameDraft('')` is a reset, and a rule that only
-        // knows `null` reads it as an unbacked claim.
-        return !new RegExp(`${setter}\\((null|\\[\\]|false|0|''|"")\\)`).test(block)
-      })
+    const cleared = new Set(
+      Object.entries(ledger)
+        .filter(([, scope]) => scope === 'cleared on switch')
+        .map(([name]) => name),
+    )
+    const unbacked = scanned(sources[file], scanRefs)
+      .filter((slot) => cleared.has(slot.name))
+      .filter((slot) => !slot.reset.test(block))
+      .map((slot) => slot.name)
     expect(
       unbacked,
       'marked "cleared on switch" but the scope-reset effect does not reset it — either clear it there or reclassify',
