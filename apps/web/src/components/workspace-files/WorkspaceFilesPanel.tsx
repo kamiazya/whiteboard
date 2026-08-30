@@ -313,7 +313,28 @@ export function WorkspaceFilesPanel({
     let cancelled = false
     setDocuments(null)
     setListStatus('ok')
+    // Everything here NAMES A DOCUMENT, and a document belongs to exactly one
+    // workspace. `submitRename` and the card menu's verbs close over the
+    // CURRENT source while holding a captured entry, so anything left behind
+    // addresses the departed workspace's path into the one now on screen —
+    // and paths collide freely across workspaces, `untitled` most of all.
+    // Measured before this: a rename dialog left open across a switch called
+    // `setDocumentName` on the new workspace's store.
     setSelected(null)
+    setCardMenu(null)
+    setRenaming(null)
+    setRenameError(null)
+    setRenameBusy(false)
+    // Results computed against the departed workspace's content, still
+    // clickable. The search effect does re-run on a source change, but only
+    // after its debounce — until then these rows name documents that are not
+    // here.
+    setHits(null)
+    setSearchDegraded(false)
+    // Both name a path, and their message is about a write that happened
+    // somewhere else.
+    setRefreshError(null)
+    setPinError(null)
     // Guarded by the source's IDENTITY, not by a first-run flag: an
     // `initialFolder` is a deliberate address and must survive mounting,
     // while StrictMode replays this effect with the SAME readList — which a

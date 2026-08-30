@@ -398,6 +398,17 @@ export function DaemonIndexPage({
     setTrashCount(0)
     setLoaded(false)
     setLoadError(null)
+    // Same rule, one level up: a DIALOG holding a path is the mismatched
+    // identity the rows-clear above exists to prevent, and it outlives the
+    // switch that the rows do not. `handleConfirmDelete` reads
+    // `selectedWorkspace` when the button is pressed, not when the dialog
+    // opened, so confirming after a switch sends the departed workspace's
+    // path to the one now on screen. Measured before this line existed:
+    // opening Delete on ws-a's `untitled`, switching to ws-b and confirming
+    // sent `DELETE ws-b/untitled` — a document nobody selected.
+    setPendingDelete(null)
+    setDeleteError(null)
+    setDuplicatingPath(null)
     void loadWorkspace(selectedWorkspace, () => cancelled)
     return () => {
       cancelled = true
