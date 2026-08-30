@@ -23,14 +23,22 @@ export interface LoopAvailability {
   /** Wall clock in which the loop ran nothing: elapsed minus what ticked. */
   blockedMs: number
   /**
-   * The longest single gap between ticks, or the whole run if none ticked.
+   * The longest single stretch the loop ran nothing.
    *
-   * Weaker than `blockedMs` and deliberately kept beside it: a stall that
-   * runs to the END of the body is invisible here, because no tick lands
-   * after it to measure the gap — measured at 0.5ms for a body that awaited
-   * 150ms and then blocked 200ms, where `blockedMs` correctly reported 205ms.
-   * Read it for the shape of a stall, never as the answer to "did this
-   * block".
+   * The number the registry declares, because it is what a request arriving
+   * mid-pass actually waits: a second of CPU in twenty-millisecond pieces is
+   * a busy daemon, the same second unbroken is a gone one.
+   *
+   * A stall that runs to the END of the body has no tick after it to bound
+   * it, so the final stretch is closed off against the body's own completion
+   * rather than left unmeasured. Without that it reported **0.3ms for a
+   * 200ms stall** — not a weaker answer but the best-looking possible number
+   * for the worst case, which is the exact failure this instrument exists to
+   * remove, arriving through its other field.
+   *
+   * Still read it beside `blockedMs`, never instead: this says no single
+   * stall swallowed the pass, that says how much of the pass was stalled at
+   * all.
    */
   worstStallMs: number
   samples: number
@@ -70,7 +78,12 @@ export async function measureLoopAvailability<T>(
   const startedAt = process.hrtime.bigint()
   try {
     const result = await body()
-    const elapsedMs = Number(process.hrtime.bigint() - startedAt) / 1e6
+    const endedAt = process.hrtime.bigint()
+    const elapsedMs = Number(endedAt - startedAt) / 1e6
+    // Close the final stretch against the body's completion. A stall that
+    // runs to the end has no tick after it, so without this the longest one
+    // in the run can be the one that goes unmeasured entirely.
+    worstGapMs = Math.max(worstGapMs, Number(endedAt - last) / 1e6 - intervalMs)
     return {
       result,
       availability: {
