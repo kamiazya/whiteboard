@@ -1,11 +1,12 @@
 # ADR-0021: Durability is a property of each store, not an operation on a directory
 
-**Status:** Accepted — decisions 2 and 3 implemented (a database we do not
+**Status:** Accepted — decisions 2, 3 and 4 implemented (a database we do not
 host is reported out of scope rather than refused wholesale; the rows are
 captured by a hot snapshot, so backup no longer requires stopping the
-server), plus the first slice of decision 1's per-store record. Decisions
-4, 5 and 6 are not: `backup-retention.ts` and its property hold decision
-6's invariant but nothing wires them yet.
+server; backups run on a schedule, taken by one instance per deployment
+under ADR-0020's leader lease), plus the first slice of decision 1's
+per-store record. Decisions 5 and 6 are not: `backup-retention.ts` and its
+property hold decision 6's invariant but nothing wires them yet.
 
 ## Context
 
@@ -169,7 +170,11 @@ last two were found by measuring rather than by reading:
    two moments; a file-GC pass unlinking between them removes a file the
    snapshot still references. `backup-in-progress.json` is how the host-side
    backup process tells the daemon's GC to stand down — the filesystem is the
-   only channel between them. It fails OPEN, the opposite of every other guard
+   only channel between them. Its liveness is an EXPIRY the running backup
+   keeps pushing out, never the writer's pid: a pid is meaningful only inside
+   one pid namespace, and once several instances share a volume the reader is
+   routinely in another container, where the number matches nothing or matches
+   something unrelated with no way to tell which. It fails OPEN, the opposite of every other guard
    here: wrongly believing a backup is running means GC never collects again,
    an unbounded disk leak from a file nobody maintains, while wrongly believing
    none is running costs one skipped stand-down in a window of seconds.
@@ -195,6 +200,63 @@ The periodic-pass shape already exists twice in this codebase
 (`file-gc-sweeper` and `workspace-tail`): a completion-rescheduled unref'd
 one-shot, off unless configured, strict interval parsing. This is not new
 machinery, and it should not be built as though it were.
+
+**Implemented** as `backup-scheduler.ts`, with `performBackup` extracted so
+the schedule and the CLI share one implementation rather than two — the CLI is
+now argument handling and nothing else.
+
+**The schedule is cron, not an interval.** An interval cannot say WHEN: "every
+24h" is phased on the daemon's last restart, so it lands mid-working-day as
+readily as at night. A backup is a snapshot plus a copy of every blob — real
+load — and only the operator knows their quiet window. `croner` supplies the
+next fire time and nothing else; the timer loop stays the one
+`file-gc-sweeper` established, because croner's own scheduler would be a
+second answer to "is a pass already running" and the no-overlap guard here is
+the one that is tested. A cron expression also reaches past `setTimeout`'s
+~24.8-day maximum, so the clamp wakes early, notices the target is still
+ahead, and re-arms.
+
+One thing this decision says that the implementation does not: "scheduled by
+default". There is no destination worth defaulting to. Writing copies beside
+the data they protect is not a backup, and anywhere else is a path only the
+operator knows — so `WHITEBOARD_BACKUP_DIR` arms it, matching what
+`workspace-tail` already does for the same reason. What the decision's intent
+survives as: setting an interval or a retention count WITHOUT a destination
+aborts startup, because that combination configures nothing while looking from
+the outside exactly like one that works.
+
+**The pass runs in its own process, and one instance runs it.** Both were
+found by measurement rather than argued.
+
+`VACUUM INTO` through `@libsql/client` blocks the Node event loop for its
+whole duration: a 5ms sampler fired ZERO times across a 4767ms snapshot of a
+421MB database, and the cost is roughly linear below that (33ms empty, 314ms
+at 25MB, 1242ms at 103MB). In the daemon's own process that is every HTTP
+request, WebSocket frame and MCP call stopped for seconds, nightly, growing
+with the data — so decision 3's "the server keeps serving" holds for the
+LOCKS and not for the loop. Same data, same pass, measured the same way:
+in-process, 1787ms wall of which 1107ms the loop could serve nothing and a
+single 1105ms stall; as a child process, 100ms of unavailability across the
+whole pass and a worst stall of 7ms. The child is the CLI itself, so the
+scheduled path and the manual one remain one program. The blob copy was
+never the problem (under 3.1ms of lag across a 200MB tree); the pass moves
+whole because splitting it would need the two halves to agree about the
+marker, the lease and the output directory, for nothing.
+
+Several instances over one data directory took N backups a night, and their
+retention passes each deleted from a set the others were changing. This is
+the discardable-but-expensive work ADR-0020 reserves leader election for, so
+that ADR's own first option is taken: a `leases` table in the database the
+instances already share, one conditional statement, expiry rather than
+liveness because a pid means nothing across a container boundary. Cron makes
+the coordination matter MORE, not less — an interval drifts apart from each
+instance's restart while `0 3 * * *` fires on all of them in the same minute.
+
+Retention ships with it. An automatic daily backup with no bound fills the
+disk, which costs the operator the running server as well as the backups. It
+counts only directories the scheduler wrote, and does not run at all after a
+failed pass — deleting on the way to a backup that then failed is how someone
+ends up with fewer backups than before they turned this on.
 
 ### 5. A blob's durable copy is a mirror, and the mirror never deletes on garbage collection's behalf
 

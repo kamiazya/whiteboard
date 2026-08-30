@@ -156,6 +156,18 @@ discardable work, and when it is, it is rented too (a `leases` table, a
 Postgres advisory lock, or a Kubernetes `Lease` — never a bespoke
 implementation).
 
+*Added 2026-08-29: it was, for exactly one subject.* The scheduled backup
+pass (ADR-0021 decision 4) is discardable and expensive, and cron makes the
+duplication worse rather than better — an interval drifts apart from each
+instance's own restart, while `0 3 * * *` fires on every instance in the same
+minute. `server/store/lease.ts` takes the first option on that list, a
+`leases` table in the database the instances already share, acquired by a
+single `ON CONFLICT ... DO UPDATE ... WHERE` so the check and the write cannot
+be separated. Nothing else uses it, and in particular **GC still does not**,
+for the reason given below: a GC leader removes GC-versus-GC races and leaves
+GC-versus-WRITE untouched. Correctness continues to come from the fencing
+token; this only stops the deployment paying for the same backup N times.
+
 **4. Invariants a CRDT cannot preserve are resolved by deterministic
 convergence, not by a uniqueness authority.** Path uniqueness is settled
 after the fact: both creations survive the merge and a deterministic rule
