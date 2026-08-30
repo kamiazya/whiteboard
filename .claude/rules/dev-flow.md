@@ -126,6 +126,11 @@ This rule was prose ONLY for a long time, and it hollowed out: the observed shap
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 
+**Coverage ledgers** — the discipline that keeps a test honest about a surface that keeps growing
+— are governed by `.claude/rules/coverage-ledger.md` (path-scoped to `apps/web/**` and
+`packages/*/src/**`). Reach for it when adding a member to an editor's command set, event set,
+keyboard catalog or verb table, and when deciding whether a new surface earns a ledger at all.
+
 **Code placement and package boundaries** are governed by `.claude/rules/architecture-map.md` (always-on) and `.claude/rules/package-*.md` (path-scoped). Every PR that adds a package ships its path-scoped rule in the same increment.
 
 ## Ticketing (no GitHub Issues — all local-private)
