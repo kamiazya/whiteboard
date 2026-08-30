@@ -49,6 +49,12 @@ jobs:
         with:
           # The diff is the input, so the base branch has to be reachable.
           fetch-depth: 0
+          # This job runs untrusted PR code — an install and a mutation run —
+          # so don't leave the git credential where that tooling can read it.
+          # Nothing here needs authenticated git: the diff reads objects that
+          # are already fetched, and the comment step authenticates with
+          # GH_TOKEN instead.
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
 
@@ -132,6 +138,10 @@ jobs:
     timeout-minutes: 180
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # Same reason as the PR job: this one performs no authenticated git
+          # operation either, so keep the job token away from build tooling.
+          persist-credentials: false
 
       - uses: ./.github/actions/setup-pnpm
 
