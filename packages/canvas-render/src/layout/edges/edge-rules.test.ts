@@ -43,6 +43,36 @@ function candidateRule(name: string): Extract<PreferenceRule, { kind: 'candidate
 
 const rectAt = (x: number, y: number, w = 100, h = 100): Rect => ({ x, y, w, h })
 
+describe('u-hook-span-exposed-first', () => {
+  const rule = candidateRule('u-hook-span-exposed-first')
+  const from = rectAt(0, 0)
+
+  // The rule sorts the four same-side hooks by whether that side's BORDER
+  // SPAN passes through the target's interior, and the span is built by a
+  // four-branch switch whose every coordinate was unpinned — 18 surviving
+  // mutants, one per corner arithmetic. Each row places the target to taint
+  // exactly ONE side, so a branch that computes the wrong border stops
+  // matching and the order changes.
+  it.each([
+    ['top', rectAt(20, -50, 60, 60), ['right', 'bottom', 'left', 'top']],
+    ['bottom', rectAt(20, 90, 60, 60), ['top', 'right', 'left', 'bottom']],
+    ['left', rectAt(-50, 20, 60, 60), ['top', 'right', 'bottom', 'left']],
+    ['right', rectAt(90, 20, 60, 60), ['top', 'bottom', 'left', 'right']],
+  ])('demotes the %s hook when that border span enters the target', (_side, toRect, order) => {
+    const ranked = rule.generate({
+      dx: toRect.x + toRect.w / 2 - 50,
+      dy: toRect.y + toRect.h / 2 - 50,
+      fromRect: from,
+      toRect,
+      crowd: () => 0,
+    })
+
+    expect(ranked.map((p) => p.fromSide)).toEqual(order)
+    // Same-side hooks throughout: this rule never proposes a crossing pair.
+    expect(ranked.every((p) => p.fromSide === p.toSide)).toBe(true)
+  })
+})
+
 describe('zero-bend-facing-first', () => {
   const rule = candidateRule('zero-bend-facing-first')
 
