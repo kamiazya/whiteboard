@@ -9,7 +9,7 @@ git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
 pnpm install
 pnpm exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser)
-pnpm test         # full suite (see root vitest.config.ts): mcp-node, mcp-smoke, model, ports, codec, workspace, server-core, arch-lint, canvas-render node/browser, canvas-viewer node/jsdom/browser, apps/web node/jsdom/browser
+pnpm test         # all 22 vitest projects (listed under Workflow below)
 pnpm typecheck
 pnpm smoke:e2e    # stdio MCP smoke (no API quota)
 ```
@@ -24,7 +24,17 @@ See [README.md](README.md) for the full setup including Claude Code / Codex auto
 
 ## Workflow
 
-This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer (mcp-node / canvas-viewer-node / canvas-viewer-jsdom / canvas-viewer-browser / apps/web jsdom / web-browser / E2E) to choose for which kind of change.
+This project follows a **test → patch → manual verify → regression test** loop. See [AGENTS.md](AGENTS.md) for the full development loop, including which test layer to choose for which kind of change.
+
+`pnpm test` runs 22 vitest projects. The names below are what `--project` accepts — worth copying rather than typing, because **vitest only errors when a `--project` filter set is empty**: a name that matches nothing alongside one that matches runs the smaller set and exits 0, which reads exactly like both suites passing.
+
+| runtime | projects |
+|---|---|
+| node | `mcp-node`, `mcp-smoke`, `model-node`, `ports-node`, `facet-engine-node`, `plugin-visual-node`, `codec-node`, `arch-lint-node`, `loro-adapter-node`, `search-node`, `server-core-node`, `workspace-index-node`, `canvas-render-node`, `canvas-viewer-node`, `web-node` |
+| jsdom | `facet-ui-jsdom`, `plugin-visual-jsdom`, `canvas-viewer-jsdom`, `web-jsdom` |
+| real browser | `canvas-render-browser`, `canvas-viewer-browser`, `web-browser` |
+
+`apps/web`'s two non-browser projects are `web-jsdom` and `web-node`; running only `--project web-jsdom` omits `web-node`'s build and deploy-config guards, so use `pnpm --filter @kamiazya/whiteboard-web test` when the question is "does this match CI".
 
 Short version:
 
@@ -63,7 +73,7 @@ The codebase is warning-free and `pnpm lint` runs as part of the pre-push gate (
 [Lefthook](https://lefthook.dev) installs git hooks automatically on `pnpm install` (via the `prepare` script):
 
 - **pre-commit** (fast): formats the staged files with Biome and re-stages them, then runs **secretlint**, which BLOCKS the commit on a secret or an absolute home-dir path. It deliberately does NOT run lint/typecheck/tests, so it never slows the many automated commits the dev flow makes.
-- **pre-push** (the gate): runs `pnpm -r typecheck`, `pnpm test --project mcp-node`, `pnpm lint:noconsole`, `pnpm lint`, and `pnpm verify:git-hooks` in parallel — mirroring CI so a broken build, failing test, or stray `console.*` in server code is caught before it leaves your machine.
+- **pre-push** (the gate): runs six checks in parallel — `pnpm verify:git-hooks`, `pnpm -r typecheck`, `pnpm test --project mcp-node`, `pnpm lint:noconsole`, `pnpm lint`, and `pnpm vitest run --project canvas-render-node packages/canvas-render/src/mutation-lane-coverage.test.ts` — mirroring CI so a broken build, failing test, or stray `console.*` in server code is caught before it leaves your machine. The last one is the only check anywhere that notices the mutation lane going stale: the lane covers a list of modules, so a new module is simply not covered and the weekly report still looks healthy.
 
 `pnpm verify:git-hooks` checks the hooks themselves rather than your code. A tool that appends its own block to `.git/hooks/<name>` — several editor and code-intelligence integrations install that way — makes *its* exit status the script's, which silently reduces every lefthook command above to advisory while still printing failures as if they blocked. Run `pnpm verify:git-hooks --fix` to move an appended block ahead of lefthook's invocation.
 
