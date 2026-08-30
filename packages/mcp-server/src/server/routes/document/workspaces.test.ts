@@ -93,9 +93,12 @@ describe('GET /api/workspaces', () => {
 
     expect(res.status).toBe(200)
     const json = (await res.json()) as {
-      workspaces: Array<{ workspaceId: string }>
+      workspaces: Array<{ workspaceId: string; documentCount?: number }>
     }
-    expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a' }])
+    // `documentCount` joined the row when the switcher started showing it.
+    // This case pins WHICH workspaces are listed, so it carries the field
+    // rather than asserting a shape the route no longer has.
+    expect(json.workspaces).toEqual([{ workspaceId: 'workspace-a', documentCount: 1 }])
   })
 
   // ADR-0019: segment/displayName flow from the registry row through this
@@ -124,9 +127,14 @@ describe('GET /api/workspaces', () => {
       workspaceId: 'workspace-named',
       segment: 'team-notes',
       displayName: 'Team notes',
+      documentCount: 0,
     })
     const bare = parsed.workspaces.find((w) => w.workspaceId === 'workspace-bare')
-    expect(bare).toEqual({ workspaceId: 'workspace-bare' })
+    // Zero, and PRESENT: an empty workspace is counted, not left uncounted.
+    // Which is the distinction the two assertions below are about — those
+    // layers are absent because nobody chose them, and this test's subject is
+    // that absence, not the row's total width.
+    expect(bare).toEqual({ workspaceId: 'workspace-bare', documentCount: 0 })
     expect('segment' in (bare ?? {})).toBe(false)
     expect('displayName' in (bare ?? {})).toBe(false)
   })
@@ -1084,5 +1092,80 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
     })
     expect(res.status).toBe(200)
     expect(workspaceSummarySchema.parse(await res.json()).displayName).toBe('Named at last')
+  })
+})
+
+// A switcher row that says only a name gives no reason to pick one workspace
+// over another. The count is what makes the list readable — and it must agree
+// with the list the document browser then shows, which is why a SHADOWED
+// document counts: it is a document in the workspace, it appears in the
+// listing with its mark, and a number that quietly omitted it would recreate
+// the disagreement the mark exists to prevent.
+describe('GET /api/workspaces document counts', () => {
+  async function created(app: ReturnType<typeof createWorkspacesRouter>, displayName: string) {
+    const res = await app.request('/api/workspaces', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ displayName }),
+    })
+    return workspaceSummarySchema.parse(await res.json())
+  }
+
+  async function listed(app: ReturnType<typeof createWorkspacesRouter>) {
+    return listWorkspacesResponseSchema.parse(await (await app.request('/api/workspaces')).json())
+  }
+
+  it('counts each workspace its own documents', async () => {
+    const app = createWorkspacesRouter()
+    const two = await created(app, 'Two docs')
+    const none = await created(app, 'No docs')
+
+    for (const path of ['alpha', 'beta']) {
+      await app.request(`/api/workspaces/${two.workspaceId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+    }
+
+    const { workspaces } = await listed(app)
+    expect(workspaces.find((w) => w.workspaceId === two.workspaceId)?.documentCount).toBe(2)
+    // Zero is a real answer and must be REPORTED, not left absent: an empty
+    // workspace is exactly the one a person needs to recognise in the list.
+    expect(workspaces.find((w) => w.workspaceId === none.workspaceId)?.documentCount).toBe(0)
+  })
+
+  it('counts documents in folders, not just at the root', async () => {
+    const app = createWorkspacesRouter()
+    const ws = await created(app, 'Nested')
+    for (const path of ['top', 'folder/one', 'folder/deeper/two']) {
+      await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path }),
+      })
+    }
+
+    const { workspaces } = await listed(app)
+    expect(workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount).toBe(3)
+  })
+
+  it('stops counting a document once it is deleted', async () => {
+    const app = createWorkspacesRouter()
+    const ws = await created(app, 'Deletes')
+    await app.request(`/api/workspaces/${ws.workspaceId}/documents`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ path: 'gone' }),
+    })
+    expect(
+      (await listed(app)).workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount,
+    ).toBe(1)
+
+    await app.request(`/api/workspaces/${ws.workspaceId}/documents/gone`, { method: 'DELETE' })
+
+    expect(
+      (await listed(app)).workspaces.find((w) => w.workspaceId === ws.workspaceId)?.documentCount,
+    ).toBe(0)
   })
 })

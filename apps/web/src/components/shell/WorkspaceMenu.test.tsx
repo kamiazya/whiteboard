@@ -9,7 +9,7 @@
 import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { WorkspaceMenu, type WorkspaceSwitcherSource } from './WorkspaceMenu.js'
+import { WorkspaceMenu, type WorkspaceRow, type WorkspaceSwitcherSource } from './WorkspaceMenu.js'
 
 const DESIGN = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 const NOTES = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
@@ -17,7 +17,7 @@ const NOTES = '01BX5ZZKBKACTAV9WEVGEMMVRZ'
 const listOnly: WorkspaceSwitcherSource = { list: () => Promise.resolve([]) }
 
 function renderMenu(
-  workspaces: WorkspaceEntry[],
+  workspaces: WorkspaceRow[],
   source: Partial<WorkspaceSwitcherSource> = {},
   {
     onSwitch = vi.fn(),
@@ -331,5 +331,37 @@ describe('WorkspaceMenu — naming, in place', () => {
   it('states nothing to edit until the rows say which workspace the address names', () => {
     renderMenu([], { rename: () => Promise.reject(new Error('not expected')) })
     expect(screen.queryByLabelText(/workspace name/i)).toBeNull()
+  })
+})
+
+describe('WorkspaceMenu — how much is in each workspace', () => {
+  it('puts the count on the row, so a list of names becomes a reason to pick one', () => {
+    renderMenu([
+      { workspaceId: DESIGN, segment: 'design', displayName: 'Design team', documentCount: 12 },
+      { workspaceId: NOTES, segment: 'notes', displayName: 'Notes', documentCount: 3 },
+    ])
+
+    expect(screen.getByRole('menuitem', { name: /design team/i }).textContent).toContain('12')
+    expect(screen.getByRole('menuitem', { name: /notes/i }).textContent).toContain('3')
+  })
+
+  it('shows a count of zero, which is the row a person most needs to recognise', () => {
+    // Guarded on `undefined`, not on falsiness: a truthiness check would hide
+    // every empty workspace, which is exactly the one whose emptiness is the
+    // useful fact.
+    renderMenu([
+      { workspaceId: DESIGN, segment: 'design', displayName: 'Design team', documentCount: 0 },
+    ])
+    expect(screen.getByRole('menuitem', { name: /design team/i }).textContent).toContain('0')
+  })
+
+  it('leaves the row alone when the keeper did not count', () => {
+    // Absent is not zero. The browser keeper counts nothing today — documents
+    // live in the workspace tree, and reading it would put loro-crdt behind a
+    // control the shell renders — so its rows must read as a plain name, not
+    // as an empty workspace.
+    renderMenu([{ workspaceId: DESIGN, segment: 'design', displayName: 'Design team' }])
+    const row = screen.getByRole('menuitem', { name: /design team/i })
+    expect(row.textContent).not.toMatch(/\d/)
   })
 })

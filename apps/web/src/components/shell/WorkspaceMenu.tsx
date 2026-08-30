@@ -23,8 +23,20 @@ import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
  * read in an effect keyed on this object, so a fresh one per render is a
  * fetch per render.
  */
+/**
+ * A workspace as the switcher needs it: its identity, plus how much is in it.
+ *
+ * `documentCount` is optional and absent is NOT zero — zero says the
+ * workspace is empty, which is exactly the row a person needs to recognise,
+ * while absent says this keeper did not count. The browser keeper is the
+ * absent case today: documents live in the workspace tree, so counting them
+ * means loading loro-crdt behind a control that renders in the app shell,
+ * which `browser-workspaces.ts` deliberately avoids.
+ */
+export type WorkspaceRow = WorkspaceEntry & { readonly documentCount?: number }
+
 export interface WorkspaceSwitcherSource {
-  list(): Promise<readonly WorkspaceEntry[]>
+  list(): Promise<readonly WorkspaceRow[]>
   /**
    * Answers the workspace that was created — including the handle it was
    * actually given.
@@ -56,7 +68,7 @@ export interface WorkspaceMenuProps {
   /** The handle the address currently carries. */
   readonly current: string
   /** The rows, loaded by the shell so its head can name the current one. */
-  readonly workspaces: readonly WorkspaceEntry[]
+  readonly workspaces: readonly WorkspaceRow[]
   readonly source: WorkspaceSwitcherSource
   readonly onSwitch: (handle: string) => void
   /** Replaces a row in the shell's copy after a rename answers. */
@@ -318,6 +330,17 @@ export function WorkspaceMenu({
                 {isCurrent ? '\u2713' : ''}
               </span>
               <span className="truncate">{workspaceLabel(w)}</span>
+              {/* Reads as part of the row's own sentence rather than as a
+                  separate column, so a keeper that does not count leaves no
+                  hole where a number would be. `0` is rendered like any other
+                  count — the check is against undefined, not against
+                  falsiness, which would silently hide every empty
+                  workspace. */}
+              {w.documentCount !== undefined && (
+                <span className="ml-auto shrink-0 pl-2 text-xs font-normal text-muted-foreground tabular-nums">
+                  {w.documentCount}
+                </span>
+              )}
             </button>
           )
         })}

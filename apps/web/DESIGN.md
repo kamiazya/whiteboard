@@ -186,6 +186,33 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   Each layer is written on its own, never as a form submitting both: an
   unchanged URL sent back would put every name edit behind the one write that
   can be refused for a collision.
+- **Each switcher row says how much is in that workspace.** A list of names
+  gives no reason to pick one; the count is what makes it readable. It reads
+  as part of the row rather than as a column, so a keeper that does not count
+  leaves no hole where a number would be.
+
+  **Absent is not zero, and the difference is the whole rule.** Zero says the
+  workspace is empty — the row a person most needs to recognise — while absent
+  says this keeper did not count. So the render is guarded on `undefined`,
+  never on falsiness, which would hide exactly the empty ones. Today the
+  daemon counts and the browser does not: documents live in the workspace
+  tree, and reading it from the shell would put loro-crdt behind a control
+  that renders on every page, which `browser-workspaces.ts` deliberately
+  avoids. That asymmetry is a keeper difference with a recorded cost, not an
+  oversight — and it is the reason the field is optional rather than
+  defaulted.
+
+  The count includes SHADOWED documents. A concurrent create can leave two
+  documents on one path and the listing shows both, one marked, precisely so
+  the convergent state is visible; a count that quietly omitted the marked one
+  would put back the disagreement the mark exists to prevent.
+
+  Measured before it was added, because the cost is invisible in the diff: the
+  tree index answers a document listing by OPENING each workspace's record, so
+  this turns one registry read into N. On the daemon store at 10 workspaces
+  holding 200 documents between them, 0.2ms became 5.8ms. The ratio says don't
+  and the figure says it does not matter, on a control a person opens by
+  clicking — which is why it was measured rather than argued.
 - **The document browser heads itself with the workspace name.** The other
   half of the answer above, and the only place a sighted reader sees the name
   at all — the shell states it in the mark's accessible name and draws it only

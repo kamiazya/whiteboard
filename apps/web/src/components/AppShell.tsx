@@ -1,4 +1,3 @@
-import type { WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { Settings } from 'lucide-react'
 import { lazy, Suspense, useEffect, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -10,7 +9,11 @@ import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-sto
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
 import { ConnectionStatus, connectionLabel, isSyncOff } from './connection/ConnectionStatus.js'
-import { WorkspaceMenu, type WorkspaceSwitcherSource } from './shell/WorkspaceMenu.js'
+import {
+  WorkspaceMenu,
+  type WorkspaceRow,
+  type WorkspaceSwitcherSource,
+} from './shell/WorkspaceMenu.js'
 
 // React.lazy for the same reason the browser page had it: the banner
 // pulls in daemon-probe.ts and its Zod parsing, and only the Local popover
@@ -116,7 +119,7 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   // The rows live HERE rather than in the menu, because the popover's head
   // names the current workspace and the head is the shell's. One fetch, two
   // readers.
-  const [rows, setRows] = useState<readonly WorkspaceEntry[]>([])
+  const [rows, setRows] = useState<readonly WorkspaceRow[]>([])
   const source = workspaces?.source
   useEffect(() => {
     if (source === undefined) return

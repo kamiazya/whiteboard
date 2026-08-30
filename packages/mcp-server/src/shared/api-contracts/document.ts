@@ -184,6 +184,22 @@ export const workspaceSummarySchema = z.object({
   workspaceId: z.string(),
   segment: workspaceSegmentSchema.optional(),
   displayName: workspaceDisplayNameSchema.optional(),
+  /**
+   * How many documents the workspace holds — what makes a switcher row worth
+   * reading, since a list of names alone gives no reason to pick one.
+   *
+   * SHADOWED documents count. A concurrent create can leave two documents on
+   * one path, and the listing shows both (one marked) precisely so the
+   * convergent state is visible rather than hidden; a count that quietly
+   * omitted the marked one would put back the disagreement the mark exists to
+   * prevent.
+   *
+   * Optional for the same additive reason as the two layers above, and
+   * absent is not zero: zero means "this workspace is empty", which is
+   * exactly the row a person needs to recognise, while absent means the
+   * responder did not count. Only a keeper that cannot count leaves it out.
+   */
+  documentCount: z.number().int().nonnegative().optional(),
 })
 
 export const listWorkspacesResponseSchema = z.object({
