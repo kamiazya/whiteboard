@@ -147,6 +147,41 @@ Native **Task list** = live board (in-flight / blocked / done; main session owns
 
 The hazard this project name closes is narrower than it sounds, and the general shape survives: **vitest only errors when a `--project` filter set is empty; a project name that matches nothing alongside a sibling name that DOES match is silent** — `--project web-jsdom --project web-browser` used to run only the browser project (unnamed `web-jsdom` matched nothing), reported its ~540 tests, and exited 0. That reads exactly like both suites passing. It let a real regression reach CI twice in one session before anyone noticed the count was too small. Naming this one project retires that one instance; any future typo'd or renamed `--project` value reopens the same class. Match the local command to the CI job, and treat a test count far below CI's as evidence the filter missed, not as good news.
 
+**Run the Node in `.node-version`, and let the guard tell you when you are not.**
+`local-node-version.test.ts` compares the running major against the pin (24
+today, which is what CI installs) and fails naming the consequence. The
+consequence is specific: on Node 22 **nine `web-jsdom` tests fail**, every one
+of them with a message about `Blob` — jsdom's own `Blob` implements `slice`,
+`text`, `arrayBuffer` and `bytes` and no `stream()` in BOTH majors, so what
+differs is undici's `new Response(blobLike)`, which reaches for `.stream()` on
+22 and does not on 24. What you see is
+`TypeError: object.stream is not a function` out of
+`node:internal/deps/undici`, pointing at a Blob the test wrote and at code the
+diff never touched.
+
+That is not a hypothetical either. A whole session read those nine as standing
+environment failures, said so in three PR bodies, and A/B-confirmed them
+against a clean `origin/main` — which is TRUE, and answers a different question
+than "why". Nothing said the checkout was on the wrong Node. Under the pin the
+same commands report **285 files / 2944 tests** and **358 / 4171 + 9 skipped**,
+digit-for-digit what CI's own logs say. `engines` in the published package is
+deliberately wider (`^22 || ^24 || >=26`) and is a different claim: that is
+what a CONSUMER may run the daemon on.
+
+**A test whose PREMISE this environment cannot establish skips, and says so —
+probed, never inferred.** Three EACCES tests need a file they cannot read, and
+`chmod 000` does not achieve that for root (nor on Windows, where the mode
+barely means anything); the code under test never receives the error it exists
+to handle, and the failure reads as a broken error path
+(`expected undefined to be an instance of Error` says nothing about uid).
+`CAN_DENY_FILE_READ` in `shared/test-utils` writes a file, closes it off and
+tries to read it, rather than asking `getuid() === 0` — which is a guess about
+a mechanism that capabilities, a read-only mount, a user namespace and Windows
+each decide independently. Guarded from both sides, because a skipped test
+reads exactly like a passing one: the probe is checked against a fresh
+mode-000 read, and on CI it MUST be true, so the skip cannot quietly disable
+those paths for everyone while every summary line stays green.
+
 The integrator's push is guarded on two sides. **Local (pre-push, `lefthook`)**: `pnpm -r typecheck` + `pnpm test --project mcp-node` + `pnpm lint:noconsole` run before the commit leaves the machine (pre-commit only formats staged files, to not slow the dev-loop's worktree commits). **`pnpm check:local` is the fuller local pass** — every gate CI's `check` job runs, plus `pnpm knip` from `verify` (seconds, and it catches the dead export a refactor leaves behind; the rest of `verify` builds and smokes the published artifacts and belongs in CI). It is DERIVED from `ci.yml`, not remembered: `local-gate-command.test.ts` fails when the job gains a step the script does not run. That guard exists because the remembered list actually drifted — a session's habitual five (`typecheck`, `lint`, `lint:noconsole`, `audit`, `knip`) was missing `intent:validate`, `secretlint` and `test:scripts`, and reported green for work whose CI `check` job had not been approximated at all. A local pass that is trusted and wrong is worse than none. **Cloud (post-push)**: GitHub Actions CI (`verify`) + CodeRabbit + AccessLint + WIP + CodeQL — monitor with the `Monitor` tool and triage with the `ci-triage` workflow/skill into Tasks / whiteboard canvases. **Cloud (mutation, report-only)**: `mutation.yml` runs Stryker over `canvas-render`'s property-covered modules — on a PR, scoped to the curated files that diff changed and posted as a sticky comment; weekly, the whole list into an artifact. It is deliberately NOT a gate — a mutation score belongs to the whole suite, not to whoever pushed last — and it exists because a property that asserts nothing passes every other gate there is. Its survivors are triaged like review findings, and each is verified by hand first (the tool can report a false survivor; see `package-canvas-render.md`).
 
 **PR merge gate.** `verify` + CodeQL are the authoritative gate. AI review is consulted **when it has actually run**, and its absence does not block a merge (user decision, 2026-08-02): CodeRabbit is on a plan whose per-developer rolling limit this repo's merge pace exhausts, so waiting on it serialises delivery behind a quota rather than behind a real signal. Batching several PRs at once is what burns the quota fastest — when a review matters for a specific change, open that PR alone and let it land. Before merging, still fetch **every bot's** PR review comments and triage each finding; the discipline below applies whenever there *are* comments. Fetch with `gh api repos/<owner>/<repo>/pulls/<n>/comments` + `gh pr view <n> --json reviews,comments`, then **read the comments from ALL bot authors — do not filter to a hardcoded reviewer list.** The surface currently includes **CodeRabbit** (`coderabbitai[bot]`, AI review — Free Plan so not guaranteed) and **`github-advanced-security[bot]`** (CodeQL code-scanning — its findings arrive as ordinary PR review comments on the plain `/pulls/<n>/comments` feed, no `security_events` scope needed, and are same-priority-or-higher security signal). (Gemini Code Assist is **sunset** as of 2026-07-27 — no longer reviews; do not wait on it.) Missing a bot because you scoped the sweep to two named reviewers is exactly the gap that let a CodeQL ReDoS comment slip past this gate — enumerate authors from the feed, don't assume. Triage each finding: (a) verify validity against the actual code (do not trust or dismiss blindly — check the claimed line/behavior; CodeQL security findings on untrusted-input paths get the same red-test-first + fix treatment as any CRITICAL, per the `ci-triage` skill's CodeQL rubric), (b) apply valid findings as commits on the PR branch, (c) for findings judged invalid/stale, record the reason (reply on the PR thread or note in the merge summary to the user). A reviewer skipping a PR (rate limits, plan limits) is acceptable to proceed past — note it when it happens, rather than waiting it out. **Dependabot** (dep-bump PRs + security alerts) has its own `dependabot-triage` workflow + `dependabot-review` skill. Hooks are a net, not the gate — CI is authoritative; `LEFTHOOK=0` / `--no-verify` bypass when justified.
