@@ -287,7 +287,7 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
               const row = miniGraphById.get(v.id)
               const operator = getOperatorAffordance(v.operator)
               return (
-                <div key={v.id} className="flex items-stretch gap-1.5">
+                <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
                   {/* Mini-graph lane. */}
                   {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */}
                   <svg className="shrink-0" width={24} height={36} viewBox="0 0 24 36" aria-hidden>
@@ -352,6 +352,22 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                         <span className="text-[11px] text-muted-foreground">
                           {operator.icon} {operator.label}
                         </span>
+                        {/* Only on the lanes HEAD is NOT on. A ring says "not
+                            yours" and colour is not a name, so without this a
+                            reader with two variations open has a row of
+                            history and no way to tell whose. The lane you ARE
+                            on is the frame the whole panel is read in —
+                            repeating it on every row states the obvious and
+                            makes the exceptions harder to see. */}
+                        {row?.active === false && (
+                          <span
+                            data-testid="version-lane-name"
+                            className="text-[11px] font-medium truncate"
+                            style={{ color: row.dotColor }}
+                          >
+                            {displayBranchName(v.branchName ?? 'main')}
+                          </span>
+                        )}
                         <span className="text-[11px] text-muted-foreground">
                           {formatRelative(v.createdAt)} · {v.elementCount} els
                           {row?.branchOut ? (

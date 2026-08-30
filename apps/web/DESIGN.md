@@ -232,6 +232,14 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 
   The empty state moved with the filter. It is the document's history now, not
   one lane's, so an empty list means there is nothing anywhere.
+
+  **A row on another lane says which lane, and a row on yours does not.** The
+  ring answers "not the one you are on" and stops there; colour is not a name,
+  so with two variations open a reader has a row of history and no way to tell
+  whose. The lane you ARE on is the frame the whole panel is read in — naming
+  it on every row states the obvious and makes the exceptions harder to find,
+  which is the same reason the shell names the current workspace once rather
+  than on each document.
 - **Each switcher row says how much is in that workspace.** A list of names
   gives no reason to pick one; the count is what makes it readable. It reads
   as part of the row rather than as a column, so a keeper that does not count

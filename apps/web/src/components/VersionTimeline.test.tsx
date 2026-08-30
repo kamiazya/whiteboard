@@ -283,6 +283,27 @@ describe('VersionTimeline', () => {
     expect(rings[0]?.getAttribute('stroke-width')).toBe('2')
   })
 
+  it('names the variation a row is on, but only on the rows HEAD is not on', async () => {
+    // A ring says "not the lane you are on". It does not say WHICH lane, and
+    // colour is not a name — with two variations open the reader has a row of
+    // history and no way to tell whose. The lane HEAD is on takes no label
+    // for the same reason the shell does not repeat the current workspace on
+    // every row: it is the frame, so saying it once is saying it.
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+
+    await waitFor(() => {
+      expect(screen.getByText(/4 els/)).toBeTruthy()
+    })
+
+    // The `feature` row, and no other, carries the lane's name.
+    const labels = screen.getAllByTestId('version-lane-name')
+    expect(labels.length).toBe(1)
+    expect(labels[0]?.textContent).toBe('feature')
+
+    // And it is on the row it describes, not floating beside the list.
+    expect(labels[0]?.closest('[data-testid="version-row"]')?.textContent).toContain('4 els')
+  })
+
   it('offers restore only on the lane HEAD is on', async () => {
     // Showing another variation history is not the same as offering to
     // restore from it. What restoring one variation version into another
