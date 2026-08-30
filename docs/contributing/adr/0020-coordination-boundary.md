@@ -237,6 +237,36 @@ intuitive fix and the wrong one: electing a single GC leader removes
 GC-versus-GC races and leaves GC-versus-WRITE untouched, because the write
 barrier is in-process and another instance's write never takes it.
 
+*Added 2026-08-30: the sweeper is now armed in server mode, which is where
+this decision was actually being spent.* It had been declared and left
+`worker: null`, so the multi-instance deployment was the one taking no
+garbage collection at all and unreferenced uploads accumulated indefinitely.
+What held it back was a question about running a deleter with several
+instances against one data directory, and working through it found nothing
+single-instance in the pass: it catches up on the record before deciding,
+fences on the position it decided at, stands down while a backup is
+assembling the directory, and spares anything younger than the grace window.
+Two passes racing the same file is the benign half — the loser's `unlink`
+answers `ENOENT` and is logged and skipped, which is what "no leader" costs.
+
+The grace period turned out not to be a multi-instance question at all. It is
+keyed on the FILE's mtime, which the shared filesystem supplies to every
+instance alike, and it covers the upload-then-save window rather than
+anything about who is purging. What clock skew between instances can do is
+shrink the effective window, by whatever the instances disagree by — against
+an hour, and with the instances already required to share a database, that is
+not the exposure worth designing for.
+
+The real residual is the one stated above and is unchanged by arming this:
+a write from another instance landing between the fence and the unlinks.
+Worth being precise about how a file becomes referenced AGAIN after every
+live state, branch tip and saved version has stopped pointing at it, because
+that is the only shape this loses — an undo or a paste restoring a node.
+Which is a hazard the single-instance daemon already has, since the grace
+period is keyed on the file's age and not on how long it has been
+unreferenced; running several instances widens the window it can land in by
+milliseconds, not by a category.
+
 ## Consequences
 
 Running more than one instance needs one thing this design does not

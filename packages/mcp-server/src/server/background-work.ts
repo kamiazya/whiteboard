@@ -47,16 +47,27 @@ type InstanceReach =
 /**
  * What this costs the loop that is serving requests.
  *
- * `in-process` carries a MEASURED figure and the date it was taken, not an
- * estimate: the whole reason this field exists is that a blocking call is
- * indistinguishable from a non-blocking one in the source. Use
- * `measureLoopAvailability` (shared/test-utils/loop-availability.ts) to
- * produce it, and note that a sampler which records nothing is reporting
- * total blockage, not none — that mistake is why the number has to come from
- * a shared instrument rather than a hand-rolled one.
+ * `in-process` carries a MEASURED figure, what was measured, and when: the
+ * whole reason this field exists is that a blocking call is
+ * indistinguishable from a non-blocking one in the source. Produce it with
+ * `measureLoopAvailability` (shared/test-utils/loop-availability.ts), and
+ * note that a sampler which records nothing is reporting total blockage, not
+ * none — that mistake is why the number has to come from a shared instrument
+ * rather than a hand-rolled one.
+ *
+ * `worstStallMs` is the LONGEST SINGLE stretch the loop ran nothing, not the
+ * total. A pass that costs a second of CPU in twenty-millisecond pieces is a
+ * daemon that is busy; the same second unbroken is a daemon that is gone, and
+ * only the second one is visible to whoever is waiting on a request.
+ *
+ * `fixture` says what produced the number, and it is the field that stops
+ * this being decoration. Three of these declarations said `0` with a date
+ * beside it and no measurement behind any of them; both were wrong, and the
+ * file-GC one was wrong by three orders of magnitude — 7404ms unbroken.
+ * A number with nothing named next to it is a guess wearing a date.
  */
 type LoopCost =
-  | { runs: 'in-process'; measuredBlockMs: number; measuredOn: string }
+  | { runs: 'in-process'; worstStallMs: number; fixture: string; measuredOn: string }
   | { runs: 'subprocess'; because: string }
 
 export interface BackgroundWork {
