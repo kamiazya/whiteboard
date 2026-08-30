@@ -4,8 +4,8 @@ import {
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
 import {
-  type DocumentIndex,
   DocumentHasDescendantsError,
+  type DocumentIndex,
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
@@ -31,7 +31,7 @@ import {
   type RenameDocumentPathResponse,
   renameDocumentPathRequestSchema,
   renameWorkspaceRequestSchema,
-  type WorkspaceMutationResponse,
+  type WorkspaceSummary,
 } from '../../../shared/api-contracts/document.js'
 import type { ApiErrorBody } from '../../../shared/api-contracts/errors.js'
 import { getLogger } from '../../log.js'
@@ -141,7 +141,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
         ...(segment === undefined ? {} : { segment }),
         displayName,
       })
-      const response: WorkspaceMutationResponse = {
+      const response: WorkspaceSummary = {
         workspaceId,
         ...(segment === undefined ? {} : { segment }),
         displayName,
@@ -185,7 +185,7 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // the address exactly as every other addressed surface does.
       const workspaceId = await workspaceIdFromHandle(c, handle)
       const renamed = await deps.documentIndex.renameWorkspace({ workspaceId, ...parsed.data })
-      const response: WorkspaceMutationResponse = {
+      const response: WorkspaceSummary = {
         workspaceId: renamed.workspaceId,
         ...(renamed.segment === undefined ? {} : { segment: renamed.segment }),
         ...(renamed.displayName === undefined ? {} : { displayName: renamed.displayName }),

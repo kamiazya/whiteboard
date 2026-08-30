@@ -14,8 +14,10 @@ import { describe, expect, it } from 'vitest'
 import {
   type CreateDocumentRequest,
   type CreateDocumentResponse,
+  type CreateWorkspaceRequest,
   createDocumentRequestSchema,
   createDocumentResponseSchema,
+  createWorkspaceRequestSchema,
   type DocumentSummary,
   documentSummarySchema,
   type ExportDocumentJsonRequest,
@@ -35,6 +37,7 @@ import {
   pruneSandwichedVersionsResponseSchema,
   purgeResultSchema,
   type RestoreVersionRequest,
+  renameWorkspaceRequestSchema,
   restoreVersionRequestSchema,
   type SaveVersionRequest,
   type SaveVersionResponse,
@@ -47,9 +50,6 @@ import {
   type VersionEntry,
   versionEntrySchema,
   type WorkspaceSummary,
-  type CreateWorkspaceRequest,
-  createWorkspaceRequestSchema,
-  renameWorkspaceRequestSchema,
   workspaceSummarySchema,
 } from './document.js'
 import { roundtrip } from './roundtrip.test-helper.js'

@@ -8,7 +8,7 @@ import {
   deleteDocumentResponseSchema,
   listWorkspacesResponseSchema,
   renameDocumentPathResponseSchema,
-  workspaceMutationResponseSchema,
+  workspaceSummarySchema,
 } from '../../../shared/api-contracts/document.js'
 import { seedWorkspaceRow, withTempDataDir } from '../_test-helpers.js'
 
@@ -942,7 +942,7 @@ describe('POST /api/workspaces', () => {
     const res = await create(app, { displayName: 'Marketing Team' })
 
     expect(res.status).toBe(201)
-    const created = workspaceMutationResponseSchema.parse(await res.json())
+    const created = workspaceSummarySchema.parse(await res.json())
     expect(created.displayName).toBe('Marketing Team')
     expect(created.segment).toBe('marketing-team')
     // ADR-0019's canonical layer is minted HERE. A caller naming one would be
@@ -957,10 +957,10 @@ describe('POST /api/workspaces', () => {
 
   it('gives the second workspace of the same name an address of its own', async () => {
     const app = createWorkspacesRouter()
-    const first = workspaceMutationResponseSchema.parse(
+    const first = workspaceSummarySchema.parse(
       await (await create(app, { displayName: 'Notes' })).json(),
     )
-    const second = workspaceMutationResponseSchema.parse(
+    const second = workspaceSummarySchema.parse(
       await (await create(app, { displayName: 'Notes' })).json(),
     )
 
@@ -978,7 +978,7 @@ describe('POST /api/workspaces', () => {
     // A name the segment charset cannot spell. ADR-0019 leaves the layer
     // absent rather than writing a mangled approximation — the workspace is
     // addressed by its canonical id until a rename gives it one.
-    const created = workspaceMutationResponseSchema.parse(
+    const created = workspaceSummarySchema.parse(
       await (await create(app, { displayName: '設計ノート' })).json(),
     )
     expect(created.displayName).toBe('設計ノート')
@@ -999,7 +999,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ displayName }),
     })
-    return workspaceMutationResponseSchema.parse(await res.json())
+    return workspaceSummarySchema.parse(await res.json())
   }
 
   async function patch(
@@ -1020,7 +1020,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
 
     const res = await patch(app, before.workspaceId, { segment: 'after', displayName: 'After' })
     expect(res.status).toBe(200)
-    expect(workspaceMutationResponseSchema.parse(await res.json())).toEqual({
+    expect(workspaceSummarySchema.parse(await res.json())).toEqual({
       workspaceId: before.workspaceId,
       segment: 'after',
       displayName: 'After',
@@ -1033,7 +1033,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
     expect(before.segment).toBe('keeps-its-url')
 
     const res = await patch(app, before.workspaceId, { displayName: 'Renamed' })
-    const renamed = workspaceMutationResponseSchema.parse(await res.json())
+    const renamed = workspaceSummarySchema.parse(await res.json())
     expect(renamed.displayName).toBe('Renamed')
     expect(renamed.segment).toBe('keeps-its-url')
   })
@@ -1044,9 +1044,7 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
 
     const res = await patch(app, 'addressed-by-segment', { displayName: 'Renamed through it' })
     expect(res.status).toBe(200)
-    expect(workspaceMutationResponseSchema.parse(await res.json()).workspaceId).toBe(
-      before.workspaceId,
-    )
+    expect(workspaceSummarySchema.parse(await res.json()).workspaceId).toBe(before.workspaceId)
   })
 
   it('answers 404 for a workspace that does not exist', async () => {
@@ -1085,8 +1083,6 @@ describe('PATCH /api/workspaces/:workspaceId', () => {
       displayName: 'Named at last',
     })
     expect(res.status).toBe(200)
-    expect(workspaceMutationResponseSchema.parse(await res.json()).displayName).toBe(
-      'Named at last',
-    )
+    expect(workspaceSummarySchema.parse(await res.json()).displayName).toBe('Named at last')
   })
 })

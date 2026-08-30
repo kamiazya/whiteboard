@@ -2,11 +2,13 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import {
   createDaemonFetch,
   createDocument,
+  createWorkspace,
   deleteDocument,
   getDocumentSnapshot,
   listDocuments,
   listWorkspaces,
   renameDocumentPath,
+  renameWorkspace,
   setDocumentDisplayName,
   updateDocument,
 } from './daemon-api-client.js'
@@ -325,5 +327,72 @@ describe('renameDocumentPath', () => {
     await expect(
       renameDocumentPath(fetchFn, DAEMON_BASE_URL, 'w1', 'design/notes', 'archive/notes'),
     ).rejects.toMatchObject({ status: 409, message: 'Path "archive/notes/a" already exists' })
+  })
+})
+
+describe('createWorkspace', () => {
+  it('POSTs the display name and nothing else, and parses what came back', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(
+        jsonResponse({ workspaceId: 'w1', segment: 'marketing', displayName: 'Marketing' }, 201),
+      )
+    const result = await createWorkspace(fetchFn, DAEMON_BASE_URL, 'Marketing')
+
+    expect(result).toEqual({ workspaceId: 'w1', segment: 'marketing', displayName: 'Marketing' })
+    const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${DAEMON_BASE_URL}/api/workspaces`)
+    expect(init.method).toBe('POST')
+    // The other two of ADR-0019's layers are the server's to decide. Sending
+    // either would be this client claiming an identity it does not own.
+    expect(JSON.parse(String(init.body))).toEqual({ displayName: 'Marketing' })
+  })
+
+  it('rejects a malformed response body without returning raw JSON', async () => {
+    const fetchFn = vi.fn().mockResolvedValue(jsonResponse({ nope: true }, 201))
+    await expect(createWorkspace(fetchFn, DAEMON_BASE_URL, 'X')).rejects.toThrow(/validation/i)
+  })
+
+  it('surfaces the daemon reason for a refused segment', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ title: 'Segment "taken" is already in use' }, 409))
+    await expect(createWorkspace(fetchFn, DAEMON_BASE_URL, 'Taken')).rejects.toThrow(
+      /already in use/i,
+    )
+  })
+})
+
+describe('renameWorkspace', () => {
+  it('PATCHes only the layers it was given, so an omitted one stays untouched', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ workspaceId: 'w1', segment: 'kept', displayName: 'New' }))
+    const result = await renameWorkspace(fetchFn, DAEMON_BASE_URL, 'w1', { displayName: 'New' })
+
+    expect(result.segment).toBe('kept')
+    const [url, init] = fetchFn.mock.calls[0] as [string, RequestInit]
+    expect(url).toBe(`${DAEMON_BASE_URL}/api/workspaces/w1`)
+    expect(init.method).toBe('PATCH')
+    // Absent, not null: the port reads an absent field as "leave this layer
+    // alone", and a null would be a different request entirely.
+    expect(JSON.parse(String(init.body))).toEqual({ displayName: 'New' })
+  })
+
+  it('addresses the workspace by whatever handle it was given', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ workspaceId: 'w1', segment: 'by-segment' }))
+    await renameWorkspace(fetchFn, DAEMON_BASE_URL, 'by segment', { segment: 'moved' })
+    expect(fetchFn.mock.calls[0]?.[0]).toBe(`${DAEMON_BASE_URL}/api/workspaces/by%20segment`)
+  })
+
+  it('surfaces the daemon reason for a refused rename', async () => {
+    const fetchFn = vi
+      .fn()
+      .mockResolvedValue(jsonResponse({ title: 'Segment "taken" is already in use' }, 409))
+    await expect(
+      renameWorkspace(fetchFn, DAEMON_BASE_URL, 'w1', { segment: 'taken' }),
+    ).rejects.toThrow(/already in use/i)
   })
 })

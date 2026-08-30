@@ -21,9 +21,9 @@ import {
   listLocalDocuments,
 } from '../lib/local-document-summary.js'
 import { createLocalFilesSource } from '../lib/local-files-source.js'
-import { workspaceLabel } from '../lib/workspace-handle.js'
 import { LoroStore } from '../lib/loro-store.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import { workspaceLabel } from '../lib/workspace-handle.js'
 import { createSeededDocument, type LoroStoreLike } from './use-browser-document-controller.js'
 
 export interface BrowserIndexPageProps {
