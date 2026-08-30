@@ -246,6 +246,16 @@ export function DaemonIndexPage({
     // first-listed fallback below, unchanged.
     if (wanted === null && refetchedForRef.current !== workspace) {
       refetchedForRef.current = workspace
+      // Unselected for the duration, and that is the load-bearing half. The
+      // re-read can FAIL, and leaving the previous workspace selected under an
+      // address naming another is the mismatch the stale-address branch below
+      // exists to refuse: the error state offers `Create a canvas` while
+      // something is selected, so a create there would post the document to
+      // the workspace the URL does not name. With nothing selected the same
+      // state offers `Try again`, which is the only honest action while the
+      // address is unresolved. On success `loadWorkspaces` selects the
+      // addressed workspace itself, since there is no current value to keep.
+      setSelectedWorkspace(null)
       void loadWorkspaces()
       return
     }

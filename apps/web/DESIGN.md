@@ -198,6 +198,15 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   else's, and that was true while every create path addressed a
   (workspace, path) pair the page could not name; `POST /api/workspaces`
   retired the premise by minting the id itself.
+- **An address the page cannot resolve yet leaves NOTHING selected.** The
+  daemon page re-reads its list once when the address names a workspace the
+  list does not hold, because the switcher may have just created it. That
+  re-read can fail — and keeping the previous workspace selected through the
+  failure puts the page on one workspace under an address naming another,
+  which is the mismatch the stale-address fallback already refuses to leave
+  behind. The error state offers `Create a canvas` only while something is
+  selected, so the stale selection is not cosmetic: a create there posts the
+  document to the workspace the URL does not name.
 - **A rename changes identity and nothing else.** The switcher's rename
   answers with the three identity layers, and the row it lands on also carries
   what the keeper counted — so the answer is MERGED into the row, never

@@ -97,6 +97,10 @@ interface MockRoutes {
    *  default. Consulted per call, so a test can answer 404 once and then
    *  behave normally — a workspace deleted out from under the page. */
   onListDocuments?: (workspaceId: string) => Response | undefined
+  /** Override the workspaces GET. Return undefined to fall through to the
+   *  default. Consulted per call, so a test can answer 500 only on the
+   *  re-list a switch triggers. */
+  onListWorkspaces?: () => Response | undefined
   /** Rows the trash GET answers with; defaults to an empty trash. */
   trashByWorkspace?: Record<string, Array<{ documentId: string; path: string; deletedAt: number }>>
 }
@@ -105,6 +109,8 @@ function installFetchMock(routes: MockRoutes) {
   const fetchMock = vi.fn((input: RequestInfo | URL, init?: RequestInit) => {
     const url = typeof input === 'string' ? input : input.toString()
     if (url.endsWith('/api/workspaces') && (!init || init.method === undefined)) {
+      const override = routes.onListWorkspaces?.()
+      if (override) return Promise.resolve(override)
       const respond = () => jsonResponse({ workspaces: routes.workspaces })
       // Held open so a test can inspect what renders WHILE the re-list is in
       // flight — the window in which a deleted workspace is still selected.
@@ -534,6 +540,55 @@ describe('DaemonIndexPage', () => {
     expect(await screen.findByText('freshly-made')).toBeTruthy()
     expect(screen.queryByText('alpha')).toBeNull()
     expect(onWorkspaceResolved).not.toHaveBeenCalledWith('ws-a')
+  })
+
+  it('does not leave the old workspace usable when the re-list for a new one fails', async () => {
+    // The refetch above is a second chance, not a guarantee. When it fails the
+    // page still holds the PREVIOUS workspace selected while the address names
+    // the new one — and a create from that state posts the document to the
+    // workspace the URL does not name. The same mismatch the stale-address
+    // branch below already refuses to leave behind.
+    let workspaceCalls = 0
+    const routes = {
+      workspaces: [{ workspaceId: 'ws-a' }] as Array<{ workspaceId: string; segment?: string }>,
+      documentsByWorkspace: {
+        'ws-a': [{ path: 'alpha', updatedAt: new Date().toISOString() }],
+      },
+      onListWorkspaces: () => {
+        workspaceCalls += 1
+        // The first load settles the page; the re-list a switch triggers fails.
+        return workspaceCalls === 1 ? undefined : jsonResponse({ message: 'nope' }, 500)
+      },
+    }
+    installFetchMock(routes)
+    const onOpenDocument = vi.fn()
+    const { rerender } = render(
+      <DaemonIndexPage
+        daemonBaseUrl={DAEMON_BASE_URL}
+        workspace="ws-a"
+        onOpenDocument={onOpenDocument}
+      />,
+    )
+    expect(await screen.findByText('alpha')).toBeTruthy()
+
+    rerender(
+      <MemoryRouter initialEntries={['/']}>
+        <DaemonIndexPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspace="ws-new"
+          onOpenDocument={onOpenDocument}
+        />
+      </MemoryRouter>,
+    )
+
+    await waitFor(() => expect(screen.getByRole('alert')).toBeTruthy())
+    // The error state offers `Create a canvas` only while a workspace is still
+    // SELECTED, and that selection would be the one the address just left. So
+    // the affordance itself is the evidence: a create here posts the document
+    // to `ws-a` under an address naming `ws-new`.
+    expect(screen.queryByRole('button', { name: /create a canvas/i })).toBeNull()
+    expect(screen.getByRole('button', { name: /try again/i })).toBeTruthy()
+    expect(screen.queryByText('alpha')).toBeNull()
   })
 
   it('follows a segment the workspace was renamed to a moment ago', async () => {
