@@ -551,7 +551,7 @@ export function BrowserDocumentPage({
     isDocumentReadFailure(backendError) ? backendError : null,
   )
 
-  const nodeInEditor = useNodeInEditor(canvas, onChange)
+  const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
   const documentOpsFilenameBase = sanitizeExportFilenameBase(documentName ?? 'canvas')
   const { exportError, handleExport } = useSceneExport({
