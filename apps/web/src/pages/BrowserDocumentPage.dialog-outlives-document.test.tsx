@@ -332,7 +332,12 @@ describe('a destructive dialog does not outlive its document', () => {
     await act(async () => {
       navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
     })
-    for (let i = 0; i < 100 && !document.body.textContent?.includes(ARRIVED_AFTER); i++) {
+    // Longer than the other two cases here, and measured rather than guessed:
+    // with the surface open this page also holds a CodeMirror instance, and
+    // under the full suite the switch did not land inside their 5s. Still
+    // well inside this file's 30s per-test budget, so a real failure lands on
+    // an assertion rather than turning into a timeout that names nothing.
+    for (let i = 0; i < 300 && !document.body.textContent?.includes(ARRIVED_AFTER); i++) {
       await new Promise((r) => setTimeout(r, 50))
     }
     await act(async () => {})

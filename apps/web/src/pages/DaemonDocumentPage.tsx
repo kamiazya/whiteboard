@@ -360,11 +360,17 @@ export function DaemonDocumentPage({
   // and local-update forwarding as every other change, with no second write
   // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
   // value passed alongside is the unchanged one this command does not touch.
-  // The same identity this page's own mount is keyed on in App.tsx. Passing
-  // it is belt-and-braces here — the key already rebuilds the page on a
-  // switch — but the hook's contract is the hook's, not a caller's mount
-  // strategy, and the browser page next door has no key at all.
-  const nodeInEditor = useNodeInEditor(canvasValue, onChange, `${workspaceId}:${path}`)
+  // The CONTROLLER's identity, not this page's props. They are not the same
+  // thing: the controller owns its own `path` and `switchDocument`, and five
+  // call sites here move the document without the props ever changing — one
+  // of them is this very surface's own link-following
+  // (`onOpenDocument` below). Keying on the props would leave the surface
+  // open across exactly the switch it is most likely to be part of.
+  const nodeInEditor = useNodeInEditor(
+    canvasValue,
+    onChange,
+    `${controller.workspaceId}:${controller.path}`,
+  )
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
