@@ -262,7 +262,12 @@ export function createCanvasSnapshotTool(deps: ServerDeps) {
       )
       // The one fact the node list above cannot restate. Matched by id, so a
       // node past `SNAPSHOT_MAX_NODES` simply never gets asked about.
-      const overflowing = new Set(laidOut.filter((n) => n.truncated === true).map((n) => n.id))
+      // `overflows`, not `truncated`: the digest distinguishes "there is more
+      // of this than is painted" from "this does not fit its box", and the
+      // advice below — resize the node or shorten its text — is the answer to
+      // the second. A label kept whole at one code point too wide is hidden by
+      // nothing and still needs a bigger box.
+      const overflowing = new Set(laidOut.filter((n) => n.overflows === true).map((n) => n.id))
       return {
         ...snapshot,
         nodes: snapshot.nodes.map((node) =>

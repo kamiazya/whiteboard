@@ -2,7 +2,7 @@
 // topology: outermost-group units, fixed-first-anchor band alignment (no
 // running-mean chaining), bounded overlap resolution, locked nodes as
 // fixed obstacles. Only boxes that actually move are reported.
-import { describe, expect, it } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { fc, fcTest, withDefaults } from './test-utils/fast-check.js'
 import type { TidyNode } from './tidy.js'
 import { tidyNodes } from './tidy.js'
@@ -100,6 +100,16 @@ describe('scope and totality', () => {
   })
 })
 
+const TIDY_MARGIN_PX = 24
+const TIDY_GRID_PX = 8
+
+const rectOf = (n: TidyNode) => ({ x: n.x, y: n.y, w: n.width, h: n.height })
+const overlapsWithMargin = (a: ReturnType<typeof rectOf>, b: ReturnType<typeof rectOf>) =>
+  a.x < b.x + b.w + TIDY_MARGIN_PX &&
+  b.x < a.x + a.w + TIDY_MARGIN_PX &&
+  a.y < b.y + b.h + TIDY_MARGIN_PX &&
+  b.y < a.y + a.h + TIDY_MARGIN_PX
+
 describe('tidy properties', () => {
   const nodeArb = fc.record({
     x: fc.integer({ min: 0, max: 640 }),
@@ -107,12 +117,166 @@ describe('tidy properties', () => {
     w: fc.constantFrom(60, 100, 140),
     h: fc.constantFrom(40, 60),
   })
+  const plainNodes = (rects: readonly { x: number; y: number; w: number; h: number }[]) =>
+    rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h))
+
   fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
     'tidy is idempotent: a second pass moves nothing',
     (rects) => {
-      const nodes = rects.map((r, i) => box(`n${i}`, r.x, r.y, r.w, r.h))
+      const nodes = plainNodes(rects)
       const once = applyMoves(nodes, [...tidyNodes(nodes)])
       expect(tidyNodes(once)).toEqual([])
     },
   )
+
+  fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
+    'nothing is left overlapping, which is what the whole pass is for',
+    (rects) => {
+      // Idempotence alone is satisfied by a tidy that does NOTHING, and
+      // separation is the reason the module exists. Stated over plain
+      // singletons, because two members of one group unit are allowed to
+      // overlap each other — the unit moves as a whole.
+      const nodes = plainNodes(rects)
+      const after = applyMoves(nodes, [...tidyNodes(nodes)])
+      const collisions = after.flatMap((a, i) =>
+        after.slice(i + 1).filter((b) => overlapsWithMargin(rectOf(a), rectOf(b))),
+      )
+      expect(collisions).toEqual([])
+    },
+  )
+
+  fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
+    'every position it emits sits ON the grid',
+    (rects) => {
+      // Both movers land on the grid — banding snaps to it, and an overlap hop
+      // rounds AWAY from the collider onto it. Off-grid output would feed the
+      // next pass's banding and unsettle the fixpoint, so this is part of why
+      // idempotence holds rather than an independent nicety.
+      const offGrid = [...tidyNodes(plainNodes(rects))].filter(
+        (m) => m.x % TIDY_GRID_PX !== 0 || m.y % TIDY_GRID_PX !== 0,
+      )
+      expect(offGrid).toEqual([])
+    },
+  )
+
+  fcTest.prop([fc.array(nodeArb, { minLength: 2, maxLength: 12 })], withDefaults({ numRuns: 80 }))(
+    'it reports only nodes that actually moved',
+    (rects) => {
+      const nodes = plainNodes(rects)
+      const byId = new Map(nodes.map((n) => [n.id, n]))
+      const noOps = [...tidyNodes(nodes)].filter(
+        (m) => byId.get(m.id)?.x === m.x && byId.get(m.id)?.y === m.y,
+      )
+      expect(noOps).toEqual([])
+    },
+  )
+
+  /**
+   * Groups, locks and scope — none of which the plain domain above can
+   * produce, and which between them own most of this module. A group only
+   * scoops what its box CONTAINS, so the enclosing box is computed from the
+   * members rather than drawn: independently drawn boxes contain one another
+   * almost never, and the scooping would go untested exactly as it did.
+   */
+  const scenarioArb = fc
+    .record({
+      rects: fc.array(nodeArb, { minLength: 2, maxLength: 8 }),
+      grouped: fc.integer({ min: 0, max: 4 }),
+      locked: fc.integer({ min: 0, max: 2 }),
+      scoped: fc.boolean(),
+    })
+    .map(({ rects, grouped, locked, scoped }) => {
+      const members = plainNodes(rects)
+      const wrapped = members.slice(0, Math.min(grouped, members.length))
+      const nodes: TidyNode[] = [...members]
+      if (wrapped.length >= 2) {
+        const x = Math.min(...wrapped.map((n) => n.x))
+        const y = Math.min(...wrapped.map((n) => n.y))
+        const right = Math.max(...wrapped.map((n) => n.x + n.width))
+        const bottom = Math.max(...wrapped.map((n) => n.y + n.height))
+        nodes.unshift(box('grp', x, y, right - x, bottom - y, 'group'))
+      }
+      const lockedIds = new Set(nodes.slice(0, locked).map((n) => n.id))
+      const scope = scoped
+        ? new Set(nodes.filter((_, i) => i % 2 === 0).map((n) => n.id))
+        : undefined
+      return { nodes, lockedIds, scope }
+    })
+
+  const tidyScenario = ({
+    nodes,
+    lockedIds,
+    scope,
+  }: {
+    nodes: TidyNode[]
+    lockedIds: Set<string>
+    scope: Set<string> | undefined
+  }) =>
+    tidyNodes(nodes, {
+      locked: (id) => lockedIds.has(id),
+      ...(scope === undefined ? {} : { scope }),
+    })
+
+  // What the scenario domain actually reached, guarded from both sides. A
+  // property over groups that never generates a group passes for the wrong
+  // reason, and reads exactly like one that does. Measured over 120 runs:
+  // a group node in 65, a lock in 77, a scope in 61, and some move emitted in
+  // 96 — so the floor is far below each without pinning a distribution.
+  const REACHED = {
+    group: 'the board contains a group node, whose box scoops members',
+    locked: 'at least one id is locked',
+    scope: 'a scope is supplied, so some units are immobile',
+    moved: 'the pass emitted at least one move',
+  } as const
+  const reached = new Map<string, number>()
+  const REACHED_FLOOR = 10
+  const note = (key: keyof typeof REACHED, hit: boolean) => {
+    if (hit) reached.set(key, (reached.get(key) ?? 0) + 1)
+  }
+  afterAll(() => {
+    expect(
+      Object.fromEntries(
+        Object.keys(REACHED).map((key) => [key, (reached.get(key) ?? 0) >= REACHED_FLOOR]),
+      ),
+    ).toEqual(Object.fromEntries(Object.keys(REACHED).map((key) => [key, true])))
+  })
+
+  fcTest.prop([scenarioArb], withDefaults({ numRuns: 120 }))(
+    'a locked node is never moved',
+    (scenario) => {
+      const moves = tidyScenario(scenario)
+      note(
+        'group',
+        scenario.nodes.some((n) => n.type === 'group'),
+      )
+      note('locked', scenario.lockedIds.size > 0)
+      note('scope', scenario.scope !== undefined)
+      note('moved', moves.length > 0)
+
+      expect(moves.filter((m) => scenario.lockedIds.has(m.id))).toEqual([])
+    },
+  )
+
+  fcTest.prop([scenarioArb], withDefaults({ numRuns: 120 }))(
+    'tidy is deterministic — the same board yields the same moves',
+    (scenario) => {
+      expect(tidyScenario(scenario)).toEqual(tidyScenario(scenario))
+    },
+  )
+
+  fcTest.prop(
+    [fc.array(nodeArb, { minLength: 2, maxLength: 8 }), fc.nat({ max: 7 })],
+    withDefaults({ numRuns: 80 }),
+  )('a node with non-finite geometry is dropped, and the rest still tidy', (rects, which) => {
+    // `usable` exists for exactly this, and nothing generated one: a stored
+    // canvas can hold a NaN coordinate, and the pass must not turn into NaN
+    // moves because of it.
+    const nodes = plainNodes(rects)
+    const index = which % nodes.length
+    const broken = nodes.map((n, i) => (i === index ? { ...n, x: Number.NaN } : n))
+    const moves = tidyNodes(broken)
+
+    expect(moves.some((m) => m.id === nodes[index]?.id)).toBe(false)
+    expect(moves.every((m) => Number.isFinite(m.x) && Number.isFinite(m.y))).toBe(true)
+  })
 })

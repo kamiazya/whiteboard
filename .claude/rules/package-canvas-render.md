@@ -1015,6 +1015,32 @@ the table alone.
   own files, not somebody else's debt — and it is why the score is never a
   merge condition: a survivor can be the correct state of the world, and only
   a reader can say.
+  **A differential oracle is blind to whatever it SHARES with its subject.**
+  The third failure mode the lane found, and the least visible of the three,
+  because the property reads as the strongest kind there is. `edge-crossing-
+  sweep`'s oracle is the full O(E^2) scan — deliberately, since the sweep's
+  claim is exact equality with it — but both sides call the same
+  `scoreSegmentPair`, so every mutation inside the narrow phase changed the
+  oracle and the subject together and the property stayed green. Measured: 38
+  survivors on that file, 22 of them in that one function. The fix is not a
+  denser domain but a SECOND oracle that shares no code — the same
+  specification solved with different machinery (exact BigInt rationals
+  against sign-normalized cross-multiplication), plus a deterministic example
+  per comparison the reference cannot pin on its own — four clearance ends,
+  four endpoint incidences, one diagonal length. 83.1% to 89.3%, and every
+  mutant still standing is equivalent (below). When reading a differential
+  property, ask what the oracle imports before trusting what it covers.
+  **Stryker attributes ANY failure during a mutant's run to that mutant, so a
+  flaky suite inflates the score.** The mirror of the false SURVIVOR above,
+  and harder to notice because it moves the number the right way. Measured on
+  `edge-crossing-sweep`: the y-gate mutant (`if (…) continue` -> `if (false)`)
+  came back Killed in one run and Survived in the next three — and deleting
+  that gate by hand leaves all 983 canvas-render tests green, so the kill was
+  an unrelated flake charged to it. Two more mutants behaved the same way.
+  A score therefore has a noise floor: two back-to-back runs of the same tree
+  differed by one mutant (89.33% vs 88.89%), and a run against a STRICTLY
+  larger test set scored lower than an earlier one. Read a small delta as
+  nothing, and re-run before believing a survivor appeared or vanished.
   **Verify a survivor by hand before acting on it.** The tool can report one
   falsely: measured, `src/layout/seed.ts` is imported by its own test and
   nothing else, so Stryker's related-test selection runs 7 tests against it
@@ -1023,9 +1049,59 @@ the table alone.
   the suite. That file is excluded from `mutate` for exactly that reason, and
   the general habit is the one `diagnosis-evidence` already asks for — apply
   the edit, run the suite, watch it stay green.
+  A NARROW selection is not required for that to happen, which is the part
+  the `seed.ts` story understates. Measured on `scene-digest.ts`: the mutant
+  turning `minY = Math.min(...)` into `Math.max(...)` came back Survived from
+  a run that Stryker itself lists as covered by 33 tests across five files —
+  including a differential oracle that catches it 6 times out of 6 when the
+  same edit is applied by hand. Within that one file the number of tests
+  actually completed per mutant ranged from 1 to 57 (the five files hold 57),
+  with 75 mutants judged on a single test. That number is now PRINTED — the
+  sticky comment's `judged by` column is the mutant's own `testsCompleted`,
+  so the weak signal is visible on the row rather than inferred from knowing
+  which files import what. So read the SCORE of a file whose
+  module few tests import as a weak signal, and treat its survivor list as a
+  set of hypotheses to check rather than a worklist to burn down — the
+  difference is measured in hours.
+  It also pays the other way: a survivor whose LOCATION looks obviously
+  killable is often a sub-expression, not the statement. `edge-crossing-
+  sweep.ts:85` reported `ConditionalExpression -> true` on a three-way `&&`,
+  and replacing the whole condition failed 19 tests — the mutant was columns
+  22-33, the middle conjunct alone, which needs a segment that BEGINS on a
+  lane and slants away to distinguish. Read the columns before concluding the
+  tool is wrong.
+  **A survivor can mean the file has no INSTRUMENT, not that it has no
+  test.** `tidy.ts` sat at 52.63% with a suite that pins separation,
+  grid-snapping, idempotence and determinism — every one of them true, and
+  none of them able to see the thing most of that file does. Measured:
+  forcing the overlap-resolution axis to one direction keeps all of those
+  green while total displacement over a fixed corpus goes 51647 -> 77469, a
+  50% regression in how far tidy drags a person's boxes. The file was a
+  QUALITY heuristic wearing correctness clothing, and the answer was the
+  instrument this package already prescribes — `tidy-quality.test.ts`, debt
+  metrics targeting zero and price metrics pinned exactly, over a seeded
+  corpus chosen to CROWD. 52.63% -> 80.70%, and the residue moved from the
+  heuristic into `buildUnits`. Unlike the routing and wrapping scoreboards it
+  runs inside the mutation lane, because it costs a second: a cheap
+  scoreboard belongs there, and the exclusions in `vitest.stryker.config.ts`
+  are about price, not about kind. When a file's survivors cluster in a cost
+  model, a tie-break or a search, reach for a scoreboard before writing more
+  properties.
+  **An equivalent mutant is a real answer, and the reason belongs in the
+  source.** Of the 18 left on that file after the second oracle, 14 cannot be
+  killed by any test: the broad phase is an optimisation whose comparisons are
+  non-critical in one direction (widening the candidate set cannot change a
+  sum whose non-interacting terms are zero) and safe in the other (two boxes
+  meeting exactly after a quarter-pixel inflation each are half a pixel apart
+  before it, so they share no point), `hi > lo` and `hi >= lo` differ only
+  where the value is zero either way, and `dx === 0` falls through to a
+  `hypot` that is exact for it. Write the INVARIANT next to the code, not the
+  survivor list — a list goes stale and sends the next reader chasing the same
+  fourteen every time the weekly report runs.
   **The list is a BUDGET, and `src/mutation-lane-coverage.test.ts` is what
   keeps it honest.** Mutating every production source file is 9089 mutants
-  against the list's ~1300 — several hours at this package's measured rate —
+  against the list's 2225 — near two hours at this package's measured ~3s per
+  mutant, and most of a working day for the whole package —
   so the lane covers 9 of 47 modules. A list's failure mode is silence: a
   module added next month is not covered, the report still looks healthy, and
   nothing says the lane has been looking at less and less of the code. So both

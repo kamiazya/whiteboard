@@ -110,6 +110,13 @@ function queueSave(documentId: string, save: () => Promise<void>): Promise<void>
  */
 export const DEFAULT_MARKDOWN_CORE_FACETS: StoredCoreFacets = { type: 'markdown' }
 
+/**
+ * What the indicator says about a document nothing has written yet: no
+ * unsaved edits, and no save this session. Named rather than written twice,
+ * so the initial value and the value a switch goes back to cannot drift.
+ */
+const INITIAL_SAVE_STATE: BrowserPersistenceState = { kind: 'saved', lastSavedAt: null }
+
 export interface MarkdownDocumentState {
   /** Null until the initial load resolves — render nothing editable before. */
   readonly body: string | null
@@ -245,14 +252,17 @@ export function useMarkdownDocument(
   enabled: boolean,
 ): MarkdownDocumentState {
   const [body, setBodyState] = useState<string | null>(null)
-  const [saveState, setSaveState] = useState<BrowserPersistenceState>({
-    kind: 'saved',
-    lastSavedAt: null,
-  })
+  const [saveState, setSaveState] = useState<BrowserPersistenceState>(INITIAL_SAVE_STATE)
   // Through a ref: the debounce closure and the unmount flush both report,
   // and neither may re-arm the timer by depending on the setter's identity.
   const setSaveStateRef = useRef(setSaveState)
   setSaveStateRef.current = setSaveState
+  // Mirrors the scope itself, rewritten every render: a scheduler outlives
+  // the document it was made for (its flush settles after the switch), so at
+  // report time it has to ask who the hook is about NOW, not who it was
+  // created for.
+  const currentDocumentIdRef = useRef(documentId)
+  currentDocumentIdRef.current = documentId
   const [coreFacets, setCoreMetaState] = useState<StoredCoreFacets | null>(null)
   const [doc, setDoc] = useState<Loro | null>(null)
   const hostRef = useRef<ContentHost | null>(null)
@@ -263,14 +273,33 @@ export function useMarkdownDocument(
   // for this document before reading the store.
   const pending = pendingFlushes
 
+  // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
-    if (!enabled || documentId === null) {
-      hostRef.current = null
-      setDoc(null)
-      setBodyState(null)
-      setCoreMetaState(null)
-      return
-    }
+    // Cleared synchronously, BEFORE the async load below — the same rule
+    // `DaemonIndexPage` states for its rows ("leaving the previous
+    // workspace's rows visible during the switch lets a click pair the new
+    // workspace id with an old workspace's path") and `VersionTimeline` for
+    // its versions. Unconditional, because a switch from one document to
+    // another is the case that was missing: the `cancelled` guard below stops
+    // a stale load from LANDING, and does nothing about what is still held
+    // while the next one is in flight.
+    //
+    // `hostRef` is the half that matters. `setBody` writes through it and
+    // returns early when it is null, while `scheduleSave` keys its scheduler
+    // on the NEW id — so without this, a keystroke during the next document's
+    // load is written into the previous document and queued under a name that
+    // is not its own. Measured: typing under c2 while c2 loaded produced
+    // `save('c1', …)`.
+    hostRef.current = null
+    setDoc(null)
+    setBodyState(null)
+    setCoreMetaState(null)
+    // The indicator too. It reads `saved at 10:00` about the document that
+    // left, and left standing that becomes a claim about this one, which was
+    // never saved at all. Back to the initial value — no unsaved edits, no
+    // save yet this session — which is what a freshly loaded document is.
+    setSaveState(INITIAL_SAVE_STATE)
+    if (!enabled || documentId === null) return
     let cancelled = false
     let unsubscribe: (() => void) | undefined
     void Promise.resolve(pending.get(documentId))
@@ -344,7 +373,18 @@ export function useMarkdownDocument(
         scheduler: createSaveScheduler({
           debounceMs: SAVE_DEBOUNCE_MS,
           now: () => new Date().toISOString(),
-          report: (update) => setSaveStateRef.current(update),
+          report: (update) => {
+            // The switch FLUSHES this document's debounce on purpose, so the
+            // last 500ms of typing is not lost — and that write reports after
+            // the hook has moved on. `saved` arriving then is a durability
+            // claim about the document now on screen, whose own edit may
+            // still be sitting in its debounce; `degraded` accuses it of a
+            // failure that was not its. Both answer about a document nobody
+            // is looking at, so they stop here. The write itself still
+            // completes; only its report is scoped.
+            if (currentDocumentIdRef.current !== id) return
+            setSaveStateRef.current(update)
+          },
           // Bound here, so the write goes through the handle this document
           // had when the debounce elapsed — not whatever the next load has
           // put in the ref by the time the queue reaches it.

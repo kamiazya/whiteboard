@@ -261,9 +261,35 @@ const foreignBodiesArb: fc.Arbitrary<readonly Rect[]> = fc.array(foreignRectArb,
   maxLength: 4,
 })
 
-// Node-border domain for the border-tracing rule: same shape as the
-// foreign-body domain (mutually overlapping and zero-size rects included).
-const nodeBordersArb = foreignBodiesArb
+/**
+ * A node border that can actually COINCIDE with a routed path. Border-tracing
+ * prices a segment running ALONG a rect's edge, so the segment's fixed
+ * coordinate has to land exactly on `r.y`/`r.y + r.h` — and a rect drawn from
+ * arbitrary integers over ±200 shares an edge with the orthogonal walk's
+ * multiples of 4 almost never. Measured over four runs of the reachability
+ * guard below, `border-tracing` was reached 4, 2, 2 and 0 times in 600
+ * samples: the guard therefore FAILED outright on the fourth, which reads as
+ * a regression in a file the change never touched.
+ *
+ * Same lattice and same neighbourhood as `orthogonalPathArb` after its ×4
+ * scaling, so a coincidence is ordinary rather than lucky.
+ */
+const tracedBorderArb: fc.Arbitrary<Rect> = fc.record({
+  x: fc.integer({ min: -20, max: 20 }).map((n) => n * 4),
+  y: fc.integer({ min: -20, max: 20 }).map((n) => n * 4),
+  // Zero-size stays reachable here too — a degenerate node border must not
+  // be charged twice for one segment (`near === far`).
+  w: fc.integer({ min: 0, max: 20 }).map((n) => n * 4),
+  h: fc.integer({ min: 0, max: 20 }).map((n) => n * 4),
+})
+
+// Node-border domain for the border-tracing rule: the foreign-body shape
+// (mutually overlapping and zero-size rects included) plus lattice-aligned
+// rects, which are the only ones a routed segment ever runs along.
+const nodeBordersArb: fc.Arbitrary<readonly Rect[]> = fc.array(
+  fc.oneof({ weight: 1, arbitrary: foreignRectArb }, { weight: 2, arbitrary: tracedBorderArb }),
+  { minLength: 0, maxLength: 4 },
+)
 
 /**
  * A narrow-phase term, zero often enough that a cost tuple with NOTHING in
@@ -308,6 +334,16 @@ describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
    * half: each rule has to be seen contributing something, at least once,
    * through the same composed call.
    */
+  // A FLOOR rather than "at least once", because at least once is what this
+  // guard used to ask and it made the guard itself flaky: `border-tracing`
+  // was reached 4, 2, 2 and 0 times across four runs of 600 samples, so one
+  // run in roughly fifteen failed on a domain nobody had changed — a red build
+  // pointing at the wrong file. The generator is denser now (see
+  // `tracedBorderArb`); measured over five runs it lands 16, 21, 20, 31 and
+  // 16, and every other self-scoring rule is in the dozens or hundreds. The
+  // floor sits well below that without pinning a distribution.
+  const SELF_CONTRIBUTION_FLOOR = 5
+
   it('the domain makes every penalty rule contribute a nonzero term', () => {
     const samples = fc.sample(
       fc.tuple(pathArb, foreignBodiesArb, nodeBordersArb, foreignBodiesArb),
@@ -316,10 +352,10 @@ describe('PENALTY_RULES: each rule writes only its declared tier slot', () => {
     const reached = PENALTY_RULES.map((rule) => ({
       name: rule.name,
       contributes:
-        samples.some(
+        samples.filter(
           ([path, foreign, borders, endpoints]) =>
             selfPenalty(path, foreign, borders, endpoints)[rule.tier] !== 0,
-        ) ||
+        ).length >= SELF_CONTRIBUTION_FLOOR ||
         // pairTerm-only rules (overlap, illegibility, crossings) read the
         // narrow-phase triple instead, and have no self contribution at all.
         rule.pairTerm([1, 1, 1]) !== 0,

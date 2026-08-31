@@ -14,6 +14,15 @@ import { defineConfig } from 'vitest/config'
  * wrapping. Excluding both is what makes the lane finish; the mutants they
  * would have caught still have to be caught by something, which is exactly
  * the report this lane exists to produce.
+ *
+ * `tidy-quality.test.ts` is the same KIND of instrument and is deliberately
+ * NOT excluded, because it costs about a second — and because it is the only
+ * thing in the repo that can kill its file's mutants at all. Measured:
+ * `tidy.ts` sat at 52.63% with every correctness test green, since forcing
+ * the overlap axis to one direction leaves the result separated, on-grid,
+ * idempotent and deterministic while dragging boxes 50% further. Adding the
+ * scoreboard took it to 80.70%. A cheap scoreboard belongs in the lane; an
+ * expensive one is what these two exclusions are about.
  */
 export default defineConfig({
   test: {

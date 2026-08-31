@@ -272,14 +272,32 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
 
   **Absent is not zero, and the difference is the whole rule.** Zero says the
   workspace is empty — the row a person most needs to recognise — while absent
-  says this keeper did not count. So the render is guarded on `undefined`,
-  never on falsiness, which would hide exactly the empty ones. Today the
-  daemon counts and the browser does not: documents live in the workspace
-  tree, and reading it from the shell would put loro-crdt behind a control
-  that renders on every page, which `browser-workspaces.ts` deliberately
-  avoids. That asymmetry is a keeper difference with a recorded cost, not an
-  oversight — and it is the reason the field is optional rather than
-  defaulted.
+  says nobody has counted this row YET. So the render is guarded on
+  `undefined`, never on falsiness, which would hide exactly the empty ones.
+
+  **Both keepers count, at different moments, and the moment is the design.**
+  The daemon counts in `list()`, since one HTTP round trip already carries the
+  number. The browser cannot: its documents live in the workspace tree, and
+  reading that means loro-crdt's WASM — 3039.5 KB — behind a control that
+  renders on every page. So the browser publishes a separate `counts()`, which
+  the switcher calls when the popover OPENS. `list()` stays loro-free and
+  keeps naming the current workspace on the shell's render path; nothing about
+  startup changes, which is what the CI LCP floor exists to hold.
+
+  Measured on the LCP rig's profile (CPU x4, 10Mbps/40ms): **1850 ms over the
+  network, 65 ms out of Cache Storage.** Cache Storage is the ordinary case —
+  the service worker already precaches that WASM so the editor works offline,
+  and `check-pwa-precache.mjs` asserts it — so opening the switcher rides a
+  cost the product already pays instead of creating one. Only a first visit
+  that opens the switcher before the precache finishes waits, and it waits
+  without a spinner: the rows render immediately from `list()` and the numbers
+  arrive after, which is precisely what optional-and-absent buys.
+
+  The earlier decision recorded here — that the browser simply would not
+  count — was made from the byte budget alone (10.8 KB of headroom against a
+  1002.5 KB gzipped dependency) without measuring either the precache or the
+  compile, which is 21 ms. The budget number was right and the conclusion
+  drawn from it was not.
 
   The count includes SHADOWED documents. A concurrent create can leave two
   documents on one path and the listing shows both, one marked, precisely so

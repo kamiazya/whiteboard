@@ -76,3 +76,39 @@ export function assertLedger<K extends string>(
     }
   }
 }
+
+/**
+ * The same both-sides check, for a ledger whose key set is SCANNED out of
+ * source rather than taken from a union.
+ *
+ * The union form above gets two of its four directions from the type system:
+ * a new member is a missing property, a removed one is an excess property. A
+ * scanned surface has no union, so both of those have to be done at runtime
+ * — and doing them by hand is how a scan ends up with only one of them, which
+ * reads exactly like a scan that checked.
+ *
+ * The MESSAGES stay at the call site, deliberately. What is shared here is
+ * the judgement — every scanned name is classified, every entry still names
+ * something the source holds — and not the wording, which has to name the
+ * actual table and the actual vocabulary or it helps nobody.
+ *
+ * Assert the scan found a plausible COUNT in its own `it` as well. A regex
+ * that stops matching reports itself here as "every entry is stale", which
+ * sends the reader to the wrong file entirely.
+ */
+export function assertScannedLedger(
+  scanned: readonly string[],
+  ledger: Record<string, unknown>,
+  messages: { readonly unclassified: string; readonly stale: string },
+): void {
+  const held = new Set(scanned)
+  const declared = new Set(Object.keys(ledger))
+  expect(
+    [...held].filter((name) => !declared.has(name)),
+    messages.unclassified,
+  ).toEqual([])
+  expect(
+    [...declared].filter((name) => !held.has(name)),
+    messages.stale,
+  ).toEqual([])
+}

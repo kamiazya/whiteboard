@@ -97,6 +97,185 @@ describe('sceneBounds', () => {
     expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 50, h: 30 })
   })
 
+  it('skips an edge point with only ONE non-finite coordinate', () => {
+    // The bbox path already covers a non-finite field; the POINT path did not,
+    // and its guard is a conjunction — so `||` in place of `&&` admits a point
+    // whose x is NaN, and the whole extent becomes NaN. A point where BOTH
+    // coordinates are non-finite cannot tell the two apart.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 100, y: 50 },
+            { x: Number.NaN, y: 1000 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
+        },
+      ],
+    }
+    expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 100, h: 50 })
+  })
+
+  it('leaves a wrapper that emits NO transform absolute', () => {
+    // Only `listItem` and `tableCell` translate their subtree. A group at
+    // x=100 whose child sits at x=0 must contribute BOTH — reading the group's
+    // own x as an offset shifts the child onto the group and loses everything
+    // to its left.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'group',
+          bbox: { x: 100, y: 0, w: 10, h: 10 },
+          children: [{ kind: 'thematicBreak', bbox: { x: 0, y: 0, w: 10, h: 10 } }],
+        },
+      ],
+    }
+    expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 110, h: 10 })
+  })
+
+  it('walks the runs of a PARAGRAPH, not only those of a heading', () => {
+    // `heading`, `paragraph` and `tableCell` share one case arm, so a test for
+    // any single one of them leaves the other two able to fall through to
+    // `default` — where the runs are never visited and a run outside its
+    // parent silently stops counting.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'paragraph',
+          bbox: { x: 0, y: 0, w: 10, h: 10 },
+          runs: [
+            {
+              kind: 'textRun',
+              bbox: { x: 0, y: 0, w: 200, h: 16 },
+              baseline: 12,
+              text: 'wider than its parent',
+            },
+          ],
+        },
+      ],
+    }
+    expect(sceneBounds(scene)).toEqual({ x: 0, y: 0, w: 200, h: 16 })
+  })
+
+  it('applies a list-item offset to a nested EDGE, whose points are item-relative', () => {
+    // The same wrapper-relative rule the shape and run cases already pin, on
+    // the third and last kind of geometry the walk knows — an edge's points.
+    // Its two loops (polyline and arrowhead wings) compose the offset with the
+    // same `+`, and nothing reached either of them under a transform.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: 50, y: 0, w: 10, h: 10 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: 50, y: 0, w: 10, h: 10 },
+              children: [
+                {
+                  kind: 'edge',
+                  id: 'nested',
+                  path: [
+                    { x: 0, y: 0 },
+                    { x: 20, y: 30 },
+                  ],
+                  fromSide: 'right',
+                  toSide: 'left',
+                  fromEnd: 'none',
+                  toEnd: 'none',
+                },
+              ],
+            },
+          ],
+        },
+      ],
+    }
+    // The item translates its subtree by its own x, so the points land at
+    // x = 50 and x = 70; the list and item bboxes span 50..60.
+    expect(sceneBounds(scene)).toEqual({ x: 50, y: 0, w: 20, h: 30 })
+  })
+
+  it('applies that offset to the arrowhead WINGS too, not only the polyline', () => {
+    // The walk has two point loops — the path and the arrow polygons — and
+    // each composes the offset itself. The test above reaches only the first,
+    // because an edge with no arrowhead has no wings. Asserted as a shift
+    // rather than as coordinates: the wing geometry is the arrow helper's
+    // business, and pinning its numbers here would break on every change to
+    // the arrow shape while saying nothing about the offset.
+    const arrowEdge = {
+      kind: 'edge' as const,
+      id: 'arrowed',
+      path: [
+        { x: 0, y: 0 },
+        { x: 20, y: 30 },
+      ],
+      fromSide: 'right' as const,
+      toSide: 'left' as const,
+      fromEnd: 'none' as const,
+      toEnd: 'arrow' as const,
+    }
+    const nest = (offsetX: number): Scene => ({
+      nodes: [
+        {
+          kind: 'list',
+          bbox: { x: offsetX, y: 0, w: 1, h: 1 },
+          ordered: false,
+          depth: 0,
+          items: [
+            {
+              kind: 'listItem',
+              bbox: { x: offsetX, y: 0, w: 1, h: 1 },
+              children: [arrowEdge],
+            },
+          ],
+        },
+      ],
+    })
+
+    const here = sceneBounds(nest(0))
+    const shifted = sceneBounds(nest(50))
+
+    expect(shifted.x).toBe(here.x + 50)
+    expect(shifted.w).toBe(here.w)
+  })
+
+  it('skips a non-finite arrowhead point, exactly as it skips a path point', () => {
+    // An arrowhead is derived FROM the path, so a non-finite path point can
+    // produce non-finite wings — and the wings have their own guard. Without
+    // it the whole extent goes NaN and the SVG gets a viewBox of NaNs.
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'broken',
+          path: [
+            { x: 0, y: 0 },
+            { x: 100, y: 50 },
+            { x: Number.NaN, y: Number.NaN },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'arrow',
+        },
+      ],
+    }
+    const bounds = sceneBounds(scene)
+
+    expect(Number.isFinite(bounds.x)).toBe(true)
+    expect(Number.isFinite(bounds.y)).toBe(true)
+    expect(Number.isFinite(bounds.w)).toBe(true)
+    expect(Number.isFinite(bounds.h)).toBe(true)
+  })
+
   it('includes arrowhead wings in the bounds so a derived viewBox never clips them', () => {
     const scene: Scene = {
       nodes: [

@@ -466,13 +466,15 @@ function labelRun(text: string, options: ResolvedLayoutOptions, maxWidth: number
     baseline: metrics.ascent,
     text: fitted.text,
     ...(fitted.truncated ? { truncated: true as const } : {}),
+    ...(fitted.overflows ? { overflows: true as const } : {}),
     appearance: { ...labelAppearance, fontSize: options.geometry.labelFontSizePx },
   }
 }
 
 /** Moves a node's content from its own origin to the node's padded top-left. */
 /**
- * The node's chrome, carrying whether its content had to be cut to fit.
+ * The node's chrome, carrying whether its content fits the box and whether
+ * anything had to be cut for it.
  *
  * The same fact the fade marks on the last surviving run, put where a READER
  * of the scene can find it: `sceneDigest` reports per addressable node, and a
@@ -483,10 +485,14 @@ function labelRun(text: string, options: ResolvedLayoutOptions, maxWidth: number
 function chromeWithFit(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
-  truncated: boolean,
+  fit: { readonly truncated: boolean; readonly overflows: boolean },
 ): ShapeSceneNode {
   const chrome = chromeShape(node, options)
-  return truncated ? { ...chrome, truncated: true } : chrome
+  return {
+    ...chrome,
+    ...(fit.truncated ? { truncated: true as const } : {}),
+    ...(fit.overflows ? { overflows: true as const } : {}),
+  }
 }
 
 function placeInNode(
@@ -605,10 +611,7 @@ function composeTextNode(
       body = fitTextBody({ nodes: [labelRun(node.text, options, maxWidth)] }, node, options)
     }
   }
-  return [
-    chromeWithFit(node, options, body.truncated),
-    ...placeInNode(node, { nodes: body.nodes }, options),
-  ]
+  return [chromeWithFit(node, options, body), ...placeInNode(node, { nodes: body.nodes }, options)]
 }
 
 /**
@@ -764,7 +767,7 @@ function fitSceneInNode(
   node: SpatialNode,
   options: ResolvedLayoutOptions,
 ): FittedBlocks | undefined {
-  if (!options.fitToBox) return { nodes: scene.nodes, truncated: false }
+  if (!options.fitToBox) return { nodes: scene.nodes, truncated: false, overflows: false }
   const box = contentBox(node, options)
   if (box === undefined) return undefined
   const fitted = fitBlocksToHeight(scene.nodes, box.h)
@@ -827,7 +830,7 @@ function composeFileMarkdown(
   }
   if (body === undefined) return undefined
 
-  const chrome = chromeWithFit(node, options, body.truncated)
+  const chrome = chromeWithFit(node, options, body)
   const label = labelOf(node, resolved)
   const placed = placeInNode(node, { nodes: body.nodes }, options)
   return label === undefined
@@ -885,10 +888,7 @@ function composeFileFacets(
   const body = fitBodyInNode(node, { type: 'root', children: blocks }, options)
   if (body === undefined) return undefined
 
-  return [
-    chromeWithFit(node, options, body.truncated),
-    ...placeInNode(node, { nodes: body.nodes }, options),
-  ]
+  return [chromeWithFit(node, options, body), ...placeInNode(node, { nodes: body.nodes }, options)]
 }
 
 /**

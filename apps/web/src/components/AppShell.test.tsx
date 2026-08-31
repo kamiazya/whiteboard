@@ -421,3 +421,43 @@ describe('AppShell — the mark as the connection carrier', () => {
     )
   })
 })
+
+describe('AppShell — a count the keeper can only produce expensively', () => {
+  const COUNTED = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+
+  it('does not ask for counts while the popover is closed', async () => {
+    // THE guard for this whole design. The browser keeper answers `counts()`
+    // by loading loro-crdt's WASM (3039.5 KB), so a call on the shell's own
+    // render path would put it on every startup — which is exactly what the
+    // merged LCP floor exists to refuse. The popover's content is what asks,
+    // and Radix does not mount content until it opens.
+    const counts = vi.fn(() => Promise.resolve(new Map([[COUNTED, 4]])))
+    renderShell(true, '/w/default', undefined, {
+      ...WORKSPACES,
+      source: { ...WORKSPACES.source, counts },
+    })
+    // Wait for the shell's OWN list to land, so this asserts against a shell
+    // that has finished its startup work rather than one still doing it.
+    // Waited on the MARK'S ACCESSIBLE NAME, which the shell can only write
+    // once `list()` resolved. Without a wait that reaches the loaded state,
+    // this would assert against a shell still starting up and pass whatever
+    // the code did.
+    expect(await screen.findByLabelText(/workspace: design team/i)).toBeTruthy()
+    expect(counts).not.toHaveBeenCalled()
+  })
+
+  it('shows the count on the row once opening the popover has bought it', async () => {
+    const counts = vi.fn(() => Promise.resolve(new Map([[COUNTED, 4]])))
+    renderShell(true, '/w/default', undefined, {
+      ...WORKSPACES,
+      source: { ...WORKSPACES.source, counts },
+    })
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    const row = await screen.findByRole('menuitem', { name: /design team/i })
+    // The row is readable BEFORE the count arrives — the name is what a
+    // person opened this for, and the number is an ornament on it.
+    expect(row.textContent).toMatch(/design team/i)
+    await waitFor(() => expect(row.textContent).toMatch(/4/))
+    expect(counts).toHaveBeenCalledTimes(1)
+  })
+})
