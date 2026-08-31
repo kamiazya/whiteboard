@@ -151,6 +151,13 @@ const ARRIVED_AFTER = 'The document that arrived while it was open'
 
 describe('a destructive dialog does not outlive its document', () => {
   beforeEach(async () => {
+    // Both captures are MODULE state, so they outlive the test that filled
+    // them — the same shape this file exists to refuse, one level up in the
+    // test itself. Left standing, `waitFor(editorMounted !== null)` is
+    // satisfied by the PREVIOUS test's callback and the wait proves nothing
+    // about this page; `openInEditor` would then be the departed page's.
+    editorMounted = null
+    openInEditor = null
     await clearWhiteboardDb()
   })
 
