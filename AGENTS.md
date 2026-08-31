@@ -241,7 +241,9 @@ A change with a user-visible effect ships its verification figure in the PR body
 sees the bug and the fix without cloning. For a FIX that means two panels — the same case before
 and after — not one capture of the result. **Say so when you skip**: `Visual evidence: none —
 <reason>` in the body, with a real reason; a PreToolUse hook blocks `gh pr create` otherwise, so
-the skip is a decision on the record rather than an omission. Other real evidence goes there too
+the skip is a decision on the record rather than an omission. The hook reads the body from
+`--body`/`--body-file` and fails open when it cannot — stdin, an editor, `--fill` — so it is a
+net under the rule, not the rule. Other real evidence goes there too
 — a `pnpm test` paste for a browser-mode regression reads as a reason.
 
 How to produce the figure — rendering both versions through the real pipeline, composing them

@@ -94,7 +94,9 @@ worked measurements live.** Load it before the work, not after:
   pipeline before and after, chosen by the metric the change targets rather than by eye. Two
   executable rungs back it, because this rule was prose alone for a long time and hollowed out —
   `compose-figure.mjs` refuses two identical panels, and a PreToolUse hook makes an absent figure
-  a stated decision (`Visual evidence: none — <reason>`) rather than an omission.
+  a stated decision (`Visual evidence: none — <reason>`) rather than an omission — for a body it
+  can read, which is a `--body`/`--body-file` argument; it fails open on stdin, an editor, or
+  `--fill`.
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
 

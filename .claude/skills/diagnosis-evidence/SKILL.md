@@ -58,15 +58,19 @@ the duplicate:
   comparing to the same literal".
 - `grep 'setSystemTime'` reported clock-pinning absent from `docs-sync`, which says "pin the
   clock".
-- `grep -- '--ring'` reported the compose-figure invocation absent from `visual-evidence`, which
-  prints the whole command including that flag. (The pattern was also eaten as an option — a
-  second way to get a false negative from the same command.)
+- `grep '--ring'` reported the compose-figure invocation absent from `visual-evidence`, which
+  prints the whole command including that flag. This one was not a wording miss at all: `grep`
+  parsed `--ring` as an option and exited with an error, and the checking script branched on exit
+  status alone, so `grep: unrecognized option` and "no match" arrived as the same answer. Ending
+  option parsing (`grep -- '--ring'`) finds it. **A non-zero exit means "did not match" OR "did
+  not run"; a script that reads only the status cannot tell you which.**
 - `grep 'gh image'` reported the upload step absent from the same file, four lines further down.
 
 So a NEGATIVE from a text search is a hypothesis, not a finding. Confirm it by reading the section
 that would hold the claim, or by searching for the thing the claim is ABOUT — the identifier, the
-path, the number — rather than the sentence you expect around it. A positive is safe; only the
-absence needs the second look.
+path, the number — rather than the sentence you expect around it. Let the search PRINT rather than
+branching on its status, so a tool error cannot arrive dressed as a result. A positive is safe;
+only the absence needs the second look.
 
 ## Read the stack line before explaining the message
 
