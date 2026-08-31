@@ -15,7 +15,18 @@ export function withTempDataDir(prefix = 'whiteboard-test-'): { get dir(): strin
   })
 
   afterEach(async () => {
-    await rm(tempDir, { recursive: true, force: true })
+    // `recursive` is not enough on its own: a data dir a server is still
+    // shutting down can gain a file DURING the walk, and the rmdir at the
+    // end then raises ENOTEMPTY. It surfaces as a teardown failure attached
+    // to whichever test happened to run last, which names neither the writer
+    // nor the race — observed on CI as
+    // `ENOTEMPTY: directory not empty, rmdir '/tmp/whiteboard-app-test-…'`
+    // against a suite that passes 3/3 locally.
+    //
+    // `maxRetries` is what node supplies for exactly this. It makes the
+    // teardown robust to a writer that is on its way out; it would not
+    // rescue one that never stops, and is not meant to.
+    await rm(tempDir, { recursive: true, force: true, maxRetries: 5, retryDelay: 50 })
   })
 
   return {
