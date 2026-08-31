@@ -68,8 +68,14 @@ it('the Facets entry opens the panel, and a pick there stores and draws', () => 
   })
   expect(container.querySelector('svg g[data-wb-key] polygon')).not.toBeNull()
 
-  // Done is the way out. Escape belongs to the canvas (deselect) — an
-  // inspector that never holds focus could not receive it anyway.
-  fireEvent.click(panel.querySelector('[aria-label="Close facets"]') as HTMLElement)
+  // DESELECTING is the way out, and the only one: the panel carries no
+  // dismiss control of its own, because it is about the selected node and a
+  // press on blank canvas is already how a surface is put away here.
+  expect(
+    panel.querySelector('[aria-label="Close facets"]'),
+    'the panel grew a dismiss control again — two ways to put one surface away',
+  ).toBeNull()
+  fireEvent.pointerDown(root, { clientX: 20, clientY: 400, button: 0, pointerId: 7 })
+  fireEvent.pointerUp(root, { clientX: 20, clientY: 400, button: 0, pointerId: 7 })
   expect(container.querySelector('[data-testid="facet-form-panel"]')).toBeNull()
 })

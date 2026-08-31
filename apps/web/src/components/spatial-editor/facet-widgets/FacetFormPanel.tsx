@@ -40,8 +40,6 @@ export interface FacetFormPanelProps {
   readonly registry: FacetRegistry
   /** `undefined` payload clears the facet, matching set-node-facet. */
   readonly onWrite: (key: string, payload: unknown) => void
-  /** Present when mounted as an overlay; absent renders the bare body. */
-  readonly onClose?: () => void
   /**
    * Where the inspector sits: a column beside the canvas, or a sheet under
    * it. Decided from the EDITOR SHELL's width — the panel's own column comes
@@ -55,7 +53,6 @@ export function FacetFormPanel({
   node,
   registry,
   onWrite,
-  onClose,
   editors = NODE_FACET_EDITORS,
   variant = 'dock',
 }: FacetFormPanelProps) {
@@ -112,7 +109,6 @@ export function FacetFormPanel({
         ))}
       </div>
     )
-  if (onClose === undefined) return <div data-testid="facet-form-panel">{body}</div>
   // Same vessel convention as the other canvas overlays: hand-rolled and
   // inline-positioned, so it behaves identically where the app stylesheet
   // is absent (browser-mode component tests), and marked
@@ -148,16 +144,13 @@ export function FacetFormPanel({
             }
       }
     >
-      <div className="flex items-center justify-between gap-4 pb-2">
+      {/* No dismiss control of its own. The panel is ABOUT the selected node,
+          so deselecting is what closes it — the same thing a press on blank
+          canvas already does to the context menu, and one semantic instead of
+          two. Writes land as they are made, so there is nothing here to
+          confirm either. */}
+      <div className="pb-2">
         <span className="text-xs font-medium">Facets</span>
-        <button
-          type="button"
-          aria-label="Close facets"
-          className="rounded px-2 text-xs text-muted-foreground hover:bg-accent"
-          onClick={onClose}
-        >
-          Done
-        </button>
       </div>
       {body}
     </aside>
