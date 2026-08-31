@@ -38,7 +38,7 @@
     "@kamiazya/whiteboard-canvas-render": "workspace:*",
     "@testing-library/react": "^16.0.0",
     "@types/react": "^19",
-    "@vitejs/plugin-react": "^6.0.5",
+    "@vitejs/plugin-react": "^6.1.0",
     "react-dom": "catalog:",
     "typescript": "catalog:",
     "vite": "catalog:",
