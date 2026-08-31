@@ -434,15 +434,15 @@ function reducePointerUp(
     // Gathering fingers act on the press, so their release carries no
     // meaning — running the click/marquee logic here would re-collapse the
     // very selection the gesture just built. The anchor lifting ends it.
-    if (state.mode.memberIds.has(event.pointerId)) {
-      const memberIds = new Set(state.mode.memberIds)
-      memberIds.delete(event.pointerId)
-      return {
-        state: { ...state, down, mode: { ...state.mode, memberIds } },
-        effects,
-        fallThrough: false,
-      }
-    }
+    //
+    // The ANCHOR is checked first, and that ordering is load-bearing rather
+    // than incidental. Pointer ids are reused, so a gather that outlived a
+    // release this handler never saw can be joined by a new finger carrying
+    // the anchor's own id — at which point one id is both anchor and member,
+    // the member arm consumes its release, and the gather survives with an
+    // anchor that is no longer down. Ending on the anchor cannot leave that
+    // behind. In every ordinary gather the two sets are disjoint and the
+    // order does not matter.
     if (state.mode.anchorId === event.pointerId) {
       return {
         state: {
@@ -451,6 +451,15 @@ function reducePointerUp(
           mode: { kind: 'idle' },
           touches: withoutTouch(state.touches, event.pointerId),
         },
+        effects,
+        fallThrough: false,
+      }
+    }
+    if (state.mode.memberIds.has(event.pointerId)) {
+      const memberIds = new Set(state.mode.memberIds)
+      memberIds.delete(event.pointerId)
+      return {
+        state: { ...state, down, mode: { ...state.mode, memberIds } },
         effects,
         fallThrough: false,
       }

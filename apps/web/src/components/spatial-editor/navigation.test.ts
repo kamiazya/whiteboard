@@ -234,6 +234,58 @@ describe('gathering', () => {
   })
 })
 
+describe('a gather whose anchor was released without the machine hearing', () => {
+  /**
+   * Pointer ids are reused. A gather holds an anchor id, so a release this
+   * handler never saw leaves that id free for the NEXT finger — which then
+   * joins the same gather carrying the anchor's own id, and one id is both
+   * the anchor and a member.
+   *
+   * The release order then decides whether the gather can survive its own
+   * anchor. Checking members first consumes the release and leaves a gather
+   * whose anchor is not down, which by the machine's own invariant cannot
+   * happen; checking the anchor first ends the gather, which is what "the
+   * anchor lifting ends it" already says.
+   *
+   * Found by `navigation.property.test.ts` and pinned here because the
+   * property needs four specific steps in order to reach it — an example is
+   * the regression guard, the property is what found it.
+   */
+  const gatherContext: PressContext = {
+    ...plainContext,
+    hitId: 'n2',
+    anchorPrimaryId: 'n1',
+  }
+
+  it('ends when that id is pressed again and released', () => {
+    const { state } = run([
+      down(1, { x: 100, y: 100 }, { context: { ...gatherContext, hitId: 'n1' } }),
+      down(3, { x: 200, y: 200 }, { context: gatherContext, isPrimary: false }),
+      // No release for finger 1 reaches us; the platform frees its id.
+      // A new finger takes it, and is not primary because 3 is still down.
+      down(1, { x: 260, y: 240 }, { context: gatherContext, isPrimary: false }),
+      up(1),
+    ])
+    expect(state.mode).toEqual({ kind: 'idle' })
+  })
+
+  it('never leaves a mode holding a pointer that is not down', () => {
+    const { state } = run([
+      down(1, { x: 100, y: 100 }, { context: { ...gatherContext, hitId: 'n1' } }),
+      down(3, { x: 200, y: 200 }, { context: gatherContext, isPrimary: false }),
+      down(1, { x: 260, y: 240 }, { context: gatherContext, isPrimary: false }),
+      up(1),
+    ])
+    const held =
+      state.mode.kind === 'gathering'
+        ? [state.mode.anchorId, ...state.mode.memberIds]
+        : state.mode.kind === 'panning'
+          ? [state.mode.pointerId]
+          : []
+    expect(held.filter((id) => !state.down.has(id))).toEqual([])
+  })
+})
+
 describe('long press arming', () => {
   it('is armed for a single finger outside hand mode', () => {
     const { effects } = run([down(1, { x: 10, y: 20 }, { context: plainContext })])
