@@ -18,6 +18,7 @@ import { DocumentProperties } from '../components/document-properties/DocumentPr
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
 import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
+import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
@@ -631,6 +632,17 @@ export function DaemonDocumentPage({
                     // the disclosure here without a second flag to keep in sync.
                     facets={coreFacets}
                     onFacetsChange={setCoreFacets}
+                    // Canvas-level display settings, gated on kind the same
+                    // way the facet disclosure above is: a markdown document
+                    // has no canvas to configure. The browser page has placed
+                    // this since it existed and this one did not, which left
+                    // every `canvasSettings` contribution — today `visual`'s
+                    // `visual.edges/v0` — unreachable in daemon mode.
+                    settings={
+                      documentKind === 'spatial' ? (
+                        <CanvasDisplaySettings canvas={canvasValue} onChange={onChange} />
+                      ) : undefined
+                    }
                     actions={
                       <>
                         {exportError && (
