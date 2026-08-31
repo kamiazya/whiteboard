@@ -256,15 +256,24 @@ export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
  * Mechanics an ADAPTER still reaches directly, pending ADR-0018's migration.
  *
  * Each entry is one `<adapter file> -> <mechanic module>` edge, relative to
- * `packages/mcp-server/src/server`. This list may only SHRINK: an edge that
- * is not here fails the build, and an entry that is no longer a real edge
- * fails it too, so an entry cannot outlive the debt it names. Same shape,
- * and the same reason, as {@link KNOWN_IMPORT_CYCLES}.
+ * `packages/mcp-server/src/server`. An edge that is not here fails the build,
+ * and an entry that is no longer a real edge fails it too, so an entry cannot
+ * outlive the debt it names. Same shape, and the same reason, as
+ * {@link KNOWN_IMPORT_CYCLES}.
  *
  * The rule could not land without it. Every one of these exists today, and
  * enforcing the invariant on an empty list would simply have failed the
  * build — so the debt is recorded rather than the guard postponed until
  * after the migration it is meant to verify.
+ *
+ * **Shrinking is what {@link ADAPTERS_REACHING_MECHANICS_CEILING} enforces,
+ * and the two checks above do not.** They stop a fabricated entry and a stale
+ * one; neither has anything to say about a real new edge added along with its
+ * allowlist line, which is the ordinary way this list grows. Measured before
+ * the ceiling existed: a genuine `routes/export.ts -> backup-in-progress`
+ * import, duly listed, passed all six assertions. The list went 37 -> 36 ->
+ * 35 -> 36 -> 40 over one week while both this doc comment and the test's own
+ * comment said it could only shrink.
  */
 export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'mcp/document-tools.ts -> workspace-lock',
@@ -310,6 +319,24 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/ws.ts -> version-store',
   'routes/ws.ts -> workspace-lock',
 ]
+
+/**
+ * How many entries {@link ADAPTERS_REACHING_MECHANICS} may hold — a ratchet,
+ * not a budget.
+ *
+ * ADR-0018 is Accepted, so this debt is scheduled rather than tolerated, and
+ * the number is the only thing that makes "scheduled" mean anything a build
+ * can check. Pinned by equality on purpose: adding an edge fails until
+ * someone raises this line, and PAYING one off fails until someone lowers it.
+ * Both halves matter — a ceiling nobody lowers stops recording progress and
+ * becomes a budget, which is the thing it exists not to be.
+ *
+ * Raising it is a decision, not a fix. Do it only when the alternative is
+ * worse than the debt, and say in the PR why the operation could not go to
+ * server-core instead. The burn-down order is in the ADR; the four clusters
+ * it names are 17 of these 39.
+ */
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 39
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

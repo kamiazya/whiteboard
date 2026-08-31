@@ -78,58 +78,27 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 **Simplicity already has two executable rungs — reach for them before writing a prose rule.** `tools/arch-lint`'s allowed-third-party-dependency check fails the build on a dependency added outside a package's allowlist, and `pnpm knip` fails on the unused export a deleted feature left behind. Those are the "don't add a dependency" and "delete it" rungs made mechanical. What the `simplifier` agent and its `ponytail` ladder add on top is only the judgement-shaped rungs (does this need to exist, is this one line) — inherently prose, and the weakest rung by design.
 
-**Measure before you change what you cannot see in the diff.** A heuristic, a cost model, a search or an optimisation is correct-looking code whose worth is entirely in numbers nobody has taken — so the INSTRUMENT lands first, in its own commit, and the change is judged by it. Two exist: `edge-routing-quality.test.ts` (quality: a corpus plus aggregate counts pinned EXACTLY, so an improvement is as loud as a regression, with debt metrics separated from price metrics) and `pnpm bench` (performance: `vitest bench`, compared across INTERLEAVED paired runs because machine drift between separate runs exceeds the effect). For a behaviour-preserving optimisation the scoreboard NOT moving is the proof. This is not ceremony: the instruments rejected three changes that were obviously right on argument — per-blocker detours, a placement cache, and an excess-length penalty tier — and one cheap reachability probe (67 of 68 remaining defects had a clean path available) retired a planned task and redirected the work. They also **rescued** one: an aligned re-score was rejected in its first two shapes on cost (13x, then 4.5x layout time) and shipped in a third that reused machinery already in the file, at 2x — the measurement did not veto the idea, it priced each shape until one was worth paying for. Load the `measured-change` skill. When a change buys one metric with another, `PENALTY_RULES`' declared tier order decides it; when the currencies are genuinely different, that is a human decision worth interrupting for.
+**Three things you cannot see by reading a diff each have a skill, and the skill is where the
+worked measurements live.** Load it before the work, not after:
 
-**A guard that never reaches its subject passes, and reads exactly like a
-guard that checked.** Distinct from a vacuous PROPERTY (a generator too sparse
-to reach the interesting inputs) and from an empty `--project` filter: here the
-assertion is right, the subject is simply absent from the fixture, so nothing
-is wrong for it to find. Three instances in one session, each costing a real
-defect:
-
-- `route-scope-registry.test.ts` walked apps built WITHOUT `ServerDeps`, and
-  `/api/v1` mounts only when they are supplied — so nine routes were exempt
-  from the registry-wide guard by accident. Every `/api/v1/*` path resolved to
-  `null`, which server mode answers 500 to.
-- Nothing migrated the data dir before `http-server.ts` handed its ports a
-  handle. `/api/v1` had answered `no such table: workspaces` on a fresh dir
-  since the day it was mounted; no test saw it because every one of them
-  migrated through some legacy call first.
-- A route test's own helper pre-created the workspace, so `createWorkspace:
-  true` was pinned by nothing — removing it left every case green, on
-  behaviour the PR body claimed to preserve.
-
-The mutation check catches this ONLY if the mutation is on the production
-side; mutating a rule the fixture never exercises is green either way. So
-assert the subject is PRESENT, not merely that what is present passes —
-`expect(routes.some(r => r.path.startsWith('/api/v1/'))).toBe(true)` beside the
-walk, `expect(edges.length).toBeGreaterThan(20)` beside the allowlist. A count
-far below what the real surface holds is evidence the fixture missed, never
-good news.
-
-**The same scepticism applies one step earlier, to a DIAGNOSIS.** A failure message, a "not a
-regression", a mutation check, a hand-verified fix — each arrives looking like evidence while
-saying nothing about what was actually exercised. In one session that produced three published
-wrong conclusions: a cause read off an assertion string without checking which of two identical
-assertions failed; a regression denied by a property of the diff instead of an A/B of the
-behaviour; and a mutation check whose restore had already run, so eleven "mutated" runs used the
-original file. Each was one printed line away from being caught. Load the `diagnosis-evidence` skill before
-reporting ANY diagnostic or verification conclusion — a cause, a "not a regression", a mutation
-result, or a fix you are calling verified by hand.
-
-**Visual evidence for a change that moves pixels** is a repeatable procedure, not a screenshot of whatever was on screen: render the SAME canvas through the real pipeline before and after, side by side, chosen by the metric the change targets rather than by eye. Load the `visual-evidence` skill — its traps (a no-op `git stash` producing identical panels, unfilled rects rendering black) have each produced a misleading figure at least once.
-
-This rule was prose ONLY for a long time, and it hollowed out: the observed shape is a `## Visual repro` heading over a single "after" capture for a change that is a fix, which satisfies a reader skimming for the section while showing a reviewer nothing they could not have assumed. Two rungs now carry the parts a rule cannot.
-
-- **`node .claude/scripts/compose-figure.mjs --before <png> --after <png> --out <png>`** composes the labelled figure and **refuses two identical panels**, printing both digests for the PR body. Every way of getting the "before" wrong fails identically — a `git stash push` with nothing to stash, a revert that did not take, a second run overwriting the first — and the result is a figure showing one picture under both labels.
-- **A PreToolUse hook** (`hooks/pre-pr-visual-evidence.mjs`) blocks `gh pr create` when the diff touches a surface a human looks at and the body carries no figure. It cannot judge whether a figure is GOOD; it makes the ABSENCE a stated decision — `Visual evidence: none — <reason>` in the body passes, the same way `blastRadius: none:` does. The REASON is required, not decoration: a bare `none` is the same omission with a sentence in front of it. Fail-open for a body it cannot read.
+- **`measured-change`** — a heuristic, a cost model, a search or an optimisation is
+  correct-looking code whose worth is entirely in numbers nobody has taken, so the INSTRUMENT
+  lands first, in its own commit, and the change is judged by it. It rejected three changes that
+  were obviously right on argument, and priced a fourth through three shapes until one was worth
+  paying for.
+- **`diagnosis-evidence`** — before publishing ANY cause, "not a regression", mutation result, or
+  fix you are calling verified by hand. A number arrives looking like evidence while saying
+  nothing about what was actually exercised; the fix is to choose an observation that could
+  REFUTE the claim.
+- **`visual-evidence`** — for a change that moves pixels: the same canvas through the real
+  pipeline before and after, chosen by the metric the change targets rather than by eye. Two
+  executable rungs back it, because this rule was prose alone for a long time and hollowed out —
+  `compose-figure.mjs` refuses two identical panels, and a PreToolUse hook makes an absent figure
+  a stated decision (`Visual evidence: none — <reason>`) rather than an omission — for a body it
+  can read, which is a `--body`/`--body-file` argument; it fails open on stdin, an editor, or
+  `--fill`.
 
 **Docs sync**: a user-visible / API / contract / config change ships with its docs in the same increment (`technical-writer` + `docs-sync` skill; honesty — document the shipped state, never the aspiration). **`./docs/**` is USER docs (Diátaxis); developer docs are OSS-convention root files (README / SECURITY / CONTRIBUTING / CODE_OF_CONDUCT / .github). All project docs are in ENGLISH.** Marketing/release notes are drafts only (`marketing` agent), human ships.
-
-**Coverage ledgers** — the discipline that keeps a test honest about a surface that keeps growing
-— are governed by `.claude/rules/coverage-ledger.md` (path-scoped to `apps/web/**` and
-`packages/*/src/**`). Reach for it when adding a member to an editor's command set, event set,
-keyboard catalog or verb table, and when deciding whether a new surface earns a ledger at all.
 
 **Code placement and package boundaries** are governed by `.claude/rules/architecture-map.md` (always-on) and `.claude/rules/package-*.md` (path-scoped). Every PR that adds a package ships its path-scoped rule in the same increment.
 

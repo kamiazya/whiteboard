@@ -17,10 +17,24 @@ instrument rejected **three separate changes that were obviously right**:
   are a higher tier, so it was a bad trade in the project's own currency
 - a per-group placement cache — measured *slower* in all three rounds; the
   cached groups held two or three items and the key cost more than the work
-- an aligned re-score post-pass — targeted 9 layouts in 400 and would have
-  charged every layout an extra pass
+- an excess-length penalty tier — a new cost term that argued well and moved
+  no debt metric the corpus pins
 
 Every one of them would have shipped on argument alone.
+
+**And the instrument is not a veto — it prices.** An aligned re-score was
+rejected in its first shape (a bespoke repair loop scoring whole
+configurations, 13x layout time — it targeted 9 layouts in 400 and would have
+charged every layout an extra pass), rejected again in its second (the same
+loop reusing unchanged paths, 4.5x), and SHIPPED in a third that reused the search's
+own incremental trial machinery, at 2x — `assignEdgeAnchors` now hands the
+settled configuration back through the same search with `align: true`, and it
+buys own-endpoint violations 35 -> 14 and crossings 647 -> 500. A measurement
+that kills the first shape of an idea has not killed the idea.
+
+That distinction is worth the words because this list used to end with the
+re-score's FIRST verdict, as though it were the final one, while the third
+shape was already in `spatial-edges.ts`.
 
 ## Quality: a scoreboard
 

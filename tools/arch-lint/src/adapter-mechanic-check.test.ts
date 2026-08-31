@@ -8,6 +8,7 @@ import { findAdapterMechanicEdges } from './adapter-mechanic-check.js'
 import {
   ADAPTER_SCAN_EXEMPT_FILES,
   ADAPTERS_REACHING_MECHANICS,
+  ADAPTERS_REACHING_MECHANICS_CEILING,
   MECHANICS_NOT_SCANNED,
 } from './architecture-map.js'
 
@@ -39,9 +40,9 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
     ).toEqual([])
   })
 
-  // Guarded from both sides, so the list can only shrink. Without this, a
-  // migration that removed an edge would leave its entry behind and the
-  // allowlist would slowly stop describing anything.
+  // Guarded from both sides, so an entry cannot outlive its debt. Note this
+  // is NOT what keeps the list shrinking — that is the ceiling below, and the
+  // comment here claimed otherwise for as long as the claim was false.
   it('every allowlist entry is still a real edge', () => {
     const found = new Set(actual)
     const stale = ADAPTERS_REACHING_MECHANICS.filter((edge) => !found.has(edge))
@@ -56,6 +57,30 @@ describe('ADR-0018: an adapter may not reach a mechanic directly', () => {
   // The scan reaching nothing would make both assertions above pass while
   // checking nothing at all — the failure mode this repo has been bitten by
   // more than once.
+  // The ratchet. The two assertions above stop a fabricated entry and a stale
+  // one, and neither has anything to say about the ordinary way this list
+  // grows: a real new adapter -> mechanic edge added together with its
+  // allowlist line. Measured before this existed — a genuine
+  // `routes/export.ts -> backup-in-progress` import, duly listed, passed all
+  // six assertions, and the list had gone 35 -> 40 in a week under two
+  // comments asserting it could only shrink.
+  //
+  // Equality rather than an upper bound, so paying debt off is also a failure
+  // until the number comes down with it. A ceiling nobody lowers stops
+  // recording progress and turns into a budget.
+  it('holds the allowlist at its declared ceiling', () => {
+    expect(
+      ADAPTERS_REACHING_MECHANICS.length,
+      ADAPTERS_REACHING_MECHANICS.length > ADAPTERS_REACHING_MECHANICS_CEILING
+        ? 'a new adapter -> mechanic edge was added. ADR-0018 is Accepted, so ' +
+            'this is debt being taken on against a decision to pay it down: give ' +
+            'the operation a home in server-core, or raise the ceiling in the ' +
+            'same PR and say there why that was not possible.'
+        : 'an edge was paid off — lower ADAPTERS_REACHING_MECHANICS_CEILING to ' +
+            'match, so the number keeps recording where the migration is.',
+    ).toBe(ADAPTERS_REACHING_MECHANICS_CEILING)
+  })
+
   it('the scan actually reaches the adapter tree', () => {
     expect(actual.length).toBeGreaterThan(20)
   })
