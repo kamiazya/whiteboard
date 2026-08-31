@@ -53,20 +53,8 @@ under `server/store/`). The composition root's own wiring — `di/`, `app.ts`,
 is its job. `ADAPTERS_REACHING_MECHANICS` in `architecture-map.ts` records
 the edges that exist today: an unlisted edge fails the build, and a listed
 edge that no longer exists fails it too, so an entry cannot outlive the debt
-it names.
-
-**Shrinking is a third check, and for a while it was only a sentence.** Those
-two guards reject a fabricated entry and a stale one; neither has anything to
-say about a real new edge added along with its allowlist line, which is the
-ordinary way the list grows. Measured: a genuine `routes/export.ts ->
-backup-in-progress` import, duly listed, passed all six assertions, and the
-list went 37 -> 36 -> 35 -> 36 -> 40 in a week while this paragraph and the
-test's own comment both said it could only shrink. `ADAPTERS_REACHING_MECHANICS_CEILING`
-now pins the count by equality — **39 today** — so adding an edge fails until
-someone raises it deliberately and paying one off fails until someone lowers
-it. ADR-0018 is **Accepted** as of 2026-08-31 and carries the burn-down order;
-the four adapters it schedules first (`restore.ts`, `live-doc.ts`,
-`workspace-document.ts`, `ws.ts`) hold 17 of the 39. `corrupt-stored-data` is excluded and says
+it names. Neither sees the list GROW, so `ADAPTERS_REACHING_MECHANICS_CEILING`
+pins the count by equality; ADR-0018 (Accepted) carries the burn-down. `corrupt-stored-data` is excluded and says
 why — an error taxonomy an adapter reads to pick a status code is
 translation, which is an adapter's job, and listing it would put five
 permanently-unshrinkable entries in a list whose whole value is that it
