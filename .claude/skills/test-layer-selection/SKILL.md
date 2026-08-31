@@ -75,6 +75,27 @@ solved with different machinery — exact BigInt rationals against the subject's
 cross-multiplication, cell-by-cell rasterisation against its interval algebra — is what makes the
 comparison mean anything. Calling the production helper from the test is the same code twice.
 
+**A guard that never reaches its subject passes, and reads exactly like a guard that checked.**
+The third sibling of the two above, and the one no mutation check finds: here the assertion is
+right and the subject is simply absent from the fixture, so there is nothing for it to find.
+Mutating the production side is green either way when the fixture never exercises that rule.
+
+Three instances in one session, each costing a real defect:
+
+- `route-scope-registry.test.ts` walked apps built WITHOUT `ServerDeps`, and `/api/v1` mounts
+  only when they are supplied — so nine routes were exempt from a registry-wide guard by
+  accident, every `/api/v1/*` path resolving to `null`, which server mode answers 500 to.
+- Nothing migrated the data dir before `http-server.ts` handed its ports a handle, so `/api/v1`
+  had answered `no such table: workspaces` on a fresh dir since the day it was mounted. No test
+  saw it, because every one of them migrated through some legacy call first.
+- A route test's own helper pre-created the workspace, so `createWorkspace: true` was pinned by
+  nothing — removing it left every case green, on behaviour a PR body claimed to preserve.
+
+So assert the subject is PRESENT, not merely that what is present passes:
+`expect(routes.some((r) => r.path.startsWith('/api/v1/'))).toBe(true)` beside the walk,
+`expect(edges.length).toBeGreaterThan(20)` beside the allowlist. A count far below what the real
+surface holds is evidence the fixture missed, never good news.
+
 **Coverage ledgers**, for a property modelling a surface that keeps growing (an editor's command
 set, its gesture events, its keyboard catalog, its verbs), are
 `.claude/rules/coverage-ledger.md` — path-scoped to `apps/web/**` and `packages/*/src/**`, so it
