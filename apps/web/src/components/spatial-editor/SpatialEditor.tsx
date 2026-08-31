@@ -898,6 +898,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // selection. Pinning it to the node the menu was opened on made it a
     // dialog you had to close before you could look at anything else.
     const [facetPanelOpen, setFacetPanelOpen] = useState(false)
+    // Deselecting CLOSES it, rather than leaving it standing with nothing to
+    // edit. It is the same act that dismisses the context menu, and on touch
+    // a press on blank canvas is how you put a surface away — one semantic
+    // instead of two, and no dismiss control for this panel to carry.
+    //
+    // Cleared during render rather than in an effect, the shape
+    // `DerivedFacetForm` uses for its draft: an effect would let the panel
+    // paint one frame with nothing in it. Clearing the FLAG (rather than
+    // rendering null and leaving it true) is what keeps a later re-open an
+    // ordinary open — the earlier version of this returned null and stranded
+    // the flag, which only a new selection could get out of.
+    if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
     const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
@@ -3905,26 +3917,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         {facetPanelOpen &&
           (() => {
             const target = canvas.nodes.find((entry) => entry.id === selectedId)
-            // Nothing selected: the inspector stays open and says so, rather
-            // than vanishing. Returning null here left `facetPanelOpen` true
-            // with nothing on screen and no Done to press — a state only a
-            // new selection could get out of.
-            if (target === undefined) {
-              return (
-                <FacetFormPanel
-                  node={undefined}
-                  registry={bundledFacetRegistry}
-                  onClose={() => setFacetPanelOpen(false)}
-                  variant={inspectorIsSheet ? 'sheet' : 'dock'}
-                  onWrite={() => {}}
-                />
-              )
-            }
+            // Nothing selected: the inspector is ABOUT a node, so there is
+            // nothing for it to be about. It closes rather than standing
+            // there saying so — the same thing a press on blank canvas does
+            // to the context menu, which is the semantic this matches. The
+            // flag is cleared during render just above, so re-opening it
+            // later is an ordinary open rather than a stuck true.
+            if (target === undefined) return null
             return (
               <FacetFormPanel
                 node={target}
                 registry={bundledFacetRegistry}
-                onClose={() => setFacetPanelOpen(false)}
                 variant={inspectorIsSheet ? 'sheet' : 'dock'}
                 onWrite={(key, payload) => {
                   // Applies to the whole selection, the semantics the menu

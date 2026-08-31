@@ -81,7 +81,7 @@ it('leaves focus on the canvas, so typing and shortcuts still reach it', async (
   expect(panel.contains(document.activeElement)).toBe(false)
 })
 
-it('stays dismissible when the selection empties, instead of vanishing', async () => {
+it('closes when the selection empties — deselecting is what puts it away', async () => {
   const { Host } = makeHost()
   const { container } = render(<Host />)
   const root = await openInspector(container, 120, 85)
@@ -92,12 +92,17 @@ it('stays dismissible when the selection empties, instead of vanishing', async (
   await userEvent.click(root, {
     position: { x: Math.round(root.clientWidth / 2), y: 400 },
   })
-  const panel = panelOf(container)
-  // It must still be on screen WITH its Done control — returning null here
-  // left `facetPanelOpen` true with nothing to press.
-  expect(panel).not.toBeNull()
-  const done = panel?.querySelector('[aria-label="Close facets"]') as HTMLElement
-  expect(done).not.toBeNull()
-  fireEvent.click(done)
+  // Gone, not standing there saying there is nothing to edit. The panel is
+  // ABOUT the selected node, so the act that empties the selection is the act
+  // that puts it away — the same one that dismisses the context menu.
   expect(panelOf(container)).toBeNull()
+
+  // And the flag went with it: re-selecting must not spring the panel back
+  // open on its own. Rendering null while leaving `facetPanelOpen` true is
+  // the earlier defect this replaced, one turn further on.
+  await userEvent.click(root, { position: { x: 120, y: 85 } })
+  expect(
+    panelOf(container),
+    'the inspector re-opened by itself on the next selection — the open flag outlived the panel',
+  ).toBeNull()
 })
