@@ -59,26 +59,51 @@ pnpm typecheck
 pnpm smoke:e2e
 ```
 
-`scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and verifies at least the following.
+`scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and calls
+every tool in `COVERED_TOOLS`, asserting each one's `structuredContent` against
+its `outputSchema`. It also exercises the error paths in `ERROR_PATH_ONLY_TOOLS`
+and the no-browser cases — a viewport set answering `no_client`, and a scene
+render succeeding through headless rendering with nothing connected.
 
-- `canvas_create`
-- `annotate`
-- `canvas_inspect`
-- `version_save`
-- `version_restore` (with and without `targetSlug`)
-- `version_list`
-- `viewport_set` returning `no_client`
-- `export_canvas` (format:png/svg/json) succeeding via headless rendering with no browser connected
+**Read the covered set from `server/mcp/mcp-smoke-coverage.ts`, not from here.**
+That file is the source of truth and `smoke-tool-list-parity.test.ts` keeps it in
+step with what the smoke actually calls; a copy in this skill is a second list
+with nothing checking it. The copy that used to sit here named eight tools, and
+the tool renames of ADR-0009 had left every one of them unregistered — a skill is
+instructions to a future session, so a wrong name here is misdirection rather
+than noise.
 
 If the final line is `[e2e] ALL OK`, the MCP wrapper and route wiring are basically connected correctly.
 
 ### 5. LLM Smoke Only When Needed
 
 ```bash
-pnpm smoke:claude
+pnpm smoke:claude   # Claude subprocess, from a zero-context start
+pnpm smoke:codex    # Codex subprocess: schema-bound JSON output + real files on disk
 ```
 
-This consumes quota. Use it only when you need to confirm that the LLM can call tools correctly through descriptions and schemas.
+Both consume quota, so neither runs in CI. Reach for them only to confirm an
+LLM can call the tools through their descriptions and schemas.
+
+`smoke:codex` fails inside a sandbox because it cannot write `~/.codex/sessions`.
+That is the sandbox, not a repo bug — rerun it outside. And returning JSON is
+not the pass condition on its own: confirm real `.loro` files were left behind.
+`KEEP_SMOKE_TMP=1 pnpm smoke:codex` keeps the tmp directory to look at them.
+
+## Which smoke, and in what order
+
+Start with the smallest that covers the changed area; add the next only if the
+first passes. Do not open with a quota-consuming one.
+
+| Changed | Run first | Add next |
+|---|---|---|
+| entrypoint, imports, a crash right after startup | `pnpm smoke` (the process survives 3s) | `pnpm smoke:e2e` |
+| canvas routes, versions, store, MCP tool wiring | `pnpm smoke:e2e` | `smoke:claude` / `smoke:codex` if it reaches subprocess integration |
+| Claude Code subprocess compatibility | `pnpm smoke:claude` | `pnpm typecheck` |
+| Codex subprocess, strict output, tmp persistence | `pnpm smoke:codex` | `pnpm typecheck` |
+| rendering quality needing a connected browser | smoke proves nothing here | open the browser and look |
+
+`pnpm smoke:all` is `smoke:e2e && smoke:claude`, not everything.
 
 ## How To Read Failures
 

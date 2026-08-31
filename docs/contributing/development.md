@@ -186,7 +186,7 @@ pnpm smoke:claude   # spawn the claude CLI; verifies tools are callable via desc
 pnpm smoke:all      # smoke:e2e + smoke:claude
 ```
 
-The project-scoped skills `.claude/skills/whiteboard-mcp-smoke/SKILL.md` (restart triage) and `.claude/skills/whiteboard-smoke/SKILL.md` (smoke selection) encode this workflow so a "verify behavior" request can trigger it without restarting manually.
+The project-scoped skill `.claude/skills/whiteboard-mcp-smoke/SKILL.md` encodes this workflow — restart triage, which smoke to run in what order, and how to read a failure — so a "verify behavior" request can trigger it without restarting manually.
 
 ## Shared-channel hygiene
 

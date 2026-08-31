@@ -85,12 +85,6 @@ const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
 // when a node smoke is added to or removed from test:e2e:distribution.
-//
-// A count is not a check that the steps RESOLVE, and the difference was live:
-// this stood at 16 while one of those steps, `pnpm smoke:template`, delegated
-// to a package script that had been deleted with the template feature. The
-// chain was the length this said and stopped at its eighth step.
-// `root-composite-scripts.test.ts` is the other half.
 const EXPECTED_DISTRIBUTION_STEPS = 15
 
 describe('release-gate-matrix.json structure', () => {
@@ -288,6 +282,26 @@ describe('test:e2e:distribution step-count drift', () => {
 
   it('README says "fifteen steps" matching the current chain', () => {
     expect(readmeText).toMatch(/The chain has fifteen steps/)
+  })
+
+  it('every `pnpm <script>` step in the chain resolves to a script that exists', () => {
+    // The count above pinned the SHAPE of this chain and not its contents, so
+    // a step naming a script that had been deleted stayed in it and the guard
+    // stayed green. `pnpm smoke:template` sat there until someone ran the
+    // chain — and it only runs on a release tag, since CI's packaged-smoke job
+    // exercises `smoke:distribution:packaged` instead. Nothing else would have
+    // reported it before the release it broke.
+    //
+    // Scoped to this chain, beside the count it completes.
+    // `root-composite-scripts.test.ts` applies the same rule to every root
+    // composite script, so a dangling step in `check:release-candidate` or
+    // `check:local` is caught too.
+    const chain = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
+    const missing = scriptSegments(chain)
+      .map((segment) => /^pnpm ([\w:-]+)$/.exec(segment)?.[1])
+      .filter((name): name is string => name !== undefined)
+      .filter((name) => rootPkg.scripts[name] === undefined)
+    expect(missing).toEqual([])
   })
 })
 
