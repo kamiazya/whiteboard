@@ -176,16 +176,26 @@ export function BrowserDocumentPage({
   const [duplicateError, setDuplicateError] = useState<string | null>(null)
   const handleDuplicate = async () => {
     if (isDuplicating) return
+    // The document this run is about, fixed before the first await. The page
+    // stays mounted across a switch, so by the time the catch below runs the
+    // one on screen may be a different document — and reading `documentId`
+    // there would answer with this closure's own render either way.
+    const startedOn = documentId
     setIsDuplicating(true)
     setDuplicateError(null)
     try {
       await duplicateDocument()
     } catch (err) {
+      // Resetting on the switch is not enough on its own: this runs AFTER the
+      // reset, so without the guard the failed duplicate of the document that
+      // left prints its error under a document that has nothing wrong with
+      // it. Same residual the save indicator had, same shape of fix.
+      if (currentDocumentIdRef.current !== startedOn) return
       setDuplicateError(
         err instanceof Error ? err.message : `Failed to duplicate ${kindNoun(documentKind)}.`,
       )
     } finally {
-      setIsDuplicating(false)
+      if (currentDocumentIdRef.current === startedOn) setIsDuplicating(false)
     }
   }
 
@@ -258,6 +268,28 @@ export function BrowserDocumentPage({
   const mainRef = useRef<HTMLElement | null>(null)
   // Stable canvas id from the loaded snapshot; null while not yet loaded.
   const documentId = pageState.kind === 'editing' ? pageState.snapshot.documentId : null
+
+  // Mirrors the scope itself, rewritten every render: an async handler that
+  // started under one document has to ask who is on screen NOW, and its own
+  // closure can only answer with the render it was created in.
+  const currentDocumentIdRef = useRef(documentId)
+  currentDocumentIdRef.current = documentId
+
+  // Everything above NAMES A DOCUMENT, and this page keeps its own document
+  // switching rather than remounting (App.tsx says so at the mount site), so
+  // none of it may outlive the document it is about.
+  //
+  // `confirmDelete` is the one that bites: it is a bare boolean, and
+  // `triggerCleanup()` acts on whatever document the controller currently
+  // holds. Nothing binds them, so a dialog opened on one document and
+  // confirmed after a switch deletes the OTHER — measured, the document that
+  // arrived while the dialog stood was the one that went to the Trash.
+  // SCOPE RESET — see scoped-screen-state.test.ts
+  useEffect(() => {
+    setConfirmDelete(false)
+    setDuplicateError(null)
+    setIsDuplicating(false)
+  }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
   // instant the id is, and so this effect does not re-fire every time the list
