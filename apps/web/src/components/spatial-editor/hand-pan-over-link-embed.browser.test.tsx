@@ -52,12 +52,20 @@ function readTranslate(container: HTMLElement): { x: number; y: number } {
   return { x: Number(m[1]), y: Number(m[2]) }
 }
 
-/** Presses at the given root-local point, on whatever element is really there. */
+/**
+ * Presses at the given root-local point, on whatever element is really there —
+ * which is the whole point, since the defect is an element taking a press.
+ *
+ * It THROWS rather than falling back to the root when nothing is at the point.
+ * The fallback is what a probe that missed its target looks like, and it makes
+ * the test pass while never touching the layer it exists to check.
+ */
 function dragFrom(root: HTMLElement, at: { x: number; y: number }, by: { x: number; y: number }) {
   const rect = root.getBoundingClientRect()
   const clientX = rect.left + at.x
   const clientY = rect.top + at.y
-  const target = document.elementFromPoint(clientX, clientY) ?? root
+  const target = document.elementFromPoint(clientX, clientY)
+  if (target === null) throw new Error(`nothing at (${clientX}, ${clientY}) to press`)
   const init = { pointerId: 1, pointerType: 'touch', isPrimary: true, button: 0 }
   fireEvent.pointerDown(target, { ...init, buttons: 1, clientX, clientY })
   fireEvent.pointerMove(root, {
@@ -78,10 +86,30 @@ const CENTRE = { x: NODE.x + NODE.width / 2, y: NODE.y + NODE.height / 2 }
 // The facade sits on the node's centre, nudged 8px down (see LinkEmbedLayer).
 const FACADE = { x: CENTRE.x, y: CENTRE.y + 8 }
 
+/**
+ * That the press point is over the embed layer, checked from GEOMETRY.
+ *
+ * Not from the hit test: once the fix lands the layer stops taking the
+ * pointer, so `elementFromPoint` answers with what is beneath it and a
+ * hit-test guard would fail on the fixed code. The geometry is the same
+ * before and after, and it is what "this probe reached its subject" means.
+ */
+function expectOver(root: HTMLElement, testId: string, at: { x: number; y: number }) {
+  const rect = root.getBoundingClientRect()
+  const box = screen.getByTestId(testId).getBoundingClientRect()
+  const x = rect.left + at.x
+  const y = rect.top + at.y
+  expect({
+    inside: x >= box.left && x <= box.right && y >= box.top && y <= box.bottom,
+    hasArea: box.width > 0 && box.height > 0,
+  }).toEqual({ inside: true, hasArea: true })
+}
+
 it('hand tool pans from a press on a link node embed facade', async () => {
   const { container } = render(<Host tool="hand" />)
   const root = container.querySelector('[data-testid="spatial-editor"]') as HTMLElement
   await screen.findByTestId('link-embed-facade')
+  expectOver(root, 'link-embed-facade', FACADE)
 
   const before = readTranslate(container)
   dragFrom(root, FACADE, { x: 40, y: -25 })
@@ -102,6 +130,8 @@ it('hand tool pans from a press on a live link embed', async () => {
       'true',
     ),
   )
+
+  expectOver(root, 'link-embed-frame', CENTRE)
 
   const before = readTranslate(container)
   dragFrom(root, CENTRE, { x: -30, y: 20 })
