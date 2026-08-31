@@ -47,6 +47,14 @@ pnpm --filter @kamiazya/whiteboard-web docs:snapshots
 
 Add a `*.docs-snapshot.test.tsx`, pin the clock, save via `resolveDocAssetPath`, run, and commit the PNG with the markdown that references it.
 
+The project is excluded from the ordinary `pnpm test` run because it writes into the repo, so
+regenerate deliberately and commit the result. `docs:snapshots:check` generates TWICE before
+`git diff --exit-code`: Vite's first run after a config change can re-optimise dependencies and
+produce a one-off pixel drift, so the second run is the stable artifact. Diffs surviving a
+double run are a real UI change, not jitter. Cross-platform font rendering means a Linux CI
+capture is not byte-identical to a macOS one — this stays a developer-driven, regenerate-locally
+workflow.
+
 ## Discipline
 
 Update only doc files in a docs pass; commit them separately with a `docs:` message. Fix broken links you touch. Surface any user-visible change you could not find a doc home for.

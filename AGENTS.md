@@ -89,105 +89,22 @@ pnpm run test:browser:trace  # same, with trace artifacts on failure
 
 ## MCP Development Mode
 
-When developing this repo's MCP server, prefer the daemon-hosted HTTP MCP endpoint over direct `stdio`.
+Develop this repo's MCP server against the **daemon-hosted HTTP endpoint**, not `stdio`:
+`pnpm mcp:http:dev` starts the local daemon in watch mode at `http://127.0.0.1:3099/mcp`, so a
+code change restarts the daemon rather than the whole client integration. `stdio` is reserved for
+packaged-distribution checks — validating `@kamiazya/whiteboard-mcp` as it ships. Debug in this
+order: MCP Inspector against that URL (`pnpm mcp:inspect`), then `initialize` and `tools/list`,
+then `MCP_HTTP_DEBUG=1` if capability negotiation or request flow is unclear, and only then
+compare against a specific client.
 
-Use:
+When changing transport, routing, or tool registration, add or update a nearest-layer automated
+test for `/mcp` behaviour and verify against the running endpoint with a real client, not only
+mocked unit tests.
 
-```bash
-pnpm mcp:http:dev
-pnpm mcp:inspect
-pnpm mcp:debug:http
-```
-
-- This starts the local daemon in watch mode and exposes MCP at `http://127.0.0.1:3099/mcp`.
-- Prefer connecting Codex or Claude Code to that URL during active MCP development so code changes only restart the daemon, not the whole MCP client integration.
-- Use `stdio` MCP only for packaged-distribution checks or when specifically validating the standalone entrypoint behavior.
-- Prefer the official MCP Inspector for first-pass debugging before switching to client-specific debugging.
-- If request flow is unclear, restart with `MCP_HTTP_DEBUG=1 pnpm mcp:http:dev` and inspect the `[mcp-http:init]` / `[mcp-http]` logs.
-- Keep the detailed checklist in `docs/contributing/mcp-debugging.md` in sync with actual repo workflow.
-
-Dev sessions reach the daemon through the stdio proxy
-`packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs`:
-
-- **Claude Code**: register it once per checkout at LOCAL scope (machine-
-  private `~/.claude.json`), which shadows the published `npx` definition
-  in `.mcp.json` (precedence: local > project). `.mcp.json` itself is the
-  PUBLIC plugin/team surface and stays pointed at the published package —
-  do not repoint it at dev tooling. Note `settings.json` has no
-  `mcpServers` field in its schema; a definition there is silently ignored.
-
-  ```bash
-  claude mcp add --scope local --transport stdio whiteboard --     node "$(git rev-parse --show-toplevel)/packages/mcp-server/scripts/dev/mcp-http-stdio-proxy.mjs"
-  ```
-
-- **Codex**: `.codex/config.toml` registers the same proxy as
-  `whiteboard_dev` (repo-tracked; it already disables the plugin-provided
-  published server).
-
-The clients register the proxy as a stdio server rather than the HTTP URL
-directly: an MCP client attempts one HTTP connection at session start and
-never retries, so it can lose the race against the SessionStart hook
-spawning the daemon, and a watch restart mid-session strands the
-connection the same way. The stdio spawn always succeeds; the proxy runs
-the ensure hook, waits for readiness, and retries each request across
-watch restarts. This is sound because `/mcp` is stateless per request —
-one stdin line becomes one authenticated POST, with no protocol session
-to lose. Server-initiated notifications do not traverse the proxy;
-reload the client session to pick up a changed tool list.
-
-Both Claude Code (`.claude/settings.json`) and Codex
-(`.codex/config.toml`) wire a `SessionStart` hook to
-`packages/mcp-server/scripts/dev/ensure-http-dev-daemon.mjs`. The hook
-probes this checkout's derived dev port (3099 on the main checkout,
-a deterministic per-worktree port otherwise — see
-`docs/contributing/development.md`'s ".dev-data" section) and, if
-nothing is listening, spawns `pnpm mcp:http:dev` detached so the first
-MCP request can connect immediately. It is idempotent — if our
-authenticated daemon is already up **and its identity marker matches
-this worktree** it exits without touching anything; if a foreign
-service, or a different worktree's daemon that hash-collided on the
-same port, is on the port it fails loudly so the developer can
-investigate. Output goes to `tmp/logs/mcp-http-dev.log`. If hooks are
-disabled or the project is not trusted yet, run `pnpm mcp:http:dev`
-manually in another terminal before opening the repo.
-
-The probe-decide-spawn sequence is mutually exclusive across
-processes: two hooks starting close together (a new editor session
-plus a `new-worktree.mjs` run, say) acquire an exclusive, atomically-
-created lock file (`<dataDir>/dev-daemon-spawn.lock`, alongside the
-`dev-daemon.json` identity marker — per-worktree exactly like the
-derived port) before probing the port, so only one of them ever
-spawns. The loser doesn't exit or spawn a competitor — it waits for
-the winner's daemon to become reachable and exits 0 once it answers,
-because the developer's session just needs a working daemon regardless
-of who started it. A lock abandoned by a crashed hook self-heals: it
-is stolen once its recorded pid is dead, or once it exceeds
-`WHITEBOARD_DEV_SPAWN_LOCK_STALE_MS` (default 45s).
-
-With HTTP transport every client reload connects to the same long-lived
-daemon, picking up source changes immediately and avoiding the stale-daemon
-reuse that the old stdio + daemon-registry path was prone to.
-
-stdio is reserved for packaged-distribution checks (validating
-`@kamiazya/whiteboard-mcp` as it ships on npm). Day-to-day MCP development
-inside this repo always goes through HTTP.
-
-When changing MCP transport, routing, or tool registration:
-
-- Add or update a nearest-layer automated test for `/mcp` behavior.
-- Manually verify with a real MCP client against the running HTTP endpoint, not only via mocked unit tests.
-
-Preferred MCP debugging order:
-
-1. Reproduce with Inspector against `http://127.0.0.1:3099/mcp`
-2. Verify `initialize` and `tools/list`
-3. Enable `MCP_HTTP_DEBUG=1` if capability negotiation or request flow is unclear
-4. Only then compare with Codex / Claude Code specific behavior
-
-If the issue is client-specific:
-
-- Capture the mismatch between Inspector and the real client before changing server behavior.
-- Keep `docs/contributing/mcp-debugging.md` aligned with any new debugging workflow learned during the fix.
+Everything else — how each client registers the stdio proxy, the SessionStart hook that ensures
+the daemon, its per-worktree port and spawn lock, and the failure modes — is
+`docs/contributing/mcp-debugging.md` and `docs/contributing/development.md`, which carry it in
+more detail than a summary here could. Keep those in sync with the real workflow.
 
 ## Zod Schema Discipline
 
@@ -283,41 +200,10 @@ rather than passed as a structured field — do not do that.
 
 ## Doc Screenshots
 
-Images under `docs/assets/` that are produced from the running UI (canvas
-list, storage tab, etc.) are regenerated by Vitest browser-mode tests
-that render real components against deterministic mocked data and write
-PNGs straight to their final paths.
-
-```bash
-pnpm --filter @kamiazya/whiteboard-web docs:snapshots
-```
-
-Each `*.docs-snapshot.test.tsx` under `apps/web/src/docs-snapshots/`
-mounts a canonical apps/web component, waits for the post-fetch render
-to settle, then calls `page.screenshot({ path: … })`. To add a new doc
-image:
-
-1. Drop a new `<name>.docs-snapshot.test.tsx` file under that directory.
-2. Pin the system clock with `vi.setSystemTime(...)` so any "Xd ago"
-   labels stay stable across regenerations.
-3. Save to the canonical asset path with
-   `resolveDocAssetPath('foo.png')` from `_helpers.ts`.
-4. Run `pnpm --filter @kamiazya/whiteboard-web docs:snapshots` and commit
-   the resulting PNG alongside the markdown change that references it.
-
-The project is excluded from the regular `pnpm test` run because it
-writes into the repo. Cross-platform font rendering means snapshots
-generated on Linux CI will not be byte-identical to macOS / Windows
-captures, so for now treat this as a developer-driven workflow:
-regenerate locally, commit.
-
-`pnpm --filter @kamiazya/whiteboard-web docs:snapshots:check` invokes the generator twice before running
-`git diff --exit-code` because Vite's first run after a config change
-can re-optimise dependencies and produce a one-off pixel drift; the
-second run is the stable artifact. If a regeneration leaves
-unexpected diffs in `docs/assets/`, it almost always means a real UI
-change rather than residual jitter — re-run twice and inspect the
-remaining diff.
+Images under `docs/assets/` that come from the running UI are regenerated by vitest browser-mode
+tests that render real components against mocked data and write PNGs to their final paths:
+`pnpm --filter @kamiazya/whiteboard-web docs:snapshots`. Adding one, the clock-pinning that keeps
+"Xd ago" labels stable, and why the check runs twice are the `docs-sync` skill.
 
 ## Completion Checklist
 
@@ -351,33 +237,16 @@ pnpm build
 
 ## PR Visual Evidence
 
-When the change has a user-visible effect (canvas rendering, UI surface, MCP tool result that depends on state), attach the verification screenshot to the PR body. Reviewers should be able to see the bug and the fix without having to clone and reproduce.
+A change with a user-visible effect ships its verification figure in the PR body, so a reviewer
+sees the bug and the fix without cloning. For a FIX that means two panels — the same case before
+and after — not one capture of the result. **Say so when you skip**: `Visual evidence: none —
+<reason>` in the body, with a real reason; a PreToolUse hook blocks `gh pr create` otherwise, so
+the skip is a decision on the record rather than an omission. Other real evidence goes there too
+— a `pnpm test` paste for a browser-mode regression reads as a reason.
 
-Workflow:
-
-1. Capture screenshots while doing the manual verification step from the workflow above. Save them under `tmp/screenshots/` per the tmp-workspace rule. For a FIX that means two: the same case rendered by the code before and after.
-2. Compose the two into one figure:
-   ```
-   node .claude/scripts/compose-figure.mjs \
-     --before tmp/screenshots/before.png --after tmp/screenshots/after.png \
-     --out tmp/screenshots/figure.png \
-     [--before-label "…"] [--after-label "…"] [--ring x1,y1,x2,y2]
-   ```
-   It refuses two panels that are the same picture — which is what every failed attempt at producing a real "before" looks like — and prints both pixel signatures for the body. A new affordance has nothing to compare against; one capture of it is the whole figure, and this step is skipped.
-3. Upload the figure to GitHub via the `gh image` extension (`drogers0/gh-image`):
-   ```
-   gh extension install drogers0/gh-image  # one-time setup
-   gh image tmp/screenshots/figure.png
-   ```
-   This prints an `![figure.png](https://github.com/user-attachments/...)` line.
-4. Paste the markdown into the PR body under a `## Visual repro` (or similarly named) section, with one sentence naming what to look at — and say what the figure CANNOT show, when something about it is staged (a case only reachable behind a flag, a state supplied through a seam rather than by its real producer).
-5. Keep the PNGs in `tmp/screenshots/` until the PR merges; remove them afterward to keep the dir lean (the GitHub upload is the durable copy).
-
-Skip this rule for changes that are invisible to humans — purely backend, schema, internal helper, etc. — but lean toward attaching when in doubt.
-
-**Say so when you skip**, in the body: `Visual evidence: none — <reason>`. A PreToolUse hook blocks `gh pr create` when the diff touches a surface a human looks at and the body carries neither a figure nor that line, so the skip is a decision on the record rather than an omission — and the reason is required, because a bare "none" is the same omission with a sentence in front of it. Everything that is real evidence but not a picture goes there too: a `pnpm test` output paste for a `canvas-viewer-browser`/`web-browser` regression is a perfectly good reason, and reads as one.
-
-The hook exists because this section was prose alone for a long time and the practice decayed into a `## Visual repro` heading over an after-only capture — which satisfies a reader skimming for the section while showing a reviewer nothing.
+How to produce the figure — rendering both versions through the real pipeline, composing them
+with `compose-figure.mjs` (which refuses two identical panels), uploading it, and the traps that
+have each produced a misleading figure — is the `visual-evidence` skill.
 
 ## Source Comment Discipline
 
