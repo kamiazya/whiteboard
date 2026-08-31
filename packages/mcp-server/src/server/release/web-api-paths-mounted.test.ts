@@ -82,8 +82,13 @@ function webApiPaths(): WebPath[] {
   const seen = new Map<string, WebPath>()
   for (const file of sourceFiles(WEB_SRC)) {
     const text = readFileSync(file, 'utf-8')
-    for (const match of text.matchAll(/['`](\/api\/[^'`]*)['`]/g)) {
-      const raw = match[1]
+    // All three quotings, matched with a backreference so the closing quote is
+    // the opening one. Double quotes are not hypothetical here: biome.json sets
+    // `jsxQuoteStyle: "double"`, so a JSX `src="/api/…"` is the style the
+    // linter ENFORCES — a scan blind to it would miss the one place a path is
+    // most likely to be written inline.
+    for (const match of text.matchAll(/(['"`])(\/api\/[^'"`]*)\1/g)) {
+      const raw = match[2]
       if (NOT_A_REQUEST_TARGET.has(raw)) continue
       // A literal broken across an interpolation boundary is not a whole path.
       if (raw.includes('${') && !raw.includes('}')) continue
