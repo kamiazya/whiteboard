@@ -27,9 +27,20 @@ export interface LinkEmbedLayerProps {
   readonly canvas: SpatialCanvas
   /** The LOD gate: only link nodes this returns true for offer the facade. */
   readonly shouldOffer: (node: Extract<SpatialNode, { type: 'link' }>) => boolean
+  /**
+   * False while the editor's tool is navigation-only (the hand tool), where
+   * every press has to pan — including one that lands on this layer.
+   *
+   * `data-editor-overlay` alone cannot express that: it makes the root ignore
+   * the press, which is what a control wants and the opposite of what a
+   * navigation gesture wants. It also cannot help at all once the iframe is
+   * live, because an iframe consumes the pointer before any handler of ours
+   * runs. `pointer-events: none` is the only thing that answers both.
+   */
+  readonly interactive: boolean
 }
 
-export function LinkEmbedLayer({ canvas, shouldOffer }: LinkEmbedLayerProps) {
+export function LinkEmbedLayer({ canvas, shouldOffer, interactive }: LinkEmbedLayerProps) {
   // Activation order doubles as the LRU: first entry is the oldest.
   const [liveIds, setLiveIds] = useState<readonly string[]>([])
 
@@ -63,6 +74,7 @@ export function LinkEmbedLayer({ canvas, shouldOffer }: LinkEmbedLayerProps) {
               top: node.y,
               width: node.width,
               height: node.height,
+              pointerEvents: interactive ? undefined : 'none',
             }}
             className="overflow-hidden rounded-md border bg-background shadow-sm"
           >
@@ -112,6 +124,7 @@ export function LinkEmbedLayer({ canvas, shouldOffer }: LinkEmbedLayerProps) {
               top: node.y + node.height / 2 - 14 + 8,
               width: 28,
               height: 28,
+              pointerEvents: interactive ? undefined : 'none',
             }}
             className="flex items-center justify-center rounded-full border bg-background/95 text-muted-foreground shadow hover:text-foreground"
           >
