@@ -1,3 +1,4 @@
+import { storageCategorySchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { act, cleanup, fireEvent, render, waitFor } from '@testing-library/react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
@@ -7,11 +8,16 @@ import { STATUS_CLEAR_MS, StorageReportCard } from './StorageReportCard.js'
 const PAYLOAD = {
   totalBytes: 4096,
   fileCount: 6,
+  // Every category the contract declares. It used to omit `exports` and
+  // `logs` and carry a `libraries` the daemon cannot report — a fixture
+  // describing a payload no server sends, which is how the component's rows
+  // were asserted against a shape nothing produced.
   byCategory: {
     blobs: { bytes: 1024, files: 2 },
     versions: { bytes: 2048, files: 1 },
     files: { bytes: 0, files: 0 },
-    libraries: { bytes: 0, files: 0 },
+    exports: { bytes: 0, files: 0 },
+    logs: { bytes: 0, files: 0 },
     db: { bytes: 1024, files: 1 },
     other: { bytes: 0, files: 2 },
   },
@@ -62,12 +68,21 @@ describe('StorageReportCard', () => {
     expect(daemonFetch).toHaveBeenCalledWith('/api/runtime/logs/prune', { method: 'POST' })
   })
 
-  it('renders each storage category as its own row so future actions can hang off objects', async () => {
+  it('renders exactly the categories the daemon can report, one row each', async () => {
     const { container } = render(<StorageReportCard />)
-    // Eight rows render synchronously from the static descriptor list:
-    // blobs, versions, files, exports, logs, db, other, libraries.
-    // Values fill in once fetch + the min-refresh timer settle.
-    expect(container.querySelectorAll('[data-storage-row]').length).toBe(8)
+    // Compared against the contract's own union rather than a count. The
+    // count was 8 and included `libraries`, a category the daemon lost the
+    // ability to report when that feature's server half was deleted — the row
+    // then showed a permanent 0 B, which reads as "nothing stored yet". A
+    // number cannot tell those apart; the set can.
+    //
+    // This is the direction `key: StorageCategory` in the component does not
+    // catch: that rejects a row for a category the contract does not have,
+    // while this catches a category the contract gained and nobody rendered.
+    const rendered = Array.from(container.querySelectorAll('[data-storage-row]')).map((row) =>
+      row.getAttribute('data-storage-row'),
+    )
+    expect([...rendered].sort()).toEqual([...storageCategorySchema.options].sort())
     await act(async () => {
       await vi.advanceTimersByTimeAsync(500)
     })
@@ -77,10 +92,6 @@ describe('StorageReportCard', () => {
     expect(versionsRow!.textContent).toMatch(/2\.0\s*KiB|2048/)
     // Reserved per-row action slot is the OOUI hook for future Optimize.
     expect(container.querySelector('[data-storage-actions="versions"]')).not.toBeNull()
-    // User libraries row is pinned to the bottom so management UI lives
-    // away from the hot maintenance buckets.
-    const allRows = Array.from(container.querySelectorAll('[data-storage-row]'))
-    expect(allRows[allRows.length - 1]?.getAttribute('data-storage-row')).toBe('libraries')
   })
 
   it('exposes Optimize all on the Canvas snapshots row and aggregates across workspaces', async () => {
@@ -364,202 +375,6 @@ describe('StorageReportCard', () => {
 
     setTimeoutSpy.mockRestore()
     clearTimeoutSpy.mockRestore()
-  })
-
-  it('opens the libraries dialog, fetches rows, and renders the "file missing" branch', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    fetchMock.mockImplementation((input: RequestInfo | URL) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (url === '/api/user-libraries') {
-        return Promise.resolve(
-          jsonResponse({
-            libraries: [
-              { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
-              { name: 'orphan', path: '/data/orphan.excalidrawlib', itemCount: 1, bytes: null },
-            ],
-          }),
-        )
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
-    })
-
-    const manageButton = container.querySelector(
-      '[aria-label="Manage installed user libraries"]',
-    ) as HTMLButtonElement
-    expect(manageButton).not.toBeNull()
-    fireEvent.click(manageButton)
-
-    await waitFor(() => {
-      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
-    })
-    const shapesRow = document.querySelector('[data-user-library-row="shapes"]')!
-    expect(shapesRow.textContent).toMatch(/3\s*items?/i)
-    expect(shapesRow.textContent).toMatch(/KiB|2048/)
-
-    const orphanRow = document.querySelector('[data-user-library-row="orphan"]')!
-    expect(orphanRow.textContent).toMatch(/file missing/i)
-  })
-
-  it('shows the fetch error instead of "No user libraries installed." when the list request fails', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    fetchMock.mockImplementation((input: RequestInfo | URL) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (url === '/api/user-libraries') {
-        return Promise.resolve(new Response('{}', { status: 500 }))
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
-    })
-    fireEvent.click(container.querySelector('[aria-label="Manage installed user libraries"]')!)
-
-    await waitFor(() => {
-      expect(document.body.textContent).toMatch(/HTTP 500/)
-    })
-    // An empty list caused by a failed fetch must not masquerade as
-    // "no libraries installed".
-    expect(document.body.textContent).not.toMatch(/No user libraries installed/)
-  })
-
-  it('surfaces a network failure from remove as libsError instead of an unhandled rejection', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (url === '/api/user-libraries' && !init?.method) {
-        return Promise.resolve(
-          jsonResponse({
-            libraries: [
-              { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
-            ],
-          }),
-        )
-      }
-      if (url.startsWith('/api/user-libraries/') && init?.method === 'DELETE') {
-        return Promise.reject(new Error('network down'))
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
-    })
-    fireEvent.click(container.querySelector('[aria-label="Manage installed user libraries"]')!)
-    await waitFor(() => {
-      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
-    })
-
-    fireEvent.click(document.querySelector('[aria-label="Remove user library shapes"]')!)
-    await waitFor(() => {
-      expect(document.body.textContent).toMatch(/network down/)
-    })
-  })
-
-  it('removes a user library optimistically and re-pulls the list on success', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    let libraries = [
-      { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
-    ]
-    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (url === '/api/user-libraries') {
-        return Promise.resolve(jsonResponse({ libraries }))
-      }
-      if (init?.method === 'DELETE' && url === '/api/user-libraries/shapes') {
-        libraries = []
-        return Promise.resolve(new Response(null, { status: 204 }))
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
-    })
-    fireEvent.click(
-      container.querySelector('[aria-label="Manage installed user libraries"]') as HTMLElement,
-    )
-    await waitFor(() => {
-      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
-    })
-
-    fireEvent.click(document.querySelector('[aria-label="Remove user library shapes"]')!)
-
-    await waitFor(() => {
-      expect(document.querySelector('[data-user-library-row="shapes"]')).toBeNull()
-    })
-  })
-
-  it('surfaces a remove failure without dropping the row', async () => {
-    const fetchMock = globalThis.fetch as unknown as ReturnType<typeof vi.fn>
-    fetchMock.mockImplementation((input: RequestInfo | URL, init?: RequestInit) => {
-      const url =
-        typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
-      if (url === '/api/runtime/storage') {
-        return Promise.resolve(jsonResponse(PAYLOAD))
-      }
-      if (url === '/api/user-libraries') {
-        return Promise.resolve(
-          jsonResponse({
-            libraries: [
-              { name: 'shapes', path: '/data/shapes.excalidrawlib', itemCount: 3, bytes: 2048 },
-            ],
-          }),
-        )
-      }
-      if (init?.method === 'DELETE' && url === '/api/user-libraries/shapes') {
-        return Promise.resolve(new Response(null, { status: 500 }))
-      }
-      return Promise.reject(new Error(`unexpected fetch: ${url}`))
-    })
-
-    vi.useRealTimers()
-    const { container } = render(<StorageReportCard />)
-    await waitFor(() => {
-      expect(container.querySelector('[data-storage-row="libraries"]')).not.toBeNull()
-    })
-    fireEvent.click(
-      container.querySelector('[aria-label="Manage installed user libraries"]') as HTMLElement,
-    )
-    await waitFor(() => {
-      expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
-    })
-
-    fireEvent.click(document.querySelector('[aria-label="Remove user library shapes"]')!)
-
-    await waitFor(() => {
-      expect(document.body.textContent ?? '').toMatch(/Remove failed: HTTP 500/i)
-    })
-    // The row must still be there — a failed remove should not disappear.
-    expect(document.querySelector('[data-user-library-row="shapes"]')).not.toBeNull()
   })
 
   it('exposes Cleanup on the Versions row and aggregates sandwiched-auto-version prunes across workspaces', async () => {
