@@ -9,60 +9,18 @@ Use this repo's standard development loop for every feature, bug fix, or refacto
 
 ## Test Layer Selection
 
-- Use `mcp-node` for pure functions, stores, routes, server behavior, and persistence logic in `packages/mcp-server`.
-- Use `canvas-viewer-node` / `canvas-viewer-jsdom` for `packages/canvas-viewer` parsing, hooks, and components where browser layout and pointer behavior are not the core risk; use `canvas-viewer-browser` when they are.
-- Use the `apps/web` jsdom project (`apps/web/vitest.config.ts`) for React components and hooks when browser layout and pointer behavior are not the core risk.
-- Use `web-browser` for `apps/web` tests that require real browser APIs not available in jsdom: IndexedDB, OPFS, `window.showOpenFilePicker`. File suffix: `.browser.test.tsx`.
-- Promote to E2E when the bug depends on real routes, server composition, websocket timing, persistence order, or multi-step page flows.
+Start with the smallest failing test at the **nearest** layer, and do not jump to broad E2E when a
+smaller failing test can isolate the bug. Reach for a property or model-based test (fast-check)
+over an example-only one when the change touches a parser/serializer, a state machine with
+time/TTL/revocation semantics, a concurrent store, a CRDT or other mergeable structure, or a
+rounding/normalization transform with an algebraic invariant. Prefer example and browser tests for
+UI wiring, one-off integrations, and anything with no clean invariant to state.
 
-Do not jump to broad E2E first if a smaller failing test can isolate the bug.
-
-### Property-Based / Model-Based Testing (PBT)
-
-Prefer a property or model-based test (fast-check; shared wrappers in
-`packages/mcp-server/src/shared/test-utils/fast-check.ts` and
-`apps/web/src/test-utils/fast-check.ts`) over an example-only test when the change touches:
-
-- a parser/serializer (round-trip: `parse(serialize(x))` equals `x` or a well-defined normalization of `x`)
-- a state machine or store with time/TTL/revocation semantics (model-based: generate a random
-  command sequence, check invariants after each step)
-- a concurrent store (convergence: N concurrent operations settle on one agreed-upon result)
-- a CRDT or other mergeable structure (idempotence, commutativity, convergence under any merge order)
-- rounding, normalization, or other value transforms with an algebraic invariant
-
-When a property models a SURFACE that keeps growing — the editor's command set, its gesture
-events, its keyboard catalog, its editing verbs — pin that surface with a coverage ledger rather
-than trusting whoever adds the next feature to remember this file exists. A ledger is a
-`satisfies Record<TheUnion, SurfaceCoverage>` map guarded in four directions, two by the type
-system and two at runtime by the shared helper in
-`apps/web/src/test-utils/coverage-ledger.ts` — never a per-file re-implementation.
-
-**`.claude/rules/coverage-ledger.md` is the convention**: when a surface earns one and (the half
-that matters more) when it does not, the declare -> model -> pin order, the source-scan variant
-for a surface with no union behind it, and the traps. Worked examples are
-`editor-state.property.test.ts` (three union ledgers), `editor-verbs.property.test.ts` (one), and
-`editor-state-surface.test.ts` (the source scan).
-
-Prefer example/browser tests for UI wiring, one-off integrations, and anything without a clean
-invariant to state. When a property finds a real bug, pin the shrunk counterexample as an example
-test before fixing the implementation — the example is the regression guard, the property is the
-generator that found it. Mutation-check every NEW property before trusting it: temporarily revert
-the rule/fix it pins and confirm the property goes red. A generator too sparse to reach the
-interesting arrangements (boxes that rarely overlap, sequences that rarely collide) passes
-vacuously — the mutation check is what catches a property that asserts nothing, and the fix is a
-denser generator, not more runs. Never pin a fast-check seed to make a flaky property pass; treat repeat
-failures under load as a signal to reduce `numRuns`, not to fix the RNG. Put arbitraries shared
-across test files in the owning package's `test-utils`, not duplicated per file.
-
-**A differential oracle is blind to whatever it SHARES with its subject**, and this is the failure
-mode that reads as the strongest kind of property rather than the weakest. `edge-crossing-sweep`'s
-oracle is the full O(E^2) scan its sweep claims exact equality with — but both sides called the same
-scoring helper, so a mutation inside that helper changed the oracle and the subject together and the
-property stayed green: 22 survivors in one function, under a property nobody would have doubted. So
-when you write an A-vs-B property, ask what B IMPORTS, not what it asserts. A reference solved with
-different machinery (exact BigInt rationals against the subject's floating-point cross-multiplication,
-cell-by-cell rasterisation against its interval algebra) is what makes the comparison mean anything;
-calling the production helper from the test is the same code twice.
+Everything that follows from that choice is the **`test-layer-selection` skill**: which project
+serves which layer and the command for each, the per-layer `numRuns` budget, and the property
+disciplines — mutation-check every new property, answer a vacuous one with a denser generator
+rather than more runs, never pin a seed, and never build an oracle out of the code it is judging.
+Coverage ledgers are `.claude/rules/coverage-ledger.md`, which is path-scoped and loads itself.
 
 ## Required Workflow
 

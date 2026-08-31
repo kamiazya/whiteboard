@@ -59,3 +59,25 @@ properties are the most expensive per run (real browser + IndexedDB/etc.) — ke
   fixing production code, fix the implementation, then mutation-check (revert the fix, confirm the
   pinned example — and ideally the property — goes red, then restore).
 - Shared arbitraries belong in the owning package's `test-utils`, not copy-pasted per test file.
+- A generator too sparse to reach the interesting arrangements — boxes that rarely overlap,
+  sequences that rarely collide — passes **vacuously**. The mutation check is what catches a
+  property that asserts nothing, and the fix is a denser domain plus a reachability guard with a
+  measured floor, never more runs.
+
+**A differential oracle is blind to whatever it SHARES with its subject**, and this reads as the
+strongest kind of property rather than the weakest. `edge-crossing-sweep`'s oracle is the full
+O(E^2) scan its sweep claims exact equality with — but both sides called the same scoring helper,
+so a mutation inside that helper changed the oracle and the subject together and the property
+stayed green: 22 survivors in one function, under a property nobody would have doubted.
+
+So when you write an A-vs-B property, ask what B **imports**, not what it asserts. A reference
+solved with different machinery — exact BigInt rationals against the subject's floating-point
+cross-multiplication, cell-by-cell rasterisation against its interval algebra — is what makes the
+comparison mean anything. Calling the production helper from the test is the same code twice.
+
+**Coverage ledgers**, for a property modelling a surface that keeps growing (an editor's command
+set, its gesture events, its keyboard catalog, its verbs), are
+`.claude/rules/coverage-ledger.md` — path-scoped to `apps/web/**` and `packages/*/src/**`, so it
+loads itself when you are in those files. Worked examples: `editor-state.property.test.ts` (three
+union ledgers), `editor-verbs.property.test.ts` (one), `editor-state-surface.test.ts` (the source
+scan).

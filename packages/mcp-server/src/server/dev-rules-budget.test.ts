@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
@@ -51,7 +51,7 @@ function alwaysOnFiles(): string[] {
 }
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
-  'AGENTS.md': 27,
+  'AGENTS.md': 23,
   '.claude/rules/architecture-map.md': 17,
   '.claude/rules/dev-flow.md': 32,
   '.claude/rules/integrator-flow.md': 13,
@@ -59,7 +59,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 105
+const ALWAYS_ON_TOTAL_BUDGET = 102
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
