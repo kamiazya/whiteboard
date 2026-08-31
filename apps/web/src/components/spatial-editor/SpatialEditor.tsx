@@ -3543,6 +3543,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               LOD gate mirrors the canvas-embed thresholds. */}
             <LinkEmbedLayer
               canvas={canvas}
+              interactive={tool !== 'hand'}
               shouldOffer={(node) =>
                 node.width * viewport.zoom >= EXPAND_MIN_W &&
                 node.height * viewport.zoom >= EXPAND_MIN_H
