@@ -58,9 +58,16 @@ claimIsolatedWhiteboardDb('browserdocumentpage-dialog-outlives-document')
 // no-op — measured, ten samples over three seconds all still on the first
 // document.
 let editorMounted: (() => void) | null = null
+/** The editor's own way in to the full-screen body surface. */
+let openInEditor: ((nodeId: string, text: string) => void) | null = null
 vi.mock('../components/spatial-editor/index.js', () => ({
-  SpatialEditor: (props: { canvas: SpatialCanvas; onChange?: () => void }) => {
+  SpatialEditor: (props: {
+    canvas: SpatialCanvas
+    onChange?: () => void
+    onOpenInEditor?: (nodeId: string, text: string) => void
+  }) => {
     editorMounted = props.onChange ?? null
+    openInEditor = props.onOpenInEditor ?? null
     return null
   },
 }))
@@ -202,7 +209,7 @@ describe('a destructive dialog does not outlive its document', () => {
     await act(async () => {})
     expect(
       document.body.textContent,
-      'the page never switched, so this case would pass without exercising anything',
+      'the page never switched, so the DELETE case would pass without exercising anything',
     ).toContain(ARRIVED_AFTER)
 
     // The dialog named the document that left. It has no subject any more, so
@@ -274,7 +281,7 @@ describe('a destructive dialog does not outlive its document', () => {
     await act(async () => {})
     expect(
       document.body.textContent,
-      'the page never switched, so this case would pass without exercising anything',
+      'the page never switched, so the DUPLICATE case would pass without exercising anything',
     ).toContain(ARRIVED_AFTER)
 
     store.releaseFailure()
@@ -287,6 +294,61 @@ describe('a destructive dialog does not outlive its document', () => {
     expect(
       screen.queryByText(/refused the write/i),
       'the duplicate that failed was the other document’s, and its error is on screen under this one — which has nothing wrong with it',
+    ).toBeNull()
+  })
+  it('a body surface opened on one document does not stay open over the next', async () => {
+    const store = new IdbDocumentIndex()
+    await seedIdbDocument(store, {
+      path: 'opened-about',
+      name: OPENED_ABOUT,
+      kind: 'spatial',
+      makeDefault: true,
+    })
+    await seedIdbDocument(store, {
+      path: 'arrived-after',
+      name: ARRIVED_AFTER,
+      kind: 'spatial',
+    })
+
+    render(<BrowserDocumentPage store={store} />)
+    await waitFor(() =>
+      expect(
+        editorMounted,
+        'the page is not wired yet; a switch now would be dropped',
+      ).not.toBeNull(),
+    )
+    await waitFor(async () => {
+      expect((await listLocalDocuments(store)).map((r) => r.path)).toHaveLength(2)
+    })
+
+    await act(async () => {
+      openInEditor?.('n1', 'typed against a node in the first document')
+    })
+    expect(
+      screen.queryByTestId('node-text-overlay'),
+      'the surface did not open, so the switch below would prove nothing',
+    ).not.toBeNull()
+
+    await act(async () => {
+      navigateTo?.(documentPath(BROWSER_DEFAULT_SEGMENT, 'arrived-after'))
+    })
+    for (let i = 0; i < 100 && !document.body.textContent?.includes(ARRIVED_AFTER); i++) {
+      await new Promise((r) => setTimeout(r, 50))
+    }
+    await act(async () => {})
+    expect(
+      document.body.textContent,
+      'the page never switched, so the BODY SURFACE case would pass without exercising anything',
+    ).toContain(ARRIVED_AFTER)
+
+    // It titles itself from the CURRENT document, so left open it reads as
+    // "Editing <the one that arrived>" while holding the other one's node —
+    // and its commit resolves that node in THIS canvas, does not find it,
+    // and drops the write. Everything typed into it after this point would
+    // go nowhere, with nothing said.
+    expect(
+      screen.queryByTestId('node-text-overlay'),
+      'the body surface is still open over a document that does not hold the node it was opened on',
     ).toBeNull()
   })
 })

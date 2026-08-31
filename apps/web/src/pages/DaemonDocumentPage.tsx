@@ -360,7 +360,11 @@ export function DaemonDocumentPage({
   // and local-update forwarding as every other change, with no second write
   // pipeline. `set-body` carries the WHOLE body, so it needs no canvas: the
   // value passed alongside is the unchanged one this command does not touch.
-  const nodeInEditor = useNodeInEditor(canvasValue, onChange)
+  // The same identity this page's own mount is keyed on in App.tsx. Passing
+  // it is belt-and-braces here — the key already rebuilds the page on a
+  // switch — but the hook's contract is the hook's, not a caller's mount
+  // strategy, and the browser page next door has no key at all.
+  const nodeInEditor = useNodeInEditor(canvasValue, onChange, `${workspaceId}:${path}`)
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
