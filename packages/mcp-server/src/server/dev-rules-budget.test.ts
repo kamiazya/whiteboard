@@ -5,11 +5,19 @@ import { describe, expect, it } from 'vitest'
 
 // Always-on rule prose is charged to EVERY session in this repo before any
 // work starts, and almost none of it is guarded: across the five files below,
-// the only content any test would notice losing is the 163 characters
-// `dev-rules-contract.test.ts` pins about the web-jsdom hazard — 0.15% of the
-// corpus. So the budget is not protected by the suite as a side effect of
-// anything else, and a section added in passing costs every future session
-// silently.
+// what any test would notice losing is 283 characters over 18 literals —
+// 0.32% of the corpus — split between `dev-rules-contract.test.ts` (the
+// web-jsdom hazard) and `repo-coverage.test.ts`'s architecture-map doc-sync
+// block (the shared-layer package names, the composition roots,
+// `web-app-boundary.test.ts`, `cycle-check.ts`). So the budget is not
+// protected by the suite as a side effect of anything else, and a section
+// added in passing costs every future session silently.
+//
+// That figure was first written here as 0.15%, from a search of ONE test
+// file, under a heading claiming to have measured what ANY test would notice.
+// The doc-sync guard then caught a real omission this very file's author had
+// made — which is how the undercount surfaced. Widen the search before
+// trusting a coverage number: the conclusion survived, the number did not.
 //
 // This is the instrument, not a limit: the sizes are pinned so a change to
 // them is a decision someone makes in a diff rather than drift nobody
@@ -52,14 +60,14 @@ function alwaysOnFiles(): string[] {
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
   'AGENTS.md': 16,
-  '.claude/rules/architecture-map.md': 17,
+  '.claude/rules/architecture-map.md': 13,
   '.claude/rules/dev-flow.md': 28,
   '.claude/rules/integrator-flow.md': 13,
   '.claude/rules/vocabulary.md': 15,
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 90
+const ALWAYS_ON_TOTAL_BUDGET = 87
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
