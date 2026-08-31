@@ -44,10 +44,12 @@ const EFFECT_COVERAGE = {
   'zoom-at': 'covered',
   pinch: 'covered',
   capture: 'covered',
+  'release-capture': 'covered',
   'arm-long-press': 'covered',
   'clear-long-press': 'covered',
   'cancel-manipulation': 'covered',
   'clear-marquee': 'covered',
+  'clear-press-memory': 'covered',
   gather: 'covered',
 } satisfies Record<NavigationEffect['kind'], SurfaceCoverage>
 
@@ -189,6 +191,11 @@ const stepArb = fc.record({
     // completes it. Steering toward an interesting state is what
     // `fc.commands`' own `check` does; the ORACLE stays independent.
     { weight: 3, arbitrary: fc.constant('reuse-mode-anchor' as const) },
+    // A press that reached an overlay control rather than this machine. It
+    // joins the down set without a touch, and its RELEASE does arrive here —
+    // so it is generated for the lifetime invariants, which would otherwise
+    // never see a pointer the machine believes down but never tracked.
+    { weight: 2, arbitrary: fc.constant('external-press' as const) },
   ),
   placement: pressPlacementArb,
   button: fc.constantFrom(0, 1),
@@ -285,6 +292,13 @@ function drive(sequence: Sequence, check: (observation: Observation) => void) {
       lastPoint = point
       platformDown.delete(id)
       apply({ type: 'pointerup', pointerId: id, pointerType: 'touch' })
+      continue
+    }
+
+    if (step.kind === 'external-press') {
+      if (platformDown.has(step.pointerId)) continue
+      platformDown.add(step.pointerId)
+      apply({ type: 'external-press', pointerId: step.pointerId })
       continue
     }
 
