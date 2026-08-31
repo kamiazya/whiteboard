@@ -90,12 +90,11 @@ const SKILLS_DIR = '.claude/skills'
 
 /**
  * Skill directories deliberately NOT in the always-on index, with the reason.
- * Guarded from both sides below, so an entry cannot outlive what it names.
+ * Guarded from both sides below, so an entry cannot outlive what it names —
+ * which is why it is empty: the one entry it held named a skill that has since
+ * been deleted, and the guard would fail rather than let the record linger.
  */
-const NOT_INDEXED: Record<string, string> = {
-  'whiteboard-smoke':
-    'Superseded by whiteboard-mcp-smoke. Its own description still says "Excalidraw MCP" — a vocabulary this repo retired — and nothing in .claude/ reaches it. Left on disk pending a decision to delete it; indexing it would advertise it as current.',
-}
+const NOT_INDEXED: Record<string, string> = {}
 
 function indexedSkills(): string[] {
   const devFlow = read('.claude/rules/dev-flow.md')

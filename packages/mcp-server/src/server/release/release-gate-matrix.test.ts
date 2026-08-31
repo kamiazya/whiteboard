@@ -85,7 +85,7 @@ const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
 // when a new node smoke is added to test:e2e:distribution.
-const EXPECTED_DISTRIBUTION_STEPS = 16
+const EXPECTED_DISTRIBUTION_STEPS = 15
 
 describe('release-gate-matrix.json structure', () => {
   it('has schemaVersion 1', () => {
@@ -280,8 +280,23 @@ describe('test:e2e:distribution step-count drift', () => {
     expect(countDistributionSteps(script)).toBe(EXPECTED_DISTRIBUTION_STEPS)
   })
 
-  it('README says "sixteen steps" matching the current chain', () => {
-    expect(readmeText).toMatch(/The chain has sixteen steps/)
+  it('README says "fifteen steps" matching the current chain', () => {
+    expect(readmeText).toMatch(/The chain has fifteen steps/)
+  })
+
+  it('every `pnpm <script>` step in the chain resolves to a script that exists', () => {
+    // The count above pinned the SHAPE of this chain and not its contents, so
+    // a step naming a script that had been deleted stayed in it and the guard
+    // stayed green. `pnpm smoke:template` sat there until someone ran the
+    // chain — and it only runs on a release tag, since CI's packaged-smoke job
+    // exercises `smoke:distribution:packaged` instead. Nothing else would have
+    // reported it before the release it broke.
+    const chain = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
+    const missing = scriptSegments(chain)
+      .map((segment) => /^pnpm ([\w:-]+)$/.exec(segment)?.[1])
+      .filter((name): name is string => name !== undefined)
+      .filter((name) => rootPkg.scripts[name] === undefined)
+    expect(missing).toEqual([])
   })
 })
 
