@@ -13,33 +13,26 @@
 import type { Dirent } from 'node:fs'
 import { readdir, stat } from 'node:fs/promises'
 import { join } from 'node:path'
+import type {
+  StorageBucket,
+  StorageCategory,
+  StorageReportPayload,
+} from '../../shared/api-contracts/document.js'
 
-export interface StorageReport {
-  totalBytes: number
-  fileCount: number
-  byCategory: {
-    blobs: { bytes: number; files: number }
-    versions: { bytes: number; files: number }
-    files: { bytes: number; files: number }
-    db: { bytes: number; files: number }
-    // PNG / JSON exports the user produced via export_canvas.
-    // Kept separate from "other" because they are
-    // legitimate user data the UI should not invite to delete.
-    exports: { bytes: number; files: number }
-    // Daemon log files. Operational data — typically safe to clean up
-    // periodically, surfaced separately so the user can tell what is
-    // actually growing.
-    logs: { bytes: number; files: number }
-    other: { bytes: number; files: number }
-  }
-}
+// Derived from the wire schema rather than written alongside it. A
+// hand-written interface beside a Zod schema is the shape that shipped the
+// `create_frame` `assignedMembers` bug, and here the two had already drifted
+// in the direction nobody sees: the schema's `byCategory` was an open
+// `z.record(z.string(), …)`, so the Storage tab could ask for a category this
+// walk never produces and get a permanent 0 B row instead of a failure.
+//
+// `exports` holds the PNG / JSON files a user exported. It is kept out of
+// "other" because it is legitimate user data the UI must not invite them to
+// delete. `logs` is daemon operational data, usually safe to clean up, split
+// out so a user can tell what is actually growing.
+export type StorageReport = StorageReportPayload
 
-interface Bucket {
-  bytes: number
-  files: number
-}
-
-function emptyBucket(): Bucket {
+function emptyBucket(): StorageBucket {
   return { bytes: 0, files: 0 }
 }
 
@@ -52,7 +45,7 @@ function emptyBucket(): Bucket {
 //   logs/                                        — daemon log files
 //   whiteboard.db / .db-wal / .db-shm            — metadata SQLite
 //   daemon.json                                   — port + token registry
-function categorize(relPath: string): keyof StorageReport['byCategory'] {
+function categorize(relPath: string): StorageCategory {
   const segments = relPath.split('/').filter(Boolean)
   const head = segments[0] ?? ''
   if (head === 'blobs') {
