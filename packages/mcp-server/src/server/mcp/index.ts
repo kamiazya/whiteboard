@@ -19,9 +19,8 @@ import {
 } from './pairing-link.js'
 import {
   buildDrawDiagramPrompt,
-  getStandaloneHelpText,
   WHITEBOARD_DRAW_PROMPT,
-  WHITEBOARD_HELP_URI,
+  WHITEBOARD_INSTRUCTIONS,
 } from './standalone-help.js'
 import { installStdioLifecycle } from './stdio-lifecycle.js'
 
@@ -47,10 +46,17 @@ export async function createMcpServer(options: CreateMcpServerOptions = {}) {
 
   // Read `version` from package.json at runtime so release-please bumps propagate
   // without source edits.
-  const server = new McpServer({
-    name: 'whiteboard',
-    version: PACKAGE_VERSION,
-  })
+  const server = new McpServer(
+    {
+      name: 'whiteboard',
+      version: PACKAGE_VERSION,
+    },
+    // The protocol's own channel for "how do I use this server" — a client
+    // injects it into the model's system prompt at initialize. This replaced
+    // a help RESOURCE, which no client is obliged to read; see
+    // standalone-help.ts for what that cost.
+    { instructions: WHITEBOARD_INSTRUCTIONS },
+  )
 
   // Bridge our logger to MCP `notifications/message` and accept
   // `logging/setLevel` from clients. Records still hit stderr in the base
@@ -71,25 +77,6 @@ export async function createMcpServer(options: CreateMcpServerOptions = {}) {
       previousOnClose?.()
     }
   }
-
-  server.registerResource(
-    'whiteboard-help',
-    WHITEBOARD_HELP_URI,
-    {
-      title: 'Whiteboard MCP quickstart',
-      description: 'Standalone help for raw MCP clients that do not load Claude/Codex skills.',
-      mimeType: 'text/markdown',
-    },
-    async () => ({
-      contents: [
-        {
-          uri: WHITEBOARD_HELP_URI,
-          mimeType: 'text/markdown',
-          text: getStandaloneHelpText(),
-        },
-      ],
-    }),
-  )
 
   server.registerPrompt(
     WHITEBOARD_DRAW_PROMPT,

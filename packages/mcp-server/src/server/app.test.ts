@@ -562,7 +562,18 @@ describe('createApp daemon mutation auth', () => {
     await transport.close()
   })
 
-  it('exposes standalone help through MCP resources and prompts', async () => {
+  /**
+   * Orientation rides `instructions` on the initialize result — the
+   * protocol's own channel, which a client injects into the model's system
+   * prompt rather than having to know to fetch a resource.
+   *
+   * This case used to pin a help RESOURCE, and required its body to name a
+   * specific tool. That is worth knowing before anyone asserts on the text
+   * again: an end-to-end test through a real MCP client will hold whatever
+   * the text says, including a tool that no longer exists. Assert the channel
+   * and the shape, not the wording.
+   */
+  it('hands the client its instructions at initialize, and still offers the draw prompt', async () => {
     const app = createApp(createRuntimeOptions('secret'))
     const client = new Client({ name: 'app-help-client', version: '1.0.0' })
     const transport = new StreamableHTTPClientTransport(new URL('http://127.0.0.1/mcp'), {
@@ -578,34 +589,26 @@ describe('createApp daemon mutation auth', () => {
     })
 
     await client.connect(transport)
+
+    // The initialize result's own field, read back through the client.
+    const instructions = client.getInstructions()
+    expect(instructions).toBeTruthy()
+    expect(instructions).toContain('DOCUMENTS')
+
     const resources = await client.listResources()
+    expect(
+      resources.resources.find((resource) => resource.uri === 'whiteboard://help/getting-started'),
+    ).toBeUndefined()
+
     const prompts = await client.listPrompts()
-    const helpResource = resources.resources.find(
-      (resource) => resource.uri === 'whiteboard://help/getting-started',
-    )
-    const drawPrompt = prompts.prompts.find((prompt) => prompt.name === 'whiteboard.draw_diagram')
+    expect(
+      prompts.prompts.find((prompt) => prompt.name === 'whiteboard.draw_diagram'),
+    ).toMatchObject({ name: 'whiteboard.draw_diagram' })
 
-    expect(helpResource).toMatchObject({
-      name: 'whiteboard-help',
-      mimeType: 'text/markdown',
-    })
-    expect(drawPrompt).toMatchObject({
-      name: 'whiteboard.draw_diagram',
-    })
-
-    const help = await client.readResource({ uri: 'whiteboard://help/getting-started' })
     const prompt = await client.getPrompt({
       name: 'whiteboard.draw_diagram',
       arguments: { goal: 'Summarize the payment flow' },
     })
-
-    expect(help.contents).toEqual([
-      expect.objectContaining({
-        uri: 'whiteboard://help/getting-started',
-        mimeType: 'text/markdown',
-        text: expect.stringContaining('Start with `canvas_create`'),
-      }),
-    ])
     expect(prompt.messages).toEqual([
       expect.objectContaining({
         role: 'user',
@@ -615,8 +618,6 @@ describe('createApp daemon mutation auth', () => {
         }),
       }),
     ])
-
-    await transport.close()
   })
 
   it('logs initialize capabilities and per-request timing when MCP_HTTP_DEBUG=1', async () => {

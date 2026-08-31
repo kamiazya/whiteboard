@@ -84,7 +84,7 @@ const rootPkg = readJson('package.json') as { scripts: Record<string, string> }
 const readmeText = readText('tests/e2e/distribution/README.md')
 
 // Authoritative step count for the distribution chain. Update this constant
-// when a new node smoke is added to test:e2e:distribution.
+// when a node smoke is added to or removed from test:e2e:distribution.
 const EXPECTED_DISTRIBUTION_STEPS = 15
 
 describe('release-gate-matrix.json structure', () => {
@@ -291,6 +291,11 @@ describe('test:e2e:distribution step-count drift', () => {
     // chain — and it only runs on a release tag, since CI's packaged-smoke job
     // exercises `smoke:distribution:packaged` instead. Nothing else would have
     // reported it before the release it broke.
+    //
+    // Scoped to this chain, beside the count it completes.
+    // `root-composite-scripts.test.ts` applies the same rule to every root
+    // composite script, so a dangling step in `check:release-candidate` or
+    // `check:local` is caught too.
     const chain = rootPkg.scripts['test:e2e:distribution:only'] ?? ''
     const missing = scriptSegments(chain)
       .map((segment) => /^pnpm ([\w:-]+)$/.exec(segment)?.[1])

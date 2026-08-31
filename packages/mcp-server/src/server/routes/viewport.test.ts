@@ -66,14 +66,21 @@ describe('POST /api/w/:workspaceId/document/:path/viewport - error handling', ()
     expect(mockSendViewportRequest).not.toHaveBeenCalled()
   })
 
-  it('includes a canvas_open hint in the zero-client error JSON', async () => {
+  /**
+   * Asserts what the hint tells the caller to DO, not which tool to call.
+   *
+   * It used to require a tool name, which is how a hint kept naming one that
+   * no longer existed. `mcp/mcp-guidance-tool-names.test.ts` fails if a tool
+   * name comes back into this text.
+   */
+  it('tells the caller how to unblock itself, without naming a tool', async () => {
     mockGetClientCount.mockReturnValue(0)
     const app = makeApp()
     const res = await app.request('/api/w/s1/document/canvas-a/viewport', { method: 'POST' })
     const body = (await res.json()) as { error: string; message: string; hint?: string }
     expect(body.error).toBe('no_client')
     expect(body.message.toLowerCase()).toContain('no browser')
-    expect(body.hint).toContain('canvas_open')
+    expect(body.hint?.toLowerCase()).toContain('open the canvas in a browser')
   })
 
   it('returns 504 and a timeout error when a WS client does not respond', async () => {

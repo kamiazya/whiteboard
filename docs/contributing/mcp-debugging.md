@@ -151,7 +151,19 @@ If the daemon fails to start with:
 Database migration failed: corrupted migrations: previously executed migration 0002-canvases-last-compacted-at is missing
 ```
 
-or a similar "corrupted migrations" message, your local database is incompatible with the current codebase.
+or with:
+
+```
+IncompatibleDatabaseError: Database is incompatible with this build — its migration
+history records a migration this version does not ship.
+```
+
+your local database is incompatible with the current codebase. Both wordings
+are the same situation from opposite sides — a migration the database recorded
+that this build no longer has, usually because it was renamed. Renumbering one
+does that to every database that already ran it, which the pre-1.0 policy below
+permits; `published-migration-names.ts` is what makes such a rename land in a
+diff a reviewer sees rather than silently.
 
 **Pre-1.0 policy**: the data dir's databases are **disposable**. On an incompatible upgrade, re-create the database. `pnpm mcp:http:dev` defaults to the repo-local `.dev-data/` dir (see [development.md](./development.md)) rather than the packaged install's `~/.whiteboard` — adjust the path below if you set `WHITEBOARD_DATA_DIR` yourself:
 

@@ -59,16 +59,19 @@ pnpm typecheck
 pnpm smoke:e2e
 ```
 
-`scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and verifies at least the following.
+`scripts/smoke/mcp-e2e-smoke.mjs` launches stdio MCP in a subprocess and calls
+every tool in `COVERED_TOOLS`, asserting each one's `structuredContent` against
+its `outputSchema`. It also exercises the error paths in `ERROR_PATH_ONLY_TOOLS`
+and the no-browser cases — a viewport set answering `no_client`, and a scene
+render succeeding through headless rendering with nothing connected.
 
-- `canvas_create`
-- `annotate`
-- `canvas_inspect`
-- `version_save`
-- `version_restore` (with and without `targetSlug`)
-- `version_list`
-- `viewport_set` returning `no_client`
-- `export_canvas` (format:png/svg/json) succeeding via headless rendering with no browser connected
+**Read the covered set from `server/mcp/mcp-smoke-coverage.ts`, not from here.**
+That file is the source of truth and `smoke-tool-list-parity.test.ts` keeps it in
+step with what the smoke actually calls; a copy in this skill is a second list
+with nothing checking it. The copy that used to sit here named eight tools, and
+the tool renames of ADR-0009 had left every one of them unregistered — a skill is
+instructions to a future session, so a wrong name here is misdirection rather
+than noise.
 
 If the final line is `[e2e] ALL OK`, the MCP wrapper and route wiring are basically connected correctly.
 

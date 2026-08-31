@@ -4,8 +4,18 @@ Local-checkout setup, the HTTP MCP development loop, and how the repo's committe
 
 ## Prerequisites
 
-- Node.js 22+ (24 recommended — matches `.node-version`) and `pnpm`
+- Node.js **24** — the major `.node-version` pins and CI installs — and `pnpm`.
+  Not a recommendation: `local-node-version.test.ts` fails on any other major,
+  because nine `web-jsdom` tests fail on 22 with a message about `Blob` that
+  names neither Node nor the cause, so a run on the wrong major looks like nine
+  real regressions. (The published package's `engines` is deliberately wider —
+  that is what a CONSUMER may run the daemon on, not what this checkout builds
+  on.)
 - A Chromium that Playwright can drive (installed automatically below)
+- ImageMagick (`convert`, `identify`) — needed by `pnpm test:scripts`, and so
+  by `pnpm check:local`, which runs `.claude/scripts/compose-figure.test.mjs`.
+  Without it that suite fails rather than skipping. `apt install imagemagick`
+  or `brew install imagemagick`.
 
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
