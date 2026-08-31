@@ -59,3 +59,46 @@ properties are the most expensive per run (real browser + IndexedDB/etc.) — ke
   fixing production code, fix the implementation, then mutation-check (revert the fix, confirm the
   pinned example — and ideally the property — goes red, then restore).
 - Shared arbitraries belong in the owning package's `test-utils`, not copy-pasted per test file.
+- A generator too sparse to reach the interesting arrangements — boxes that rarely overlap,
+  sequences that rarely collide — passes **vacuously**. The mutation check is what catches a
+  property that asserts nothing, and the fix is a denser domain plus a reachability guard with a
+  measured floor, never more runs.
+
+**A differential oracle is blind to whatever it SHARES with its subject**, and this reads as the
+strongest kind of property rather than the weakest. `edge-crossing-sweep`'s oracle is the full
+O(E^2) scan its sweep claims exact equality with — but both sides called the same scoring helper,
+so a mutation inside that helper changed the oracle and the subject together and the property
+stayed green: 22 survivors in one function, under a property nobody would have doubted.
+
+So when you write an A-vs-B property, ask what B **imports**, not what it asserts. A reference
+solved with different machinery — exact BigInt rationals against the subject's floating-point
+cross-multiplication, cell-by-cell rasterisation against its interval algebra — is what makes the
+comparison mean anything. Calling the production helper from the test is the same code twice.
+
+**A guard that never reaches its subject passes, and reads exactly like a guard that checked.**
+The third sibling of the two above, and the one no mutation check finds: here the assertion is
+right and the subject is simply absent from the fixture, so there is nothing for it to find.
+Mutating the production side is green either way when the fixture never exercises that rule.
+
+Three instances in one session, each costing a real defect:
+
+- `route-scope-registry.test.ts` walked apps built WITHOUT `ServerDeps`, and `/api/v1` mounts
+  only when they are supplied — so nine routes were exempt from a registry-wide guard by
+  accident, every `/api/v1/*` path resolving to `null`, which server mode answers 500 to.
+- Nothing migrated the data dir before `http-server.ts` handed its ports a handle, so `/api/v1`
+  had answered `no such table: workspaces` on a fresh dir since the day it was mounted. No test
+  saw it, because every one of them migrated through some legacy call first.
+- A route test's own helper pre-created the workspace, so `createWorkspace: true` was pinned by
+  nothing — removing it left every case green, on behaviour a PR body claimed to preserve.
+
+So assert the subject is PRESENT, not merely that what is present passes:
+`expect(routes.some((r) => r.path.startsWith('/api/v1/'))).toBe(true)` beside the walk,
+`expect(edges.length).toBeGreaterThan(20)` beside the allowlist. A count far below what the real
+surface holds is evidence the fixture missed, never good news.
+
+**Coverage ledgers**, for a property modelling a surface that keeps growing (an editor's command
+set, its gesture events, its keyboard catalog, its verbs), are
+`.claude/rules/coverage-ledger.md` — path-scoped to `apps/web/**` and `packages/*/src/**`, so it
+loads itself when you are in those files. Worked examples: `editor-state.property.test.ts` (three
+union ledgers), `editor-verbs.property.test.ts` (one), `editor-state-surface.test.ts` (the source
+scan).
