@@ -1,6 +1,6 @@
 # ADR-0018: An operation is a use case; the composition root holds only mechanics
 
-**Status:** Proposed
+**Status:** Accepted (2026-08-31)
 
 ## Context
 
@@ -152,6 +152,52 @@ executable rungs carry it:
 
 The guards land before the moves. A migration with no guard re-admits the
 thing it was migrating away from.
+
+## Burn-down
+
+Accepting this ADR without a schedule would leave a rule the codebase does
+not obey and nothing recording the gap, so the debt is counted and ratcheted.
+
+**Where it stands, measured on 2026-08-31:** `ADAPTERS_REACHING_MECHANICS`
+holds **39 edges across 17 adapters**. `ADAPTERS_REACHING_MECHANICS_CEILING`
+pins that number by equality — adding an edge fails the build until someone
+raises it deliberately, and paying one off fails until someone lowers it, so
+the figure keeps saying where the migration actually is.
+
+That ratchet is the half this ADR was missing. The allowlist's two existing
+checks reject a fabricated entry and a stale one; neither has anything to say
+about the ordinary way the list grows, which is a real new edge added along
+with its allowlist line. Measured before the ceiling existed: a genuine
+`routes/export.ts -> backup-in-progress` import, duly listed, passed all six
+assertions. The list went 37 -> 36 -> 35 -> 36 -> 40 across one week while
+both the map's doc comment and the test's own comment said it could only
+shrink.
+
+**Order.** Four adapters hold 17 of the 39, and they are the ones where a
+second surface most plausibly needs the same operation:
+
+| adapter | edges | the operation underneath |
+|---|---|---|
+| `routes/document/restore.ts` | 5 | restoring a version — three modes in one handler |
+| `routes/document/live-doc.ts` | 4 | reading and updating a document by path |
+| `routes/document/workspace-document.ts` | 4 | the workspace document's own snapshot/update |
+| `routes/ws.ts` | 4 | the sync surface's document access |
+
+Take them one at a time, each its own PR, lowering the ceiling in the same
+commit that removes the edges. `restore.ts` first: it is the largest cluster,
+its three restore modes are already tangled in a single 215-line handler, and
+it has no MCP twin yet — so it is the case where a second surface is most
+likely to arrive and find no operation to call.
+
+The remaining 22 edges across 13 adapters are mostly one or two apiece and
+are not scheduled here. They come along with whatever work next opens those
+files, under the standing "fix what you touch" rule.
+
+**What would make raising the ceiling right.** It is a decision, not a
+failure: an operation that genuinely belongs to this deployment, or a fix
+that cannot wait for the move. The requirement is only that the PR says which
+one it is, so a raised number is a recorded judgement rather than the list
+quietly resuming its drift.
 
 ## Alternatives considered
 
