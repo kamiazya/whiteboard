@@ -57,19 +57,44 @@ const SHARED_CANVAS_CHROME = ['CanvasDisplaySettings', 'WorkspaceTopBar'] as con
  * `SaveStatusChip` in the properties row, so the two presentations differ
  * while the capability does not.
  */
-const MODE_SPECIFIC_CHROME: Readonly<Record<string, string>> = {
+const MODE_SPECIFIC_CHROME = {
   // Not a substitute for a save indicator the other mode lacks: BOTH pages
   // render WorkspaceTopBar, whose dot comes from its own `useDirtyState` and
   // means "no manual version named yet" rather than "unsaved". The browser
   // page adds this finer chip because its markdown path has two writers — the
   // controller and the body's debounced save — and one dot reported `Saved`
   // over unwritten text.
-  SaveStatusChip: 'browser only; a second, finer indicator its markdown path needs',
-  HeaderBranchBanner: 'daemon only; branches are a daemon concept (ADR-0004)',
-  MergeToast: 'daemon only; merge is a daemon concept (ADR-0004)',
-  AgentPresenceChip: 'daemon only; no agents connect in browser mode',
-  ConnectionsChip: 'daemon only; backlinks come from the daemon index',
-  CapabilityTeaser: 'daemon only; it teases daemon capabilities',
+  SaveStatusChip: {
+    page: './BrowserDocumentPage.tsx',
+    why: 'a second, finer indicator its markdown path needs',
+  },
+  HeaderBranchBanner: {
+    page: './DaemonDocumentPage.tsx',
+    why: 'branches are a daemon concept (ADR-0004)',
+  },
+  MergeToast: { page: './DaemonDocumentPage.tsx', why: 'merge is a daemon concept (ADR-0004)' },
+  AgentPresenceChip: {
+    page: './DaemonDocumentPage.tsx',
+    why: 'no agents connect in browser mode',
+  },
+  ConnectionsChip: {
+    page: './DaemonDocumentPage.tsx',
+    why: 'backlinks come from the daemon index',
+  },
+  CapabilityTeaser: { page: './DaemonDocumentPage.tsx', why: 'it teases daemon capabilities' },
+} satisfies Record<string, { page: (typeof PAGES)[number]; why: string }>
+
+/**
+ * Does this page render that component?
+ *
+ * A word boundary after the name, because `includes('<Foo')` also matches
+ * `<FooPanel` — so a component RENAMED to a longer name reads as still
+ * rendered, and every assertion here keeps passing over chrome that is gone.
+ * Found by a mutation that renamed `<AgentPresenceChip` to
+ * `<AgentPresenceChipX` and did not turn the scan red.
+ */
+function renders(source: string, chrome: string): boolean {
+  return new RegExp(`<${chrome}[\\s/>]`).test(source)
 }
 
 describe('document page canvas chrome', () => {
@@ -77,7 +102,7 @@ describe('document page canvas chrome', () => {
     const missing: string[] = []
     for (const page of PAGES) {
       const source = await read(page)
-      if (!source.includes(`<${chrome}`)) missing.push(page)
+      if (!renders(source, chrome)) missing.push(page)
     }
 
     expect(
@@ -89,23 +114,27 @@ describe('document page canvas chrome', () => {
     ).toEqual([])
   })
 
-  // The exemption list is a claim about the code, so it is checked against it.
-  // An entry naming chrome that both pages render is stale — it would quietly
-  // excuse a real divergence if one appeared there later.
-  it('every mode-specific exemption is still one-sided', async () => {
-    const both: string[] = []
-    for (const [chrome] of Object.entries(MODE_SPECIFIC_CHROME)) {
-      const rendered = await Promise.all(
-        PAGES.map(async (page) => (await read(page)).includes(`<${chrome}`)),
-      )
-      if (rendered.every(Boolean)) both.push(chrome)
+  // The exemption list is a claim about the code, so it is checked against it —
+  // and against the exact page, not merely against "not shared". Naming only
+  // the sharing case leaves three ways to be wrong silently: chrome NEITHER
+  // page renders any more (a stale entry excusing nothing), chrome whose
+  // ownership has flipped, and chrome that quietly became shared. Asserting
+  // the owner covers all three with one comparison.
+  it.each(
+    Object.entries(MODE_SPECIFIC_CHROME),
+  )('%s is rendered by its documented page and no other', async (chrome, { page: owner }) => {
+    const renderedBy: string[] = []
+    for (const page of PAGES) {
+      if (renders(await read(page), chrome)) renderedBy.push(page)
     }
 
     expect(
-      both,
-      'these are rendered by both pages now — move them to SHARED_CANVAS_CHROME ' +
-        'so the scan holds them there.',
-    ).toEqual([])
+      renderedBy,
+      `${chrome} is exempt as ${owner}-only (${MODE_SPECIFIC_CHROME[chrome as keyof typeof MODE_SPECIFIC_CHROME].why}). ` +
+        'Rendered by both means it is shared now — move it to SHARED_CANVAS_CHROME. ' +
+        'Rendered by neither means the entry outlived its subject. Rendered by ' +
+        'the other page means the exemption is describing the wrong one.',
+    ).toEqual([owner])
   })
 
   // Neither assertion above means anything if the sources did not load.
