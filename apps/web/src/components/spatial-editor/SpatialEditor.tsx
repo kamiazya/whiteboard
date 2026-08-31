@@ -430,6 +430,22 @@ const DEFAULT_TEST_ID = 'spatial-editor'
  */
 const DOUBLE_PRESS_WINDOW_MS = 400
 
+/**
+ * How far apart two presses may land and still be one double press.
+ *
+ * Only hand mode needs it. Every other double press is bound to a logical
+ * target — a node id, an edge id — so two presses far apart are already two
+ * different presses. Hand mode has no target to key on and used a constant
+ * key, which made EVERY press within the window a double press regardless of
+ * where it landed: a tap, then a drag from 224px away, and the drag zoomed
+ * instead of panning while the finger was still down.
+ *
+ * Sized like the OS convention it imitates rather than like finger jitter,
+ * which is what LONG_PRESS_SLOP_PX measures — a deliberate double tap is not
+ * a still finger, and a value near 10px would reject most real ones.
+ */
+const DOUBLE_PRESS_SLOP_PX = 40
+
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const FRAME_MARGIN_PX = 24
 const ZOOM_WHEEL_FACTOR = 1.1
@@ -599,8 +615,12 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const gatherAnchorRef = useRef<number | null>(null)
     const gatherPointersRef = useRef<Set<number>>(new Set())
-    /** Last primary press for double-press detection: logical target + time. */
-    const lastPressRef = useRef<{ key: string; at: number } | null>(null)
+    /**
+     * Last primary press for double-press detection: logical target, time, and
+     * where it landed. The point is what stops hand mode — whose key is a
+     * constant — from reading any two presses in the window as one gesture.
+     */
+    const lastPressRef = useRef<{ key: string; at: number; point: Point } | null>(null)
     const lastPanPointRef = useRef({ x: 0, y: 0 })
     /**
      * The pointerId this component currently holds capture for, or `null`.
@@ -1546,6 +1566,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // as a capture loss.
       downPointersRef.current.add(e.pointerId)
       if (e.pointerType === 'touch') {
+        // A touch pointer is `isPrimary` only while no other touch is active
+        // (Pointer Events 3, sec. 4.2), so anything still tracked here belongs
+        // to a gesture whose release this handler never received — a finger
+        // lifted over an element outside the root, a browser that claimed the
+        // gesture, a pointercancel delivered somewhere else. Left in place it
+        // is not inert: the next one-finger press makes the map size 2, so a
+        // plain drag is read as the second finger of a pinch and the canvas
+        // follows at half speed while zooming, which reads as "the hand tool
+        // stopped responding" and never recovers on its own.
+        if (e.isPrimary) {
+          touchPointsRef.current.clear()
+          gatherPointersRef.current.clear()
+          gatherAnchorRef.current = null
+          pinchActiveRef.current = false
+        }
         touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
         if (pinchActiveRef.current) return
         if (gatherPointersRef.current.size > 0 || gatherAnchorRef.current !== null) {
@@ -1664,11 +1699,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // note, because that one is detected further down — past this
         // early return, which hand mode never gets past.
         if (tool === 'hand' && e.button === 0 && !spaceDownRef.current) {
+          const previous = lastPressRef.current
           const isDoublePress =
-            lastPressRef.current !== null &&
-            lastPressRef.current.key === HAND_PRESS_KEY &&
-            e.timeStamp - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
-          lastPressRef.current = isDoublePress ? null : { key: HAND_PRESS_KEY, at: e.timeStamp }
+            previous !== null &&
+            previous.key === HAND_PRESS_KEY &&
+            e.timeStamp - previous.at <= DOUBLE_PRESS_WINDOW_MS &&
+            Math.hypot(
+              screenPointForPan.x - previous.point.x,
+              screenPointForPan.y - previous.point.y,
+            ) <= DOUBLE_PRESS_SLOP_PX
+          lastPressRef.current = isDoublePress
+            ? null
+            : { key: HAND_PRESS_KEY, at: e.timeStamp, point: screenPointForPan }
           if (isDoublePress) {
             setViewport((vp) => zoomAt(vp, screenPointForPan, DOUBLE_PRESS_ZOOM_FACTOR))
             return
@@ -1723,7 +1765,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         lastPressRef.current !== null &&
         lastPressRef.current.key === pressKey &&
         now - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
-      lastPressRef.current = isDoublePress ? null : { key: pressKey, at: now }
+      lastPressRef.current = isDoublePress ? null : { key: pressKey, at: now, point: screenPoint }
       doublePressRef.current = isDoublePress ? { key: pressKey, point } : null
 
       if (hitId === undefined) {
