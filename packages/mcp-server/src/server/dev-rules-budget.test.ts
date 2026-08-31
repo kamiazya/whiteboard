@@ -61,13 +61,13 @@ function alwaysOnFiles(): string[] {
 const ALWAYS_ON_BUDGET: Record<string, number> = {
   'AGENTS.md': 16,
   '.claude/rules/architecture-map.md': 13,
-  '.claude/rules/dev-flow.md': 28,
+  '.claude/rules/dev-flow.md': 25,
   '.claude/rules/integrator-flow.md': 13,
   '.claude/rules/vocabulary.md': 15,
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 87
+const ALWAYS_ON_TOTAL_BUDGET = 85
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
