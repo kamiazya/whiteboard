@@ -31,6 +31,10 @@ const SCANNED_PATHS = [
   './scene-render.ts',
   './viewport.ts',
   './node-factories.ts',
+  // Pointer snapping serves preview AND commit from one call path, so it
+  // must stay a pure function of its inputs — an ambient read here could
+  // make the two disagree.
+  './gesture-snap.ts',
 ]
 
 describe('theme resolver purity (no ambient DOM read)', () => {
