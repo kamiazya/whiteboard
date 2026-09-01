@@ -1,4 +1,5 @@
 import type {
+  CanvasComment,
   CanvasEdge,
   ExtensionFacets,
   SpatialCanvas,
@@ -8,6 +9,7 @@ import type {
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import {
+  deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
   readCoreFacets,
@@ -18,6 +20,7 @@ import {
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,
+  writeCanvasComment,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,
@@ -960,5 +963,118 @@ describe('canvas-level extension', () => {
     a.import(b.export({ mode: 'snapshot' }))
 
     expect(readSpatialCanvas(a)['x-whiteboard']?.edgeRouting?.style).toBe('orthogonal')
+  })
+})
+
+// The annotation layer (ADR-0024). The one property everything below exists
+// for: two peers commenting CONCURRENTLY must both survive a merge, which is
+// why each comment lives under its own key in a dedicated map rather than
+// inside the canvas envelope value (whole-value LWW) or a facet payload
+// (replace-whole-payload).
+describe('canvas comments bridge', () => {
+  const COMMENT: CanvasComment = { id: 'c1', x: 10, y: 20, text: 'this box overlaps' }
+  const OTHER: CanvasComment = {
+    id: 'c2',
+    x: -40,
+    y: 5,
+    text: 'rename this',
+    author: 'human:reviewer',
+    createdAt: '2026-09-01T10:00:00+09:00',
+    targetNodeId: 'node-1',
+    resolved: false,
+  }
+
+  test('round-trips comments beside the rendering preferences', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+    })
+
+    const result = readSpatialCanvas(doc)
+    expect(result['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect((result['x-whiteboard']?.comments ?? []).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+    expect(result['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
+  })
+
+  test('stores each comment under its own key, never inside the envelope value', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT] },
+    })
+
+    // The envelope stays whole-value LWW and must not carry the comments —
+    // that is what would reintroduce the concurrent-loss this layout removes.
+    expect(doc.getMap('canvas').get('x-whiteboard')).toEqual({
+      edgeRouting: { style: 'orthogonal' },
+    })
+    expect(doc.getMap('comments').keys()).toEqual(['c1'])
+  })
+
+  test('CRDT merge: two peers comment concurrently and both survive', () => {
+    const base = makeDoc()
+    writeSpatialCanvas(base, { nodes: [TEXT_NODE], edges: [] })
+    const peer = makeDoc()
+    peer.import(base.export({ mode: 'snapshot' }))
+
+    writeCanvasComment(base, COMMENT)
+    writeCanvasComment(peer, OTHER)
+    base.import(peer.export({ mode: 'snapshot' }))
+
+    const merged = readSpatialCanvas(base)['x-whiteboard']?.comments ?? []
+    expect(merged.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+  })
+
+  test('a full resync deletes the comments the canvas no longer carries', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, {
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { comments: [COMMENT, OTHER] },
+    })
+    writeSpatialCanvas(doc, { nodes: [], edges: [], 'x-whiteboard': { comments: [OTHER] } })
+
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([OTHER])
+  })
+
+  test('writeCanvasComment leaves every other comment untouched; delete removes exactly one', () => {
+    const doc = makeDoc()
+    writeSpatialCanvas(doc, { nodes: [], edges: [], 'x-whiteboard': { comments: [COMMENT] } })
+
+    writeCanvasComment(doc, OTHER)
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toHaveLength(2)
+
+    deleteCanvasComment(doc, 'c1')
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([OTHER])
+
+    // Absent id: a no-op, no commit — matching the bridge convention.
+    deleteCanvasComment(doc, 'never-existed')
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([OTHER])
+  })
+
+  test('a corrupt stored comment is dropped on read, never the whole layer', () => {
+    const doc = makeDoc()
+    writeCanvasComment(doc, COMMENT)
+    doc.getMap('comments').set('bad', { nope: true })
+    doc.commit()
+
+    expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([COMMENT])
+  })
+
+  test('refuses a non-finite anchor loudly, matching the node geometry guard', () => {
+    const doc = makeDoc()
+    expect(() => writeCanvasComment(doc, { ...COMMENT, x: Number.NaN })).toThrow(TypeError)
+  })
+
+  test('comments alone produce an extension; no comments and no envelope produce none', () => {
+    const doc = makeDoc()
+    writeCanvasComment(doc, COMMENT)
+    expect(readSpatialCanvas(doc)['x-whiteboard']).toEqual({ comments: [COMMENT] })
+
+    deleteCanvasComment(doc, 'c1')
+    expect(readSpatialCanvas(doc)).not.toHaveProperty('x-whiteboard')
   })
 })

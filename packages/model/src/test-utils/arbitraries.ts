@@ -9,7 +9,7 @@ import type {
   MdastTableCell,
   MdastTableRow,
 } from '../mdast/index.js'
-import type { SpatialCanvas } from '../spatial.js'
+import type { CanvasComment, CanvasEdge, SpatialCanvas } from '../spatial.js'
 import { fc } from './fast-check.js'
 
 const CROCKFORD_CHARS = '0123456789ABCDEFGHJKMNPQRSTVWXYZ'
@@ -502,11 +502,30 @@ export function mdastRootArbitrary(maxDepth = 3): fc.Arbitrary<MdastRoot> {
  * and one of them had lost the node-id dedupe — a canvas the schema rejects,
  * asserted to round-trip.
  */
+// Valid-by-construction: text is non-empty, the anchor is integer, and the
+// optional author/timestamp use the shapes their schemas actually accept.
+// `targetNodeId` is free-standing on purpose — a dangling target is VALID
+// (a comment may outlive its subject), so the canvas arbitrary does not need
+// to correlate it with node ids the way edges must be.
+export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc.record(
+  {
+    id: nodeIdArbitrary,
+    x: geometryArbitrary,
+    y: geometryArbitrary,
+    text: fc.string({ minLength: 1, maxLength: 40 }),
+    author: fc.constantFrom('human:reviewer', 'process:layout-agent'),
+    createdAt: fc.constant('2026-09-01T10:00:00+09:00'),
+    targetNodeId: nodeIdArbitrary,
+    resolved: fc.boolean(),
+  },
+  { requiredKeys: ['id', 'x', 'y', 'text'] },
+)
+
 export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
   .uniqueArray(spatialNodeArbitrary, { maxLength: 4, selector: (node) => node.id })
-  .chain((nodes): fc.Arbitrary<SpatialCanvas> => {
+  .chain((nodes) => {
     const ids = nodes.map((node) => node.id)
-    if (ids.length < 2) return fc.constant({ nodes, edges: [] })
+    if (ids.length < 2) return fc.constant({ nodes, edges: [] as CanvasEdge[] })
     return fc
       .uniqueArray(
         fc
@@ -518,3 +537,15 @@ export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc
       )
       .map((edges) => ({ nodes, edges }))
   })
+  .chain(
+    (canvas): fc.Arbitrary<SpatialCanvas> =>
+      fc
+        .option(fc.uniqueArray(canvasCommentArbitrary, { maxLength: 3, selector: (c) => c.id }), {
+          nil: undefined,
+        })
+        .map((comments) =>
+          comments === undefined || comments.length === 0
+            ? canvas
+            : { ...canvas, 'x-whiteboard': { comments } },
+        ),
+  )
