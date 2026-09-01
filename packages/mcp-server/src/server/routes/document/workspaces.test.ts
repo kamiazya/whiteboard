@@ -138,6 +138,62 @@ describe('GET /api/workspaces', () => {
     expect('segment' in (bare ?? {})).toBe(false)
     expect('displayName' in (bare ?? {})).toBe(false)
   })
+
+  // SEQUENTIAL, and that is the load-bearing part (the route's own comment):
+  // `Promise.all` over the rows opens N workspace records at once against
+  // the one SQLite file, and on a real daemon holding real workspaces that
+  // 500ed every row with SQLITE_BUSY. That contention cannot be reproduced
+  // deterministically here — each test gets a fresh, idle database — so this
+  // pins the DECISION instead of the symptom: the per-row document listings
+  // never overlap. Reverting the loop to `Promise.all` drives the observed
+  // peak concurrency to the row count and fails the last assertion.
+  it('counts each workspace sequentially — the per-row listings never overlap', async () => {
+    const db = await getDb(tmp.dir)
+    const deps = resolveServerDeps(
+      createContainer(createStoreLocalModule({ db, blobDir: tmp.dir })),
+    )
+    for (const workspaceId of ['workspace-a', 'workspace-b', 'workspace-c']) {
+      await deps.documentIndex.createWorkspace({ workspaceId })
+    }
+    let inFlight = 0
+    let peak = 0
+    const inner = deps.documentIndex
+    const index = new Proxy(inner, {
+      get(target, key) {
+        if (key === 'listDocuments') {
+          return async (...args: unknown[]) => {
+            inFlight += 1
+            peak = Math.max(peak, inFlight)
+            // Long enough that a Promise.all shape reliably overlaps all
+            // three rows before the first listing resolves.
+            await new Promise((resolve) => setTimeout(resolve, 5))
+            try {
+              return await (inner.listDocuments as (...a: unknown[]) => Promise<unknown>).apply(
+                target,
+                args,
+              )
+            } finally {
+              inFlight -= 1
+            }
+          }
+        }
+        const value = Reflect.get(target, key, target)
+        return typeof value === 'function'
+          ? (value as (...a: unknown[]) => unknown).bind(target)
+          : value
+      },
+    }) as typeof deps.documentIndex
+
+    const app = createWorkspacesRouter({ serverDeps: { ...deps, documentIndex: index } })
+    const res = await app.request('/api/workspaces')
+    expect(res.status).toBe(200)
+    const parsed = listWorkspacesResponseSchema.parse(await res.json())
+    expect(parsed.workspaces).toHaveLength(3)
+    expect(
+      peak,
+      'GET /api/workspaces overlapped its per-row document listings — the Promise.all shape that 500ed a real daemon with SQLITE_BUSY',
+    ).toBe(1)
+  })
 })
 
 describe('POST /api/workspaces/:workspaceId/documents', () => {
