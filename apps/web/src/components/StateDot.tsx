@@ -83,6 +83,13 @@ export function StateDot({
         data-testid="state-dot"
         className={cn(
           'absolute inset-0 rounded-full',
+          // The tone CROSSES rather than cuts. A save cycle flips this dot
+          // every debounce period while someone types, and at an instant
+          // swap that reads as flicker beside the title being edited. It
+          // also softens the case an instant swap makes worst: a write
+          // faster than this duration never reaches the far colour at all,
+          // so a quick save shimmers instead of flashing.
+          'transition-colors duration-(--motion-duration-normal) ease-(--motion-ease-out)',
           shape === 'filled' && TONE_FILL[tone],
           shape !== 'filled' && cn('border-2', TONE_STROKE[tone]),
           // The ring's own gap is what reads as "not yet"; spinning it is the
