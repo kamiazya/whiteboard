@@ -133,6 +133,7 @@ import {
   scaleBoxWithin,
   unionBox,
 } from './geometry.js'
+import { describeTarget, gestureTrace } from './gesture-trace.js'
 import {
   type CarriedSideCache,
   canReuseCarriedSides,
@@ -1487,6 +1488,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           }
           setMarquee(null)
           navigationRef.current = createIdleNavigation()
+          gestureTrace.recordReset('long-press-menu', Math.round(performance.now()))
           lastPressRef.current = null
           doublePressRef.current = null
           // The native long-press this replaces gave a system haptic; keep
@@ -1504,9 +1506,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * asks for. Every effect maps to something this component already did at
      * the site the machine replaced; nothing new is invented here.
      */
-    const runNavigation = (root: HTMLElement, event: NavigationEvent): NavigationResult => {
-      const result = reduceNavigation(navigationRef.current, event)
+    const runNavigation = (
+      root: HTMLElement,
+      event: NavigationEvent,
+      at: number,
+    ): NavigationResult => {
+      const before = navigationRef.current
+      const result = reduceNavigation(before, event)
       navigationRef.current = result.state
+      gestureTrace.recordNavigation({ at: Math.round(at), event, before, result })
       for (const effect of result.effects) {
         switch (effect.kind) {
           case 'pan':
@@ -1563,10 +1571,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // would be read as an ordinary handback and never recovered. Their
         // release does reach handlePointerUp, because capture redirects the
         // rest of the sequence to the root.
-        navigationRef.current = reduceNavigation(navigationRef.current, {
-          type: 'external-press',
-          pointerId: e.pointerId,
-        }).state
+        runNavigation(root, { type: 'external-press', pointerId: e.pointerId }, e.timeStamp)
         capturePointer(root, e.pointerId)
       }
       return root
@@ -1612,7 +1617,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerDown = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (isOverlayEvent(e)) return
+      if (isOverlayEvent(e)) {
+        // The one rejection that used to leave no trace at all: a press an
+        // overlay took never reaches the machine, so a dead zone made of
+        // chrome reads as nothing having happened. The recorder names what
+        // took it.
+        gestureTrace.recordOverlayRejected({
+          at: Math.round(e.timeStamp),
+          pointerId: e.pointerId,
+          pointerType: e.pointerType,
+          target: describeTarget(e.target),
+        })
+        return
+      }
       const root = rootRef.current
       if (root === null) return
       const screenPoint = clientPointToRootLocal(e, root)
@@ -1622,31 +1639,35 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // it owns — which finger is down, whether two of them are driving the
       // viewport, whether this press continues a gather — lives in one value
       // in `navigation.ts` rather than in the refs this used to read.
-      const navigation = runNavigation(root, {
-        type: 'pointerdown',
-        pointerId: e.pointerId,
-        pointerType: navigationPointerKind(e.pointerType),
-        isPrimary: e.isPrimary,
-        button: e.button,
-        point: screenPoint,
-        timeStamp: e.timeStamp,
-        context: {
-          handMode: tool === 'hand',
-          spaceDown: spaceDownRef.current,
-          hitId,
-          // The anchor a gather would extend. Mid-gather it is the standing
-          // selection; otherwise only a node this press could join to, which
-          // is why entering hand mode — which clears the selection — can
-          // never gather.
-          anchorPrimaryId:
-            navigationRef.current.mode.kind === 'gathering'
-              ? selectedId
-              : gestureState.kind === 'moving'
-                ? gestureState.nodeId
-                : null,
-          manipulating: gestureState.kind !== 'idle',
+      const navigation = runNavigation(
+        root,
+        {
+          type: 'pointerdown',
+          pointerId: e.pointerId,
+          pointerType: navigationPointerKind(e.pointerType),
+          isPrimary: e.isPrimary,
+          button: e.button,
+          point: screenPoint,
+          timeStamp: e.timeStamp,
+          context: {
+            handMode: tool === 'hand',
+            spaceDown: spaceDownRef.current,
+            hitId,
+            // The anchor a gather would extend. Mid-gather it is the standing
+            // selection; otherwise only a node this press could join to, which
+            // is why entering hand mode — which clears the selection — can
+            // never gather.
+            anchorPrimaryId:
+              navigationRef.current.mode.kind === 'gathering'
+                ? selectedId
+                : gestureState.kind === 'moving'
+                  ? gestureState.nodeId
+                  : null,
+            manipulating: gestureState.kind !== 'idle',
+          },
         },
-      })
+        e.timeStamp,
+      )
       if (navigation.preventDefault === true) e.preventDefault()
       if (!navigation.fallThrough) return
       if (e.button !== 0) return
@@ -1812,12 +1833,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       ) {
         capturePointer(root, e.pointerId)
       }
-      const navigation = runNavigation(root, {
-        type: 'pointermove',
-        pointerId: e.pointerId,
-        pointerType: navigationPointerKind(e.pointerType),
-        point: screenPoint,
-      })
+      const navigation = runNavigation(
+        root,
+        {
+          type: 'pointermove',
+          pointerId: e.pointerId,
+          pointerType: navigationPointerKind(e.pointerType),
+          point: screenPoint,
+        },
+        e.timeStamp,
+      )
       if (!navigation.fallThrough) return
       if (marquee !== null) {
         setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
@@ -1838,11 +1863,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
       const root = rootRef.current
       if (root === null) return
-      const navigation = runNavigation(root, {
-        type: 'pointerup',
-        pointerId: e.pointerId,
-        pointerType: navigationPointerKind(e.pointerType),
-      })
+      const navigation = runNavigation(
+        root,
+        {
+          type: 'pointerup',
+          pointerId: e.pointerId,
+          pointerType: navigationPointerKind(e.pointerType),
+        },
+        e.timeStamp,
+      )
       // A release the machine answered was navigation — a finger leaving a
       // gather or a pinch, or the end of a pan. None of them run the click
       // and marquee semantics below: the sequence was never a gesture on the
@@ -2010,11 +2039,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // The machine's own cancel arm emits the long-press clear, the capture
       // release and the gesture cancel, in that order — the three things
       // this handler used to do by hand across four refs.
-      runNavigation(root, {
-        type: 'pointercancel',
-        pointerId: e.pointerId,
-        pointerType: navigationPointerKind(e.pointerType),
-      })
+      runNavigation(
+        root,
+        {
+          type: 'pointercancel',
+          pointerId: e.pointerId,
+          pointerType: navigationPointerKind(e.pointerType),
+        },
+        e.timeStamp,
+      )
     }
 
     /**
@@ -2036,6 +2069,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      */
     const handleLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
       if (!navigationRef.current.down.has(e.pointerId)) return
+      gestureTrace.recordLostCapture(e.pointerId, Math.round(e.timeStamp))
       handlePointerCancel(e)
     }
 
@@ -2627,6 +2661,40 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // out) would otherwise leave the browser holding capture for a pointer
     // no element can any longer respond to. Best-effort/never-throw, same
     // reasoning as `trySetPointerCapture`.
+    // The flight recorder's document-side ear. The root's own handlers can
+    // only record presses that REACH them, and the report this recorder
+    // exists for is precisely a press that seems not to: an element outside
+    // the root — a portal, a stale overlay — consumes it before the editor
+    // sees anything. A capture-phase listener on the document sees every
+    // press first and records whether it was headed inside the root, which
+    // is the discriminator nothing else can supply. Down/up/cancel only:
+    // moves would flood the ring, and the missing-press question never
+    // needs them.
+    useEffect(() => {
+      const record = (e: PointerEvent) => {
+        const root = rootRef.current
+        gestureTrace.recordDocPointer({
+          at: Math.round(e.timeStamp),
+          type: e.type,
+          pointerId: e.pointerId,
+          pointerType: e.pointerType,
+          isPrimary: e.isPrimary,
+          x: Math.round(e.clientX),
+          y: Math.round(e.clientY),
+          insideRoot: root !== null && e.target instanceof Node && root.contains(e.target),
+          target: describeTarget(e.target),
+        })
+      }
+      document.addEventListener('pointerdown', record, true)
+      document.addEventListener('pointerup', record, true)
+      document.addEventListener('pointercancel', record, true)
+      return () => {
+        document.removeEventListener('pointerdown', record, true)
+        document.removeEventListener('pointerup', record, true)
+        document.removeEventListener('pointercancel', record, true)
+      }
+    }, [])
+
     useEffect(() => {
       // Capture the root HERE, at mount, rather than reading `rootRef.current`
       // inside the cleanup closure: React detaches the ref (sets it to
