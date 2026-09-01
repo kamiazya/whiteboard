@@ -7,13 +7,11 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
-import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
+import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
-import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { SaveStatusChip } from '../components/SaveStatusChip.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
-import { SpatialEditor } from '../components/spatial-editor/index.js'
 import {
   AlertDialog,
   AlertDialogAction,
@@ -50,7 +48,6 @@ import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
 import { isDocumentReadFailure } from '../lib/document-read-failure.js'
 import { browserFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { sharedFoldingBrowserIndex } from '../lib/folding-browser-index.js'
-import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { kindNoun } from '../lib/kind-noun.js'
 import type { ContentClock, DefaultDocumentPointer } from '../lib/local-document-summary.js'
 import { ensurePersistentStorage } from '../lib/persistent-storage.js'
@@ -924,79 +921,43 @@ export function BrowserDocumentPage({
           }
           spatial={() => (
             <div className="flex h-full min-h-0 flex-col">
-              {/* The hook sits INSIDE the spatial slot, as it does on the
-                  daemon page, so `spatial-editor-container` means the same
-                  thing on both: a spatial editor is mounted. Outside the
-                  slot it was also present for a markdown document, so one
-                  identifier answered two different questions depending on
-                  which page a test was written against. */}
-              <div data-testid="spatial-editor-container" className="relative min-h-0 flex-1">
-                {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
-                  gesture and open text editor all describe ONE canvas, and
-                  `SpatialCanvas` carries no id for the editor to notice a
-                  switch by. Without the key, switching documents silently
-                  inherits the previous canvas's viewport. (The markdown
-                  branch keys for the same reason.) */}
-                <SpatialEditor
-                  key={documentId ?? 'no-canvas'}
-                  // Decided from the canvas's own shape, but only once its
-                  // document has loaded — at mount every canvas still looks
-                  // empty.
-                  initialTool={
-                    canvasLoaded
-                      ? resolveInitialTool({
-                          isEmpty: canvas.nodes.length === 0,
-                          lastTool: readLastTool(),
-                        })
-                      : undefined
-                  }
-                  canvas={canvas}
-                  onChange={onChange}
-                  externalVersion={externalVersion}
-                  theme={resolvedTheme}
-                  // File-node reference = canvas id minted in the browser; the current
-                  // canvas is excluded (a self-reference card is pure noise).
-                  fileRefOptions={documents
-                    .filter((entry) => entry.documentId !== documentId)
-                    .map((entry) => ({
-                      file: entry.documentId,
-                      label: entry.name,
-                      kind: entry.kind,
-                    }))}
-                  // A file-node reference names a document id exactly like a
-                  // [[wikiLink]] does, so it follows through the same one
-                  // conversion rather than repeating it here.
-                  onOpenFileRef={navigateToDocument}
-                  missingFileRef={missingFileRef}
-                  {...fileSeams}
-                  lockedNodeIds={lockedNodeIds}
-                  lockedEdgeIds={lockedEdgeIds}
-                  onToggleNodeLock={setNodeLock}
-                  onOpenInEditor={nodeInEditor.open}
-                  onToggleEdgeLock={setEdgeLock}
-                  paletteLeading={
-                    <HistoryCluster
-                      onUndo={() => void undo()}
-                      onRedo={() => void redo()}
-                      canUndo={canUndo()}
-                      canRedo={canRedo()}
-                    />
-                  }
-                />
-                {nodeInEditor.editing !== null && (
-                  <NodeTextEditorOverlay
-                    title={documentName ?? 'Untitled'}
-                    initialText={nodeInEditor.editing.text}
-                    theme={resolvedTheme}
-                    resolveAlias={resolveAlias}
-                    resolveEmbed={resolveEmbed}
-                    linkTargets={linkTargets}
-                    onCommit={nodeInEditor.commit}
-                    onClose={nodeInEditor.close}
-                    onOpenDocument={(id) => navigateToDocument(id)}
-                  />
-                )}
-              </div>
+              <SpatialEditorPane
+                className="relative min-h-0 flex-1"
+                editorKey={documentId ?? 'no-canvas'}
+                canvasLoaded={canvasLoaded}
+                canvas={canvas}
+                onChange={onChange}
+                externalVersion={externalVersion}
+                theme={resolvedTheme}
+                // File-node reference = canvas id minted in the browser; the
+                // current canvas is excluded (a self-reference card is pure
+                // noise).
+                fileRefOptions={documents
+                  .filter((entry) => entry.documentId !== documentId)
+                  .map((entry) => ({
+                    file: entry.documentId,
+                    label: entry.name,
+                    kind: entry.kind,
+                  }))}
+                onOpenDocument={navigateToDocument}
+                missingFileRef={missingFileRef}
+                fileSeams={fileSeams}
+                lockedNodeIds={lockedNodeIds}
+                lockedEdgeIds={lockedEdgeIds}
+                onToggleNodeLock={setNodeLock}
+                onToggleEdgeLock={setEdgeLock}
+                nodeInEditor={nodeInEditor}
+                history={{
+                  onUndo: () => void undo(),
+                  onRedo: () => void redo(),
+                  canUndo: canUndo(),
+                  canRedo: canRedo(),
+                }}
+                overlayTitle={documentName ?? 'Untitled'}
+                resolveAlias={resolveAlias}
+                resolveEmbed={resolveEmbed}
+                linkTargets={linkTargets}
+              />
             </div>
           )}
         />

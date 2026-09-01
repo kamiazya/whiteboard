@@ -12,15 +12,13 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsC
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
-import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
+import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
-import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
-import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
@@ -50,7 +48,6 @@ import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
-import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -804,85 +801,58 @@ export function DaemonDocumentPage({
               resolveEmbed,
             }}
             spatial={() => (
-              <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
+              <SpatialEditorPane
+                className="relative h-full min-h-0"
+                editorKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
+                canvasLoaded={canvasLoaded}
+                editorRef={spatialEditorRef}
+                agentTouchedNodeIds={agentActivity.touchedNodeIds}
+                canvas={canvasValue}
+                onChange={onChange}
+                externalVersion={externalVersion}
+                theme={resolvedTheme}
+                // File-node reference = the target's immutable id (rename-
+                // safe); the label shows its current path and the current
+                // canvas is excluded. Legacy documents still carry path refs,
+                // which resolveRefPath misses and switchDocument takes as-is.
+                fileRefOptions={controller.documents
+                  .filter((entry) => entry.path !== canvas?.path)
+                  .map((entry) => ({
+                    file: entry.id,
+                    label: entry.path,
+                    kind: entry.kind,
+                  }))}
+                onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
+                missingFileRef={missingFileRef}
+                fileSeams={fileSeams}
+                lockedNodeIds={lockedNodeIds}
+                lockedEdgeIds={lockedEdgeIds}
+                onToggleNodeLock={setNodeLock}
+                onToggleEdgeLock={setEdgeLock}
+                nodeInEditor={nodeInEditor}
+                history={{
+                  onUndo: () => void undo(),
+                  onRedo: () => void redo(),
+                  canUndo: canUndo(),
+                  canRedo: canRedo(),
+                  versions:
+                    capabilities.versions && canvas
+                      ? {
+                          workspaceId: canvas.workspaceId,
+                          path: canvas.path,
+                          onRestored: clearLocalUndo,
+                          refreshSignal: versionRefreshSignal,
+                          versionPanelExtra,
+                        }
+                      : undefined,
+                }}
+                overlayTitle={canvas?.path ?? 'Untitled'}
+                resolveAlias={resolveAlias}
+                resolveEmbed={resolveEmbed}
+                linkTargets={linkTargets}
+              >
                 <AgentPresenceChip summary={agentActivity.summary} />
-                {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
-                gesture and open text editor all describe ONE canvas, and
-                `SpatialCanvas` carries no id for the editor to notice a switch
-                by. Without the key, switching documents silently inherits the
-                previous canvas's viewport. */}
-                <SpatialEditor
-                  key={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
-                  // Decided from the canvas's own shape, but only once its
-                  // document has loaded — at mount every canvas still looks
-                  // empty.
-                  initialTool={
-                    canvasLoaded
-                      ? resolveInitialTool({
-                          isEmpty: canvasValue.nodes.length === 0,
-                          lastTool: readLastTool(),
-                        })
-                      : undefined
-                  }
-                  ref={spatialEditorRef}
-                  agentTouchedNodeIds={agentActivity.touchedNodeIds}
-                  canvas={canvasValue}
-                  onChange={onChange}
-                  externalVersion={externalVersion}
-                  theme={resolvedTheme}
-                  // File-node reference = the target's immutable id (rename-
-                  // safe); the label shows its current path and the current
-                  // canvas is excluded. Legacy documents still carry path refs,
-                  // which resolveRefPath misses and switchDocument takes as-is.
-                  fileRefOptions={controller.documents
-                    .filter((entry) => entry.path !== canvas?.path)
-                    .map((entry) => ({
-                      file: entry.id,
-                      label: entry.path,
-                      kind: entry.kind,
-                    }))}
-                  onOpenFileRef={(file) => controller.switchDocument(resolveRefPath(file) ?? file)}
-                  missingFileRef={missingFileRef}
-                  {...fileSeams}
-                  lockedNodeIds={lockedNodeIds}
-                  lockedEdgeIds={lockedEdgeIds}
-                  onToggleNodeLock={setNodeLock}
-                  onOpenInEditor={nodeInEditor.open}
-                  onToggleEdgeLock={setEdgeLock}
-                  paletteLeading={
-                    <HistoryCluster
-                      onUndo={() => void undo()}
-                      onRedo={() => void redo()}
-                      canUndo={canUndo()}
-                      canRedo={canRedo()}
-                      versions={
-                        capabilities.versions && canvas
-                          ? {
-                              workspaceId: canvas.workspaceId,
-                              path: canvas.path,
-                              onRestored: clearLocalUndo,
-                              refreshSignal: versionRefreshSignal,
-                              versionPanelExtra,
-                            }
-                          : undefined
-                      }
-                    />
-                  }
-                />
-                {nodeInEditor.editing !== null && (
-                  <NodeTextEditorOverlay
-                    title={canvas?.path ?? 'Untitled'}
-                    initialText={nodeInEditor.editing.text}
-                    theme={resolvedTheme}
-                    resolveAlias={resolveAlias}
-                    resolveEmbed={resolveEmbed}
-                    linkTargets={linkTargets}
-                    onCommit={nodeInEditor.commit}
-                    onClose={nodeInEditor.close}
-                    onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
-                  />
-                )}
-              </div>
+              </SpatialEditorPane>
             )}
           />
         )}
