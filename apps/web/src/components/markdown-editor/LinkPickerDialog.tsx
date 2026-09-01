@@ -1,5 +1,6 @@
 import { FileSymlink, SquareArrowOutUpRight } from 'lucide-react'
 import { useEffect, useMemo, useRef, useState } from 'react'
+import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { cn } from '../../lib/utils.js'
 import {
   externalLinkMarkup,
@@ -105,6 +106,7 @@ export function LinkPickerDialog({
           return
         }
         if (event.key === 'Enter') {
+          if (isImeComposingKeydown(event.nativeEvent)) return
           event.preventDefault()
           commit(activeIndex)
         }

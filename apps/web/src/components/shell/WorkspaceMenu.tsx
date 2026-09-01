@@ -14,6 +14,7 @@
 import type { RenameWorkspaceInput, WorkspaceEntry } from '@kamiazya/whiteboard-ports'
 import { useEffect, useId, useRef, useState } from 'react'
 import { workspaceHandle, workspaceLabel } from '@/lib/workspace-handle'
+import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 
 /**
  * Where the workspaces come from and how one is made or renamed — the half
@@ -337,6 +338,7 @@ export function WorkspaceMenu({
               onKeyDown={(event) => {
                 event.stopPropagation()
                 if (event.key === 'Enter') {
+                  if (isImeComposingKeydown(event.nativeEvent)) return
                   event.preventDefault()
                   commitUrl()
                   return
@@ -418,7 +420,8 @@ export function WorkspaceMenu({
                 value={newName}
                 onChange={(event) => setNewName(event.target.value)}
                 onKeyDown={(event) => {
-                  if (event.key === 'Enter') submitCreate()
+                  if (event.key !== 'Enter' || isImeComposingKeydown(event.nativeEvent)) return
+                  submitCreate()
                 }}
                 className="rounded-md border bg-background px-2 py-1 text-sm"
               />

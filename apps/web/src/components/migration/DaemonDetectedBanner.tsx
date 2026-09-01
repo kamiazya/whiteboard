@@ -16,6 +16,7 @@ import {
   type ProbeDaemonOptions,
   probeDaemon,
 } from '../../lib/daemon-probe.js'
+import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import {
   decideConnectGate,
   explainProbeFailure,
@@ -626,7 +627,8 @@ export function DaemonDetectedBanner({
             value={portInput}
             onChange={(event) => setPortInput(event.target.value)}
             onKeyDown={(event) => {
-              if (event.key === 'Enter') void checkNow()
+              if (event.key !== 'Enter' || isImeComposingKeydown(event.nativeEvent)) return
+              void checkNow()
             }}
             placeholder="3099"
             className="w-16 rounded border px-1 py-0.5"
