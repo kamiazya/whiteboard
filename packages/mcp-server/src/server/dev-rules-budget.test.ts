@@ -59,7 +59,7 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 91
+const ALWAYS_ON_TOTAL_BUDGET = 90
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by
