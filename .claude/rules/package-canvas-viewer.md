@@ -42,8 +42,11 @@ paths:
 - OKF/JSON Canvas parsing internals — this package calls into
   `codec`'s `parseSpatial`/`serializeSpatial`, it does not
   reimplement them.
-- Any editing affordance — this is a read-only viewer. Editing lives in
-  `apps/web`'s editor surfaces.
+- Any editing affordance beyond the widget's append-only sticky note — the
+  viewer itself is read-only, and the widget's one write goes through the
+  host session to `wb_canvas_edit` (widget-entry.test.tsx pins the
+  callServerTool allowlist to exactly `canvas_view` + `wb_canvas_edit`).
+  Real editing lives in `apps/web`'s editor surfaces.
 - Node/CLI/daemon code — this is a browser-runtime UI package.
 
 ## Dependency rules
