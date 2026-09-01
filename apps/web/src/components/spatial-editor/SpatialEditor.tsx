@@ -79,7 +79,7 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -93,13 +93,7 @@ import {
 } from 'react'
 import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
-import {
-  readClipboardFragment,
-  recordedReconnection,
-  recordReconnection,
-  writeClipboardFragment,
-} from '../../lib/clipboard-store.js'
+import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import type { BoxMove } from './align.js'
@@ -111,7 +105,7 @@ import {
 } from './CanvasContextMenu.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
-import { applyCommand, buildFragmentInsertCommand, DUPLICATE_OFFSET_PX } from './commands.js'
+import { applyCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -170,7 +164,6 @@ import {
   LINK_NODE_HEIGHT,
   linkNodeDefaults,
   resolveSpawnPoint,
-  textNodeDefaults,
 } from './node-factories.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
@@ -192,6 +185,7 @@ import {
   type EditorTool,
   ToolPalette,
 } from './ToolPalette.js'
+import { useClipboardActions } from './use-clipboard-actions.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
@@ -502,6 +496,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const rootRef = useRef<HTMLDivElement | null>(null)
 
     const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
+    const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
+      useEditorMeasurements(rootRef)
+
     /**
      * The multi-selection lives in ONE state object and every transition
      * routes through the pure `reduceSelection` (selection.ts), so its
@@ -2036,189 +2033,33 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
-     * Clones the selection as ONE batch command (one undo step): reminted
-     * ids via the clipboard-fragment helpers, +16px offset (the standard
-     * duplicate-again cascade), edges kept only when both endpoints are
-     * selected — with their properties. The copies become the selection.
+     * The selection seam for the clipboard family: make exactly these nodes
+     * the selection (primary first) and drop any edge selection, through
+     * the same reducer every other selection write uses.
      */
-    const duplicateSelection = (): boolean => {
-      if (selection === undefined) return false
-      const current = canvasRef.current
-      const fragment = extractClipboardFragment(current, new Set([selection.id, ...extraIds]))
-      const command = buildFragmentInsertCommand(
-        current,
-        fragment,
-        () => createId?.() ?? crypto.randomUUID(),
-      )
-      if (command === undefined) return false
-      const running = applyCommand(current, command)
-      if (running === current) return false
-      onChange(running, command)
-      const remintedIds =
-        command.kind === 'batch'
-          ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
-          : []
-      if (remintedIds.length > 0) {
-        applySelection({ type: 'set-members', ids: remintedIds })
-        setSelectedEdgeId(null)
-      }
-      return true
-    }
-
-    /**
-     * Copy the selection into the in-app clipboard slot, returning the
-     * fragment so the caller can also hand it to the OS clipboard. null
-     * when there is nothing to copy.
-     */
-    const copySelection = (): ClipboardFragment | null => {
-      if (selection === undefined) return null
-      const fragment = extractClipboardFragment(
-        canvasRef.current,
-        new Set([selection.id, ...extraIds]),
-      )
-      if (fragment.nodes.length === 0) return null
-      writeClipboardFragment(fragment)
-      // The newest clipboard intent wins: a plain copy lifts a pending cut.
-      setPendingCut(null)
-      return fragment
-    }
-
-    /**
-     * Cut-flavoured copy: the fragment also records the cut surface (the
-     * edges the deletion is about to sever), so the FIRST same-canvas paste
-     * reconnects them — a cut is the front half of a move, not a delete.
-     */
-    const cutSelection = (): ClipboardFragment | null => {
-      if (selection === undefined) return null
-      const fragment = extractClipboardFragment(
-        canvasRef.current,
-        new Set([selection.id, ...extraIds]),
-        { cutId: crypto.randomUUID() },
-      )
-      if (fragment.nodes.length === 0 || fragment.cut === undefined) return null
-      writeClipboardFragment(fragment)
-      // Defer the delete: hold the originals as a ghost until the paste
-      // decides what the cut meant (move here, copy elsewhere, or nothing).
-      setPendingCut({
-        cutId: fragment.cut.id,
-        snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
-      })
-      return fragment
-    }
-
-    /** A note carrying pasted foreign text, at the viewport center. */
-    const createTextNodeAtViewportCenter = (text: string): void => {
-      const point = screenToCanvas(viewportCenterScreen(), viewport)
-      const node = textNodeDefaults(createId?.() ?? crypto.randomUUID(), point, text)
-      const command: EditorCommand = { kind: 'create-node', node }
-      const running = applyCommand(canvasRef.current, command)
-      if (running === canvasRef.current) return
-      onChange(running, command)
-      applySelection({ type: 'set-members', ids: [node.id] })
+    const selectNodes = (ids: readonly string[]): void => {
+      applySelection({ type: 'set-members', ids: [...ids] })
       setSelectedEdgeId(null)
     }
-
-    /**
-     * Paste the stored fragment as ONE batch: reminted ids, edges remapped.
-     * With an anchor point (the empty-space menu's "Paste here") the
-     * fragment's bounding box centers on it; without one (Cmd+V) copies
-     * land +16px from their source coordinates, cascading like duplicate.
-     */
-    const pasteClipboard = (at?: Point): boolean => {
-      const fragment = readClipboardFragment()
-      if (fragment === null) return false
-      return pasteFragment(fragment, at)
-    }
-
-    /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
-    const pasteFragment = (
-      fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
-      at?: Point,
-    ): boolean => {
-      const current = canvasRef.current
-      // A paste that answers THIS canvas's pending cut is a MOVE: the held
-      // nodes keep their ids and just change place, so every edge — internal
-      // or boundary — survives without any reconnection machinery. One batch
-      // of move-node commands = one undo step that only moves them back.
-      if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
-        const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
-        if (held.length > 0) {
-          let dx = DUPLICATE_OFFSET_PX
-          let dy = DUPLICATE_OFFSET_PX
-          if (at !== undefined) {
-            const minX = Math.min(...held.map((node) => node.x))
-            const minY = Math.min(...held.map((node) => node.y))
-            const maxX = Math.max(...held.map((node) => node.x + node.width))
-            const maxY = Math.max(...held.map((node) => node.y + node.height))
-            dx = Math.round(at.x - (minX + maxX) / 2)
-            dy = Math.round(at.y - (minY + maxY) / 2)
-          }
-          const moveCommand: EditorCommand = {
-            kind: 'batch',
-            commands: held.map((node) => ({
-              kind: 'move-node' as const,
-              id: node.id,
-              x: node.x + dx,
-              y: node.y + dy,
-            })),
-          }
-          setPendingCut(null)
-          const running = applyCommand(current, moveCommand)
-          if (running === current) return false
-          onChange(running, moveCommand)
-          applySelection({ type: 'set-members', ids: held.map((node) => node.id) })
-          setSelectedEdgeId(null)
-          return true
-        }
-      }
-      // The cut surface reconnects while the document shows no trace of a
-      // previous reconnection: as long as any edge a prior paste of this cut
-      // created is still on THIS canvas, the fragment behaves as a plain
-      // copy (no second wire onto the peer). Undo removes those edges, so
-      // the next paste is a first paste again.
-      const cut =
-        fragment.cut !== undefined &&
-        !recordedReconnection(fragment.cut.id).some((id) =>
-          current.edges.some((edge) => edge.id === id),
-        )
-          ? fragment.cut
-          : undefined
-      const command = buildFragmentInsertCommand(
-        current,
-        { nodes: fragment.nodes, edges: fragment.edges, cut },
-        () => createId?.() ?? crypto.randomUUID(),
-        at,
-      )
-      if (command === undefined) return false
-      const running = applyCommand(current, command)
-      if (running === current) return false
-      if (cut !== undefined && command.kind === 'batch') {
-        // The boundary edges are the created edges with an endpoint OUTSIDE
-        // the created node set — that endpoint is the surviving peer.
-        const createdNodeIds = new Set(
-          command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
-        )
-        recordReconnection(
-          cut.id,
-          command.commands.flatMap((c) =>
-            c.kind === 'create-edge' &&
-            (!createdNodeIds.has(c.edge.fromNode) || !createdNodeIds.has(c.edge.toNode))
-              ? [c.edge.id]
-              : [],
-          ),
-        )
-      }
-      onChange(running, command)
-      const remintedIds =
-        command.kind === 'batch'
-          ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
-          : []
-      if (remintedIds.length > 0) {
-        applySelection({ type: 'set-members', ids: remintedIds })
-        setSelectedEdgeId(null)
-      }
-      return true
-    }
+    const {
+      duplicateSelection,
+      copySelection,
+      cutSelection,
+      createTextNodeAtViewportCenter,
+      pasteClipboard,
+      pasteFragment,
+    } = useClipboardActions({
+      canvasRef,
+      primaryId: selection?.id,
+      extraIds,
+      pendingCut,
+      setPendingCut,
+      onChange,
+      createId,
+      selectNodes,
+      viewport,
+      viewportCenterScreen,
+    })
 
     /**
      * Select every node; the first becomes primary, the rest extras.
@@ -2553,9 +2394,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
       return true
     }
-
-    const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
-      useEditorMeasurements(rootRef)
 
     /**
      * Node boxes for the overview, with each authored colour resolved to the

@@ -154,19 +154,23 @@ describe('single content path (S10 guardrail)', () => {
     // dispatching an EditorCommand through applyCommand — a hand-rolled
     // canvas object spread reaching onChange directly would bypass the
     // command layer sync consumers replay.
-    const loader = modules['./SpatialEditor.tsx']
-    const source = loader as string
-    // String-level TRIPWIRE for the command boundary: every statement-level
-    // onChange call must hand over a canvas spelled `running` (the
-    // applyCommand accumulator) or an inline `applyCommand(...)` result.
-    // This is deliberately formatting-sensitive and NOT data-flow analysis —
-    // a rename or a bypass shows up as a diff in this file, and the
-    // behavioral guarantee (sync consumers can replay commands) is carried
-    // by the browser-tier tests that assert commands reconstruct the
-    // canvas. Prose mentions inside comments don't match: only call sites
-    // preceded by code punctuation/whitespace count.
-    const callSites = (source.match(/[^`\w]onChange\((running\b|applyCommand\()/g) ?? []).length
-    const allCalls = (source.match(/[^`\w]onChange\(/g) ?? []).length
-    expect(allCalls).toBe(callSites)
+    // The editor plus every hook its onChange call sites moved to — an
+    // extraction moves a mutation site, not past the command boundary.
+    const MUTATING_SOURCES = ['./SpatialEditor.tsx', './use-clipboard-actions.ts']
+    for (const path of MUTATING_SOURCES) {
+      const source = modules[path] as string
+      // String-level TRIPWIRE for the command boundary: every statement-level
+      // onChange call must hand over a canvas spelled `running` (the
+      // applyCommand accumulator) or an inline `applyCommand(...)` result.
+      // This is deliberately formatting-sensitive and NOT data-flow analysis —
+      // a rename or a bypass shows up as a diff in this file, and the
+      // behavioral guarantee (sync consumers can replay commands) is carried
+      // by the browser-tier tests that assert commands reconstruct the
+      // canvas. Prose mentions inside comments don't match: only call sites
+      // preceded by code punctuation/whitespace count.
+      const callSites = (source.match(/[^`\w]onChange\((running\b|applyCommand\()/g) ?? []).length
+      const allCalls = (source.match(/[^`\w]onChange\(/g) ?? []).length
+      expect({ path, allCalls }).toEqual({ path, allCalls: callSites })
+    }
   })
 })
