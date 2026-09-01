@@ -63,6 +63,12 @@ export async function countBrowserWorkspaceDocuments(
 export type PromoteWorkspaceResult =
   | {
       kind: 'ok'
+      /**
+       * The browser workspace the record was read from — what a per-workspace
+       * moved marker needs, reported by the transfer itself rather than
+       * re-read by the caller, so the two cannot disagree.
+       */
+      sourceWorkspaceId: string
       /** Every documentId the record carried across — the same ids, by design. */
       promotedDocumentIds: string[]
       /** Paths the merge left contested; surfaced, never auto-resolved. */
@@ -136,7 +142,8 @@ async function promoteWorkspaceUnsafe(
   // the same claimed database, so tests seed through the production path.
   const fileStore = new DocumentFileStore()
 
-  const record = await workspaceDocs.open(getBrowserWorkspaceId())
+  const sourceWorkspaceId = getBrowserWorkspaceId()
+  const record = await workspaceDocs.open(sourceWorkspaceId)
   if (record === null) {
     return { kind: 'failed', reason: 'This browser keeps no workspace record to promote.' }
   }
@@ -190,5 +197,5 @@ async function promoteWorkspaceUnsafe(
     else blobs.failed.push(fileId)
   }
 
-  return { kind: 'ok', promotedDocumentIds, shadowedPaths, blobs }
+  return { kind: 'ok', sourceWorkspaceId, promotedDocumentIds, shadowedPaths, blobs }
 }

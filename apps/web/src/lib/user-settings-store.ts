@@ -127,6 +127,14 @@ const promotionResultSchema = z
     daemonBaseUrl: httpUrl.optional(),
     /** The TARGET daemon workspace the record merged into. */
     workspaceId: z.string(),
+    /**
+     * The SOURCE browser workspace the record came from. The move disclosure
+     * is a claim about one workspace's data, and this browser keeps many —
+     * without the source, the banner fires on whichever workspace is active.
+     * Optional because records persisted before the field existed lack it;
+     * those cannot say which workspace moved, so no disclosure renders.
+     */
+    sourceWorkspaceId: z.string().optional(),
     ok: z.boolean(),
     promotedCount: z.number().optional(),
     shadowedPaths: z.array(z.string()).optional(),
