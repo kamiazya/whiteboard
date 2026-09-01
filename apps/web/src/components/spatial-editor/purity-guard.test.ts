@@ -156,7 +156,13 @@ describe('single content path (S10 guardrail)', () => {
     // command layer sync consumers replay.
     // The editor plus every hook its onChange call sites moved to — an
     // extraction moves a mutation site, not past the command boundary.
-    const MUTATING_SOURCES = ['./SpatialEditor.tsx', './use-clipboard-actions.ts']
+    const MUTATING_SOURCES = [
+      './SpatialEditor.tsx',
+      './use-clipboard-actions.ts',
+      // Creation goes through applyResult, so this one holds zero onChange
+      // calls today — scanned so a future direct write cannot slip in.
+      './use-node-creation.ts',
+    ]
     for (const path of MUTATING_SOURCES) {
       const source = modules[path] as string
       // String-level TRIPWIRE for the command boundary: every statement-level
