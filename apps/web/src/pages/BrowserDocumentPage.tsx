@@ -901,7 +901,7 @@ export function BrowserDocumentPage({
           <Minimize2 aria-hidden="true" className="size-4" />
         </Button>
       )}
-      <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
+      <div className="relative h-full min-h-0">
         <DocumentEditorSurface
           kind={documentKind}
           documentKey={documentId ?? 'no-canvas'}
@@ -924,7 +924,13 @@ export function BrowserDocumentPage({
           }
           spatial={() => (
             <div className="flex h-full min-h-0 flex-col">
-              <div className="relative min-h-0 flex-1">
+              {/* The hook sits INSIDE the spatial slot, as it does on the
+                  daemon page, so `spatial-editor-container` means the same
+                  thing on both: a spatial editor is mounted. Outside the
+                  slot it was also present for a markdown document, so one
+                  identifier answered two different questions depending on
+                  which page a test was written against. */}
+              <div data-testid="spatial-editor-container" className="relative min-h-0 flex-1">
                 {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
                   gesture and open text editor all describe ONE canvas, and
                   `SpatialCanvas` carries no id for the editor to notice a

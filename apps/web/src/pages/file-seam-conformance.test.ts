@@ -97,6 +97,40 @@ function renders(source: string, chrome: string): boolean {
   return new RegExp(`<${chrome}[\\s/>]`).test(source)
 }
 
+/**
+ * `spatial-editor-container` must sit INSIDE each page's spatial slot.
+ *
+ * It is the hook most page tests reach for, and it meant two different things:
+ * the daemon page placed it inside the slot, so it answered "a spatial editor
+ * is mounted", while the browser page placed it around `DocumentEditorSurface`,
+ * so it also appeared for a MARKDOWN document and answered "the editor surface
+ * is mounted". Measured — `DocumentEditorSurface` does not render its `spatial`
+ * slot for a markdown document, so the two placements cannot agree.
+ *
+ * One identifier answering two questions makes a test written against one page
+ * silently wrong against the other, which is the same defect as chrome one page
+ * renders and the other does not, one layer down.
+ *
+ * A scan rather than a render, for the reason the file-seam scan gives: the
+ * property is WHERE the attribute sits in the source, and a render can only see
+ * one kind at a time.
+ */
+describe('the spatial-editor-container hook means one thing', () => {
+  it.each(PAGES)('%s places it inside the spatial slot', async (page) => {
+    const source = await read(page)
+    const slot = source.indexOf('spatial={() => (')
+    expect(slot, `${page} has no spatial slot to place it in`).toBeGreaterThan(-1)
+
+    const at = source.indexOf('data-testid="spatial-editor-container"')
+    expect(at, `${page} does not expose the hook at all`).toBeGreaterThan(-1)
+    expect(
+      at,
+      'the hook sits before the spatial slot, so it is present for a markdown ' +
+        'document too and no longer means "a spatial editor is mounted".',
+    ).toBeGreaterThan(slot)
+  })
+})
+
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
     const missing: string[] = []
