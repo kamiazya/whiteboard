@@ -1,7 +1,7 @@
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { snapGesturePoint } from './gesture-snap.js'
 import { indexNodeBoxes } from './geometry.js'
+import { snapGesturePoint } from './gesture-snap.js'
 import type { GestureState } from './gestures.js'
 
 function textNode(id: string, x: number, y: number, width = 100, height = 50) {
