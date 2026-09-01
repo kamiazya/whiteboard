@@ -43,6 +43,8 @@ import { assertScannedLedger } from './test-utils/coverage-ledger.js'
 const sources = import.meta.glob(
   [
     './components/workspace-files/WorkspaceFilesPanel.tsx',
+    './components/workspace-files/use-browser-columns.ts',
+    './components/workspace-files/use-debounced-document-search.ts',
     './pages/DaemonIndexPage.tsx',
     './components/HeaderBranchChip.tsx',
     './components/VersionTimeline.tsx',
@@ -71,6 +73,10 @@ type ScopeCoverage =
   | `no subject: ${string}`
 
 const PANEL = './components/workspace-files/WorkspaceFilesPanel.tsx'
+// The panel's extracted hooks are part of the same SCREEN: its state moved
+// there, not away, so the scan surface is the concatenation of all three.
+const PANEL_COLUMNS_HOOK = './components/workspace-files/use-browser-columns.ts'
+const PANEL_SEARCH_HOOK = './components/workspace-files/use-debounced-document-search.ts'
 const DAEMON_INDEX = './pages/DaemonIndexPage.tsx'
 const BRANCH_CHIP = './components/HeaderBranchChip.tsx'
 const VERSION_TIMELINE = './components/VersionTimeline.tsx'
@@ -208,10 +214,22 @@ const SCOPE_RESET_MARKER = '// SCOPE RESET'
  * "cleared WHEN THE SCOPE CHANGES", and only this block can answer it.
  */
 function scopeResetBlock(source: string): string {
-  const start = source.indexOf(SCOPE_RESET_MARKER)
-  if (start === -1) return ''
-  const end = source.indexOf('}, [', start)
-  return end === -1 ? '' : source.slice(start, end)
+  // Every marker's block, concatenated: a screen whose state moved into a
+  // hook clears that state through the hook's own marked reset, which the
+  // screen's scope-reset effect calls. The claim stays checkable per setter;
+  // what the concatenation cannot see is the CALL from the effect to the
+  // hook's reset, which is the reader's half of the contract.
+  const blocks: string[] = []
+  let from = 0
+  for (;;) {
+    const start = source.indexOf(SCOPE_RESET_MARKER, from)
+    if (start === -1) break
+    const end = source.indexOf('}, [', start)
+    if (end === -1) break
+    blocks.push(source.slice(start, end))
+    from = end
+  }
+  return blocks.join('\n')
 }
 
 // Scoped on the DOCUMENT rather than the workspace: both live in the top bar
@@ -307,23 +325,28 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 }
 
 const CASES = [
-  { file: PANEL, ledger: PANEL_STATE, label: 'WorkspaceFilesPanel', scanRefs: true },
-  { file: DAEMON_INDEX, ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: true },
-  { file: BRANCH_CHIP, ledger: BRANCH_CHIP_STATE, label: 'HeaderBranchChip', scanRefs: true },
   {
-    file: VERSION_TIMELINE,
+    files: [PANEL, PANEL_COLUMNS_HOOK, PANEL_SEARCH_HOOK],
+    ledger: PANEL_STATE,
+    label: 'WorkspaceFilesPanel',
+    scanRefs: true,
+  },
+  { files: [DAEMON_INDEX], ledger: DAEMON_INDEX_STATE, label: 'DaemonIndexPage', scanRefs: true },
+  { files: [BRANCH_CHIP], ledger: BRANCH_CHIP_STATE, label: 'HeaderBranchChip', scanRefs: true },
+  {
+    files: [VERSION_TIMELINE],
     ledger: VERSION_TIMELINE_STATE,
     label: 'VersionTimeline',
     scanRefs: true,
   },
   {
-    file: MARKDOWN_DOCUMENT,
+    files: [MARKDOWN_DOCUMENT],
     ledger: MARKDOWN_DOCUMENT_STATE,
     label: 'useMarkdownDocument',
     scanRefs: true,
   },
   {
-    file: BROWSER_DOCUMENT_PAGE,
+    files: [BROWSER_DOCUMENT_PAGE],
     ledger: BROWSER_DOCUMENT_PAGE_STATE,
     label: 'BrowserDocumentPage',
     scanRefs: true,
@@ -335,24 +358,31 @@ function scanned(source: string, scanRefs: boolean): Slot[] {
   return scanRefs ? [...stateNames(source), ...refNames(source)] : stateNames(source)
 }
 
+/** A screen's whole scan surface: its file plus the hooks its state moved to. */
+function sourceOf(files: readonly string[]): string {
+  return files.map((file) => sources[file] ?? '').join('\n')
+}
+
 describe('scoped screen state is classified', () => {
-  it.each(CASES)('$label: the scan reaches a plausible amount of state', ({ file, scanRefs }) => {
+  it.each(CASES)('$label: the scan reaches a plausible amount of state', ({ files, scanRefs }) => {
     // A regex that stops matching reports every entry as stale, which sends
     // the reader to the wrong file entirely.
-    expect(sources[file], `${file} was not globbed`).toBeDefined()
-    expect(scanned(sources[file], scanRefs).length).toBeGreaterThan(4)
+    for (const file of files) {
+      expect(sources[file], `${file} was not globbed`).toBeDefined()
+    }
+    expect(scanned(sourceOf(files), scanRefs).length).toBeGreaterThan(4)
   })
 
   // Both directions in one `it`, through the shared helper: they are the same
   // judgement, and a scan that ends up with only one of them reads exactly
   // like a scan that checked.
   it.each(CASES)('$label: every name is classified, and every entry still exists', ({
-    file,
+    files,
     ledger,
     scanRefs,
   }) => {
     assertScannedLedger(
-      scanned(sources[file], scanRefs).map((slot) => slot.name),
+      scanned(sourceOf(files), scanRefs).map((slot) => slot.name),
       ledger,
       {
         unclassified:
@@ -365,11 +395,11 @@ describe('scoped screen state is classified', () => {
   // The half that makes this more than a list of names. An entry claiming to
   // be cleared must have its setter called somewhere — a claim nothing backs
   // is the decoration this ledger exists to replace.
-  it.each(CASES)('$label: carries a scope-reset effect to check against', ({ file }) => {
+  it.each(CASES)('$label: carries a scope-reset effect to check against', ({ files }) => {
     // Without the marker the block is empty and every `cleared` entry below
     // fails at once — loud, but pointing at the wrong thing. Say it here.
     expect(
-      scopeResetBlock(sources[file]).length,
+      scopeResetBlock(sourceOf(files)).length,
       `no ${SCOPE_RESET_MARKER} marker: the guard cannot tell what this screen drops when its scope changes`,
     ).toBeGreaterThan(0)
   })
@@ -381,17 +411,17 @@ describe('scoped screen state is classified', () => {
   // An exemption has to expire when the thing it excuses stops being true,
   // or it decays into the decoration this ledger replaces.
   it.each(CASES)('$label: nothing exempt is quietly reset there after all', ({
-    file,
+    files,
     ledger,
     scanRefs,
   }) => {
-    const block = scopeResetBlock(sources[file])
+    const block = scopeResetBlock(sourceOf(files))
     const exempt = new Set(
       Object.entries(ledger)
         .filter(([, scope]) => scope !== 'cleared on switch')
         .map(([name]) => name),
     )
-    const backed = scanned(sources[file], scanRefs)
+    const backed = scanned(sourceOf(files), scanRefs)
       .filter((slot) => exempt.has(slot.name))
       .filter((slot) => slot.reset.test(block))
       .map((slot) => slot.name)
@@ -402,17 +432,17 @@ describe('scoped screen state is classified', () => {
   })
 
   it.each(CASES)('$label: everything marked cleared is reset IN that effect', ({
-    file,
+    files,
     ledger,
     scanRefs,
   }) => {
-    const block = scopeResetBlock(sources[file])
+    const block = scopeResetBlock(sourceOf(files))
     const cleared = new Set(
       Object.entries(ledger)
         .filter(([, scope]) => scope === 'cleared on switch')
         .map(([name]) => name),
     )
-    const unbacked = scanned(sources[file], scanRefs)
+    const unbacked = scanned(sourceOf(files), scanRefs)
       .filter((slot) => cleared.has(slot.name))
       .filter((slot) => !slot.reset.test(block))
       .map((slot) => slot.name)

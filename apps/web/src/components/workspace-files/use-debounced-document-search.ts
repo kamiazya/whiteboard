@@ -67,6 +67,8 @@ export function useDebouncedDocumentSearch(
     // nothing is worse than a slower answer.
   }, [query, source, revision])
 
+  // SCOPE RESET — the panel's own scope-reset effect calls this; the marker
+  // lets scoped-screen-state.test.ts verify the setters from here.
   const resetResults = useCallback(() => {
     setHits(null)
     setSearchDegraded(false)
