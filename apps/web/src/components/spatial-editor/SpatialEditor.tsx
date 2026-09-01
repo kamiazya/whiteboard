@@ -2068,6 +2068,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * inherits it.
      */
     const handleLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
+      // Only the ROOT losing capture is a loss. A real touch implicitly
+      // captures the pointer to the element under the finger (Pointer
+      // Events, "implicit pointer capture") — over a node that is an SVG
+      // child, not this root — and the first move's own capturePointer()
+      // then TRANSFERS capture here, which fires `lostpointercapture` on
+      // that child a frame later, bubbling to this handler. Treating the
+      // transfer this component itself performed as a loss cancelled the
+      // pan under a still-moving finger: pressed over a node it died within
+      // two frames, pressed over empty canvas (implicit capture already on
+      // the root, transfer a no-op, no event) it lived. Synthetic pointer
+      // events get no implicit capture, so only a real device ever showed
+      // it — caught by the gesture flight recorder, not by a test.
+      if (e.target !== e.currentTarget) return
       if (!navigationRef.current.down.has(e.pointerId)) return
       gestureTrace.recordLostCapture(e.pointerId, Math.round(e.timeStamp))
       handlePointerCancel(e)
