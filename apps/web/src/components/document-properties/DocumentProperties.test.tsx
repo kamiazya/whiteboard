@@ -131,6 +131,22 @@ describe('DocumentProperties', () => {
     expect(onChange).toHaveBeenLastCalledWith({ type: 'markdown' })
   })
 
+  it('does not commit a tag on the Enter that confirms an IME composition', () => {
+    const onChange = vi.fn()
+    render(
+      <DocumentProperties
+        {...titleProps()}
+        facets={meta({ tags: [] })}
+        onFacetsChange={onChange}
+      />,
+    )
+    fireEvent.click(screen.getByRole('button', { name: /properties/i }))
+    const box = screen.getByRole('textbox', { name: /add tag/i })
+    fireEvent.change(box, { target: { value: '\u4f01\u753b' } })
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true })
+    expect(onChange).not.toHaveBeenCalled()
+  })
+
   it('ignores a duplicate or blank tag instead of storing it', () => {
     const onChange = vi.fn()
     render(
@@ -304,6 +320,51 @@ describe('DocumentProperties title typing (controlled-input round trip)', () => 
     fireEvent.keyDown(screen.getByRole('textbox', { name: /title/i }), { key: 'Delete' })
 
     expect(onAncestorKeyDown).not.toHaveBeenCalled()
+  })
+
+  // Enter is the universal "I'm done" for a single-line field, and every other
+  // single-line input in this app already treats it that way. Here every
+  // keystroke is already committed, so finishing means BLURRING — the focus
+  // ring goes away and the save dot is the receipt. Without it the caret just
+  // sits there and nothing says the name was kept.
+  it('finishes the edit on Enter: the field blurs and keeps the typed name', () => {
+    const onChange = vi.fn()
+    render(
+      <DocumentProperties
+        {...titleProps({ title: 'Draft', onTitleChange: onChange })}
+        facets={meta()}
+        onFacetsChange={vi.fn()}
+      />,
+    )
+    const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+    box.focus()
+    fireEvent.change(box, { target: { value: 'Release plan' } })
+    fireEvent.keyDown(box, { key: 'Enter' })
+
+    expect(document.activeElement).not.toBe(box)
+    // Finishing must not revert: the typed name stands (Escape is the revert).
+    expect(onChange).toHaveBeenLastCalledWith('Release plan')
+  })
+
+  // The Enter that CONFIRMS a Japanese/Chinese/Korean conversion is not "I am
+  // done with the field" — swallowing it into a blur would end the edit in
+  // the middle of typing a word. Both spellings of "an IME is active" must
+  // hold the field open (see lib/ime-keydown.ts).
+  it('stays focused on the Enter that confirms an IME composition', () => {
+    render(
+      <DocumentProperties
+        {...titleProps({ title: 'Draft' })}
+        facets={meta()}
+        onFacetsChange={vi.fn()}
+      />,
+    )
+    const box = screen.getByRole('textbox', { name: /title/i }) as HTMLInputElement
+    box.focus()
+    fireEvent.keyDown(box, { key: 'Enter', isComposing: true })
+    expect(document.activeElement).toBe(box)
+
+    fireEvent.keyDown(box, { key: 'Enter', keyCode: 229 })
+    expect(document.activeElement).toBe(box)
   })
 
   it('drops the draft on blur so the box shows the canonical name', () => {

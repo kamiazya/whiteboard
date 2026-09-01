@@ -2,6 +2,7 @@ import type { StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { Info, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { useId, useRef, useState } from 'react'
+import { isImeComposingKeydown } from '../../lib/ime-keydown.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
 export interface DocumentPropertiesProps {
@@ -139,6 +140,17 @@ export function DocumentProperties({
           // bindings (Cmd+S) are unaffected by it.
           onKeyDown={(event) => {
             event.stopPropagation()
+            // Enter finishes the edit. Every keystroke is already committed
+            // (there is no Save button), so finishing means BLURRING: the
+            // focus ring goes away and the save dot is the receipt. Never on
+            // the Enter that confirms an IME conversion — that one means
+            // "accept this word", and the field must stay open under it.
+            if (event.key === 'Enter') {
+              if (isImeComposingKeydown(event.nativeEvent)) return
+              event.preventDefault()
+              event.currentTarget.blur()
+              return
+            }
             if (event.key !== 'Escape' || onTitleChange === undefined) return
             event.preventDefault()
             setDraftTitle(null)
@@ -355,6 +367,9 @@ function FacetDisclosure({
             onChange={(event) => setDraftTag(event.target.value)}
             onKeyDown={(event) => {
               if (event.key !== 'Enter' && event.key !== ',') return
+              // The Enter that confirms an IME conversion is "accept this
+              // word", not "finish this tag" — let it pass untouched.
+              if (isImeComposingKeydown(event.nativeEvent)) return
               // Enter would submit an enclosing form and `,` would land in
               // the box; both mean "finish this tag" here.
               event.preventDefault()

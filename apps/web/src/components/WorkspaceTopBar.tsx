@@ -4,6 +4,7 @@ import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import { getAppLogger } from '@/lib/app-logger'
+import { isMacPlatform } from '../lib/platform.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderVersionDot } from './HeaderVersionDot'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
@@ -127,7 +128,7 @@ export default function WorkspaceTopBar({
     log,
   })
   useQuickSaveShortcut(versionsEnabled, saveVersion)
-  const isMac = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+  const isMac = isMacPlatform()
   const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
   const canvasCustomName = effectiveNames.documents[path]

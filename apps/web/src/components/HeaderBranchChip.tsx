@@ -43,6 +43,7 @@ import type { MergeResult } from '@/hooks/useBranches'
 import { useBranches } from '@/hooks/useBranches'
 import { safeErrorCopy } from '@/lib/error-copy'
 import { cn, displayBranchName } from '@/lib/utils'
+import { isImeComposingKeydown } from '../lib/ime-keydown.js'
 
 // MergeDialog pulls in its own thumbnail-fetch effect and a second Dialog
 // surface; loading it on demand keeps it out of the daemon-canvas chunk
@@ -567,7 +568,7 @@ export function HeaderBranchChip({
             value={renameDraft}
             onChange={(e) => setRenameDraft(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') {
+              if (e.key === 'Enter' && !isImeComposingKeydown(e.nativeEvent)) {
                 e.preventDefault()
                 void submitRename()
               }

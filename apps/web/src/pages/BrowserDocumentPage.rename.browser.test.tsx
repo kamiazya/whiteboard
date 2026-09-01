@@ -64,6 +64,25 @@ describe('BrowserDocumentPage rename (real IndexedDB)', () => {
     cleanup()
   })
 
+  it('Enter ends the title edit; a composing Enter keeps it open', async () => {
+    await renderLoaded()
+    const titleInput = await titleField()
+    titleInput.focus()
+    fireEvent.change(titleInput, { target: { value: '\u4f01\u753b' } })
+    // The Enter that confirms an IME conversion must hold the field open.
+    fireEvent.keyDown(titleInput, { key: 'Enter', isComposing: true })
+    expect(document.activeElement).toBe(titleInput)
+
+    // The plain Enter is "I am done": the field blurs, the name stands, and
+    // the save chip is the receipt.
+    fireEvent.keyDown(titleInput, { key: 'Enter' })
+    expect(document.activeElement).not.toBe(titleInput)
+    await waitForTitle('\u4f01\u753b')
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Saved' })).toBeInTheDocument(), {
+      timeout: 5000,
+    })
+  })
+
   it('reload: edited title survives an unmount + fresh-store remount', async () => {
     await renderLoaded()
     const titleInput = await titleField()

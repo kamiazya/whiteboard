@@ -157,6 +157,19 @@ describe('WorkspaceMenu — creating', () => {
     expect(create).toHaveBeenCalledTimes(1)
   })
 
+  it('does not create on the Enter that confirms an IME composition', async () => {
+    // A workspace named in Japanese is typed through an IME, and the Enter
+    // that accepts the conversion arrives at this same handler. Only the
+    // shared guard (lib/ime-keydown.ts) separates it from "create now".
+    const create = vi.fn(() => Promise.resolve({ workspaceId: NOTES, segment: 'kikaku' }))
+    renderMenu([{ workspaceId: DESIGN, segment: 'design' }], { create })
+    fireEvent.click(screen.getByRole('menuitem', { name: /new workspace/i }))
+    const input = screen.getByLabelText(/new workspace name/i)
+    fireEvent.change(input, { target: { value: '\u4f01\u753b' } })
+    fireEvent.keyDown(input, { key: 'Enter', isComposing: true })
+    expect(create).not.toHaveBeenCalled()
+  })
+
   it('closes the create form once the workspace exists, rather than leaving it disabled', async () => {
     // `onSwitch` is an in-SPA route change for the browser keeper, so the
     // shell does NOT remount — the same menu instance survives the

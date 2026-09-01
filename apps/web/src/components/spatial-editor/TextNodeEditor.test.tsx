@@ -48,6 +48,15 @@ describe('TextNodeEditor', () => {
     expect(onCancel).not.toHaveBeenCalled()
   })
 
+  it('shows the exit hint below the editing box while open', () => {
+    render(<TextNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />)
+    const hint = screen.getByTestId('editor-exit-hint')
+    expect(hint.textContent).toContain('Done')
+    // Rides the same canvas-space coordinates as the editor, just under it.
+    expect(hint.style.top).toBe(`${BOX.y + BOX.height + 6}px`)
+    expect(hint.style.left).toBe(`${BOX.x}px`)
+  })
+
   it('a blur after Escape does not resurrect the cancelled edit as a commit', () => {
     const onCommit = vi.fn()
     const onCancel = vi.fn()
