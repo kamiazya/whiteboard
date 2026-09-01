@@ -58,6 +58,14 @@ describe('the node text overlay (real browser)', () => {
   })
 
   // Same grammar as the inline node editor, so nothing new has to be learned.
+  it('says its exit chords in the header, for the hand asking how to finish', async () => {
+    const { container } = renderOverlay()
+    await waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())
+    const hint = container.querySelector('[data-testid="editor-exit-hint"]')
+    expect(hint?.textContent).toContain('Done')
+    expect(hint?.textContent).toContain('Cancel')
+  })
+
   it('discards the edit on Escape', async () => {
     const { container, onCommit, onClose } = renderOverlay()
     await waitFor(() => expect(container.querySelector('.cm-content')).not.toBeNull())

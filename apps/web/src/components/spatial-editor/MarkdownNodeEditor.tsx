@@ -25,6 +25,7 @@
  * the rendered SVG); an OPAQUE background is load-bearing — it is what
  * hides the committed render underneath while editing.
  */
+
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { syntaxHighlighting } from '@codemirror/language'
@@ -32,6 +33,7 @@ import { EditorState, Prec } from '@codemirror/state'
 import { EditorView, keymap } from '@codemirror/view'
 import { GFM } from '@lezer/markdown'
 import { type CSSProperties, useLayoutEffect, useRef } from 'react'
+import { EditorExitHint } from '../EditorExitHint.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
@@ -159,26 +161,30 @@ export function MarkdownNodeEditor({
   }, [])
 
   return (
-    <div
-      ref={hostRef}
-      data-testid={testId}
-      data-editor-overlay
-      // Caret placement must not bubble into the root's hit-test and turn
-      // into a move gesture that unmounts this editor mid-edit.
-      onPointerDown={(e) => e.stopPropagation()}
-      style={{
-        position: 'absolute',
-        left: box.x,
-        top: box.y,
-        width: box.width,
-        height: box.height,
-        boxSizing: 'border-box',
-        overflow: 'hidden',
-        // Explicit, because the canvas root turns selection OFF and this
-        // inherits from it.
-        userSelect: 'text',
-        ...style,
-      }}
-    />
+    <>
+      <div
+        ref={hostRef}
+        aria-keyshortcuts="Meta+Enter Control+Enter"
+        data-testid={testId}
+        data-editor-overlay
+        // Caret placement must not bubble into the root's hit-test and turn
+        // into a move gesture that unmounts this editor mid-edit.
+        onPointerDown={(e) => e.stopPropagation()}
+        style={{
+          position: 'absolute',
+          left: box.x,
+          top: box.y,
+          width: box.width,
+          height: box.height,
+          boxSizing: 'border-box',
+          overflow: 'hidden',
+          // Explicit, because the canvas root turns selection OFF and this
+          // inherits from it.
+          userSelect: 'text',
+          ...style,
+        }}
+      />
+      <EditorExitHint style={{ position: 'absolute', left: box.x, top: box.y + box.height + 6 }} />
+    </>
   )
 }

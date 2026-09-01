@@ -1,5 +1,6 @@
 import { ArrowLeft } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { EditorExitHint } from '../EditorExitHint.js'
 import type { MarkdownEditorProps } from '../markdown-editor/MarkdownEditor.js'
 import { MarkdownEditor } from '../markdown-editor/MarkdownEditor.js'
 
@@ -113,6 +114,7 @@ export function NodeTextEditorOverlay({
           Canvas
         </button>
         <span className="text-foreground truncate text-sm font-medium">{title}</span>
+        <EditorExitHint className="ml-auto" />
       </div>
       <div className="min-h-0 flex-1">
         <MarkdownEditor

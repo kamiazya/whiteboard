@@ -16,7 +16,9 @@
  * `onCancel` unmounting synchronously is not guaranteed, so `mountedRef`
  * alone cannot prevent either.
  */
+
 import { type CSSProperties, useEffect, useRef, useState } from 'react'
+import { EditorExitHint } from '../EditorExitHint.js'
 import type { Box } from './geometry.js'
 
 export interface TextNodeEditorProps {
@@ -78,40 +80,44 @@ export function TextNodeEditor({
   }
 
   return (
-    <textarea
-      ref={textareaRef}
-      data-testid={testId}
-      value={value}
-      style={{
-        position: 'absolute',
-        left: box.x,
-        top: box.y,
-        width: box.width,
-        height: box.height,
-        resize: 'none',
-        boxSizing: 'border-box',
-        // Explicit, because the canvas root turns selection OFF and this
-        // inherits from it — without this the caret cannot select the text it
-        // is editing.
-        userSelect: 'text',
-        ...style,
-      }}
-      onChange={(e) => {
-        setValue(e.target.value)
-        onChange?.(e.target.value)
-      }}
-      data-editor-overlay
-      onPointerDown={(e) => e.stopPropagation()}
-      onBlur={commit}
-      onKeyDown={(e) => {
-        if (e.key === 'Escape') {
-          e.preventDefault()
-          cancel()
-        } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
-          e.preventDefault()
-          commit()
-        }
-      }}
-    />
+    <>
+      <textarea
+        ref={textareaRef}
+        aria-keyshortcuts="Meta+Enter Control+Enter"
+        data-testid={testId}
+        value={value}
+        style={{
+          position: 'absolute',
+          left: box.x,
+          top: box.y,
+          width: box.width,
+          height: box.height,
+          resize: 'none',
+          boxSizing: 'border-box',
+          // Explicit, because the canvas root turns selection OFF and this
+          // inherits from it — without this the caret cannot select the text it
+          // is editing.
+          userSelect: 'text',
+          ...style,
+        }}
+        onChange={(e) => {
+          setValue(e.target.value)
+          onChange?.(e.target.value)
+        }}
+        data-editor-overlay
+        onPointerDown={(e) => e.stopPropagation()}
+        onBlur={commit}
+        onKeyDown={(e) => {
+          if (e.key === 'Escape') {
+            e.preventDefault()
+            cancel()
+          } else if (e.key === 'Enter' && (e.metaKey || e.ctrlKey)) {
+            e.preventDefault()
+            commit()
+          }
+        }}
+      />
+      <EditorExitHint style={{ position: 'absolute', left: box.x, top: box.y + box.height + 6 }} />
+    </>
   )
 }

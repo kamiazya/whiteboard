@@ -19,11 +19,13 @@
  * Marked `data-editor-overlay` so the canvas root's gesture handlers
  * ignore presses originating here (see SpatialEditor's isOverlayEvent).
  */
+
 import { History, Redo2, Undo2 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
 import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
+import { isMacPlatform } from '../../lib/platform.js'
 import { VersionPanel } from '../workspace-top-bar/VersionPanel.js'
 
 export interface HistoryClusterVersionsProps {
@@ -43,7 +45,7 @@ export interface HistoryClusterProps {
   readonly versions?: HistoryClusterVersionsProps
 }
 
-const IS_MAC = typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
+const IS_MAC = isMacPlatform()
 const MOD_LABEL = IS_MAC ? '⌘' : 'Ctrl+'
 const MOD_KEY = IS_MAC ? 'Meta' : 'Control'
 
