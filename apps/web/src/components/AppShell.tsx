@@ -69,10 +69,11 @@ function PromotedElsewhereNotice({
 
 /**
  * ADR-0023: a daemon workspace this browser holds a replica of says so where
- * the workspace is named. A fact, not a promise — reads are not served from
- * the cache yet, so the copy claims presence and nothing more. Silent for a
- * workspace with no registry entry, and while the row (hence the id) has not
- * loaded: a claim needs its subject.
+ * the workspace is named — and since the offline read shipped, the copy may
+ * also promise what the replica now delivers: a read-only view when the
+ * daemon cannot be reached. Silent for a workspace with no registry entry,
+ * and while the row (hence the id) has not loaded: a claim needs its
+ * subject.
  */
 function ReplicaCacheNotice({
   settingsStore,
@@ -86,7 +87,8 @@ function ReplicaCacheNotice({
   if (replica === undefined) return null
   return (
     <p data-testid="replica-cache-notice" className="text-muted-foreground">
-      A copy of this workspace is cached in this browser.
+      A copy of this workspace is cached in this browser, and opens read-only when the daemon cannot
+      be reached.
     </p>
   )
 }

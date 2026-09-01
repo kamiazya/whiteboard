@@ -126,6 +126,12 @@ vi.mock('./pages/SettingsPage.js', () => ({
   },
 }))
 
+vi.mock('./pages/ReplicaReadPage.js', () => ({
+  ReplicaReadPage: (props: Record<string, unknown>) => (
+    <div data-testid="replica-read-page-stub" data-workspace-id={String(props.workspaceId)} />
+  ),
+}))
+
 let receivedDaemonIndexPageProps: Record<string, unknown> | undefined
 vi.mock('./pages/DaemonIndexPage.js', () => ({
   DaemonIndexPage: (props: Record<string, unknown>) => {
@@ -193,6 +199,64 @@ describe('silent renewal on a hosted origin', () => {
       daemonBaseUrl: 'http://127.0.0.1:3099',
       token: 'tok-r',
     })
+  })
+
+  it('serves the replica read-only when the daemon is unreachable and a replica exists', async () => {
+    // ADR-0023's offline read: the address names a daemon workspace this
+    // browser holds a replica of, the daemon cannot be reached, so the
+    // replica page serves it — addressed by SEGMENT, resolved to the
+    // canonical id the registry keys by.
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        storage: {
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          replicas: {
+            '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
+              daemonBaseUrl: 'http://127.0.0.1:3099',
+              syncedAt: '2026-09-01T12:00:00.000Z',
+              segment: 'team',
+              displayName: 'Design team',
+            },
+          },
+        },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'none' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/w/team']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    const page = await screen.findByTestId('replica-read-page-stub')
+    expect(page.getAttribute('data-workspace-id')).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('an address with no replica behind it still falls to the browser flow when unreachable', async () => {
+    localStorage.setItem(
+      STORAGE_KEY,
+      JSON.stringify({
+        version: 2,
+        storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
+        migration: {},
+        capabilities: {},
+      }),
+    )
+    mockRenewResult = { status: 'none' }
+    await act(async () => {
+      render(
+        <MemoryRouter initialEntries={['/w/team']}>
+          <App providerState={BROWSER_STATE} />
+        </MemoryRouter>,
+      )
+    })
+    expect(await screen.findByTestId('browser-index-page')).toBeTruthy()
+    expect(screen.queryByTestId('replica-read-page-stub')).toBeNull()
   })
 
   it('falls back to the browser when renewal reports none (revoked / unreachable)', async () => {
