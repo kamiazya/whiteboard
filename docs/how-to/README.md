@@ -16,6 +16,8 @@ Guides:
   app and copy canvases kept in your browser onto it.
 - **[install-fonts-for-export](install-fonts-for-export.md)** — stop exports rendering Japanese,
   Chinese, Korean and other scripts as empty boxes.
+- **[report-a-gesture-problem](report-a-gesture-problem.md)** — copy the built-in pointer-event
+  trace from Settings when a touch or drag misbehaved.
 - **[view-canvas-in-chat](view-canvas-in-chat.md)** — render an interactive read-only canvas
   view inline in an MCP Apps-compatible AI chat client (currently unavailable — see the page's
   notice).

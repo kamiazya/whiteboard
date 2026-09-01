@@ -13,6 +13,7 @@ import {
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { AppVersionRow } from '@/components/settings/AppVersionRow'
+import { GestureTraceRow } from '@/components/settings/GestureTraceRow'
 import { PromoteWorkspaceSection } from '@/components/settings/PromoteWorkspaceSection'
 import type { PersistStepState } from '@/components/settings/SetupJourney'
 import { findVisibleJourneyBadge, SetupJourney } from '@/components/settings/SetupJourney'
@@ -326,6 +327,9 @@ function sectionContent(
           />
           <div className="mt-6 border-t pt-4">
             <AppVersionRow />
+          </div>
+          <div className="mt-4 border-t pt-4">
+            <GestureTraceRow />
           </div>
         </div>
       )
