@@ -1,7 +1,20 @@
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
-import { makeSpatialDoc } from '../../shared/test-utils/spatial-doc.js'
-import { countAliveNodes, countLegacyTombstones } from './count-alive-nodes.js'
+import { countAliveNodes, countLegacyTombstones } from './document-counts.js'
+
+// Built through the real `writeSpatialCanvas` bridge rather than by poking at
+// LoroDoc internals, so the fixture cannot drift from what a save actually
+// persists. mcp-server's `test-utils/spatial-doc.ts` says the same and is
+// shared by nine of its own tests; this needs only the one line of it, and
+// hauling that file across a package boundary to avoid two lines would be
+// the larger change.
+function makeSpatialDoc(canvas: SpatialCanvas): LoroDoc {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, canvas)
+  return doc
+}
 
 function legacyElement(doc: LoroDoc, id: string, isDeleted = false): void {
   const list = doc.getMovableList('elements')

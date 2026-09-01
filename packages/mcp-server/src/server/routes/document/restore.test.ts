@@ -20,7 +20,7 @@ const { clearCache, peekDoc } = await import('../../store/doc-cache.js')
 const { getDoc, saveDocument, getDocumentKind, loadDocument, onWorkspaceDocUpdated } = await import(
   '../../store/document-store.js'
 )
-const { countAliveNodes } = await import('../../store/count-alive-nodes.js')
+const { countAliveNodes } = await import('@kamiazya/whiteboard-server-core')
 const { createDocumentRouter } = await import('../document.js')
 // Pre-load ws.js before any restore call, mirroring restore-race.test.ts's
 // documented cycle workaround for document.ts's dynamic import.
