@@ -173,7 +173,8 @@ branches, and merge, with live sync over WebSocket.
   precedence rules.
 
 See [Connect to a local daemon](docs/how-to/connect-to-local-daemon.md) for
-the full flow, including copy-first import of canvases kept in your browser.
+the full flow, including moving a workspace this browser keeps — history,
+identity, and images intact — into the daemon.
 
 ## Bundled skills
 
@@ -217,7 +218,7 @@ The agent returns the `wb_scene_render` result so the next turn can reason about
 | Export formats (SVG, OKF Markdown, JSON Canvas) and their tools | [docs/reference/export-formats.md](docs/reference/export-formats.md) |
 | MCP debugging workflow (Inspector, `MCP_HTTP_DEBUG`, transport checks) | [docs/contributing/mcp-debugging.md](docs/contributing/mcp-debugging.md) |
 | Trust model for all three runtimes (browser, local daemon, server mode) | [docs/explanation/security-model.md](docs/explanation/security-model.md) |
-| Pairing a browser tab to a local daemon, copy-first import | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
+| Pairing a browser tab to a local daemon, moving a browser workspace into it | [docs/how-to/connect-to-local-daemon.md](docs/how-to/connect-to-local-daemon.md) |
 | WebSocket message shapes between daemon and browser | [docs/contributing/architecture/wire-protocol.md](docs/contributing/architecture/wire-protocol.md) |
 | Test layers, commit conventions, release process | [CONTRIBUTING.md](CONTRIBUTING.md) |
 
