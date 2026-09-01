@@ -83,6 +83,8 @@ export const COVERED_TOOLS = [
   'wb_scene_render',
   'wb_document_get',
   'wb_document_list',
+  'wb_document_resolve',
+  'wb_document_delete',
 ] as const
 
 // wb_pairing_link_create's smoke coverage is deliberately its error path
@@ -105,7 +107,7 @@ export const ERROR_PATH_ONLY_TOOLS = ['wb_pairing_link_create'] as const
 // be a claim nobody checks.
 export const UI_LINKED_TOOLS = ['canvas_view'] as const
 
-export const UNIT_ONLY_TOOLS = ['wb_document_delete', 'wb_document_resolve'] as const
+export const UNIT_ONLY_TOOLS = [] as const satisfies readonly string[]
 
 export type DeferredTool = {
   name: string

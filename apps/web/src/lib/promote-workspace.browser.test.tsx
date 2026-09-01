@@ -152,6 +152,9 @@ describe('promoteWorkspace', () => {
 
     expect(result.kind).toBe('ok')
     if (result.kind !== 'ok') return
+    // The per-workspace moved marker keys off this: the transfer names the
+    // record it actually read, not whatever the caller believes is active.
+    expect(result.sourceWorkspaceId).toBe(getBrowserWorkspaceId())
     expect([...result.promotedDocumentIds].sort()).toEqual(
       [roadmap.documentId, contested.documentId].sort(),
     )

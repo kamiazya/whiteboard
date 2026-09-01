@@ -9,6 +9,18 @@
  * context share the one implementation.
  */
 /**
+ * The daemon a session is connected to, as the pair every authorized call
+ * needs — exactly what `createDaemonFetch` consumes. One declaration rather
+ * than an inline literal per surface, because structural typing would let
+ * one site's copy drift (a token quietly becoming optional, say) without a
+ * single error anywhere.
+ */
+export interface ConnectedDaemon {
+  baseUrl: string
+  token: string | null
+}
+
+/**
  * Resolves an input (string/URL/Request) against `daemonBaseUrl` and returns
  * its final URL object. Relative string/URL inputs resolve against
  * daemonBaseUrl; absolute inputs and Request objects keep their own origin

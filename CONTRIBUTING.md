@@ -7,6 +7,8 @@ Thanks for considering a contribution. This repo is a pnpm monorepo for `@kamiaz
 ```bash
 git clone https://github.com/kamiazya/whiteboard.git
 cd whiteboard      # Node: match .node-version (currently 24) — use nvm / fnm / Volta
+                   # ImageMagick (convert/identify) is also required — pnpm test:scripts and pnpm check:local call it;
+                   # full prerequisites: docs/contributing/development.md
 pnpm install
 pnpm exec playwright install --with-deps chromium   # required for the browser test projects (canvas-viewer-browser / web-browser)
 pnpm test         # all 22 vitest projects (listed under Workflow below)

@@ -30,6 +30,8 @@ function render(ui: ReactElement, options?: RenderOptions) {
   return rtlRender(ui, { wrapper: MemoryRouterWrapper, ...options })
 }
 
+vi.mock('../lib/replica-refresh.js', () => ({ scheduleReplicaRefresh: vi.fn() }))
+
 vi.mock('../lib/daemon-api-client.js', async (importOriginal) => {
   const actual = await importOriginal<typeof import('../lib/daemon-api-client.js')>()
   return {
@@ -141,6 +143,26 @@ describe('DaemonDocumentPage', () => {
   afterEach(() => {
     cleanup()
     vi.clearAllMocks()
+  })
+
+  it('working on a daemon workspace schedules a replica refresh for it', async () => {
+    // ADR-0023 decision 5's arrival path: the page that just loaded this
+    // workspace is the moment this browser can afford to cache it.
+    const { scheduleReplicaRefresh } = await import('../lib/replica-refresh.js')
+    await act(async () => {
+      render(
+        <DaemonDocumentPage
+          daemonBaseUrl={DAEMON_BASE_URL}
+          workspaceId="w1"
+          createBackend={makeCreateBackend()}
+        />,
+        { container: document.body },
+      )
+    })
+    await waitFor(() => expect(vi.mocked(scheduleReplicaRefresh)).toHaveBeenCalled())
+    const call = vi.mocked(scheduleReplicaRefresh).mock.calls[0]?.[0]
+    expect(call?.workspaceId).toBe('w1')
+    expect(call?.daemonBaseUrl).toBe(DAEMON_BASE_URL)
   })
 
   it('renders a workspace-not-found list failure as an error, never as an empty workspace', async () => {

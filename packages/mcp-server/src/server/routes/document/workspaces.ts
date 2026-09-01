@@ -136,8 +136,10 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       // and on a real daemon holding real workspaces that made the whole
       // listing fail with `SQLITE_BUSY: database is locked` — a 500 for every
       // row because of contention this route introduced. A/B against a live
-      // daemon: concurrent 500, sequential 200. No test here reaches it; each
-      // one gets a fresh temp database with nothing else touching it.
+      // daemon: concurrent 500, sequential 200. The contention itself is not
+      // reproducible here (each test gets a fresh, idle database), so the
+      // DECISION is pinned instead: workspaces.test.ts asserts the per-row
+      // listings never overlap, and a Promise.all revert fails it.
       //
       // The cost that buys: measured end-to-end over HTTP against that same
       // daemon — 11 workspaces, 38 documents — best of 7 is 4.2ms, on a

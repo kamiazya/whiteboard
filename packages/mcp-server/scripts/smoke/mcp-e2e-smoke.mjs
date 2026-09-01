@@ -334,6 +334,35 @@ async function main() {
   }
   console.log('[e2e] wb_document_create/list → name round-trips, unnamed stays unnamed')
 
+  // wb_document_resolve: id → placement, through the real outputSchema.
+  const resolved = await callTool('wb_document_resolve', {
+    workspaceId: WORKSPACE_ID,
+    documentId: named.documentId,
+  })
+  if (resolved.documentId !== named.documentId || resolved.path !== named.path) {
+    throw new Error(`wb_document_resolve returned unexpected shape: ${JSON.stringify(resolved)}`)
+  }
+  console.log(`[e2e] wb_document_resolve → ${resolved.documentId} at ${resolved.path}`)
+
+  // wb_document_delete: a throwaway document, deleted and gone from the list.
+  const doomed = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    path: 'doomed',
+    kind: 'spatial',
+  })
+  const deletion = await callTool('wb_document_delete', {
+    workspaceId: WORKSPACE_ID,
+    documentId: doomed.documentId,
+  })
+  if (deletion.deleted !== true) {
+    throw new Error(`wb_document_delete returned unexpected shape: ${JSON.stringify(deletion)}`)
+  }
+  const afterDelete = await callTool('wb_document_list', { workspaceId: WORKSPACE_ID })
+  if (afterDelete.documents.some((doc) => doc.documentId === doomed.documentId)) {
+    throw new Error('wb_document_delete left the document in the listing')
+  }
+  console.log('[e2e] wb_document_delete → deleted and gone from the list')
+
   // A facet is OKF frontmatter, so it belongs to the markdown document; the
   // spatial one refuses it.
   const facets = await callTool('wb_facet_set', {

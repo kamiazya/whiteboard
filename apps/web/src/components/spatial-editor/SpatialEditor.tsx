@@ -79,7 +79,7 @@ import {
   sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { ClipboardFragment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -93,16 +93,8 @@ import {
 } from 'react'
 import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
-import { extractClipboardFragment, parseClipboardText } from '../../lib/clipboard-fragment.js'
-import {
-  readClipboardFragment,
-  recordedReconnection,
-  recordReconnection,
-  writeClipboardFragment,
-} from '../../lib/clipboard-store.js'
-import { createSpatialContentCache } from '../../lib/content-cache.js'
+import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
-import { composeReferenceSeam } from '../../lib/layout-worker-protocol.js'
 import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import type { BoxMove } from './align.js'
 import {
@@ -113,7 +105,7 @@ import {
 } from './CanvasContextMenu.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
-import { applyCommand, buildFragmentInsertCommand, DUPLICATE_OFFSET_PX } from './commands.js'
+import { applyCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
@@ -158,22 +150,6 @@ import {
   type PointerKind,
   reduceNavigation,
 } from './navigation.js'
-import {
-  DOCUMENT_NODE_HEIGHT,
-  DOCUMENT_NODE_WIDTH,
-  fileNodeDefaults,
-  GROUP_FRAME_HEIGHT,
-  GROUP_FRAME_WIDTH,
-  groupEnclosure,
-  groupNodeDefaults,
-  IMAGE_NODE_HEIGHT,
-  IMAGE_NODE_WIDTH,
-  imageNodeDefaults,
-  LINK_NODE_HEIGHT,
-  linkNodeDefaults,
-  resolveSpawnPoint,
-  textNodeDefaults,
-} from './node-factories.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
@@ -188,23 +164,25 @@ import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
-  DOCK_OCCLUSION_PX,
   type DraggableCreation,
   draggedCreation,
   type EditorTool,
   ToolPalette,
 } from './ToolPalette.js'
+import { useClipboardActions } from './use-clipboard-actions.js'
+import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
+import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
+import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
+import { useNodeCreation } from './use-node-creation.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
-  type ContainerSize,
   canvasToScreen,
   fitViewportToBoxes,
   frameViewport,
   IDENTITY_VIEWPORT,
   type Point,
   panBy,
-  panToShowTarget,
   screenToCanvas,
   contentBounds as unionContentBounds,
   type Viewport,
@@ -253,7 +231,6 @@ const MINIMAP_HEIGHT_PX = 110
  * Keyed off the CONTAINER, not the viewport: a narrow editor column on a wide
  * screen collides in exactly the same way, and a media query cannot see it.
  */
-const MINIMAP_MIN_ROOT_WIDTH_PX = 768
 
 /** The routing styles offered in the UI. */
 
@@ -503,6 +480,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const rootRef = useRef<HTMLDivElement | null>(null)
 
     const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
+    const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
+      useEditorMeasurements(rootRef)
+
     /**
      * The multi-selection lives in ONE state object and every transition
      * routes through the pure `reduceSelection` (selection.ts), so its
@@ -707,105 +687,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // eslint-disable-next-line react-hooks/exhaustive-deps
     }, [canvas, externalVersion])
 
-    /**
-     * The LOD gate (embed spec v2, user decision 2026-08-08): a file node
-     * expands into an inline miniature only while its ON-SCREEN box is
-     * large enough to be legible. Hysteresis (expand at >=200x140, collapse
-     * below 160x110 CSS px) keeps pinch-zoom from flickering at the
-     * boundary, and a budget caps simultaneous miniatures at the largest
-     * candidates (deterministic tie-break by node id). The set is state so
-     * layout re-runs only when membership actually changes — never per
-     * zoom frame.
-     */
-    const EXPAND_MIN_W = 200
-    const EXPAND_MIN_H = 140
-    const COLLAPSE_MIN_W = 160
-    const COLLAPSE_MIN_H = 110
-    const EMBED_BUDGET = 8
-    const [expandedFileIds, setExpandedFileIds] = useState<ReadonlySet<string>>(new Set())
-    useEffect(() => {
-      if (resolveReference === undefined) return
-      const zoom = viewport.zoom
-      const candidates = canvas.nodes
-        .filter((node): node is Extract<SpatialNode, { type: 'file' }> => node.type === 'file')
-        .filter((node) => {
-          const w = node.width * zoom
-          const h = node.height * zoom
-          return expandedFileIds.has(node.id)
-            ? w >= COLLAPSE_MIN_W && h >= COLLAPSE_MIN_H
-            : w >= EXPAND_MIN_W && h >= EXPAND_MIN_H
-        })
-        .sort((a, b) => b.width * b.height - a.width * a.height || a.id.localeCompare(b.id))
-        .slice(0, EMBED_BUDGET)
-      const next = new Set(candidates.map((node) => node.id))
-      const unchanged =
-        next.size === expandedFileIds.size && [...next].every((id) => expandedFileIds.has(id))
-      if (!unchanged) setExpandedFileIds(next)
-    }, [canvas, viewport.zoom, resolveReference, expandedFileIds])
-    const expandFileNode = useMemo(
-      () =>
-        resolveReference === undefined
-          ? undefined
-          : (node: Extract<SpatialNode, { type: 'file' }>) => expandedFileIds.has(node.id),
-      [resolveReference, expandedFileIds],
-    )
-
-    // Opaque file references (canvas ids minted in the browser) become readable
-    // card labels through the host-supplied options list.
-    const fileRefLabelMap = useMemo(
-      () =>
-        fileRefOptions === undefined
-          ? undefined
-          : new Map(fileRefOptions.map((option) => [option.file, option.label])),
-      [fileRefOptions],
-    )
-    // The plain-data twin of the seam's `missing` field, so the worker path
-    // (which cannot take a function) sees the same missing set the
-    // synchronous and drag paths compute through the callback.
-    const missingRefSet = useMemo(() => {
-      if (missingFileRef === undefined) return undefined
-      const refs = new Set<string>()
-      for (const node of canvas.nodes) {
-        if (node.type === 'file' && missingFileRef(node.file)) refs.add(node.file)
-      }
-      return refs.size === 0 ? undefined : refs
-    }, [canvas, missingFileRef])
-    const missingFileRefs = useMemo(
-      () => (missingRefSet === undefined ? undefined : [...missingRefSet]),
-      [missingRefSet],
-    )
-    // ONE object for every render path below (committed scene, drag ghost,
-    // drag-static backdrop, resize preview). Four hand-listed copies is how a
-    // seam ends up wired into the committed render and missing from the drag
-    // overlay, which reads as content vanishing mid-gesture.
-    //
-    // `resolveReferenceContent` rides along UNCOMPOSED so the worker gate can
-    // still tell content (which cannot be serialized) from label/missing
-    // (which already cross as data).
-    // One text-node body memo per measure+theme (the cache's validity
-    // contract); rides fileSeamOptions so every synchronous render path in
-    // this component — the committed fallback, the drag backdrop, the live
-    // resize node — shares it. It never crosses to the layout worker
-    // (LayoutRequest carries plain data only); the worker keeps its own.
-    const contentCache = useMemo(
-      () => createSpatialContentCache(),
-      // eslint-disable-next-line react-hooks/exhaustive-deps -- theme and
-      // measure invalidate cached layout; nothing else does.
-      [resolvedMeasure, theme],
-    )
-    const fileSeamOptions = useMemo(
-      () => ({
-        resolveReference: composeReferenceSeam({
-          content: resolveReference,
-          labels: fileRefLabelMap,
-          missing: missingRefSet,
-        }),
-        resolveReferenceContent: resolveReference,
-        expandFileNode,
-        contentCache,
-      }),
-      [resolveReference, fileRefLabelMap, missingRefSet, expandFileNode, contentCache],
-    )
+    // The file-reference seam — the LOD gate, label/missing resolution and
+    // the content cache — built once in useFileSeamScene and spread into
+    // every scene-building call below (committed scene, drag ghost,
+    // drag-static backdrop, resize preview).
+    const { fileSeamOptions, missingFileRefs } = useFileSeamScene({
+      canvas,
+      zoom: viewport.zoom,
+      resolveReference,
+      fileRefOptions,
+      missingFileRef,
+      resolvedMeasure,
+      theme,
+    })
     // The COMMITTED scene, laid out in a worker when it can be. The drag
     // layers below keep their own synchronous paths: a gesture already has a
     // fast route through carried-side caching, and a round trip per frame
@@ -2123,189 +2017,33 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
-     * Clones the selection as ONE batch command (one undo step): reminted
-     * ids via the clipboard-fragment helpers, +16px offset (the standard
-     * duplicate-again cascade), edges kept only when both endpoints are
-     * selected — with their properties. The copies become the selection.
+     * The selection seam for the clipboard family: make exactly these nodes
+     * the selection (primary first) and drop any edge selection, through
+     * the same reducer every other selection write uses.
      */
-    const duplicateSelection = (): boolean => {
-      if (selection === undefined) return false
-      const current = canvasRef.current
-      const fragment = extractClipboardFragment(current, new Set([selection.id, ...extraIds]))
-      const command = buildFragmentInsertCommand(
-        current,
-        fragment,
-        () => createId?.() ?? crypto.randomUUID(),
-      )
-      if (command === undefined) return false
-      const running = applyCommand(current, command)
-      if (running === current) return false
-      onChange(running, command)
-      const remintedIds =
-        command.kind === 'batch'
-          ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
-          : []
-      if (remintedIds.length > 0) {
-        applySelection({ type: 'set-members', ids: remintedIds })
-        setSelectedEdgeId(null)
-      }
-      return true
-    }
-
-    /**
-     * Copy the selection into the in-app clipboard slot, returning the
-     * fragment so the caller can also hand it to the OS clipboard. null
-     * when there is nothing to copy.
-     */
-    const copySelection = (): ClipboardFragment | null => {
-      if (selection === undefined) return null
-      const fragment = extractClipboardFragment(
-        canvasRef.current,
-        new Set([selection.id, ...extraIds]),
-      )
-      if (fragment.nodes.length === 0) return null
-      writeClipboardFragment(fragment)
-      // The newest clipboard intent wins: a plain copy lifts a pending cut.
-      setPendingCut(null)
-      return fragment
-    }
-
-    /**
-     * Cut-flavoured copy: the fragment also records the cut surface (the
-     * edges the deletion is about to sever), so the FIRST same-canvas paste
-     * reconnects them — a cut is the front half of a move, not a delete.
-     */
-    const cutSelection = (): ClipboardFragment | null => {
-      if (selection === undefined) return null
-      const fragment = extractClipboardFragment(
-        canvasRef.current,
-        new Set([selection.id, ...extraIds]),
-        { cutId: crypto.randomUUID() },
-      )
-      if (fragment.nodes.length === 0 || fragment.cut === undefined) return null
-      writeClipboardFragment(fragment)
-      // Defer the delete: hold the originals as a ghost until the paste
-      // decides what the cut meant (move here, copy elsewhere, or nothing).
-      setPendingCut({
-        cutId: fragment.cut.id,
-        snapshot: new Map(fragment.nodes.map((node) => [node.id, JSON.stringify(node)])),
-      })
-      return fragment
-    }
-
-    /** A note carrying pasted foreign text, at the viewport center. */
-    const createTextNodeAtViewportCenter = (text: string): void => {
-      const point = screenToCanvas(viewportCenterScreen(), viewport)
-      const node = textNodeDefaults(createId?.() ?? crypto.randomUUID(), point, text)
-      const command: EditorCommand = { kind: 'create-node', node }
-      const running = applyCommand(canvasRef.current, command)
-      if (running === canvasRef.current) return
-      onChange(running, command)
-      applySelection({ type: 'set-members', ids: [node.id] })
+    const selectNodes = (ids: readonly string[]): void => {
+      applySelection({ type: 'set-members', ids: [...ids] })
       setSelectedEdgeId(null)
     }
-
-    /**
-     * Paste the stored fragment as ONE batch: reminted ids, edges remapped.
-     * With an anchor point (the empty-space menu's "Paste here") the
-     * fragment's bounding box centers on it; without one (Cmd+V) copies
-     * land +16px from their source coordinates, cascading like duplicate.
-     */
-    const pasteClipboard = (at?: Point): boolean => {
-      const fragment = readClipboardFragment()
-      if (fragment === null) return false
-      return pasteFragment(fragment, at)
-    }
-
-    /** Paste an explicit fragment (in-app slot, or one parsed off the OS clipboard). */
-    const pasteFragment = (
-      fragment: Pick<ClipboardFragment, 'nodes' | 'edges' | 'cut'>,
-      at?: Point,
-    ): boolean => {
-      const current = canvasRef.current
-      // A paste that answers THIS canvas's pending cut is a MOVE: the held
-      // nodes keep their ids and just change place, so every edge — internal
-      // or boundary — survives without any reconnection machinery. One batch
-      // of move-node commands = one undo step that only moves them back.
-      if (fragment.cut !== undefined && pendingCut?.cutId === fragment.cut.id) {
-        const held = current.nodes.filter((node) => pendingCut.snapshot.has(node.id))
-        if (held.length > 0) {
-          let dx = DUPLICATE_OFFSET_PX
-          let dy = DUPLICATE_OFFSET_PX
-          if (at !== undefined) {
-            const minX = Math.min(...held.map((node) => node.x))
-            const minY = Math.min(...held.map((node) => node.y))
-            const maxX = Math.max(...held.map((node) => node.x + node.width))
-            const maxY = Math.max(...held.map((node) => node.y + node.height))
-            dx = Math.round(at.x - (minX + maxX) / 2)
-            dy = Math.round(at.y - (minY + maxY) / 2)
-          }
-          const moveCommand: EditorCommand = {
-            kind: 'batch',
-            commands: held.map((node) => ({
-              kind: 'move-node' as const,
-              id: node.id,
-              x: node.x + dx,
-              y: node.y + dy,
-            })),
-          }
-          setPendingCut(null)
-          const running = applyCommand(current, moveCommand)
-          if (running === current) return false
-          onChange(running, moveCommand)
-          applySelection({ type: 'set-members', ids: held.map((node) => node.id) })
-          setSelectedEdgeId(null)
-          return true
-        }
-      }
-      // The cut surface reconnects while the document shows no trace of a
-      // previous reconnection: as long as any edge a prior paste of this cut
-      // created is still on THIS canvas, the fragment behaves as a plain
-      // copy (no second wire onto the peer). Undo removes those edges, so
-      // the next paste is a first paste again.
-      const cut =
-        fragment.cut !== undefined &&
-        !recordedReconnection(fragment.cut.id).some((id) =>
-          current.edges.some((edge) => edge.id === id),
-        )
-          ? fragment.cut
-          : undefined
-      const command = buildFragmentInsertCommand(
-        current,
-        { nodes: fragment.nodes, edges: fragment.edges, cut },
-        () => createId?.() ?? crypto.randomUUID(),
-        at,
-      )
-      if (command === undefined) return false
-      const running = applyCommand(current, command)
-      if (running === current) return false
-      if (cut !== undefined && command.kind === 'batch') {
-        // The boundary edges are the created edges with an endpoint OUTSIDE
-        // the created node set — that endpoint is the surviving peer.
-        const createdNodeIds = new Set(
-          command.commands.flatMap((c) => (c.kind === 'create-node' ? [c.node.id] : [])),
-        )
-        recordReconnection(
-          cut.id,
-          command.commands.flatMap((c) =>
-            c.kind === 'create-edge' &&
-            (!createdNodeIds.has(c.edge.fromNode) || !createdNodeIds.has(c.edge.toNode))
-              ? [c.edge.id]
-              : [],
-          ),
-        )
-      }
-      onChange(running, command)
-      const remintedIds =
-        command.kind === 'batch'
-          ? command.commands.filter((c) => c.kind === 'create-node').map((c) => c.node.id)
-          : []
-      if (remintedIds.length > 0) {
-        applySelection({ type: 'set-members', ids: remintedIds })
-        setSelectedEdgeId(null)
-      }
-      return true
-    }
+    const {
+      duplicateSelection,
+      copySelection,
+      cutSelection,
+      createTextNodeAtViewportCenter,
+      pasteClipboard,
+      pasteFragment,
+    } = useClipboardActions({
+      canvasRef,
+      primaryId: selection?.id,
+      extraIds,
+      pendingCut,
+      setPendingCut,
+      onChange,
+      createId,
+      selectNodes,
+      viewport,
+      viewportCenterScreen,
+    })
 
     /**
      * Select every node; the first becomes primary, the rest extras.
@@ -2613,122 +2351,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setViewport((vp) => panBy(vp, { x: -e.deltaX, y: -e.deltaY }))
     }
 
-    const handleWheelRef = useRef(handleWheel)
-    handleWheelRef.current = handleWheel
-
-    useEffect(() => {
-      const root = rootRef.current
-      if (root === null) return
-      const onWheel = (e: WheelEvent) => handleWheelRef.current(e)
-      root.addEventListener('wheel', onWheel, { passive: false })
-      return () => root.removeEventListener('wheel', onWheel)
-    }, [])
-
-    // Unmount-mid-gesture safety net. Every pointer handler above is a JSX
-    // prop (the wheel listener is this component's only native one, and it
-    // already cleans itself up), so React tears them all down with the
-    // component and no stale handler can fire an onChange/command after
-    // this point — that half of "no listener leak" is structural, not
-    // something this effect needs to do. What React does NOT do for us is
-    // release pointer capture the platform is still holding on our behalf;
-    // an unmount mid-drag (route change, a parent swapping this component
-    // iOS Safari's native long-press behaviors (selection loupe, callout,
-    // the haptic-touch takeover) ignore `touch-action` and CSS user-select
-    // suppression in practice: the system claims the press and fires
-    // pointercancel, which disarms the app's own long-press menu timer —
-    // the press is "hijacked". preventDefault on `touchstart` is the one
-    // reliable off-switch for that entire family, and it must be a
-    // NON-PASSIVE native listener (React's synthetic handlers don't
-    // guarantee that, and browsers default touch listeners to passive).
-    // Canvas interactions are pointer-event driven and unaffected —
-    // pointerdown has already fired by the time touchstart is cancelled;
-    // what this suppresses is the native gesture claim plus the synthetic
-    // mouse-compatibility events the canvas never uses. Overlays
-    // (`data-editor-overlay`: text editor, palette, menus, dialogs) keep
-    // native touch semantics — they hold real form controls.
-    useEffect(() => {
-      const root = rootRef.current
-      if (root === null) return
-      const refuseNativeTouch = (event: TouchEvent) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest('[data-editor-overlay]') !== null
-        ) {
-          return
-        }
-        event.preventDefault()
-      }
-      root.addEventListener('touchstart', refuseNativeTouch, { passive: false })
-      // touchmove too, not just touchstart: an embedding sheet (iOS's
-      // SFSafariViewController in-app browser) decides from UNCONSUMED move
-      // events whether a drag is ITS drag — a canvas pan was dragging the
-      // whole sheet up and down. Canvas gestures are pointer-event driven
-      // and unaffected.
-      root.addEventListener('touchmove', refuseNativeTouch, { passive: false })
-      return () => {
-        root.removeEventListener('touchstart', refuseNativeTouch)
-        root.removeEventListener('touchmove', refuseNativeTouch)
-      }
-    }, [])
-
-    // out) would otherwise leave the browser holding capture for a pointer
-    // no element can any longer respond to. Best-effort/never-throw, same
-    // reasoning as `trySetPointerCapture`.
-    // The flight recorder's document-side ear. The root's own handlers can
-    // only record presses that REACH them, and the report this recorder
-    // exists for is precisely a press that seems not to: an element outside
-    // the root — a portal, a stale overlay — consumes it before the editor
-    // sees anything. A capture-phase listener on the document sees every
-    // press first and records whether it was headed inside the root, which
-    // is the discriminator nothing else can supply. Down/up/cancel only:
-    // moves would flood the ring, and the missing-press question never
-    // needs them.
-    useEffect(() => {
-      const record = (e: PointerEvent) => {
-        const root = rootRef.current
-        gestureTrace.recordDocPointer({
-          at: Math.round(e.timeStamp),
-          type: e.type,
-          pointerId: e.pointerId,
-          pointerType: e.pointerType,
-          isPrimary: e.isPrimary,
-          x: Math.round(e.clientX),
-          y: Math.round(e.clientY),
-          insideRoot: root !== null && e.target instanceof Node && root.contains(e.target),
-          target: describeTarget(e.target),
-        })
-      }
-      document.addEventListener('pointerdown', record, true)
-      document.addEventListener('pointerup', record, true)
-      document.addEventListener('pointercancel', record, true)
-      return () => {
-        document.removeEventListener('pointerdown', record, true)
-        document.removeEventListener('pointerup', record, true)
-        document.removeEventListener('pointercancel', record, true)
-      }
-    }, [])
-
-    useEffect(() => {
-      // Capture the root HERE, at mount, rather than reading `rootRef.current`
-      // inside the cleanup closure: React detaches the ref (sets it to
-      // `null`) before this cleanup runs on unmount, so reading the ref at
-      // cleanup time would always see `null` and silently skip the release.
-      const root = rootRef.current
-      return () => {
-        // A long-press timer must not fire into an unmounted editor.
-        if (longPressRef.current !== null) {
-          clearTimeout(longPressRef.current.timer)
-          longPressRef.current = null
-        }
-        const pointerId = activePointerIdRef.current
-        if (root === null || pointerId === null) return
-        try {
-          root.releasePointerCapture(pointerId)
-        } catch {
-          // best-effort — see doc comment above
-        }
-      }
-    }, [])
+    useNativeCanvasListeners(rootRef, handleWheel, longPressRef, activePointerIdRef)
 
     /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
     const createNodeAt = (point: Point) => {
@@ -2756,66 +2379,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
-    /** Root-local screen point at the middle of the visible canvas. */
-    const viewportCenterScreen = () => {
-      const root = rootRef.current
-      return root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-    }
-
-    /**
-     * The editor's own pixel size, for the minimap's visible-area marker.
-     *
-     * A ResizeObserver rather than a window `resize` listener, because the
-     * container resizes without the window doing so — a side panel opening,
-     * the browser chrome changing height on mobile — and a marker that lags
-     * those is wrong about where you are.
-     *
-     * Guarded because jsdom has no ResizeObserver: without the guard every
-     * jsdom test that mounts this editor would throw. There it measures once
-     * and stays there, which is correct for a layout that never changes.
-     */
-    const [rootSize, setRootSize] = useState({ width: 0, height: 0 })
-    /**
-     * The SHELL's width, not the canvas's.
-     *
-     * The inspector takes a column out of the canvas, so `rootSize` shrinks
-     * when it opens — and a breakpoint read off `rootSize` then flips as a
-     * CONSEQUENCE of its own decision. Measured: opening the dock on a 900px
-     * editor left the canvas at 548, below the 768 breakpoint, so the panel
-     * re-rendered as a bottom sheet spanning the full width.
-     */
-    const shellRef = useRef<HTMLDivElement | null>(null)
-    const [shellWidth, setShellWidth] = useState(0)
-    useLayoutEffect(() => {
-      const shell = shellRef.current
-      if (shell === null) return
-      const measure = () => {
-        setShellWidth((prev) => (prev === shell.clientWidth ? prev : shell.clientWidth))
-      }
-      measure()
-      if (typeof ResizeObserver === 'undefined') return
-      const observer = new ResizeObserver(measure)
-      observer.observe(shell)
-      return () => observer.disconnect()
-    }, [])
-    const inspectorIsSheet = shellWidth > 0 && shellWidth < MINIMAP_MIN_ROOT_WIDTH_PX
-    useLayoutEffect(() => {
-      const root = rootRef.current
-      if (root === null) return
-      const measure = () => {
-        setRootSize((prev) =>
-          prev.width === root.clientWidth && prev.height === root.clientHeight
-            ? prev
-            : { width: root.clientWidth, height: root.clientHeight },
-        )
-      }
-      measure()
-      if (typeof ResizeObserver === 'undefined') return
-      const observer = new ResizeObserver(measure)
-      observer.observe(root)
-      return () => observer.disconnect()
-    }, [])
-
     /**
      * Node boxes for the overview, with each authored colour resolved to the
      * accent the scene already uses for it. A preset key resolves through the
@@ -2838,9 +2401,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping the current zoom (the hand-mode "where did my content go"
      * recovery). No boxes → no-op.
      */
-    const containerSizeOf = (root: HTMLDivElement | null): ContainerSize | null =>
-      root === null ? null : { width: root.clientWidth, height: root.clientHeight }
-
     /**
      * Frames the given content: pans so its center sits at the viewport
      * center, and zooms so the whole box fits with a small margin —
@@ -2887,108 +2447,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       })
     }
 
-    const createLinkAtViewportCenter = (url: string, at?: Point) => {
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id =
-        createId?.() ??
-        (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : String(Math.random()))
-      const node = linkNodeDefaults(id, point, url)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
-
-    /** File nodes are reference cards like links — same shorter default box. */
-    const createFileRefAtViewportCenter = (file: string, at?: Point) => {
-      // The picked option's kind decides the box: a markdown document
-      // renders its prose inside the node and needs room a one-line
-      // reference card does not have.
-      const kind = fileRefOptions?.find((option) => option.file === file)?.kind
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        kind === 'markdown'
-          ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
-          : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id = newId()
-      const node = fileNodeDefaults(id, point, file, kind)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
+    const {
+      visibleCanvasRect,
+      panToShow,
+      createLinkAtViewportCenter,
+      createFileRefAtViewportCenter,
+      addImageFile,
+      createGroupAtViewportCenter,
+      groupSelection,
+    } = useNodeCreation({
+      rootRef,
+      canvasRef,
+      viewport,
+      setViewport,
+      createId,
+      fileRefOptions,
+      onAddImage,
+      applyResult,
+      collapseExtras: () => applySelection({ type: 'collapse-extras' }),
+      containerSizeOf,
+    })
 
     const imageInputRef = useRef<HTMLInputElement | null>(null)
     /** When set, the next picked image becomes this group's background instead of a new node. */
     const pendingBackgroundGroupIdRef = useRef<string | null>(null)
     /** Where the pending picker-created image should land; null = viewport center. */
     const pendingImagePointRef = useRef<Point | null>(null)
-
-    const createImageNodeAt = (file: string, at?: Point) => {
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id = newId()
-      const node = imageNodeDefaults(id, point, file)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
-
-    /** Stores the image via the host seam, then creates the node. */
-    const addImageFile = (file: File, at?: Point) => {
-      if (onAddImage === undefined || !file.type.startsWith('image/')) return
-      void onAddImage(file).then((ref) => {
-        if (ref !== undefined) createImageNodeAt(ref, at)
-      })
-    }
 
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
@@ -2998,83 +2482,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {
       if (!isFollowableUrl(node.url)) return
       window.open(node.url, '_blank', 'noopener,noreferrer')
-    }
-
-    /**
-     * The free-spot cascade can push a palette-created node outside the
-     * visible viewport, leaving the user staring at an unchanged canvas.
-     * When the created box does not fully fit on screen, pan (keeping the
-     * zoom) so it sits centered — creation is always visible feedback.
-     */
-    /**
-     * The canvas-space rectangle a person can actually see: the root, minus
-     * the strip the dock paints over. Creation places inside this before it
-     * places anywhere else, which is what keeps the view still.
-     */
-    const visibleCanvasRect = (): Box | undefined => {
-      const containerSize = containerSizeOf(rootRef.current)
-      if (containerSize === null) return undefined
-      const topLeft = screenToCanvas({ x: 0, y: 0 }, viewport)
-      return {
-        x: topLeft.x,
-        y: topLeft.y,
-        width: containerSize.width / viewport.zoom,
-        height: (containerSize.height - DOCK_OCCLUSION_PX) / viewport.zoom,
-      }
-    }
-
-    const panToShow = (box: Box) => {
-      const containerSize = containerSizeOf(rootRef.current)
-      if (containerSize === null) return
-      setViewport(
-        (vp) => panToShowTarget(box, vp, containerSize, { bottom: DOCK_OCCLUSION_PX }) ?? vp,
-      )
-    }
-
-    const newId = () =>
-      createId?.() ??
-      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : String(Math.random()))
-
-    const createGroupAtViewportCenter = (at?: Point) => {
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id = newId()
-      const node = groupNodeDefaults(id, point)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-group', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
-
-    /** Frames the current multi-selection: enclosing box + padding. */
-    const groupSelection = (memberIds: readonly string[]) => {
-      const members = canvasRef.current.nodes.filter((n) => memberIds.includes(n.id))
-      const frame = groupEnclosure(members)
-      if (frame === undefined) return
-      const id = newId()
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
-        selectedId: id,
-      })
-      applySelection({ type: 'collapse-extras' })
     }
 
     return (

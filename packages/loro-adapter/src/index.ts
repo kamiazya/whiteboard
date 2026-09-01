@@ -1,3 +1,4 @@
+export { collectImageRefIds } from './image-refs.js'
 export type { DocumentContainers } from './loro-bridge.js'
 export {
   CONTENT_CONTAINER_KEYS,

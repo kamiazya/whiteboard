@@ -26,6 +26,7 @@ import { useThemeMode } from '@/hooks/useThemeMode'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '@/lib/app-routes'
 import { celebrate } from '@/lib/celebrate'
 import { createDaemonFetch } from '@/lib/daemon-api-client'
+import type { ConnectedDaemon } from '@/lib/daemon-auth-fetch'
 import { disconnectFromDaemon } from '@/lib/disconnect-daemon'
 import type { FaviconStyle } from '@/lib/favicon'
 import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
@@ -41,7 +42,7 @@ import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
 import { StorageReportCard } from '../components/StorageReportCard.js'
 
 export interface SettingsPageProps {
-  daemon?: { baseUrl: string; token: string | null }
+  daemon?: ConnectedDaemon
   /**
    * Called after this browser stops using the daemon, so the App branch can
    * follow the settings it just wrote. Without it the change only takes
@@ -206,7 +207,7 @@ function ConnectionsSection({
   daemon,
   onDisconnected,
 }: {
-  daemon?: { baseUrl: string; token: string | null }
+  daemon?: ConnectedDaemon
   onDisconnected?: () => void
 }) {
   if (!daemon) {
@@ -272,7 +273,7 @@ function stripScheme(baseUrl: string): string {
  * tofu (ADR-0012 decision 4). Without one there is nothing to install into,
  * and saying so beats an empty list.
  */
-function FontsSection({ daemon }: { daemon?: { baseUrl: string; token: string | null } }) {
+function FontsSection({ daemon }: { daemon?: ConnectedDaemon }) {
   if (!daemon) {
     return (
       <section>
@@ -309,7 +310,7 @@ function sectionContent(
     installStatus: 'installed' | 'installable' | 'not-captured'
     estimate: BrowserStorageEstimate | null
     daemonStorageBytes: number | null
-    daemon?: { baseUrl: string; token: string | null }
+    daemon?: ConnectedDaemon
     onDisconnected?: () => void
   },
 ) {

@@ -18,6 +18,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
@@ -68,6 +69,13 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     if (url.includes('/file/') && init?.method === 'PUT') {
       if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))
       return new Response(null, { status: 204 })
+    }
+    if (url.endsWith('/workspace-document/snapshot') && (init?.method ?? 'GET') === 'GET') {
+      // The demote pull: the merged target's own bytes, as the real route serves.
+      return new Response(target.export({ mode: 'snapshot' }) as BodyInit, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
     }
     if (url.endsWith('/documents')) {
       const documents = readWorkspaceDocuments(target).map((entry) => ({
@@ -468,10 +476,91 @@ describe('PromoteWorkspaceSection', () => {
     expect(resolveWorkspaceDocumentById(target, legacyId)).not.toBeNull()
   })
 
+  it('a successful move leaves a cached copy of the daemon workspace in this browser', async () => {
+    // ADR-0023 decision 2's first half: demote begins with the daemon's own
+    // record cached back into this browser's planes, keyed by the DAEMON
+    // workspace id, with the sync moment on the standing report.
+    await seedTwoDocuments()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target)}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/cached in this browser/i)
+
+    const replica = await new BrowserWorkspaceDocs().open('ws-a')
+    expect(replica).not.toBeNull()
+    expect(readWorkspaceDocuments(replica!)).toHaveLength(2)
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.replicaSyncedAt).toBeTruthy()
+  })
+
   it('stays discoverable but disabled with no daemon connected', async () => {
     render(<PromoteWorkspaceSection settingsStore={createUserSettingsStore()} />)
     const trigger = screen.getByTestId('promote-workspace-open')
     expect(trigger.hasAttribute('disabled')).toBe(true)
     expect(document.body.textContent).toMatch(/connect a daemon/i)
+  })
+
+  // The three 'unavailable' branches are the promote flow's only error
+  // disclosure before a dialog exists — a regression here leaves the trigger
+  // appearing to silently do nothing, the worst failure mode for a
+  // data-migration action.
+  it('an empty browser says there is nothing to move instead of opening the dialog', async () => {
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc())}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    const notice = await screen.findByTestId('promote-unavailable')
+    expect(notice.textContent).toMatch(/no documents to move/i)
+    expect(screen.queryByTestId('promote-dialog')).toBeNull()
+  })
+
+  it('a daemon with no workspace says to open one there first', async () => {
+    await seedTwoDocuments()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { workspaces: [] })}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    const notice = await screen.findByTestId('promote-unavailable')
+    expect(notice.textContent).toMatch(/no workspace to move into yet/i)
+    expect(notice.textContent).toMatch(/open one on the daemon first/i)
+  })
+
+  it('an unreachable daemon is disclosed and the trigger stays clickable for a retry', async () => {
+    await seedTwoDocuments()
+    const unreachable = (async () => {
+      throw new TypeError('Failed to fetch')
+    }) as typeof globalThis.fetch
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={unreachable}
+      />,
+    )
+    const trigger = screen.getByTestId('promote-workspace-open')
+    await userEvent.click(trigger)
+    const notice = await screen.findByTestId('promote-unavailable')
+    expect(notice.textContent).toMatch(/could not reach the daemon/i)
+    // Recoverable, not a dead end: the same trigger retries, and a daemon
+    // that answers this time opens the confirmation.
+    expect(trigger.hasAttribute('disabled')).toBe(false)
   })
 })

@@ -51,6 +51,7 @@ import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
+import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
@@ -110,6 +111,19 @@ export function DaemonDocumentPage({
   createBackendRef.current = createBackend
 
   const controller = useDaemonDocumentController({ daemonBaseUrl, workspaceId, path, daemonFetch })
+
+  // ADR-0023 decision 5's arrival path: the moment this browser is working
+  // on a daemon workspace is when it can afford to refresh its replica of
+  // it. Once per session per workspace, scheduled off the critical path —
+  // the module dedupes, so the effect can fire on every resolve.
+  useEffect(() => {
+    if (controller.workspaceId === null) return
+    scheduleReplicaRefresh({
+      fetch: daemonFetch,
+      daemonBaseUrl,
+      workspaceId: controller.workspaceId,
+    })
+  }, [daemonFetch, daemonBaseUrl, controller.workspaceId])
 
   // Stable across the page's lifetime, mirroring BrowserDocumentPage's
   // own settingsStore — read fresh (not cached in state) wherever the

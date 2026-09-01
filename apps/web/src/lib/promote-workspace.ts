@@ -21,12 +21,11 @@
  * record consumer relies on.
  */
 import {
+  collectImageRefIds,
   documentContainers,
-  readSpatialCanvas,
   readWorkspaceDocuments,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { apiErrorReason, documentFileApiUrl } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import type { WorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
 import { listDocuments } from './daemon-api-client.js'
@@ -63,6 +62,12 @@ export async function countBrowserWorkspaceDocuments(
 export type PromoteWorkspaceResult =
   | {
       kind: 'ok'
+      /**
+       * The browser workspace the record was read from — what a per-workspace
+       * moved marker needs, reported by the transfer itself rather than
+       * re-read by the caller, so the two cannot disagree.
+       */
+      sourceWorkspaceId: string
       /** Every documentId the record carried across — the same ids, by design. */
       promotedDocumentIds: string[]
       /** Paths the merge left contested; surfaced, never auto-resolved. */
@@ -108,9 +113,9 @@ export async function promoteWorkspace(
 /**
  * The image references the record's spatial documents carry, each mapped to
  * its owning document's path (the address the daemon's file route wants).
- * The walk mirrors the daemon-side GC's live-state pass: a 'file' node whose
- * value carries the asset prefix is a reference; markdown documents embed
- * images only through those spatial nodes.
+ * The walk itself is collectImageRefIds — shared with the daemon-side GC's
+ * live-state pass, so the two sides cannot drift on what counts as a live
+ * reference. Markdown documents embed images only through spatial nodes.
  */
 function collectImageRefs(
   record: Parameters<typeof readWorkspaceDocuments>[0],
@@ -119,9 +124,7 @@ function collectImageRefs(
   const refs = new Map<string, string>()
   for (const entry of entries) {
     if (entry.kind !== 'spatial') continue
-    for (const node of readSpatialCanvas(documentContainers(record, entry.documentId)).nodes) {
-      if (node.type !== 'file' || !isImageRef(node.file)) continue
-      const fileId = imageRefId(node.file)
+    for (const fileId of collectImageRefIds(documentContainers(record, entry.documentId))) {
       if (!refs.has(fileId)) refs.set(fileId, entry.path)
     }
   }
@@ -136,7 +139,8 @@ async function promoteWorkspaceUnsafe(
   // the same claimed database, so tests seed through the production path.
   const fileStore = new DocumentFileStore()
 
-  const record = await workspaceDocs.open(getBrowserWorkspaceId())
+  const sourceWorkspaceId = getBrowserWorkspaceId()
+  const record = await workspaceDocs.open(sourceWorkspaceId)
   if (record === null) {
     return { kind: 'failed', reason: 'This browser keeps no workspace record to promote.' }
   }
@@ -190,5 +194,5 @@ async function promoteWorkspaceUnsafe(
     else blobs.failed.push(fileId)
   }
 
-  return { kind: 'ok', promotedDocumentIds, shadowedPaths, blobs }
+  return { kind: 'ok', sourceWorkspaceId, promotedDocumentIds, shadowedPaths, blobs }
 }

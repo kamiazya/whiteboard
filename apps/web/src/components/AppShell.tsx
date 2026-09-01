@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSettingsNudge } from '@/hooks/useSettingsNudge'
 import { parseWorkspaceRoute, settingsPath } from '@/lib/app-routes'
+import { browserWorkspaceIdOrNull } from '@/lib/browser-workspace-id'
 import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
@@ -33,7 +34,11 @@ const DaemonDetectedBanner = lazy(() =>
  * when the recorded move targets the SAME daemon the browser still points
  * at: a move to a daemon this browser no longer uses is not this
  * connection's story. Reachability is unknown from here and deliberately
- * not claimed.
+ * not claimed. And only for the workspace that was actually MOVED: this
+ * browser keeps many workspaces, and the disclosure is a claim about one
+ * record's data — a legacy promotion record that never named its source
+ * cannot say which, so it discloses nothing rather than accusing whichever
+ * workspace happens to be active.
  */
 function PromotedElsewhereNotice({
   settingsStore,
@@ -47,7 +52,9 @@ function PromotedElsewhereNotice({
     promotion === undefined ||
     !promotion.ok ||
     storedDaemon === undefined ||
-    promotion.daemonBaseUrl !== storedDaemon
+    promotion.daemonBaseUrl !== storedDaemon ||
+    promotion.sourceWorkspaceId === undefined ||
+    promotion.sourceWorkspaceId !== browserWorkspaceIdOrNull()
   ) {
     return null
   }
@@ -56,6 +63,32 @@ function PromotedElsewhereNotice({
       This workspace has been moved to the daemon at{' '}
       <span className="font-mono text-xs">{storedDaemon.replace(/^https?:\/\//, '')}</span>. Changes
       made here stay in this browser until you move it again from Settings.
+    </p>
+  )
+}
+
+/**
+ * ADR-0023: a daemon workspace this browser holds a replica of says so where
+ * the workspace is named — and since the offline read shipped, the copy may
+ * also promise what the replica now delivers: a read-only view when the
+ * daemon cannot be reached. Silent for a workspace with no registry entry,
+ * and while the row (hence the id) has not loaded: a claim needs its
+ * subject.
+ */
+function ReplicaCacheNotice({
+  settingsStore,
+  workspaceId,
+}: {
+  settingsStore: ReturnType<typeof createUserSettingsStore>
+  workspaceId: string | null
+}) {
+  if (workspaceId === null) return null
+  const replica = settingsStore.load().storage.replicas?.[workspaceId]
+  if (replica === undefined) return null
+  return (
+    <p data-testid="replica-cache-notice" className="text-muted-foreground">
+      A copy of this workspace is cached in this browser, and opens read-only when the daemon cannot
+      be reached.
     </p>
   )
 }
@@ -140,13 +173,16 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   const workspaceHandleInAddress = parseWorkspaceRoute(location.pathname)?.workspace ?? null
   // The handle until the row lands: a true statement about where you are,
   // and better than a blank in an accessible name.
+  const activeRow =
+    workspaceHandleInAddress === null
+      ? undefined
+      : rows.find((w) => workspaceHandle(w) === workspaceHandleInAddress)
   const activeName =
     workspaceHandleInAddress === null
       ? undefined
-      : (() => {
-          const row = rows.find((w) => workspaceHandle(w) === workspaceHandleInAddress)
-          return row === undefined ? workspaceHandleInAddress : workspaceLabel(row)
-        })()
+      : activeRow === undefined
+        ? workspaceHandleInAddress
+        : workspaceLabel(activeRow)
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
@@ -221,6 +257,12 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         }
         onWorkInBrowser={onWorkInBrowser}
       >
+        {connection?.state.keeper === 'daemon' && (
+          <ReplicaCacheNotice
+            settingsStore={settingsStore}
+            workspaceId={activeRow?.workspaceId ?? null}
+          />
+        )}
         {connection?.state.keeper === 'browser' && (
           <>
             <p className="text-muted-foreground">

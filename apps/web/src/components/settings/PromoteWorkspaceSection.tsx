@@ -29,13 +29,14 @@ import {
 } from '@/components/ui/dialog'
 import { getAppLogger } from '@/lib/app-logger'
 import { createDaemonFetch, listWorkspaces } from '@/lib/daemon-api-client'
+import type { ConnectedDaemon } from '@/lib/daemon-auth-fetch'
 import type { PromotionResultRecord, UserSettings } from '@/lib/user-settings-store'
 import { type WorkspaceIdentity, workspaceLabel } from '@/lib/workspace-handle'
 
 const log = getAppLogger('promote-workspace-section')
 
 export interface PromoteWorkspaceSectionProps {
-  daemon?: { baseUrl: string; token: string | null }
+  daemon?: ConnectedDaemon
   settingsStore: {
     load: () => UserSettings
     update: (fn: (current: UserSettings) => UserSettings) => void
@@ -62,25 +63,28 @@ type PromoteFlow =
 
 function describeResult(result: PromotionResultRecord): string {
   if (!result.ok) {
-    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason ?? 'unknown error'}`
+    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason}`
   }
   const parts = [
-    `Moved ${result.promotedCount ?? 0} document${(result.promotedCount ?? 0) === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
+    `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
   ]
-  if ((result.shadowedPaths?.length ?? 0) > 0) {
+  if (result.shadowedPaths.length > 0) {
     parts.push(
-      `${result.shadowedPaths?.length} path${result.shadowedPaths?.length === 1 ? '' : 's'} already existed there — both versions are kept, the earlier one marked shadowed: ${result.shadowedPaths?.join(', ')}`,
+      `${result.shadowedPaths.length} path${result.shadowedPaths.length === 1 ? '' : 's'} already existed there — both versions are kept, the earlier one marked shadowed: ${result.shadowedPaths.join(', ')}`,
     )
   }
-  if ((result.blobsMissing?.length ?? 0) > 0) {
+  if (result.blobsMissing.length > 0) {
     parts.push(
-      `${result.blobsMissing?.length} referenced image${result.blobsMissing?.length === 1 ? ' was' : 's were'} already missing from this browser and could not be moved`,
+      `${result.blobsMissing.length} referenced image${result.blobsMissing.length === 1 ? ' was' : 's were'} already missing from this browser and could not be moved`,
     )
   }
-  if ((result.blobsFailed?.length ?? 0) > 0) {
+  if (result.blobsFailed.length > 0) {
     parts.push(
-      `${result.blobsFailed?.length} image upload${result.blobsFailed?.length === 1 ? '' : 's'} failed — moving again retries them safely`,
+      `${result.blobsFailed.length} image upload${result.blobsFailed.length === 1 ? '' : 's'} failed — moving again retries them safely`,
     )
+  }
+  if (result.replicaSyncedAt !== undefined) {
+    parts.push('The daemon workspace is now cached in this browser')
   }
   return `${parts.join('. ')}.`
 }
@@ -184,12 +188,30 @@ export function PromoteWorkspaceSection({
           workspaceDocs: new BrowserWorkspaceDocs(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
         })
+        // The demote pull (ADR-0023 decision 2): cache the daemon's merged
+        // record back into this browser's planes. Best-effort — the move
+        // itself already landed, so a failed pull costs only the cache line
+        // on the report, never the promotion.
+        let replicaSyncedAt: string | undefined
+        if (outcome.kind === 'ok') {
+          const { cacheDaemonWorkspace } = await import('../../lib/replica-cache.js')
+          const cache = await cacheDaemonWorkspace({
+            fetch: fetchImpl,
+            daemonBaseUrl: daemon.baseUrl,
+            workspaceId: targetId,
+            workspaceDocs: new BrowserWorkspaceDocs(),
+          })
+          if (cache.kind === 'ok') replicaSyncedAt = cache.syncedAt
+          else log.warn('replica cache after promote failed', cache.reason)
+        }
         record =
           outcome.kind === 'ok'
             ? {
                 at: new Date().toISOString(),
                 daemonBaseUrl: daemon.baseUrl,
                 workspaceId: targetId,
+                sourceWorkspaceId: outcome.sourceWorkspaceId,
+                ...(replicaSyncedAt === undefined ? {} : { replicaSyncedAt }),
                 ok: true,
                 promotedCount: outcome.promotedDocumentIds.length,
                 shadowedPaths: outcome.shadowedPaths,
