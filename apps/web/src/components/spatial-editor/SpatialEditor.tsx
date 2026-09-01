@@ -149,6 +149,15 @@ import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
+  createIdleNavigation,
+  DOUBLE_PRESS_WINDOW_MS,
+  type NavigationEvent,
+  type NavigationResult,
+  type NavigationState,
+  type PointerKind,
+  reduceNavigation,
+} from './navigation.js'
+import {
   DOCUMENT_NODE_HEIGHT,
   DOCUMENT_NODE_WIDTH,
   fileNodeDefaults,
@@ -184,7 +193,6 @@ import {
   type EditorTool,
   ToolPalette,
 } from './ToolPalette.js'
-import { computePinchUpdate } from './touch-pinch.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
@@ -226,16 +234,8 @@ const SNAP_THRESHOLD_SCREEN_PX = 6
 const SNAP_GRID_CANVAS_PX = 20
 
 /** Overview size. Big enough to aim at, small enough not to cover content. */
-/**
- * One step of hand mode's double-press zoom. Bigger than a wheel notch:
- * a tap that barely changed the view reads as a missed tap, and the way
- * back out is one press on zoom-to-fit rather than N reverse taps.
- */
-const DOUBLE_PRESS_ZOOM_FACTOR = 2
 /** One keyboard step of zoom — finer than the double press, which jumps. */
 const STEP_ZOOM_FACTOR = 1.25
-/** Press-pairing key for hand mode, where no node identity is involved. */
-const HAND_PRESS_KEY = 'hand'
 const MINIMAP_WIDTH_PX = 160
 const MINIMAP_HEIGHT_PX = 110
 
@@ -422,29 +422,17 @@ const EDGE_HIT_TOLERANCE_PX = 6
  * drag — past it the press is a drag and the menu must not interrupt.
  */
 const LONG_PRESS_MENU_MS = 500
+/**
+ * The navigation machine distinguishes touch from everything else; pen
+ * behaves as a mouse there, so this only has to be total, not faithful to
+ * every platform's spelling.
+ */
+function navigationPointerKind(pointerType: string): PointerKind {
+  return pointerType === 'touch' ? 'touch' : pointerType === 'pen' ? 'pen' : 'mouse'
+}
+
 const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
-/**
- * Window for OUR double-press detection (see handlePointerDown). Matches the
- * common OS double-click interval; not user-configurable today.
- */
-const DOUBLE_PRESS_WINDOW_MS = 400
-
-/**
- * How far apart two presses may land and still be one double press.
- *
- * Only hand mode needs it. Every other double press is bound to a logical
- * target — a node id, an edge id — so two presses far apart are already two
- * different presses. Hand mode has no target to key on and used a constant
- * key, which made EVERY press within the window a double press regardless of
- * where it landed: a tap, then a drag from 224px away, and the drag zoomed
- * instead of panning while the finger was still down.
- *
- * Sized like the OS convention it imitates rather than like finger jitter,
- * which is what LONG_PRESS_SLOP_PX measures — a deliberate double tap is not
- * a still finger, and a value near 10px would reject most real ones.
- */
-const DOUBLE_PRESS_SLOP_PX = 40
 
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const FRAME_MARGIN_PX = 24
@@ -577,51 +565,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * used to blur the just-mounted textarea when we opened at the press.
      */
     const doublePressRef = useRef<{ key: string; point: Point } | null>(null)
-    /**
-     * Every pointer currently down on the root, by id. Read by
-     * `handleLostPointerCapture` to tell a capture handed back with its own
-     * release from one lost out from under a pointer that is still down.
-     * A set, not a single slot: a pinch holds two at once and they end
-     * independently.
-     */
-    const downPointersRef = useRef<Set<number>>(new Set())
     /** In-flight marquee selection rect, in canvas space (Excalidraw
      * semantics: plain drag on empty space selects; pan is Space+drag,
      * middle-button drag, or wheel). */
     const [marquee, setMarquee] = useState<{ start: Point; current: Point } | null>(null)
     const spaceDownRef = useRef(false)
-    const isPanningRef = useRef(false)
-    // Two-finger touch navigation (`touch-action: none` disables the
-    // browser's own scrolling/zooming, so the editor must supply it):
-    // root-local positions per active touch pointer, and whether a pinch
-    // owns the touch sequence. The flag stays up until EVERY finger lifts,
-    // so the lone finger left behind after a pinch cannot fall through to
-    // the marquee/move path mid-air.
-    const touchPointsRef = useRef<Map<number, Point>>(new Map())
-    const pinchActiveRef = useRef(false)
     /**
-     * Touch multi-selection, the iOS "hold one, tap the rest" gesture.
-     *
-     * `gatherAnchorRef` is the finger holding the selection open; while it is
-     * down, a second finger's tap on a node collects that node instead of
-     * starting a pinch. Long press is NOT the trigger: the browser already
-     * synthesises `contextmenu` from it, and taking it would leave touch with
-     * no route to an object's menu.
-     *
-     * A second finger otherwise means pinch, so the two are separated by
-     * STATE rather than by timing — gathering needs a finger already holding
-     * a node, which a pinch never has. Fingers listed in `gatherPointersRef`
-     * have already done their job on the press and stay inert until they lift.
-     */
-    const gatherAnchorRef = useRef<number | null>(null)
-    const gatherPointersRef = useRef<Set<number>>(new Set())
-    /**
-     * Last primary press for double-press detection: logical target, time, and
-     * where it landed. The point is what stops hand mode — whose key is a
-     * constant — from reading any two presses in the window as one gesture.
+     * Last press for the SELECT tool's double press, keyed by what was under
+     * it — a node id, an edge id, or `'empty'`. Hand mode's own double press
+     * is not here: it has no target to key on, so the navigation machine
+     * holds it with the distance bound that keying cannot supply.
      */
     const lastPressRef = useRef<{ key: string; at: number; point: Point } | null>(null)
-    const lastPanPointRef = useRef({ x: 0, y: 0 })
     /**
      * The pointerId this component currently holds capture for, or `null`.
      * Tracked so unmount can best-effort release capture (see the teardown
@@ -630,6 +585,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * best-effort/never-throw reasoning.
      */
     const activePointerIdRef = useRef<number | null>(null)
+    /**
+     * Everything navigation owns, as one value: which fingers are down, what
+     * is driving the viewport, what the last hand press was. See
+     * `navigation.ts` — the refs this replaced could not say when a gesture
+     * was over, and twice shipped a field that outlived one.
+     */
+    const navigationRef = useRef<NavigationState>(createIdleNavigation())
 
     const canvasRef = useRef(canvas)
     const prevCanvasRef = useRef(canvas)
@@ -1500,6 +1462,95 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     /**
+     * Arms the long-press menu for a single touch. Firing abandons whatever
+     * the press started (a node move's 'pressing' state, marquee arming):
+     * the press has become a menu invocation, not a drag.
+     *
+     * The navigation machine decides WHETHER to arm — hand mode never does,
+     * because the press below it starts a pan and this teardown would strand
+     * it mid-drag — and the timer itself stays here, where the menu, the
+     * haptic and the pulse live.
+     */
+    const armLongPress = (pointerId: number, screen: Point) => {
+      clearLongPress()
+      longPressRef.current = {
+        pointerId,
+        screen,
+        timer: setTimeout(() => {
+          longPressRef.current = null
+          if (gestureStateRef.current.kind !== 'idle') {
+            applyResult(
+              reduceGesture(gestureStateRef.current, canvasRef.current, {
+                type: 'pointercancel',
+              }),
+            )
+          }
+          setMarquee(null)
+          navigationRef.current = createIdleNavigation()
+          lastPressRef.current = null
+          doublePressRef.current = null
+          // The native long-press this replaces gave a system haptic; keep
+          // that cue so the menu opening under a still-down finger reads as
+          // deliberate, not glitchy.
+          hapticTick()
+          setLongPressPulse(screen)
+          openContextMenuAtRef.current(screen)
+        }, LONG_PRESS_MENU_MS),
+      }
+    }
+
+    /**
+     * Hands one pointer event to the navigation machine and performs what it
+     * asks for. Every effect maps to something this component already did at
+     * the site the machine replaced; nothing new is invented here.
+     */
+    const runNavigation = (root: HTMLElement, event: NavigationEvent): NavigationResult => {
+      const result = reduceNavigation(navigationRef.current, event)
+      navigationRef.current = result.state
+      for (const effect of result.effects) {
+        switch (effect.kind) {
+          case 'pan':
+            setViewport((vp) => panBy(vp, effect.deltaScreen))
+            break
+          case 'zoom-at':
+            setViewport((vp) => zoomAt(vp, effect.anchorScreen, effect.factor))
+            break
+          case 'pinch':
+            setViewport((vp) =>
+              zoomAt(panBy(vp, effect.panDeltaScreen), effect.anchorScreen, effect.factor),
+            )
+            break
+          case 'capture':
+            for (const pointerId of effect.pointerIds) capturePointer(root, pointerId)
+            break
+          case 'release-capture':
+            activePointerIdRef.current = null
+            break
+          case 'arm-long-press':
+            armLongPress(effect.pointerId, effect.screen)
+            break
+          case 'clear-long-press':
+            clearLongPress()
+            break
+          case 'clear-marquee':
+            setMarquee(null)
+            break
+          case 'clear-press-memory':
+            lastPressRef.current = null
+            doublePressRef.current = null
+            break
+          case 'cancel-manipulation':
+            applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+            break
+          case 'gather':
+            toggleSelectionMember(effect.anchorPrimaryId, effect.hitId)
+            break
+        }
+      }
+      return result
+    }
+
+    /**
      * Shared prologue for the overlay's pointer handlers: take pointer capture
      * on the root and hand it back, or `null` when the root is not mounted.
      * (The overlay itself already stops propagation to the root's hit-test.)
@@ -1512,7 +1563,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // would be read as an ordinary handback and never recovered. Their
         // release does reach handlePointerUp, because capture redirects the
         // rest of the sequence to the root.
-        downPointersRef.current.add(e.pointerId)
+        navigationRef.current = reduceNavigation(navigationRef.current, {
+          type: 'external-press',
+          pointerId: e.pointerId,
+        }).state
         capturePointer(root, e.pointerId)
       }
       return root
@@ -1561,165 +1615,40 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (isOverlayEvent(e)) return
       const root = rootRef.current
       if (root === null) return
-      // Before every early return below: what is down has to be recorded even
-      // for presses this handler goes on to ignore, or their handback is read
-      // as a capture loss.
-      downPointersRef.current.add(e.pointerId)
-      if (e.pointerType === 'touch') {
-        // A touch pointer is `isPrimary` only while no other touch is active
-        // (Pointer Events 3, sec. 4.2), so anything still tracked here belongs
-        // to a gesture whose release this handler never received — a finger
-        // lifted over an element outside the root, a browser that claimed the
-        // gesture, a pointercancel delivered somewhere else. Left in place it
-        // is not inert: the next one-finger press makes the map size 2, so a
-        // plain drag is read as the second finger of a pinch and the canvas
-        // follows at half speed while zooming, which reads as "the hand tool
-        // stopped responding" and never recovers on its own.
-        if (e.isPrimary) {
-          touchPointsRef.current.clear()
-          gatherPointersRef.current.clear()
-          gatherAnchorRef.current = null
-          pinchActiveRef.current = false
-        }
-        touchPointsRef.current.set(e.pointerId, clientPointToRootLocal(e, root))
-        if (pinchActiveRef.current) return
-        if (gatherPointersRef.current.size > 0 || gatherAnchorRef.current !== null) {
-          // Already gathering: any further finger is another tap, never a
-          // pinch participant, so it must not sit in touchPointsRef.
-          touchPointsRef.current.delete(e.pointerId)
-        }
-        if (touchPointsRef.current.size === 2 || gatherAnchorRef.current !== null) {
-          const anchorId =
-            gatherAnchorRef.current ??
-            [...touchPointsRef.current.keys()].find((id) => id !== e.pointerId) ??
-            null
-          const anchorPrimary =
-            gatherAnchorRef.current !== null
+      const screenPoint = clientPointToRootLocal(e, root)
+      const point = screenToCanvas(screenPoint, viewport)
+      const hitId = hitTest(selectableBoxes, point)
+      // Navigation answers first, and answers for its own state. Everything
+      // it owns — which finger is down, whether two of them are driving the
+      // viewport, whether this press continues a gather — lives in one value
+      // in `navigation.ts` rather than in the refs this used to read.
+      const navigation = runNavigation(root, {
+        type: 'pointerdown',
+        pointerId: e.pointerId,
+        pointerType: navigationPointerKind(e.pointerType),
+        isPrimary: e.isPrimary,
+        button: e.button,
+        point: screenPoint,
+        timeStamp: e.timeStamp,
+        context: {
+          handMode: tool === 'hand',
+          spaceDown: spaceDownRef.current,
+          hitId,
+          // The anchor a gather would extend. Mid-gather it is the standing
+          // selection; otherwise only a node this press could join to, which
+          // is why entering hand mode — which clears the selection — can
+          // never gather.
+          anchorPrimaryId:
+            navigationRef.current.mode.kind === 'gathering'
               ? selectedId
               : gestureState.kind === 'moving'
                 ? gestureState.nodeId
-                : null
-          const gathered =
-            anchorPrimary === null
-              ? undefined
-              : hitTest(selectableBoxes, screenToCanvas(clientPointToRootLocal(e, root), viewport))
-          if (gathered !== undefined && anchorId !== null) {
-            touchPointsRef.current.delete(e.pointerId)
-            gatherPointersRef.current.add(e.pointerId)
-            if (gatherAnchorRef.current === null) {
-              gatherAnchorRef.current = anchorId
-              // Gathering is a selection act, not a drag. Whatever the anchor
-              // had begun to move is abandoned here — carrying a half-applied
-              // delta into the new multi-selection would jump every node
-              // gathered afterwards by an offset the user never gave it.
-              if (gestureState.kind !== 'idle') {
-                applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
-              }
-            }
-            setMarquee(null)
-            isPanningRef.current = false
-            lastPressRef.current = null
-            doublePressRef.current = null
-            clearLongPress()
-            toggleSelectionMember(anchorPrimary, gathered)
-            return
-          }
-        }
-        if (touchPointsRef.current.size === 2) {
-          // The second finger converts whatever the first finger started
-          // (marquee, node move, double-press arming) into navigation:
-          // cancel it all, then pan/zoom until every finger lifts.
-          pinchActiveRef.current = true
-          setMarquee(null)
-          isPanningRef.current = false
-          lastPressRef.current = null
-          doublePressRef.current = null
-          if (gestureState.kind !== 'idle') {
-            applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
-          }
-          // Capture BOTH fingers, not just the one that arrived second: an
-          // uncaptured first finger crossing outside the root would stop
-          // delivering its move/up events here, leaving a stale entry in
-          // touchPointsRef that would misread a later one-finger press as
-          // a pinch participant.
-          for (const pointerId of touchPointsRef.current.keys()) {
-            trySetPointerCapture(root, pointerId)
-          }
-          activePointerIdRef.current = e.pointerId
-          clearLongPress()
-          return
-        }
-        // Hand mode is navigation-ONLY, so there is no menu for the timer
-        // to open — and arming it anyway is actively harmful: the press
-        // below starts a pan, and 500ms later the timer's teardown would
-        // clear isPanningRef mid-drag, stranding the pan under a finger
-        // that is still moving.
-        if (touchPointsRef.current.size === 1 && tool !== 'hand') {
-          // Arm the long-press menu. Firing abandons whatever the press
-          // started (a node move's 'pressing' state, marquee arming): the
-          // press has become a menu invocation, not a drag.
-          clearLongPress()
-          const screen = clientPointToRootLocal(e, root)
-          longPressRef.current = {
-            pointerId: e.pointerId,
-            screen,
-            timer: setTimeout(() => {
-              longPressRef.current = null
-              if (gestureStateRef.current.kind !== 'idle') {
-                applyResult(
-                  reduceGesture(gestureStateRef.current, canvasRef.current, {
-                    type: 'pointercancel',
-                  }),
-                )
-              }
-              setMarquee(null)
-              isPanningRef.current = false
-              lastPressRef.current = null
-              doublePressRef.current = null
-              // The native long-press this replaces gave a system haptic;
-              // keep that cue so the menu opening under a still-down finger
-              // reads as deliberate, not glitchy.
-              hapticTick()
-              setLongPressPulse(screen)
-              openContextMenuAtRef.current(screen)
-            }, LONG_PRESS_MENU_MS),
-          }
-        }
-      }
-      const screenPointForPan = clientPointToRootLocal(e, root)
-      // Middle-button (or Space-held) drag pans from ANYWHERE — Excalidraw
-      // semantics; a plain left drag on empty space marquee-selects instead.
-      // The hand tool makes EVERY plain press a pan (nodes included): it is
-      // the one-handed touch navigation mode, where a second finger is not
-      // available to promote the gesture.
-      if (e.button === 1 || (e.button === 0 && (spaceDownRef.current || tool === 'hand'))) {
-        e.preventDefault()
-        // Hand mode's own double press: get closer, anchored on what was
-        // pressed. It cannot collide with the double press that creates a
-        // note, because that one is detected further down — past this
-        // early return, which hand mode never gets past.
-        if (tool === 'hand' && e.button === 0 && !spaceDownRef.current) {
-          const previous = lastPressRef.current
-          const isDoublePress =
-            previous !== null &&
-            previous.key === HAND_PRESS_KEY &&
-            e.timeStamp - previous.at <= DOUBLE_PRESS_WINDOW_MS &&
-            Math.hypot(
-              screenPointForPan.x - previous.point.x,
-              screenPointForPan.y - previous.point.y,
-            ) <= DOUBLE_PRESS_SLOP_PX
-          lastPressRef.current = isDoublePress
-            ? null
-            : { key: HAND_PRESS_KEY, at: e.timeStamp, point: screenPointForPan }
-          if (isDoublePress) {
-            setViewport((vp) => zoomAt(vp, screenPointForPan, DOUBLE_PRESS_ZOOM_FACTOR))
-            return
-          }
-        }
-        isPanningRef.current = true
-        lastPanPointRef.current = screenPointForPan
-        return
-      }
+                : null,
+          manipulating: gestureState.kind !== 'idle',
+        },
+      })
+      if (navigation.preventDefault === true) e.preventDefault()
+      if (!navigation.fallThrough) return
       if (e.button !== 0) return
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
@@ -1728,9 +1657,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // press that turns into a drag still gets capture before it can
       // escape the element. Overlay handle/connect gestures are the
       // exception (beginOverlayGesture) — they want capture immediately.
-      const screenPoint = clientPointToRootLocal(e, root)
-      const point = screenToCanvas(screenPoint, viewport)
-      const hitId = hitTest(selectableBoxes, point)
 
       // Double-press detection is OURS, not the browser's `dblclick`: the
       // first press selects the node, which re-renders the DOM under the
@@ -1874,56 +1800,27 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           clearLongPress()
         }
       }
-      // A gathering finger has already acted on its press, and the anchor's
-      // own gesture was cancelled when gathering began — neither may resume
-      // dragging the canvas while the other is still down.
-      if (gatherPointersRef.current.has(e.pointerId) || gatherAnchorRef.current === e.pointerId) {
-        return
-      }
-      if (e.pointerType === 'touch' && touchPointsRef.current.has(e.pointerId)) {
-        const points = touchPointsRef.current
-        const nextPoint = clientPointToRootLocal(e, root)
-        if (pinchActiveRef.current && points.size >= 2) {
-          // The pinch pair is the two longest-lived fingers (Map preserves
-          // insertion order); later fingers are tracked but inert.
-          const [idA, idB] = points.keys()
-          if (e.pointerId === idA || e.pointerId === idB) {
-            const prev = { a: points.get(idA)!, b: points.get(idB)! }
-            const next = {
-              a: e.pointerId === idA ? nextPoint : prev.a,
-              b: e.pointerId === idB ? nextPoint : prev.b,
-            }
-            const { panDelta, zoomFactor, anchor } = computePinchUpdate(prev, next)
-            setViewport((vp) => zoomAt(panBy(vp, panDelta), anchor, zoomFactor))
-          }
-          points.set(e.pointerId, nextPoint)
-          return
-        }
-        points.set(e.pointerId, nextPoint)
-        // A lone finger left behind by a pinch stays inert until it lifts.
-        if (pinchActiveRef.current) return
-      }
+      const screenPoint = clientPointToRootLocal(e, root)
       // First movement of an in-flight gesture: take capture now (see the
       // handlePointerDown comment for why not at the press). Idempotent —
-      // re-capturing the same pointer is a no-op.
+      // re-capturing the same pointer is a no-op. Taken BEFORE the machine
+      // reduces this move, so it reads the pan that the PRESS started rather
+      // than the one this move is about to advance.
       if (
         activePointerIdRef.current === null &&
-        (isPanningRef.current || gestureState.kind !== 'idle')
+        (navigationRef.current.mode.kind === 'panning' || gestureState.kind !== 'idle')
       ) {
         capturePointer(root, e.pointerId)
       }
-      const screenPoint = clientPointToRootLocal(e, root)
+      const navigation = runNavigation(root, {
+        type: 'pointermove',
+        pointerId: e.pointerId,
+        pointerType: navigationPointerKind(e.pointerType),
+        point: screenPoint,
+      })
+      if (!navigation.fallThrough) return
       if (marquee !== null) {
         setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
-        return
-      }
-      if (isPanningRef.current) {
-        const screenDelta = {
-          x: screenPoint.x - lastPanPointRef.current.x,
-          y: screenPoint.y - lastPanPointRef.current.y,
-        }
-        lastPanPointRef.current = screenPoint
-        setViewport((vp) => panBy(vp, screenDelta))
         return
       }
       if (gestureState.kind === 'idle') return
@@ -1939,30 +1836,19 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerUp = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
-      // Ahead of the gather/pinch early returns: this pointer is up whatever
-      // the rest of the handler decides to do about it.
-      downPointersRef.current.delete(e.pointerId)
       const root = rootRef.current
-      // Gathering fingers act on the press, so their release carries no
-      // meaning — running the click/marquee logic here would re-collapse the
-      // very selection the gesture just built. The anchor lifting ends it.
-      if (gatherPointersRef.current.delete(e.pointerId)) return
-      if (gatherAnchorRef.current === e.pointerId) {
-        gatherAnchorRef.current = null
-        touchPointsRef.current.delete(e.pointerId)
-        return
-      }
-      if (e.pointerType === 'touch') {
-        touchPointsRef.current.delete(e.pointerId)
-        if (pinchActiveRef.current) {
-          if (touchPointsRef.current.size === 0) pinchActiveRef.current = false
-          // Fingers lifting out of a pinch never run the click/marquee
-          // release logic — the sequence was navigation, not a gesture.
-          return
-        }
-      }
-      activePointerIdRef.current = null
+      if (root === null) return
+      const navigation = runNavigation(root, {
+        type: 'pointerup',
+        pointerId: e.pointerId,
+        pointerType: navigationPointerKind(e.pointerType),
+      })
+      // A release the machine answered was navigation — a finger leaving a
+      // gather or a pinch, or the end of a pan. None of them run the click
+      // and marquee semantics below: the sequence was never a gesture on the
+      // canvas, and treating its release as one would re-collapse the very
+      // selection the gather just built.
+      if (!navigation.fallThrough) return
       const armed = doublePressRef.current
       doublePressRef.current = null
       if (marquee !== null) {
@@ -2023,10 +1909,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // A drag that began on an edge line was a marquee, not an edge click
         // — drop the press-time edge selection so Delete acts on the nodes.
         setSelectedEdgeId(null)
-        return
-      }
-      if (isPanningRef.current) {
-        isPanningRef.current = false
         return
       }
       if (root === null) return
@@ -2123,19 +2005,16 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
 
     const handlePointerCancel = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (longPressRef.current?.pointerId === e.pointerId) clearLongPress()
-      downPointersRef.current.delete(e.pointerId)
-      // Pointer ids are reused, so a gathering finger left in these refs by a
-      // cancel would silently deaden whichever later touch inherits its id.
-      gatherPointersRef.current.delete(e.pointerId)
-      if (gatherAnchorRef.current === e.pointerId) gatherAnchorRef.current = null
-      if (e.pointerType === 'touch') {
-        touchPointsRef.current.delete(e.pointerId)
-        if (touchPointsRef.current.size === 0) pinchActiveRef.current = false
-      }
-      isPanningRef.current = false
-      activePointerIdRef.current = null
-      applyResult(reduceGesture(gestureState, canvas, { type: 'pointercancel' }))
+      const root = rootRef.current
+      if (root === null) return
+      // The machine's own cancel arm emits the long-press clear, the capture
+      // release and the gesture cancel, in that order — the three things
+      // this handler used to do by hand across four refs.
+      runNavigation(root, {
+        type: 'pointercancel',
+        pointerId: e.pointerId,
+        pointerType: navigationPointerKind(e.pointerType),
+      })
     }
 
     /**
@@ -2156,7 +2035,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * inherits it.
      */
     const handleLostPointerCapture = (e: React.PointerEvent<HTMLDivElement>) => {
-      if (!downPointersRef.current.has(e.pointerId)) return
+      if (!navigationRef.current.down.has(e.pointerId)) return
       handlePointerCancel(e)
     }
 

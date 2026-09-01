@@ -75,6 +75,19 @@ solved with different machinery — exact BigInt rationals against the subject's
 cross-multiplication, cell-by-cell rasterisation against its interval algebra — is what makes the
 comparison mean anything. Calling the production helper from the test is the same code twice.
 
+**A test whose PREMISE this environment cannot establish SKIPS, and says so — probed, never
+inferred.** Three EACCES tests need a file they cannot read, and `chmod 000` does not achieve that
+for root (nor on Windows, where the mode barely means anything): the code under test never
+receives the error it exists to handle, and the failure reads as a broken error path
+(`expected undefined to be an instance of Error` says nothing about uid).
+
+`CAN_DENY_FILE_READ` in `shared/test-utils` writes a file, closes it off and tries to read it,
+rather than asking `getuid() === 0` — which is a guess about a mechanism that capabilities, a
+read-only mount, a user namespace and Windows each decide independently. Guarded from both sides,
+because **a skipped test reads exactly like a passing one**: the probe is checked against a fresh
+mode-000 read, and on CI it MUST be true, so the skip cannot quietly disable those paths for
+everyone while every summary line stays green.
+
 **A guard that never reaches its subject passes, and reads exactly like a guard that checked.**
 The third sibling of the two above, and the one no mutation check finds: here the assertion is
 right and the subject is simply absent from the fixture, so there is nothing for it to find.

@@ -45,47 +45,51 @@ Absolute rules:
 3. Unsure where code goes → load the `package-placement` skill (planned). DI wiring → `di-container` skill (planned).
 4. What to CALL the thing you are placing is `.claude/rules/vocabulary.md` (always-on): ADR-0009's Document model, plus the standing rule that a session fixes vocabulary violations in whatever it already touches, without preserving backward compatibility for internal names. The package names in the table above are themselves on its known-violations list.
 
-These rules are enforced by `tools/arch-lint` (vitest project `arch-lint-node`): a TypeScript-compiler-API scan for banned imports/globals, a package.json dependency-direction check, a per-package allowed-third-party-dependency check, and a circular-value-import check (`cycle-check.ts`, run over `packages/mcp-server/src` + the eight shared-layer packages + `canvas-viewer/src` + `apps/web/src`) — value-aware (a `import type`-only edge does not count) and static-analysis-only, so it cannot see a cross-package cycle; it DOES follow an `@/...` path alias, and had to before `apps/web` could join, because that package writes 115 of its 554 intra-package value edges that way — a fifth. Measured: with the alias resolution removed, a real two-file cycle planted in `apps/web/src` passes the guard green. Declare an alias in `repo-coverage.test.ts`'s `CYCLE_SCAN_ALIASES` when a package adds one, or its edges silently leave the graph; `KNOWN_IMPORT_CYCLES` in `architecture-map.ts` is the allowlist for cycles it finds and does not yet fix, and is **currently empty** — `repo-coverage.test.ts` guards it from both sides, failing on a cycle that is not listed and equally on a listed entry that is no longer a real cycle, so an entry cannot outlive the debt it names — all against this table's data-driven mirror (`tools/arch-lint/src/architecture-map.ts`). It currently covers all eight shared-layer packages (`model`, `codec`, `canvas-render`, `ports`, `facet-engine`, `search`, `loro-adapter`, `server-core`) plus `canvas-viewer`'s narrower scan. Both composition roots (`mcp-server`, `apps/web`) are registered for the dependency-direction guard, and both now have their `src` in the cycle scan too; what stays unscanned for them is the BOUNDARY scan (banned imports/globals), and their third-party surface is open by design, so neither carries an allowed-third-party list. What DOES police `apps/web`'s own source is a separate enforcer outside this tool: `packages/mcp-server/src/server/release/web-app-boundary.test.ts` fails the build when `apps/web` imports a Node builtin or reaches into `src/server`/`src/cli`/`src/daemon`. That split is deliberate — the boundary it guards is the daemon package's own published surface — but it means "is this checked?" has two answers depending on the rule, and only this sentence says so. `adapter-mechanic-check.ts` enforces [ADR-0018](../../docs/contributing/adr/0018-operation-vs-mechanic.md)'s
-one invariant: an ADAPTER (an HTTP route under `server/routes/**`, or an MCP
-tool registration under `server/mcp/**`) may not import a MECHANIC (anything
-under `server/store/`). The composition root's own wiring — `di/`, `app.ts`,
-`http-server.ts` — is deliberately out of scope, since knowing the mechanics
-is its job. `ADAPTERS_REACHING_MECHANICS` in `architecture-map.ts` records
-the edges that exist today: an unlisted edge fails the build, and a listed
-edge that no longer exists fails it too, so an entry cannot outlive the debt
-it names. Neither sees the list GROW, so `ADAPTERS_REACHING_MECHANICS_CEILING`
-pins the count by equality; ADR-0018 (Accepted) carries the burn-down. `corrupt-stored-data` is excluded and says
-why — an error taxonomy an adapter reads to pick a status code is
-translation, which is an adapter's job, and listing it would put five
-permanently-unshrinkable entries in a list whose whole value is that it
-shrinks.
+These rules are enforced by `tools/arch-lint` (vitest project `arch-lint-node`):
+a TypeScript-compiler-API scan for banned imports/globals, a package.json
+dependency-direction check, a per-package allowed-third-party-dependency check,
+a circular-value-import check, and the adapter-mechanic check described below.
+It reads this table's data-driven mirror,
+`tools/arch-lint/src/architecture-map.ts`.
 
-A mechanic is named by its FULL path under `store/`, at whatever depth, so
-the database layer reads as `db/<module>`. It used to be invisible: the
-matcher read a single path segment, so every `store/db/**` import from an
-adapter passed the guard silently. That was a blind spot rather than a
-decision, and it read as coverage until someone measured it — four such
-edges existed when the regex was widened, all under `mcp/`. The depth is
-unbounded on purpose: `store/db/` is how deep the tree happens to go today,
-not a property of it, and a matcher enumerating the depths it has seen is
-the same blind spot one directory further down.
+Three things it enforces that a session outside `tools/arch-lint` still has to
+know, because the reader who trips them is elsewhere:
 
-The wiring exemption above is a DIRECTORY list, which misses a composition
-root that happens to live inside an adapter tree. `ADAPTER_SCAN_EXEMPT_FILES`
-carries those by file, with the reason each is not an adapter — today
-`mcp/index.ts`, the McpServer factory and stdio entry point, which makes the
-same `createContainer` / `resolveServerDeps` calls `http-server.ts` does. It
-is a separate list from `ADAPTERS_REACHING_MECHANICS` on purpose: an
-exemption is a CLASSIFICATION, not debt, and a composition root's edges will
-never shrink. Guarded from both sides like the allowlist — an entry that
-suppresses nothing fails the build, so it cannot decay into decoration.
+- **The cycle check (`cycle-check.ts`) is static and value-aware, so a
+  CROSS-PACKAGE cycle is invisible to it.** The one that exists is guarded by
+  hand, below.
+- **A package that adds an `@/...` path alias must declare it** in
+  `repo-coverage.test.ts`'s `CYCLE_SCAN_ALIASES`, or that package's edges
+  silently leave the cycle graph.
+- **An ADAPTER may not import a MECHANIC** — `adapter-mechanic-check.ts`
+  enforcing [ADR-0018](../../docs/contributing/adr/0018-operation-vs-mechanic.md)'s
+  one invariant. An adapter is an HTTP route under `server/routes/**` or an MCP
+  tool registration under `server/mcp/**`; a mechanic is anything under
+  `server/store/`, at any depth. The composition root's own wiring (`di/`,
+  `app.ts`, `http-server.ts`) is deliberately out of scope, since knowing the
+  mechanics is its job. The existing edges are allowlisted AND their count is
+  pinned by equality, so adding one fails until someone raises the ceiling
+  deliberately. ADR-0018 is Accepted and carries the burn-down order.
 
-The other file that reached `store/db` from under `mcp/` was moved instead
-of exempted. `mcp/session-resolver.ts` had stopped being an MCP concern the
-moment `http-server.ts` called it, so it is now `server/current-workspace.ts`
-— which also retires a name that said `session` about a workspace.
+`apps/web`'s own source is policed by a separate enforcer outside this tool
+(`packages/mcp-server/src/server/release/web-app-boundary.test.ts`), so "is
+this checked?" has two answers depending on the rule. `vocabulary-check.test.ts`
+is the mechanical half of `.claude/rules/vocabulary.md`, failing on a retired
+word (today `slug`) under `apps/web/src` or `packages/*/src`.
 
-`tools/arch-lint` also hosts the one part of `.claude/rules/vocabulary.md` that can be mechanical rather than prose: `vocabulary-check.test.ts` fails on a retired word appearing anywhere under `apps/web/src` or `packages/*/src`. Only words with no legitimate meaning left qualify (today: `slug`) — `canvas` never will, because it is correct for the spatial surface and wrong only as the container noun, and telling those apart needs a reader. `migrations/` is excluded as history, and `EXEMPT_FILES` carries the one other file writing history, with its reason. Extend the package list as later shared-layer packages land. Per-package details live in `.claude/rules/package-<name>.md` (path-scoped). Note: `./skills/` (product MCP skills) is unrelated to `.claude/skills/` (dev workflow skills).
+This file is itself guarded: `repo-coverage.test.ts`'s doc-sync block fails
+when it stops naming a shared-layer package, a composition root,
+`web-app-boundary.test.ts` or `cycle-check.ts` — so an edit that drops one of
+those is caught rather than quietly making the map wrong.
+
+Every allowlist in the tool is guarded from both sides, so an entry cannot
+outlive the debt it names. What each scan covers, the measurements behind the
+lists, and the blind spots found by measuring rather than reading are
+`.claude/rules/tool-arch-lint.md`, path-scoped to `tools/arch-lint/**` — a
+`tool-` rather than a `package-` rule, because arch-lint lives in `tools/`.
+Per-package details are `.claude/rules/package-<name>.md`, likewise
+path-scoped. Note: `./skills/` (product MCP skills) is unrelated to
+`.claude/skills/` (dev workflow skills).
 
 **Work the daemon does on its own is declared before it is armed.**
 `packages/mcp-server/src/server/background-work.ts` is the registry, and the
