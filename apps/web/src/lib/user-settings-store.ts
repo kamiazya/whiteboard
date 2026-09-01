@@ -103,6 +103,25 @@ const storageSettingsSchema = z
     dismissedBetaBannerAt: z.string().optional(),
     dismissedDaemonCtaAt: z.string().optional(),
     dismissedDaemonCtaInstanceId: z.string().optional(),
+    /**
+     * Daemon workspaces this browser holds a replica of (ADR-0023), keyed by
+     * the daemon workspace id the replica record is stored under. UI-hint
+     * state like lastConnected*: the replica record itself lives in
+     * IndexedDB, and this registry only says when it was last synced and
+     * from where — a missing entry means "claim no cache", never "delete
+     * the bytes".
+     */
+    replicas: z
+      .record(
+        z.string(),
+        z
+          .object({
+            daemonBaseUrl: httpUrl,
+            syncedAt: z.string(),
+          })
+          .strict(),
+      )
+      .optional(),
   })
   .strict()
 
@@ -135,6 +154,13 @@ const promotionResultSchema = z
      * those cannot say which workspace moved, so no disclosure renders.
      */
     sourceWorkspaceId: z.string().optional(),
+    /**
+     * When the demote pull that follows a successful move cached the daemon
+     * workspace's record back into this browser (ADR-0023 decision 2).
+     * Absent when the pull failed or predates the feature — the report then
+     * simply claims no cache.
+     */
+    replicaSyncedAt: z.string().optional(),
     ok: z.boolean(),
     promotedCount: z.number().optional(),
     shadowedPaths: z.array(z.string()).optional(),

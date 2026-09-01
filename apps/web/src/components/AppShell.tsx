@@ -67,6 +67,30 @@ function PromotedElsewhereNotice({
   )
 }
 
+/**
+ * ADR-0023: a daemon workspace this browser holds a replica of says so where
+ * the workspace is named. A fact, not a promise — reads are not served from
+ * the cache yet, so the copy claims presence and nothing more. Silent for a
+ * workspace with no registry entry, and while the row (hence the id) has not
+ * loaded: a claim needs its subject.
+ */
+function ReplicaCacheNotice({
+  settingsStore,
+  workspaceId,
+}: {
+  settingsStore: ReturnType<typeof createUserSettingsStore>
+  workspaceId: string | null
+}) {
+  if (workspaceId === null) return null
+  const replica = settingsStore.load().storage.replicas?.[workspaceId]
+  if (replica === undefined) return null
+  return (
+    <p data-testid="replica-cache-notice" className="text-muted-foreground">
+      A copy of this workspace is cached in this browser.
+    </p>
+  )
+}
+
 export interface AppShellProps {
   readonly daemon: boolean
   /**
@@ -147,13 +171,16 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
   const workspaceHandleInAddress = parseWorkspaceRoute(location.pathname)?.workspace ?? null
   // The handle until the row lands: a true statement about where you are,
   // and better than a blank in an accessible name.
+  const activeRow =
+    workspaceHandleInAddress === null
+      ? undefined
+      : rows.find((w) => workspaceHandle(w) === workspaceHandleInAddress)
   const activeName =
     workspaceHandleInAddress === null
       ? undefined
-      : (() => {
-          const row = rows.find((w) => workspaceHandle(w) === workspaceHandleInAddress)
-          return row === undefined ? workspaceHandleInAddress : workspaceLabel(row)
-        })()
+      : activeRow === undefined
+        ? workspaceHandleInAddress
+        : workspaceLabel(activeRow)
 
   return (
     <header className="flex h-10 shrink-0 items-center gap-2 border-b bg-background px-3">
@@ -228,6 +255,12 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         }
         onWorkInBrowser={onWorkInBrowser}
       >
+        {connection?.state.keeper === 'daemon' && (
+          <ReplicaCacheNotice
+            settingsStore={settingsStore}
+            workspaceId={activeRow?.workspaceId ?? null}
+          />
+        )}
         {connection?.state.keeper === 'browser' && (
           <>
             <p className="text-muted-foreground">

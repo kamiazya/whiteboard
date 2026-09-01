@@ -375,6 +375,38 @@ describe('AppShell — the mark as the connection carrier', () => {
     expect(notice.textContent).not.toMatch(/unreachable|offline|cannot be reached/i)
   })
 
+  it('the daemon popover states the replica cache for the active workspace', async () => {
+    // ADR-0023: a daemon workspace this browser holds a replica of says so
+    // where the workspace is named — the popover — not in a settings corner.
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: {
+        ...current.storage,
+        replicas: {
+          '01ARZ3NDEKTSV4RRFFQ69G5FAV': {
+            daemonBaseUrl: 'http://127.0.0.1:3099',
+            syncedAt: '2026-09-01T12:00:00.000Z',
+          },
+        },
+      },
+    }))
+    setShellConnection({ state: { keeper: 'daemon', session: 'synced' } })
+    renderShell(true, '/w/default', undefined, WORKSPACES)
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    const notice = await screen.findByTestId('replica-cache-notice')
+    expect(notice.textContent).toMatch(/cached in this browser/i)
+  })
+
+  it('no replica claim for a daemon workspace this browser holds no replica of', async () => {
+    setShellConnection({ state: { keeper: 'daemon', session: 'synced' } })
+    renderShell(true, '/w/default', undefined, WORKSPACES)
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    // Subject presence: the popover named the workspace, so the absence is a
+    // decision, not an unopened menu.
+    expect(await screen.findByRole('menuitem', { name: /design team/i })).toBeTruthy()
+    expect(screen.queryByTestId('replica-cache-notice')).toBeNull()
+  })
+
   it('a workspace that was not the one moved gets no move disclosure', async () => {
     // The marker is per-workspace: since ADR-0019 this browser keeps many
     // workspaces, and telling a never-promoted one "this workspace has been
