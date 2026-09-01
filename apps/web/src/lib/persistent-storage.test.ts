@@ -1,5 +1,9 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
-import { ensurePersistentStorage, queryPersistentStorage } from './persistent-storage.js'
+import {
+  ensurePersistentStorage,
+  queryPersistentStorage,
+  queryStorageEstimate,
+} from './persistent-storage.js'
 
 // jsdom has no navigator.storage — define/restore it per test.
 function withStorage(impl: Partial<StorageManager> | undefined) {
@@ -40,5 +44,28 @@ describe('ensurePersistentStorage', () => {
     withStorage(undefined)
     await expect(ensurePersistentStorage()).resolves.toBeNull()
     await expect(queryPersistentStorage()).resolves.toBeNull()
+  })
+})
+
+describe('queryStorageEstimate', () => {
+  it('reports usage and quota as bytes', async () => {
+    withStorage({ estimate: vi.fn().mockResolvedValue({ usage: 42, quota: 1024 }) })
+    await expect(queryStorageEstimate()).resolves.toEqual({ usageBytes: 42, quotaBytes: 1024 })
+  })
+
+  it('returns null where the API is unavailable', async () => {
+    withStorage(undefined)
+    await expect(queryStorageEstimate()).resolves.toBeNull()
+  })
+
+  it('returns null when the browser answers without numbers', async () => {
+    // StorageEstimate's fields are both optional in the spec.
+    withStorage({ estimate: vi.fn().mockResolvedValue({}) })
+    await expect(queryStorageEstimate()).resolves.toBeNull()
+  })
+
+  it('reports a throwing estimate as null, not a crash', async () => {
+    withStorage({ estimate: vi.fn().mockRejectedValue(new Error('denied')) })
+    await expect(queryStorageEstimate()).resolves.toBeNull()
   })
 })
