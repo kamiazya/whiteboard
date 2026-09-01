@@ -35,11 +35,10 @@ import { assertScannedLedger } from '../../test-utils/coverage-ledger.js'
 // The editor plus the hooks its state moved to: an extraction moves state,
 // not away, so a moved useState must stay scanned. A new hook that declares
 // state joins this list in the same commit that moves it.
-const sources = import.meta.glob(['./SpatialEditor.tsx', './use-editor-measurements.ts'], {
-  query: '?raw',
-  import: 'default',
-  eager: true,
-}) as Record<string, string>
+const sources = import.meta.glob(
+  ['./SpatialEditor.tsx', './use-editor-measurements.ts', './use-file-seam-scene.ts'],
+  { query: '?raw', import: 'default', eager: true },
+) as Record<string, string>
 
 type StateCoverage =
   /** The composite-state property drives this and asserts about it. */

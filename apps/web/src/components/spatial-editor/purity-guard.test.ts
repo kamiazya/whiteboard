@@ -86,8 +86,13 @@ describe('file seams reach every render path', () => {
     // drag-static backdrop, resize preview. When each listed the seams by
     // hand, adding one meant remembering four places, and the failure mode
     // is silent: content that renders committed and vanishes mid-gesture.
+    // The single build site lives in useFileSeamScene; the editor must take
+    // the shared object from there rather than assembling a second one.
+    const hookSource = modules['./use-file-seam-scene.ts'] as string
+    expect(hookSource.match(/const fileSeamOptions = useMemo\(/g) ?? []).toHaveLength(1)
     const source = modules['./SpatialEditor.tsx'] as string
-    expect(source.match(/const fileSeamOptions = useMemo\(/g) ?? []).toHaveLength(1)
+    expect(source.match(/const fileSeamOptions = useMemo\(/g) ?? []).toHaveLength(0)
+    expect(source.match(/useFileSeamScene\(/g) ?? []).toHaveLength(1)
     // Two entry points build scenes now, not one: the committed path goes
     // through `useWorkerScene` (which lays out in a worker and falls back to
     // `renderCanvasToSvg` itself), while the gesture overlays still call the
