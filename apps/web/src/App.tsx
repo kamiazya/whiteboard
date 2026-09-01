@@ -50,6 +50,7 @@ import {
   workspacePath,
   workspaceRoutePath,
 } from './lib/app-routes.js'
+import type { ConnectedDaemon } from './lib/daemon-auth-fetch.js'
 import {
   BROWSER_CAPABILITIES,
   type ProviderState,
@@ -660,7 +661,7 @@ export function App({ providerState }: AppProps) {
   // that only exists inside one of those branches' own scope.
   const grantPairedForSettings = grantConnection?.status === 'paired' ? grantConnection : null
   const providerStateForSettings = providerState ?? defaultProviderState
-  const settingsDaemon: { baseUrl: string; token: string | null } | undefined = forcedBrowser
+  const settingsDaemon: ConnectedDaemon | undefined = forcedBrowser
     ? undefined
     : daemonConnection.status === 'paired'
       ? {

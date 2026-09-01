@@ -29,13 +29,14 @@ import {
 } from '@/components/ui/dialog'
 import { getAppLogger } from '@/lib/app-logger'
 import { createDaemonFetch, listWorkspaces } from '@/lib/daemon-api-client'
+import type { ConnectedDaemon } from '@/lib/daemon-auth-fetch'
 import type { PromotionResultRecord, UserSettings } from '@/lib/user-settings-store'
 import { type WorkspaceIdentity, workspaceLabel } from '@/lib/workspace-handle'
 
 const log = getAppLogger('promote-workspace-section')
 
 export interface PromoteWorkspaceSectionProps {
-  daemon?: { baseUrl: string; token: string | null }
+  daemon?: ConnectedDaemon
   settingsStore: {
     load: () => UserSettings
     update: (fn: (current: UserSettings) => UserSettings) => void
