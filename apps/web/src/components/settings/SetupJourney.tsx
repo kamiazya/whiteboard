@@ -2,7 +2,9 @@ import { Check } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Link } from 'react-router-dom'
 import { settingsPath } from '@/lib/app-routes'
+import { formatBytes } from '@/lib/format-bytes'
 import type { InstallState } from '@/lib/install-prompt-store'
+import type { BrowserStorageEstimate } from '@/lib/persistent-storage'
 
 export type PersistStepState = 'unknown' | 'granted' | 'browser-managed' | 'todo'
 
@@ -21,6 +23,14 @@ export interface SetupJourneyProps {
   install: InstallState['status']
   onInstall: () => void
   daemonConnected: boolean
+  /**
+   * Each step carries its own measured evidence (no separate storage
+   * report surface — the journey is the one place). null/undefined = no
+   * figure available; the step renders without one.
+   */
+  estimate?: BrowserStorageEstimate | null
+  /** Total bytes the connected companion app keeps; null/undefined = unknown. */
+  daemonStorageBytes?: number | null
 }
 
 type StepKind = 'done' | 'action' | 'blocked'
@@ -31,6 +41,8 @@ interface Step {
   title: string
   state: string
   desc?: string
+  /** Measured evidence for this step (usage figures), shown under the desc. */
+  detail?: ReactNode
   action?: ReactNode
   hint?: string
 }
@@ -52,7 +64,13 @@ export function SetupJourney({
   install,
   onInstall,
   daemonConnected,
+  estimate,
+  daemonStorageBytes,
 }: SetupJourneyProps) {
+  const usageDetail =
+    estimate == null
+      ? undefined
+      : `${formatBytes(estimate.usageBytes)} used · ${formatBytes(estimate.quotaBytes)} available`
   const steps: Step[] = [
     {
       key: 'draw',
@@ -67,12 +85,14 @@ export function SetupJourney({
           kind: 'done',
           title: 'Protect your data',
           state: persist === 'granted' ? 'granted' : 'managed by the browser',
+          detail: usageDetail,
         }
       : {
           key: 'protect',
           kind: 'action',
           title: 'Protect your data',
           state: persist === 'unknown' ? '…' : 'not granted yet',
+          detail: usageDetail,
           desc: 'Ask the browser to keep your documents even when it is running low on space — without this it may delete them to free up room.',
           action:
             persist === 'todo' ? (
@@ -112,7 +132,21 @@ export function SetupJourney({
             hint: 'Your browser’s menu may offer Install or Add to Home Screen.',
           },
     daemonConnected
-      ? { key: 'daemon', kind: 'done', title: 'Connect the companion app', state: 'connected' }
+      ? {
+          key: 'daemon',
+          kind: 'done',
+          title: 'Connect the companion app',
+          state: 'connected',
+          detail:
+            daemonStorageBytes == null ? undefined : (
+              <>
+                {`${formatBytes(daemonStorageBytes)} on this computer · `}
+                <Link to={settingsPath('connections')} className="underline">
+                  breakdown
+                </Link>
+              </>
+            ),
+        }
       : {
           key: 'daemon',
           kind: 'action',
@@ -166,6 +200,14 @@ export function SetupJourney({
             </p>
             {step.desc !== undefined && (
               <p className="mt-0.5 text-xs text-muted-foreground">{step.desc}</p>
+            )}
+            {step.detail !== undefined && (
+              <p
+                data-journey-detail={step.key}
+                className="mt-0.5 font-mono text-[11px] text-muted-foreground"
+              >
+                {step.detail}
+              </p>
             )}
             {step.action}
             {step.hint !== undefined && (

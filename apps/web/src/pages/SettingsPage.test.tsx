@@ -545,3 +545,69 @@ describe('the back controls', () => {
     expect(link.textContent).toBe('')
   })
 })
+
+// Each journey step carries its own measured evidence (user decision,
+// 2026-09-01): the Protect step the browser's usage/quota, the companion
+// step what the daemon keeps. No separate storage surface.
+describe('SettingsPage — storage evidence wiring', () => {
+  afterEach(() => {
+    // jsdom has no navigator.storage; drop whatever a test defined.
+    Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
+  })
+
+  it('feeds the journey the browser usage estimate', async () => {
+    Object.defineProperty(navigator, 'storage', {
+      value: { estimate: async () => ({ usage: 2_621_440, quota: 107_374_182_400 }) },
+      configurable: true,
+    })
+    renderAt('/settings/data')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(await within(mobile).findByText(/2\.5 MiB used/)).toBeTruthy()
+  })
+
+  it('feeds the journey the companion storage total when connected', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (input: RequestInfo | URL) => {
+        const url = typeof input === 'string' ? input : input.toString()
+        if (url.includes('/api/runtime/storage')) {
+          // The contract requires ALL seven buckets — a partial byCategory is
+          // rejected by storageReportPayloadSchema (deliberately, see its doc).
+          const bucket = { bytes: 0, files: 0 }
+          return new Response(
+            JSON.stringify({
+              totalBytes: 108_003_328,
+              fileCount: 3,
+              byCategory: {
+                blobs: bucket,
+                versions: bucket,
+                files: bucket,
+                exports: bucket,
+                logs: bucket,
+                db: bucket,
+                other: bucket,
+              },
+            }),
+            { status: 200, headers: { 'Content-Type': 'application/json' } },
+          )
+        }
+        return new Response('{}', { status: 404, headers: { 'Content-Type': 'application/json' } })
+      }),
+    )
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(await within(mobile).findByText(/103\.0 MiB on this computer/)).toBeTruthy()
+  })
+
+  it('shows no companion figure when the report fetch fails', async () => {
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async () => new Response('nope', { status: 500 })),
+    )
+    renderAt('/settings/data', { baseUrl: 'http://127.0.0.1:9999', token: 'tok' })
+    const mobile = screen.getByTestId('settings-mobile')
+    // The step itself still reports connected — only the figure is absent.
+    expect(await within(mobile).findByText('connected')).toBeTruthy()
+    expect(mobile.querySelector('[data-journey-detail="daemon"]')).toBeNull()
+  })
+})
