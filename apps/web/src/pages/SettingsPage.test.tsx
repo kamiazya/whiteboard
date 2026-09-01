@@ -493,3 +493,55 @@ describe('SettingsPage — disconnecting from a daemon', () => {
     expect(screen.queryByTestId('settings-disconnect')).toBeNull()
   })
 })
+
+describe('the Developer section', () => {
+  it('is where gesture diagnostics live, not Data & app', () => {
+    renderAt('/settings/developer')
+    const mobile = screen.getByTestId('settings-mobile')
+    expect(within(mobile).getByText('Gesture diagnostics')).toBeTruthy()
+
+    cleanup()
+    renderAt('/settings/data')
+    const dataMobile = screen.getByTestId('settings-mobile')
+    // Data & app keeps the app-version row; diagnostics moved out from
+    // under it, so a user looking for either is not asked to guess.
+    expect(within(dataMobile).getByText('App version')).toBeTruthy()
+    expect(within(dataMobile).queryByText('Gesture diagnostics')).toBeNull()
+  })
+
+  it('is listed alongside the other sections', () => {
+    renderAt('/settings')
+    expect(within(screen.getByTestId('settings-mobile')).getByText('Developer')).toBeTruthy()
+    expect(
+      within(screen.getByTestId('settings-desktop')).getByRole('link', { name: /developer/i }),
+    ).toBeTruthy()
+  })
+})
+
+describe('the back controls', () => {
+  /**
+   * Every other control in this shell says what it is with a glyph — the
+   * section rows, the gear that opens settings, the top bar's own back.
+   * These three read as text in the middle of that, so they are icons with
+   * an accessible name instead: no visible words, still announced.
+   */
+  it('carry an accessible name and no visible text', () => {
+    renderAt('/settings')
+    const desktopBack = within(screen.getByTestId('settings-desktop')).getByRole('button', {
+      name: /back/i,
+    })
+    expect(desktopBack.textContent).toBe('')
+    const mobileBack = within(screen.getByTestId('settings-mobile')).getByRole('button', {
+      name: /back/i,
+    })
+    expect(mobileBack.textContent).toBe('')
+  })
+
+  it('the mobile section detail returns to the list with a named glyph too', () => {
+    renderAt('/settings/data')
+    const link = within(screen.getByTestId('settings-mobile')).getByRole('link', {
+      name: /settings/i,
+    })
+    expect(link.textContent).toBe('')
+  })
+})
