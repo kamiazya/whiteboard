@@ -10,11 +10,7 @@ import { DocumentThumbnail } from './DocumentThumbnail.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import { FolderBreadcrumb } from './FolderBreadcrumb.js'
 import { FolderContentsList } from './FolderContentsList.js'
-import {
-  type DocumentSearchHit,
-  type WorkspaceFilesSource,
-  WorkspaceMissingError,
-} from './files-source.js'
+import { type WorkspaceFilesSource, WorkspaceMissingError } from './files-source.js'
 import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
@@ -23,13 +19,10 @@ import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments } from './search-documents.js'
 import { TrashSection } from './TrashSection.js'
+import { useBrowserColumns } from './use-browser-columns.js'
+import { useDebouncedDocumentSearch } from './use-debounced-document-search.js'
 import { WorkspaceFileTree } from './WorkspaceFileTree.js'
 import { WorkspaceFolderTree } from './WorkspaceFolderTree.js'
-
-/** One screenful of results; the ranking makes a longer list noise. */
-const SEARCH_LIMIT = 20
-/** Long enough that typing a word is one search, short enough to feel live. */
-const SEARCH_DEBOUNCE_MS = 150
 
 export interface WorkspaceFilesPanelProps {
   /**
@@ -85,47 +78,6 @@ export interface WorkspaceFilesPanelProps {
 }
 
 /**
- * How many columns stand between the workspace and the preview.
- *
- * `one` is the whole tree — folders and documents together, reachable
- * without moving anything, which is what you want when you know where you
- * are going. `two` splits it: folders on the left, that folder's contents
- * as cards beside them, which is what you want when you are looking rather
- * than navigating. Neither is a subset of the other, which is why this is a
- * toggle and not a width breakpoint.
- */
-export type BrowserColumns = 'one' | 'two'
-
-const COLUMNS_STORAGE_KEY = 'whiteboard.document-browser.columns.v1'
-
-/**
- * The column count is a per-device PREFERENCE, deliberately not part of the
- * address: a link someone shares must not impose the sender's layout on
- * whoever opens it. The open folder is the other side of that line — it is
- * what you are looking at, so it lives in the URL.
- *
- * Every access is guarded because storage does not merely come back empty
- * when it is unavailable — a private window or blocked site data makes the
- * accessor itself throw — and because nothing stops the stored value being
- * anything at all.
- */
-function readStoredColumns(): BrowserColumns {
-  try {
-    return globalThis.localStorage?.getItem(COLUMNS_STORAGE_KEY) === 'one' ? 'one' : 'two'
-  } catch {
-    return 'two'
-  }
-}
-
-function storeColumns(next: BrowserColumns): void {
-  try {
-    globalThis.localStorage?.setItem(COLUMNS_STORAGE_KEY, next)
-  } catch {
-    // A remembered layout is a courtesy; losing it must never break the view.
-  }
-}
-
-/**
  * How a write that landed is named once its list refresh failed. The verb is
  * the message: it says what is now TRUE despite the stale list, which is what
  * stops the person pressing again.
@@ -165,7 +117,7 @@ export function WorkspaceFilesPanel({
   // '' is the workspace root, which is where a freshly loaded tree starts —
   // unless the address named a folder, which is the whole point of naming it.
   const [folder, setFolder] = useState(initialFolder ?? '')
-  const [columns, setColumns] = useState<BrowserColumns>(readStoredColumns)
+  const { columns, chooseColumns } = useBrowserColumns()
   /**
    * A write that LANDED, whose list refresh or open failed after the fact.
    * Separate from the refusal states because the two need opposite things:
@@ -214,15 +166,13 @@ export function WorkspaceFilesPanel({
   // handler-side early return would read a stale closure in exactly the
   // same-tick case it exists to catch.
   const [creating, setCreating] = useState(false)
-  const [query, setQuery] = useState('')
-  // Search results come from the SOURCE now — the content it can read is
-  // the whole point, and no filter over the loaded list can see a body.
-  const [hits, setHits] = useState<readonly DocumentSearchHit[] | null>(null)
-  // True when the content search could not be reached — an older daemon
-  // without the route, or a network that said no. The panel then answers
-  // from the list it already holds and SAYS that it did, because a quietly
-  // narrower answer is indistinguishable from a document that is not there.
-  const [searchDegraded, setSearchDegraded] = useState(false)
+  const {
+    query,
+    setQuery,
+    hits,
+    searchDegraded,
+    resetResults: resetSearchResults,
+  } = useDebouncedDocumentSearch(source, revision)
   // The object-action menu: which document was right-clicked, and where.
   const [cardMenu, setCardMenu] = useState<{
     entry: WorkspaceDocumentEntry
@@ -258,41 +208,6 @@ export function WorkspaceFilesPanel({
 
   const readList = useCallback(() => source.listDocuments(), [source])
 
-  // Debounced, and the LATEST query decides: a slower answer for a query
-  // the user has already moved on from must never replace a newer one, so
-  // the cleanup marks its own request stale rather than trusting arrival
-  // order.
-  useEffect(() => {
-    const trimmed = query.trim()
-    if (trimmed === '' || trimmed.startsWith('#')) {
-      setHits(null)
-      setSearchDegraded(false)
-      return
-    }
-    let stale = false
-    const timer = setTimeout(() => {
-      source
-        .searchDocuments(trimmed, SEARCH_LIMIT)
-        .then((results) => {
-          if (stale) return
-          setHits(results)
-          setSearchDegraded(false)
-        })
-        .catch(() => {
-          if (stale) return
-          setHits(null)
-          setSearchDegraded(true)
-        })
-    }, SEARCH_DEBOUNCE_MS)
-    return () => {
-      stale = true
-      clearTimeout(timer)
-    }
-    // `revision` too: results computed against the old content can name a
-    // document that has since been renamed or deleted, and a row that opens
-    // nothing is worse than a slower answer.
-  }, [query, source, revision])
-
   // Through a ref so it never joins an effect's dependencies: a host that
   // passes an inline arrow would otherwise re-run the workspace-load effect
   // on every render of the page above.
@@ -303,11 +218,6 @@ export function WorkspaceFilesPanel({
   const onOpenDocumentRef = useRef(onOpenDocument)
   onOpenDocumentRef.current = onOpenDocument
   const lastReadListRef = useRef(readList)
-
-  const chooseColumns = (next: BrowserColumns) => {
-    setColumns(next)
-    storeColumns(next)
-  }
 
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
@@ -330,8 +240,7 @@ export function WorkspaceFilesPanel({
     // clickable. The search effect does re-run on a source change, but only
     // after its debounce — until then these rows name documents that are not
     // here.
-    setHits(null)
-    setSearchDegraded(false)
+    resetSearchResults()
     // Both name a path, and their message is about a write that happened
     // somewhere else.
     setRefreshError(null)
