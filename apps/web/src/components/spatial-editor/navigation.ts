@@ -30,8 +30,16 @@ import { computePinchUpdate } from './touch-pinch.js'
 import type { Point } from './viewport.js'
 
 /**
- * Window for double-press detection. Matches the common OS double-click
- * interval; not user-configurable today.
+ * Window for double-press detection, for BOTH of this editor's double
+ * presses — hand mode's zoom, which this module decides, and the select
+ * tool's edit-or-create, which the component decides past the `fallThrough`
+ * seam. Matches the common OS double-click interval; not user-configurable
+ * today.
+ *
+ * One definition because a user pressing twice quickly is performing one
+ * gesture whichever tool is selected. Two constants of the same value is how
+ * that stops being true silently: tuning the window for one leaves the other
+ * where it was, and nothing fails.
  */
 export const DOUBLE_PRESS_WINDOW_MS = 400
 

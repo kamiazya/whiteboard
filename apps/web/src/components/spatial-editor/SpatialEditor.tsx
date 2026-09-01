@@ -150,6 +150,7 @@ import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
   createIdleNavigation,
+  DOUBLE_PRESS_WINDOW_MS,
   type NavigationEvent,
   type NavigationResult,
   type NavigationState,
@@ -432,11 +433,6 @@ function navigationPointerKind(pointerType: string): PointerKind {
 
 const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
-/**
- * Window for OUR double-press detection (see handlePointerDown). Matches the
- * common OS double-click interval; not user-configurable today.
- */
-const DOUBLE_PRESS_WINDOW_MS = 400
 
 /** Breathing room kept around framed content (zoom to fit / selection). */
 const FRAME_MARGIN_PX = 24
