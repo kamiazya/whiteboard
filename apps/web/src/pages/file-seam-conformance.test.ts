@@ -56,7 +56,15 @@ async function read(page: string): Promise<string> {
  * contribution is declared through the facet definition rather than spelled
  * at a call site; resolving the registry is what shows it is real.
  */
-const SHARED_CANVAS_CHROME = ['CanvasDisplaySettings', 'WorkspaceTopBar'] as const
+const SHARED_CANVAS_CHROME = [
+  'CanvasDisplaySettings',
+  'WorkspaceTopBar',
+  // The two-row grid <main> shell: everything header-shaped stacks in the
+  // auto row and the editor owns minmax(0,1fr). Both pages carried the same
+  // grid template and the same sr-only <h1> landmark by hand; the shell owns
+  // them once, so a layout or a11y drift between modes cannot happen quietly.
+  'DocumentPageShell',
+] as const
 
 /**
  * Chrome one mode has and the other cannot, per ADR-0004 — capability-gated

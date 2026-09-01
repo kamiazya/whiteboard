@@ -7,6 +7,7 @@ import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } fro
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
+import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -823,63 +824,62 @@ export function BrowserDocumentPage({
     // background no longer shows. Anything this element does not paint itself
     // falls through to the browser's default black backdrop — which turned
     // the canvas area black under a light theme.
-    <main
-      ref={mainRef}
-      className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)] bg-background"
-    >
-      <div className="min-w-0">
-        {/* Visually-hidden heading landmark: WorkspaceTopBar's canvas switcher
-          is the visible title control, but the page keeps a real <h1> for
-          accessibility trees. */}
-        <h1 className="sr-only">{renderState.snapshot.name}</h1>
-        {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
+    <DocumentPageShell
+      srTitle={renderState.snapshot.name}
+      mainRef={mainRef}
+      mainClassName="bg-background"
+      header={
+        <>
+          {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
             switcher, rename, menus — steps aside. The floating control below
             replaces its exit path, Escape still works natively, and the dock
             stays because editing is what the extra space is FOR. */}
-        {!isFullscreen && (
-          <Suspense
-            fallback={
-              <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
-            }
-          >
-            <WorkspaceTopBar
-              // Local mode names documents through its own store, not through
-              // the daemon's `/names`, so the identity the bar offers is unused
-              // here and `documentName`/`onTitleChange` stay the source.
-              titleSlot={() => documentTitleSlot}
-              dataMode="local"
-              workspaceId="local"
-              path={renderState.snapshot.path}
-              // The way out of the editor. This page had none until now —
-              // the app-shell brand mark was the only exit, and it says
-              // nothing about where it goes.
-              onNavigateBack={() => {
-                const handle = browserWorkspaceHandleOrNull()
-                navigate(handle === null ? indexPath() : workspacePath(handle))
-              }}
-              isFullscreen={isFullscreen}
-              onToggleFullscreen={() => {
-                // Entering hides this whole bar; the floating exit control and
-                // native Escape are the ways back out. requestFullscreen can
-                // REJECT (Permissions-Policy, an iframe without
-                // allow="fullscreen", no user activation) — a swallowed
-                // rejection is unhandled-rejection noise, so both directions log.
-                if (document.fullscreenElement)
-                  document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-                else
-                  mainRef.current
-                    ?.requestFullscreen()
-                    .catch((err) => log.warn('requestFullscreen rejected', err))
-              }}
-              capabilities={{
-                versions: capabilities.versions,
-                branches: capabilities.branches,
-                merge: capabilities.merge,
-              }}
-            />
-          </Suspense>
-        )}
-      </div>
+          {!isFullscreen && (
+            <Suspense
+              fallback={
+                <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
+              }
+            >
+              <WorkspaceTopBar
+                // Local mode names documents through its own store, not through
+                // the daemon's `/names`, so the identity the bar offers is unused
+                // here and `documentName`/`onTitleChange` stay the source.
+                titleSlot={() => documentTitleSlot}
+                dataMode="local"
+                workspaceId="local"
+                path={renderState.snapshot.path}
+                // The way out of the editor. This page had none until now —
+                // the app-shell brand mark was the only exit, and it says
+                // nothing about where it goes.
+                onNavigateBack={() => {
+                  const handle = browserWorkspaceHandleOrNull()
+                  navigate(handle === null ? indexPath() : workspacePath(handle))
+                }}
+                isFullscreen={isFullscreen}
+                onToggleFullscreen={() => {
+                  // Entering hides this whole bar; the floating exit control and
+                  // native Escape are the ways back out. requestFullscreen can
+                  // REJECT (Permissions-Policy, an iframe without
+                  // allow="fullscreen", no user activation) — a swallowed
+                  // rejection is unhandled-rejection noise, so both directions log.
+                  if (document.fullscreenElement)
+                    document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+                  else
+                    mainRef.current
+                      ?.requestFullscreen()
+                      .catch((err) => log.warn('requestFullscreen rejected', err))
+                }}
+                capabilities={{
+                  versions: capabilities.versions,
+                  branches: capabilities.branches,
+                  merge: capabilities.merge,
+                }}
+              />
+            </Suspense>
+          )}
+        </>
+      }
+    >
       {/* The snapshot's kind picks the editor: markdown documents open the
           markdown editor (body and OKF core facets persisted as containers
           of one Loro document — see use-markdown-document.ts), everything
@@ -965,6 +965,6 @@ export function BrowserDocumentPage({
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
       </div>
-    </main>
+    </DocumentPageShell>
   )
 }
