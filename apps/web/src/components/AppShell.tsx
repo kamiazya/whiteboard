@@ -4,6 +4,7 @@ import { Link, useLocation, useNavigate } from 'react-router-dom'
 import { Popover, PopoverContent, PopoverTrigger } from '@/components/ui/popover'
 import { useSettingsNudge } from '@/hooks/useSettingsNudge'
 import { parseWorkspaceRoute, settingsPath } from '@/lib/app-routes'
+import { browserWorkspaceIdOrNull } from '@/lib/browser-workspace-id'
 import { beginPairingGrant } from '@/lib/pairing-grant'
 import { getShellConnection, subscribeShellStatus } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
@@ -33,7 +34,11 @@ const DaemonDetectedBanner = lazy(() =>
  * when the recorded move targets the SAME daemon the browser still points
  * at: a move to a daemon this browser no longer uses is not this
  * connection's story. Reachability is unknown from here and deliberately
- * not claimed.
+ * not claimed. And only for the workspace that was actually MOVED: this
+ * browser keeps many workspaces, and the disclosure is a claim about one
+ * record's data — a legacy promotion record that never named its source
+ * cannot say which, so it discloses nothing rather than accusing whichever
+ * workspace happens to be active.
  */
 function PromotedElsewhereNotice({
   settingsStore,
@@ -47,7 +52,9 @@ function PromotedElsewhereNotice({
     promotion === undefined ||
     !promotion.ok ||
     storedDaemon === undefined ||
-    promotion.daemonBaseUrl !== storedDaemon
+    promotion.daemonBaseUrl !== storedDaemon ||
+    promotion.sourceWorkspaceId === undefined ||
+    promotion.sourceWorkspaceId !== browserWorkspaceIdOrNull()
   ) {
     return null
   }

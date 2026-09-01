@@ -190,6 +190,7 @@ export function PromoteWorkspaceSection({
                 at: new Date().toISOString(),
                 daemonBaseUrl: daemon.baseUrl,
                 workspaceId: targetId,
+                sourceWorkspaceId: outcome.sourceWorkspaceId,
                 ok: true,
                 promotedCount: outcome.promotedDocumentIds.length,
                 shadowedPaths: outcome.shadowedPaths,

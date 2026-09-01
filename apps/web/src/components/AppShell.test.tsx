@@ -1,6 +1,10 @@
 import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  resetBrowserWorkspaceIdForTests,
+  setBrowserWorkspaceIdForTests,
+} from '@/lib/browser-workspace-id'
 import { resetInstallPromptForTests } from '@/lib/install-prompt-store'
 import { resetShellStatusForTests, setShellConnection } from '@/lib/shell-status-store'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
@@ -16,6 +20,7 @@ beforeEach(() => {
 
 afterEach(() => {
   cleanup()
+  resetBrowserWorkspaceIdForTests()
   Object.defineProperty(navigator, 'storage', { value: undefined, configurable: true })
 })
 
@@ -344,6 +349,7 @@ describe('AppShell — the mark as the connection carrier', () => {
   // silently would hide that edits made here diverge from the daemon copy —
   // so the browser popover discloses the move instead of claiming nothing.
   it('the browser popover discloses a recorded move to the still-configured daemon', async () => {
+    setBrowserWorkspaceIdForTests('ws-src')
     createUserSettingsStore().update((current) => ({
       ...current,
       storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
@@ -353,6 +359,7 @@ describe('AppShell — the mark as the connection carrier', () => {
           at: '2026-08-28T12:00:00.000Z',
           daemonBaseUrl: 'http://127.0.0.1:3099',
           workspaceId: 'ws-a',
+          sourceWorkspaceId: 'ws-src',
           ok: true,
           promotedCount: 2,
         },
@@ -366,6 +373,58 @@ describe('AppShell — the mark as the connection carrier', () => {
     expect(notice.textContent).toMatch(/stay in this browser/i)
     // Reachability is unknown from here, so the copy must not claim it.
     expect(notice.textContent).not.toMatch(/unreachable|offline|cannot be reached/i)
+  })
+
+  it('a workspace that was not the one moved gets no move disclosure', async () => {
+    // The marker is per-workspace: since ADR-0019 this browser keeps many
+    // workspaces, and telling a never-promoted one "this workspace has been
+    // moved" is a false claim about ITS data.
+    setBrowserWorkspaceIdForTests('ws-other')
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
+      migration: {
+        ...current.migration,
+        promotion: {
+          at: '2026-08-28T12:00:00.000Z',
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          workspaceId: 'ws-a',
+          sourceWorkspaceId: 'ws-src',
+          ok: true,
+        },
+      },
+    }))
+    setShellConnection({ state: { keeper: 'browser' } })
+    renderShell(false)
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    await screen.findByText(CTA)
+    expect(screen.queryByTestId('promoted-elsewhere-notice')).toBeNull()
+  })
+
+  it('a legacy record that never named its source shows no disclosure', async () => {
+    // Pre-per-workspace records cannot say WHICH browser workspace moved, so
+    // showing the banner on whichever is active would be the misfire this
+    // field exists to end. Staying silent about an unknown is the honest
+    // floor.
+    setBrowserWorkspaceIdForTests('ws-src')
+    createUserSettingsStore().update((current) => ({
+      ...current,
+      storage: { ...current.storage, daemonBaseUrl: 'http://127.0.0.1:3099' },
+      migration: {
+        ...current.migration,
+        promotion: {
+          at: '2026-08-28T12:00:00.000Z',
+          daemonBaseUrl: 'http://127.0.0.1:3099',
+          workspaceId: 'ws-a',
+          ok: true,
+        },
+      },
+    }))
+    setShellConnection({ state: { keeper: 'browser' } })
+    renderShell(false)
+    fireEvent.click(await screen.findByTestId('shell-mark-trigger'))
+    await screen.findByText(CTA)
+    expect(screen.queryByTestId('promoted-elsewhere-notice')).toBeNull()
   })
 
   it('no move disclosure without a matching promotion record', async () => {
