@@ -179,6 +179,7 @@ export function ConnectionStatus({
             {/* The chip reports; it does not manage. Changing which daemon
                 this browser uses is something you go looking for, so it
                 lives in Settings and this only points at it. */}
+            {children}
             <Link
               to={settingsPath('connections')}
               className="mt-1 text-xs font-medium text-primary hover:underline"
