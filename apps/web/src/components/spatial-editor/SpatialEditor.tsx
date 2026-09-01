@@ -194,10 +194,11 @@ import {
   type EditorTool,
   ToolPalette,
 } from './ToolPalette.js'
+import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
+import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
-  type ContainerSize,
   canvasToScreen,
   fitViewportToBoxes,
   frameViewport,
@@ -253,7 +254,6 @@ const MINIMAP_HEIGHT_PX = 110
  * Keyed off the CONTAINER, not the viewport: a narrow editor column on a wide
  * screen collides in exactly the same way, and a media query cannot see it.
  */
-const MINIMAP_MIN_ROOT_WIDTH_PX = 768
 
 /** The routing styles offered in the UI. */
 
@@ -2613,122 +2613,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       setViewport((vp) => panBy(vp, { x: -e.deltaX, y: -e.deltaY }))
     }
 
-    const handleWheelRef = useRef(handleWheel)
-    handleWheelRef.current = handleWheel
-
-    useEffect(() => {
-      const root = rootRef.current
-      if (root === null) return
-      const onWheel = (e: WheelEvent) => handleWheelRef.current(e)
-      root.addEventListener('wheel', onWheel, { passive: false })
-      return () => root.removeEventListener('wheel', onWheel)
-    }, [])
-
-    // Unmount-mid-gesture safety net. Every pointer handler above is a JSX
-    // prop (the wheel listener is this component's only native one, and it
-    // already cleans itself up), so React tears them all down with the
-    // component and no stale handler can fire an onChange/command after
-    // this point — that half of "no listener leak" is structural, not
-    // something this effect needs to do. What React does NOT do for us is
-    // release pointer capture the platform is still holding on our behalf;
-    // an unmount mid-drag (route change, a parent swapping this component
-    // iOS Safari's native long-press behaviors (selection loupe, callout,
-    // the haptic-touch takeover) ignore `touch-action` and CSS user-select
-    // suppression in practice: the system claims the press and fires
-    // pointercancel, which disarms the app's own long-press menu timer —
-    // the press is "hijacked". preventDefault on `touchstart` is the one
-    // reliable off-switch for that entire family, and it must be a
-    // NON-PASSIVE native listener (React's synthetic handlers don't
-    // guarantee that, and browsers default touch listeners to passive).
-    // Canvas interactions are pointer-event driven and unaffected —
-    // pointerdown has already fired by the time touchstart is cancelled;
-    // what this suppresses is the native gesture claim plus the synthetic
-    // mouse-compatibility events the canvas never uses. Overlays
-    // (`data-editor-overlay`: text editor, palette, menus, dialogs) keep
-    // native touch semantics — they hold real form controls.
-    useEffect(() => {
-      const root = rootRef.current
-      if (root === null) return
-      const refuseNativeTouch = (event: TouchEvent) => {
-        if (
-          event.target instanceof Element &&
-          event.target.closest('[data-editor-overlay]') !== null
-        ) {
-          return
-        }
-        event.preventDefault()
-      }
-      root.addEventListener('touchstart', refuseNativeTouch, { passive: false })
-      // touchmove too, not just touchstart: an embedding sheet (iOS's
-      // SFSafariViewController in-app browser) decides from UNCONSUMED move
-      // events whether a drag is ITS drag — a canvas pan was dragging the
-      // whole sheet up and down. Canvas gestures are pointer-event driven
-      // and unaffected.
-      root.addEventListener('touchmove', refuseNativeTouch, { passive: false })
-      return () => {
-        root.removeEventListener('touchstart', refuseNativeTouch)
-        root.removeEventListener('touchmove', refuseNativeTouch)
-      }
-    }, [])
-
-    // out) would otherwise leave the browser holding capture for a pointer
-    // no element can any longer respond to. Best-effort/never-throw, same
-    // reasoning as `trySetPointerCapture`.
-    // The flight recorder's document-side ear. The root's own handlers can
-    // only record presses that REACH them, and the report this recorder
-    // exists for is precisely a press that seems not to: an element outside
-    // the root — a portal, a stale overlay — consumes it before the editor
-    // sees anything. A capture-phase listener on the document sees every
-    // press first and records whether it was headed inside the root, which
-    // is the discriminator nothing else can supply. Down/up/cancel only:
-    // moves would flood the ring, and the missing-press question never
-    // needs them.
-    useEffect(() => {
-      const record = (e: PointerEvent) => {
-        const root = rootRef.current
-        gestureTrace.recordDocPointer({
-          at: Math.round(e.timeStamp),
-          type: e.type,
-          pointerId: e.pointerId,
-          pointerType: e.pointerType,
-          isPrimary: e.isPrimary,
-          x: Math.round(e.clientX),
-          y: Math.round(e.clientY),
-          insideRoot: root !== null && e.target instanceof Node && root.contains(e.target),
-          target: describeTarget(e.target),
-        })
-      }
-      document.addEventListener('pointerdown', record, true)
-      document.addEventListener('pointerup', record, true)
-      document.addEventListener('pointercancel', record, true)
-      return () => {
-        document.removeEventListener('pointerdown', record, true)
-        document.removeEventListener('pointerup', record, true)
-        document.removeEventListener('pointercancel', record, true)
-      }
-    }, [])
-
-    useEffect(() => {
-      // Capture the root HERE, at mount, rather than reading `rootRef.current`
-      // inside the cleanup closure: React detaches the ref (sets it to
-      // `null`) before this cleanup runs on unmount, so reading the ref at
-      // cleanup time would always see `null` and silently skip the release.
-      const root = rootRef.current
-      return () => {
-        // A long-press timer must not fire into an unmounted editor.
-        if (longPressRef.current !== null) {
-          clearTimeout(longPressRef.current.timer)
-          longPressRef.current = null
-        }
-        const pointerId = activePointerIdRef.current
-        if (root === null || pointerId === null) return
-        try {
-          root.releasePointerCapture(pointerId)
-        } catch {
-          // best-effort — see doc comment above
-        }
-      }
-    }, [])
+    useNativeCanvasListeners(rootRef, handleWheel, longPressRef, activePointerIdRef)
 
     /** Creates a text node centered on `point` (canvas space) and opens it for typing. */
     const createNodeAt = (point: Point) => {
@@ -2756,65 +2641,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       return true
     }
 
-    /** Root-local screen point at the middle of the visible canvas. */
-    const viewportCenterScreen = () => {
-      const root = rootRef.current
-      return root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-    }
-
-    /**
-     * The editor's own pixel size, for the minimap's visible-area marker.
-     *
-     * A ResizeObserver rather than a window `resize` listener, because the
-     * container resizes without the window doing so — a side panel opening,
-     * the browser chrome changing height on mobile — and a marker that lags
-     * those is wrong about where you are.
-     *
-     * Guarded because jsdom has no ResizeObserver: without the guard every
-     * jsdom test that mounts this editor would throw. There it measures once
-     * and stays there, which is correct for a layout that never changes.
-     */
-    const [rootSize, setRootSize] = useState({ width: 0, height: 0 })
-    /**
-     * The SHELL's width, not the canvas's.
-     *
-     * The inspector takes a column out of the canvas, so `rootSize` shrinks
-     * when it opens — and a breakpoint read off `rootSize` then flips as a
-     * CONSEQUENCE of its own decision. Measured: opening the dock on a 900px
-     * editor left the canvas at 548, below the 768 breakpoint, so the panel
-     * re-rendered as a bottom sheet spanning the full width.
-     */
-    const shellRef = useRef<HTMLDivElement | null>(null)
-    const [shellWidth, setShellWidth] = useState(0)
-    useLayoutEffect(() => {
-      const shell = shellRef.current
-      if (shell === null) return
-      const measure = () => {
-        setShellWidth((prev) => (prev === shell.clientWidth ? prev : shell.clientWidth))
-      }
-      measure()
-      if (typeof ResizeObserver === 'undefined') return
-      const observer = new ResizeObserver(measure)
-      observer.observe(shell)
-      return () => observer.disconnect()
-    }, [])
-    const inspectorIsSheet = shellWidth > 0 && shellWidth < MINIMAP_MIN_ROOT_WIDTH_PX
-    useLayoutEffect(() => {
-      const root = rootRef.current
-      if (root === null) return
-      const measure = () => {
-        setRootSize((prev) =>
-          prev.width === root.clientWidth && prev.height === root.clientHeight
-            ? prev
-            : { width: root.clientWidth, height: root.clientHeight },
-        )
-      }
-      measure()
-      if (typeof ResizeObserver === 'undefined') return
-      const observer = new ResizeObserver(measure)
-      observer.observe(root)
-      return () => observer.disconnect()
-    }, [])
+    const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
+      useEditorMeasurements(rootRef)
 
     /**
      * Node boxes for the overview, with each authored colour resolved to the
@@ -2838,9 +2666,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping the current zoom (the hand-mode "where did my content go"
      * recovery). No boxes → no-op.
      */
-    const containerSizeOf = (root: HTMLDivElement | null): ContainerSize | null =>
-      root === null ? null : { width: root.clientWidth, height: root.clientHeight }
-
     /**
      * Frames the given content: pans so its center sits at the viewport
      * center, and zooms so the whole box fits with a small margin —

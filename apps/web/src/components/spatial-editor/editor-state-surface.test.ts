@@ -32,7 +32,10 @@
 import { describe, expect, it } from 'vitest'
 import { assertScannedLedger } from '../../test-utils/coverage-ledger.js'
 
-const sources = import.meta.glob('./SpatialEditor.tsx', {
+// The editor plus the hooks its state moved to: an extraction moves state,
+// not away, so a moved useState must stay scanned. A new hook that declares
+// state joins this list in the same commit that moves it.
+const sources = import.meta.glob(['./SpatialEditor.tsx', './use-editor-measurements.ts'], {
   query: '?raw',
   import: 'default',
   eager: true,
@@ -99,10 +102,10 @@ function scanStateNames(source: string): string[] {
 }
 
 describe('SpatialEditor state surface', () => {
-  const source = Object.values(sources)[0]
+  const source = Object.values(sources).join('\n')
 
   it('reads the component source', () => {
-    expect(source, 'the ?raw glob matched nothing').toBeTypeOf('string')
+    expect(Object.keys(sources).length, 'the ?raw glob matched nothing').toBeGreaterThan(1)
     // A regex that stopped matching would leave this empty, and an empty
     // scan makes every check below vacuous in the direction that matters.
     expect(scanStateNames(source).length, 'the useState scan found almost nothing').toBeGreaterThan(
