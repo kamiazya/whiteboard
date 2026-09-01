@@ -122,3 +122,23 @@ Recorded as-built rather than rewriting the decision:
   decided: workspaces surface in browser-local as a fixed single
   workspace modeled as present (ADR-0007), and Delete's placement is a
   per-card action on the shared list with a confirmation dialog.
+
+## Addendum (2026-09-01): the page state machine is shared code now
+
+Decision 3's state machine is implemented as a shared vocabulary rather
+than as two per-page shapes: `apps/web/src/pages/document-page-state.ts`
+declares every page-level render state once, each annotated with which
+keeper produces it and why the other cannot, and each page derives its own
+machine from its own controller's fields — `browser-page-state.ts` (plus
+the content-read-failure refinement) and `daemon-page-state.ts`. Two
+daemon-only states postdate the decision text: `document-missing` (a stale
+URL against a non-empty documents list, rendered as an explicit
+create-at-this-path offer) and `workspace-empty`. The controller layer
+stays capability-selected exactly as decision 2 requires.
+
+`EditingOverlay` as written did not ship: restore progress lives in editor
+chrome, and a WS auth rejection surfaces through the favicon and the shell
+connection status (`sync-off`) rather than as a page-level overlay state.
+`page-state-conformance.test.ts` pins both pages' use of the shared
+machine, and the shared `load-degraded` state renders through one
+`LoadDegradedView` in both modes.

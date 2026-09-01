@@ -13,6 +13,7 @@ import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
+import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -576,15 +577,7 @@ export function DaemonDocumentPage({
   }
 
   if (pageState.kind === 'load-degraded') {
-    return (
-      <div
-        role="alert"
-        aria-live="assertive"
-        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
-      >
-        <p className="max-w-md text-sm text-destructive">{pageState.message}</p>
-      </div>
-    )
+    return <LoadDegradedView message={pageState.message} />
   }
 
   const versionPanelExtra =
