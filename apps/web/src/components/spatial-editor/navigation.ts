@@ -30,8 +30,16 @@ import { computePinchUpdate } from './touch-pinch.js'
 import type { Point } from './viewport.js'
 
 /**
- * Window for double-press detection. Matches the common OS double-click
- * interval; not user-configurable today.
+ * Window for double-press detection, for BOTH of this editor's double
+ * presses — hand mode's zoom, which this module decides, and the select
+ * tool's edit-or-create, which the component decides past the `fallThrough`
+ * seam. Matches the common OS double-click interval; not user-configurable
+ * today.
+ *
+ * One definition because a user pressing twice quickly is performing one
+ * gesture whichever tool is selected. Two constants of the same value is how
+ * that stops being true silently: tuning the window for one leaves the other
+ * where it was, and nothing fails.
  */
 export const DOUBLE_PRESS_WINDOW_MS = 400
 
@@ -146,6 +154,14 @@ export type NavigationEvent =
       readonly point: Point
     }
   | { readonly type: 'pointerup'; readonly pointerId: number; readonly pointerType: PointerKind }
+  /**
+   * A press that never reached this machine's handler — an overlay control
+   * taking the pointer and capturing it on the root. Its RELEASE does arrive
+   * here, because capture redirects the rest of the sequence, so without
+   * this the machine would see an up for a pointer it never saw go down and
+   * a capture handback would read as a loss.
+   */
+  | { readonly type: 'external-press'; readonly pointerId: number }
   | {
       readonly type: 'pointercancel'
       readonly pointerId: number
@@ -165,11 +181,28 @@ export type NavigationEffect =
       readonly factor: number
     }
   | { readonly kind: 'capture'; readonly pointerIds: readonly number[] }
+  /**
+   * This machine no longer holds capture for anything. Emitted on the
+   * releases that END a gesture and on a cancel — never on a finger lifting
+   * out of a gather or a pinch, where the others are still down and still
+   * captured. Deciding it from an editor-wide "is something active" flag is
+   * what let a lifted finger's ordinary handback answer for a finger that
+   * was still down.
+   */
+  | { readonly kind: 'release-capture' }
   | { readonly kind: 'arm-long-press'; readonly pointerId: number; readonly screen: Point }
   | { readonly kind: 'clear-long-press' }
   /** Abandon whatever node gesture was in flight; the sequence became navigation. */
   | { readonly kind: 'cancel-manipulation' }
   | { readonly kind: 'clear-marquee' }
+  /**
+   * Drop the caller's own armed double press. Navigation never sets it — the
+   * select-tool double press is decided past the `fallThrough` seam — but a
+   * gesture that becomes navigation has to abandon it, or the release that
+   * ends the pan would resolve as the second half of a press the user
+   * abandoned two fingers ago.
+   */
+  | { readonly kind: 'clear-press-memory' }
   /** Add the pressed node to the selection the anchor is holding open. */
   | { readonly kind: 'gather'; readonly anchorPrimaryId: string; readonly hitId: string }
 
@@ -183,6 +216,13 @@ export interface NavigationResult {
    * not been consulted.
    */
   readonly fallThrough: boolean
+  /**
+   * The caller must call `preventDefault` on the DOM event. Not an effect,
+   * because it acts on the event rather than on the app: a pan or a
+   * double-press zoom has to stop the browser's own drag and
+   * selection defaults, and only the caller holds the event to stop.
+   */
+  readonly preventDefault?: boolean
 }
 
 function withTouch(
@@ -276,7 +316,11 @@ function reducePointerDown(
         // new multi-selection would jump every node gathered afterwards by
         // an offset the user never gave it.
         if (beganNow && context.manipulating) effects.push({ kind: 'cancel-manipulation' })
-        effects.push({ kind: 'clear-marquee' }, { kind: 'clear-long-press' })
+        effects.push(
+          { kind: 'clear-marquee' },
+          { kind: 'clear-press-memory' },
+          { kind: 'clear-long-press' },
+        )
         effects.push({
           kind: 'gather',
           anchorPrimaryId: context.anchorPrimaryId,
@@ -299,7 +343,11 @@ function reducePointerDown(
       // The second finger converts whatever the first started — marquee,
       // node move, double-press arming — into navigation.
       if (context.manipulating) effects.push({ kind: 'cancel-manipulation' })
-      effects.push({ kind: 'clear-marquee' }, { kind: 'clear-long-press' })
+      effects.push(
+        { kind: 'clear-marquee' },
+        { kind: 'clear-press-memory' },
+        { kind: 'clear-long-press' },
+      )
       // Capture BOTH fingers, not only the one that arrived second: an
       // uncaptured first finger crossing outside the root would stop
       // delivering its move and up events, leaving a stale entry that would
@@ -336,7 +384,12 @@ function reducePointerDown(
         anchorScreen: event.point,
         factor: DOUBLE_PRESS_ZOOM_FACTOR,
       })
-      return { state: { ...next, lastHandPress: null }, effects, fallThrough: false }
+      return {
+        state: { ...next, lastHandPress: null },
+        effects,
+        fallThrough: false,
+        preventDefault: true,
+      }
     }
     next = { ...next, lastHandPress: { at: event.timeStamp, point: event.point } }
   }
@@ -345,6 +398,7 @@ function reducePointerDown(
     state: { ...next, mode: { kind: 'panning', pointerId: event.pointerId, last: event.point } },
     effects,
     fallThrough: false,
+    preventDefault: true,
   }
 }
 
@@ -482,6 +536,7 @@ function reducePointerUp(
         fallThrough: false,
       }
     }
+    effects.push({ kind: 'release-capture' })
     if (state.mode.kind === 'panning' && state.mode.pointerId === event.pointerId) {
       return {
         state: { ...state, down, touches, mode: { kind: 'idle' } },
@@ -492,6 +547,7 @@ function reducePointerUp(
     return { state: { ...state, down, touches }, effects, fallThrough: true }
   }
 
+  effects.push({ kind: 'release-capture' })
   if (state.mode.kind === 'panning' && state.mode.pointerId === event.pointerId) {
     return { state: { ...state, down, mode: { kind: 'idle' } }, effects, fallThrough: false }
   }
@@ -514,7 +570,11 @@ function reducePointerCancel(
       touches,
       mode: stillPinching ? state.mode : { kind: 'idle' },
     },
-    effects: [{ kind: 'clear-long-press' }, { kind: 'cancel-manipulation' }],
+    effects: [
+      { kind: 'clear-long-press' },
+      { kind: 'release-capture' },
+      { kind: 'cancel-manipulation' },
+    ],
     fallThrough: false,
   }
 }
@@ -529,5 +589,11 @@ export function reduceNavigation(state: NavigationState, event: NavigationEvent)
       return reducePointerUp(state, event)
     case 'pointercancel':
       return reducePointerCancel(state, event)
+    case 'external-press':
+      return {
+        state: { ...state, down: withDown(state.down, event.pointerId, true) },
+        effects: [],
+        fallThrough: false,
+      }
   }
 }
