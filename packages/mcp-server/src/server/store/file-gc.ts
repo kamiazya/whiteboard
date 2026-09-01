@@ -2,11 +2,10 @@ import { readdir, stat, unlink } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { setImmediate as yieldToLoop } from 'node:timers/promises'
 import {
+  collectImageRefIds,
   projectWorkspaceDocument,
-  readSpatialCanvas,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
-import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
 import { decodeFrontiers, LoroDoc } from 'loro-crdt'
 import type { z } from 'zod'
 import type { purgeResultSchema } from '../../shared/api-contracts/document.js'
@@ -55,18 +54,14 @@ function workspaceFilesDir(workspaceId: string): string {
 // Walk a single doc state and collect fileIds referenced by it. Two passes,
 // both additive into the same sink:
 //
-// 1. The CURRENT model — every production doc stores spatial content in the
-//    nodes/edges maps (see readSpatialCanvas), so a 'file' node whose `file`
-//    value carries the 'asset:' upload-reference prefix is a live reference.
+// 1. The CURRENT model — collectImageRefIds, the walk shared with the
+//    browser's promote transfer so the two sides cannot drift on what
+//    counts as a live reference.
 // 2. The legacy 'elements' movable list — retired, but a pre-migration doc
 //    that was never resaved through the current model still stores its
 //    images there, so this pass stays as a fallback rather than a rewrite.
 function collectFromDoc(doc: LoroDoc, sink: Set<string>): void {
-  const { nodes } = readSpatialCanvas(doc)
-  for (const node of nodes) {
-    if (node.type !== 'file') continue
-    if (isImageRef(node.file)) sink.add(imageRefId(node.file))
-  }
+  for (const id of collectImageRefIds(doc)) sink.add(id)
 
   const list = doc.getMovableList('elements')
   for (let i = 0; i < list.length; i++) {
