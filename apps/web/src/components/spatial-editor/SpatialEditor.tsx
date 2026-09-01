@@ -150,21 +150,6 @@ import {
   type PointerKind,
   reduceNavigation,
 } from './navigation.js'
-import {
-  DOCUMENT_NODE_HEIGHT,
-  DOCUMENT_NODE_WIDTH,
-  fileNodeDefaults,
-  GROUP_FRAME_HEIGHT,
-  GROUP_FRAME_WIDTH,
-  groupEnclosure,
-  groupNodeDefaults,
-  IMAGE_NODE_HEIGHT,
-  IMAGE_NODE_WIDTH,
-  imageNodeDefaults,
-  LINK_NODE_HEIGHT,
-  linkNodeDefaults,
-  resolveSpawnPoint,
-} from './node-factories.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
@@ -179,7 +164,6 @@ import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
 import { type SnapBox, snapBox, snapEdge } from './snap.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
-  DOCK_OCCLUSION_PX,
   type DraggableCreation,
   draggedCreation,
   type EditorTool,
@@ -190,6 +174,7 @@ import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-m
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
 import { useGestureCaptured } from './use-gesture-captured.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
+import { useNodeCreation } from './use-node-creation.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   canvasToScreen,
@@ -198,7 +183,6 @@ import {
   IDENTITY_VIEWPORT,
   type Point,
   panBy,
-  panToShowTarget,
   screenToCanvas,
   contentBounds as unionContentBounds,
   type Viewport,
@@ -2463,108 +2447,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       })
     }
 
-    const createLinkAtViewportCenter = (url: string, at?: Point) => {
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id =
-        createId?.() ??
-        (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-          ? crypto.randomUUID()
-          : String(Math.random()))
-      const node = linkNodeDefaults(id, point, url)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
-
-    /** File nodes are reference cards like links — same shorter default box. */
-    const createFileRefAtViewportCenter = (file: string, at?: Point) => {
-      // The picked option's kind decides the box: a markdown document
-      // renders its prose inside the node and needs room a one-line
-      // reference card does not have.
-      const kind = fileRefOptions?.find((option) => option.file === file)?.kind
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        kind === 'markdown'
-          ? { width: DOCUMENT_NODE_WIDTH, height: DOCUMENT_NODE_HEIGHT }
-          : { width: NEW_NODE_WIDTH, height: LINK_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id = newId()
-      const node = fileNodeDefaults(id, point, file, kind)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
+    const {
+      visibleCanvasRect,
+      panToShow,
+      createLinkAtViewportCenter,
+      createFileRefAtViewportCenter,
+      addImageFile,
+      createGroupAtViewportCenter,
+      groupSelection,
+    } = useNodeCreation({
+      rootRef,
+      canvasRef,
+      viewport,
+      setViewport,
+      createId,
+      fileRefOptions,
+      onAddImage,
+      applyResult,
+      collapseExtras: () => applySelection({ type: 'collapse-extras' }),
+      containerSizeOf,
+    })
 
     const imageInputRef = useRef<HTMLInputElement | null>(null)
     /** When set, the next picked image becomes this group's background instead of a new node. */
     const pendingBackgroundGroupIdRef = useRef<string | null>(null)
     /** Where the pending picker-created image should land; null = viewport center. */
     const pendingImagePointRef = useRef<Point | null>(null)
-
-    const createImageNodeAt = (file: string, at?: Point) => {
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        { width: IMAGE_NODE_WIDTH, height: IMAGE_NODE_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id = newId()
-      const node = imageNodeDefaults(id, point, file)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-node', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
-
-    /** Stores the image via the host seam, then creates the node. */
-    const addImageFile = (file: File, at?: Point) => {
-      if (onAddImage === undefined || !file.type.startsWith('image/')) return
-      void onAddImage(file).then((ref) => {
-        if (ref !== undefined) createImageNodeAt(ref, at)
-      })
-    }
 
     /** The one place a stored URL is turned into navigation. noopener keeps
      * the canvas tab unreachable from the opened page, and the scheme guard
@@ -2574,83 +2482,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const openLinkNode = (node: Extract<SpatialNode, { type: 'link' }>) => {
       if (!isFollowableUrl(node.url)) return
       window.open(node.url, '_blank', 'noopener,noreferrer')
-    }
-
-    /**
-     * The free-spot cascade can push a palette-created node outside the
-     * visible viewport, leaving the user staring at an unchanged canvas.
-     * When the created box does not fully fit on screen, pan (keeping the
-     * zoom) so it sits centered — creation is always visible feedback.
-     */
-    /**
-     * The canvas-space rectangle a person can actually see: the root, minus
-     * the strip the dock paints over. Creation places inside this before it
-     * places anywhere else, which is what keeps the view still.
-     */
-    const visibleCanvasRect = (): Box | undefined => {
-      const containerSize = containerSizeOf(rootRef.current)
-      if (containerSize === null) return undefined
-      const topLeft = screenToCanvas({ x: 0, y: 0 }, viewport)
-      return {
-        x: topLeft.x,
-        y: topLeft.y,
-        width: containerSize.width / viewport.zoom,
-        height: (containerSize.height - DOCK_OCCLUSION_PX) / viewport.zoom,
-      }
-    }
-
-    const panToShow = (box: Box) => {
-      const containerSize = containerSizeOf(rootRef.current)
-      if (containerSize === null) return
-      setViewport(
-        (vp) => panToShowTarget(box, vp, containerSize, { bottom: DOCK_OCCLUSION_PX }) ?? vp,
-      )
-    }
-
-    const newId = () =>
-      createId?.() ??
-      (typeof crypto !== 'undefined' && 'randomUUID' in crypto
-        ? crypto.randomUUID()
-        : String(Math.random()))
-
-    const createGroupAtViewportCenter = (at?: Point) => {
-      const root = rootRef.current
-      const centerScreen =
-        root === null ? { x: 0, y: 0 } : { x: root.clientWidth / 2, y: root.clientHeight / 2 }
-      const preferred = screenToCanvas(centerScreen, viewport)
-      const occupied = indexNodeBoxes(canvasRef.current).map((b) => b.box)
-      const point = resolveSpawnPoint(
-        at,
-        preferred,
-        { width: GROUP_FRAME_WIDTH, height: GROUP_FRAME_HEIGHT },
-        occupied,
-        visibleCanvasRect(),
-      )
-      const id = newId()
-      const node = groupNodeDefaults(id, point)
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-group', node }],
-        selectedId: id,
-      })
-      // Creation selects the new node EXCLUSIVELY — set-primary alone would
-      // keep the old extras riding along into the next move/delete.
-      applySelection({ type: 'collapse-extras' })
-      panToShow({ x: node.x, y: node.y, width: node.width, height: node.height })
-    }
-
-    /** Frames the current multi-selection: enclosing box + padding. */
-    const groupSelection = (memberIds: readonly string[]) => {
-      const members = canvasRef.current.nodes.filter((n) => memberIds.includes(n.id))
-      const frame = groupEnclosure(members)
-      if (frame === undefined) return
-      const id = newId()
-      applyResult({
-        state: { kind: 'idle' },
-        commands: [{ kind: 'create-group', node: { id, type: 'group', ...frame } }],
-        selectedId: id,
-      })
-      applySelection({ type: 'collapse-extras' })
     }
 
     return (
