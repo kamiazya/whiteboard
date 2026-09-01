@@ -98,9 +98,15 @@ export function workspaceRoutePath(route: WorkspaceRoute): string {
   return route.workspace ? workspacePath(route.workspace) : indexPath()
 }
 
-export type SettingsSection = 'general' | 'data' | 'fonts' | 'connections'
+export type SettingsSection = 'general' | 'data' | 'fonts' | 'connections' | 'developer'
 
-const SETTINGS_SECTIONS: readonly SettingsSection[] = ['general', 'data', 'fonts', 'connections']
+const SETTINGS_SECTIONS: readonly SettingsSection[] = [
+  'general',
+  'data',
+  'fonts',
+  'connections',
+  'developer',
+]
 
 export function settingsPath(section?: SettingsSection): string {
   return section === undefined ? '/settings' : `/settings/${section}`

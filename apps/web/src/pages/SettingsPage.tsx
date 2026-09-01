@@ -1,5 +1,6 @@
 import {
   Cable,
+  ChevronLeft,
   ChevronRight,
   Database,
   Grid2x2,
@@ -9,6 +10,7 @@ import {
   Sun,
   Type,
   Waves,
+  Wrench,
 } from 'lucide-react'
 import { useCallback, useEffect, useId, useRef, useState, useSyncExternalStore } from 'react'
 import { Link, useLocation, useNavigate } from 'react-router-dom'
@@ -17,6 +19,7 @@ import { GestureTraceRow } from '@/components/settings/GestureTraceRow'
 import { PromoteWorkspaceSection } from '@/components/settings/PromoteWorkspaceSection'
 import type { PersistStepState } from '@/components/settings/SetupJourney'
 import { findVisibleJourneyBadge, SetupJourney } from '@/components/settings/SetupJourney'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { useThemeMode } from '@/hooks/useThemeMode'
 import { parseSettingsRoute, type SettingsSection, settingsPath } from '@/lib/app-routes'
@@ -62,6 +65,7 @@ const NAV_ITEMS: Array<{ section: SettingsSection; label: string; icon: typeof P
   { section: 'data', label: 'Data & app', icon: Database },
   { section: 'fonts', label: 'Fonts', icon: Type },
   { section: 'connections', label: 'Connections', icon: Cable },
+  { section: 'developer', label: 'Developer', icon: Wrench },
 ]
 
 const settingsStore = createUserSettingsStore()
@@ -328,15 +332,14 @@ function sectionContent(
           <div className="mt-6 border-t pt-4">
             <AppVersionRow />
           </div>
-          <div className="mt-4 border-t pt-4">
-            <GestureTraceRow />
-          </div>
         </div>
       )
     case 'fonts':
       return <FontsSection daemon={props.daemon} />
     case 'connections':
       return <ConnectionsSection daemon={props.daemon} onDisconnected={props.onDisconnected} />
+    case 'developer':
+      return <GestureTraceRow />
   }
 }
 
@@ -345,6 +348,7 @@ const SECTION_TITLE: Record<SettingsSection, string> = {
   data: 'Data & app',
   fonts: 'Fonts',
   connections: 'Connections',
+  developer: 'Developer',
 }
 
 /**
@@ -484,13 +488,19 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
         {routeSection === null ? (
           <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b px-4 py-3">
-              <button
-                type="button"
-                onClick={handleBackToApp}
-                className="rounded-md p-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <span aria-hidden="true">← </span>Back
-              </button>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <button
+                    type="button"
+                    onClick={handleBackToApp}
+                    aria-label="Back"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </button>
+                </TooltipTrigger>
+                <TooltipContent>Back</TooltipContent>
+              </Tooltip>
               <h1 className="text-sm font-semibold">Settings</h1>
             </div>
             <nav>
@@ -511,14 +521,20 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
         ) : (
           <div className="flex flex-col">
             <div className="flex items-center gap-2 border-b px-4 py-3">
-              <Link
-                to={settingsPath()}
-                replace
-                state={location.state}
-                className="rounded-md p-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-              >
-                <span aria-hidden="true">← </span>Settings
-              </Link>
+              <Tooltip>
+                <TooltipTrigger asChild>
+                  <Link
+                    to={settingsPath()}
+                    replace
+                    state={location.state}
+                    aria-label="Back to settings"
+                    className="shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+                  >
+                    <ChevronLeft className="size-4" />
+                  </Link>
+                </TooltipTrigger>
+                <TooltipContent>Back to settings</TooltipContent>
+              </Tooltip>
               <h1 className="text-sm font-semibold">{SECTION_TITLE[routeSection]}</h1>
             </div>
             <div className="p-4">{sectionContent(routeSection, sharedProps)}</div>
@@ -529,13 +545,19 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
       {/* Desktop (sm and up): sidebar + content pane. */}
       <div className="hidden h-full sm:flex sm:justify-center" data-testid="settings-desktop">
         <nav className="w-56 shrink-0 border-r p-4">
-          <button
-            type="button"
-            onClick={handleBackToApp}
-            className="mb-4 rounded-md px-1 py-1 text-sm font-medium text-muted-foreground hover:bg-accent hover:text-foreground"
-          >
-            <span aria-hidden="true">← </span>Back
-          </button>
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                onClick={handleBackToApp}
+                aria-label="Back"
+                className="mb-4 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground"
+              >
+                <ChevronLeft className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>Back</TooltipContent>
+          </Tooltip>
           <div className="space-y-1">
             {NAV_ITEMS.map(({ section, label, icon: Icon }) => (
               <Link

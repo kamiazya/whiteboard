@@ -8,8 +8,8 @@ problem on demand or attach a debugger to your phone.
 ## Copy the trace
 
 1. Right after the misbehaving gesture, open **Settings**.
-2. Find **Gesture diagnostics** (under the app section, next to *App version*).
-3. Tap **Copy trace**.
+2. Open **Developer**.
+3. Tap **Copy trace** under *Gesture diagnostics*.
 
 The trace is now on your clipboard as JSON. Paste it into a bug report, an issue, or a chat with
 whoever is investigating.

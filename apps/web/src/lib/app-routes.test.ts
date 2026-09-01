@@ -191,6 +191,7 @@ describe('isKnownAppPath', () => {
       '/settings/general',
       '/settings/data',
       '/settings/connections',
+      '/settings/developer',
     ]) {
       expect(isKnownAppPath(p)).toBe(true)
     }
@@ -224,6 +225,7 @@ describe('settingsPath', () => {
     expect(settingsPath('general')).toBe('/settings/general')
     expect(settingsPath('data')).toBe('/settings/data')
     expect(settingsPath('connections')).toBe('/settings/connections')
+    expect(settingsPath('developer')).toBe('/settings/developer')
   })
 })
 
@@ -236,6 +238,7 @@ describe('parseSettingsRoute', () => {
     expect(parseSettingsRoute('/settings/general')).toEqual({ section: 'general' })
     expect(parseSettingsRoute('/settings/data')).toEqual({ section: 'data' })
     expect(parseSettingsRoute('/settings/connections')).toEqual({ section: 'connections' })
+    expect(parseSettingsRoute('/settings/developer')).toEqual({ section: 'developer' })
   })
 
   it('returns null for an unknown section or unrelated path', () => {
