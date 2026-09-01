@@ -17,6 +17,28 @@ export async function queryPersistentStorage(): Promise<boolean | null> {
   }
 }
 
+export interface BrowserStorageEstimate {
+  usageBytes: number
+  quotaBytes: number
+}
+
+/**
+ * What this browser reports it is keeping for the app, and the room it
+ * offers. null = the API is absent (or answered without numbers), so the
+ * UI simply shows no figure rather than a zero that would read as "empty".
+ */
+export async function queryStorageEstimate(): Promise<BrowserStorageEstimate | null> {
+  const storage = navigator.storage
+  if (storage?.estimate === undefined) return null
+  try {
+    const { usage, quota } = await storage.estimate()
+    if (typeof usage !== 'number' || typeof quota !== 'number') return null
+    return { usageBytes: usage, quotaBytes: quota }
+  } catch {
+    return null
+  }
+}
+
 /** Request persistence if not yet granted. true/false = grant state, null = unsupported. */
 export async function ensurePersistentStorage(): Promise<boolean | null> {
   const storage = navigator.storage

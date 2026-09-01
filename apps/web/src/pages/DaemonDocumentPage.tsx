@@ -12,15 +12,14 @@ import type { ConnectionsBacklink } from '../components/connections/ConnectionsC
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
-import { NodeTextEditorOverlay } from '../components/document-editor/NodeTextEditorOverlay.js'
+import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
+import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
-import { HistoryCluster } from '../components/history-cluster/HistoryCluster.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
-import { SpatialEditor } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
@@ -50,7 +49,6 @@ import { daemonLinkEntries, daemonLinkTargets } from '../lib/daemon-link-entries
 import { deriveNewDocumentPath } from '../lib/derive-new-document-path.js'
 import { devTransportOverride } from '../lib/dev-transport-override.js'
 import { daemonFaviconStatus, type FaviconStyle } from '../lib/favicon.js'
-import { readLastTool, resolveInitialTool } from '../lib/initial-tool.js'
 import { DAEMON_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provider.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
@@ -604,97 +602,95 @@ export function DaemonDocumentPage({
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
-      {/* Two-row grid shell: everything header-shaped stacks inside the
-          auto row, and the canvas owns minmax(0,1fr) — however many banner
-          rows appear (or however tall they wrap), the canvas row is always
-          exactly the remaining viewport height, never clipped below it. */}
-      <main className="relative grid h-full w-full grid-rows-[auto_minmax(0,1fr)]">
-        <div className="min-w-0">
-          <h1 className="sr-only">Whiteboard (daemon)</h1>
-          {canvas && (
-            <WorkspaceTopBar
-              // Document identity in the merged header row, mirroring the
-              // browser page. The NAME is the workspace's — the top bar
-              // hands it down from `/names`, the same surface the canvas
-              // dropdown renames through — never a `title` read out of the
-              // content, which ADR-0009 decision 2 forbids and
-              // `storedCoreFacetsSchema` has no room for.
-              titleSlot={(identity) => (
-                <>
-                  <DocumentProperties
-                    inline
-                    key={`${canvas.workspaceId}/${canvas.path}`}
-                    title={identity.name}
-                    onTitleChange={identity.onRename}
-                    // Facets are OKF frontmatter, so only a markdown document
-                    // has any — `readCoreFacets` answers `undefined` for a
-                    // spatial one (ADR-0009 decision 3), which is what decides
-                    // the disclosure here without a second flag to keep in sync.
-                    facets={coreFacets}
-                    onFacetsChange={setCoreFacets}
-                    // Canvas-level display settings, gated on kind the same
-                    // way the facet disclosure above is: a markdown document
-                    // has no canvas to configure. The browser page has placed
-                    // this since it existed and this one did not, which left
-                    // every `canvasSettings` contribution — today `visual`'s
-                    // `visual.edges/v0` — unreachable in daemon mode.
-                    settings={
-                      documentKind === 'spatial' ? (
-                        <CanvasDisplaySettings canvas={canvasValue} onChange={onChange} />
-                      ) : undefined
-                    }
-                    actions={
-                      <>
-                        {exportError && (
-                          <span className="text-destructive truncate text-xs" role="alert">
-                            {exportError}
-                          </span>
-                        )}
-                        <DocumentMenu onExport={(format) => void handleExport(format)} />
-                      </>
-                    }
-                  />
-                  <ConnectionsChip
-                    backlinks={connections === null ? null : connections.backlinks}
-                    mentions={connections?.unlinkedMentions}
-                    onOpen={(entry) => controller.switchDocument(entry.path)}
-                    onLinkify={(mention) => {
-                      if (controller.workspaceId === null || currentDocumentId === undefined) return
-                      void linkifyDocumentMentions(
-                        daemonFetch,
-                        daemonBaseUrl,
-                        controller.workspaceId,
-                        mention.documentId,
-                        currentDocumentId,
-                      )
-                        .then(() => setConnectionsRefresh((n) => n + 1))
-                        .catch(() => {
-                          // The panel simply keeps showing the mention; the
-                          // next open retries.
-                        })
-                    }}
-                  />
-                </>
-              )}
-              workspaceId={canvas.workspaceId}
-              path={canvas.path}
-              capabilities={{
-                versions: capabilities.versions,
-                branches: capabilities.branches,
-                merge: capabilities.merge,
-              }}
-              branchRefreshSignal={branchRefreshSignal}
-              onNavigateBack={onNavigateBack}
-              // Version thumbnails come from the same PNG export path the
-              // user can trigger by hand. Without this the save flow skips
-              // the upload entirely and latest-thumbnail stays 204 forever.
-              getThumbnailBlob={getThumbnailBlob}
-            />
-          )}
-          {capabilities.branches && canvas && (
-            <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
-          )}
-          {/* This row only exists when it carries something meaningful: a
+      <DocumentPageShell
+        srTitle="Whiteboard (daemon)"
+        header={
+          <>
+            {canvas && (
+              <WorkspaceTopBar
+                // Document identity in the merged header row, mirroring the
+                // browser page. The NAME is the workspace's — the top bar
+                // hands it down from `/names`, the same surface the canvas
+                // dropdown renames through — never a `title` read out of the
+                // content, which ADR-0009 decision 2 forbids and
+                // `storedCoreFacetsSchema` has no room for.
+                titleSlot={(identity) => (
+                  <>
+                    <DocumentProperties
+                      inline
+                      key={`${canvas.workspaceId}/${canvas.path}`}
+                      title={identity.name}
+                      onTitleChange={identity.onRename}
+                      // Facets are OKF frontmatter, so only a markdown document
+                      // has any — `readCoreFacets` answers `undefined` for a
+                      // spatial one (ADR-0009 decision 3), which is what decides
+                      // the disclosure here without a second flag to keep in sync.
+                      facets={coreFacets}
+                      onFacetsChange={setCoreFacets}
+                      // Canvas-level display settings, gated on kind the same
+                      // way the facet disclosure above is: a markdown document
+                      // has no canvas to configure. The browser page has placed
+                      // this since it existed and this one did not, which left
+                      // every `canvasSettings` contribution — today `visual`'s
+                      // `visual.edges/v0` — unreachable in daemon mode.
+                      settings={
+                        documentKind === 'spatial' ? (
+                          <CanvasDisplaySettings canvas={canvasValue} onChange={onChange} />
+                        ) : undefined
+                      }
+                      actions={
+                        <>
+                          {exportError && (
+                            <span className="text-destructive truncate text-xs" role="alert">
+                              {exportError}
+                            </span>
+                          )}
+                          <DocumentMenu onExport={(format) => void handleExport(format)} />
+                        </>
+                      }
+                    />
+                    <ConnectionsChip
+                      backlinks={connections === null ? null : connections.backlinks}
+                      mentions={connections?.unlinkedMentions}
+                      onOpen={(entry) => controller.switchDocument(entry.path)}
+                      onLinkify={(mention) => {
+                        if (controller.workspaceId === null || currentDocumentId === undefined)
+                          return
+                        void linkifyDocumentMentions(
+                          daemonFetch,
+                          daemonBaseUrl,
+                          controller.workspaceId,
+                          mention.documentId,
+                          currentDocumentId,
+                        )
+                          .then(() => setConnectionsRefresh((n) => n + 1))
+                          .catch(() => {
+                            // The panel simply keeps showing the mention; the
+                            // next open retries.
+                          })
+                      }}
+                    />
+                  </>
+                )}
+                workspaceId={canvas.workspaceId}
+                path={canvas.path}
+                capabilities={{
+                  versions: capabilities.versions,
+                  branches: capabilities.branches,
+                  merge: capabilities.merge,
+                }}
+                branchRefreshSignal={branchRefreshSignal}
+                onNavigateBack={onNavigateBack}
+                // Version thumbnails come from the same PNG export path the
+                // user can trigger by hand. Without this the save flow skips
+                // the upload entirely and latest-thumbnail stays 204 forever.
+                getThumbnailBlob={getThumbnailBlob}
+              />
+            )}
+            {capabilities.branches && canvas && (
+              <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
+            )}
+            {/* This row only exists when it carries something meaningful: a
             capability this keeper does not have. A daemon with full
             capabilities — the common local case — gets no extra header row
             at all (every header row costs canvas height on a phone).
@@ -705,21 +701,23 @@ export function DaemonDocumentPage({
             had gone stale: it deferred to a WorkspaceTopBar dropdown that no
             longer exists. The shell switcher names the workspace on every
             page, this one included, so it is the one carrier now. */}
-          {(!capabilities.versions || !capabilities.branches || !capabilities.merge) && (
-            <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
-              {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
+            {(!capabilities.versions || !capabilities.branches || !capabilities.merge) && (
+              <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
+                {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
-              {!capabilities.versions && (
-                <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
-              )}
-              {!capabilities.branches && (
-                <CapabilityTeaser label="Variations" enabled={capabilities.branches} />
-              )}
-              {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
-            </div>
-          )}
-        </div>
+                {!capabilities.versions && (
+                  <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
+                )}
+                {!capabilities.branches && (
+                  <CapabilityTeaser label="Variations" enabled={capabilities.branches} />
+                )}
+                {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
+              </div>
+            )}
+          </>
+        }
+      >
         {canvas !== null &&
         controller.documents.length > 0 &&
         workspaceSyncDocumentId === undefined ? (
@@ -804,85 +802,58 @@ export function DaemonDocumentPage({
               resolveEmbed,
             }}
             spatial={() => (
-              <div data-testid="spatial-editor-container" className="relative h-full min-h-0">
+              <SpatialEditorPane
+                className="relative h-full min-h-0"
+                editorKey={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
+                canvasLoaded={canvasLoaded}
+                editorRef={spatialEditorRef}
+                agentTouchedNodeIds={agentActivity.touchedNodeIds}
+                canvas={canvasValue}
+                onChange={onChange}
+                externalVersion={externalVersion}
+                theme={resolvedTheme}
+                // File-node reference = the target's immutable id (rename-
+                // safe); the label shows its current path and the current
+                // canvas is excluded. Legacy documents still carry path refs,
+                // which resolveRefPath misses and switchDocument takes as-is.
+                fileRefOptions={controller.documents
+                  .filter((entry) => entry.path !== canvas?.path)
+                  .map((entry) => ({
+                    file: entry.id,
+                    label: entry.path,
+                    kind: entry.kind,
+                  }))}
+                onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
+                missingFileRef={missingFileRef}
+                fileSeams={fileSeams}
+                lockedNodeIds={lockedNodeIds}
+                lockedEdgeIds={lockedEdgeIds}
+                onToggleNodeLock={setNodeLock}
+                onToggleEdgeLock={setEdgeLock}
+                nodeInEditor={nodeInEditor}
+                history={{
+                  onUndo: () => void undo(),
+                  onRedo: () => void redo(),
+                  canUndo: canUndo(),
+                  canRedo: canRedo(),
+                  versions:
+                    capabilities.versions && canvas
+                      ? {
+                          workspaceId: canvas.workspaceId,
+                          path: canvas.path,
+                          onRestored: clearLocalUndo,
+                          refreshSignal: versionRefreshSignal,
+                          versionPanelExtra,
+                        }
+                      : undefined,
+                }}
+                overlayTitle={canvas?.path ?? 'Untitled'}
+                resolveAlias={resolveAlias}
+                resolveEmbed={resolveEmbed}
+                linkTargets={linkTargets}
+              >
                 <AgentPresenceChip summary={agentActivity.summary} />
-                {/* Keyed on canvas identity: the editor's pan/zoom, in-flight
-                gesture and open text editor all describe ONE canvas, and
-                `SpatialCanvas` carries no id for the editor to notice a switch
-                by. Without the key, switching documents silently inherits the
-                previous canvas's viewport. */}
-                <SpatialEditor
-                  key={canvas ? `${canvas.workspaceId}/${canvas.path}` : 'no-canvas'}
-                  // Decided from the canvas's own shape, but only once its
-                  // document has loaded — at mount every canvas still looks
-                  // empty.
-                  initialTool={
-                    canvasLoaded
-                      ? resolveInitialTool({
-                          isEmpty: canvasValue.nodes.length === 0,
-                          lastTool: readLastTool(),
-                        })
-                      : undefined
-                  }
-                  ref={spatialEditorRef}
-                  agentTouchedNodeIds={agentActivity.touchedNodeIds}
-                  canvas={canvasValue}
-                  onChange={onChange}
-                  externalVersion={externalVersion}
-                  theme={resolvedTheme}
-                  // File-node reference = the target's immutable id (rename-
-                  // safe); the label shows its current path and the current
-                  // canvas is excluded. Legacy documents still carry path refs,
-                  // which resolveRefPath misses and switchDocument takes as-is.
-                  fileRefOptions={controller.documents
-                    .filter((entry) => entry.path !== canvas?.path)
-                    .map((entry) => ({
-                      file: entry.id,
-                      label: entry.path,
-                      kind: entry.kind,
-                    }))}
-                  onOpenFileRef={(file) => controller.switchDocument(resolveRefPath(file) ?? file)}
-                  missingFileRef={missingFileRef}
-                  {...fileSeams}
-                  lockedNodeIds={lockedNodeIds}
-                  lockedEdgeIds={lockedEdgeIds}
-                  onToggleNodeLock={setNodeLock}
-                  onOpenInEditor={nodeInEditor.open}
-                  onToggleEdgeLock={setEdgeLock}
-                  paletteLeading={
-                    <HistoryCluster
-                      onUndo={() => void undo()}
-                      onRedo={() => void redo()}
-                      canUndo={canUndo()}
-                      canRedo={canRedo()}
-                      versions={
-                        capabilities.versions && canvas
-                          ? {
-                              workspaceId: canvas.workspaceId,
-                              path: canvas.path,
-                              onRestored: clearLocalUndo,
-                              refreshSignal: versionRefreshSignal,
-                              versionPanelExtra,
-                            }
-                          : undefined
-                      }
-                    />
-                  }
-                />
-                {nodeInEditor.editing !== null && (
-                  <NodeTextEditorOverlay
-                    title={canvas?.path ?? 'Untitled'}
-                    initialText={nodeInEditor.editing.text}
-                    theme={resolvedTheme}
-                    resolveAlias={resolveAlias}
-                    resolveEmbed={resolveEmbed}
-                    linkTargets={linkTargets}
-                    onCommit={nodeInEditor.commit}
-                    onClose={nodeInEditor.close}
-                    onOpenDocument={(id) => controller.switchDocument(resolveRefPath(id) ?? id)}
-                  />
-                )}
-              </div>
+              </SpatialEditorPane>
             )}
           />
         )}
@@ -893,7 +864,7 @@ export function DaemonDocumentPage({
             onRestored={clearLocalUndo}
           />
         )}
-      </main>
+      </DocumentPageShell>
     </DaemonApiContext.Provider>
   )
 }

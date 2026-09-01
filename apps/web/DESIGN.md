@@ -412,7 +412,15 @@ one it is not in yet, `spinner` that same ring while the doing is in flight.
   changes and small surfaces like popovers/toasts),
   `--motion-ease-out` (soft ease-out — never bouncy in chrome).
   Entrances are fade + small rise/scale (0.98→1); no entrance animation
-  without an explicit reason. `prefers-reduced-motion` is enforced
+  without an explicit reason. **Stateful colour is the one paint-property
+  exception**: where the colour IS the state (`StateDot`'s tone, a hover
+  affordance), it crosses with `transition-colors` on the normal token
+  rather than cutting. There is no transform/opacity encoding of "which
+  colour" that also works — stacking tones and fading between them breaks
+  the ring shape, whose transparent gap would reveal the layer beneath
+  instead of the background. Scoped to chrome-sized elements, where paint
+  is free; a full-surface colour transition is still a repaint per frame
+  and still belongs to the rule above. `prefers-reduced-motion` is enforced
   globally by the base-layer guard in `src/index.css` — component code
   must not assume an animation ran (never gate logic on motion).
 

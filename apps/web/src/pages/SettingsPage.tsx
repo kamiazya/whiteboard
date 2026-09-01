@@ -1,3 +1,4 @@
+import { storageReportPayloadSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import {
   Cable,
   ChevronLeft,
@@ -28,7 +29,12 @@ import { createDaemonFetch } from '@/lib/daemon-api-client'
 import { disconnectFromDaemon } from '@/lib/disconnect-daemon'
 import type { FaviconStyle } from '@/lib/favicon'
 import { getInstallState, promptInstall, subscribeInstallState } from '@/lib/install-prompt-store'
-import { ensurePersistentStorage, queryPersistentStorage } from '@/lib/persistent-storage'
+import {
+  type BrowserStorageEstimate,
+  ensurePersistentStorage,
+  queryPersistentStorage,
+  queryStorageEstimate,
+} from '@/lib/persistent-storage'
 import { createUserSettingsStore } from '@/lib/user-settings-store'
 import { FontsCard } from '../components/FontsCard.js'
 import { PairedOriginsCard } from '../components/PairedOriginsCard.js'
@@ -301,6 +307,8 @@ function sectionContent(
     protectDeclined: boolean
     onProtect: () => void
     installStatus: 'installed' | 'installable' | 'not-captured'
+    estimate: BrowserStorageEstimate | null
+    daemonStorageBytes: number | null
     daemon?: { baseUrl: string; token: string | null }
     onDisconnected?: () => void
   },
@@ -328,6 +336,8 @@ function sectionContent(
             install={props.installStatus}
             onInstall={() => void promptInstall()}
             daemonConnected={props.daemon !== undefined}
+            estimate={props.estimate}
+            daemonStorageBytes={props.daemonStorageBytes}
           />
           <div className="mt-6 border-t pt-4">
             <AppVersionRow />
@@ -427,6 +437,45 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
 
   const installState = useSyncExternalStore(subscribeInstallState, getInstallState)
 
+  // Journey evidence: what this browser keeps (estimate) and what a
+  // connected companion keeps (report total). Queried once per visit — the
+  // figures are orders-of-magnitude context, not a live meter.
+  const [estimate, setEstimate] = useState<BrowserStorageEstimate | null>(null)
+  useEffect(() => {
+    let cancelled = false
+    void queryStorageEstimate().then((value) => {
+      if (!cancelled) setEstimate(value)
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [])
+
+  const [daemonStorageBytes, setDaemonStorageBytes] = useState<number | null>(null)
+  const daemonBaseUrl = daemon?.baseUrl
+  const daemonToken = daemon?.token
+  useEffect(() => {
+    if (daemonBaseUrl === undefined) {
+      setDaemonStorageBytes(null)
+      return
+    }
+    let cancelled = false
+    const daemonFetch = createDaemonFetch(daemonBaseUrl, daemonToken ?? undefined)
+    void (async () => {
+      try {
+        const res = await daemonFetch('/api/runtime/storage')
+        if (!res.ok) return
+        const report = storageReportPayloadSchema.parse(await res.json())
+        if (!cancelled) setDaemonStorageBytes(report.totalBytes)
+      } catch {
+        // No figure — the step reads plain "connected".
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+  }, [daemonBaseUrl, daemonToken])
+
   const persistStep: PersistStepState = !persistedKnown
     ? 'unknown'
     : persisted === true
@@ -476,6 +525,8 @@ export function SettingsPage({ daemon, onDisconnected }: SettingsPageProps) {
     protectDeclined,
     onProtect: handleProtect,
     installStatus: installState.status,
+    estimate,
+    daemonStorageBytes,
     daemon,
     onDisconnected,
   }
