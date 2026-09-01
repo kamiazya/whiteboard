@@ -26,15 +26,12 @@ import type {
 /** Why a backend read or write failed. The published contract's own union. */
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
-import { exportResponseMessageSchema } from '@kamiazya/whiteboard-mcp/browser-shared'
 import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
-import type { z } from 'zod'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { getAppLogger } from './app-logger.js'
 import {
   type ExportRequestHandlerDeps,
-  flushPendingExportRequests,
   handleIncomingExportRequest,
 } from './document-sync-export.js'
 import {
@@ -466,38 +463,6 @@ export function createDocumentSyncSession(
     notify(canvas, 'external')
   }
 
-  // Bridges flushPendingExportRequests'/handleIncomingExportRequest's
-  // string-message `send` contract to DocumentBackend's typed
-  // sendExportResponse(requestId, data) method.
-  function sendExportResponseMessage(message: string): void {
-    let parsed: z.infer<typeof exportResponseMessageSchema>
-    try {
-      parsed = exportResponseMessageSchema.parse(JSON.parse(message))
-    } catch {
-      return
-    }
-    backend.sendExportResponse(parsed.requestId, parsed.data)
-  }
-
-  function buildExportDeps(): ExportRequestHandlerDeps {
-    return {
-      // lane B (document-sync-export.ts) owns replacing ExportRequestHandlerDeps's
-      // Excalidraw-shaped `api` entirely; this session has no imperative
-      // editor handle to supply, so every export request only ever queues —
-      // exportToBlobFn/blobToBase64Fn are consequently unreachable (they are
-      // only invoked once `api` is non-null).
-      api: null,
-      pending: pendingExportRequests,
-      send: sendExportResponseMessage,
-      exportToBlobFn: () => {
-        throw new Error('exportToBlobFn is unreachable while api stays null')
-      },
-      blobToBase64Fn: () => {
-        throw new Error('blobToBase64Fn is unreachable while api stays null')
-      },
-    }
-  }
-
   // Debounce window (ms): edits fired within this window of each other
   // coalesce into a single commit firing.
   const DEBOUNCE_MS = 300
@@ -745,13 +710,9 @@ export function createDocumentSyncSession(
         }
       },
 
-      async onExportRequest(payload) {
+      onExportRequest(payload) {
         if (isStale()) return
-        try {
-          await handleIncomingExportRequest(payload, buildExportDeps())
-        } catch (err) {
-          log.error('onExportRequest failed', err)
-        }
+        handleIncomingExportRequest(payload, { pending: pendingExportRequests })
       },
 
       onAuthError() {
@@ -846,9 +807,6 @@ export function createDocumentSyncSession(
 
   function onEditorReady(): void {
     backend.sendClientReady()
-    void flushPendingExportRequests(buildExportDeps()).catch((err: unknown) => {
-      log.error('flushPendingExportRequests failed', err)
-    })
   }
 
   function clearUndo(): void {
