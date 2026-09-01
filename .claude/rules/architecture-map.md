@@ -48,7 +48,8 @@ Absolute rules:
 These rules are enforced by `tools/arch-lint` (vitest project `arch-lint-node`):
 a TypeScript-compiler-API scan for banned imports/globals, a package.json
 dependency-direction check, a per-package allowed-third-party-dependency check,
-and a circular-value-import check. It reads this table's data-driven mirror,
+a circular-value-import check, and the adapter-mechanic check described below.
+It reads this table's data-driven mirror,
 `tools/arch-lint/src/architecture-map.ts`.
 
 Three things it enforces that a session outside `tools/arch-lint` still has to

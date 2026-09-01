@@ -133,11 +133,12 @@ rather than a probe) is the `test-layer-selection` skill.
 
 The integrator's push is guarded on two sides. **Local (pre-push, `lefthook`)**: `pnpm -r typecheck` + `pnpm test --project mcp-node` + `pnpm lint:noconsole` run before the commit leaves the machine (pre-commit only formats staged files, to not slow the dev-loop's worktree commits). **`pnpm check:local` is the fuller local pass** — every gate CI's `check` job runs, plus `pnpm knip` from `verify` (seconds, and it catches the dead export a refactor leaves behind; the rest of `verify` builds and smokes the published artifacts and belongs in CI). It is DERIVED from `ci.yml`, not remembered: `local-gate-command.test.ts` fails when the job gains a step the script does not run. That guard exists because the remembered list actually drifted — a session's habitual five (`typecheck`, `lint`, `lint:noconsole`, `audit`, `knip`) was missing `intent:validate`, `secretlint` and `test:scripts`, and reported green for work whose CI `check` job had not been approximated at all. A local pass that is trusted and wrong is worse than none. **Cloud (post-push)**: GitHub Actions CI (`verify`) + CodeRabbit + AccessLint + WIP + CodeQL — monitor with the `Monitor` tool and triage with the `ci-triage` workflow/skill into Tasks / whiteboard canvases. **Cloud (mutation, report-only)**: `mutation.yml` runs Stryker over `canvas-render`'s property-covered modules — on a PR, scoped to the curated files that diff changed and posted as a sticky comment; weekly, the whole list into an artifact. It is deliberately NOT a gate — a mutation score belongs to the whole suite, not to whoever pushed last — and it exists because a property that asserts nothing passes every other gate there is. Its survivors are triaged like review findings, and each is verified by hand first (the tool can report a false survivor; see `package-canvas-render.md`).
 
-**PR merge gate.** `verify` + CodeQL are the authoritative gate. **AI review is
-consulted when it has actually run, and its absence does not block a merge**
-(user decision, 2026-08-02): CodeRabbit is on a plan whose per-developer
-rolling limit this repo's merge pace exhausts, so waiting on it serialises
-delivery behind a quota rather than behind a real signal. Batching several PRs
+**PR merge gate.** `verify` + CodeQL are the authoritative gate on the change's
+quality and security. **AI review is consulted when it has actually run, and
+its absence does not block a merge** (user decision, 2026-08-02): CodeRabbit is
+on a plan whose per-developer rolling limit this repo's merge pace exhausts, so
+waiting on it serialises delivery behind a quota rather than behind a real
+signal. Batching several PRs
 at once is what burns the quota fastest — when a review matters for a specific
 change, open that PR alone and let it land.
 
