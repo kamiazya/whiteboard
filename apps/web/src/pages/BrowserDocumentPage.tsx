@@ -8,6 +8,7 @@ import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
+import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -642,12 +643,7 @@ export function BrowserDocumentPage({
 
   if (renderState.kind === 'load-degraded') {
     return (
-      <div
-        role="alert"
-        aria-live="assertive"
-        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
-      >
-        <p className="max-w-md text-sm text-destructive">{renderState.message}</p>
+      <LoadDegradedView message={renderState.message}>
         <button
           type="button"
           onClick={() => void startFresh()}
@@ -655,7 +651,7 @@ export function BrowserDocumentPage({
         >
           Start fresh
         </button>
-      </div>
+      </LoadDegradedView>
     )
   }
 

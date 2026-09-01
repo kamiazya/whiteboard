@@ -26,6 +26,12 @@ import {
   documentReadFailureMessage,
 } from '../lib/document-read-failure.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
+import type {
+  CleanupCompletedState,
+  EditingState,
+  LoadDegradedState,
+  LoadingState,
+} from './document-page-state.js'
 import type { BrowserPersistenceState } from './use-browser-document-controller.js'
 
 export interface BrowserPageStateInput {
@@ -34,27 +40,27 @@ export interface BrowserPageStateInput {
   cleanupCompleted: boolean
 }
 
+// The browser half of the shared machine in document-page-state.ts, composed
+// from its state shapes:
+//
+// - load-degraded: the persisted canvas could not be parsed and there is no
+//   user-meaningful snapshot to render. `message` is carried verbatim from
+//   the persistence state so the page never has to re-narrow
+//   `persistence.kind === 'degraded'` to read it — the helper is the single
+//   render source of truth.
+// - cleanup-completed: the persisted canvas is gone and the load effect
+//   won't re-run; the page renders the completion view instead of falling
+//   through to the loading placeholder.
+// - loading: pre-load tick — snapshot has not arrived yet and no terminal
+//   state has fired.
+// - editing: steady state. `persistence` may be `saved`, `pending`,
+//   `saving`, or `degraded` — that distinction is the header save-status
+//   surface, not a page-level branch.
 export type BrowserPageState =
-  // The persisted canvas could not be parsed and there is no
-  // user-meaningful snapshot to render. The page renders the
-  // full-page degraded banner; recovery affordances live there.
-  // `message` is carried verbatim from the persistence state so the
-  // page never has to re-narrow `persistence.kind === 'degraded'`
-  // to read it — the helper is the single render source of truth.
-  | { kind: 'load-degraded'; message: string }
-  // The user just deleted the retained browser copy. The persisted
-  // canvas is gone and the load effect won't re-run; the page
-  // renders the completion view instead of falling through to the
-  // loading placeholder.
-  | { kind: 'cleanup-completed' }
-  // Pre-load tick: snapshot has not arrived yet and no terminal
-  // state (degraded / cleanup-completed) has fired. The page
-  // renders the loading placeholder.
-  | { kind: 'loading' }
-  // Steady state. The editor renders. `persistence` may be `saved`,
-  // `pending`, `saving`, or `degraded` — that distinction is the
-  // header save-status surface, not a page-level branch.
-  | { kind: 'editing'; snapshot: DocumentSnapshot; persistence: BrowserPersistenceState }
+  | LoadDegradedState
+  | CleanupCompletedState
+  | LoadingState
+  | (EditingState & { snapshot: DocumentSnapshot; persistence: BrowserPersistenceState })
 
 export function derivePageState(input: BrowserPageStateInput): BrowserPageState {
   // Cascade order encodes the invariants documented at the top of

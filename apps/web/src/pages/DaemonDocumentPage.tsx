@@ -13,6 +13,7 @@ import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
+import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
 import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPane.js'
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
@@ -56,6 +57,7 @@ import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
+import { deriveDaemonPageState } from './daemon-page-state.js'
 import { useDaemonDocumentController } from './use-daemon-document-controller.js'
 
 const log = getAppLogger('daemon-document-page')
@@ -571,20 +573,25 @@ export function DaemonDocumentPage({
     }
   }
 
-  if (controller.loading) {
+  // The page-level render state, derived once (see daemon-page-state.ts for
+  // the cascade's invariants). Terminal states render from THIS, never from
+  // ad-hoc controller-field checks in the JSX — the machine is shared with
+  // BrowserDocumentPage (document-page-state.ts), so the two pages' state
+  // vocabularies cannot drift apart silently.
+  const pageState = deriveDaemonPageState({
+    loading: controller.loading,
+    loadError: controller.loadError,
+    canvas,
+    documentCount: controller.documents.length,
+    documentAtPath: workspaceSyncDocumentId !== undefined,
+  })
+
+  if (pageState.kind === 'loading') {
     return <DocumentPageSkeleton label="Connecting to daemon" />
   }
 
-  if (controller.loadError) {
-    return (
-      <div
-        role="alert"
-        aria-live="assertive"
-        className="flex h-full flex-col items-center justify-center gap-4 p-6 text-center"
-      >
-        <p className="max-w-md text-sm text-destructive">{controller.loadError}</p>
-      </div>
-    )
+  if (pageState.kind === 'load-degraded') {
+    return <LoadDegradedView message={pageState.message} />
   }
 
   const versionPanelExtra =
@@ -732,9 +739,7 @@ export function DaemonDocumentPage({
           </>
         }
       >
-        {canvas !== null &&
-        controller.documents.length > 0 &&
-        workspaceSyncDocumentId === undefined ? (
+        {pageState.kind === 'document-missing' ? (
           <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
             {onNavigateBack && (
               <button
@@ -746,8 +751,8 @@ export function DaemonDocumentPage({
               </button>
             )}
             <p className="text-sm text-muted-foreground">
-              Nothing is at <span className="font-medium text-foreground">“{canvas.path}”</span> in
-              this workspace. It may have been deleted or renamed.
+              Nothing is at <span className="font-medium text-foreground">“{pageState.path}”</span>{' '}
+              in this workspace. It may have been deleted or renamed.
             </p>
             {controller.createError && (
               <div role="alert" aria-live="assertive" className="text-xs text-destructive">
@@ -761,13 +766,13 @@ export function DaemonDocumentPage({
               disabled={creating}
               onClick={() => {
                 setCreating(true)
-                void controller.createDocument(canvas.path).finally(() => setCreating(false))
+                void controller.createDocument(pageState.path).finally(() => setCreating(false))
               }}
             >
               Create a canvas at this path
             </Button>
           </div>
-        ) : controller.documents.length === 0 ? (
+        ) : pageState.kind === 'workspace-empty' ? (
           <div className="flex h-full min-h-0 flex-col items-center justify-center gap-3 p-6 text-center">
             {/* WorkspaceTopBar (the usual home for this button) only mounts once
                 a canvas is selected, so a workspace that resolves to zero
