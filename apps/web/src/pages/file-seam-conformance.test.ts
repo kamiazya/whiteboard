@@ -97,6 +97,76 @@ function renders(source: string, chrome: string): boolean {
   return new RegExp(`<${chrome}[\\s/>]`).test(source)
 }
 
+/**
+ * `spatial-editor-container` must sit INSIDE each page's spatial slot.
+ *
+ * It is the hook most page tests reach for, and it meant two different things:
+ * the daemon page placed it inside the slot, so it answered "a spatial editor
+ * is mounted", while the browser page placed it around `DocumentEditorSurface`,
+ * so it also appeared for a MARKDOWN document and answered "the editor surface
+ * is mounted". Measured — `DocumentEditorSurface` does not render its `spatial`
+ * slot for a markdown document, so the two placements cannot agree.
+ *
+ * One identifier answering two questions makes a test written against one page
+ * silently wrong against the other, which is the same defect as chrome one page
+ * renders and the other does not, one layer down.
+ *
+ * A scan rather than a render, for the reason the file-seam scan gives: the
+ * property is WHERE the attribute sits in the source, and a render can only see
+ * one kind at a time.
+ */
+describe('the spatial-editor-container hook means one thing', () => {
+  const HOOK = 'data-testid="spatial-editor-container"'
+  const SLOT = 'spatial={() => ('
+
+  /**
+   * The slot callback's [start, end) range, by matching the paren the marker
+   * opens. `first occurrence comes after the opener` was the original
+   * assertion and it has two holes review named: it never proves the hook is
+   * INSIDE the callback, and a second hook added after the callback closes —
+   * outside it, so rendered for a markdown document too — keeps it green.
+   */
+  function spatialSlotRange(source: string): [number, number] {
+    const open = source.indexOf(SLOT)
+    if (open === -1) return [-1, -1]
+    let depth = 0
+    let i = open + SLOT.length - 1
+    for (; i < source.length; i++) {
+      if (source[i] === '(') depth += 1
+      else if (source[i] === ')') {
+        depth -= 1
+        if (depth === 0) break
+      }
+    }
+    return [open, i]
+  }
+
+  function hookOffsets(source: string): number[] {
+    const out: number[] = []
+    for (let i = source.indexOf(HOOK); i !== -1; i = source.indexOf(HOOK, i + 1)) out.push(i)
+    return out
+  }
+
+  it.each(PAGES)('%s places every occurrence inside the spatial slot', async (page) => {
+    const source = await read(page)
+    const [start, end] = spatialSlotRange(source)
+    expect(start, `${page} has no spatial slot to place it in`).toBeGreaterThan(-1)
+    // A slot whose body bracket-matched to nothing would let the range check
+    // below pass vacuously in one direction and fail nonsensically in the
+    // other; either way the range itself is the first thing to distrust.
+    expect(end - start, `${page}'s spatial slot range collapsed`).toBeGreaterThan(500)
+
+    const offsets = hookOffsets(source)
+    expect(offsets.length, `${page} does not expose the hook at all`).toBeGreaterThan(0)
+    const outside = offsets.filter((at) => at < start || at > end)
+    expect(
+      outside,
+      'a hook outside the spatial slot is present for a markdown document ' +
+        'too, so it no longer means "a spatial editor is mounted".',
+    ).toEqual([])
+  })
+})
+
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
     const missing: string[] = []
