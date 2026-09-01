@@ -4,10 +4,10 @@ import {
   reconcileDocContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
+import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import type { LoroDoc } from 'loro-crdt'
 import { restoreVersionRequestSchema } from '../../../shared/api-contracts/document.js'
-import { countAliveNodes } from '../../store/count-alive-nodes.js'
 import { evictDoc } from '../../store/doc-cache.js'
 import {
   ConflictError,

@@ -1,4 +1,5 @@
 export { createServer } from './create-server.js'
+export { countAliveNodes, countLegacyTombstones } from './document-counts.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
 export type { Embedder } from './search/embedder.js'
