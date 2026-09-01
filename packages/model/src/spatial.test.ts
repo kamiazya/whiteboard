@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import {
   canvasColorSchema,
+  canvasCommentSchema,
   canvasEdgeSchema,
   spatialCanvasSchema,
   spatialNodeSchema,
@@ -382,5 +383,83 @@ describe('canvas-level x-whiteboard', () => {
       'x-whiteboard': 'not an object',
     })
     expect(parsed.nodes).toHaveLength(1)
+  })
+})
+
+// The annotation layer (ADR-0024): a comment is pinned AT an anchor point but
+// is not content — it must never cost the canvas, and a reader that cannot
+// interpret it still holds a complete document.
+describe('canvasCommentSchema', () => {
+  const minimal = { id: 'c1', x: 100, y: -40, text: 'this arrow points the wrong way' }
+
+  it('accepts the minimal shape: id + integer anchor + non-empty text', () => {
+    expect(canvasCommentSchema.safeParse(minimal).success).toBe(true)
+  })
+
+  it('accepts the full shape: OKF actor author, OKF timestamp, target node, resolved', () => {
+    const parsed = canvasCommentSchema.safeParse({
+      ...minimal,
+      author: 'human:yuuki',
+      createdAt: '2026-09-01T10:00:00+09:00',
+      targetNodeId: 'n1',
+      resolved: true,
+    })
+    expect(parsed.success).toBe(true)
+  })
+
+  it('rejects empty text — a comment with nothing to say is a caller bug', () => {
+    expect(canvasCommentSchema.safeParse({ ...minimal, text: '' }).success).toBe(false)
+  })
+
+  it('rejects a non-integer anchor, matching JSON Canvas geometry', () => {
+    expect(canvasCommentSchema.safeParse({ ...minimal, x: 1.5 }).success).toBe(false)
+  })
+
+  it('rejects a blank author and a timestamp without an explicit offset', () => {
+    expect(canvasCommentSchema.safeParse({ ...minimal, author: '  ' }).success).toBe(false)
+    expect(
+      canvasCommentSchema.safeParse({ ...minimal, createdAt: '2026-09-01T10:00:00' }).success,
+    ).toBe(false)
+  })
+})
+
+describe('canvas comments on the canvas-level extension', () => {
+  const comment = { id: 'c1', x: 10, y: 20, text: 'shrink this' }
+
+  it('carries comments beside the rendering preferences', () => {
+    const parsed = spatialCanvasSchema.parse({
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [comment] },
+    })
+    expect(parsed['x-whiteboard']).toEqual({
+      edgeRouting: { style: 'orthogonal' },
+      comments: [comment],
+    })
+  })
+
+  it('a malformed comment costs the comments bucket only, never the sibling preferences', () => {
+    const parsed = spatialCanvasSchema.parse({
+      nodes: [],
+      edges: [],
+      'x-whiteboard': {
+        edgeRouting: { style: 'orthogonal' },
+        comments: [{ id: 'c1', x: 10, y: 20, text: '' }],
+      },
+    })
+    expect(parsed['x-whiteboard']).toEqual({ edgeRouting: { style: 'orthogonal' } })
+  })
+
+  // Deliberately UNLIKE an edge's endpoints: a comment may outlive the node it
+  // was left on (or arrive about one a concurrent peer deleted), and a
+  // renderer falls back to the anchor point. Rejecting would let the
+  // annotation layer make the document unreadable.
+  it('accepts a targetNodeId that names no existing node', () => {
+    const parsed = spatialCanvasSchema.safeParse({
+      nodes: [],
+      edges: [],
+      'x-whiteboard': { comments: [{ ...comment, targetNodeId: 'gone' }] },
+    })
+    expect(parsed.success).toBe(true)
   })
 })

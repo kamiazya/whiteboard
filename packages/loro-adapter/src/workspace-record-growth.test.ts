@@ -81,9 +81,9 @@ describe('workspace-record growth scoreboard', () => {
   })
 
   it('pins record size against document count (no edits)', () => {
-    expect(build(1, 0).afterCreateBytes).toBe(858)
-    expect(build(10, 0).afterCreateBytes).toBe(3002)
-    expect(build(50, 0).afterCreateBytes).toBe(12655)
+    expect(build(1, 0).afterCreateBytes).toBe(889)
+    expect(build(10, 0).afterCreateBytes).toBe(3166)
+    expect(build(50, 0).afterCreateBytes).toBe(13866)
   })
 
   it('pins oplog growth per edit and the shallow reclaim', () => {
@@ -92,10 +92,16 @@ describe('workspace-record growth scoreboard', () => {
     expect(n.updateBytes).toBe(178460)
     // The stored-snapshot price of the same history — Loro's snapshot
     // encoding compresses it to ~8B/edit.
-    expect(n.fullBytes).toBe(11348)
-    // The reclaim: a shallow cut at the current frontier is byte-identical
-    // to the record before any edit happened.
-    expect(n.shallowBytes).toBe(3002)
-    expect(n.shallowBytes).toBe(build(10, 0).afterCreateBytes)
+    expect(n.fullBytes).toBe(11428)
+    // The reclaim: a shallow cut at the current frontier collapses the whole
+    // edit history. It is no longer byte-IDENTICAL to the create-time record:
+    // since the comments container (ADR-0024) joined the pre-attached set, a
+    // container that has never been written encodes 9B leaner in a shallow
+    // snapshot than at create time (measured 3157 vs 3166), so the cut is
+    // pinned exactly AND bounded by the create-time size — the reclaim story
+    // ("compaction takes back everything the edits added") is the invariant,
+    // byte identity was only its strongest available form.
+    expect(n.shallowBytes).toBe(3157)
+    expect(n.shallowBytes).toBeLessThanOrEqual(build(10, 0).afterCreateBytes)
   })
 })

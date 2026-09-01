@@ -2,6 +2,7 @@ export { collectImageRefIds } from './image-refs.js'
 export type { DocumentContainers } from './loro-bridge.js'
 export {
   CONTENT_CONTAINER_KEYS,
+  deleteCanvasComment,
   deleteSpatialEdge,
   deleteSpatialNode,
   MARKDOWN_BODY_KEY,
@@ -18,6 +19,7 @@ export {
   setEdgeLock,
   setNodeLock,
   withSpatialBatch,
+  writeCanvasComment,
   writeCoreFacets,
   writeDocumentKind,
   writeFacets,

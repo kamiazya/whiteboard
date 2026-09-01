@@ -1,5 +1,7 @@
 import {
+  type CanvasComment,
   type CanvasEdge,
+  canvasCommentSchema,
   canvasEdgeSchema,
   canvasExtensionSchema,
   type DocumentKind,
@@ -55,6 +57,15 @@ const EDGES_KEY = 'edges'
  */
 const CANVAS_KEY = 'canvas'
 const EXTENSION_FIELD = 'x-whiteboard'
+/**
+ * The comment annotation layer (ADR-0024), keyed per comment like nodes and
+ * edges — NOT stored inside the canvas envelope above, although the model
+ * type carries comments on `x-whiteboard`. The envelope is whole-value LWW,
+ * which is right for a preference and exactly wrong for comments: two peers
+ * commenting concurrently must both survive a merge. `writeSpatialCanvas`
+ * splits the field out on write and `readSpatialCanvas` reassembles it.
+ */
+const COMMENTS_KEY = 'comments'
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -155,16 +166,51 @@ function edgeToFields(edge: CanvasEdge): Fields {
   return fields
 }
 
+function commentToFields(comment: CanvasComment): Fields {
+  // Same loud refusal as nodeToFields: readSpatialCanvas round-trips every
+  // comment through the Zod schema and silently drops failures, so a NaN
+  // anchor written here would delete the comment for every reader.
+  for (const [field, value] of [
+    ['x', comment.x],
+    ['y', comment.y],
+  ] as const) {
+    if (!Number.isFinite(value)) {
+      throw new TypeError(
+        `canvas comment "${comment.id}" has a non-finite ${field} (${value}); the anchor must be finite`,
+      )
+    }
+  }
+  const fields: Fields = { id: comment.id, x: comment.x, y: comment.y, text: comment.text }
+  if (comment.author !== undefined) fields.author = comment.author
+  if (comment.createdAt !== undefined) fields.createdAt = comment.createdAt
+  if (comment.targetNodeId !== undefined) fields.targetNodeId = comment.targetNodeId
+  if (comment.resolved !== undefined) fields.resolved = comment.resolved
+  return fields
+}
+
 export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanvas): void {
   const nodesMap = doc.getMap(NODES_KEY)
   const edgesMap = doc.getMap(EDGES_KEY)
   // Deleted rather than left behind when the canvas drops it: a canvas that
   // returned to the default must stop rendering a preference the author
-  // turned off.
+  // turned off. Comments are split OUT of the envelope value first — see
+  // COMMENTS_KEY for why they must not ride the whole-value LWW write.
   const canvasMap = doc.getMap(CANVAS_KEY)
-  const extension = canvas[EXTENSION_FIELD]
-  if (extension === undefined) canvasMap.delete(EXTENSION_FIELD)
-  else canvasMap.set(EXTENSION_FIELD, extension)
+  const { comments, ...envelope } = canvas[EXTENSION_FIELD] ?? {}
+  if (Object.values(envelope).every((value) => value === undefined)) {
+    canvasMap.delete(EXTENSION_FIELD)
+  } else {
+    canvasMap.set(EXTENSION_FIELD, envelope)
+  }
+
+  const commentsMap = doc.getMap(COMMENTS_KEY)
+  const existingCommentIds = new Set<string>(commentsMap.keys())
+  for (const comment of comments ?? []) {
+    existingCommentIds.delete(comment.id)
+    commentsMap.set(comment.id, commentToFields(comment))
+  }
+  // A resync states the whole truth, comments included.
+  for (const id of existingCommentIds) commentsMap.delete(id)
 
   const existingNodeIds = new Set<string>(nodesMap.keys())
   const existingEdgeIds = new Set<string>(edgesMap.keys())
@@ -405,9 +451,53 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
 
   // Parsed, not trusted: the stored value came from another version or peer,
   // and model's own rule for this key is that an unreadable payload
-  // costs the preference, never the canvas.
-  const extension = canvasExtensionSchema.safeParse(doc.getMap(CANVAS_KEY).get(EXTENSION_FIELD))
-  return extension.success ? { nodes, edges, [EXTENSION_FIELD]: extension.data } : { nodes, edges }
+  // costs the preference, never the canvas. Any `comments` a buggy writer
+  // left INSIDE the envelope are discarded here — the comments map below is
+  // the single source of that field.
+  const parsedEnvelope = canvasExtensionSchema.safeParse(
+    doc.getMap(CANVAS_KEY).get(EXTENSION_FIELD),
+  )
+  const { comments: _strayComments, ...envelope } = parsedEnvelope.success
+    ? parsedEnvelope.data
+    : {}
+
+  const commentsMap = doc.getMap(COMMENTS_KEY)
+  const comments: CanvasComment[] = []
+  for (const commentId of commentsMap.keys()) {
+    const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
+    if (parsed.success) comments.push(parsed.data)
+  }
+
+  const hasEnvelope = Object.values(envelope).some((value) => value !== undefined)
+  if (!hasEnvelope && comments.length === 0) return { nodes, edges }
+  return {
+    nodes,
+    edges,
+    [EXTENSION_FIELD]: comments.length > 0 ? { ...envelope, comments } : envelope,
+  }
+}
+
+/**
+ * Writes exactly one comment's entry, leaving every other comment (and the
+ * canvas envelope) untouched — the comment-level counterpart of
+ * `writeSpatialNode`, and the write shape a "two peers comment concurrently"
+ * merge depends on. Also the UPDATE path: resolving a comment is a rewrite
+ * of the same id with `resolved: true`.
+ */
+export function writeCanvasComment(doc: DocumentContainers, comment: CanvasComment): void {
+  doc.getMap(COMMENTS_KEY).set(comment.id, commentToFields(comment))
+  doc.commit()
+}
+
+/**
+ * Removes exactly one comment. Idempotent and a no-op (no commit) for an id
+ * absent from the doc, matching `deleteSpatialEdge`.
+ */
+export function deleteCanvasComment(doc: DocumentContainers, commentId: string): void {
+  const commentsMap = doc.getMap(COMMENTS_KEY)
+  if (!commentsMap.keys().includes(commentId)) return
+  commentsMap.delete(commentId)
+  doc.commit()
 }
 
 /**
@@ -712,6 +802,7 @@ export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 
   { key: NODES_KEY, kind: 'map' },
   { key: EDGES_KEY, kind: 'map' },
   { key: CANVAS_KEY, kind: 'map' },
+  { key: COMMENTS_KEY, kind: 'map' },
   { key: FACETS_KEY, kind: 'map' },
   { key: NODE_LOCKS_KEY, kind: 'map' },
   { key: EDGE_LOCKS_KEY, kind: 'map' },
