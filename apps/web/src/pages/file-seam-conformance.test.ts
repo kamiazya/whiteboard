@@ -116,18 +116,54 @@ function renders(source: string, chrome: string): boolean {
  * one kind at a time.
  */
 describe('the spatial-editor-container hook means one thing', () => {
-  it.each(PAGES)('%s places it inside the spatial slot', async (page) => {
-    const source = await read(page)
-    const slot = source.indexOf('spatial={() => (')
-    expect(slot, `${page} has no spatial slot to place it in`).toBeGreaterThan(-1)
+  const HOOK = 'data-testid="spatial-editor-container"'
+  const SLOT = 'spatial={() => ('
 
-    const at = source.indexOf('data-testid="spatial-editor-container"')
-    expect(at, `${page} does not expose the hook at all`).toBeGreaterThan(-1)
+  /**
+   * The slot callback's [start, end) range, by matching the paren the marker
+   * opens. `first occurrence comes after the opener` was the original
+   * assertion and it has two holes review named: it never proves the hook is
+   * INSIDE the callback, and a second hook added after the callback closes —
+   * outside it, so rendered for a markdown document too — keeps it green.
+   */
+  function spatialSlotRange(source: string): [number, number] {
+    const open = source.indexOf(SLOT)
+    if (open === -1) return [-1, -1]
+    let depth = 0
+    let i = open + SLOT.length - 1
+    for (; i < source.length; i++) {
+      if (source[i] === '(') depth += 1
+      else if (source[i] === ')') {
+        depth -= 1
+        if (depth === 0) break
+      }
+    }
+    return [open, i]
+  }
+
+  function hookOffsets(source: string): number[] {
+    const out: number[] = []
+    for (let i = source.indexOf(HOOK); i !== -1; i = source.indexOf(HOOK, i + 1)) out.push(i)
+    return out
+  }
+
+  it.each(PAGES)('%s places every occurrence inside the spatial slot', async (page) => {
+    const source = await read(page)
+    const [start, end] = spatialSlotRange(source)
+    expect(start, `${page} has no spatial slot to place it in`).toBeGreaterThan(-1)
+    // A slot whose body bracket-matched to nothing would let the range check
+    // below pass vacuously in one direction and fail nonsensically in the
+    // other; either way the range itself is the first thing to distrust.
+    expect(end - start, `${page}'s spatial slot range collapsed`).toBeGreaterThan(500)
+
+    const offsets = hookOffsets(source)
+    expect(offsets.length, `${page} does not expose the hook at all`).toBeGreaterThan(0)
+    const outside = offsets.filter((at) => at < start || at > end)
     expect(
-      at,
-      'the hook sits before the spatial slot, so it is present for a markdown ' +
-        'document too and no longer means "a spatial editor is mounted".',
-    ).toBeGreaterThan(slot)
+      outside,
+      'a hook outside the spatial slot is present for a markdown document ' +
+        'too, so it no longer means "a spatial editor is mounted".',
+    ).toEqual([])
   })
 })
 
