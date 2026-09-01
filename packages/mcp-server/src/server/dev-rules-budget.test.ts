@@ -60,7 +60,7 @@ function alwaysOnFiles(): string[] {
 
 const ALWAYS_ON_BUDGET: Record<string, number> = {
   'AGENTS.md': 16,
-  '.claude/rules/architecture-map.md': 13,
+  '.claude/rules/architecture-map.md': 14,
   '.claude/rules/dev-flow.md': 25,
   '.claude/rules/integrator-flow.md': 13,
   '.claude/rules/vocabulary.md': 15,

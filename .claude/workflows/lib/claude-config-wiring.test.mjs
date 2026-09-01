@@ -103,21 +103,28 @@ test('the Simplify phase runs a repo-owned agent, not a foreign plugin agent', (
 // requires every new package to ship that rule. Neither is mechanical, and 6 of the 7 shipped
 // without the `paths:` frontmatter that makes the promise true — so every package's rule loaded
 // into every session regardless of what was being touched. This is that prose made executable.
-test('every package-<name>.md rule is path-scoped to packages/<name>', () => {
+// A rule for something under `tools/` is named `tool-<name>.md` and scoped there, for the same
+// reason and by the same check: `package-arch-lint.md` scoped to `tools/arch-lint/**` failed this
+// guard, and the name was the thing that was wrong — arch-lint is not a package.
+test('every package-/tool-<name>.md rule is path-scoped to its own directory', () => {
   const rulesDir = path.join(repoRoot, '.claude', 'rules')
   const unscoped = []
-  for (const file of readdirSync(rulesDir).filter((f) => f.startsWith('package-') && f.endsWith('.md'))) {
-    const pkg = file.slice('package-'.length, -'.md'.length)
+  const prefixes = { 'package-': 'packages', 'tool-': 'tools' }
+  for (const file of readdirSync(rulesDir).filter((f) => f.endsWith('.md'))) {
+    const prefix = Object.keys(prefixes).find((p) => file.startsWith(p))
+    if (prefix === undefined) continue
+    const dir = prefixes[prefix]
+    const pkg = file.slice(prefix.length, -'.md'.length)
     const frontmatter = readFileSync(path.join(rulesDir, file), 'utf8').match(/^---\n([\s\S]*?)\n---\n/)
     // Match a real `paths:` LIST ITEM, not a substring of the frontmatter: these blocks carry
     // explanatory comments, and a pattern mentioned only in a comment would otherwise satisfy the
     // guard while scoping nothing.
     const isScoped = (frontmatter?.[1] ?? '')
       .split('\n')
-      .some((line) => new RegExp(`^\\s*-\\s*["']?packages/${pkg}/\\*\\*["']?\\s*$`).test(line))
+      .some((line) => new RegExp(`^\\s*-\\s*["']?${dir}/${pkg}/\\*\\*["']?\\s*$`).test(line))
     if (!isScoped) unscoped.push(file)
   }
-  assert.deepEqual(unscoped, [], `package rules missing a "paths: packages/<name>/**" frontmatter: ${unscoped.join(', ')}`)
+  assert.deepEqual(unscoped, [], `rules missing a "paths: <packages|tools>/<name>/**" frontmatter: ${unscoped.join(', ')}`)
 })
 
 // The Workflow runtime executes each script as a function body (top-level `return` is legal, so

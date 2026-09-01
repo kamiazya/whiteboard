@@ -84,7 +84,8 @@ those is caught rather than quietly making the map wrong.
 Every allowlist in the tool is guarded from both sides, so an entry cannot
 outlive the debt it names. What each scan covers, the measurements behind the
 lists, and the blind spots found by measuring rather than reading are
-`.claude/rules/package-arch-lint.md`, path-scoped to `tools/arch-lint/**`.
+`.claude/rules/tool-arch-lint.md`, path-scoped to `tools/arch-lint/**` — a
+`tool-` rather than a `package-` rule, because arch-lint lives in `tools/`.
 Per-package details are `.claude/rules/package-<name>.md`, likewise
 path-scoped. Note: `./skills/` (product MCP skills) is unrelated to
 `.claude/skills/` (dev workflow skills).
