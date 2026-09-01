@@ -6,37 +6,11 @@ import {
   type StorageReportPayload,
   storageReportPayloadSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
-import { Eraser, HardDrive, Library, RefreshCw, Sparkles, Trash2 } from 'lucide-react'
+import { Eraser, HardDrive, RefreshCw, Sparkles } from 'lucide-react'
 import { useCallback, useEffect, useRef, useState } from 'react'
-import { z } from 'zod'
 import { Button } from '@/components/ui/button'
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { formatBytes } from '../lib/format-bytes.js'
-import { SquiggleLoader } from './SquiggleLoader.js'
-
-// Schema for the daemon's /api/v1/user-libraries response.
-// This is the sole definition — the former api-contracts/libraries.ts was
-// removed by the move to the document model.
-const userLibraryRowSchema = z.object({
-  name: z.string(),
-  path: z.string(),
-  itemCount: z.number().int().nonnegative(),
-  bytes: z.number().int().nonnegative().nullable().optional(),
-})
-
-const userLibrariesResponseSchema = z.object({
-  libraries: z.array(userLibraryRowSchema),
-})
-
-type UserLibraryRow = z.infer<typeof userLibraryRowSchema>
 
 // Storage starts as visibility-before-enforcement: rows expose where bytes are
 // accumulating before the app applies caps, LRU, or category-specific cleanup.
@@ -47,13 +21,7 @@ interface CategoryDescriptor {
   key: string
   label: string
   description: string
-  // Optional soft cap. When the row's bytes pass this threshold the row
-  // surfaces a "near / over cap" hint. No auto-prune happens here; this
-  // component only makes growth visible before any cleanup policy runs.
-  softCapBytes?: number
 }
-
-const USER_LIBRARIES_SOFT_CAP_BYTES = 50 * 1024 * 1024
 
 const CATEGORIES: CategoryDescriptor[] = [
   { key: 'blobs', label: 'Canvas snapshots', description: 'Latest Loro doc per canvas' },
@@ -67,14 +35,6 @@ const CATEGORIES: CategoryDescriptor[] = [
   { key: 'logs', label: 'Logs', description: 'Daemon stdout / stderr archives' },
   { key: 'db', label: 'Metadata DB', description: 'Workspaces, names, pins, branches' },
   { key: 'other', label: 'Other', description: 'Unclassified files in the data dir' },
-  // Pinned to the bottom — user libraries are explicit user data, not
-  // generated artefacts, and have their own management dialog.
-  {
-    key: 'libraries',
-    label: 'User libraries',
-    description: 'Library packs you installed',
-    softCapBytes: USER_LIBRARIES_SOFT_CAP_BYTES,
-  },
 ]
 
 // Show the spinner for at least this long even if fetch returns sooner —
@@ -259,62 +219,6 @@ export function StorageReportCard() {
     }
   }, [refresh, scheduleStatusClear, fetchApi])
 
-  // User libraries management dialog. Surfaces installed libraries with
-  // per-pack size and item count, plus a per-row Remove that maps to the
-  // existing DELETE /api/user-libraries/:name endpoint.
-  const [libsOpen, setLibsOpen] = useState(false)
-  const [libsLoading, setLibsLoading] = useState(false)
-  const [libs, setLibs] = useState<UserLibraryRow[]>([])
-  const [libsError, setLibsError] = useState<string | null>(null)
-  const fetchLibs = useCallback(async () => {
-    setLibsLoading(true)
-    setLibsError(null)
-    try {
-      const res = await fetchApi('/api/user-libraries')
-      if (!mountedRef.current) return
-      if (!res.ok) {
-        setLibsError(`HTTP ${res.status}`)
-        return
-      }
-      const json = userLibrariesResponseSchema.parse(await res.json())
-      if (!mountedRef.current) return
-      setLibs(json.libraries)
-    } catch (err) {
-      if (mountedRef.current) {
-        setLibsError(err instanceof Error ? err.message : String(err))
-      }
-    } finally {
-      if (mountedRef.current) setLibsLoading(false)
-    }
-  }, [fetchApi])
-  const removeLib = useCallback(
-    async (name: string) => {
-      // Callers fire-and-forget this (void removeLib(...)), so a thrown fetch
-      // must be converted to state here or it becomes an unhandled rejection.
-      try {
-        const res = await fetchApi(`/api/user-libraries/${encodeURIComponent(name)}`, {
-          method: 'DELETE',
-        })
-        if (!mountedRef.current) return
-        if (!res.ok) {
-          setLibsError(`Remove failed: HTTP ${res.status}`)
-          return
-        }
-        // Optimistic update so the row disappears immediately, then re-pull
-        // from the server to stay consistent with whatever else changed
-        // (timestamps etc.).
-        setLibs((prev) => prev.filter((l) => l.name !== name))
-        void fetchLibs()
-        void refresh()
-      } catch (err) {
-        if (mountedRef.current) {
-          setLibsError(err instanceof Error ? err.message : String(err))
-        }
-      }
-    },
-    [fetchLibs, refresh, fetchApi],
-  )
-
   // Daemon-log rotation override. Logs are also pruned fire-and-forget
   // on every daemon startup; this button lets the user reclaim disk
   // without bouncing the daemon.
@@ -489,11 +393,8 @@ export function StorageReportCard() {
       )}
 
       <ul className="rounded-lg border divide-y">
-        {CATEGORIES.map(({ key, label, description, softCapBytes }) => {
+        {CATEGORIES.map(({ key, label, description }) => {
           const bucket = report?.byCategory[key] ?? { bytes: 0, files: 0 }
-          const overCap = softCapBytes !== undefined && bucket.bytes > softCapBytes
-          const nearCap =
-            !overCap && softCapBytes !== undefined && bucket.bytes > softCapBytes * 0.8
           return (
             <li key={key} data-storage-row={key} className="flex items-center gap-3 px-4 py-3">
               <div className="min-w-0 flex-1">
@@ -501,19 +402,8 @@ export function StorageReportCard() {
                 <div className="text-xs text-muted-foreground truncate">{description}</div>
               </div>
               <div className="shrink-0 text-right font-mono text-xs tabular-nums">
-                <div className={overCap ? 'text-destructive' : undefined}>
-                  {formatBytes(bucket.bytes)}
-                  {softCapBytes !== undefined && (
-                    <span className="text-muted-foreground"> / {formatBytes(softCapBytes)}</span>
-                  )}
-                </div>
-                <div className="text-[10px] text-muted-foreground">
-                  {overCap
-                    ? 'Over soft cap — please uninstall unused'
-                    : nearCap
-                      ? 'Approaching soft cap'
-                      : `${bucket.files} files`}
-                </div>
+                <div>{formatBytes(bucket.bytes)}</div>
+                <div className="text-[10px] text-muted-foreground">{`${bucket.files} files`}</div>
               </div>
               {/* Reserved action slot. Today only the Canvas snapshots row
                   carries an action (Optimize all → compact Loro op-log on
@@ -606,100 +496,11 @@ export function StorageReportCard() {
                     )}
                   </>
                 )}
-                {key === 'libraries' && (
-                  <Button
-                    variant="outline"
-                    size="sm"
-                    className="h-7 gap-1.5"
-                    onClick={() => {
-                      setLibsOpen(true)
-                      void fetchLibs()
-                    }}
-                    aria-label="Manage installed user libraries"
-                  >
-                    <Library className="size-3.5" />
-                    <span className="text-xs">Manage</span>
-                  </Button>
-                )}
               </div>
             </li>
           )
         })}
       </ul>
-
-      <Dialog
-        open={libsOpen}
-        onOpenChange={(next) => {
-          setLibsOpen(next)
-          if (!next) setLibsError(null)
-        }}
-      >
-        <DialogContent className="sm:max-w-lg">
-          <DialogHeader>
-            <DialogTitle>User libraries</DialogTitle>
-            <DialogDescription>
-              Installed library packs. Removing a pack deletes its <code>.excalidrawlib</code> file
-              from disk and drops the registry row — documents that referenced it keep their
-              embedded copies of any item already inserted.
-            </DialogDescription>
-          </DialogHeader>
-          {libsLoading ? (
-            <SquiggleLoader label="Loading…" className="justify-start text-sm" />
-          ) : libs.length === 0 && !libsError ? (
-            // A failed fetch also leaves libs empty — that renders the error
-            // line below instead of masquerading as "no libraries installed".
-            <div className="rounded-md border border-dashed p-6 text-center text-sm text-muted-foreground">
-              No user libraries installed.
-            </div>
-          ) : (
-            <ul className="rounded-md border divide-y max-h-[60vh] overflow-y-auto">
-              {libs.map((lib) => (
-                <li
-                  key={lib.name}
-                  className="flex items-center gap-3 px-3 py-2"
-                  data-user-library-row={lib.name}
-                >
-                  <div className="min-w-0 flex-1">
-                    <div className="text-sm font-medium truncate">{lib.name}</div>
-                    <div className="text-[11px] text-muted-foreground truncate">
-                      {lib.itemCount} item{lib.itemCount === 1 ? '' : 's'}
-                      {typeof lib.bytes === 'number'
-                        ? ` · ${formatBytes(lib.bytes)}`
-                        : lib.bytes === null
-                          ? ' · file missing'
-                          : ''}
-                    </div>
-                  </div>
-                  <Button
-                    variant="ghost"
-                    size="sm"
-                    className="h-7 gap-1.5 text-destructive hover:text-destructive"
-                    onClick={() => void removeLib(lib.name)}
-                    aria-label={`Remove user library ${lib.name}`}
-                  >
-                    <Trash2 className="size-3.5" />
-                    <span className="text-xs">Remove</span>
-                  </Button>
-                </li>
-              ))}
-            </ul>
-          )}
-          {libsError && <div className="text-xs text-destructive">{libsError}</div>}
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="ghost"
-              onClick={() => void fetchLibs()}
-              disabled={libsLoading}
-            >
-              Refresh
-            </Button>
-            <Button type="button" onClick={() => setLibsOpen(false)}>
-              Close
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
     </div>
   )
 }
