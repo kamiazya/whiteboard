@@ -147,7 +147,7 @@ Add to `~/.gemini/settings.json`:
 
 ### Verify
 
-In your agent session, ask it to call `wb_document_create({ workspaceId: "default", path: "smoke", kind: "spatial" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/w/{workspaceId}/canvas/smoke` in a browser tab to see it.
+In your agent session, ask it to call `wb_document_create({ workspaceId: "default", path: "smoke", kind: "spatial" })`. The call creates `~/.whiteboard/{workspaceId}/`; open `http://127.0.0.1:<port>/w/{workspaceId}/d/smoke` in a browser tab to see it.
 
 ## Pair with your local daemon
 
