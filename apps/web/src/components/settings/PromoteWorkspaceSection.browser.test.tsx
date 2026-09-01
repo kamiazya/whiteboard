@@ -18,6 +18,7 @@ import { cleanup, render, screen, waitFor } from '@testing-library/react'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { BrowserWorkspaceDocs } from '../../lib/browser-workspace-docs.js'
 import { getBrowserWorkspaceId } from '../../lib/browser-workspace-id.js'
 import { DocumentFileStore } from '../../lib/document-file-store.js'
 import { FoldingBrowserIndex } from '../../lib/folding-browser-index.js'
@@ -68,6 +69,13 @@ function daemonStub(target: LoroDoc, opts: StubOptions = {}): typeof globalThis.
     if (url.includes('/file/') && init?.method === 'PUT') {
       if (opts.putDelayMs) await new Promise((r) => setTimeout(r, opts.putDelayMs))
       return new Response(null, { status: 204 })
+    }
+    if (url.endsWith('/workspace-document/snapshot') && (init?.method ?? 'GET') === 'GET') {
+      // The demote pull: the merged target's own bytes, as the real route serves.
+      return new Response(target.export({ mode: 'snapshot' }) as BodyInit, {
+        status: 200,
+        headers: { 'Content-Type': 'application/octet-stream' },
+      })
     }
     if (url.endsWith('/documents')) {
       const documents = readWorkspaceDocuments(target).map((entry) => ({
@@ -466,6 +474,31 @@ describe('PromoteWorkspaceSection', () => {
     await userEvent.click(screen.getByTestId('promote-confirm'))
     await screen.findByTestId('promote-last-result')
     expect(resolveWorkspaceDocumentById(target, legacyId)).not.toBeNull()
+  })
+
+  it('a successful move leaves a cached copy of the daemon workspace in this browser', async () => {
+    // ADR-0023 decision 2's first half: demote begins with the daemon's own
+    // record cached back into this browser's planes, keyed by the DAEMON
+    // workspace id, with the sync moment on the standing report.
+    await seedTwoDocuments()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target)}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/cached in this browser/i)
+
+    const replica = await new BrowserWorkspaceDocs().open('ws-a')
+    expect(replica).not.toBeNull()
+    expect(readWorkspaceDocuments(replica!)).toHaveLength(2)
+    expect(createUserSettingsStore().load().migration.promotion?.replicaSyncedAt).toBeTruthy()
   })
 
   it('stays discoverable but disabled with no daemon connected', async () => {

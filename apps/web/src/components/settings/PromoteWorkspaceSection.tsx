@@ -82,6 +82,9 @@ function describeResult(result: PromotionResultRecord): string {
       `${result.blobsFailed?.length} image upload${result.blobsFailed?.length === 1 ? '' : 's'} failed — moving again retries them safely`,
     )
   }
+  if (result.replicaSyncedAt !== undefined) {
+    parts.push('The daemon workspace is now cached in this browser')
+  }
   return `${parts.join('. ')}.`
 }
 
@@ -184,6 +187,22 @@ export function PromoteWorkspaceSection({
           workspaceDocs: new BrowserWorkspaceDocs(),
           onProgress: (phase) => setFlow({ step: 'running', phase }),
         })
+        // The demote pull (ADR-0023 decision 2): cache the daemon's merged
+        // record back into this browser's planes. Best-effort — the move
+        // itself already landed, so a failed pull costs only the cache line
+        // on the report, never the promotion.
+        let replicaSyncedAt: string | undefined
+        if (outcome.kind === 'ok') {
+          const { cacheDaemonWorkspace } = await import('../../lib/replica-cache.js')
+          const cache = await cacheDaemonWorkspace({
+            fetch: fetchImpl,
+            daemonBaseUrl: daemon.baseUrl,
+            workspaceId: targetId,
+            workspaceDocs: new BrowserWorkspaceDocs(),
+          })
+          if (cache.kind === 'ok') replicaSyncedAt = cache.syncedAt
+          else log.warn('replica cache after promote failed', cache.reason)
+        }
         record =
           outcome.kind === 'ok'
             ? {
@@ -191,6 +210,7 @@ export function PromoteWorkspaceSection({
                 daemonBaseUrl: daemon.baseUrl,
                 workspaceId: targetId,
                 sourceWorkspaceId: outcome.sourceWorkspaceId,
+                ...(replicaSyncedAt === undefined ? {} : { replicaSyncedAt }),
                 ok: true,
                 promotedCount: outcome.promotedDocumentIds.length,
                 shadowedPaths: outcome.shadowedPaths,

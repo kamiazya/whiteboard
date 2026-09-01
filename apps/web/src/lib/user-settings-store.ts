@@ -135,6 +135,13 @@ const promotionResultSchema = z
      * those cannot say which workspace moved, so no disclosure renders.
      */
     sourceWorkspaceId: z.string().optional(),
+    /**
+     * When the demote pull that follows a successful move cached the daemon
+     * workspace's record back into this browser (ADR-0023 decision 2).
+     * Absent when the pull failed or predates the feature — the report then
+     * simply claims no cache.
+     */
+    replicaSyncedAt: z.string().optional(),
     ok: z.boolean(),
     promotedCount: z.number().optional(),
     shadowedPaths: z.array(z.string()).optional(),
