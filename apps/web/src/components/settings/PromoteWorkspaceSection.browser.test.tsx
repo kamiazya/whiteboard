@@ -509,4 +509,58 @@ describe('PromoteWorkspaceSection', () => {
     expect(trigger.hasAttribute('disabled')).toBe(true)
     expect(document.body.textContent).toMatch(/connect a daemon/i)
   })
+
+  // The three 'unavailable' branches are the promote flow's only error
+  // disclosure before a dialog exists — a regression here leaves the trigger
+  // appearing to silently do nothing, the worst failure mode for a
+  // data-migration action.
+  it('an empty browser says there is nothing to move instead of opening the dialog', async () => {
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc())}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    const notice = await screen.findByTestId('promote-unavailable')
+    expect(notice.textContent).toMatch(/no documents to move/i)
+    expect(screen.queryByTestId('promote-dialog')).toBeNull()
+  })
+
+  it('a daemon with no workspace says to open one there first', async () => {
+    await seedTwoDocuments()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(new LoroDoc(), { workspaces: [] })}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    const notice = await screen.findByTestId('promote-unavailable')
+    expect(notice.textContent).toMatch(/no workspace to move into yet/i)
+    expect(notice.textContent).toMatch(/open one on the daemon first/i)
+  })
+
+  it('an unreachable daemon is disclosed and the trigger stays clickable for a retry', async () => {
+    await seedTwoDocuments()
+    const unreachable = (async () => {
+      throw new TypeError('Failed to fetch')
+    }) as typeof globalThis.fetch
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={unreachable}
+      />,
+    )
+    const trigger = screen.getByTestId('promote-workspace-open')
+    await userEvent.click(trigger)
+    const notice = await screen.findByTestId('promote-unavailable')
+    expect(notice.textContent).toMatch(/could not reach the daemon/i)
+    // Recoverable, not a dead end: the same trigger retries, and a daemon
+    // that answers this time opens the confirmation.
+    expect(trigger.hasAttribute('disabled')).toBe(false)
+  })
 })
