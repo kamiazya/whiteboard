@@ -118,6 +118,15 @@ const storageSettingsSchema = z
           .object({
             daemonBaseUrl: httpUrl,
             syncedAt: z.string(),
+            /**
+             * The workspace's other two identity layers, captured at sync
+             * time. Offline is exactly when they cannot be resolved against
+             * the daemon, and a URL usually carries the SEGMENT while this
+             * registry is keyed by the canonical id — without the copy here
+             * an offline load could not find the replica its address names.
+             */
+            segment: z.string().optional(),
+            displayName: z.string().optional(),
           })
           .strict(),
       )

@@ -50,7 +50,14 @@ describe('scheduleReplicaRefresh', () => {
 
     await vi.waitFor(() => {
       const replicas = createUserSettingsStore().load().storage.replicas
-      expect(replicas?.[WS]).toEqual({ daemonBaseUrl: BASE, syncedAt: '2026-09-01T12:00:00.000Z' })
+      // segment/displayName captured at sync time: offline is exactly when
+      // they cannot be resolved against the daemon, and the URL usually
+      // carries the segment while this registry keys by the canonical id.
+      expect(replicas?.[WS]).toEqual({
+        daemonBaseUrl: BASE,
+        syncedAt: '2026-09-01T12:00:00.000Z',
+        segment: 'dev',
+      })
     })
   })
 

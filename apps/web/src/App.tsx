@@ -55,6 +55,7 @@ import {
   type ProviderState,
   resolveHostedProviderStateFromRaw,
 } from './lib/provider.js'
+import { findReplicaForHandle } from './lib/replicas.js'
 import { createUserSettingsStore } from './lib/user-settings-store.js'
 import { workspaceHandle } from './lib/workspace-handle.js'
 
@@ -81,6 +82,13 @@ const BrowserDocumentPage = lazy(() =>
 // Lazy so the list stays outside the loro-crdt chunk the editor drags in.
 const BrowserIndexPage = lazy(() =>
   import('./pages/BrowserIndexPage.js').then((m) => ({ default: m.BrowserIndexPage })),
+)
+
+// ADR-0023's offline read: mounted only when the daemon is unreachable and
+// a replica of the addressed workspace exists — the rarest branch, and the
+// heaviest (loro-adapter + the canvas viewer), so it stays a chunk.
+const ReplicaReadPage = lazy(() =>
+  import('./pages/ReplicaReadPage.js').then((m) => ({ default: m.ReplicaReadPage })),
 )
 
 // Same lazy-chunk rationale as DaemonDocumentPage above — the gallery only
@@ -192,6 +200,10 @@ export function App({ providerState }: AppProps) {
   // no-fragment cold load: an in-flight #wb=/#wb-grant flow always wins,
   // and a 403/unreachable daemon collapses to 'none' so the app falls back
   // to the browser exactly as before, with the banner as the path back.
+  // The stored daemon answered the silent renewal with nothing usable —
+  // revoked or unreachable. Held so the render can offer the replica read
+  // (ADR-0023) instead of silently landing on the browser's own workspaces.
+  const [daemonRenewalFailed, setDaemonRenewalFailed] = useState(false)
   const attemptedRenewalRef = useRef(false)
   useEffect(() => {
     if (attemptedRenewalRef.current) return
@@ -211,6 +223,8 @@ export function App({ providerState }: AppProps) {
       // dropping it here would silently swallow the whole verification.
       if (result.status === 'paired' || result.status === 'identity-mismatch') {
         setGrantConnection(result)
+      } else {
+        setDaemonRenewalFailed(true)
       }
     })
     // Cold-load decision over mount-time facts; the ref guards StrictMode.
@@ -317,6 +331,15 @@ export function App({ providerState }: AppProps) {
       (daemonConnection.status === 'paired' || grantConnection?.status === 'paired')) ||
     effectiveState.kind === 'daemon'
 
+  // ADR-0023's offline read: the addressed workspace is daemon-kept, the
+  // daemon answered the renewal with nothing usable, and this browser holds
+  // a replica of it. Looked up by EITHER identity layer — the registry keys
+  // by the canonical id and captured the segment at sync time, because
+  // offline is exactly when a segment cannot be resolved.
+  const replicaMatch =
+    daemonRenewalFailed && !daemonKept && browserRoute?.workspace !== undefined
+      ? findReplicaForHandle(userSettingsStore.load(), browserRoute.workspace)
+      : null
   const isFirstUrlSyncRef = useRef(true)
   // The path this effect last navigated to. StrictMode's effect replay
   // re-runs the effect with the PRE-navigation location still in its
@@ -530,6 +553,10 @@ export function App({ providerState }: AppProps) {
     const route = parseWorkspaceRoute(location.pathname)
     const named = route === null ? undefined : route.workspace
     if (named !== undefined && browserWorkspaceMatches(named)) return
+    // A replica address is not this keeper's to erase: the workspace it
+    // names exists, kept elsewhere, and the replica page may be serving it.
+    if (named !== undefined && findReplicaForHandle(userSettingsStore.load(), named) !== null)
+      return
     let cancelled = false
     const rewrite = () => {
       if (cancelled) return
@@ -906,7 +933,15 @@ export function App({ providerState }: AppProps) {
         )}
         <div className="min-h-0 flex-1 overflow-hidden">
           <Suspense fallback={<LazyPageFallback heightClass="h-full" message="Loading…" />}>
-            {browserPath === undefined ? (
+            {replicaMatch !== null ? (
+              <ReplicaReadPage
+                workspaceId={replicaMatch.workspaceId}
+                {...(replicaMatch.displayName === undefined
+                  ? {}
+                  : { displayName: replicaMatch.displayName })}
+                syncedAt={replicaMatch.syncedAt}
+              />
+            ) : browserPath === undefined ? (
               // An index route lands on the document list. The editor mounts
               // only for a document route, whose in-editor switching it keeps
               // owning — App re-routes solely when the URL crosses the
