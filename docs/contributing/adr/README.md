@@ -55,3 +55,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0020](0020-coordination-boundary.md) | The coordination boundary — a CRDT data plane and a compare-and-swap control plane | Proposed |
 | [ADR-0021](0021-durability-boundary.md) | Durability is a property of each store, not an operation on a directory | Accepted (implemented) |
 | [ADR-0022](0022-variation-addressing.md) | A variation is not in the address, and the default one has no name to put there | Accepted — records the shipped shape; fixes the grammar for later |
+| [ADR-0023](0023-replica-model.md) | A workspace has one keeper; every other copy is a replica | Proposed — design of record for the demote/cache work |
