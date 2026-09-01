@@ -1,9 +1,9 @@
 # View a canvas inline in your AI chat (MCP Apps)
 
-> **Available, minus the sticky note.** `canvas_view` is wired back up to the widget
-> resource, so the inline view works again. The add-a-sticky-note control is gone:
-> it called an `annotate` tool the move to the document model removed, so every submission
-> failed at the host while the control still looked live. Everything else on this
+> **Available, sticky note included.** `canvas_view` renders inline, Refresh
+> re-reads the document through the host, and the add-a-sticky-note control is
+> back: it now appends a text node through `wb_canvas_edit`, so a quick comment
+> can be dropped onto the canvas without leaving the chat. Everything on this
 > page reflects what ships today.
 
 Whiteboard's local daemon MCP server implements the [MCP Apps extension](https://github.com/modelcontextprotocol/ext-apps)
@@ -30,27 +30,30 @@ no need to switch to a browser tab to see what the agent drew.
 
 On clients whose MCP Apps host advertises the `serverTools` capability, the widget
 shows a small **Refresh** button once the initial `canvas_view` result has loaded. It
-re-invokes `canvas_view` for the same `canvasId` through the host and swaps in the
-latest scene — you do not need to leave the chat or call the tool again by hand. On
-clients that do not advertise `serverTools`, or when the widget cannot confirm a host
-connection at all, the button never appears; call `canvas_view` again to see a fresh
-snapshot instead.
+re-invokes `canvas_view` for the same document through the host (using the workspace
+and document ids the result echoed) and swaps in the latest scene — you do not need
+to leave the chat or call the tool again by hand. On clients that do not advertise
+`serverTools`, or when the widget cannot confirm a host connection at all, the button
+never appears; call `canvas_view` again to see a fresh snapshot instead.
 
 ## Adding a sticky note from the widget
 
-Removed. The control called an `annotate` tool that no longer exists, so it could
-only ever fail. Restoring it is not just re-wiring: the document model has no `annotate`
-equivalent, and a sticky note is a `node.add` op on `wb_canvas_edit` — so it needs a
-decision about whether this widget should mutate a document at all, given that it
-is otherwise strictly read-only. See the `TODO(annotate)` note in
-`packages/canvas-viewer/src/widget-entry.ts`.
+Behind the same gate as Refresh, the widget shows a small text field. Type a note
+and press **Add**: the widget appends one text node to the document through
+`wb_canvas_edit` (the server picks a free spot for it — the widget sends no
+geometry), then refreshes so the note appears in the view. A refused or failed
+append keeps your text in the field for retry; the field clears only once the
+note is committed. This is the widget's ONE write — everything else stays
+read-only, and the only tools it can ever call through the host are
+`canvas_view` and this append.
 
 ## What you do not get (yet)
 
 This is **Phase A** of MCP Apps support:
 
-- The view is **read-only**. Refresh reloads the current document, but there is no
-  in-widget editing, moving, or deleting.
+- The view is **read-only apart from the sticky-note append**. Refresh reloads the
+  current document, but there is no in-widget editing, moving, or deleting of
+  existing content.
 - Only `canvas_view` is UI-linked. It is the sole tool whose registration carries
   `_meta.ui.resourceUri`; every other tool returns ordinary structured content. A
   tool that opened the full editor would have to pass the daemon's base URL into the

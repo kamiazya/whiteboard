@@ -36,9 +36,12 @@ export type CanvasViewInput = z.infer<typeof canvasViewInputSchema>
 export const canvasViewOutputSchema = z
   .object({
     /**
-     * Echoed so the widget's Refresh control can re-invoke this tool for the
-     * same canvas without the host having to remember what it asked for.
+     * Both ids echo so the widget's follow-up calls (Refresh re-invoking
+     * this tool, the sticky-note append calling wb_canvas_edit) can
+     * construct a valid strict-schema call without the host having to
+     * remember what it asked for.
      */
+    workspaceId: workspaceIdSchema,
     documentId: documentIdSchema,
     /** The document itself: the widget lays it out, it is not pre-rendered. */
     scene: spatialCanvasSchema,
@@ -78,6 +81,7 @@ export function createCanvasViewTool(deps: ServerDeps) {
       await assertSpatialDocument(deps, input.workspaceId, input.documentId, doc, 'canvas_view')
       const resolved = await resolveFileReferences(deps, input.workspaceId, canvas)
       return {
+        workspaceId: input.workspaceId,
         documentId: input.documentId,
         scene: canvas,
         // `markdown` -> `body` is the one place the internal record and the

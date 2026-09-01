@@ -115,7 +115,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenCalledWith(
@@ -192,7 +194,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     expect(mountCanvasViewer).toHaveBeenCalledTimes(2)
     expect(mountCanvasViewer).toHaveBeenLastCalledWith(
@@ -214,7 +218,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
     const { mountCanvasViewer } = await import('./mount.js')
     expect(mountCanvasViewer).toHaveBeenCalledTimes(1)
     const liveHandle = vi.mocked(mountCanvasViewer).mock.results[0]?.value
@@ -246,7 +252,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'c', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     await vi.advanceTimersByTimeAsync(2_100)
 
@@ -294,7 +302,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     // A committed documentId would normally reveal Refresh (see the next
     // test); the missing serverTools capability must suppress that.
@@ -318,7 +328,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     resolveConnect?.()
     await Promise.resolve()
@@ -348,6 +360,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const body = { type: 'root', children: [{ type: 'paragraph', children: [] }] }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: {
+        workspaceId: 'ws-1',
         documentId: 'ws/path',
         scene,
         references: { notes: { label: 'W', body } },
@@ -376,6 +389,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     }
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: {
+        workspaceId: 'ws-1',
         documentId: 'ws/path',
         scene,
         references: { notes: { body: { type: 'root', children: [null] } } },
@@ -389,12 +403,37 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(opts?.references).toBeUndefined()
   })
 
-  it('never mounts the sticky-note control, since the tool behind it no longer exists', async () => {
-    // Not "absence of something that never existed": the control DID ship,
-    // and was unwired because every submission failed at the host with an
-    // unknown-tool error while the control still looked live (see the
-    // TODO(annotate) note in widget-entry.ts). Re-mounting it without
-    // restoring a backing tool turns this red.
+  it('reveals the sticky-note control behind the same gate as Refresh', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Connected + serverTools, but nothing committed yet: mounted, hidden.
+    const beforeResult = queryStickyForm()
+    if (beforeResult) {
+      expect(beforeResult.style.display).toBe('none')
+    }
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+    await Promise.resolve()
+    await Promise.resolve()
+
+    expect(queryStickyForm()?.style.display).toBe('flex')
+  })
+
+  it('reveals neither control from a validated result that carries no workspaceId', async () => {
+    // Every follow-up call's strict input schema requires BOTH ids, so a
+    // scene-valid result missing one commits nothing — revealing a control
+    // here would show a button whose every click fails server-side input
+    // validation.
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)
 
@@ -409,10 +448,104 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(queryStickyForm()).toBeNull()
-    // Refresh IS still wired, so this cannot pass merely because bootstrap
-    // fell over and mounted no controls at all.
-    expect(queryRefreshButton()).not.toBeNull()
+    expect(queryRefreshButton()?.style.display).toBe('none')
+    expect(queryStickyForm()?.style.display).toBe('none')
+  })
+
+  it('submitting a sticky note appends a text node via wb_canvas_edit, clears the input, and refreshes', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+
+    const scene2 = {
+      nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hello note' }],
+    }
+    callServerToolMock
+      .mockResolvedValueOnce({ structuredContent: { documentId: 'ws/path', applied: 1 } })
+      .mockResolvedValueOnce({
+        structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
+      })
+
+    const form = queryStickyForm() as HTMLFormElement
+    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-sticky-note-input"]')!
+    input.value = '  hello note  '
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // Trimmed text, no geometry: wb_canvas_edit's own auto-placement
+    // positions a node that names none.
+    expect(callServerToolMock).toHaveBeenNthCalledWith(1, {
+      name: 'wb_canvas_edit',
+      arguments: {
+        workspaceId: 'ws-1',
+        documentId: 'ws/path',
+        ops: [{ op: 'node.add', node: { type: 'text', text: 'hello note' } }],
+      },
+    })
+    // The follow-up refresh reads the canvas back through canvas_view.
+    expect(callServerToolMock).toHaveBeenNthCalledWith(2, {
+      name: 'canvas_view',
+      arguments: { workspaceId: 'ws-1', documentId: 'ws/path' },
+    })
+    // Cleared on WRITE success: the note is committed server-side, and a
+    // kept text would invite a duplicate resubmit if only the refresh failed.
+    expect(input.value).toBe('')
+  })
+
+  it('keeps the sticky text for retry when the append is refused or the transport fails', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+
+    const form = queryStickyForm() as HTMLFormElement
+    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-sticky-note-input"]')!
+    const submit = form.querySelector<HTMLButtonElement>(
+      '[data-testid="widget-sticky-note-submit"]',
+    )!
+
+    // The ext-apps host resolves a server-side handler exception as
+    // {isError: true} rather than rejecting — both shapes must keep the text.
+    callServerToolMock.mockResolvedValueOnce({ isError: true, content: [] })
+    input.value = 'first try'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(callServerToolMock).toHaveBeenCalledTimes(1)
+    expect(input.value).toBe('first try')
+    expect(submit.disabled).toBe(false)
+
+    callServerToolMock.mockRejectedValueOnce(new Error('host gone'))
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(callServerToolMock).toHaveBeenCalledTimes(2)
+    expect(input.value).toBe('first try')
+    expect(submit.disabled).toBe(false)
   })
 
   it('reveals Refresh only after connecting AND a valid tool-result commits a documentId', async () => {
@@ -432,7 +565,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     const button = queryRefreshButton()
     expect(button).not.toBeNull()
@@ -454,7 +589,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'c', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     await vi.advanceTimersByTimeAsync(2_100)
     expect(queryRefreshButton()).toBeNull()
@@ -464,7 +601,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
     expect(queryRefreshButton()).toBeNull()
 
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
     expect(queryRefreshButton()).toBeNull()
 
     vi.useRealTimers()
@@ -479,7 +618,11 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     fakeAppInstances[0].ontoolresult?.({
-      structuredContent: { documentId: 'wrong', scene: { nodes: 'not an array' } },
+      structuredContent: {
+        workspaceId: 'ws-1',
+        documentId: 'wrong',
+        scene: { nodes: 'not an array' },
+      },
     })
     // Connected already, so the control exists but must stay hidden — it is
     // not absent from the DOM, just never revealed by an unvalidated result.
@@ -491,7 +634,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/right', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/right', scene },
+    })
     expect(queryRefreshButton()?.style.display).toBe('block')
   })
 
@@ -507,7 +652,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     fakeAppInstances[0].ontoolresult?.({
-      structuredContent: { documentId: 'ws/path', scene: scene1 },
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene1 },
     })
 
     const { mountCanvasViewer } = await import('./mount.js')
@@ -518,7 +663,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/path', scene: scene2 },
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
     })
 
     const button = queryRefreshButton()
@@ -530,7 +675,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(callServerToolMock).toHaveBeenCalledTimes(1)
     expect(callServerToolMock).toHaveBeenCalledWith({
       name: 'canvas_view',
-      arguments: { documentId: 'ws/path' },
+      arguments: { workspaceId: 'ws-1', documentId: 'ws/path' },
     })
     expect(initialHandle.dispose).toHaveBeenCalledTimes(1)
     expect(mountCanvasViewer).toHaveBeenCalledWith(
@@ -550,7 +695,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
@@ -569,7 +716,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/path', scene: scene2 },
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
     })
     button.click()
     await Promise.resolve()
@@ -591,13 +738,19 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
 
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/path', scene: { nodes: 'not an array' } },
+      structuredContent: {
+        workspaceId: 'ws-1',
+        documentId: 'ws/path',
+        scene: { nodes: 'not an array' },
+      },
     })
     const button = queryRefreshButton() as HTMLButtonElement
     button.click()
@@ -612,7 +765,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/path', scene: scene2 },
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
     })
     button.click()
     await Promise.resolve()
@@ -634,7 +787,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     let resolveCall: ((value: unknown) => void) | undefined
     callServerToolMock.mockImplementation(
@@ -653,7 +808,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(callServerToolMock).toHaveBeenCalledTimes(1)
     expect(button.disabled).toBe(true)
 
-    resolveCall?.({ structuredContent: { documentId: 'ws/path', scene: { nodes: [] } } })
+    resolveCall?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: { nodes: [] } },
+    })
     await Promise.resolve()
     await Promise.resolve()
     await Promise.resolve()
@@ -671,7 +828,9 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     const scene = {
       nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
-    fakeAppInstances[0].ontoolresult?.({ structuredContent: { documentId: 'ws/path', scene } })
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
 
     const { mountCanvasViewer } = await import('./mount.js')
     vi.mocked(mountCanvasViewer).mockClear()
@@ -680,7 +839,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
       nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
     }
     callServerToolMock.mockResolvedValueOnce({
-      structuredContent: { documentId: 'ws/path', scene: scene2 },
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
     })
     const button = queryRefreshButton() as HTMLButtonElement
     button.click()
@@ -693,7 +852,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     // Host also echoes the refreshed result via its normal notification path.
     expect(() =>
       fakeAppInstances[0].ontoolresult?.({
-        structuredContent: { documentId: 'ws/path', scene: scene2 },
+        structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
       }),
     ).not.toThrow()
     expect(mountCanvasViewer).toHaveBeenCalledTimes(2)
@@ -715,12 +874,12 @@ describe('widget-entry append-only invariant', () => {
         .map((f) => readFileSync(resolvePath(widgetDir, f), 'utf-8')),
     ].join('\n')
 
-    // `annotate` was removed from this allowlist when its affordance was
-    // unwired (see the TODO(annotate) note in widget-entry.ts): the tool no
-    // longer exists server-side, so a call site naming it is a call that
-    // fails at the host. Restoring the affordance means widening this
-    // deliberately, not by accident.
-    const allowlist = new Set(['canvas_view'])
+    // The widget's whole outbound surface: re-reading the canvas it shows
+    // (canvas_view) and appending one sticky-note text node (wb_canvas_edit,
+    // reached only from the sticky submit path). Anything else a widget
+    // source calls is a widening someone must do here deliberately, not by
+    // accident — the old `annotate` call outlived its tool exactly that way.
+    const allowlist = new Set(['canvas_view', 'wb_canvas_edit'])
     const callSiteNames = [...sources.matchAll(/callServerTool\(\s*\{\s*name:\s*'([^']+)'/g)].map(
       (m) => m[1],
     )
