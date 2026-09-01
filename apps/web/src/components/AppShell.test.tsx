@@ -362,6 +362,9 @@ describe('AppShell — the mark as the connection carrier', () => {
           sourceWorkspaceId: 'ws-src',
           ok: true,
           promotedCount: 2,
+          shadowedPaths: [],
+          blobsMissing: [],
+          blobsFailed: [],
         },
       },
     }))
@@ -423,6 +426,10 @@ describe('AppShell — the mark as the connection carrier', () => {
           workspaceId: 'ws-a',
           sourceWorkspaceId: 'ws-src',
           ok: true,
+          promotedCount: 2,
+          shadowedPaths: [],
+          blobsMissing: [],
+          blobsFailed: [],
         },
       },
     }))
@@ -449,6 +456,10 @@ describe('AppShell — the mark as the connection carrier', () => {
           daemonBaseUrl: 'http://127.0.0.1:3099',
           workspaceId: 'ws-a',
           ok: true,
+          promotedCount: 2,
+          shadowedPaths: [],
+          blobsMissing: [],
+          blobsFailed: [],
         },
       },
     }))
@@ -472,6 +483,10 @@ describe('AppShell — the mark as the connection carrier', () => {
           daemonBaseUrl: 'http://127.0.0.1:4200',
           workspaceId: 'ws-a',
           ok: true,
+          promotedCount: 2,
+          shadowedPaths: [],
+          blobsMissing: [],
+          blobsFailed: [],
         },
       },
     }))

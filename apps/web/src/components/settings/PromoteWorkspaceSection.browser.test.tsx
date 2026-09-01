@@ -498,7 +498,9 @@ describe('PromoteWorkspaceSection', () => {
     const replica = await new BrowserWorkspaceDocs().open('ws-a')
     expect(replica).not.toBeNull()
     expect(readWorkspaceDocuments(replica!)).toHaveLength(2)
-    expect(createUserSettingsStore().load().migration.promotion?.replicaSyncedAt).toBeTruthy()
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.replicaSyncedAt).toBeTruthy()
   })
 
   it('stays discoverable but disabled with no daemon connected', async () => {

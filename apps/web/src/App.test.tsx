@@ -176,7 +176,7 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 2,
+        version: 3,
         storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
@@ -209,7 +209,7 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 2,
+        version: 3,
         storage: {
           daemonBaseUrl: 'http://127.0.0.1:3099',
           replicas: {
@@ -241,7 +241,7 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 2,
+        version: 3,
         storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
@@ -263,7 +263,7 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 2,
+        version: 3,
         storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
@@ -286,7 +286,7 @@ describe('silent renewal on a hosted origin', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 2,
+        version: 3,
         storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},
@@ -1485,7 +1485,7 @@ describe('App /settings routing', () => {
     localStorage.setItem(
       STORAGE_KEY,
       JSON.stringify({
-        version: 2,
+        version: 3,
         storage: { daemonBaseUrl: 'http://127.0.0.1:3099' },
         migration: {},
         capabilities: {},

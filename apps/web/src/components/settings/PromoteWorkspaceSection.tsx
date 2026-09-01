@@ -62,24 +62,24 @@ type PromoteFlow =
 
 function describeResult(result: PromotionResultRecord): string {
   if (!result.ok) {
-    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason ?? 'unknown error'}`
+    return `Move to daemon workspace "${result.workspaceId}" failed: ${result.reason}`
   }
   const parts = [
-    `Moved ${result.promotedCount ?? 0} document${(result.promotedCount ?? 0) === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
+    `Moved ${result.promotedCount} document${result.promotedCount === 1 ? '' : 's'} to daemon workspace "${result.workspaceId}"`,
   ]
-  if ((result.shadowedPaths?.length ?? 0) > 0) {
+  if (result.shadowedPaths.length > 0) {
     parts.push(
-      `${result.shadowedPaths?.length} path${result.shadowedPaths?.length === 1 ? '' : 's'} already existed there — both versions are kept, the earlier one marked shadowed: ${result.shadowedPaths?.join(', ')}`,
+      `${result.shadowedPaths.length} path${result.shadowedPaths.length === 1 ? '' : 's'} already existed there — both versions are kept, the earlier one marked shadowed: ${result.shadowedPaths.join(', ')}`,
     )
   }
-  if ((result.blobsMissing?.length ?? 0) > 0) {
+  if (result.blobsMissing.length > 0) {
     parts.push(
-      `${result.blobsMissing?.length} referenced image${result.blobsMissing?.length === 1 ? ' was' : 's were'} already missing from this browser and could not be moved`,
+      `${result.blobsMissing.length} referenced image${result.blobsMissing.length === 1 ? ' was' : 's were'} already missing from this browser and could not be moved`,
     )
   }
-  if ((result.blobsFailed?.length ?? 0) > 0) {
+  if (result.blobsFailed.length > 0) {
     parts.push(
-      `${result.blobsFailed?.length} image upload${result.blobsFailed?.length === 1 ? '' : 's'} failed — moving again retries them safely`,
+      `${result.blobsFailed.length} image upload${result.blobsFailed.length === 1 ? '' : 's'} failed — moving again retries them safely`,
     )
   }
   if (result.replicaSyncedAt !== undefined) {
