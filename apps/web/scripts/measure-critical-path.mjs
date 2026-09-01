@@ -131,6 +131,62 @@ export function parseFloorMs(raw) {
   }
   return { floor: parsed }
 }
+// The fixed settle after `load`, and the bounded grace that only a run which
+// LOSES that bet ever pays.
+//
+// The fixed beat is a bet on how long the app takes to mount, and a cold
+// first run loses it. Measured on CI: run 1 of 5 came back `mounted=false`,
+// and the gate did exactly what it should — a number taken over the boot
+// splash is not the shell's LCP, so it refused. The run was not wrong about
+// what it saw; the instrument had not waited long enough for there to be
+// anything else to see. That is a flake in the INSTRUMENT, and re-running it
+// is how a gate starts being ignored.
+//
+// The grace is deliberately not "wait longer". Raising the fixed beat would
+// widen the LCP observation window on every run, including the healthy ones,
+// and every median in the comment block above was taken through the 2000ms
+// window — the floor would then be stated against one measurement and
+// enforced against another. So the beat is untouched and the extra wait is
+// reached only when the first probe comes back unmounted: a healthy run's
+// timeline is byte-identical to what it was, and a slow run reports the LCP
+// it actually had instead of failing the gate over the splash.
+//
+// It stays BOUNDED and the probe still has the last word. An app that truly
+// never mounts must still fail, and fail with the gate's own diagnosis rather
+// than a Playwright timeout, which is why the expiry is swallowed here.
+//
+// Verified against a real browser by shortening the beat to 1ms, which
+// reproduces the lost bet on demand instead of waiting for a cold CI runner:
+//
+//   beat 1ms, no grace     3/3 never mounted, gate FAILED (exit 1)
+//   beat 1ms, grace 8s     3/3 mounted, grace 1931-1970ms, LCP median 504 ms
+//   beat 2000ms (healthy)  5/5 mounted, no grace paid,     LCP median 500 ms
+//   beat 1ms, grace 200ms  2/2 never mounted, gate FAILED (exit 1)
+//
+// The middle two rows are the claim that matters and the reason the beat is
+// left alone: a run that pays the grace reports the same LCP as one that does
+// not, inside the 2% band. The last row is the one that keeps this honest —
+// a grace long enough to rescue a slow run must still be short enough that a
+// build which never mounts is refused, with the message above rather than a
+// selector timeout.
+const SETTLE_MS = Number(process.env.MEASURE_SETTLE_MS ?? 2000)
+const MOUNT_GRACE_MS = Number(process.env.MEASURE_MOUNT_GRACE_MS ?? 8000)
+
+// Injected rather than closed over a `page`, so both branches are testable
+// without a browser — the same reason `parseFloorMs` is pure and exported.
+export async function settleForMount({ waitFixed, probe, waitForMount, now = Date.now }) {
+  await waitFixed()
+  const first = await probe()
+  if (first.shellMark) return { ...first, graceMs: 0 }
+  const started = now()
+  try {
+    await waitForMount()
+  } catch {
+    // Expiry is not the verdict. The probe below is.
+  }
+  return { ...(await probe()), graceMs: now() - started }
+}
+
 // A mid-range phone on a decent connection, fixed so two runs are comparable.
 // The absolute numbers are only meaningful against each other.
 const CPU_THROTTLE = Number(process.env.MEASURE_CPU_THROTTLE ?? 4)
@@ -201,25 +257,31 @@ async function measureOnce(browser, url) {
   await cdp.send('Network.emulateNetworkConditions', NETWORK)
   await cdp.send('Emulation.setCPUThrottlingRate', { rate: CPU_THROTTLE })
   await page.goto(url, { waitUntil: 'load' })
-  // The app dismisses its boot splash and mounts React after load; settle for
-  // a fixed beat so LCP has landed on real content rather than on the splash.
-  await page.waitForTimeout(2000)
-  // Did the APP render, or did this measure the boot splash?
-  //
-  // Not decoration. The first run of this script reported LCP identical to
-  // FCP in every single run, which is what a page whose largest paint is its
-  // own splash looks like — and also what a page that never mounted looks
-  // like. A 2% spread on a number that describes the wrong thing reads as
-  // "gateable" and is worse than no measurement. So the instrument states
-  // what it saw rather than leaving the reader to assume.
-  const mounted = await page.evaluate(() => {
-    const el = document.querySelector('[data-testid="shell-mark"]')
-    const root = document.getElementById('root')
-    return {
-      shellMark: el !== null,
-      rootChildren: root ? root.childElementCount : 0,
-      largestText: document.body.innerText.slice(0, 60).replace(/\s+/g, ' ').trim(),
-    }
+  const mounted = await settleForMount({
+    // The app dismisses its boot splash and mounts React after load; settle
+    // for a fixed beat so LCP has landed on real content rather than on the
+    // splash. This is the window every recorded median was taken through.
+    waitFixed: () => page.waitForTimeout(SETTLE_MS),
+    // Did the APP render, or did this measure the boot splash?
+    //
+    // Not decoration. The first run of this script reported LCP identical to
+    // FCP in every single run, which is what a page whose largest paint is
+    // its own splash looks like — and also what a page that never mounted
+    // looks like. A 2% spread on a number that describes the wrong thing
+    // reads as "gateable" and is worse than no measurement. So the instrument
+    // states what it saw rather than leaving the reader to assume.
+    probe: () =>
+      page.evaluate(() => {
+        const el = document.querySelector('[data-testid="shell-mark"]')
+        const root = document.getElementById('root')
+        return {
+          shellMark: el !== null,
+          rootChildren: root ? root.childElementCount : 0,
+          largestText: document.body.innerText.slice(0, 60).replace(/\s+/g, ' ').trim(),
+        }
+      }),
+    waitForMount: () =>
+      page.waitForSelector('[data-testid="shell-mark"]', { timeout: MOUNT_GRACE_MS }),
   })
   const m = await page.evaluate(() => window.__m)
   await context.close()
@@ -278,7 +340,7 @@ async function main() {
       const m = await measureOnce(browser, url)
       runs.push(m)
       process.stderr.write(
-        `run ${i + 1}/${RUNS}  lcp=${m.lcp.toFixed(0)}ms  fcp=${m.fcp.toFixed(0)}ms  longTasks=${m.longTasks.toFixed(0)}ms  cls=${m.cls.toFixed(4)}  mounted=${m.shellMark} rootKids=${m.rootChildren} text="${m.largestText}"\n`,
+        `run ${i + 1}/${RUNS}  lcp=${m.lcp.toFixed(0)}ms  fcp=${m.fcp.toFixed(0)}ms  longTasks=${m.longTasks.toFixed(0)}ms  cls=${m.cls.toFixed(4)}  mounted=${m.shellMark} rootKids=${m.rootChildren}${m.graceMs > 0 ? ` grace=${m.graceMs}ms` : ''} text="${m.largestText}"\n`,
       )
     }
   } finally {

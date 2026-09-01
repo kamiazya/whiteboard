@@ -2,7 +2,7 @@ import { execFileSync } from 'node:child_process'
 import { dirname, join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { describe, expect, it } from 'vitest'
-import { parseFloorMs } from './measure-critical-path.mjs'
+import { parseFloorMs, settleForMount } from './measure-critical-path.mjs'
 
 const SCRIPT = join(dirname(fileURLToPath(import.meta.url)), 'measure-critical-path.mjs')
 
@@ -66,5 +66,65 @@ describe('the gate script itself', () => {
     }
     expect(status).toBe(1)
     expect(stderr).toContain('LCP_FLOOR_MS must be a positive number')
+  })
+})
+
+describe('settleForMount', () => {
+  // The flake this closes: the fixed settle is a BET on how long the app
+  // takes to mount, and a cold first run loses it — the probe reads
+  // `shellMark=false`, and the gate correctly refuses a number that
+  // describes the boot splash. The run was not wrong about what it saw; the
+  // instrument simply did not wait long enough to see anything else.
+  //
+  // The fix has to leave the HEALTHY measurement alone, because the fixed
+  // beat is the LCP window every recorded median was taken through. So the
+  // grace is not a longer wait, it is a wait that only happens when the
+  // first probe comes back unmounted.
+  it('does not wait past the fixed beat when the shell is already up', async () => {
+    let waits = 0
+    const result = await settleForMount({
+      waitFixed: async () => {},
+      probe: async () => ({ shellMark: true, rootChildren: 3, largestText: 'Workspace' }),
+      waitForMount: async () => {
+        waits++
+      },
+    })
+    expect(waits).toBe(0)
+    expect(result.graceMs).toBe(0)
+    expect(result.shellMark).toBe(true)
+  })
+
+  it('waits out a slow mount and reports what it cost, so a slow run is visible rather than silent', async () => {
+    const probes = [
+      { shellMark: false, rootChildren: 1, largestText: 'Loading' },
+      { shellMark: true, rootChildren: 3, largestText: 'Workspace' },
+    ]
+    let clock = 1_000
+    const result = await settleForMount({
+      waitFixed: async () => {},
+      probe: async () => probes.shift() ?? probes[0],
+      waitForMount: async () => {
+        clock += 1_400
+      },
+      now: () => clock,
+    })
+    expect(result.shellMark).toBe(true)
+    expect(result.graceMs).toBe(1400)
+  })
+
+  // A grace that THROWS on expiry would abort the whole measurement with a
+  // Playwright timeout, replacing the gate's own diagnosis ("N/5 runs never
+  // mounted the app") with a stack trace about a selector. The wait is a
+  // grace, not an assertion — the probe after it is what states the verdict.
+  it('swallows an expired grace and lets the probe state the verdict', async () => {
+    const result = await settleForMount({
+      waitFixed: async () => {},
+      probe: async () => ({ shellMark: false, rootChildren: 1, largestText: 'Loading' }),
+      waitForMount: async () => {
+        throw new Error('Timeout 8000ms exceeded waiting for selector')
+      },
+      now: () => 0,
+    })
+    expect(result.shellMark).toBe(false)
   })
 })
