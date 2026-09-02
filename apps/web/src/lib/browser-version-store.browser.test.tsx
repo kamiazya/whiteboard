@@ -58,7 +58,7 @@ describe('BrowserVersionStore (real IndexedDB)', () => {
     await clearDb()
   })
 
-  it('saves a frontier into the record, lists newest first, and checks the past state back out — through a fresh store after a reload', async () => {
+  it('saves a frontier, lists newest first, and checks the past out through a fresh store', async () => {
     const { index, workspaceId, documentId } = await seedDocument('canvas-a')
     const docs = new BrowserWorkspaceDocs()
     await writeContent(docs, documentId, 'first')

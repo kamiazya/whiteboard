@@ -75,7 +75,7 @@ async function openPage() {
 // The browser keeper's version history, end to end through the real page:
 // the top bar's quick save writes a row, the History panel lists it, and a
 // restore from the panel puts the saved state back into the record.
-describe('BrowserDocumentPage version history (browser — real IndexedDB)', () => {
+describe('BrowserDocumentPage version history (browser)', () => {
   beforeEach(async () => {
     await clearDb()
   })
@@ -84,7 +84,7 @@ describe('BrowserDocumentPage version history (browser — real IndexedDB)', () 
     cleanup()
   })
 
-  it('saves a version with Ctrl+S, lists it in the History panel, and restores it', async () => {
+  it('saves with Ctrl+S, lists in the History panel, and restores', async () => {
     const index = new FoldingBrowserIndex()
     const workspaceId = getBrowserWorkspaceId()
     await index.createWorkspace({ workspaceId })

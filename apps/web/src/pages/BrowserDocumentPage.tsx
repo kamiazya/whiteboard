@@ -562,7 +562,7 @@ export function BrowserDocumentPage({
           }),
     [backend, store],
   )
-  const versionsEnabled = capabilities.versions && versionsBackend !== null
+  const versionsEnabled = versionsBackend !== null
   // The panel refetches on a CHANGE of this signal. A manual save announces
   // itself on the window (`useSaveVersion` dispatches it after the keeper
   // confirmed the save), which is the same event the daemon page bumps on.
@@ -900,10 +900,10 @@ export function BrowserDocumentPage({
                         .catch((err) => log.warn('requestFullscreen rejected', err))
                   }}
                   capabilities={{
-                    versions: versionsEnabled,
                     branches: capabilities.branches,
                     merge: capabilities.merge,
                   }}
+                  versionsEnabled={versionsEnabled}
                 />
               </Suspense>
             )}

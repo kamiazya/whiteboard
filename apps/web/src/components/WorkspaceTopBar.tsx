@@ -26,7 +26,6 @@ export interface DocumentIdentity {
 }
 
 export interface WorkspaceTopBarCapabilities {
-  versions?: boolean
   branches?: boolean
   merge?: boolean
 }
@@ -56,6 +55,13 @@ interface Props {
   // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
   // "all capabilities on", matching every existing caller's behavior.
   capabilities?: WorkspaceTopBarCapabilities
+  /**
+   * Whether THIS document has a history to save into — a page fact, not a
+   * keeper capability (both keepers have one now): the browser's markdown
+   * documents have no version backend yet, so their page hides the save
+   * dot and the shortcut. Undefined means "yes".
+   */
+  versionsEnabled?: boolean
   // Bumped by the host page on an externally observed HEAD/version change
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
@@ -96,11 +102,11 @@ export default function WorkspaceTopBar({
   onNavigateBack,
   dataMode = 'daemon',
   capabilities,
+  versionsEnabled = true,
   branchRefreshSignal,
   titleSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
-  const versionsEnabled = capabilities?.versions ?? true
   const branchesEnabled = capabilities?.branches ?? true
   const mergeEnabled = capabilities?.merge ?? true
   const log = getAppLogger('workspace-top-bar')

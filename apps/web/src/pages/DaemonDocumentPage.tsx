@@ -540,7 +540,7 @@ export function DaemonDocumentPage({
   }
 
   const saveVersion = async (): Promise<void> => {
-    if (!capabilities.versions || canvas === null || savingVersion) return
+    if (canvas === null || savingVersion) return
     setSavingVersion(true)
     setSaveVersionMessage(null)
     try {
@@ -594,32 +594,31 @@ export function DaemonDocumentPage({
     return <LoadDegradedView message={pageState.message} />
   }
 
-  const versionPanelExtra =
-    capabilities.versions && canvas ? (
-      <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
-        <button
-          type="button"
-          onClick={() => void saveVersion()}
-          disabled={savingVersion}
-          className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+  const versionPanelExtra = canvas ? (
+    <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
+      <button
+        type="button"
+        onClick={() => void saveVersion()}
+        disabled={savingVersion}
+        className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+      >
+        {savingVersion ? 'Saving…' : 'Save version'}
+      </button>
+      {saveVersionMessage && (
+        <span
+          role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
+          aria-live="polite"
+          className={
+            saveVersionMessage.kind === 'error'
+              ? 'text-xs text-destructive'
+              : 'text-xs text-muted-foreground'
+          }
         >
-          {savingVersion ? 'Saving…' : 'Save version'}
-        </button>
-        {saveVersionMessage && (
-          <span
-            role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
-            aria-live="polite"
-            className={
-              saveVersionMessage.kind === 'error'
-                ? 'text-xs text-destructive'
-                : 'text-xs text-muted-foreground'
-            }
-          >
-            {saveVersionMessage.text}
-          </span>
-        )}
-      </div>
-    ) : null
+          {saveVersionMessage.text}
+        </span>
+      )}
+    </div>
+  ) : null
 
   return (
     <DaemonApiContext.Provider value={daemonFetch}>
@@ -696,7 +695,6 @@ export function DaemonDocumentPage({
                 workspaceId={canvas.workspaceId}
                 path={canvas.path}
                 capabilities={{
-                  versions: capabilities.versions,
                   branches: capabilities.branches,
                   merge: capabilities.merge,
                 }}
@@ -722,12 +720,11 @@ export function DaemonDocumentPage({
             had gone stale: it deferred to a WorkspaceTopBar dropdown that no
             longer exists. The shell switcher names the workspace on every
             page, this one included, so it is the one carrier now. */}
-            {(!capabilities.versions || !capabilities.branches || !capabilities.merge) && (
+            {(!capabilities.branches || !capabilities.merge) && (
               <div className="flex flex-wrap items-center gap-2 border-b bg-background px-4 py-2">
                 {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
-                {!capabilities.versions && <CapabilityTeaser label="Version history" />}
                 {!capabilities.branches && <CapabilityTeaser label="Variations" />}
                 {!capabilities.merge && <CapabilityTeaser label="Combine" />}
               </div>
@@ -851,16 +848,15 @@ export function DaemonDocumentPage({
                   onRedo: () => void redo(),
                   canUndo: canUndo(),
                   canRedo: canRedo(),
-                  versions:
-                    capabilities.versions && canvas
-                      ? {
-                          workspaceId: canvas.workspaceId,
-                          path: canvas.path,
-                          onRestored: clearLocalUndo,
-                          refreshSignal: versionRefreshSignal,
-                          versionPanelExtra,
-                        }
-                      : undefined,
+                  versions: canvas
+                    ? {
+                        workspaceId: canvas.workspaceId,
+                        path: canvas.path,
+                        onRestored: clearLocalUndo,
+                        refreshSignal: versionRefreshSignal,
+                        versionPanelExtra,
+                      }
+                    : undefined,
                 }}
                 overlayTitle={canvas?.path ?? 'Untitled'}
                 resolveAlias={resolveAlias}

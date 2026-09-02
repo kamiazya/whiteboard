@@ -862,29 +862,6 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('does not render the save button when capabilities.versions is false', async () => {
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            capabilities={{
-              versions: false,
-              branches: true,
-              merge: true,
-            }}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      expect(screen.queryByRole('button', { name: 'Save version' })).toBeNull()
-    })
-
     it('shows an inline error when the save request fails', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
@@ -1075,33 +1052,6 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('shows the static disabled teaser instead of the toggle when capabilities.versions is false', async () => {
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-            capabilities={{
-              versions: false,
-              branches: true,
-              merge: true,
-            }}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      const versionButton = screen.getByRole('button', { name: 'Version history' })
-      // The static CapabilityTeaser renders aria-disabled; the real toggle
-      // never does, so this distinguishes the two without a false negative.
-      expect(versionButton.getAttribute('aria-disabled')).toBe('true')
-      expect(versionButton.hasAttribute('aria-pressed')).toBe(false)
-    })
-
     it('restoring a version reflects on the canvas via the broadcast incremental update', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input) => {
@@ -1278,7 +1228,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              versions: true,
               branches: false,
               merge: false,
             }}
@@ -1445,7 +1394,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              versions: true,
               branches: false,
               merge: false,
             }}
@@ -1516,7 +1464,6 @@ describe('DaemonDocumentPage', () => {
             daemonBaseUrl={DAEMON_BASE_URL}
             createBackend={makeCreateBackend()}
             capabilities={{
-              versions: true,
               branches: true,
               merge: false,
             }}

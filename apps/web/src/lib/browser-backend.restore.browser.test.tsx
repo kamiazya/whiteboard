@@ -99,7 +99,7 @@ function textOf(doc: LoroDoc, documentId: string): string | undefined {
 }
 
 describe('BrowserBackend.applyRestore', () => {
-  it('reconciles the record to the past state, persists it, and delivers the ops to the session as a remote update', async () => {
+  it('reconciles the record to the past state, persists it, and delivers the ops to the session', async () => {
     const docs = new InMemoryWorkspaceDocs()
     const backend = new BrowserBackend(
       { documentId: DOC_ID, path: 'canvas-a', kind: 'spatial' },
@@ -125,7 +125,7 @@ describe('BrowserBackend.applyRestore', () => {
     expect(reopened && textOf(reopened, DOC_ID)).toBe('the checkpoint')
   })
 
-  it('completes the bracket even when persistence fails, and the failure reaches the caller', async () => {
+  it('completes the bracket when persistence fails, and the failure reaches the caller', async () => {
     const docs = new InMemoryWorkspaceDocs()
     const backend = new BrowserBackend(
       { documentId: DOC_ID, path: 'canvas-a', kind: 'spatial' },

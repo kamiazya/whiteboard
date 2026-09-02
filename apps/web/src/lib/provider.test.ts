@@ -20,14 +20,18 @@ describe('resolveProviderState', () => {
     expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser capabilities: versions is true (manual save/list/restore over IndexedDB)', () => {
+  it('browser capabilities: no branches, no merge — versions is not a capability, both keepers have one', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({ kind: 'browser', capabilities: { versions: true } })
+    expect(state).toMatchObject({
+      kind: 'browser',
+      capabilities: { branches: false, merge: false },
+    })
+    expect(state.kind === 'browser' && 'versions' in state.capabilities).toBe(false)
   })
 
-  it('daemon capabilities: versions is true', () => {
+  it('daemon capabilities: branches and merge', () => {
     const state = resolveProviderState({ daemonBaseUrl: 'http://127.0.0.1:3099' })
-    expect(state).toMatchObject({ kind: 'daemon', capabilities: { versions: true } })
+    expect(state).toMatchObject({ kind: 'daemon', capabilities: { branches: true, merge: true } })
   })
 
   it('browser capabilities: branches and merge are false', () => {

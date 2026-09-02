@@ -333,14 +333,15 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Fullscreen')).toBeNull()
   })
 
-  it('hides HeaderVersionDot when capabilities.versions is false', () => {
+  it('hides HeaderVersionDot when versionsEnabled is false', () => {
     render(
       <WorkspaceTopBar
         workspaceId="ws_1"
         path="canvas-a"
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        capabilities={{ versions: false, branches: true, merge: true }}
+        versionsEnabled={false}
+        capabilities={{ branches: true, merge: true }}
       />,
       { container: document.body },
     )
@@ -350,7 +351,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByRole('button', { name: /history/i })).toBeNull()
   })
 
-  it('never issues a POST /versions on Cmd/Ctrl+S when capabilities.versions is false', async () => {
+  it('never issues a POST /versions on Cmd/Ctrl+S when versionsEnabled is false', async () => {
     let postCount = 0
     vi.mocked(apiFetch).mockImplementation(async (url, init) => {
       const u = String(url)
@@ -367,7 +368,8 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
         path="canvas-a"
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        capabilities={{ versions: false, branches: true, merge: true }}
+        versionsEnabled={false}
+        capabilities={{ branches: true, merge: true }}
       />,
       { container: document.body },
     )
@@ -386,7 +388,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
         path="canvas-a"
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        capabilities={{ versions: true, branches: false, merge: true }}
+        capabilities={{ branches: false, merge: true }}
       />,
       { container: document.body },
     )
