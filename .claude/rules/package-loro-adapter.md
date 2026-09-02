@@ -78,6 +78,27 @@ implementations live in the composition roots.
   `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
   (not a nested LoroMap container) — this preserves node-level CRDT
   merge while avoiding Loro's nested-container overwrite issues.
+- **`containers.ts` holds the `DocumentContainers` seam and the container keys
+  more than one module reads.** A key lives in `loro-bridge.ts` until a second
+  module needs it and moves here then — which is also what keeps `loro-bridge`
+  and `comment-threads` from importing each other, a value cycle
+  `cycle-check.ts` would fail on.
+- **A comment lives in the `threads` plane (ADR-0026), and `readSpatialCanvas`
+  PROJECTS one back.** Every writer — `writeCanvasComment`, the resync inside
+  `writeSpatialCanvas`, `withSpatialBatch` — goes through the thread plane, so
+  the canvas API every consumer speaks is unchanged while the storage under it
+  moved once rather than twice. The projection is lossy by construction (a
+  thread's replies have nowhere to go in a `CanvasComment`, and a text anchor
+  has no canvas position), which is why the panel that shows a conversation
+  reads threads directly instead.
+
+  The legacy `comments` map is read as a FALLBACK, for a document no writer has
+  touched since. `migrateCanvasCommentsToThreads` empties it at every write
+  seam, and it does not commit — the seam that calls it owns the commit
+  boundary, because an extra commit inside `withSpatialBatch` splits one user
+  action into two undo steps. Retire the fallback (and `COMMENTS_KEY`) once
+  nothing needs it; the condition is a keeper whose documents have all been
+  written since.
 - **A nested container is the right shape only when the thing inside it must
   merge per ENTRY**, and it buys that at a price worth naming. The annotation
   layer's `threads` map (`comment-threads.ts`, ADR-0026) is the one that

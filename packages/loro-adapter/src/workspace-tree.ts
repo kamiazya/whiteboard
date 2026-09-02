@@ -26,7 +26,8 @@ import { documentIdSchema, documentKindSchema } from '@kamiazya/whiteboard-model
 import type { LoroTreeNode, TreeID } from 'loro-crdt'
 import { LoroDoc, LoroMap, LoroMovableList, LoroText } from 'loro-crdt'
 import { z } from 'zod'
-import { CONTENT_CONTAINER_KEYS, type DocumentContainers } from './loro-bridge.js'
+import { type DocumentContainers } from './containers.js'
+import { CONTENT_CONTAINER_KEYS } from './loro-bridge.js'
 
 /** The one root container a workspace document has. */
 export const WORKSPACE_TREE_KEY = 'tree'

@@ -6,7 +6,7 @@ export {
   writeThreadMessage,
 } from './comment-threads.js'
 export { collectImageRefIds } from './image-refs.js'
-export type { DocumentContainers } from './loro-bridge.js'
+export type { DocumentContainers } from './containers.js'
 export {
   CONTENT_CONTAINER_KEYS,
   deleteCanvasComment,
