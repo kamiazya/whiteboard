@@ -2,6 +2,7 @@
 
 import type { SpatialPresetKey } from '@kamiazya/whiteboard-canvas-render'
 import {
+  commentAnchor,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   tidyNodes,
@@ -70,6 +71,8 @@ export interface ContextMenuTarget {
   readonly y: number
   readonly nodeId: string | undefined
   readonly edgeId: string | undefined
+  /** A comment's pin or bubble under the pointer: the menu is the comment's, not the canvas's. */
+  readonly commentId?: string
   readonly point: Point
   /** The ⋯ control opens the same catalog in the icon-grid or sheet vessel. */
   readonly variant?: 'list' | 'grid' | 'sheet'
@@ -96,6 +99,13 @@ export type DocumentPickerState =
 export interface CommentComposeState {
   readonly point: Point
   readonly targetNodeId?: string
+  /**
+   * Present when the bubble edits an EXISTING comment rather than drafting
+   * a new one: the commit rewrites that comment's text instead of creating.
+   * `point` is then the comment's own anchor, so the bubble opens exactly
+   * over the drawn one.
+   */
+  readonly editing?: { readonly id: string; readonly initialText: string }
 }
 
 /**
@@ -221,6 +231,28 @@ export function CanvasContextMenu({
       variant={contextMenu.variant}
       onClose={() => setContextMenu(null)}
       items={(() => {
+        // A comment's menu is its own: it is not content, so none of the
+        // node/edge/canvas verbs apply. Removal stays MCP-only in v1
+        // (ADR-0025), so editing the text is the whole band for now.
+        const comment =
+          contextMenu.commentId === undefined
+            ? undefined
+            : canvasRef.current['x-whiteboard']?.comments?.find(
+                (entry) => entry.id === contextMenu.commentId,
+              )
+        if (comment !== undefined) {
+          return [
+            {
+              label: 'Edit comment',
+              icon: <Pencil />,
+              onSelect: () =>
+                setCommentCompose({
+                  point: commentAnchor(comment, canvasRef.current),
+                  editing: { id: comment.id, initialText: comment.text },
+                }),
+            },
+          ]
+        }
         const node =
           contextMenu.nodeId === undefined
             ? undefined

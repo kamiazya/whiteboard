@@ -67,6 +67,7 @@ import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
   COMMENT_BUBBLE_OFFSET_PX,
+  commentAnchor,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
   outlineContentBox,
@@ -76,7 +77,7 @@ import {
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -100,6 +101,7 @@ import {
   type DocumentPickerState,
   type LinkDialogState,
 } from './CanvasContextMenu.js'
+import { CommentDragLayer } from './CommentDragLayer.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
@@ -665,6 +667,47 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         ),
       [scene],
     )
+    // Comment chrome (pins and bubbles) from the committed scene, for
+    // hit-testing: the shapes carry `${commentId}/pin` / `/bubble` ids and
+    // the commentChrome marker (ADR-0025 decision 5), so the boxes a press
+    // is tested against are exactly the boxes the renderer painted — one
+    // producer for the geometry. Later entries draw on top, so hit-testing
+    // walks them in reverse.
+    const commentChromeBoxes = useMemo(
+      () =>
+        scene.nodes.flatMap((node) => {
+          if (node.kind !== 'shape' || node.commentChrome !== true || node.id === undefined)
+            return []
+          const cut = node.id.lastIndexOf('/')
+          return cut <= 0 ? [] : [{ commentId: node.id.slice(0, cut), bbox: node.bbox }]
+        }),
+      [scene],
+    )
+    const hitTestComment = (point: Point): string | undefined => {
+      for (let i = commentChromeBoxes.length - 1; i >= 0; i -= 1) {
+        const entry = commentChromeBoxes[i]
+        if (entry === undefined) continue
+        const { bbox } = entry
+        if (
+          point.x >= bbox.x &&
+          point.x <= bbox.x + bbox.w &&
+          point.y >= bbox.y &&
+          point.y <= bbox.y + bbox.h
+        ) {
+          return entry.commentId
+        }
+      }
+      return undefined
+    }
+    const commentById = (id: string): CanvasComment | undefined =>
+      canvasRef.current['x-whiteboard']?.comments?.find((entry) => entry.id === id)
+    /** Opens the compose bubble over an existing comment, pre-filled, to rewrite its text. */
+    const openCommentEditor = (comment: CanvasComment) => {
+      setCommentCompose({
+        point: commentAnchor(comment, canvasRef.current),
+        editing: { id: comment.id, initialText: comment.text },
+      })
+    }
     const [selectedEdgeId, setSelectedEdgeId] = useState<string | null>(null)
     /**
      * A cut waiting for its paste — the front half of a move. Pure view
@@ -694,6 +737,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }, [canvas, pendingCut])
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     const [commentCompose, setCommentCompose] = useState<CommentComposeState | null>(null)
+    /**
+     * A point-anchored comment's pin being dragged: the comment as it was
+     * at the press (its stored anchor), the press point, and the live
+     * pointer. Kept beside the gesture machine rather than in it — see
+     * CommentDragLayer for why — so the node machinery (snapping, carried
+     * sets, live edges) never has to learn what a comment is.
+     */
+    const [commentDrag, setCommentDrag] = useState<{
+      readonly comment: CanvasComment
+      readonly startPoint: Point
+      readonly live: Point | null
+    } | null>(null)
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
@@ -1096,6 +1151,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (navigation.preventDefault === true) e.preventDefault()
       if (!navigation.fallThrough) return
       if (e.button !== 0) return
+      // A comment's chrome floats above content, so it is tested before the
+      // nodes under it. A press on it never falls through to node or
+      // marquee handling: a double press edits the text; a single press on
+      // a point-anchored comment arms a pin drag. A node-anchored comment's
+      // anchor IS its node's corner, so its pin does not drag — moving the
+      // node is how it moves (and the comment rides along).
+      const hitCommentId = hitTestComment(point)
+      if (hitCommentId !== undefined) {
+        const comment = commentById(hitCommentId)
+        if (comment === undefined) return
+        const key = `comment:${comment.id}`
+        const pressedAt = e.timeStamp
+        const isDoublePress =
+          lastPressRef.current !== null &&
+          lastPressRef.current.key === key &&
+          pressedAt - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
+        lastPressRef.current = isDoublePress ? null : { key, at: pressedAt, point: screenPoint }
+        if (isDoublePress) {
+          openCommentEditor(comment)
+          return
+        }
+        if (comment.targetNodeId === undefined) {
+          setCommentDrag({ comment, startPoint: point, live: null })
+        }
+        return
+      }
       // Deliberately NO pointer capture here. Capturing on the press
       // retargets the subsequent clicks to the capturing root, so a control
       // the press bubbled from never receives its click. Capture is taken
@@ -1191,6 +1272,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // into editing affordances.
       if (tool === 'hand') return
       const point = screenToCanvas(screenPoint, viewport)
+      // A comment under the pointer gets ITS menu — and leaves the node or
+      // edge selection alone, since the menu is about the comment.
+      const hitCommentId = hitTestComment(point)
+      if (hitCommentId !== undefined) {
+        setContextMenu({
+          x: screenPoint.x,
+          y: screenPoint.y,
+          nodeId: undefined,
+          edgeId: undefined,
+          commentId: hitCommentId,
+          point,
+        })
+        return
+      }
       // The MENU hit-tests every node, locked included — a locked node has
       // to stay right-clickable or Unlock would be unreachable. Only the
       // selection side effect below is skipped for it.
@@ -1254,7 +1349,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // than the one this move is about to advance.
       if (
         activePointerIdRef.current === null &&
-        (navigationRef.current.mode.kind === 'panning' || gestureState.kind !== 'idle')
+        (navigationRef.current.mode.kind === 'panning' ||
+          gestureState.kind !== 'idle' ||
+          commentDrag !== null)
       ) {
         capturePointer(root, e.pointerId)
       }
@@ -1269,6 +1366,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         e.timeStamp,
       )
       if (!navigation.fallThrough) return
+      if (commentDrag !== null) {
+        setCommentDrag({ ...commentDrag, live: screenToCanvas(screenPoint, viewport) })
+        return
+      }
       if (marquee !== null) {
         setMarquee({ start: marquee.start, current: screenToCanvas(screenPoint, viewport) })
         return
@@ -1311,6 +1412,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas, and treating its release as one would re-collapse the very
       // selection the gather just built.
       if (!navigation.fallThrough) return
+      if (commentDrag !== null) {
+        setCommentDrag(null)
+        const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
+        const dx = released.x - commentDrag.startPoint.x
+        const dy = released.y - commentDrag.startPoint.y
+        // A press that never travelled is a press (the double-press pairing
+        // above owns it), not a zero-distance move.
+        if (dx !== 0 || dy !== 0) {
+          applyResult({
+            state: { kind: 'idle' },
+            commands: [
+              {
+                kind: 'move-comment',
+                id: commentDrag.comment.id,
+                x: commentDrag.comment.x + dx,
+                y: commentDrag.comment.y + dy,
+              } as const,
+            ],
+          })
+        }
+        return
+      }
       const armed = doublePressRef.current
       doublePressRef.current = null
       if (marquee !== null) {
@@ -1489,6 +1612,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         },
         e.timeStamp,
       )
+      // A cancelled pin drag writes nothing: the comment stays where it was.
+      setCommentDrag(null)
     }
 
     /**
@@ -2365,6 +2490,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 contentSvg={dragContentSvg}
               />
             )}
+            {commentDrag?.live != null && (
+              <CommentDragLayer
+                comment={commentDrag.comment}
+                delta={{
+                  x: commentDrag.live.x - commentDrag.startPoint.x,
+                  y: commentDrag.live.y - commentDrag.startPoint.y,
+                }}
+                measure={resolvedMeasure}
+                theme={theme}
+              />
+            )}
             {selectedEdgeId !== null && (
               <EdgeSelectionHighlight selectedEdgeId={selectedEdgeId} edgePaths={edgePaths} />
             )}
@@ -2447,14 +2583,29 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   width: COMMENT_COMPOSE_WIDTH_PX,
                   height: COMMENT_COMPOSE_HEIGHT_PX,
                 }}
-                initialText=""
+                initialText={commentCompose.editing?.initialText ?? ''}
                 testId="comment-compose"
                 style={labelEditorStyle(theme)}
                 onCommit={(draft) => {
                   const text = draft.trim()
                   // A blank commit is a cancel: an empty comment says nothing
-                  // and would still ask the reader to resolve it.
-                  if (text.length > 0) {
+                  // and would still ask the reader to resolve it. Editing an
+                  // existing comment to blank likewise keeps its stored text —
+                  // removal stays MCP-only in v1 (ADR-0025).
+                  if (commentCompose.editing !== undefined) {
+                    if (text.length > 0 && text !== commentCompose.editing.initialText) {
+                      applyResult({
+                        state: { kind: 'idle' },
+                        commands: [
+                          {
+                            kind: 'set-comment-text',
+                            id: commentCompose.editing.id,
+                            text,
+                          } as const,
+                        ],
+                      })
+                    }
+                  } else if (text.length > 0) {
                     const { point, targetNodeId } = commentCompose
                     applyResult({
                       state: { kind: 'idle' },
