@@ -14,8 +14,13 @@ paths:
 - BM25 ranking over a caller-supplied corpus (`fullTextSearch`), plus the
   match excerpts a result row shows (`snippetAround`).
 - **The one definition of what text a document contributes**
-  (`searchableTexts`): a markdown body, or a canvas's node texts, group
-  labels and edge labels.
+  (`searchableTexts`): a markdown body, or a canvas's node texts, link urls,
+  group labels and edge labels. A `file` node contributes NOTHING, and that
+  is a decision rather than a gap — its readable label is the RESOLVED
+  reference's, which needs a lookup this package deliberately does not take,
+  and the raw `node.file` is an opaque id. The node loop is an exhaustive
+  `switch` with a `satisfies never`, so a fifth `SpatialNode` kind fails the
+  build rather than being silently dropped from search.
 
 ## What does NOT belong here
 
