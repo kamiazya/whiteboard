@@ -35,8 +35,7 @@ afterEach(() => {
 
 describe('restore router', () => {
   it('returns a Hono instance', () => {
-    const versionStore = { listVersions: vi.fn(), saveVersion: vi.fn() }
-    const app = createRestoreRouter({ versionStore: versionStore as never })
+    const app = createRestoreRouter()
     expect(app).toBeInstanceOf(Hono)
   })
 })
@@ -320,8 +319,36 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     expect(ids).toEqual(['added-after-v1', 'keep-me'])
   })
 
-  it('evicts the cached doc when reconcile/commit itself fails during in-place restore, not only when saveDocument fails', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+  // Previously this spied `commit` on the cached live doc and asserted the
+  // cache was EVICTED afterwards. That pinned a mechanism the restore no
+  // longer has: the operation reconciles a fresh copy and only the keeper's
+  // save touches the live projection, so a failure before that point leaves
+  // nothing to evict. The guarantee this now pins is the stronger one the
+  // design bought — a refused restore does not dirty the live document at
+  // all — asserted on what a reader gets, not on cache bookkeeping. The
+  // failure-DURING-persistence case, where the live doc is already mutated,
+  // is the test above this one.
+  it('a restore refused before persistence leaves the live document untouched and still served', async () => {
+    const { getDefaultServerDeps } = await import('../../../di/default-server-deps.js')
+    const deps = await getDefaultServerDeps()
+    const real = deps.documentStore
+    // Bound to the real store, not the proxy: the routed store keeps private
+    // fields, which a proxy receiver would break.
+    const refusing = new Proxy(real, {
+      get(target, key, receiver) {
+        if (key === 'saveSnapshot') {
+          return async () => {
+            throw new Error('simulated persistence refusal')
+          }
+        }
+        const value = Reflect.get(target, key, receiver)
+        return typeof value === 'function' ? value.bind(target) : value
+      },
+    })
+    const app = createDocumentRouter({
+      autoVersionIntervalMs: 60_000,
+      serverDeps: { ...deps, documentStore: refusing },
+    })
 
     const initial = new LoroDoc()
     const vv0 = initial.version()
@@ -352,26 +379,17 @@ describe('POST /api/workspaces/:workspaceId/documents/:path/versions/:id/restore
     })
 
     expect(peekDoc('session1', 'canvas-a')).toBeDefined()
-
-    // The reconcile has already mutated the live cached doc by the time its
-    // commit() runs, so a throw here must still evict the cache -- not only
-    // the saveDocument failure path further down. Spied on the cached
-    // INSTANCE, not the prototype: version machinery commits its own clones
-    // and projections first, and those must pass through.
-    const cachedLive = peekDoc('session1', 'canvas-a')!
-    const commitSpy = vi.spyOn(cachedLive, 'commit').mockImplementationOnce(() => {
-      throw new Error('simulated commit failure')
-    })
+    const before = peekDoc('session1', 'canvas-a')!
 
     const restoreRes = await app.request(
       `/api/workspaces/session1/documents/canvas-a/versions/${saveBody.version.id}/restore`,
       { method: 'POST' },
     )
-    commitSpy.mockRestore()
-
     expect(restoreRes.status).toBe(500)
-    expect(peekDoc('session1', 'canvas-a')).toBeUndefined()
 
+    // Still cached, and the SAME instance: nothing was dirtied, so nothing
+    // had to be thrown away.
+    expect(peekDoc('session1', 'canvas-a')).toBe(before)
     const reloaded = await getDoc('session1', 'canvas-a')
     const ids = (reloaded.getMovableList('elements').toJSON() as Array<{ id: string }>)
       .map((el) => el.id)

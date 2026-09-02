@@ -1,6 +1,8 @@
 import {
   createWorkspaceDocumentAtPath,
+  readDocumentKind,
   readSpatialCanvas,
+  writeDocumentKind,
   writeSpatialCanvas,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
@@ -15,11 +17,11 @@ import {
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { loadDocument } from '../tools/document-io.js'
 import {
+  NoSuchVersionError,
   NotWorkspaceScopedError,
   restoreVersion,
   SubtreeTargetError,
   TargetExistsError,
-  VersionNotFoundError,
 } from './restore-version.js'
 
 const WORKSPACE_ID = 'ws-1'
@@ -103,7 +105,7 @@ describe('restoreVersion', () => {
 
     await expect(
       restoreVersion(deps, { workspaceId: WORKSPACE_ID, path: 'design', versionId: 'nope' }),
-    ).rejects.toBeInstanceOf(VersionNotFoundError)
+    ).rejects.toBeInstanceOf(NoSuchVersionError)
   })
 
   test('restores into a brand-new target, leaving the source untouched', async () => {
@@ -405,5 +407,42 @@ describe('restoreVersion', () => {
       documentId: OTHER_DOCUMENT_ID,
     })
     expect(moved?.path).toBe('design/where-it-was')
+  })
+
+  test('overwrite declares the source kind on the target, so it opens in the right editor', async () => {
+    const store = new FakeDocumentStore()
+    // Source is markdown; the seeded index entry says so.
+    await seedDoc(store, DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, readSpatialCanvas(canvasWith(['keep-me'])))
+      writeDocumentKind(doc, 'markdown')
+    })
+    store.documentIndex.seed({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      path: 'design',
+      kind: 'markdown',
+    })
+    // Target is spatial.
+    await seedDoc(store, OTHER_DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, readSpatialCanvas(canvasWith(['occupied'])))
+      writeDocumentKind(doc, 'spatial')
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, OTHER_DOCUMENT_ID, 'design-v1')
+    const deps: ServerDeps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      versions: historyWith({ v1: canvasWith(['keep-me']) }),
+    })
+
+    await restoreVersion(deps, {
+      workspaceId: WORKSPACE_ID,
+      path: 'design',
+      versionId: 'v1',
+      targetPath: 'design-v1',
+      overwrite: true,
+    })
+
+    const { doc: target } = await loadDocument(deps, WORKSPACE_ID, OTHER_DOCUMENT_ID)
+    expect(readDocumentKind(target)).toBe('markdown')
   })
 })

@@ -67,7 +67,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())
   app.route('/', createThumbnailsRouter({ versionStore }))
-  app.route('/', createRestoreRouter({ versionStore }))
+  app.route('/', createRestoreRouter({ serverDeps: options.serverDeps }))
 
   return app
 }

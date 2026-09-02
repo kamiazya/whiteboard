@@ -2,6 +2,17 @@ export { createServer } from './create-server.js'
 export { countAliveNodes, countLegacyTombstones } from './document-counts.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
+export type { RestoreVersionInput, RestoreVersionOutput } from './operations/restore-version.js'
+export {
+  NoSuchVersionError,
+  NotWorkspaceScopedError,
+  RestoreTargetNotFoundError,
+  restoreVersion,
+  restoreVersionInputSchema,
+  restoreVersionOutputSchema,
+  SubtreeTargetError,
+  TargetExistsError,
+} from './operations/restore-version.js'
 export type { Embedder } from './search/embedder.js'
 export type { ConfidenceInterval, Judgments, PermutationResult } from './search/eval.js'
 export {

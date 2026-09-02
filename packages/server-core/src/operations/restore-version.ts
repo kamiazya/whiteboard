@@ -3,9 +3,11 @@ import {
   readDocumentKind,
   readWorkspaceNodes,
   reconcileDocContent,
+  writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
+import { isWorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import { z } from 'zod'
 import { countAliveNodes } from '../document-counts.js'
@@ -70,15 +72,24 @@ export type RestoreVersionOutput = z.infer<typeof restoreVersionOutputSchema>
 /**
  * The named version does not exist in this workspace's history.
  *
+ * Named for the history it answers about, because there are TWO. This
+ * operation reads the daemon's saved-version store through `deps.versions`
+ * — the History panel's versions. `wb_version_restore` reads a version
+ * record the document carries in its own `versions` map, and raises its own
+ * `VersionNotFoundError`. A version saved through one is invisible to the
+ * other. That is a standing second answer to what restoring means, of the
+ * kind ADR-0018 exists to retire; it predates this operation and is not
+ * resolved by it, only made visible.
+ *
  * A class rather than a `null` return, for the reason `SnapshotNotFoundError`
  * is one: every caller has to map it to a refusal, and a nullable result is
  * the shape a caller forgets to check. Distinct from the seam answering
  * `null`, which is the fact this is raised FROM.
  */
-export class VersionNotFoundError extends Error {
+export class NoSuchVersionError extends Error {
   constructor(readonly versionId: string) {
     super(`no such version: ${versionId}`)
-    this.name = 'VersionNotFoundError'
+    this.name = 'NoSuchVersionError'
   }
 }
 
@@ -133,7 +144,7 @@ export async function restoreVersion(
   const { workspaceId, path, versionId, targetPath, overwrite, subtree } =
     restoreVersionInputSchema.parse(input)
 
-  const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
+  const entry = await resolveOrNull(deps, workspaceId, path)
   if (entry === null) throw new RestoreTargetNotFoundError(path)
 
   if (subtree === true) {
@@ -142,7 +153,7 @@ export async function restoreVersion(
   }
 
   const past = await deps.versions.load(workspaceId, versionId)
-  if (past === null) throw new VersionNotFoundError(versionId)
+  if (past === null) throw new NoSuchVersionError(versionId)
 
   if (targetPath !== undefined && targetPath !== path) {
     return await restoreIntoTarget(deps, {
@@ -197,6 +208,11 @@ async function restoreIntoTarget(
     if (!overwrite) throw new TargetExistsError(targetPath)
     const { doc } = await loadDocument(deps, workspaceId, existing.documentId)
     reconcileDocContent(doc, past)
+    // The merged content is the SOURCE's shape, so the target has to declare
+    // the source's kind or a kind-aware reader opens it under the wrong
+    // editor. Declared in the document, the way every tool write declares
+    // kind, and the keeper's index follows the declaration on save.
+    if (sourceKind !== undefined) writeDocumentKind(doc, sourceKind)
     await saveDocumentSnapshot(deps, workspaceId, existing.documentId, doc)
     return {
       kind: 'into-target',
@@ -282,4 +298,19 @@ async function rollBackSubtree(
   }
 
   return { kind: 'subtree', restoredCount: pastDocs.length }
+}
+
+/**
+ * The index answers a missing DOCUMENT with `null` and a missing WORKSPACE
+ * with a throw — a typo'd workspace id must not materialise one. To this
+ * operation both are the same fact, "nothing to restore at that address",
+ * so the throw is folded into the null and every caller maps one error.
+ */
+async function resolveOrNull(deps: ServerDeps, workspaceId: string, path: string) {
+  try {
+    return await deps.documentIndex.resolveDocument({ workspaceId, path })
+  } catch (err) {
+    if (isWorkspaceNotFoundError(err)) return null
+    throw err
+  }
 }

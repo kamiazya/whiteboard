@@ -319,10 +319,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/maintenance.ts -> document-store',
   'routes/document/maintenance.ts -> version-store',
   'routes/document/metadata.ts -> names-store',
-  'routes/document/restore.ts -> doc-cache',
-  'routes/document/restore.ts -> document-store',
-  'routes/document/restore.ts -> version-store',
-  'routes/document/restore.ts -> workspace-lock',
   'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
@@ -360,7 +356,7 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  * server-core instead. The burn-down order is in the ADR; the four clusters
  * it names are 17 of these 39.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 37
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 33
 
 /**
  * Modules under `store/` the adapter rule does NOT count.
