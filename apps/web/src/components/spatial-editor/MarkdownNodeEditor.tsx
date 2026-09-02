@@ -44,8 +44,8 @@ import {
 } from '../markdown-editor/active-markdown-editor.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
+import { headingLevelAt } from '../markdown-editor/line-prefix.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
-import { headingLevelAt } from '../markdown-editor/set-heading-level.js'
 import type { Box } from './geometry.js'
 
 export interface MarkdownNodeEditorProps {

@@ -20,8 +20,8 @@ import {
 } from './active-markdown-editor.js'
 import { markdownStyleKeymap } from './editor-verbs.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
+import { headingLevelAt } from './line-prefix.js'
 import { minimalChange } from './minimal-change.js'
-import { headingLevelAt } from './set-heading-level.js'
 import { rangeToActOn } from './word-at.js'
 
 /**

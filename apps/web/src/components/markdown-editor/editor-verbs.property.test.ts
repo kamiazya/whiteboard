@@ -21,6 +21,7 @@
  * counter got wrong, passing on 16 attempts and 2 actual effects.
  */
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
+import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import { afterAll, describe, expect, it } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
@@ -116,6 +117,24 @@ const line = fc.oneof(
 
 const document = fc.array(line, { minLength: 1, maxLength: 6 }).map((lines) => lines.join('\n'))
 
+/**
+ * Lines separated by blank lines and never two list items in a row, so every
+ * line is a block of its own and a line end is a block end. Two adjacent
+ * text lines are ONE paragraph and two list items ONE (loose) list even
+ * across blank lines; a block tapped in between splits either — which is
+ * what was asked for, but not what B3 is about.
+ */
+const isListLine = (text: string) => /^(-|\d+\.) /.test(text)
+const blockDocument = fc
+  .array(line, { minLength: 1, maxLength: 4 })
+  .filter((lines) => {
+    // Blank lines do not end a list, so adjacency is judged over the
+    // non-blank lines: `- a`, blank, blank, `- b` is still one list.
+    const items = lines.filter((text) => text !== '')
+    return items.every((text, i) => i === 0 || !(isListLine(text) && isListLine(items[i - 1])))
+  })
+  .map((lines) => lines.join('\n\n'))
+
 /** A document paired with a caret position inside it. */
 const documentAndCaret = document.chain((doc) =>
   fc.record({ doc: fc.constant(doc), at: fc.integer({ min: 0, max: doc.length }) }),
@@ -155,6 +174,21 @@ function countLines(doc: string): number {
   return doc.split('\n').length
 }
 
+/**
+ * The top-level blocks of `doc` as the parser reads them: kind and the text
+ * under each, with the parser's own reading of headings kept separate from
+ * paragraphs so a setext promotion shows up as a changed kind.
+ */
+function blocksOf(doc: string): { readonly type: string; readonly text: string }[] {
+  const textUnder = (node: { type: string; value?: string; children?: unknown[] }): string =>
+    (node.value ?? '') +
+    (node.children ?? []).map((child) => textUnder(child as typeof node)).join('')
+  return normalizeMdast(parseMarkdownBody(doc)).children.map((block) => ({
+    type: block.type,
+    text: textUnder(block),
+  }))
+}
+
 /** Whether `inner` appears in `outer` in order, as a subsequence. */
 function isSubsequence(inner: string, outer: string): boolean {
   let i = 0
@@ -181,9 +215,10 @@ describe('markdown editor verbs', () => {
   })
 
   /**
-   * W1. A wrap is insert-only by design (see `wrapSelectionWith` — unwrapping
-   * is deliberately not attempted), so the document it started from must
-   * survive inside the result, in order and complete.
+   * W1. On a word carrying none of the marks, a wrap adds its pair and
+   * nothing else: the document it started from survives inside the result,
+   * in order and complete. (The toggle's other half — the pair coming off
+   * again — is the model test's, where the nest around the word is state.)
    */
   fcTest.prop([documentAndCaret], withDefaults())(
     'W1: wrapping never loses a character of the document',
@@ -227,11 +262,13 @@ describe('markdown editor verbs', () => {
    * H2. Promote then demote returns the original, for a line that had no
    * heading marker to begin with. Restricted to single-line documents so the
    * caret cannot cover a line that already had one — that line's marker is
-   * genuinely lost by the demote, which is what demote means.
+   * genuinely lost by the demote, which is what demote means. A task line is
+   * not in the set either: a heading displaces its checkbox by design (GFM
+   * reads `[ ] # x` as text), so `- [ ] x` round-trips to `- x`.
    */
   fcTest.prop(
     [
-      fc.constantFrom('weekly review', 'ship the thing', '- [ ] open task', 'notes and more'),
+      fc.constantFrom('weekly review', 'ship the thing', '- open item', 'notes and more'),
       fc.integer({ min: 1, max: 3 }),
     ],
     withDefaults(),
@@ -310,6 +347,37 @@ describe('markdown editor verbs', () => {
     if (command === null) throw new Error('code-block lost its command')
     expect(drive('code-block', command, 'alpha\nbeta', 0, 10).doc).toBe('```\nalpha\nbeta\n```')
   })
+
+  /**
+   * B3, judged on the parse rather than the string. A block inserter tapped
+   * at the end of a line adds exactly its block after that line's, and
+   * leaves every other block as the parser read it before: same kinds in
+   * the same order, same text. That is what rules out the spellings that
+   * look right and parse wrong — `milk` + `---` is a setext heading, and
+   * `milk```` is a paragraph ending in three backticks.
+   */
+  fcTest.prop([blockDocument, fc.nat()], withDefaults())(
+    'B3: an inserter at a line end adds its block and changes no other block',
+    (doc, lineChoice) => {
+      const lineIndex = lineChoice % countLines(doc)
+      const at = lineStart(doc, lineIndex) + doc.split('\n')[lineIndex].length
+      const before = blocksOf(doc)
+      for (const [id, type] of [
+        ['rule', 'thematicBreak'],
+        ['code-block', 'code'],
+        ['table', 'table'],
+      ] as const) {
+        const command = selfContainedCommand(verb(id))
+        if (command === null) throw new Error(`${id} lost its command`)
+        const after = blocksOf(drive(id, command, doc, at).doc)
+        const added = after.findIndex(
+          (block, index) => block.type === type && before[index]?.type !== type,
+        )
+        expect(added, `${id} added no ${type} to ${JSON.stringify(doc)}`).toBeGreaterThanOrEqual(0)
+        expect([...after.slice(0, added), ...after.slice(added + 1)]).toEqual(before)
+      }
+    },
+  )
 
   fcTest.prop(
     [fc.constantFrom('weekly review', 'ship the thing', 'notes and more')],
