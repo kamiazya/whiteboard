@@ -164,6 +164,9 @@ describe('single content path (S10 guardrail)', () => {
       // fed solely by canvas-render's escaping serializer.
       ['./SpatialEditor.tsx', 2],
       ['./DragPreviewLayer.tsx', 1],
+      // The comment pin-drag overlay: the dragged comment's chrome, rendered
+      // once through the same serializer and translated per frame.
+      ['./CommentDragLayer.tsx', 1],
       // The committed-scene sink: mount-once innerHTML write of the full
       // keyed document, plus the per-group parse the patcher replaces
       // changed groups through. Every byte both writes carry is
