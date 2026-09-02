@@ -1,6 +1,6 @@
 import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
-import type { DocumentId } from '@kamiazya/whiteboard-model'
+import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
 import type { Embedder } from './search/embedder.js'
@@ -182,6 +182,60 @@ export interface ServerDeps {
    * beside the other seams, exactly as `documentTeardown` does.
    */
   versions: VersionHistory
+  /**
+   * The workspace's LIVE documents — the cached, mutable doc instances every
+   * connected client shares — as an operation needs to touch them.
+   *
+   * Narrow-seam rules as `versions`: these are the calls the restore
+   * operation makes, not the daemon store's whole surface, and structural
+   * typing lets the implementation be larger without a wrapper. Not a
+   * `packages/ports` port for the same reason `versions` is not — the
+   * methods answer with a `LoroDoc`.
+   *
+   * REQUIRED, like `documentTeardown`: a composition root that forgets it
+   * should be a compile error, not a server whose restore route throws at
+   * request time. Tests whose subject is elsewhere pass
+   * `unusedLiveDocuments()`, which refuses.
+   */
+  liveDocuments: LiveDocuments
+}
+
+/**
+ * `withWriteLock` is ON the seam, not around it, because the operation is
+ * what must hold it: every read and write of a restore runs inside one hold
+ * (an unlocked get->save window lets a concurrent delete/rename insert a
+ * phantom canvas), and a lock the adapter takes is a lock a second surface
+ * forgets. The bracket must be re-entrant — `save`/`rename`/`delete`
+ * implementations may take the same lock again.
+ */
+export interface LiveDocuments {
+  /** The live (cached) doc at `path`; an unknown path answers an empty doc. */
+  get(workspaceId: string, path: string): Promise<LoroDoc>
+  /**
+   * Persists `doc` at `path`. Without `overwrite`, a path already held —
+   * checked again inside the store, not only by the caller's `exists` —
+   * rejects with ports' `DocumentPathTakenError`, which is the one failure
+   * an operation turns into a result rather than propagating.
+   */
+  save(
+    workspaceId: string,
+    path: string,
+    doc: LoroDoc,
+    options?: { overwrite?: boolean; kind?: DocumentKind },
+  ): Promise<void>
+  exists(workspaceId: string, path: string): Promise<boolean>
+  /** The document's recorded kind, or null when the path holds none. */
+  kind(workspaceId: string, path: string): Promise<DocumentKind | null>
+  /** Every document in the workspace; `id` is absent for uncorrelatable rows. */
+  list(workspaceId: string): Promise<readonly { id?: string; path: string }[]>
+  rename(workspaceId: string, oldPath: string, newPath: string): Promise<void>
+  delete(workspaceId: string, path: string): Promise<void>
+  /**
+   * Drops the cached doc instance so the next read reloads durable state —
+   * the recovery move after a failed write left the cache ahead of disk.
+   */
+  evict(workspaceId: string, path: string): void
+  withWriteLock<T>(workspaceId: string, fn: () => Promise<T>): Promise<T>
 }
 
 /**

@@ -12,6 +12,7 @@ import { createOpentypeMeasureText } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { documentTeardown } from '../server/store/document-store.js'
 import { documentWritten } from '../server/store/document-written.js'
+import { liveDocuments } from '../server/store/live-documents.js'
 import { FileVersionStore } from '../server/store/version-store.js'
 import { storeMemoryModule } from './store-memory.module.js'
 
@@ -91,5 +92,9 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // eleven methods and the seam names the three an operation reads, so no
     // adapter class is needed to bridge them.
     versions: new FileVersionStore(),
+    // Same reason as documentTeardown: this package's own store, cache and
+    // lock, bundled once so operations reach them through the seam instead
+    // of any adapter importing a mechanic.
+    liveDocuments: liveDocuments(),
   }
 }

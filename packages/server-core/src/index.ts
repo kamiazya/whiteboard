@@ -2,6 +2,13 @@ export { createServer } from './create-server.js'
 export { countAliveNodes, countLegacyTombstones } from './document-counts.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
+export type {
+  RestoreProgress,
+  RestoreProgressEvent,
+  RestoreVersionInput,
+  RestoreVersionResult,
+} from './operations/restore-version.js'
+export { restoreVersion } from './operations/restore-version.js'
 export type { Embedder } from './search/embedder.js'
 export type { ConfidenceInterval, Judgments, PermutationResult } from './search/eval.js'
 export {
@@ -21,7 +28,9 @@ export type {
   CanvasClientNotifier,
   DocumentTeardown,
   DocumentWritten,
+  LiveDocuments,
   ServerDeps,
+  VersionHistory,
   ViewportRequest,
 } from './server-deps.js'
 export type { BacklinksInput, BacklinksOutput } from './tools/backlinks.js'
