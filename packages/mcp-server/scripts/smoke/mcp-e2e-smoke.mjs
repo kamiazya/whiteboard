@@ -963,29 +963,31 @@ async function main() {
     'is not on the canvas',
   )
 
-  // wb_version_save
+  // wb_version_save — into the SAME history the History panel lists, so the
+  // answer is the panel's row shape.
   const saved = await callTool('wb_version_save', {
     workspaceId: WORKSPACE_ID,
     documentId,
     label: 'e2e',
   })
   if (
-    !saved.versionId ||
     saved.documentId !== documentId ||
-    saved.label !== 'e2e' ||
-    !saved.timestamp ||
-    !saved.frontier
+    !saved.version?.id ||
+    saved.version.label !== 'e2e' ||
+    saved.version.auto !== false ||
+    !saved.version.createdAt ||
+    saved.version.operator?.kind !== 'ai'
   ) {
     throw new Error(`wb_version_save returned unexpected shape: ${JSON.stringify(saved)}`)
   }
-  console.log(`[e2e] wb_version_save → ${saved.versionId}`)
+  console.log(`[e2e] wb_version_save → ${saved.version.id}`)
 
   // wb_version_list
   const listed = await callTool('wb_version_list', { workspaceId: WORKSPACE_ID, documentId })
   if (
     listed.documentId !== documentId ||
     !Array.isArray(listed.versions) ||
-    !listed.versions.some((v) => v.versionId === saved.versionId)
+    !listed.versions.some((v) => v.id === saved.version.id)
   ) {
     throw new Error(`wb_version_list missing the saved id: ${JSON.stringify(listed)}`)
   }
@@ -995,13 +997,12 @@ async function main() {
   const restored = await callTool('wb_version_restore', {
     workspaceId: WORKSPACE_ID,
     documentId,
-    versionId: saved.versionId,
+    versionId: saved.version.id,
   })
   if (
     restored.documentId !== documentId ||
-    restored.restoredVersionId !== saved.versionId ||
-    restored.label !== saved.label ||
-    restored.frontier !== saved.frontier
+    restored.restoredVersionId !== saved.version.id ||
+    restored.label !== 'e2e'
   ) {
     throw new Error(`wb_version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
   }

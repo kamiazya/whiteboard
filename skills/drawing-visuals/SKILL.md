@@ -261,8 +261,10 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
 - **Every write is a remote change.** MCP tool calls apply directly to the document; there is no
   separate "commit" step and no local undo. One `wb_canvas_edit` call is atomic — a rejected batch
   leaves nothing behind — but a batch that SUCCEEDS is not undoable, so save a
-  `wb_version_save({ documentId, label })` before a risky one and call
-  `wb_version_restore({ workspaceId, documentId, versionId })` to roll back if it goes wrong.
+  `wb_version_save({ workspaceId, documentId, label })` before a risky one and call
+  `wb_version_restore({ workspaceId, documentId, versionId: version.id })` to roll back if it goes
+  wrong. The version lands in the same history the person's History panel shows, so they can see
+  the checkpoint and restore it themselves.
 - **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
   need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
 - **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;
