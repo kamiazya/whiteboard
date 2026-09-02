@@ -269,6 +269,15 @@ export interface SpatialLayoutOptions {
    * measurer whose per-call cost is far above the fake's.
    */
   readonly contentCache?: SpatialContentCache
+  /**
+   * Draw resolved comments too, muted per the theme's `resolvedOverlay`
+   * (ADR-0025 decisions 2 and 5). Absent/false is the historic behavior —
+   * resolved comments stay in the document, never composed — so every
+   * existing caller's output is byte-identical; the editor's "Show
+   * resolved" toggle is per-user LOCAL view state and must never be written
+   * to the shared document, only passed here at render time.
+   */
+  readonly showResolved?: boolean
 }
 
 /**
@@ -1338,9 +1347,17 @@ function commentAnchor(
  * the anchor) plus one bubble (rounded rect holding the text, floating
  * offset from the anchor) per unresolved comment, composed from existing
  * scene kinds so no consumer of the closed union changes. Resolved comments
- * stay in the document and are deliberately not drawn. Appearance comes
- * from the resolver's optional `resolveComment` — assigned, never invented —
- * so a resolver that predates the layer still lays comments out, bare.
+ * stay in the document and are drawn only when `options.showResolved` is set
+ * (ADR-0025 decision 2), muted via the resolver's `resolvedOverlay`.
+ * Appearance comes from the resolver's optional `resolveComment` — assigned,
+ * never invented — so a resolver that predates the layer still lays
+ * comments out, bare.
+ *
+ * The pin and bubble carry ids (`${comment.id}/pin`, `${comment.id}/bubble`,
+ * mirroring the leader's `${comment.id}/leader`) so the editor can hit-test
+ * them, and `commentChrome: true` so `sceneDigest` can tell them apart from
+ * an addressable document node despite carrying an id of their own (see
+ * `ShapeSceneNode.commentChrome`).
  *
  * ponytail: placement is a fixed down-right offset with no collision
  * avoidance; overlapping bubbles on clustered comments are the ceiling, and
@@ -1353,10 +1370,15 @@ function composeComments(
   const comments = canvas['x-whiteboard']?.comments
   if (comments === undefined || comments.length === 0) return []
 
-  const appearance = options.appearance.resolveComment?.()
+  const chrome = options.appearance.resolveComment?.()
   const out: SceneNode[] = []
   for (const comment of comments) {
-    if (comment.resolved === true) continue
+    if (comment.resolved === true && options.showResolved !== true) continue
+    // Assigned, never invented: a resolved comment's muting comes only from
+    // the theme's `resolvedOverlay`, never from an opacity literal here. A
+    // bare resolver (no `resolveComment`) still composes full geometry with
+    // no appearance at all, resolved or not.
+    const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
     const anchor = commentAnchor(comment, canvas)
 
     const bubbleX = anchor.x + COMMENT_BUBBLE_OFFSET_PX
@@ -1386,6 +1408,8 @@ function composeComments(
 
     out.push({
       kind: 'shape',
+      id: `${comment.id}/pin`,
+      commentChrome: true,
       bbox: {
         x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
         y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
@@ -1414,6 +1438,8 @@ function composeComments(
 
     out.push({
       kind: 'shape',
+      id: `${comment.id}/bubble`,
+      commentChrome: true,
       bbox: {
         x: bubbleX,
         y: bubbleY,

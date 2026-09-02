@@ -264,6 +264,13 @@ function computeFreeRegions(entries: readonly DigestEntry[]): BoundingBox[] {
  * hand-built scene, a fragment — and keeps the previous behaviour of taking
  * every bbox-carrying node, named by position. There is nothing better to
  * name them by, and the alternative is answering with nothing.
+ *
+ * A comment pin/bubble (`ShapeSceneNode.commentChrome`) carries an `id` too
+ * — the editor needs one to hit-test it — but is excluded here as if that id
+ * were absent (ADR-0025 decision 5): `wb_canvas_snapshot.comments` already
+ * publishes comments, so counting their chrome again would double-report
+ * them as phantom nodes, repeating the six-entries-for-three-nodes mistake
+ * this function exists to avoid.
  */
 function collectEntries(scene: Scene): {
   readonly id?: string
@@ -272,7 +279,7 @@ function collectEntries(scene: Scene): {
   readonly overflows?: true
 }[] {
   const identified = scene.nodes.flatMap((node) =>
-    node.kind === 'shape' && node.id !== undefined
+    node.kind === 'shape' && node.id !== undefined && node.commentChrome !== true
       ? [
           {
             id: node.id,

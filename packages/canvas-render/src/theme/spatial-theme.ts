@@ -48,6 +48,28 @@ export interface SpatialThemeOptions {
 
 /** Dash pattern for the comment leader line (SVG stroke-dasharray). */
 const COMMENT_LEADER_DASH = '4 3'
+/**
+ * Alpha for a RESOLVED comment shown under `showResolved` (ADR-0025 decision
+ * 2): muted enough to read as receded/settled without disappearing, applied
+ * to the same palette colors the unresolved chrome already uses rather than
+ * naming a second color. `composeComments` never chooses this value itself —
+ * it only reads whichever appearance the resolver hands it.
+ */
+const COMMENT_RESOLVED_OPACITY = 0.45
+
+/**
+ * The resolved-overlay treatment, DERIVED from the base chrome so the two
+ * can never disagree on color: same fields, each present paint channel
+ * muted, and no dropShadow — a resolved comment recedes rather than
+ * floating above the canvas plane like an active one.
+ */
+function muteForResolved({ dropShadow: _dropShadow, ...base }: Appearance): Appearance {
+  return {
+    ...base,
+    ...(base.fill === undefined ? {} : { fillOpacity: COMMENT_RESOLVED_OPACITY }),
+    ...(base.stroke === undefined ? {} : { strokeOpacity: COMMENT_RESOLVED_OPACITY }),
+  }
+}
 
 /** A numbered preset resolved through the palette; null for hex/unknown. */
 function presetAccent(color: CanvasColor | undefined, palette: SpatialPalette) {
@@ -84,27 +106,37 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
     resolveSyntax: () => palette.syntax,
     // Floating chrome, not content: shadow + neutral card + surface-ringed
     // pin are what separate a comment from an authored amber node.
-    resolveComment: () => ({
-      pin: {
+    resolveComment: () => {
+      const pin: Appearance = {
         fill: palette.comment.pin.fill,
         stroke: palette.comment.pin.stroke,
         strokeWidth: 2,
         dropShadow: true,
-      },
-      bubble: {
+      }
+      const bubble: Appearance = {
         fill: palette.comment.bubble.fill,
         stroke: palette.comment.bubble.stroke,
         dropShadow: true,
-      },
+      }
       // The bubble's stroke color, dashed: the tie must read as comment
       // chrome, not as an authored canvas edge, and dashing is what says so
       // when a dense canvas separates pin from bubble.
-      leader: {
+      const leader: Appearance = {
         stroke: palette.comment.bubble.stroke,
         strokeWidth: 1,
         strokeDasharray: COMMENT_LEADER_DASH,
-      },
-    }),
+      }
+      return {
+        pin,
+        bubble,
+        leader,
+        resolvedOverlay: {
+          pin: muteForResolved(pin),
+          bubble: muteForResolved(bubble),
+          leader: muteForResolved(leader),
+        },
+      }
+    },
     resolveLabel: () => ({
       fill: palette.labelFill,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
