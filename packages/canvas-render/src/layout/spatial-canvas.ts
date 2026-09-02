@@ -1322,8 +1322,11 @@ export const COMMENT_PIN_SIZE_PX = 20
 /** Gap (px) from the anchor point to the bubble's top-left corner. */
 export const COMMENT_BUBBLE_OFFSET_PX = 14
 const COMMENT_TEXT_MAX_WIDTH_PX = 200
-const COMMENT_BUBBLE_PADDING_PX = 8
-const COMMENT_BUBBLE_RADIUS_PX = 8
+// Exported with the offset so the editor's compose bubble can wear the same
+// box the renderer draws (padding, corner) — the draft and the settled
+// comment are one object, not two that happen to look alike.
+export const COMMENT_BUBBLE_PADDING_PX = 8
+export const COMMENT_BUBBLE_RADIUS_PX = 8
 
 /**
  * Where a comment points: the target node's top-right corner while the node
