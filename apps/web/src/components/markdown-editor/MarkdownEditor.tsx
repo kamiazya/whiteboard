@@ -6,11 +6,9 @@ import type { MdastLayoutOptions, MeasureText } from '@kamiazya/whiteboard-canva
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { AliasResolver } from '@kamiazya/whiteboard-codec'
 import { documentIdSchema, type StoredCoreFacets } from '@kamiazya/whiteboard-model'
-import { Bold, Code, Italic, Link2, SquareCheck } from 'lucide-react'
 import {
   type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent as ReactMouseEvent,
-  type ReactNode,
   type PointerEvent as ReactPointerEvent,
   useCallback,
   useEffect,
@@ -30,7 +28,6 @@ import {
   levelCommand,
   MARKDOWN_EDITOR_VERBS,
   type MarkdownVerbBand,
-  type MarkdownVerbId,
   selfContainedCommand,
 } from './editor-verbs.js'
 import { LinkPickerDialog } from './LinkPickerDialog.js'
@@ -48,31 +45,12 @@ import type { RailBlock } from './rail-geometry.js'
 import type { PreviewBlockAnchor } from './render-preview.js'
 import { SourcePane, type SourcePaneApi } from './SourcePane.js'
 import { useDebouncedValue } from './use-debounced-value.js'
+import { VERB_ICONS } from './verb-icons.js'
 import {
   wikiLinkCompletionSource,
   wikiLinkCompletionTheme,
   wikiLinkTouchAccept,
 } from './wiki-link-completion.js'
-
-/**
- * The catalog's leading glyphs, keyed by verb so adding a verb also has to
- * answer "what does it look like?" — `satisfies Record<MarkdownVerbId, …>`
- * fails the build otherwise. Kept out of `editor-verbs.ts` on purpose: that
- * file stays React-free so a node test can import the table and drive every
- * verb without a renderer.
- *
- * `heading` renders as an options band with no leading glyph, so its entry
- * is `null` rather than absent — an optional key would let a real icon go
- * missing silently.
- */
-const VERB_ICONS = {
-  heading: null,
-  bold: <Bold aria-hidden className="size-4" />,
-  italic: <Italic aria-hidden className="size-4" />,
-  code: <Code aria-hidden className="size-4" />,
-  link: <Link2 aria-hidden className="size-4" />,
-  'toggle-task': <SquareCheck aria-hidden className="size-4" />,
-} satisfies Record<MarkdownVerbId, ReactNode>
 
 export interface MarkdownEditorProps {
   value: string
@@ -757,6 +735,16 @@ export function MarkdownEditor({
             value={value}
             onChange={onChange}
             autoFocus={autoFocus}
+            onRequestLinkPicker={
+              linkTargets !== undefined && linkTargets.length > 0
+                ? () => {
+                    const scope = sourceApiRef.current?.pinScope()
+                    if (scope === undefined) return false
+                    setLinkPicker({ query: scope.text, text: scope.text })
+                    return true
+                  }
+                : undefined
+            }
             apiRef={sourceApiRef}
             placeholderText="Write in Markdown…"
             className="markdown-editor-source"

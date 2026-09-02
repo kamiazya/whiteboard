@@ -89,7 +89,7 @@ describe('the editor catalog (real browser)', () => {
     await caretInto(container, 8)
 
     await userEvent.click(getByRole('button', { name: 'Editing actions' }))
-    await userEvent.click(getByRole('menuitem', { name: 'Toggle task' }))
+    await userEvent.click(getByRole('menuitem', { name: 'Task' }))
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('- [x] ship it')
   })

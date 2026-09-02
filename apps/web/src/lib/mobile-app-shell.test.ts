@@ -4,7 +4,8 @@
  *   must be cancelled or the PAGE zooms underneath the app's own gestures;
  * - the viewport meta (index.html): asserted here from the source file so
  *   a refactor cannot silently drop `maximum-scale` (which is also what
- *   stops iOS auto-zooming focused inputs) or `viewport-fit=cover`.
+ *   stops iOS auto-zooming focused inputs), `viewport-fit=cover`, or
+ *   `interactive-widget=resizes-content`.
  */
 import { describe, expect, it } from 'vitest'
 import indexHtml from '../../index.html?raw'
@@ -40,5 +41,23 @@ describe('app-shell viewport meta', () => {
     expect(viewport).toContain('maximum-scale=1')
     expect(viewport).toContain('user-scalable=no')
     expect(viewport).toContain('viewport-fit=cover')
+  })
+})
+
+describe('viewport meta', () => {
+  const viewport = /<meta\s+name="viewport"\s+content="([^"]+)"/.exec(indexHtml)?.[1] ?? ''
+
+  it('was found in index.html at all', () => {
+    // A regex that stops matching would report every key below as missing,
+    // which sends the reader to the wrong file.
+    expect(viewport).toContain('width=device-width')
+  })
+
+  it('asks the browser to resize the layout viewport for the on-screen keyboard', () => {
+    // Without this the keyboard only shrinks the VISUAL viewport, and the
+    // formatting strip has to chase that from script a frame at a time —
+    // which on a fling it cannot win (see lib/software-keyboard.ts). Chrome
+    // and Firefox honour the key; an engine that does not simply ignores it.
+    expect(viewport).toContain('interactive-widget=resizes-content')
   })
 })

@@ -15,12 +15,14 @@ import {
 } from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { beforeEach, describe, expect, it } from 'vitest'
+import * as documentStore from '../../store/document-store.js'
 import { withTempDataDir } from '../_test-helpers.js'
+import { createDocumentRouter } from '../document.js'
 
+// `withTempDataDir` only registers beforeEach/afterEach hooks — it sets
+// nothing at module scope — so these imports never had to be deferred past
+// it.
 const tmp = withTempDataDir('whiteboard-follow-rename-test-')
-
-const { createDocumentRouter } = await import('../document.js')
-const documentStore = await import('../../store/document-store.js')
 const { getDoc } = documentStore
 
 async function seedMarkdown(workspaceId: string, path: string, body: string) {
