@@ -97,6 +97,9 @@ export interface CanvasCommands {
   /** Opens the node's full facet editor — the point knows no domain. */
   readonly setFacetPanelOpen: (open: boolean) => void
   readonly setCommentCompose: (state: CommentComposeState | null) => void
+  /** Per-user view state (ADR-0025 decision 2): resolved comments drawn, muted. */
+  readonly showResolvedComments: boolean
+  readonly setShowResolvedComments: (show: boolean) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -164,6 +167,8 @@ export function CanvasContextMenu({
     setDocumentPicker,
     setFacetPanelOpen,
     setCommentCompose,
+    showResolvedComments,
+    setShowResolvedComments,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -196,7 +201,7 @@ export function CanvasContextMenu({
 
   const items: readonly ContextMenuItem[] =
     comment !== undefined
-      ? commentMenuItems({ comment, canvasRef, setCommentCompose })
+      ? commentMenuItems({ comment, canvasRef, setCommentCompose, applyResult })
       : node === undefined && edge !== undefined
         ? edgeMenuItems({
             edge,
@@ -225,6 +230,8 @@ export function CanvasContextMenu({
               setDocumentPicker,
               applyBoxMoves,
               setCommentCompose,
+              showResolvedComments,
+              setShowResolvedComments,
             })
           : nodeMenuItems({
               node,

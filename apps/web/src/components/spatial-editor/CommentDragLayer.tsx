@@ -52,7 +52,9 @@ export function CommentDragLayer({
     () =>
       renderCanvasToSvg(
         { nodes: [], edges: [], 'x-whiteboard': { comments: [comment] } },
-        { measure, theme, commentObstacles: obstacles },
+        // The dragged comment was hit-tested on the drawn scene, so it is
+        // visible whatever its resolved state: draw it unconditionally.
+        { measure, theme, commentObstacles: obstacles, showResolved: true },
       ),
     [comment, measure, theme, obstacles],
   )

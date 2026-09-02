@@ -13,7 +13,7 @@
  * stay cheap enough to call at either cadence.
  */
 
-import type { EdgeSides, Scene } from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, EdgeSides, Scene } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { carriedWithDrag } from './drag-preview.js'
 import type { Box } from './geometry.js'
@@ -71,6 +71,49 @@ export function commentExtensionFor(
     ),
   }
 }
+
+/**
+ * What a riding comment's bubble must not cover in the GHOST render: the
+ * nodes staying behind, and the bubbles of the comments staying behind.
+ *
+ * The ghost re-places the bubbles of the comments it carries, and it has to
+ * reach the same quadrant the committed scene chose or the bubble jumps the
+ * moment the press lands. That means scoring against what the COMMITTED
+ * placement scored against — which excludes the carried comments' own
+ * bubbles. Counting a comment's own bubble is worse than useless: it covers
+ * exactly the candidate the committed run picked, so it steers the ghost
+ * away from the right answer every time.
+ *
+ * The committed placer also works incrementally, so a comment is scored only
+ * against bubbles placed BEFORE it. This returns one set for the whole ghost
+ * render instead, which over-counts the bystander bubbles that would have
+ * come later. That is a tie-breaker's worth of difference and it keeps the
+ * contract one list; the exact form would need per-comment obstacle sets
+ * through `layoutSpatialCanvas`.
+ */
+export function ghostCommentObstacles(
+  canvas: SpatialCanvas,
+  committed: Scene,
+  carried: ReadonlySet<string>,
+): BoundingBox[] {
+  const riding = new Set(
+    (commentExtensionFor(canvas, carried, true)?.comments ?? []).map((comment) => comment.id),
+  )
+  return [
+    ...canvas.nodes
+      .filter((node) => !carried.has(node.id) && node.type !== 'group')
+      .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
+    ...committed.nodes.flatMap((node) => {
+      if (node.kind !== 'shape' || node.commentChrome !== true) return []
+      const id = node.id
+      if (id === undefined || !id.endsWith(BUBBLE_SUFFIX)) return []
+      return riding.has(id.slice(0, -BUBBLE_SUFFIX.length)) ? [] : [node.bbox]
+    }),
+  ]
+}
+
+/** How `composeComments` keys a comment's bubble shape. */
+const BUBBLE_SUFFIX = '/bubble'
 
 /**
  * The canvas' nodes with the gesture's transform applied at the live

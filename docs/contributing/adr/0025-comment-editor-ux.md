@@ -62,10 +62,16 @@ Two facts frame every choice:
   built now; the keyboard-reachable create/resolve paths carry the
   accessibility requirement the panel would otherwise have carried.
 - Resolve/reopen ship with **no confirmation dialog** (resolve is reversible
-  by design — ADR-0024 keeps the record) and a toast with Undo. A failed
-  resolve/reopen write keeps the bubble's visible state unchanged and says
-  so in the toast — the pin never optimistically flips to a state the
-  document does not hold.
+  by design — ADR-0024 keeps the record). **Landed** (2026-09-02) as
+  context-menu verbs on the comment — "Resolve" on an open one, "Reopen" on
+  a resolved one — beside "Edit comment", and "Show / Hide resolved
+  comments" on the empty-canvas band. The toast-with-Undo this bullet first
+  promised is NOT built: the host's Undo already reverts the write, and a
+  resolved comment is one toggle and one verb from being back, so a toast
+  would be a third path to the same place. Revisit only if dogfooding shows
+  a resolve going unnoticed. The write is the same `set-comment-resolved`
+  the fine-grained path already carried, so a failed write leaves the
+  document — and therefore the pin — as it was.
 - **There is no removal, on either side** (user decision, 2026-09-02). The
   first cut kept `comment.remove` as an MCP-only op while the editor shipped
   resolve-only; that asymmetry — an agent able to erase feedback a person

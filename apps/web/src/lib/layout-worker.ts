@@ -168,6 +168,7 @@ self.onmessage = async (
       resolveReference: composeReferenceSeam({ labels, missing: missingRefs }),
       contentCache: contentCacheFor(request.theme),
       suppressedBodyNodeIds: request.suppressedBodyNodeIds,
+      showResolved: request.showResolved,
     })
     const response: LayoutResponse = {
       type: 'laid-out',

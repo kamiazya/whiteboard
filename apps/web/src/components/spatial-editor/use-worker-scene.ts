@@ -82,6 +82,8 @@ export function useWorkerScene(
      *  Must be referentially stable across renders, like the seams object —
      *  it participates in the memo below. */
     readonly suppressedBodyNodeIds?: readonly string[]
+    /** Draw resolved comments too; view state, threaded to the worker as data. */
+    readonly showResolved?: boolean
   },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'> & {
     /**
@@ -100,7 +102,7 @@ export function useWorkerScene(
 ): RenderedCanvas & { readonly sceneCurrent: boolean } {
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
-    [base.measure, base.theme, base.suppressedBodyNodeIds, fileSeamOptions],
+    [base.measure, base.theme, base.suppressedBodyNodeIds, base.showResolved, fileSeamOptions],
   )
   const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
@@ -135,8 +137,16 @@ export function useWorkerScene(
       fileRefLabels,
       missingFileRefs,
       suppressedBodyNodeIds: options.suppressedBodyNodeIds,
+      showResolved: options.showResolved,
     }),
-    [canvas, options.theme, fileRefLabels, missingFileRefs, options.suppressedBodyNodeIds],
+    [
+      canvas,
+      options.theme,
+      fileRefLabels,
+      missingFileRefs,
+      options.suppressedBodyNodeIds,
+      options.showResolved,
+    ],
   )
 
   useEffect(() => {
@@ -202,6 +212,7 @@ export function useWorkerScene(
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
       suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
+      showResolved: inputs.showResolved,
     }
     worker.postMessage(request)
     return () => {

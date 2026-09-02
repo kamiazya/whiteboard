@@ -49,6 +49,8 @@ export type LayoutRequest = {
   readonly missingFileRefs?: readonly string[]
   /** Node ids whose body an editor overlay owns — plain data, like the refs. */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /** Draw resolved comments too (the editor's per-user toggle). */
+  readonly showResolved?: boolean
 }
 
 /**

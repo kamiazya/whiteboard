@@ -35,6 +35,8 @@ function baseInput(canvas: SpatialCanvas) {
     setDocumentPicker: vi.fn(),
     applyBoxMoves: vi.fn(),
     setCommentCompose: vi.fn(),
+    showResolvedComments: false,
+    setShowResolvedComments: vi.fn(),
   }
 }
 
@@ -51,7 +53,22 @@ describe('canvasMenuItems', () => {
       'Group',
       'separator',
       'Comment here',
+      'Show resolved comments',
     ])
+  })
+
+  it('the resolved-comments toggle flips its label with the view state and writes nothing to the canvas', () => {
+    const shown = canvasMenuItems({ ...baseInput(emptyCanvas), showResolvedComments: true })
+    expect(
+      shown.some((item) => (item as { label?: string }).label === 'Hide resolved comments'),
+    ).toBe(true)
+    const input = baseInput(emptyCanvas)
+    const item = canvasMenuItems(input).find(
+      (entry) => (entry as { label?: string }).label === 'Show resolved comments',
+    )
+    ;(item as { onSelect: () => void }).onSelect()
+    expect(input.setShowResolvedComments).toHaveBeenCalledWith(true)
+    expect(input.applyBoxMoves).not.toHaveBeenCalled()
   })
 
   it('"Comment here" opens a compose anchored at the click point, about no node', () => {

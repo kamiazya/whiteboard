@@ -687,9 +687,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       containerSizeOf,
       setViewport,
     })
+    /**
+     * Whether resolved comments are drawn (muted) — ADR-0025 decision 2:
+     * per-user VIEW state, never written to the shared document, so one
+     * person's toggle cannot change what another person sees.
+     */
+    const [showResolvedComments, setShowResolvedComments] = useState(false)
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
-      { measure: resolvedMeasure, theme, suppressedBodyNodeIds },
+      {
+        measure: resolvedMeasure,
+        theme,
+        suppressedBodyNodeIds,
+        showResolved: showResolvedComments,
+      },
       fileSeamOptions,
       fileRefOptions,
       missingFileRefs,
@@ -929,6 +940,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         scene,
         anchors,
         keyed: surfaceKeyed,
+        showResolved: showResolvedComments,
         boxes,
         selectableBoxes,
         livePoint,
@@ -2314,6 +2326,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 setDocumentPicker,
                 setFacetPanelOpen,
                 setCommentCompose,
+                showResolvedComments,
+                setShowResolvedComments,
               }}
               contextMenu={contextMenu}
               setContextMenu={setContextMenu}

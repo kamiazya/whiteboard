@@ -6,6 +6,8 @@ import { tidyNodes } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import {
   ClipboardPaste,
+  Eye,
+  EyeOff,
   FileBox,
   Frame,
   Image as ImageIcon,
@@ -38,6 +40,8 @@ export interface CanvasMenuItemsInput {
   readonly setDocumentPicker: CanvasCommands['setDocumentPicker']
   readonly applyBoxMoves: CanvasCommands['applyBoxMoves']
   readonly setCommentCompose: CanvasCommands['setCommentCompose']
+  readonly showResolvedComments: CanvasCommands['showResolvedComments']
+  readonly setShowResolvedComments: CanvasCommands['setShowResolvedComments']
 }
 
 export function canvasMenuItems({
@@ -56,6 +60,8 @@ export function canvasMenuItems({
   setDocumentPicker,
   applyBoxMoves,
   setCommentCompose,
+  showResolvedComments,
+  setShowResolvedComments,
 }: CanvasMenuItemsInput): ContextMenuItem[] {
   // The same creation set as the dock's + menu, anchored at
   // the click point — "here" is exactly the information the
@@ -123,6 +129,13 @@ export function canvasMenuItems({
     label: 'Comment here',
     icon: <MessageSquarePlus />,
     onSelect: () => setCommentCompose({ point }),
+  })
+  // Resolved comments stay in the document; this is the one way to see
+  // them again (and reopen one). View state, per user.
+  emptyItems.push({
+    label: showResolvedComments ? 'Hide resolved comments' : 'Show resolved comments',
+    icon: showResolvedComments ? <EyeOff /> : <Eye />,
+    onSelect: () => setShowResolvedComments(!showResolvedComments),
   })
   return emptyItems
 }

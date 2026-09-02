@@ -7,7 +7,6 @@
 // which side it is on and why.
 
 import type {
-  BoundingBox,
   EdgeSides,
   KeyedSvgRender,
   MeasureText,
@@ -33,6 +32,7 @@ import {
   carriedSideCacheKey,
   commentExtensionFor,
   frozenSidesOf,
+  ghostCommentObstacles,
   liveNodesFor,
 } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
@@ -61,6 +61,8 @@ export interface DragLayersInputs {
   anchors: RenderedCanvas['anchors']
   /** The committed surface's keyed projection (mount-once patch container). */
   keyed: KeyedSvgRender
+  /** Draw resolved comments in the drag layers too, matching the committed surface. */
+  showResolved?: boolean
   boxes: readonly NodeBox[]
   selectableBoxes: readonly NodeBox[]
   livePoint: Point | null
@@ -79,10 +81,27 @@ export function useDragLayers({
   scene,
   anchors,
   keyed,
+  showResolved,
   boxes,
   selectableBoxes,
   livePoint,
 }: DragLayersInputs) {
+  // The committed layout, FROZEN at gesture start. The worker's next
+  // reply may land mid-gesture, and THREE things ride on it: the anchors
+  // are the points bystander edges are pinned to, the scene is what
+  // decides which edges are pin-eligible at all (frozenSidesOf) — a
+  // swapped scene silently un-pins every bystander even with the anchors
+  // held, which is the same re-fraction by another door — and the ghost's
+  // comment obstacles below, which must keep answering the placement
+  // question the way the committed scene answered it at the press.
+  const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
+  const gestureCommitted = useGestureCaptured(
+    gestureState.kind === 'moving' ||
+      gestureState.kind === 'resizing' ||
+      gestureState.kind === 'connecting',
+    committedPair,
+  )
+
   /**
    * The dragged node's own content, rendered ONCE per drag (the reducer's
    * pointermove passthrough returns the same state reference, so this memo
@@ -105,16 +124,7 @@ export function useDragLayers({
     // placed it against — the bystander nodes and the bubbles staying
     // behind — so at the press it sits exactly where it was drawn. Rendered
     // alone it would re-place in an empty canvas and jump quadrant.
-    const ghostObstacles: BoundingBox[] = [
-      ...canvas.nodes
-        .filter((n) => !carried.has(n.id) && n.type !== 'group')
-        .map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
-      ...scene.nodes.flatMap((n) =>
-        n.kind === 'shape' && n.commentChrome === true && n.id?.endsWith('/bubble') === true
-          ? [n.bbox]
-          : [],
-      ),
-    ]
+    const ghostObstacles = ghostCommentObstacles(canvas, gestureCommitted.scene, carried)
     const rendered = renderCanvasToSvg(
       {
         nodes,
@@ -125,6 +135,7 @@ export function useDragLayers({
         measure: resolvedMeasure,
         theme,
         ...fileSeamOptions,
+        showResolved,
         commentObstacles: ghostObstacles,
       },
     )
@@ -144,22 +155,10 @@ export function useDragLayers({
     resolvedMeasure,
     theme,
     fileSeamOptions,
-    scene,
+    gestureCommitted,
+    showResolved,
   ])
 
-  // The committed layout, FROZEN at gesture start. The worker's next
-  // reply may land mid-gesture, and BOTH halves matter: the anchors are
-  // the points bystander edges are pinned to, and the scene is what
-  // decides which edges are pin-eligible at all (frozenSidesOf) — a
-  // swapped scene silently un-pins every bystander even with the anchors
-  // held, which is the same re-fraction by another door.
-  const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
-  const gestureCommitted = useGestureCaptured(
-    gestureState.kind === 'moving' ||
-      gestureState.kind === 'resizing' ||
-      gestureState.kind === 'connecting',
-    committedPair,
-  )
   // Last optimized sides for the gesture's carried edges (see liveEdges).
   const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
   useEffect(() => {
@@ -201,6 +200,7 @@ export function useDragLayers({
       measure: resolvedMeasure,
       theme,
       ...fileSeamOptions,
+      showResolved,
     })
     const metricsCache = new Map<string, TextMetrics>()
     const measure: MeasureText = (text, font) => {
@@ -237,6 +237,7 @@ export function useDragLayers({
     resolvedMeasure,
     theme,
     fileSeamOptions,
+    showResolved,
   ])
   // The committed surface's mount-once container (see the editor's JSX):
   // during a gesture it patches to the drag backdrop, on drop back to the
@@ -399,6 +400,7 @@ export function useDragLayers({
         measure: dragStatic.measure,
         theme,
         ...fileSeamOptions,
+        showResolved,
       },
     )
     return { svg: rendered.svg, bounds: rendered.bounds }

@@ -311,7 +311,7 @@ const COMMAND_COVERAGE = {
   'create-comment':
     'not modelled: written by the compose bubble (comment-create.browser.test.tsx), outside the gesture machine; no gesture or selection coupling to model here — covered at the applyCommand/session layers',
   'set-comment-resolved':
-    'not modelled: single-field write; no editor surface writes it yet (the resolve/reopen layer of ADR-0025 is a later increment)',
+    'not modelled: single-field write from the context menu verbs Resolve / Reopen (comment-resolve.browser.test.tsx); no gesture or selection coupling to model here',
   'move-comment':
     'not modelled: written by the pin drag (comment-move.browser.test.tsx), a side state beside the gesture machine rather than a GestureState arm; single-field write',
   'set-comment-text':
