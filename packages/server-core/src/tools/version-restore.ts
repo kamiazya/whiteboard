@@ -51,7 +51,7 @@ export function createVersionRestoreTool(deps: ServerDeps) {
     inputSchema: versionRestoreInputSchema,
     outputSchema: versionRestoreOutputSchema,
     execute: async (input: VersionRestoreInput): Promise<VersionRestoreOutput> => {
-      const { workspaceId, documentId, versionId } = input
+      const { workspaceId, documentId, versionId } = versionRestoreInputSchema.parse(input)
       const entry = await resolveDocumentInWorkspace(deps.documentIndex, workspaceId, documentId)
       // The operation looks the label up for its `started` event; reading it
       // from there is what keeps the tool's answer and the overlay's caption

@@ -233,6 +233,24 @@ describe('restoreVersion result union', () => {
     expectAllCallsLocked(live)
   })
 
+  it("answers not-found for a version that belongs to ANOTHER document's history, and writes nothing", async () => {
+    // A version id is unique per workspace, so `load` alone would happily
+    // answer another document's past state — and the reconcile would then
+    // overwrite this document with unrelated content. The history the
+    // caller named (`path`) has to hold the id.
+    const live = new FakeLive()
+    const liveDoc = spatialDoc(['mine'])
+    live.seed('canvas-a', liveDoc)
+    const before = liveDoc.oplogVersion()
+    const result = await run(
+      live,
+      versionsWith({ v1: { doc: spatialDoc(['theirs']), path: 'canvas-b' } }),
+    )
+    expect(result).toEqual({ kind: 'not-found' })
+    expect(liveDoc.oplogVersion().compare(before)).toBe(0)
+    expect(live.calls.map((c) => c.method)).not.toContain('save')
+  })
+
   it('answers output-exists for an existing target without overwrite, and writes nothing', async () => {
     const live = new FakeLive()
     live.seed('canvas-a', spatialDoc(['n1']))

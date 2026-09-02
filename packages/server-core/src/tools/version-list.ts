@@ -29,7 +29,7 @@ export function createVersionListTool(deps: ServerDeps) {
     inputSchema: versionListInputSchema,
     outputSchema: versionListOutputSchema,
     async execute(input: VersionListInput): Promise<VersionListOutput> {
-      const { workspaceId, documentId } = input
+      const { workspaceId, documentId } = versionListInputSchema.parse(input)
       const entry = await resolveDocumentInWorkspace(deps.documentIndex, workspaceId, documentId)
       const versions = await deps.versions.list(workspaceId, entry.path)
       return { documentId, versions: [...versions] }

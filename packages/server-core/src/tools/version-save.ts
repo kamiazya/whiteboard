@@ -40,7 +40,9 @@ export function createVersionSaveTool(deps: ServerDeps) {
     inputSchema: versionSaveInputSchema,
     outputSchema: versionSaveOutputSchema,
     async execute(input: VersionSaveInput): Promise<VersionSaveOutput> {
-      const { workspaceId, documentId, label } = input
+      // Parsed again here: the MCP boundary may rebuild validation without
+      // `.strict()`, so the schema is the only guard on what reaches the seam.
+      const { workspaceId, documentId, label } = versionSaveInputSchema.parse(input)
       const entry = await resolveDocumentInWorkspace(deps.documentIndex, workspaceId, documentId)
       // The doc is read only for the row's advisory element count; the
       // checkpoint itself is the stored record's frontier, which the history
