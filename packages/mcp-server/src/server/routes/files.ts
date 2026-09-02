@@ -2,6 +2,7 @@ import { mkdir, readdir, readFile } from 'node:fs/promises'
 import { basename, extname, join } from 'node:path'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
+import { errorMessage } from '../../shared/error-message.js'
 import { writeFileAtomic } from '../atomic-write.js'
 import { getDataDir } from '../config.js'
 import {
@@ -32,10 +33,6 @@ const MIME_TO_EXT: Record<string, string> = {
 const EXT_TO_MIME: Record<string, string> = Object.fromEntries(
   Object.entries(MIME_TO_EXT).map(([m, e]) => [e, m]),
 )
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
-}
 
 async function readStoredFileNames(dir: string): Promise<string[] | null> {
   try {
