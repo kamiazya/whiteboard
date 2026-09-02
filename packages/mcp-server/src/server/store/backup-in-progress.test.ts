@@ -1,4 +1,4 @@
-import { mkdtemp, readdir, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readdir, readFile, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
@@ -101,20 +101,41 @@ describe('the backup-in-progress marker', () => {
    * own marker and GC resumes underneath it — the very window this closes.
    */
   it('stays valid across a pass longer than its own lifetime', async () => {
-    let seenLate = false
+    // Asserted against the marker's own timestamps, never the wall clock.
+    // Two earlier shapes of this test raced real timers and lost under a
+    // loaded parallel suite: a 5ms refresh slipped its 40ms TTL, then a 30ms
+    // refresh slipped its 300ms TTL on CI — each time measuring the
+    // machine's load, not whether the marker refreshes. So the body now
+    // WAITS (polling, bounded only by the test timeout) until a refresh has
+    // observably pushed the deadline out, and the assertion asks
+    // backupIsInProgress the deterministic question via its injectable
+    // clock: at the moment the ORIGINAL deadline passed, was the refreshed
+    // marker still honoured?
+    const markerFile = join(dir, 'backup-in-progress.json')
+    const readExpiresAt = async (): Promise<number | null> => {
+      try {
+        return JSON.parse(await readFile(markerFile, 'utf8')).expiresAt as number
+      } catch {
+        // Mid-write or not yet written: not an answer, poll again.
+        return null
+      }
+    }
+    let seenPastOriginalDeadline = false
     await withBackupMarker(
       dir,
       async () => {
-        await new Promise((r) => setTimeout(r, 900))
-        seenLate = await backupIsInProgress(dir)
+        let initial: number | null = null
+        while (initial === null) initial = await readExpiresAt()
+        let refreshed: number | null = null
+        while (refreshed === null || refreshed <= initial) {
+          await new Promise((r) => setTimeout(r, 10))
+          refreshed = await readExpiresAt()
+        }
+        seenPastOriginalDeadline = await backupIsInProgress(dir, initial)
       },
-      // Three times the TTL of waiting, and ten refreshes' worth of headroom
-      // inside each TTL. A tighter pair (40ms / 5ms) fails under a full
-      // parallel suite, where a 5ms timer routinely slips — the test would be
-      // measuring the machine's load rather than whether the marker refreshes.
       { ttlMs: 300, refreshEveryMs: 30 },
     )
-    expect(seenLate).toBe(true)
+    expect(seenPastOriginalDeadline).toBe(true)
   })
 
   /** Fail OPEN: an unreadable marker must not wedge GC permanently. */
