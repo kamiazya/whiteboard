@@ -1,22 +1,14 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it, vi } from 'vitest'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import type { ServerDeps } from '../server-deps.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { ContentFactsCache } from './content-facts-cache.js'
 
 const WS = 'ws-1'
 
-function makeDeps() {
-  return {
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+function makeDeps(): ServerDeps {
+  return makeTestDeps()
 }
 
 async function seedTwo(deps: ReturnType<typeof makeDeps>) {

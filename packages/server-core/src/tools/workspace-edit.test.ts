@@ -1,8 +1,7 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { createDocumentGetTool } from './document-get.js'
 import { createWorkspaceEditTool } from './workspace-edit.js'
@@ -17,13 +16,7 @@ const WS = 'batch'
  * keeps the flag and reads the id the batch reports.
  */
 async function makeDeps() {
-  const deps = {
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentTeardown: inMemoryDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-    documentIndex: new InMemoryDocumentIndex(),
-  }
+  const deps = makeTestDeps({ documentTeardown: inMemoryDocumentTeardown() })
   await deps.documentIndex.createWorkspace({ workspaceId: WS })
   return deps
 }
@@ -136,13 +129,10 @@ describe('wb_workspace_edit', () => {
     // directly, with no resolution between. Before the batch carried that id
     // forward, op 1 addressed the caller's handle, which by then named
     // nothing: `ops[1] ... Workspace not found: "batch"`.
-    const deps: ServerDeps = {
+    const deps: ServerDeps = makeTestDeps({
       documentStore: createInMemoryDocumentStore(),
-      blobStore: {} as never,
       documentTeardown: inMemoryDocumentTeardown(),
-      documentWritten: ignoredDocumentWrites(),
-      documentIndex: new InMemoryDocumentIndex(),
-    }
+    })
 
     const out = await createWorkspaceEditTool(deps).execute({
       workspaceId: WS,

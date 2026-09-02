@@ -1,9 +1,7 @@
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from '../create-server.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import type { ServerDeps } from '../server-deps.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { backlinksOutputSchema } from './backlinks.js'
 import { createCanvasEditTool } from './canvas-edit.js'
 import { wbDocumentCreate } from './document-crud.js'
@@ -11,14 +9,8 @@ import { createDocumentSetTool } from './document-set.js'
 
 const WS = 'ws-1'
 
-function makeDeps() {
-  return {
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+function makeDeps(): ServerDeps {
+  return makeTestDeps()
 }
 
 async function seed(deps: ReturnType<typeof makeDeps>) {

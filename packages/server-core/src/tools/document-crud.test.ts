@@ -1,10 +1,9 @@
 import { documentIdSchema } from '@kamiazya/whiteboard-model'
 import { DocumentHasDescendantsError, DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
+import type { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { WorkspaceDocumentNotFoundError, WorkspaceNotFoundError } from './document-crud.errors.js'
 import {
@@ -26,13 +25,7 @@ const WS = 'ws-1'
  * explicitly; everything else just needs one to exist.
  */
 async function makeDeps(): Promise<ServerDeps> {
-  const deps: ServerDeps = {
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
-    documentTeardown: inMemoryDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  const deps = makeTestDeps({ documentTeardown: inMemoryDocumentTeardown() })
   await deps.documentIndex.createWorkspace({ workspaceId: WS })
   return deps
 }
