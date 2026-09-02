@@ -81,7 +81,6 @@ import {
   type ReactNode,
   useEffect,
   useImperativeHandle,
-  useLayoutEffect,
   useMemo,
   useRef,
   useState,
@@ -104,6 +103,7 @@ import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
+import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
@@ -117,6 +117,7 @@ import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from 
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
+import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -130,6 +131,7 @@ import {
 } from './navigation.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
+import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { requiredTextNodeHeight } from './scene-render.js'
 import { renderedCanvasKeyed } from './scene-render-core.js'
 import {
@@ -146,11 +148,13 @@ import {
   type EditorTool,
   ToolPalette,
 } from './ToolPalette.js'
+import { useCanvasReplacement } from './use-canvas-replacement.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
 import { useDragLayers } from './use-drag-layers.js'
 import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
+import { useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeCreation } from './use-node-creation.js'
 import { useViewportControls } from './use-viewport-controls.js'
@@ -546,8 +550,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const navigationRef = useRef<NavigationState>(createIdleNavigation())
 
     const canvasRef = useRef(canvas)
-    const prevCanvasRef = useRef(canvas)
-    const prevExternalVersionRef = useRef(externalVersion)
     canvasRef.current = canvas
 
     // Mirror for callbacks that outlive their render — the long-press timer
@@ -579,84 +581,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // The timer must call the LATEST render's opener (fresh viewport/boxes/
     // selection), not the one captured when the finger landed.
     const openContextMenuAtRef = useRef<(screen: Point) => void>(() => {})
-
-    // Controlled-prop-swap policy: a sync-driven parent can replace `canvas`
-    // mid-gesture. Feed the reducer a `canvas-replaced` event so it can abort
-    // or continue per gestures.ts's documented contract. `origin` is
-    // 'external' only when the caller's `externalVersion` counter itself
-    // advanced — that is what tells an undo/redo/remote-import replacement
-    // (which must cancel the gesture unconditionally) apart from this
-    // component's own controlled re-render after `onChange`.
-    // Layout, not passive: this must land before the browser can dispatch the
-    // next pointer event, or a pointerup could still be reduced against the
-    // gesture the replacement was meant to cancel — committing a delta derived
-    // from a canvas that no longer exists. Nothing here reads layout, so the
-    // synchronous slot costs nothing and removes the need to reason about when
-    // React flushes passive effects relative to input.
-    useLayoutEffect(() => {
-      const previous = prevCanvasRef.current
-      if (previous === canvas) return
-      prevCanvasRef.current = canvas
-      const isExternal =
-        externalVersion !== undefined && externalVersion !== prevExternalVersionRef.current
-      prevExternalVersionRef.current = externalVersion
-      const result = reduceGesture(gestureState, canvas, {
-        type: 'canvas-replaced',
-        canvas,
-        origin: isExternal ? 'external' : 'local',
-      })
-      setGestureState(result.state)
-      // The gesture is not the only state pinned to a node id: a selection
-      // outlives the node it named unless something retires it, and every
-      // site that READS the selection filters by laid-out box, so the stale
-      // id stays invisible while quietly disabling the verbs. A primary
-      // whose node an undo removed leaves `selection` undefined, and the
-      // Delete key's own branches are gated on it — two extras keep drawing
-      // their outlines while Delete does nothing.
-      const held = new Set(canvas.nodes.map((node) => node.id))
-      const missingIds = new Set(
-        previous.nodes.map((node) => node.id).filter((id) => !held.has(id)),
-      )
-      if (missingIds.size > 0) applySelection({ type: 'drop-missing', missingIds })
-      // The edge selection is the same story with none of the machinery:
-      // no reducer, eighteen hand-maintained writes, and nothing anywhere
-      // comparing it against `canvas.edges`. A selected edge that an undo
-      // or a peer's delete removed still consumes the Delete key — the
-      // edge branch runs first in `handleKeyDown` and returns — so the
-      // keypress does nothing at all. Phrased as what VANISHED, like the
-      // node half above and for the same reason.
-      const heldEdges = new Set(canvas.edges.map((edge) => edge.id))
-      const missingEdges = new Set(
-        previous.edges.map((edge) => edge.id).filter((id) => !heldEdges.has(id)),
-      )
-      // Only the SELECTION needs retiring here. The edge label editor
-      // resolves its edge in the render and returns null when it is
-      // missing, so a second rule for it would be a second mechanism for
-      // one invariant — the kind that drifts. The selection has no such
-      // gate: every site that reads it filters by what is laid out, which
-      // is why a stale id there is invisible rather than inert.
-      if (missingEdges.size > 0) {
-        setSelectedEdgeId((current) =>
-          current !== null && missingEdges.has(current) ? null : current,
-        )
-      }
-      // Mirror gestures.ts's canvas-replaced abort/continue answer into the
-      // preview: an abort (result.state no longer in-flight) must retire the
-      // preview too, or it would keep drawing a gesture the reducer already
-      // cancelled. Uses the SAME predicate applyResult's own clearing check
-      // below does, so there is exactly one definition of "no longer in
-      // flight" rather than two clearing rules that could drift apart.
-      if (!isInFlightGesture(result.state)) {
-        setLivePoint(null)
-        // The guides justify an in-flight snap; outliving the gesture would
-        // leave stray lines on the canvas.
-        setSnapGuides(null)
-      }
-      // gestureState intentionally omitted: this effect only reacts to a new
-      // canvas identity, not every gestureState transition (that would create
-      // an infinite render loop feeding the reducer's own output back in).
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [canvas, externalVersion])
 
     // The file-reference seam — the LOD gate, label/missing resolution and
     // the content cache — built once in useFileSeamScene and spread into
@@ -758,54 +682,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // ordinary open — the earlier version of this returned null and stranded
     // the flag, which only a new selection could get out of.
     if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
-    /**
-     * Lock only binds when the host wired the seam — an editor mounted
-     * without `onToggleNodeLock` has no way to unlock, so blocking there
-     * would strand the node.
-     */
-    const lockEnabled = onToggleNodeLock !== undefined
-    const isLocked = (nodeId: string): boolean =>
-      lockEnabled && (lockedNodeIds?.has(nodeId) ?? false)
-    /** Boxes a pointer or marquee may target: locked nodes are invisible to both. */
-    const selectableBoxes = useMemo(
-      () => (lockEnabled ? boxes.filter((entry) => !isLocked(entry.id)) : boxes),
-      // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
-      [boxes, lockEnabled, lockedNodeIds],
+    // Lock seams + coherence (predicates, selectable subset, and the two
+    // effects that retire state a lock arrival invalidates) — see
+    // use-lock-policy.ts.
+    const { lockEnabled, isLocked, selectableBoxes, edgeLockEnabled, isEdgeLocked } = useLockPolicy(
+      {
+        boxes,
+        lockedNodeIds,
+        lockedEdgeIds,
+        onToggleNodeLock,
+        onToggleEdgeLock,
+        selectedId,
+        extraIds,
+        selectedEdgeId,
+        setSelectedEdgeId,
+        setEdgeLabelEditId,
+        gestureState,
+        setGestureState,
+        applySelection,
+      },
     )
-    /** Same seam rule as the node lock: no callback, no enforcement. */
-    const edgeLockEnabled = onToggleEdgeLock !== undefined
-    const isEdgeLocked = (edgeId: string): boolean =>
-      edgeLockEnabled && (lockedEdgeIds?.has(edgeId) ?? false)
-
-    /**
-     * A lock can arrive from a peer or an agent while the node is ALREADY
-     * selected or mid-drag — a case hit-test filtering cannot reach, because
-     * the selection exists before the lock does. Dropping it here closes
-     * every command path that reads the selection (nudge, delete, resize,
-     * z-order, colour, cut) at one point instead of guarding each in turn.
-     * A locked primary promotes the first surviving extra rather than
-     * clearing the whole selection, so locking one node of many is not a
-     * silent deselect-all.
-     */
-    useEffect(() => {
-      if (edgeLockEnabled && selectedEdgeId !== null && isEdgeLocked(selectedEdgeId)) {
-        setSelectedEdgeId(null)
-        setEdgeLabelEditId((current) => (current === selectedEdgeId ? null : current))
-      }
-      // isEdgeLocked closes over lockedEdgeIds/edgeLockEnabled, both listed.
-    }, [edgeLockEnabled, lockedEdgeIds, selectedEdgeId])
-
-    useEffect(() => {
-      if (!lockEnabled) return
-      if (gestureState.kind === 'moving' || gestureState.kind === 'resizing') {
-        if (isLocked(gestureState.nodeId)) setGestureState(createIdleState())
-      }
-      const lockedMembers = new Set(
-        [...extraIds, ...(selectedId !== null ? [selectedId] : [])].filter(isLocked),
-      )
-      if (lockedMembers.size > 0) applySelection({ type: 'drop-locked', lockedIds: lockedMembers })
-      // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
-    }, [lockEnabled, lockedNodeIds, selectedId, extraIds, gestureState])
+    // The controlled-prop-swap policy (gesture abort/continue + retiring
+    // id-pinned state the new canvas no longer holds) — see
+    // use-canvas-replacement.ts. Layout-effect timing lives there.
+    useCanvasReplacement({
+      canvas,
+      externalVersion,
+      gestureState,
+      setGestureState,
+      applySelection,
+      setSelectedEdgeId,
+      setLivePoint,
+      setSnapGuides,
+    })
 
     // The drag/resize/connect render layers (ghost, backdrop, live edges,
     // live resize, preview geometry, and the committed surface's mount-once
@@ -862,25 +771,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [selectionMembers],
     )
     const isMultiSelection = selectionMembers.length > 1
-
-    /**
-     * How far a snap guide extends, in canvas space: across all content plus
-     * a margin. Spanning the content rather than the window keeps the line a
-     * function of the document alone, so it renders identically at any zoom
-     * or scroll position and needs no measured element size.
-     */
-    const guideSpan = useMemo(() => {
-      const GUIDE_MARGIN_PX = 40
-      if (boxes.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 }
-      const xs = boxes.flatMap((entry) => [entry.box.x, entry.box.x + entry.box.width])
-      const ys = boxes.flatMap((entry) => [entry.box.y, entry.box.y + entry.box.height])
-      return {
-        minX: Math.min(...xs) - GUIDE_MARGIN_PX,
-        maxX: Math.max(...xs) + GUIDE_MARGIN_PX,
-        minY: Math.min(...ys) - GUIDE_MARGIN_PX,
-        maxY: Math.max(...ys) + GUIDE_MARGIN_PX,
-      }
-    }, [boxes])
 
     /**
      * Folds `result.commands` in order over a LOCAL running canvas (seeded
@@ -2308,100 +2198,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 node.height * viewport.zoom >= EXPAND_MIN_H
               }
             />
-            {marquee !== null && (
-              <svg
-                data-testid="marquee-rect"
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  overflow: 'visible',
-                  left: 0,
-                  top: 0,
-                  pointerEvents: 'none',
-                }}
-              >
-                <rect
-                  x={Math.min(marquee.start.x, marquee.current.x)}
-                  y={Math.min(marquee.start.y, marquee.current.y)}
-                  width={Math.abs(marquee.current.x - marquee.start.x)}
-                  height={Math.abs(marquee.current.y - marquee.start.y)}
-                  fill="var(--manipulation)"
-                  fillOpacity={0.08}
-                  stroke="var(--manipulation)"
-                  strokeWidth={1 / viewport.zoom}
-                  strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
-                />
-              </svg>
-            )}
-            {snapGuides !== null && snapGuides.x.length + snapGuides.y.length > 0 && (
-              <svg
-                data-testid="snap-guides"
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  overflow: 'visible',
-                  left: 0,
-                  top: 0,
-                  pointerEvents: 'none',
-                }}
-              >
-                {/* Dashed with a dot at each end: a ruler showing a measured
-                  extent, not an alert line. The dash and dot sizes divide by
-                  zoom for the same reason every handle does — the ruler is
-                  chrome, and chrome keeps its on-screen size. */}
-                {snapGuides.x.map((x) => (
-                  <g key={`x${x}`}>
-                    <line
-                      data-axis="x"
-                      x1={x}
-                      x2={x}
-                      y1={guideSpan.minY}
-                      y2={guideSpan.maxY}
-                      stroke="var(--manipulation-guide)"
-                      strokeWidth={1 / viewport.zoom}
-                      strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
-                    />
-                    <circle
-                      cx={x}
-                      cy={guideSpan.minY}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                    <circle
-                      cx={x}
-                      cy={guideSpan.maxY}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                  </g>
-                ))}
-                {snapGuides.y.map((y) => (
-                  <g key={`y${y}`}>
-                    <line
-                      data-axis="y"
-                      x1={guideSpan.minX}
-                      x2={guideSpan.maxX}
-                      y1={y}
-                      y2={y}
-                      stroke="var(--manipulation-guide)"
-                      strokeWidth={1 / viewport.zoom}
-                      strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
-                    />
-                    <circle
-                      cx={guideSpan.minX}
-                      cy={y}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                    <circle
-                      cx={guideSpan.maxX}
-                      cy={y}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                  </g>
-                ))}
-              </svg>
+            {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
+            {snapGuides !== null && (
+              <SnapGuidesOverlay guides={snapGuides} boxes={boxes} zoom={viewport.zoom} />
             )}
             {/* Which nodes are in the selection. The overlay above outlines the
             region the handles act on, which says nothing about membership —
@@ -2532,32 +2331,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 contentSvg={dragContentSvg}
               />
             )}
-            {selectedEdgeId !== null &&
-              (() => {
-                const selected = edgePaths.find((edge) => edge.id === selectedEdgeId)
-                if (selected === undefined || selected.path.length < 2) return null
-                return (
-                  <svg
-                    style={{
-                      position: 'absolute',
-                      overflow: 'visible',
-                      left: 0,
-                      top: 0,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <title>Selected connection</title>
-                    <polyline
-                      data-testid="edge-selection-highlight"
-                      points={selected.path.map((p) => `${p.x},${p.y}`).join(' ')}
-                      fill="none"
-                      stroke="var(--manipulation)"
-                      strokeWidth={3}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                )
-              })()}
+            {selectedEdgeId !== null && (
+              <EdgeSelectionHighlight selectedEdgeId={selectedEdgeId} edgePaths={edgePaths} />
+            )}
             {gestureState.kind === 'connecting' && (
               <ConnectOverlay
                 gestureState={gestureState}
