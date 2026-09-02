@@ -249,3 +249,47 @@ it('the index creates, renames and deletes on the tree', async () => {
   expect(resolveWorkspaceDocumentById(tree, entry.documentId)).toBeNull()
   expect(readTrashEntries(tree).map((t) => t.documentId)).toContain(entry.documentId)
 })
+
+it('does not keep serving an agent write whose persistence failed', async () => {
+  // A save mutates the LIVE projection before the record is persisted, so a
+  // failure in between leaves every cached reader ahead of durable state and
+  // the next read serves content that was never written. `saveWorkspaceDoc`
+  // is what prevents that, by evicting both caches in its catch — the choke
+  // point every durable workspace write funnels through, which is why this
+  // path inherits the guard without repeating it.
+  //
+  // The guard is load-bearing and was covered ONCE. Mutating that catch to
+  // rethrow without evicting turns 4210 mcp-node tests into exactly two
+  // failures, and before this test the only one was in `restore.test.ts` —
+  // a route-level test of a handler ADR-0018 schedules for removal. So the
+  // single guard on an invariant every agent write depends on
+  // (`wb_canvas_edit` -> saveDocumentSnapshot -> saveSnapshot) was going to
+  // be deleted by an unrelated refactor, silently.
+  //
+  // Asserted on what a reader GETS, not on whether some cache entry exists,
+  // so it keeps meaning the same thing if the caching changes.
+  const { routed } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('persisted'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+
+  const edited = canvasDoc('never-persisted')
+  const { manifest, chunks } = chunkSnapshot(
+    new Uint8Array(edited.export({ mode: 'snapshot' })),
+    1_000_000,
+  )
+  const saveSpy = vi
+    .spyOn(DocumentStoreWorkspaceDocs.prototype, 'save')
+    .mockRejectedValueOnce(new Error('simulated persistence failure'))
+  await expect(
+    routed.saveSnapshot({
+      docRef: { kind: 'document', workspaceId: 'ws-a', documentId: rowId },
+      manifest,
+      chunks,
+      frontier: new Uint8Array(edited.oplogVersion().encode()),
+    }),
+  ).rejects.toThrow('simulated persistence failure')
+  saveSpy.mockRestore()
+
+  expect(readText(await loadDocument('ws-a', 'design'))).toBe('persisted')
+})
