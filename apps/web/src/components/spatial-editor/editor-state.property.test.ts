@@ -309,10 +309,11 @@ const COMMAND_COVERAGE = {
   'set-group-label': 'not modelled: group label editor, single-field write',
   'set-group-background': 'not modelled: group inspector, single-field write',
   'create-comment':
-    'not modelled: no comment UI is wired yet (ADR-0025 slice); the command has no gesture or selection coupling to model here — covered at the applyCommand/session layers instead',
+    "not modelled: no comment UI is wired yet (ADR-0024's apps/web interactive-comment-UI follow-up increment, named in its 'This increment' section); the command has no gesture or selection coupling to model here — covered at the applyCommand/session layers instead",
   'set-comment-resolved':
-    'not modelled: no comment UI is wired yet (ADR-0025 slice), single-field write',
-  'delete-comment': 'not modelled: no comment UI is wired yet (ADR-0025 slice)',
+    "not modelled: no comment UI is wired yet (ADR-0024's apps/web interactive-comment-UI follow-up increment), single-field write",
+  'delete-comment':
+    "not modelled: no comment UI is wired yet (ADR-0024's apps/web interactive-comment-UI follow-up increment)",
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>
 
 /** Every event the gesture state machine accepts. All of them are driven. */

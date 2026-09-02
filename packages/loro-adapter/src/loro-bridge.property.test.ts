@@ -246,3 +246,46 @@ describe('withSpatialBatch equivalence property', () => {
     },
   )
 })
+
+// The equivalence property above skips its undo-step assertion whenever
+// `undo.canUndo()` is false, which is also the correct outcome for a value-
+// identical rewrite (Loro dedupes a `.set()` to unchanged content into no
+// diff even though a commit happens) — so that property alone cannot tell
+// "batch forgot to commit" apart from "batch committed a no-op". These two
+// properties close that gap for the comment writer specifically, each built
+// so the write is UNAMBIGUOUSLY a real value change: a brand-new id (the
+// base canvas below carries no comments to collide with) or a delete of an
+// id already present. Mutation-checked: dropping `wrote = true` from
+// `withSpatialBatch`'s `writeComment`/`deleteComment` handlers makes both
+// fail (`undo.canUndo()` stays `false` after the batch), and restoring it
+// makes both pass again.
+describe('withSpatialBatch comment ops always commit (ADR-0024)', () => {
+  fcTest.prop([spatialCanvasArbitrary, canvasCommentArbitrary], withDefaults())(
+    'a batch that only writes one brand-new comment produces exactly one undo step',
+    (canvas, comment) => {
+      const clean = { nodes: canvas.nodes, edges: canvas.edges }
+      const doc = new LoroDoc()
+      writeSpatialCanvas(doc, clean)
+      const undo = new UndoManager(doc, { mergeInterval: 0 })
+      withSpatialBatch(doc, (writer) => writer.writeComment(comment))
+      expect(undo.canUndo()).toBe(true)
+      undo.undo()
+      expect(undo.canUndo()).toBe(false)
+    },
+  )
+
+  fcTest.prop([spatialCanvasArbitrary, canvasCommentArbitrary], withDefaults())(
+    'a batch that only deletes one comment present in the doc produces exactly one undo step',
+    (canvas, comment) => {
+      const clean = { nodes: canvas.nodes, edges: canvas.edges }
+      const doc = new LoroDoc()
+      writeSpatialCanvas(doc, clean)
+      writeCanvasComment(doc, comment)
+      const undo = new UndoManager(doc, { mergeInterval: 0 })
+      withSpatialBatch(doc, (writer) => writer.deleteComment(comment.id))
+      expect(undo.canUndo()).toBe(true)
+      undo.undo()
+      expect(undo.canUndo()).toBe(false)
+    },
+  )
+})
