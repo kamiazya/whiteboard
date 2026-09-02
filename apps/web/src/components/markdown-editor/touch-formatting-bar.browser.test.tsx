@@ -9,6 +9,9 @@ import { MarkdownNodeEditor } from '../spatial-editor/MarkdownNodeEditor.js'
 import { nodeEditorContent } from '../spatial-editor/node-editor-test-utils.js'
 import { MarkdownEditor } from './MarkdownEditor.js'
 import { TouchFormattingBar } from './TouchFormattingBar.js'
+// The bar loads its panel lazily; importing it here moves that chunk's load
+// into the collection phase, off the per-assertion retry budget.
+import './TouchFormattingBarPanel.js'
 import { TOUCH_BAR_HEIGHT_PX } from './touch-bar-layout.js'
 
 const realMatchMedia = window.matchMedia
