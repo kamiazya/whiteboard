@@ -155,6 +155,7 @@ import { useDragLayers } from './use-drag-layers.js'
 import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
+import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeCreation } from './use-node-creation.js'
@@ -609,6 +610,15 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
+    // While that edit is open, keep its node above the virtual keyboard —
+    // the keyboard overlays the page without resizing it, so this pan is
+    // the only thing standing between edit mode and an invisible subject.
+    useKeyboardAvoidance({
+      editingBox: editingTextNodeId === undefined ? undefined : selection?.box,
+      rootRef,
+      containerSizeOf,
+      setViewport,
+    })
     const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       { measure: resolvedMeasure, theme, suppressedBodyNodeIds },

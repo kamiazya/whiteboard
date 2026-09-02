@@ -67,7 +67,7 @@ export function panBy(viewport: Viewport, screenDelta: Point): Viewport {
   }
 }
 
-interface BBoxLike {
+export interface BBoxLike {
   readonly x: number
   readonly y: number
   readonly width: number
