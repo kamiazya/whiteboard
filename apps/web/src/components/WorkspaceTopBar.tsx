@@ -123,7 +123,6 @@ export default function WorkspaceTopBar({
   const { saving, saveVersion } = useSaveVersion({
     workspaceId,
     path,
-    daemonFetch,
     getThumbnailBlob,
     log,
   })

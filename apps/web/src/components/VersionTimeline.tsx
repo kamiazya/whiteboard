@@ -1,9 +1,4 @@
-import {
-  documentsApiUrl,
-  listVersionsResponseSchema,
-  type OperatorInfo,
-  type VersionEntry,
-} from '@kamiazya/whiteboard-mcp/api-contracts'
+import type { OperatorInfo, VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
 import {
@@ -19,18 +14,31 @@ import {
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
+import { useVersionsBackend } from '@/contexts/VersionsBackendContext'
 import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
 import { displayBranchName } from '@/lib/utils'
+import { VersionsRequestError } from '@/lib/versions-backend'
 import { SquiggleLoader } from './SquiggleLoader.js'
 import { VersionThumbnail } from './VersionThumbnail.js'
 
 const log = getAppLogger('VersionTimeline')
 
+/**
+ * What the keeper behind this history can do. Both default to true — the
+ * daemon's shape — so every existing mount is unchanged; the browser keeper
+ * passes both false: it has one lane and saves only when asked.
+ */
+export interface VersionTimelineCapabilities {
+  readonly branches: boolean
+  readonly autoVersions: boolean
+}
+
 interface Props {
   workspaceId: string
   path: string
+  capabilities?: VersionTimelineCapabilities
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
   // Bumped by the caller (e.g. after a manual "Save version" action, or a WS
@@ -106,8 +114,15 @@ function RowShell({
   )
 }
 
-export default function VersionTimeline({ workspaceId, path, onRestored, refreshSignal }: Props) {
+export default function VersionTimeline({
+  workspaceId,
+  path,
+  capabilities = { branches: true, autoVersions: true },
+  onRestored,
+  refreshSignal,
+}: Props) {
   const fetchFn = useDaemonApi()
+  const versionsBackend = useVersionsBackend()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
@@ -128,26 +143,23 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
     const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
-      const res = await fetchFn(documentsApiUrl(workspaceId, path, 'versions'))
+      const next = await versionsBackend.list(workspaceId, path)
       if (seq !== fetchSeqRef.current) return
-      if (res.ok) {
-        const parsed = listVersionsResponseSchema.safeParse(await res.json())
-        if (seq !== fetchSeqRef.current) return
-        if (parsed.success) setVersions(parsed.data.versions)
-        else {
-          log.error('versions response failed schema validation', { workspaceId, path })
-          setVersions([])
-        }
-      } else {
-        log.error('versions request failed', { status: res.status, workspaceId, path })
-      }
+      setVersions(next)
     } catch (err) {
       if (seq !== fetchSeqRef.current) return
-      log.error('versions request threw', err)
+      if (err instanceof VersionsRequestError) {
+        log.error('versions request failed', { status: err.status, workspaceId, path })
+      } else if (err instanceof Error && err.message.includes('schema validation')) {
+        log.error('versions response failed schema validation', { workspaceId, path })
+        setVersions([])
+      } else {
+        log.error('versions request threw', err)
+      }
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
-  }, [workspaceId, path, fetchFn])
+  }, [workspaceId, path, versionsBackend])
 
   // Clear the previously loaded canvas's versions immediately on canvas
   // change so a stale row (with thumbnail URLs pointing at the old
@@ -174,7 +186,7 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
     state: branchesState,
     loading: branchesLoading,
     refetch: refetchBranches,
-  } = useBranches(workspaceId, path, fetchFn)
+  } = useBranches(workspaceId, path, fetchFn, { enabled: capabilities.branches })
 
   // Poll every 15 seconds for new auto-versions, and re-fetch branches on the
   // same tick. useBranches has no event subscription of its own, so this is
@@ -212,16 +224,13 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
     // actually happened. A failed request keeps the dialog open with an error
     // so the caller never discards undo history for a restore that didn't occur.
     try {
-      const res = await fetchFn(documentsApiUrl(workspaceId, path, `versions/${v.id}/restore`), {
-        method: 'POST',
-      })
-      if (!res.ok) {
-        log.error('restore request failed', { status: res.status, versionId: v.id })
-        setRestoreError('Restore failed. Please try again.')
-        return
-      }
+      await versionsBackend.restore(workspaceId, path, v.id)
     } catch (err) {
-      log.error('restore request threw', err)
+      if (err instanceof VersionsRequestError) {
+        log.error('restore request failed', { status: err.status, versionId: v.id })
+      } else {
+        log.error('restore request threw', err)
+      }
       setRestoreError('Restore failed. Please try again.')
       return
     } finally {
@@ -238,7 +247,7 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
     onRestored?.()
     // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
-  }, [pendingRestore, isRestoring, workspaceId, path, onRestored, refresh, fetchFn])
+  }, [pendingRestore, isRestoring, workspaceId, path, onRestored, refresh, versionsBackend])
 
   const head = branchesState.head
 
@@ -281,7 +290,9 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                   filtered, so an empty one means there is nothing anywhere. */}
               No versions yet.
               <br />
-              Edit this canvas to trigger auto-save (~30s), or press ⌘/Ctrl+S.
+              {capabilities.autoVersions
+                ? 'Edit this canvas to trigger auto-save (~30s), or press ⌘/Ctrl+S.'
+                : 'Press ⌘/Ctrl+S to save a version.'}
             </div>
           ) : (
             visibleVersions.map((v) => {

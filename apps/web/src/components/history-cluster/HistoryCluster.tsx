@@ -26,11 +26,14 @@ import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { isMacPlatform } from '../../lib/platform.js'
+import type { VersionTimelineCapabilities } from '../VersionTimeline.js'
 import { VersionPanel } from '../workspace-top-bar/VersionPanel.js'
 
 export interface HistoryClusterVersionsProps {
   readonly workspaceId: string
   readonly path: string
+  /** What the keeper can do; absent means the daemon's full shape. */
+  readonly capabilities?: VersionTimelineCapabilities
   readonly onRestored?: () => void
   readonly refreshSignal?: number
   readonly versionPanelExtra?: ReactNode
@@ -175,6 +178,7 @@ export function HistoryCluster({
                 panelRef={versionPanelRef}
                 workspaceId={versions.workspaceId}
                 path={versions.path}
+                capabilities={versions.capabilities}
                 onRestored={versions.onRestored}
                 refreshSignal={versions.refreshSignal}
                 versionPanelExtra={versions.versionPanelExtra}

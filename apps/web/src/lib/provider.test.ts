@@ -20,9 +20,9 @@ describe('resolveProviderState', () => {
     expect(state).toMatchObject({ kind: 'daemon', daemonBaseUrl: 'http://127.0.0.1:3099' })
   })
 
-  it('browser capabilities: versions is false', () => {
+  it('browser capabilities: versions is true (manual save/list/restore over IndexedDB)', () => {
     const state = resolveProviderState(EMPTY_RUNTIME_CONFIG)
-    expect(state).toMatchObject({ kind: 'browser', capabilities: { versions: false } })
+    expect(state).toMatchObject({ kind: 'browser', capabilities: { versions: true } })
   })
 
   it('daemon capabilities: versions is true', () => {

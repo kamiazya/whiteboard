@@ -2,6 +2,7 @@ import {
   adoptWorkspaceDocument,
   createWorkspaceDocumentAtPath,
   resolveWorkspaceDocumentById,
+  writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   BinaryFileDataLike,
@@ -128,6 +129,51 @@ export class BrowserBackend implements DocumentBackend {
     const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
     this._writeQueue = this._writeQueue.then(() => this._doWrite(bytes, workspaceDoc, workspaceId))
     return this._writeQueue
+  }
+
+  /**
+   * Make this backend's document equal `past` — the browser's restore.
+   *
+   * The daemon restores by reconciling onto the LIVE doc and letting the
+   * workspace record's funnel fan the resulting ops to every client. Here
+   * the live doc is this backend's own workspace record, and the one client
+   * is the sync session holding its twin — so the same reconcile
+   * (`writeWorkspaceDocumentContent`, a diff and never a rewrite) runs on
+   * the record, the ops it produced are persisted, and those ops reach the
+   * session the way a peer's would: as a remote update. Nothing rewinds in
+   * a CRDT; the session's own later ops stay in its history and the restore
+   * is one more edit on top of them.
+   *
+   * Bracketed with the restore events the daemon sends, so a page that
+   * renders the restore overlay for a daemon restore renders it here too.
+   * Queued behind pending pushes so a keystroke in flight is reconciled
+   * over, not lost under, the restore.
+   */
+  applyRestore(past: LoroDoc, label?: string): Promise<void> {
+    const workspaceDoc = this.workspaceDoc
+    const workspaceId = workspaceDoc === null ? null : getBrowserWorkspaceId()
+    const handlers = this.handlers
+    const run = async (): Promise<void> => {
+      if (workspaceDoc === null || workspaceId === null || handlers === null) {
+        throw new Error('restore before the document was delivered')
+      }
+      handlers.onRestoreStarted(label === undefined ? {} : { label })
+      try {
+        const before = workspaceDoc.version()
+        writeWorkspaceDocumentContent(workspaceDoc, this.target.documentId, past)
+        const update = workspaceDoc.export({ mode: 'update', from: before })
+        await this.docs.save(workspaceId, workspaceDoc)
+        await touchContentTimestamp(this.target.documentId)
+        if (update.length > 0 && !this.isStale(handlers)) handlers.onRemoteUpdate(update)
+      } finally {
+        if (!this.isStale(handlers)) handlers.onRestoreComplete()
+      }
+    }
+    const queued = this._writeQueue.then(run)
+    // The queue itself must never reject, or every later push would be
+    // refused by a restore that failed before it.
+    this._writeQueue = queued.catch(() => {})
+    return queued
   }
 
   private async _doWrite(

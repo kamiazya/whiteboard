@@ -42,7 +42,9 @@ export type ProviderState =
   | { readonly kind: 'invalid-config'; readonly message: string }
 
 export const BROWSER_CAPABILITIES: WhiteboardCapabilities = {
-  versions: false,
+  // Manual save / list / restore over the browser's own IndexedDB history;
+  // no automatic checkpoints yet, and no thumbnails.
+  versions: true,
   branches: false,
   merge: false,
 }

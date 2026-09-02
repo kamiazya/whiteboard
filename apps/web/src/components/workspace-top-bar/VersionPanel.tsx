@@ -1,10 +1,11 @@
 import type { ReactNode, Ref } from 'react'
-import VersionTimeline from '@/components/VersionTimeline'
+import VersionTimeline, { type VersionTimelineCapabilities } from '@/components/VersionTimeline'
 
 interface VersionPanelProps {
   panelRef: Ref<HTMLDivElement>
   workspaceId: string
   path: string
+  capabilities?: VersionTimelineCapabilities
   onRestored?: () => void
   refreshSignal?: number
   versionPanelExtra?: ReactNode
@@ -16,6 +17,7 @@ export function VersionPanel({
   panelRef,
   workspaceId,
   path,
+  capabilities,
   onRestored,
   refreshSignal,
   versionPanelExtra,
@@ -29,6 +31,7 @@ export function VersionPanel({
         <VersionTimeline
           workspaceId={workspaceId}
           path={path}
+          capabilities={capabilities}
           onRestored={onRestored}
           refreshSignal={refreshSignal}
         />

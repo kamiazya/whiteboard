@@ -1,27 +1,27 @@
-import { documentsApiUrl, saveVersionResponseSchema } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
+import { useVersionsBackend } from '@/contexts/VersionsBackendContext'
 import type { DirtyEventDetail } from '@/hooks/useDirtyState'
 import type { AppLogger } from '@/lib/app-logger'
 
 interface UseSaveVersionOptions {
   workspaceId: string
   path: string
-  daemonFetch: typeof globalThis.fetch
   getThumbnailBlob: (() => Promise<Blob | null>) | undefined
   log?: AppLogger
 }
 
-// Owns the manual-save flow (POST /versions, optional thumbnail upload) plus
-// the Cmd/Ctrl+S shortcut that triggers it. `saving` is exposed for
+// Owns the manual-save flow (save, optional thumbnail upload) plus the
+// Cmd/Ctrl+S shortcut that triggers it. `saving` is exposed for
 // HeaderSaveDot; `savingRef` stays internal because it exists only to dedupe
-// re-entrant calls issued before React re-renders `saving`.
+// re-entrant calls issued before React re-renders `saving`. Which keeper
+// answers is the VersionsBackend's business.
 export function useSaveVersion({
   workspaceId,
   path,
-  daemonFetch,
   getThumbnailBlob,
   log,
 }: UseSaveVersionOptions) {
+  const versions = useVersionsBackend()
   const [saving, setSaving] = useState(false)
   // `saving` state updates land on the next render, so two calls issued
   // before React re-renders both see the same stale `false`. Guard with a
@@ -29,7 +29,7 @@ export function useSaveVersion({
   // keydown listener to be re-subscribed (kept out of saveVersion's deps).
   const savingRef = useRef(false)
 
-  // Shared save flow: POST /versions, then upload a thumbnail if available.
+  // Shared save flow: save, then upload a thumbnail if the keeper takes one.
   // Quick save passes an empty label.
   const saveVersion = useCallback(
     async (label = ''): Promise<boolean> => {
@@ -37,34 +37,24 @@ export function useSaveVersion({
       savingRef.current = true
       setSaving(true)
       try {
-        const res = await daemonFetch(documentsApiUrl(workspaceId, path, 'versions'), {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ label }),
-        })
-        if (!res.ok) return false
-        const parsed = saveVersionResponseSchema.safeParse(await res.json().catch(() => null))
-        if (!parsed.success) {
-          log?.error('POST /versions response did not match schema:', parsed.error)
+        let saved: Awaited<ReturnType<typeof versions.save>>
+        try {
+          saved = await versions.save(workspaceId, path, { label })
+        } catch (err) {
+          log?.error('save version failed:', err)
           return false
         }
-        // Dispatch only after schema validation confirms the server response is well-formed.
-        // Manual save can bypass the server's version_created websocket path; a later WS event becomes a no-op.
+        // Dispatch only once the keeper confirmed the save. A manual save can
+        // bypass the daemon's version_created websocket path; a later WS
+        // event becomes a no-op.
         if (typeof window !== 'undefined') {
           const detail: DirtyEventDetail = { workspaceId, path }
           window.dispatchEvent(new CustomEvent('whiteboard:wb_version_saved', { detail }))
         }
-        const id = parsed.data.version.id
-        if (id && getThumbnailBlob) {
+        if (saved.id && getThumbnailBlob && versions.putThumbnail) {
           try {
             const blob = await getThumbnailBlob()
-            if (blob) {
-              await daemonFetch(documentsApiUrl(workspaceId, path, `versions/${id}/thumbnail`), {
-                method: 'PUT',
-                headers: { 'Content-Type': 'image/png' },
-                body: blob,
-              })
-            }
+            if (blob) await versions.putThumbnail(workspaceId, path, saved.id, blob)
           } catch (err) {
             log?.error('manual-save thumbnail upload failed:', err)
           }
@@ -75,7 +65,7 @@ export function useSaveVersion({
         setSaving(false)
       }
     },
-    [workspaceId, path, getThumbnailBlob, log, daemonFetch],
+    [workspaceId, path, getThumbnailBlob, log, versions],
   )
 
   return { saving, savingRef, saveVersion }

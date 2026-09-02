@@ -1,6 +1,16 @@
 import { act, renderHook } from '@testing-library/react'
+import { createElement, type ReactNode } from 'react'
 import { describe, expect, it, vi } from 'vitest'
+import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { useSaveVersion } from './useSaveVersion'
+
+// The hook reaches the daemon through the VersionsBackend seam, whose
+// default is the daemon over DaemonApiContext's fetch — so the fetch is
+// injected the way a daemon page injects it.
+function withFetch(daemonFetch: typeof globalThis.fetch) {
+  return ({ children }: { children: ReactNode }) =>
+    createElement(DaemonApiContext.Provider, { value: daemonFetch }, children)
+}
 
 function jsonResponse(body: unknown, ok = true): Response {
   return { ok, json: async () => body } as Response
@@ -21,8 +31,9 @@ const VALID_VERSION = {
 describe('useSaveVersion', () => {
   it('POSTs /versions and returns true on a schema-valid response', async () => {
     const daemonFetch = vi.fn().mockResolvedValue(jsonResponse(VALID_VERSION))
-    const { result } = renderHook(() =>
-      useSaveVersion({ workspaceId: 'ws1', path: 'foo', daemonFetch, getThumbnailBlob: undefined }),
+    const { result } = renderHook(
+      () => useSaveVersion({ workspaceId: 'ws1', path: 'foo', getThumbnailBlob: undefined }),
+      { wrapper: withFetch(daemonFetch) },
     )
     let ok = false
     await act(async () => {
@@ -37,8 +48,9 @@ describe('useSaveVersion', () => {
 
   it('returns false without throwing when the response fails schema validation', async () => {
     const daemonFetch = vi.fn().mockResolvedValue(jsonResponse({ nope: true }))
-    const { result } = renderHook(() =>
-      useSaveVersion({ workspaceId: 'ws1', path: 'foo', daemonFetch, getThumbnailBlob: undefined }),
+    const { result } = renderHook(
+      () => useSaveVersion({ workspaceId: 'ws1', path: 'foo', getThumbnailBlob: undefined }),
+      { wrapper: withFetch(daemonFetch) },
     )
     let ok = true
     await act(async () => {
@@ -54,8 +66,9 @@ describe('useSaveVersion', () => {
         resolveFetch = resolve
       }),
     )
-    const { result } = renderHook(() =>
-      useSaveVersion({ workspaceId: 'ws1', path: 'foo', daemonFetch, getThumbnailBlob: undefined }),
+    const { result } = renderHook(
+      () => useSaveVersion({ workspaceId: 'ws1', path: 'foo', getThumbnailBlob: undefined }),
+      { wrapper: withFetch(daemonFetch) },
     )
     let firstResult: boolean | undefined
     let secondResult: boolean | undefined

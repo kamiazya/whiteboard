@@ -29,6 +29,7 @@ import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
+import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
 import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
@@ -43,7 +44,10 @@ import {
   workspacePath,
 } from '../lib/app-routes.js'
 import { BrowserBackend } from '../lib/browser-backend.js'
-import { browserWorkspaceHandleOrNull } from '../lib/browser-workspace-id.js'
+import { BrowserVersionStore } from '../lib/browser-version-store.js'
+import { createBrowserVersionsBackend } from '../lib/browser-versions-backend.js'
+import { BrowserWorkspaceDocs } from '../lib/browser-workspace-docs.js'
+import { browserWorkspaceHandleOrNull, getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { useWhiteboardCommands } from '../lib/commands/index.js'
 import { DESTRUCTIVE_COPY } from '../lib/destructive-copy.js'
 import { BROWSER_FILE_ADAPTER } from '../lib/document-embed-content.js'
@@ -536,11 +540,38 @@ export function BrowserDocumentPage({
     lockedEdgeIds,
     setEdgeLock,
     backendError,
+    clearLocalUndo,
   } = useDocumentSync(backend, {
     // The backend delivers the WORKSPACE document; this scopes the session's
     // reads and writes to the tree node carrying this document's content.
     ...(documentId === null ? {} : { contentDocumentId: documentId }),
   })
+
+  // The browser's version history for this document: rows in IndexedDB,
+  // restores through the backend holding the live record. Null while there
+  // is no spatial backend (a markdown document, or nothing loaded yet), in
+  // which case the save control is hidden below rather than left to fall
+  // back onto the daemon's routes.
+  const versionsBackend = useMemo(
+    () =>
+      backend === null
+        ? null
+        : createBrowserVersionsBackend({
+            backend,
+            store: new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index: store }),
+          }),
+    [backend, store],
+  )
+  const versionsEnabled = capabilities.versions && versionsBackend !== null
+  // The panel refetches on a CHANGE of this signal. A manual save announces
+  // itself on the window (`useSaveVersion` dispatches it after the keeper
+  // confirmed the save), which is the same event the daemon page bumps on.
+  const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  useEffect(() => {
+    const onSaved = () => setVersionRefreshSignal((n) => n + 1)
+    window.addEventListener('whiteboard:wb_version_saved', onSaved)
+    return () => window.removeEventListener('whiteboard:wb_version_saved', onSaved)
+  }, [])
 
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only
@@ -820,147 +851,161 @@ export function BrowserDocumentPage({
     // background no longer shows. Anything this element does not paint itself
     // falls through to the browser's default black backdrop — which turned
     // the canvas area black under a light theme.
-    <DocumentPageShell
-      srTitle={renderState.snapshot.name}
-      mainRef={mainRef}
-      mainClassName="bg-background"
-      header={
-        <>
-          {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
+    <VersionsBackendContext.Provider value={versionsBackend}>
+      <DocumentPageShell
+        srTitle={renderState.snapshot.name}
+        mainRef={mainRef}
+        mainClassName="bg-background"
+        header={
+          <>
+            {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
             switcher, rename, menus — steps aside. The floating control below
             replaces its exit path, Escape still works natively, and the dock
             stays because editing is what the extra space is FOR. */}
-          {!isFullscreen && (
-            <Suspense
-              fallback={
-                <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
-              }
-            >
-              <WorkspaceTopBar
-                // Local mode names documents through its own store, not through
-                // the daemon's `/names`, so the identity the bar offers is unused
-                // here and `documentName`/`onTitleChange` stay the source.
-                titleSlot={() => documentTitleSlot}
-                dataMode="local"
-                workspaceId="local"
-                path={renderState.snapshot.path}
-                // The way out of the editor. This page had none until now —
-                // the app-shell brand mark was the only exit, and it says
-                // nothing about where it goes.
-                onNavigateBack={() => {
-                  const handle = browserWorkspaceHandleOrNull()
-                  navigate(handle === null ? indexPath() : workspacePath(handle))
-                }}
-                isFullscreen={isFullscreen}
-                onToggleFullscreen={() => {
-                  // Entering hides this whole bar; the floating exit control and
-                  // native Escape are the ways back out. requestFullscreen can
-                  // REJECT (Permissions-Policy, an iframe without
-                  // allow="fullscreen", no user activation) — a swallowed
-                  // rejection is unhandled-rejection noise, so both directions log.
-                  if (document.fullscreenElement)
-                    document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-                  else
-                    mainRef.current
-                      ?.requestFullscreen()
-                      .catch((err) => log.warn('requestFullscreen rejected', err))
-                }}
-                capabilities={{
-                  versions: capabilities.versions,
-                  branches: capabilities.branches,
-                  merge: capabilities.merge,
-                }}
-              />
-            </Suspense>
-          )}
-        </>
-      }
-    >
-      {/* The snapshot's kind picks the editor: markdown documents open the
+            {!isFullscreen && (
+              <Suspense
+                fallback={
+                  <div className={cn(TOP_BAR_FALLBACK_HEIGHT, 'shrink-0 border-b bg-background')} />
+                }
+              >
+                <WorkspaceTopBar
+                  // Local mode names documents through its own store, not through
+                  // the daemon's `/names`, so the identity the bar offers is unused
+                  // here and `documentName`/`onTitleChange` stay the source.
+                  titleSlot={() => documentTitleSlot}
+                  dataMode="local"
+                  workspaceId="local"
+                  path={renderState.snapshot.path}
+                  // The way out of the editor. This page had none until now —
+                  // the app-shell brand mark was the only exit, and it says
+                  // nothing about where it goes.
+                  onNavigateBack={() => {
+                    const handle = browserWorkspaceHandleOrNull()
+                    navigate(handle === null ? indexPath() : workspacePath(handle))
+                  }}
+                  isFullscreen={isFullscreen}
+                  onToggleFullscreen={() => {
+                    // Entering hides this whole bar; the floating exit control and
+                    // native Escape are the ways back out. requestFullscreen can
+                    // REJECT (Permissions-Policy, an iframe without
+                    // allow="fullscreen", no user activation) — a swallowed
+                    // rejection is unhandled-rejection noise, so both directions log.
+                    if (document.fullscreenElement)
+                      document
+                        .exitFullscreen()
+                        .catch((err) => log.warn('exitFullscreen failed', err))
+                    else
+                      mainRef.current
+                        ?.requestFullscreen()
+                        .catch((err) => log.warn('requestFullscreen rejected', err))
+                  }}
+                  capabilities={{
+                    versions: versionsEnabled,
+                    branches: capabilities.branches,
+                    merge: capabilities.merge,
+                  }}
+                />
+              </Suspense>
+            )}
+          </>
+        }
+      >
+        {/* The snapshot's kind picks the editor: markdown documents open the
           markdown editor (body and OKF core facets persisted as containers
           of one Loro document — see use-markdown-document.ts), everything
           else the spatial editor. */}
-      {isFullscreen && (
-        <Button
-          ref={exitFullscreenRef}
-          variant="outline"
-          size="icon"
-          aria-label="Exit fullscreen"
-          onClick={() =>
-            document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
-          }
-          className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
-        >
-          <Minimize2 aria-hidden="true" className="size-4" />
-        </Button>
-      )}
-      <div className="relative h-full min-h-0">
-        <DocumentEditorSurface
-          kind={documentKind}
-          documentKey={documentId ?? 'no-canvas'}
-          markdown={
-            markdownDoc.coreFacets === null
-              ? { body: null, setBody: markdownDoc.setBody }
-              : {
-                  body: markdownDoc.body,
-                  setBody: markdownDoc.setBody,
-                  sourceExtensions: markdownBinding,
-                  autoFocus: true,
-                  theme: resolvedTheme,
-                  meta: markdownDoc.coreFacets,
-                  title: titleOf(documentName, documentPath),
-                  resolveAlias,
-                  linkTargets,
-                  onOpenDocument: (id) => navigateToDocument(id),
-                  resolveEmbed,
-                }
-          }
-          spatial={() => (
-            <div className="flex h-full min-h-0 flex-col">
-              <SpatialEditorPane
-                className="relative min-h-0 flex-1"
-                editorKey={documentId ?? 'no-canvas'}
-                canvasLoaded={canvasLoaded}
-                canvas={canvas}
-                onChange={onChange}
-                externalVersion={externalVersion}
-                theme={resolvedTheme}
-                // File-node reference = canvas id minted in the browser; the
-                // current canvas is excluded (a self-reference card is pure
-                // noise).
-                fileRefOptions={documents
-                  .filter((entry) => entry.documentId !== documentId)
-                  .map((entry) => ({
-                    file: entry.documentId,
-                    label: entry.name,
-                    kind: entry.kind,
-                  }))}
-                onOpenDocument={navigateToDocument}
-                missingFileRef={missingFileRef}
-                fileSeams={fileSeams}
-                lockedNodeIds={lockedNodeIds}
-                lockedEdgeIds={lockedEdgeIds}
-                onToggleNodeLock={setNodeLock}
-                onToggleEdgeLock={setEdgeLock}
-                nodeInEditor={nodeInEditor}
-                history={{
-                  onUndo: () => void undo(),
-                  onRedo: () => void redo(),
-                  canUndo: canUndo(),
-                  canRedo: canRedo(),
-                }}
-                overlayTitle={documentName ?? 'Untitled'}
-                resolveAlias={resolveAlias}
-                resolveEmbed={resolveEmbed}
-                linkTargets={linkTargets}
-              />
-            </div>
-          )}
-        />
-        {/* Markdown documents keep CodeMirror's own history (its keymap
+        {isFullscreen && (
+          <Button
+            ref={exitFullscreenRef}
+            variant="outline"
+            size="icon"
+            aria-label="Exit fullscreen"
+            onClick={() =>
+              document.exitFullscreen().catch((err) => log.warn('exitFullscreen failed', err))
+            }
+            className="absolute top-3 right-3 z-20 bg-background/80 text-muted-foreground backdrop-blur hover:text-foreground"
+          >
+            <Minimize2 aria-hidden="true" className="size-4" />
+          </Button>
+        )}
+        <div className="relative h-full min-h-0">
+          <DocumentEditorSurface
+            kind={documentKind}
+            documentKey={documentId ?? 'no-canvas'}
+            markdown={
+              markdownDoc.coreFacets === null
+                ? { body: null, setBody: markdownDoc.setBody }
+                : {
+                    body: markdownDoc.body,
+                    setBody: markdownDoc.setBody,
+                    sourceExtensions: markdownBinding,
+                    autoFocus: true,
+                    theme: resolvedTheme,
+                    meta: markdownDoc.coreFacets,
+                    title: titleOf(documentName, documentPath),
+                    resolveAlias,
+                    linkTargets,
+                    onOpenDocument: (id) => navigateToDocument(id),
+                    resolveEmbed,
+                  }
+            }
+            spatial={() => (
+              <div className="flex h-full min-h-0 flex-col">
+                <SpatialEditorPane
+                  className="relative min-h-0 flex-1"
+                  editorKey={documentId ?? 'no-canvas'}
+                  canvasLoaded={canvasLoaded}
+                  canvas={canvas}
+                  onChange={onChange}
+                  externalVersion={externalVersion}
+                  theme={resolvedTheme}
+                  // File-node reference = canvas id minted in the browser; the
+                  // current canvas is excluded (a self-reference card is pure
+                  // noise).
+                  fileRefOptions={documents
+                    .filter((entry) => entry.documentId !== documentId)
+                    .map((entry) => ({
+                      file: entry.documentId,
+                      label: entry.name,
+                      kind: entry.kind,
+                    }))}
+                  onOpenDocument={navigateToDocument}
+                  missingFileRef={missingFileRef}
+                  fileSeams={fileSeams}
+                  lockedNodeIds={lockedNodeIds}
+                  lockedEdgeIds={lockedEdgeIds}
+                  onToggleNodeLock={setNodeLock}
+                  onToggleEdgeLock={setEdgeLock}
+                  nodeInEditor={nodeInEditor}
+                  history={{
+                    onUndo: () => void undo(),
+                    onRedo: () => void redo(),
+                    canUndo: canUndo(),
+                    canRedo: canRedo(),
+                    versions: versionsEnabled
+                      ? {
+                          workspaceId: getBrowserWorkspaceId(),
+                          path: renderState.snapshot.path,
+                          // One lane, and a version only when asked for.
+                          capabilities: { branches: false, autoVersions: false },
+                          onRestored: clearLocalUndo,
+                          refreshSignal: versionRefreshSignal,
+                        }
+                      : undefined,
+                  }}
+                  overlayTitle={documentName ?? 'Untitled'}
+                  resolveAlias={resolveAlias}
+                  resolveEmbed={resolveEmbed}
+                  linkTargets={linkTargets}
+                />
+              </div>
+            )}
+          />
+          {/* Markdown documents keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
-      </div>
-    </DocumentPageShell>
+        </div>
+      </DocumentPageShell>
+    </VersionsBackendContext.Provider>
   )
 }
