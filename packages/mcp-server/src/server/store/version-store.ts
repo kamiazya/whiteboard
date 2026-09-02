@@ -39,25 +39,12 @@ import { withWorkspaceWriteLock } from './workspace-lock.js'
 const MAX_AUTO_PER_DOCUMENT = 50
 const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 
-export interface OperatorInfo {
-  kind: 'ai' | 'human' | 'system'
-  peerId: string
-  displayName?: string
-  agentId?: string
-  workspaceId?: string
-}
+// z.infer of the shared wire schema, not a hand-written twin: a separately
+// written interface beside a Zod schema is the drift recipe the Zod
+// discipline names, and this pair had three copies of one shape.
+import type { OperatorInfo, VersionEntry } from '../../shared/api-contracts/document.js'
 
-export interface VersionEntry {
-  id: string
-  path: string
-  createdAt: string
-  elementCount: number
-  label?: string
-  auto: boolean
-  operator?: OperatorInfo
-  hasThumbnail: boolean
-  branchName: string
-}
+export type { OperatorInfo, VersionEntry }
 
 export interface VersionStore {
   save(
