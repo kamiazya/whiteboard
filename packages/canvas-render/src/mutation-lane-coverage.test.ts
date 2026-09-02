@@ -61,8 +61,8 @@ describe('the mutation lane covers what it says it covers', () => {
 
   it('names exactly the modules it mutates, out of exactly this many', () => {
     expect({ mutated: MUTATED.length, production: production.length }).toEqual({
-      mutated: 9,
-      production: 47,
+      mutated: 10,
+      production: 48,
     })
   })
 

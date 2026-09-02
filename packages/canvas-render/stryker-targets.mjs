@@ -30,6 +30,9 @@ export const MUTATED = [
   'src/scene-digest.ts',
   'src/layout/nodes/truncate.ts',
   'src/tidy.ts',
+  // A four-candidate search whose property scores the candidates from the
+  // definition of overlap, sharing nothing with the search.
+  'src/layout/comment-placement.ts',
   // NOT `src/layout/seed.ts`, and the reason is a measurement rather than a
   // judgement about its value. Stryker selects the test files related to a
   // mutated module, and seed.ts is imported by its own test and nothing else:

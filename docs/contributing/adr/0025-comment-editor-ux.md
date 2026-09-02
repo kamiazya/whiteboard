@@ -126,7 +126,7 @@ look correct in every single-user test.
 | Threads / `parentId` replies | dogfooding shows single-text comments forcing awkward node-edit conversations |
 | Identity minting / per-author styling | a keeper that can vouch for identity (daemon accounts / SaaS) |
 | Push notification to AI (`resources/subscribe` etc.) | client-support verification + a real latency complaint against pull |
-| Dense-canvas collision avoidance / clustering | dogfooding pain at real comment densities (the fixed-offset ponytail stands) |
+| ~~Dense-canvas collision avoidance~~ | **Landed** (2026-09-02): the trigger fired on the first real canvas — a bubble covered the node beside it. `placeCommentBubble` in canvas-render takes the least-covered of four quadrants around the anchor, against every non-group node and every earlier bubble, so comments fan out instead of stacking; the editor's draft and drag preview place through the same function. Still deferred: clustering, and a second ring of candidates for an anchor sitting inside a node (today it takes the least-covered quadrant). |
 | Resolve/remove authorization (author-only? role?) | real identity; named here so it is not decided by omission — today's boundary is "anyone with document write access" |
 | Comments panel / history surface | toggle proves insufficient on dense canvases |
 | `text` length cap + snapshot truncation treatment | first oversized-comment incident or measured snapshot bloat |
