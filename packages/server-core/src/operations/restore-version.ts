@@ -1,4 +1,9 @@
-import { readDocumentKind, reconcileDocContent } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  projectWorkspaceDocument,
+  readDocumentKind,
+  readWorkspaceNodes,
+  reconcileDocContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { documentPathSchema, workspaceIdSchema } from '@kamiazya/whiteboard-model'
 import type { LoroDoc } from 'loro-crdt'
@@ -35,6 +40,12 @@ export const restoreVersionInputSchema = z
     targetPath: documentPathSchema.optional(),
     /** Required to replace a target that already exists. */
     overwrite: z.boolean().optional(),
+    /**
+     * Roll the document AND every descendant back to this version's state —
+     * reverts, resurrections and deletions alike, each as an ordinary new
+     * edit, since nothing rewinds in a CRDT.
+     */
+    subtree: z.boolean().optional(),
   })
   .strict()
 export type RestoreVersionInput = z.infer<typeof restoreVersionInputSchema>
@@ -52,6 +63,7 @@ export const restoreVersionOutputSchema = z.union([
       elementCount: z.number().int().min(0),
     })
     .strict(),
+  z.object({ kind: z.literal('subtree'), restoredCount: z.number().int().min(0) }).strict(),
 ])
 export type RestoreVersionOutput = z.infer<typeof restoreVersionOutputSchema>
 
@@ -82,6 +94,30 @@ export class TargetExistsError extends Error {
   }
 }
 
+/**
+ * A subtree rollback needs the whole workspace at that point, and this
+ * version does not carry it.
+ *
+ * Not a "not found": the version exists, it is simply per-document, and a
+ * per-document version cannot say where the document's SIBLINGS were. The
+ * seam answers `null` for exactly that, which is a real answer rather than
+ * a failure, so the refusal has to be its own condition.
+ */
+export class NotWorkspaceScopedError extends Error {
+  constructor(readonly versionId: string) {
+    super(`subtree rollback needs a workspace-scoped version: ${versionId}`)
+    this.name = 'NotWorkspaceScopedError'
+  }
+}
+
+/** A subtree rollback was asked to write somewhere other than where it rolls back. */
+export class SubtreeTargetError extends Error {
+  constructor() {
+    super('subtree rollback cannot take a targetPath')
+    this.name = 'SubtreeTargetError'
+  }
+}
+
 /** The document named by `path` is not in this workspace's index. */
 export class RestoreTargetNotFoundError extends Error {
   constructor(readonly path: string) {
@@ -94,11 +130,16 @@ export async function restoreVersion(
   deps: ServerDeps,
   input: RestoreVersionInput,
 ): Promise<RestoreVersionOutput> {
-  const { workspaceId, path, versionId, targetPath, overwrite } =
+  const { workspaceId, path, versionId, targetPath, overwrite, subtree } =
     restoreVersionInputSchema.parse(input)
 
   const entry = await deps.documentIndex.resolveDocument({ workspaceId, path })
   if (entry === null) throw new RestoreTargetNotFoundError(path)
+
+  if (subtree === true) {
+    if (targetPath !== undefined && targetPath !== path) throw new SubtreeTargetError()
+    return await rollBackSubtree(deps, { workspaceId, path, versionId })
+  }
 
   const past = await deps.versions.load(workspaceId, versionId)
   if (past === null) throw new VersionNotFoundError(versionId)
@@ -179,4 +220,66 @@ async function restoreIntoTarget(
     documentId: created.documentId,
     elementCount: countAliveNodes(past),
   }
+}
+
+/**
+ * Roll a document and every descendant back to a workspace-scoped version.
+ *
+ * DELETIONS RUN FIRST, and the order is load-bearing: a document that
+ * existed at the version may sit at a path some later-born document now
+ * occupies, and it cannot land until the squatter is gone. The index's
+ * delete evacuates rather than destroys, so nothing here is unrecoverable.
+ *
+ * A document alive at both points is RECONCILED in place rather than
+ * recreated, for the same reason the overwrite mode is: a client may be
+ * holding it, and a wholesale replacement would strand that client's own
+ * history. One that was deleted since the version has no holder, so it is
+ * written outright.
+ */
+async function rollBackSubtree(
+  deps: ServerDeps,
+  input: { workspaceId: string; path: string; versionId: string },
+): Promise<RestoreVersionOutput> {
+  const { workspaceId, path, versionId } = input
+  const pastWorkspace = await deps.versions.loadWorkspaceAt(workspaceId, versionId)
+  if (pastWorkspace === null) throw new NotWorkspaceScopedError(versionId)
+
+  const inSubtree = (candidate: string) => candidate === path || candidate.startsWith(`${path}/`)
+  const pastDocs = readWorkspaceNodes(pastWorkspace).flatMap((node) =>
+    node.type === 'document' && inSubtree(node.path) ? [node] : [],
+  )
+  const pastIds = new Set(pastDocs.map((node) => node.meta.documentId))
+  const live = await deps.documentIndex.listDocuments({ workspaceId })
+  const liveById = new Map(live.map((entry) => [entry.documentId, entry]))
+
+  for (const entry of live) {
+    if (inSubtree(entry.path) && !pastIds.has(entry.documentId)) {
+      await deps.documentIndex.deleteDocument({ workspaceId, path: entry.path })
+    }
+  }
+
+  for (const node of pastDocs) {
+    const pastDoc = projectWorkspaceDocument(pastWorkspace, node.meta.documentId)
+    // A node the workspace record holds but cannot project has no content to
+    // restore; skipping is the honest answer, not an error for the caller.
+    if (pastDoc === null) continue
+    const existing = liveById.get(node.meta.documentId)
+    if (existing === undefined) {
+      const created = await deps.documentIndex.createDocument({
+        workspaceId,
+        path: node.path,
+        kind: node.meta.kind ?? readDocumentKind(pastDoc) ?? 'spatial',
+      })
+      await saveDocumentSnapshot(deps, workspaceId, created.documentId, pastDoc)
+      continue
+    }
+    if (existing.path !== node.path) {
+      await deps.documentIndex.moveDocument({ workspaceId, from: existing.path, to: node.path })
+    }
+    const { doc } = await loadDocument(deps, workspaceId, existing.documentId)
+    reconcileDocContent(doc, pastDoc)
+    await saveDocumentSnapshot(deps, workspaceId, existing.documentId, doc)
+  }
+
+  return { kind: 'subtree', restoredCount: pastDocs.length }
 }

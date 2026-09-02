@@ -1,4 +1,9 @@
-import { readSpatialCanvas, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import {
+  createWorkspaceDocumentAtPath,
+  readSpatialCanvas,
+  writeSpatialCanvas,
+  writeWorkspaceDocumentContent,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import type { ServerDeps, VersionHistory } from '../server-deps.js'
@@ -9,7 +14,13 @@ import {
 } from '../test-utils/fake-document-store.js'
 import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { loadDocument } from '../tools/document-io.js'
-import { restoreVersion, TargetExistsError, VersionNotFoundError } from './restore-version.js'
+import {
+  NotWorkspaceScopedError,
+  restoreVersion,
+  SubtreeTargetError,
+  TargetExistsError,
+  VersionNotFoundError,
+} from './restore-version.js'
 
 const WORKSPACE_ID = 'ws-1'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -224,5 +235,175 @@ describe('restoreVersion', () => {
     expect(result).toEqual({ kind: 'in-place' })
     const { doc } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
     expect(nodeIds(doc)).toEqual(['keep-me'])
+  })
+
+  test('subtree rollback refuses a version that is not workspace-scoped', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, ['keep-me'])
+    const deps: ServerDeps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      // `historyWith` answers null from loadWorkspaceAt, which is the seam's
+      // real answer for a per-document version: it cannot say where the
+      // document's siblings were, so it must not guess.
+      versions: historyWith({ v1: canvasWith(['keep-me']) }),
+    })
+
+    await expect(
+      restoreVersion(deps, {
+        workspaceId: WORKSPACE_ID,
+        path: 'design',
+        versionId: 'v1',
+        subtree: true,
+      }),
+    ).rejects.toBeInstanceOf(NotWorkspaceScopedError)
+  })
+
+  test('subtree rollback cannot take a targetPath', async () => {
+    const store = new FakeDocumentStore()
+    await seedWorkspace(store, ['keep-me'])
+    const deps: ServerDeps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      versions: historyWith({ v1: canvasWith(['keep-me']) }),
+    })
+
+    // Rolling a subtree back to where it was, and copying it somewhere else,
+    // are different requests. Accepting both at once would have to silently
+    // pick one.
+    await expect(
+      restoreVersion(deps, {
+        workspaceId: WORKSPACE_ID,
+        path: 'design',
+        versionId: 'v1',
+        subtree: true,
+        targetPath: 'elsewhere',
+      }),
+    ).rejects.toBeInstanceOf(SubtreeTargetError)
+  })
+
+  test('subtree rollback reverts, resurrects and deletes in one pass', async () => {
+    // One version, three transitions, because they interact: the resurrected
+    // document's path is occupied by the one being deleted, so a pass that
+    // does not delete first cannot land it.
+    const GONE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
+    const store = new FakeDocumentStore()
+
+    // The past: `design` held keep-me, and `design/child` existed.
+    const pastWorkspace = new LoroDoc()
+    createWorkspaceDocumentAtPath(pastWorkspace, {
+      path: 'design',
+      documentId: DOCUMENT_ID,
+      kind: 'spatial',
+    })
+    createWorkspaceDocumentAtPath(pastWorkspace, {
+      path: 'design/child',
+      documentId: OTHER_DOCUMENT_ID,
+      kind: 'spatial',
+    })
+    writeWorkspaceDocumentContent(pastWorkspace, DOCUMENT_ID, canvasWith(['keep-me']))
+    writeWorkspaceDocumentContent(pastWorkspace, OTHER_DOCUMENT_ID, canvasWith(['child-past']))
+
+    // The present: `design` drifted, `design/child` was deleted, and a NEW
+    // document was born onto the path the child used to occupy.
+    await seedWorkspace(store, ['keep-me', 'added-after'])
+    await seedDoc(store, GONE_ID, (doc) => {
+      writeSpatialCanvas(doc, readSpatialCanvas(canvasWith(['squatter'])))
+    })
+    await registerDocumentInWorkspace(store, WORKSPACE_ID, GONE_ID, 'design/child')
+
+    const deps: ServerDeps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      versions: {
+        load: async () => null,
+        loadWorkspaceAt: async () => pastWorkspace,
+        list: async () => [{ id: 'v1' }],
+      },
+    })
+
+    const result = await restoreVersion(deps, {
+      workspaceId: WORKSPACE_ID,
+      path: 'design',
+      versionId: 'v1',
+      subtree: true,
+    })
+
+    expect(result).toEqual({ kind: 'subtree', restoredCount: 2 })
+
+    // Reverted: the survivor is back at its past content.
+    const { doc: reverted } = await loadDocument(deps, WORKSPACE_ID, DOCUMENT_ID)
+    expect(nodeIds(reverted)).toEqual(['keep-me'])
+
+    // Deleted: the later-born squatter is gone from the subtree.
+    const squatter = await deps.documentIndex.resolveDocumentById({
+      workspaceId: WORKSPACE_ID,
+      documentId: GONE_ID,
+    })
+    expect(squatter).toBeNull()
+
+    // Resurrected: the child is back, at the path the squatter vacated.
+    const child = await deps.documentIndex.resolveDocument({
+      workspaceId: WORKSPACE_ID,
+      path: 'design/child',
+    })
+    expect(child).not.toBeNull()
+    if (child === null) return
+    const { doc: childDoc } = await loadDocument(deps, WORKSPACE_ID, child.documentId)
+    expect(nodeIds(childDoc)).toEqual(['child-past'])
+  })
+
+  test('subtree rollback moves a document back to the path it had at the version', async () => {
+    // Alive at both points but MOVED since. Reverting its content without
+    // moving it back leaves the subtree the right documents in the wrong
+    // shape, which reads as a successful rollback.
+    const store = new FakeDocumentStore()
+    const pastWorkspace = new LoroDoc()
+    createWorkspaceDocumentAtPath(pastWorkspace, {
+      path: 'design',
+      documentId: DOCUMENT_ID,
+      kind: 'spatial',
+    })
+    createWorkspaceDocumentAtPath(pastWorkspace, {
+      path: 'design/where-it-was',
+      documentId: OTHER_DOCUMENT_ID,
+      kind: 'spatial',
+    })
+    writeWorkspaceDocumentContent(pastWorkspace, DOCUMENT_ID, canvasWith(['keep-me']))
+    writeWorkspaceDocumentContent(pastWorkspace, OTHER_DOCUMENT_ID, canvasWith(['moved']))
+
+    await seedWorkspace(store, ['keep-me'])
+    await seedDoc(store, OTHER_DOCUMENT_ID, (doc) => {
+      writeSpatialCanvas(doc, readSpatialCanvas(canvasWith(['moved'])))
+    })
+    await registerDocumentInWorkspace(
+      store,
+      WORKSPACE_ID,
+      OTHER_DOCUMENT_ID,
+      'design/where-it-is-now',
+    )
+
+    const deps: ServerDeps = makeTestDeps({
+      documentStore: store,
+      documentIndex: store.documentIndex,
+      versions: {
+        load: async () => null,
+        loadWorkspaceAt: async () => pastWorkspace,
+        list: async () => [{ id: 'v1' }],
+      },
+    })
+
+    await restoreVersion(deps, {
+      workspaceId: WORKSPACE_ID,
+      path: 'design',
+      versionId: 'v1',
+      subtree: true,
+    })
+
+    const moved = await deps.documentIndex.resolveDocumentById({
+      workspaceId: WORKSPACE_ID,
+      documentId: OTHER_DOCUMENT_ID,
+    })
+    expect(moved?.path).toBe('design/where-it-was')
   })
 })
