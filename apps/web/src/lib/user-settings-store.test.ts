@@ -394,7 +394,12 @@ describe('v1 -> v2 migration', () => {
     })
     // browserToDaemon is dropped by the chained v2->v3 step, not carried.
     expect(loaded.migration).toEqual({})
-    expect(loaded.capabilities).toEqual({ webMcpEnabled: true, webMcpMaxTier: 2 })
+    // webMcpMaxTier went IN this bump, not through it: declared speculative
+    // in the very first schema, never written or read by anything since. The
+    // v1 seed above still carries it, pinning that a payload holding the
+    // retired key MIGRATES (parse-tolerated) rather than being discarded by
+    // the strict parse.
+    expect(loaded.capabilities).toEqual({ webMcpEnabled: true })
     expect(loaded.appearance).toEqual({ faviconStyle: 'dot' })
   })
 

@@ -209,6 +209,19 @@ const migrationSettingsSchema = z
 const capabilitySettingsSchema = z
   .object({
     webMcpEnabled: z.boolean().optional(),
+  })
+  .strict()
+
+/**
+ * The capability shape v1 and v2 stored, kept parse-only. `webMcpMaxTier`
+ * was declared speculative in the very first schema and never written or
+ * read by anything since — dropped from the live shape (a field nobody
+ * reads does not need to survive the bump), kept here so a payload holding
+ * the retired key migrates instead of being discarded by `.strict()`.
+ */
+const legacyCapabilitySettingsSchema = z
+  .object({
+    webMcpEnabled: z.boolean().optional(),
     webMcpMaxTier: z
       .union([z.literal(0), z.literal(1), z.literal(2), z.literal(3), z.literal(4)])
       .optional(),
@@ -311,7 +324,7 @@ const legacyV1SettingsSchema = z
       // through.
       .strict(),
     migration: legacyMigrationSettingsSchema,
-    capabilities: capabilitySettingsSchema,
+    capabilities: legacyCapabilitySettingsSchema,
     appearance: appearanceSettingsSchema.optional(),
   })
   .strict()
@@ -353,7 +366,7 @@ const legacyV2SettingsSchema = z
       })
       .strict(),
     migration: legacyMigrationSettingsSchema,
-    capabilities: capabilitySettingsSchema,
+    capabilities: legacyCapabilitySettingsSchema,
     appearance: appearanceSettingsSchema.optional(),
   })
   .strict()
@@ -414,10 +427,13 @@ function migrateV2(legacy: z.infer<typeof legacyV2SettingsSchema>): UserSettings
   return {
     version: 3,
     storage: legacy.storage,
-    // browserToDaemon goes IN the migration (dropped), not through it: a
-    // field nobody reads does not need to survive the bump.
+    // browserToDaemon and webMcpMaxTier go IN the migration (dropped), not
+    // through it: a field nobody reads does not need to survive the bump.
     migration: promotion === undefined ? {} : { promotion: normalizeLegacyPromotion(promotion) },
-    capabilities: legacy.capabilities,
+    capabilities:
+      legacy.capabilities.webMcpEnabled === undefined
+        ? {}
+        : { webMcpEnabled: legacy.capabilities.webMcpEnabled },
     ...(legacy.appearance === undefined ? {} : { appearance: legacy.appearance }),
   }
 }
