@@ -311,10 +311,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document.ts -> version-store',
   'routes/document/auto-version.ts -> version-store',
   'routes/document/export-svg.ts -> document-store',
-  'routes/document/live-doc.ts -> doc-cache',
-  'routes/document/live-doc.ts -> document-store',
-  'routes/document/live-doc.ts -> version-store',
-  'routes/document/live-doc.ts -> workspace-lock',
   'routes/document/maintenance.ts -> doc-cache',
   'routes/document/maintenance.ts -> document-store',
   'routes/document/maintenance.ts -> version-store',
@@ -353,11 +349,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Raising it is a decision, not a fix. Do it only when the alternative is
  * worse than the debt, and say in the PR why the operation could not go to
- * server-core instead. The burn-down order is in the ADR; restore.ts's edges
- * are paid off, and the three remaining scheduled adapters (live-doc.ts,
- * workspace-document.ts, ws.ts) hold 12 of these 33.
+ * server-core instead. The burn-down order is in the ADR; restore.ts's and
+ * live-doc.ts's edges are paid off, and the two remaining scheduled adapters
+ * (workspace-document.ts, ws.ts) hold 8 of these 29.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 33
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 29
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

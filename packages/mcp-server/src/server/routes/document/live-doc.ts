@@ -1,15 +1,14 @@
+import { applyDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
+import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import type {
   DocumentExistsResponse,
   UpdateDocumentResponse,
+  VersionEntry,
 } from '../../../shared/api-contracts/document.js'
 import { getLogger } from '../../log.js'
-import { evictDoc } from '../../store/doc-cache.js'
-import { documentExists, getDoc, saveDocument } from '../../store/document-store.js'
-import type { VersionEntry } from '../../store/version-store.js'
-import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import { onDocumentAction } from './path-route.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's
@@ -24,29 +23,43 @@ export interface LiveDocRouterOptions {
     path: string,
     doc: LoroDoc,
   ) => Promise<VersionEntry | null>
+  // The live-document seam the routes read and write through. Production
+  // wires this from document.ts; a router built without it falls back to the
+  // same wiring via getDefaultServerDeps.
+  serverDeps?: ServerDeps
 }
 
 // GET /api/w/:workspaceId/document/*/snapshot
 // GET /api/w/:workspaceId/document/*/exists
 // POST /api/w/:workspaceId/document/*/update
+//
+// Translation-only adapters (ADR-0018): the reads go through the
+// LiveDocuments seam, and the update path — lock bracket, import, persist,
+// evict-on-failure — lives in server-core's applyDocumentUpdate.
 export function createLiveDocRouter(options: LiveDocRouterOptions) {
   const app = new Hono()
+  const depsOf = async (): Promise<ServerDeps> =>
+    options.serverDeps ?? (await getDefaultServerDeps())
 
   onDocumentAction(app, 'get', 'exists', async (c, workspaceId, path) => {
-    const response: DocumentExistsResponse = { exists: await documentExists(workspaceId, path) }
+    const deps = await depsOf()
+    const response: DocumentExistsResponse = {
+      exists: await deps.liveDocuments.exists(workspaceId, path),
+    }
     return c.json(response)
   })
 
   onDocumentAction(app, 'get', 'snapshot', async (c, workspaceId, path) => {
-    // getDoc()'s lazy-create would otherwise silently hand back an empty
+    const deps = await depsOf()
+    // get()'s lazy-create would otherwise silently hand back an empty
     // doc for a canvas that does not exist — indistinguishable from a
     // never-created OR just-deleted canvas. Same problem-details { title }
     // shape as DELETE, deliberately not thumbnails/restore's { error,
     // message }: the client parses problem-details for both routes.
-    if (!(await documentExists(workspaceId, path))) {
+    if (!(await deps.liveDocuments.exists(workspaceId, path))) {
       return c.json({ title: `Canvas "${path}" not found` }, 404)
     }
-    const doc = await getDoc(workspaceId, path)
+    const doc = await deps.liveDocuments.get(workspaceId, path)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, {
       'Content-Type': 'application/octet-stream',
@@ -59,32 +72,10 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
     'update',
     async (c, workspaceId, path) => {
       const bytes = new Uint8Array(await c.req.arrayBuffer())
+      const deps = await depsOf()
+      const doc = await applyDocumentUpdate(deps, { workspaceId, path, update: bytes })
 
-      // Resolve the doc AND persist it inside one lock hold. getDoc() alone is
-      // unlocked, so a rename that runs its whole lock-protected section
-      // between an unlocked read here and saveDocument()'s own later lock
-      // acquisition would find no row left at the old path (renameDocumentPath
-      // moved it) and silently insert a brand-new phantom canvas back at
-      // that path instead of erroring or landing on the renamed one. Sharing
-      // the workspace write lock across the read and the write closes that
-      // window: the two operations settle into one definite order instead of
-      // interleaving through a stale read.
-      const doc = await withWorkspaceWriteLock(workspaceId, async () => {
-        const resolved = await getDoc(workspaceId, path)
-        resolved.import(bytes)
-        try {
-          await saveDocument(workspaceId, path, resolved, { overwrite: true })
-        } catch (err) {
-          // doc.import() above already mutated the cached doc, so a failed save
-          // would otherwise leave the cache ahead of durable state. Evict it so
-          // the next read reloads the last successfully persisted snapshot.
-          evictDoc(workspaceId, path)
-          throw err
-        }
-        return resolved
-      })
-
-      // No explicit broadcast: saveDocument persisted through the workspace
+      // No explicit broadcast: the save persisted through the workspace
       // record, whose funnel already fanned the persisted bytes to every
       // subscriber (including the sender, whose re-import is a CRDT no-op).
 
