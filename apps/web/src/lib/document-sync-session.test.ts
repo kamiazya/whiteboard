@@ -420,6 +420,46 @@ describe('createDocumentSyncSession', () => {
     expect(comments).toEqual([{ ...comment, resolved: true }])
   })
 
+  it('debounce coalescing: move-comment then set-comment-text for the same id dedupes to one fine-grained write carrying both', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'first pass' }
+    const other: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'stays' }
+    const initial: SpatialCanvas = {
+      ...emptyCanvas(),
+      'x-whiteboard': { comments: [comment, other] },
+    }
+    session.connect()
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const moveCmd: EditorCommand = { kind: 'move-comment', id: 'c-1', x: 120, y: -30 }
+    const afterMove = applyCommand(initial, moveCmd)
+    session.onChange(afterMove, moveCmd)
+
+    const textCmd: EditorCommand = { kind: 'set-comment-text', id: 'c-1', text: 'second pass' }
+    const afterText = applyCommand(afterMove, textCmd)
+    session.onChange(afterText, textCmd)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    // Both map to `comment:c-1`, so one write; and it is the fine-grained
+    // path — the full-resync fallback's tell (the warning) must not fire.
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+    expect(comments.find((c) => c.id === 'c-1')).toEqual({
+      ...comment,
+      x: 120,
+      y: -30,
+      text: 'second pass',
+    })
+    expect(comments.find((c) => c.id === 'c-2')).toEqual(other)
+  })
+
   it('debounce coalescing: set-comment-resolved then delete-comment for the same id dedupes to the delete; an unrelated comment survives', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
