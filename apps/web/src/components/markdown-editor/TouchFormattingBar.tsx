@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
 import { hasCoarsePointer } from '../../lib/platform.js'
-import { useSoftwareKeyboard } from '../../lib/software-keyboard.js'
+import { useSoftwareKeyboardOccluded } from '../../lib/software-keyboard.js'
 import { useActiveMarkdownEditor } from './active-markdown-editor.js'
 
 const TouchFormattingBarPanel = lazy(() => import('./TouchFormattingBarPanel.js'))
@@ -24,8 +24,8 @@ const TouchFormattingBarPanel = lazy(() => import('./TouchFormattingBarPanel.js'
  */
 export function TouchFormattingBar() {
   const editor = useActiveMarkdownEditor()
-  const keyboard = useSoftwareKeyboard()
-  const shown = editor !== null && keyboard.occludedBottomPx > 0 && hasCoarsePointer()
+  const occluded = useSoftwareKeyboardOccluded()
+  const shown = editor !== null && occluded && hasCoarsePointer()
   if (!shown) return null
   return (
     <Suspense fallback={null}>

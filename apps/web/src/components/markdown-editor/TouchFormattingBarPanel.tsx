@@ -1,8 +1,14 @@
 import { Ellipsis } from 'lucide-react'
-import { type PointerEvent as ReactPointerEvent, useEffect, useRef, useState } from 'react'
+import {
+  type PointerEvent as ReactPointerEvent,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from 'react'
 import { createPortal } from 'react-dom'
 import { cn } from '@/lib/utils'
-import { useSoftwareKeyboard } from '../../lib/software-keyboard.js'
+import { trackVisualViewportBottom } from '../../lib/software-keyboard.js'
 import { DOCK_BUTTON_CLASS } from '../ui/dock-button.js'
 import { useActiveMarkdownEditor } from './active-markdown-editor.js'
 import {
@@ -41,10 +47,20 @@ function useWindowWidth(): number {
  */
 export default function TouchFormattingBarPanel() {
   const editor = useActiveMarkdownEditor()
-  const keyboard = useSoftwareKeyboard()
   const width = useWindowWidth()
   const [sheetOpen, setSheetOpen] = useState(false)
   const rootRef = useRef<HTMLDivElement | null>(null)
+
+  // The strip's own position, written per frame and outside React — see
+  // `trackVisualViewportBottom` for why neither half of that is optional.
+  const hasEditor = editor !== null
+  useLayoutEffect(() => {
+    const root = rootRef.current
+    if (root === null) return
+    return trackVisualViewportBottom((bottomPx) => {
+      root.style.transform = `translate3d(0, ${bottomPx - TOUCH_BAR_HEIGHT_PX}px, 0)`
+    })
+  }, [hasEditor])
 
   useEffect(() => {
     if (!sheetOpen) return
@@ -83,8 +99,8 @@ export default function TouchFormattingBarPanel() {
       data-testid="touch-formatting-bar"
       role="toolbar"
       aria-label="Formatting"
-      className="bg-background border-border fixed inset-x-0 z-40 flex items-center border-t px-1 select-none"
-      style={{ top: keyboard.visualBottomPx - TOUCH_BAR_HEIGHT_PX, height: TOUCH_BAR_HEIGHT_PX }}
+      className="bg-background border-border fixed inset-x-0 top-0 z-40 flex items-center border-t px-1 select-none"
+      style={{ height: TOUCH_BAR_HEIGHT_PX }}
       onPointerDown={keepEditorFocus}
     >
       {layout.visible.map((id, index) => {

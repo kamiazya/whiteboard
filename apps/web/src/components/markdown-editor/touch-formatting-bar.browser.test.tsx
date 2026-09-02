@@ -52,6 +52,30 @@ const bar = () =>
   document.querySelector('[data-testid="touch-formatting-bar"]') as HTMLElement | null
 const settle = () => new Promise((resolve) => setTimeout(resolve, 60))
 
+it('follows the visual viewport panning even when no scroll event fires', async () => {
+  render(
+    <>
+      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
+      <TouchFormattingBar />
+    </>,
+  )
+  await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
+  raiseKeyboard(300)
+  await vi.waitFor(() => expect(bar()).not.toBeNull())
+
+  // iOS pans the visual viewport during a fling and delivers the scroll
+  // event once the fling settles, not per frame — so a bar that waits to be
+  // TOLD where the edge is stays where the pan began, which is under the
+  // keyboard. Panning with no event at all is that case at its limit.
+  fake.offsetTop = 120
+  await vi.waitFor(() =>
+    expect((bar() as HTMLElement).getBoundingClientRect().bottom).toBeCloseTo(
+      window.innerHeight - 300 + 120,
+      0,
+    ),
+  )
+})
+
 it('appears glued to the visual viewport bottom once a node editor has focus and the keyboard is up', async () => {
   render(
     <>
