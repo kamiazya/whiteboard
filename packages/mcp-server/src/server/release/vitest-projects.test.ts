@@ -24,7 +24,9 @@ const RUN_SHARED_LAYER_TESTS_MODULE_PATH = join(ROOT, 'tools/checks/src/run-shar
 interface FixtureProject {
   configPath: string
   name?: string
-  browser?: boolean
+  /** true = the inline `enabled: true` literal; 'shared-helper' = the
+   *  `browser: sharedBrowserTestConfig()` shape the dedupe introduced. */
+  browser?: boolean | 'shared-helper'
 }
 
 interface VitestProjectsModule {
@@ -87,9 +89,12 @@ async function writeFixtureRepo(root: string, projects: FixtureProject[]): Promi
   for (const project of projects) {
     await mkdir(join(root, dirname(project.configPath)), { recursive: true })
     const nameField = project.name ? `      name: '${project.name}',\n` : ''
-    const browserField = project.browser
-      ? `      browser: {\n        enabled: true,\n      },\n`
-      : ''
+    const browserField =
+      project.browser === 'shared-helper'
+        ? `      browser: sharedBrowserTestConfig(),\n`
+        : project.browser
+          ? `      browser: {\n        enabled: true,\n      },\n`
+          : ''
     await writeFile(
       join(root, project.configPath),
       `import { defineConfig } from 'vitest/config'\nexport default defineConfig({\n  test: {\n${nameField}${browserField}  },\n})\n`,
@@ -124,6 +129,21 @@ describe('vitest-projects.mjs', () => {
     ])
 
     expect(deriveSharedLayerProjectNames(fixtureRoot)).toEqual(['alpha-node', 'zeta-node'])
+  })
+
+  it('detects the shared-helper browser shape, keeping it out of the derivation', async () => {
+    const { deriveSharedLayerProjectNames, readBrowserProjectNames } = await importVitestProjects()
+    await writeFixtureRepo(fixtureRoot, [
+      { configPath: 'packages/alpha/vitest.node.config.ts', name: 'alpha-node' },
+      {
+        configPath: 'packages/beta/vitest.browser.config.ts',
+        name: 'beta-browser',
+        browser: 'shared-helper',
+      },
+    ])
+
+    expect(readBrowserProjectNames(fixtureRoot)).toEqual(['beta-browser'])
+    expect(deriveSharedLayerProjectNames(fixtureRoot)).toEqual(['alpha-node'])
   })
 
   it('throws, naming the empty derivation, when every project is excluded or browser-mode', async () => {
