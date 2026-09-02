@@ -114,14 +114,14 @@ async function main() {
       )
     }
 
-    // Same gate as Refresh: the sticky-note affordance must never appear
+    // Same gate as Refresh: the comment affordance must never appear
     // without an embedding host peer.
     const hasStickyNoteControl = await page.evaluate(
-      () => document.querySelector('[data-testid="widget-sticky-note"]') !== null,
+      () => document.querySelector('[data-testid="widget-comment"]') !== null,
     )
     if (hasStickyNoteControl) {
       fail(
-        'expected no sticky-note control without an embedding host (file:// load has no parent frame)',
+        'expected no comment control without an embedding host (file:// load has no parent frame)',
       )
     }
 
@@ -230,21 +230,21 @@ async function main() {
 
     // No real MCP Apps host answers the postMessage handshake in this
     // harness, so app.connect() loses the HOST_CONNECT_TIMEOUT_MS race —
-    // Refresh and the sticky-note affordance must both stay absent here too,
+    // Refresh and the comment affordance must both stay absent here too,
     // the same as the file:// no-parent-frame load above.
     if (srcdocSvgCount > 0) {
       const widgetFrame = srcdocPage.frames().find((frame) => frame !== srcdocPage.mainFrame())
       const controlPresence = await widgetFrame
         ?.evaluate(() => ({
           refresh: document.querySelector('[data-testid="widget-refresh"]') !== null,
-          stickyNote: document.querySelector('[data-testid="widget-sticky-note"]') !== null,
+          comment: document.querySelector('[data-testid="widget-comment"]') !== null,
         }))
         .catch(() => undefined)
       if (controlPresence?.refresh) {
         fail('expected no Refresh control under sandboxed srcdoc hosting with no real host')
       }
-      if (controlPresence?.stickyNote) {
-        fail('expected no sticky-note control under sandboxed srcdoc hosting with no real host')
+      if (controlPresence?.comment) {
+        fail('expected no comment control under sandboxed srcdoc hosting with no real host')
       }
     }
 
