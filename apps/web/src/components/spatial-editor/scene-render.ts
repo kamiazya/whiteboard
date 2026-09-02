@@ -22,6 +22,8 @@ export interface RenderCanvasOptions {
   readonly resolveReference?: (ref: string) => ResolvedReference | undefined
   /** Passed through to layout: the LOD gate deciding card vs miniature. */
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
+  /** See RenderCanvasCoreOptions: the node ids whose body an editor overlay owns. */
+  readonly suppressedBodyNodeIds?: readonly string[]
 }
 
 /**

@@ -21,9 +21,12 @@
  * text — a destroy-fired blur re-committing through this component's
  * stale pre-unmount closure would write a duplicate set-text every time.
  *
- * The wrapper carries the node's own fill/font/padding (style parity with
- * the rendered SVG); an OPAQUE background is load-bearing — it is what
- * hides the committed render underneath while editing.
+ * The wrapper carries the node's font/padding (style parity with the
+ * rendered SVG) and is TRANSPARENT: the scene below keeps drawing the
+ * node's chrome — silhouette, stroke, fill — and suppresses only this
+ * node's text (`suppressedBodyNodeIds`), so nothing is doubled and a
+ * non-rectangular node keeps its shape for the whole edit. The opaque
+ * background this replaced existed solely to hide the committed text.
  */
 
 import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
@@ -42,6 +45,21 @@ import type { Box } from './geometry.js'
 export interface MarkdownNodeEditorProps {
   readonly box: Box
   readonly initialText: string
+  /**
+   * Vertically centre content that fits, the way the committed render
+   * places a SHAPED node's text (placeInNode's diagram-symbol
+   * convention). Read once at mount, like `initialText` — the editor
+   * remounts per edit.
+   */
+  readonly centerContent?: boolean
+  /**
+   * Where the exit hint's top edge goes, in the same canvas coordinates
+   * as `box`. A shaped node's editor sits in the silhouette's INSCRIBED
+   * box, and a hint hung from that box would land inside the shape — the
+   * caller passes the full node box's bottom instead. Defaults to just
+   * under `box`.
+   */
+  readonly exitHintTop?: number
   readonly style?: CSSProperties
   readonly testId?: string
   readonly onCommit: (text: string) => void
@@ -52,6 +70,8 @@ export interface MarkdownNodeEditorProps {
 export function MarkdownNodeEditor({
   box,
   initialText,
+  centerContent = false,
+  exitHintTop,
   style,
   testId = 'text-node-editor',
   onCommit,
@@ -128,7 +148,9 @@ export function MarkdownNodeEditor({
         // Inherit the node's own typography from the wrapper — the parity
         // styles live there so the SVG render and the editor agree.
         EditorView.theme({
-          '&': { height: '100%', backgroundColor: 'transparent' },
+          '&': centerContent
+            ? { maxHeight: '100%', backgroundColor: 'transparent' }
+            : { height: '100%', backgroundColor: 'transparent' },
           '.cm-scroller': {
             fontFamily: 'inherit',
             fontSize: 'inherit',
@@ -178,13 +200,21 @@ export function MarkdownNodeEditor({
           height: box.height,
           boxSizing: 'border-box',
           overflow: 'hidden',
+          // Centre-what-fits, matching the committed render's shaped-node
+          // placement; past the middle the editor grows downward as the
+          // committed centring would recompute per added line.
+          ...(centerContent
+            ? { display: 'flex', flexDirection: 'column' as const, justifyContent: 'center' }
+            : {}),
           // Explicit, because the canvas root turns selection OFF and this
           // inherits from it.
           userSelect: 'text',
           ...style,
         }}
       />
-      <EditorExitHint style={{ position: 'absolute', left: box.x, top: box.y + box.height + 6 }} />
+      <EditorExitHint
+        style={{ position: 'absolute', left: box.x, top: exitHintTop ?? box.y + box.height + 6 }}
+      />
     </>
   )
 }

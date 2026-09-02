@@ -75,7 +75,14 @@ function createLayoutWorker(): Worker | null {
  */
 export function useWorkerScene(
   canvas: SpatialCanvas,
-  base: { readonly measure: MeasureText; readonly theme: ResolvedTheme },
+  base: {
+    readonly measure: MeasureText
+    readonly theme: ResolvedTheme
+    /** Node ids whose body an editor overlay owns (see RenderCanvasOptions).
+     *  Must be referentially stable across renders, like the seams object —
+     *  it participates in the memo below. */
+    readonly suppressedBodyNodeIds?: readonly string[]
+  },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'> & {
     /**
      * The host's CONTENT resolver, uncomposed. `resolveReference` beside it
@@ -93,7 +100,7 @@ export function useWorkerScene(
 ): RenderedCanvas {
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
-    [base.measure, base.theme, fileSeamOptions],
+    [base.measure, base.theme, base.suppressedBodyNodeIds, fileSeamOptions],
   )
   const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
@@ -122,8 +129,14 @@ export function useWorkerScene(
   const shownFor = useRef<unknown>(null)
 
   const inputs = useMemo(
-    () => ({ canvas, theme: options.theme, fileRefLabels, missingFileRefs }),
-    [canvas, options.theme, fileRefLabels, missingFileRefs],
+    () => ({
+      canvas,
+      theme: options.theme,
+      fileRefLabels,
+      missingFileRefs,
+      suppressedBodyNodeIds: options.suppressedBodyNodeIds,
+    }),
+    [canvas, options.theme, fileRefLabels, missingFileRefs, options.suppressedBodyNodeIds],
   )
 
   useEffect(() => {
@@ -188,6 +201,7 @@ export function useWorkerScene(
       theme: inputs.theme,
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
+      suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
     }
     worker.postMessage(request)
     return () => {

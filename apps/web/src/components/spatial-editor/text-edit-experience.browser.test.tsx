@@ -45,13 +45,18 @@ async function openEditor(container: HTMLElement): Promise<HTMLElement> {
   return nodeEditor(container) as HTMLElement
 }
 
-it('covers the rendered text: opaque background matching the node, same typography', async () => {
+it('the SCENE hides the committed text; the transparent editor keeps the typography', async () => {
   const { container } = render(<Host />)
   const editor = await openEditor(container)
   const style = getComputedStyle(editor)
 
-  // Opaque — the pre-edit SVG text must not show through the draft.
-  expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
+  // Transparent by design: the scene suppresses the edited node's body
+  // (`suppressedBodyNodeIds`), so nothing shows through to double — and a
+  // shaped node keeps its silhouette instead of vanishing under an opaque
+  // rectangle for the whole edit.
+  expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)')
+  const svgs = [...container.querySelectorAll('svg')].map((svg) => svg.textContent ?? '').join(' ')
+  expect(svgs).not.toContain('hello world')
   // Matches the rendered body text (Roboto 16px, 16px line pitch, 8px padding).
   expect(style.fontFamily).toContain('Roboto')
   expect(style.fontSize).toBe('16px')
@@ -70,12 +75,13 @@ it('opens with the caret at the end of the existing text', async () => {
   expect(nodeEditorText(container)).toBe('hello world!')
 })
 
-it('uses the dark node fill when the theme is dark', async () => {
+it('stays transparent in dark mode and types in the dark text fill', async () => {
   const { container } = render(<Host theme="dark" />)
   const editor = await openEditor(container)
   const style = getComputedStyle(editor)
 
-  expect(style.backgroundColor).not.toBe('rgba(0, 0, 0, 0)')
-  // The light-mode node fill must not leak into dark mode.
-  expect(style.backgroundColor).not.toBe('rgb(255, 255, 255)')
+  // Same contract in both themes: the scene's own chrome is the visible
+  // fill, so the light-mode white can no longer leak in as a background.
+  expect(style.backgroundColor).toBe('rgba(0, 0, 0, 0)')
+  expect(style.color).not.toBe('rgb(0, 0, 0)')
 })
