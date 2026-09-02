@@ -5,10 +5,12 @@ import {
   ConflictError,
   deleteDocument,
   documentExists,
+  evictWorkspaceDocCache,
   getDoc,
   getDocumentKind,
   getWorkspaceDoc,
   listDocuments,
+  onWorkspaceDocUpdated,
   renameDocumentPath,
   saveDocument,
   saveWorkspaceDoc,
@@ -66,5 +68,7 @@ export function workspaceDocuments(): WorkspaceDocuments {
       await saveWorkspaceDoc(workspaceId, doc)
     },
     evictProjections: evictWorkspaceDocs,
+    evict: evictWorkspaceDocCache,
+    onUpdated: onWorkspaceDocUpdated,
   }
 }

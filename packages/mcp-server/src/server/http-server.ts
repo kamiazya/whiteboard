@@ -3,6 +3,7 @@ import { accessSync, existsSync, constants as fsConstants } from 'node:fs'
 import type { Socket } from 'node:net'
 import { join } from 'node:path'
 import { serve } from '@hono/node-server'
+import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { WebSocketServer } from 'ws'
 import { IdleTimer } from '../daemon/idle-timer.js'
 import { createContainer, resolveServerDeps } from '../di/container.js'
@@ -13,6 +14,7 @@ import { WHITEBOARD_WS_PROTOCOL } from '../shared/ws-protocol.js'
 import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
+import { createCanvasClientNotifier } from './canvas-client-notifier.js'
 import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
@@ -20,6 +22,7 @@ import { getLogger } from './log.js'
 import {
   getConnectionStats,
   handleWsUpgrade,
+  installWsUpdateFanout,
   setRuntimeTouchFn,
   subscribedWorkspaceIds,
 } from './routes/ws.js'
@@ -280,9 +283,21 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // a state the document browser can select out of. Memoized per data dir, so
   // the per-request MCP callers below share this one resolve.
   await ensureWorkspaceId(dataDir)
-  const serverDeps = resolveServerDeps(
+  const resolvedDeps = resolveServerDeps(
     createContainer(createStoreLocalModule({ db: await getDb(dataDir), blobDir: dataDir })),
   )
+  // The WS-route bridge is attached HERE, not in resolveServerDeps: the di
+  // graph must not import the routes layer (value cycle), and this root is
+  // one of the two places a live-socket audience exists.
+  const serverDeps: ServerDeps = {
+    ...resolvedDeps,
+    clientNotifier: createCanvasClientNotifier(resolvedDeps.documentIndex),
+  }
+  // Eagerly, not only per-upgrade: an SSE-only audience (or a workspace-tail
+  // record arriving before any socket) must reach connected ws clients the
+  // moment the first one appears — and the ws fan-out listener costs nothing
+  // while nobody is connected.
+  installWsUpdateFanout(serverDeps)
 
   const app = createApp({
     authMode: 'local-daemon',
@@ -426,7 +441,7 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
     }
     touch()
     wss.handleUpgrade(req, socket, head, (ws) => {
-      void handleWsUpgrade(req, ws, decision.scopes)
+      void handleWsUpgrade(req, ws, decision.scopes, serverDeps)
     })
   })
 

@@ -5,6 +5,7 @@ import { z } from 'zod'
 import { createContainer, resolveServerDeps } from '../../di/container.js'
 import { createStoreLocalModule } from '../../di/store-local.module.js'
 import { PACKAGE_VERSION } from '../../shared/package-version.js'
+import { createCanvasClientNotifier } from '../canvas-client-notifier.js'
 import { getDataDir } from '../config.js'
 import { ensureWorkspaceId } from '../current-workspace.js'
 import { isDirectEntryPoint } from '../entrypoint.js'
@@ -113,7 +114,15 @@ export async function createMcpServer(options: CreateMcpServerOptions = {}) {
   const dataDir = getDataDir()
   const db = await getDb(dataDir)
   const container = createContainer(createStoreLocalModule({ db, blobDir: dataDir }))
-  registerDocumentTools(server, resolveServerDeps(container))
+  const deps = resolveServerDeps(container)
+  // The WS-route bridge is attached at the roots rather than in
+  // resolveServerDeps (the di graph must not import the routes layer); this
+  // stdio root serves the same daemon process, so its tools notify the same
+  // sockets the HTTP root serves.
+  registerDocumentTools(server, {
+    ...deps,
+    clientNotifier: createCanvasClientNotifier(deps.documentIndex),
+  })
 
   return server
 }

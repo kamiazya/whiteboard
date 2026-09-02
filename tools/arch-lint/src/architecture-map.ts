@@ -323,10 +323,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/files.ts -> version-store',
   'routes/files.ts -> workspace-lock',
   'routes/runtime.ts -> document-store',
-  'routes/ws.ts -> doc-cache',
-  'routes/ws.ts -> document-store',
-  'routes/ws.ts -> version-store',
-  'routes/ws.ts -> workspace-lock',
 ]
 
 /**
@@ -342,11 +338,13 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Raising it is a decision, not a fix. Do it only when the alternative is
  * worse than the debt, and say in the PR why the operation could not go to
- * server-core instead. The burn-down order is in the ADR; restore.ts's,
- * live-doc.ts's and workspace-document.ts's edges are paid off, and the one
- * remaining scheduled adapter (ws.ts) holds 4 of these 25.
+ * server-core instead. The ADR's scheduled burn-down is COMPLETE
+ * (2026-09-02): restore.ts, live-doc.ts, workspace-document.ts and ws.ts
+ * are all translation-only over the LiveDocuments/WorkspaceDocuments
+ * seams. The 21 edges left are the unscheduled adapters — each still a
+ * candidate for the same treatment, none yet ordered.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 25
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 21
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

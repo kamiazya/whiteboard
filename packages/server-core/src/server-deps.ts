@@ -233,6 +233,21 @@ export interface WorkspaceDocuments {
    * would diff old content back over the import on its next save.
    */
   evictProjections(workspaceId: string): void
+  /**
+   * Drops the cached workspace doc itself, so the next `get` reloads
+   * durable bytes — the recovery move when a failure may have left the
+   * in-memory doc ahead of what persisted.
+   */
+  evict(workspaceId: string): void
+  /**
+   * Subscribes to every persisted workspace-document update — the sync
+   * fan-out funnel. Listeners get the exact bytes the store persisted;
+   * importing them into a replica converges it. Best-effort and
+   * order-independent, the clientNotifier-shaped events carve-out: a
+   * listener throwing must never fail the save that fired it (the
+   * implementation guards this). Answers an unsubscribe.
+   */
+  onUpdated(listener: (workspaceId: string, update: Uint8Array) => void): () => void
 }
 
 /**

@@ -17,5 +17,7 @@ export function unusedWorkspaceDocuments(): WorkspaceDocuments {
     get: refuse('get'),
     save: refuse('save'),
     evictProjections: refuse('evictProjections'),
+    evict: refuse('evict'),
+    onUpdated: refuse('onUpdated'),
   }
 }

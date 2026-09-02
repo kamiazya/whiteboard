@@ -147,10 +147,35 @@ export function resetSyncStreamsForTests(): void {
   streams.clear()
 }
 
+// This transport's own funnel subscription, installed by its own entry
+// point (stream-open) — an SSE-only audience must hear persisted updates
+// whether or not a websocket ever connected (ws.ts installs its own; see
+// installWsUpdateFanout). Subscribed through the WorkspaceDocuments seam
+// (ADR-0018) via the same wiring production resolves; memoized as a promise
+// so concurrent first opens install once, and a failed resolve retries on
+// the next open instead of poisoning the flag.
+let sseFanoutInstall: Promise<void> | null = null
+function ensureSseUpdateFanout(): Promise<void> {
+  sseFanoutInstall ??= (async () => {
+    // Dynamic for the same value-cycle reason ws.ts gives: the di wiring's
+    // import chain reaches back into the routes through canvas-client-notifier.
+    const { getDefaultServerDeps } = await import('../../di/default-server-deps.js')
+    const deps = await getDefaultServerDeps()
+    deps.workspaceDocuments.onUpdated((workspaceId, update) => {
+      sseBroadcastWorkspaceUpdate(workspaceId, update)
+    })
+  })().catch((err: unknown) => {
+    sseFanoutInstall = null
+    throw err
+  })
+  return sseFanoutInstall
+}
+
 export function createSyncSseRouter() {
   const app = new Hono()
 
-  app.get('/api/sync/stream', (c) => {
+  app.get('/api/sync/stream', async (c) => {
+    await ensureSseUpdateFanout()
     // The id is minted here and never accepted from the caller. A client-chosen
     // key into a server-side registry lets one client name another's stream —
     // displacing it on open, or adding and removing that client's
