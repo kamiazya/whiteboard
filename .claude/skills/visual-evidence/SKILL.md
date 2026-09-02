@@ -170,17 +170,37 @@ same face, or do not make the figure.
 **Read the PNG before uploading.** Half the failures above are invisible in
 the SVG text and obvious in the image.
 
-```bash
-gh image tmp/screenshots/figure.png     # prints the markdown
+Reference it under a `## Visual repro` heading with plain markdown image
+syntax, pointing at the local file:
+
+```markdown
+## Visual repro
+![before — 170px through B / after — clean path](tmp/screenshots/figure.png)
 ```
 
-Paste under a `## Visual repro` heading with one sentence naming what to look
-at, and say what the figure CANNOT show (a case only reachable behind a flag,
-a panel state supplied through a seam rather than by the real producer). Cite
-the two digests the script printed: they are what tells a reader the panels
-were two different renders. Delete the throwaway test and the intermediate
-`.svg` files; keep the PNG in `tmp/screenshots/` until the PR merges (the
-GitHub upload is the durable copy).
+Then pass it to `gh pr create` (or `gh pr comment`/`gh pr edit` on an
+existing PR) with `--attach`, which gh added in v2.99.0 (GitHub Changelog,
+2026-09-01) specifically to replace hand-uploading a screenshot and pasting
+its markdown back in:
+
+```bash
+gh pr create --title "…" --body-file body.md --attach tmp/screenshots/figure.png
+```
+
+`--attach` uploads the file, rewrites any local-path reference already in the
+body in place (alt text preserved), and appends the markdown for anything
+left unmatched. It is repeatable for more than one image, accepts
+`--attach 'path#alt text'` for custom alt text, and covers PNG/JPEG/GIF/WebP/
+SVG plus MP4/MOV/WebM (10 MB cap on images/GIFs). Confirm `gh --version` is
+2.99.0+ before relying on it — an older gh silently has no such flag.
+
+One sentence naming what to look at, and say what the figure CANNOT show (a
+case only reachable behind a flag, a panel state supplied through a seam
+rather than by the real producer). Cite the two digests the script printed:
+they are what tells a reader the panels were two different renders. Delete
+the throwaway test and the intermediate `.svg` files; keep the PNG in
+`tmp/screenshots/` until the PR merges (the GitHub upload is the durable
+copy).
 
 `gh pr create` is gated on this: a diff touching a surface a human looks at
 needs a figure in the body, or one line saying why a picture is the wrong

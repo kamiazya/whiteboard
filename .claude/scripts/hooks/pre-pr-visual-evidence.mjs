@@ -41,8 +41,9 @@ const VISUAL_PATHS = [
 const NOT_A_SURFACE = /\.(test|bench|spec|docs-snapshot)\.[cm]?[jt]sx?$/
 
 /**
- * A figure. Markdown image, HTML img, or a bare attachment URL — `gh image`
- * prints the first, and a body assembled by hand may carry any of them.
+ * A figure. Markdown image, HTML img, or a bare attachment URL — a body
+ * referencing a local screenshot path for `gh pr create --attach` to upload
+ * carries the first, and a body assembled by hand may carry any of them.
  */
 const HAS_FIGURE = /!\[[^\]]*\]\([^)]+\)|<img\s|https:\/\/github\.com\/user-attachments\//
 
@@ -111,7 +112,9 @@ try {
       `  • For a FIX, show the defect and the fix: render the same case both ways and compose with\n` +
       `      node .claude/scripts/compose-figure.mjs --before <a.png> --after <b.png> --out tmp/screenshots/figure.png\n` +
       `    (it refuses two identical panels, which is the trap that has produced a misleading figure before),\n` +
-      `    then \`gh image\` the result into a "## Visual repro" section. See the visual-evidence skill.\n` +
+      `    then reference it as ![…](tmp/screenshots/figure.png) under a "## Visual repro" section\n` +
+      `    and pass --attach tmp/screenshots/figure.png to \`gh pr create\` (gh ≥2.99.0) to upload it.\n` +
+      `    See the visual-evidence skill.\n` +
       `  • For a new affordance, one capture of it is enough.\n` +
       `  • If a picture is genuinely the wrong evidence, say so in one line: "Visual evidence: none — <reason>".`,
   )
