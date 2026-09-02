@@ -12,13 +12,14 @@ import {
   readMarkdownBody,
   readSpatialCanvas,
   setNodeLock,
+  writeCanvasComment,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
   DocumentBackendHandlers,
 } from '@kamiazya/whiteboard-mcp/browser-contract'
-import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import type { EditorCommand } from '../components/spatial-editor/commands.js'
@@ -354,6 +355,40 @@ describe('createDocumentSyncSession', () => {
     const result = readSpatialCanvas(doc)
     expect(result.nodes.map((n) => n.id)).toEqual(['n-b'])
     expect(result.edges).toEqual([])
+  })
+
+  it('a local create-comment commit does not delete a comment a remote peer wrote concurrently (fine-grained comment write, not full resync)', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(emptyCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    // A remote peer wrote this comment directly into the shared doc — never
+    // reflected in this editor's own `next` canvas below, exactly as a
+    // remote update racing a local edit would arrive.
+    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
+    const remoteDoc = new LoroDoc()
+    remoteDoc.import(snapshotBytes)
+    writeCanvasComment(remoteDoc, remoteComment)
+    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
+
+    const localComment: CanvasComment = { id: 'local-c', x: 1, y: 1, text: 'local note' }
+    const next: SpatialCanvas = { ...emptyCanvas(), 'x-whiteboard': { comments: [localComment] } }
+    const command = { kind: 'create-comment', comment: localComment }
+    session.onChange(next, command as unknown as EditorCommand)
+    await vi.advanceTimersByTimeAsync(300)
+
+    // The fallback's tell: if the comment command fell through to the full
+    // resync, this fires — see commitToDoc's doc comment.
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+
+    const merged = new LoroDoc()
+    merged.import(snapshotBytes)
+    merged.import(remoteDoc.export({ mode: 'update' }))
+    for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
+    const comments = readSpatialCanvas(merged)['x-whiteboard']?.comments ?? []
+    expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
   })
 
   it('debounce coalescing: create-node then move-node for the same id dedupes to a single write of the final node value', async () => {
