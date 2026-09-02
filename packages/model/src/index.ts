@@ -1,3 +1,4 @@
+export * from './annotation.js'
 export * from './asset-ref.js'
 export * from './clipboard.js'
 // The mdast subset is intentionally NOT re-exported here — it is

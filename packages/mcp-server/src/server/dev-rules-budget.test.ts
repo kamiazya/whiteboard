@@ -63,11 +63,15 @@ const ALWAYS_ON_BUDGET: Record<string, number> = {
   '.claude/rules/architecture-map.md': 14,
   '.claude/rules/dev-flow.md': 25,
   '.claude/rules/integrator-flow.md': 13,
-  '.claude/rules/vocabulary.md': 15,
+  // 16 since the annotation layer's thread vocabulary (ADR-0026) landed in
+  // the Comment row. It sat 23 characters under the boundary beforehand, so
+  // this bucket bought about 200 characters of prose, not a thousand — a
+  // coarse instrument charges the whole step to whoever crosses it.
+  '.claude/rules/vocabulary.md': 16,
 }
 
 /** Floored bucket of the SUM, which is not the sum of the buckets. */
-const ALWAYS_ON_TOTAL_BUDGET = 85
+const ALWAYS_ON_TOTAL_BUDGET = 86
 
 /**
  * The largest path-scoped file, tracked separately because it is not paid by

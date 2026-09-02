@@ -9,12 +9,19 @@
  * a name collision introduced by a THIRD document, a rename that revives a
  * dangling path link, and a delete that takes its outgoing refs with it.
  *
+ * A path move also carries the FOLLOW pass, exactly as the daemon's route
+ * runs it (movesForPathChange -> followReferencesAfterRename), and the model
+ * rewrites its own tokens by an independent naive plan — so follow semantics
+ * hold under any interleaving, not just the single-move example tests.
+ *
  * The token scanner (codec's scanReferences) is deliberately shared with
  * the SUT: the bracket grammar is not under test here. Aggregation and
  * resolution — the semantics this file exists for — are written out
  * independently below.
  */
-import { scanReferences } from '@kamiazya/whiteboard-codec'
+import { movesForPathChange, scanReferences } from '@kamiazya/whiteboard-codec'
+import { readMarkdownBody, readSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import type { DocumentId } from '@kamiazya/whiteboard-model'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
@@ -22,14 +29,18 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
+import { loadOrCreateDocument } from '../tools/document-io.js'
 import { createDocumentSearchTool } from '../tools/document-search.js'
 import { createDocumentSetTool } from '../tools/document-set.js'
 import { computeDocumentTags } from '../tools/document-tags.js'
 import { ContentFactsCache } from './content-facts-cache.js'
+import { followReferencesAfterRename } from './follow-rename.js'
 
 const WS = 'ws-pbt'
-const PATHS = ['alpha', 'beta', 'gamma', 'delta'] as const
-const NAMES = ['Plan', 'Note'] as const
+const PATHS = ['alpha', 'alpha/leaf', 'beta', 'beta/leaf', 'gamma'] as const
+// 'beta/leaf' as a NAME collides with a path in the pool — the states the
+// follow plan's ambiguity and fallback rules exist for.
+const NAMES = ['Plan', 'Note', 'beta/leaf'] as const
 const SLOTS = [0, 1, 2] as const
 
 // ---------------------------------------------------------------- commands
@@ -61,9 +72,15 @@ const slotArb = fc.constantFrom(...SLOTS)
 // undoing, and a uniform pool reaches them too rarely — the last-wins
 // mutation of the ambiguity rule SURVIVED this property until the
 // distribution was skewed this way. Density, not numRuns (AGENTS.md).
+// ... and toward PATH aliases with equal weight since the follow pass
+// landed: a moved document only drags references written as its PATH, so a
+// name-heavy pool never reaches the states the follow plan decides.
+// Measured: with paths at weight 1-in-8, a no-op'd followReferencesAfterRename
+// SURVIVED this property at numRuns 40.
 const aliasArb = fc.oneof(
-  { weight: 3, arbitrary: fc.constant<string>('Plan') },
-  { weight: 1, arbitrary: fc.constantFrom<string>(...NAMES, ...PATHS) },
+  { weight: 2, arbitrary: fc.constant<string>('Plan') },
+  { weight: 2, arbitrary: fc.constantFrom<string>(...PATHS) },
+  { weight: 1, arbitrary: fc.constantFrom<string>(...NAMES) },
 )
 const tokenArb: fc.Arbitrary<Token> = fc.oneof(
   { weight: 1, arbitrary: fc.record({ k: fc.constant('id' as const), slot: slotArb }) },
@@ -85,6 +102,7 @@ const cmdArb: fc.Arbitrary<Cmd> = fc.oneof(
         name: fc.oneof(
           { weight: 3, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>('Plan') },
           { weight: 1, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>('Note') },
+          { weight: 1, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>('beta/leaf') },
           { weight: 1, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>(undefined) },
         ),
       },
@@ -115,7 +133,7 @@ const cmdArb: fc.Arbitrary<Cmd> = fc.oneof(
     }),
   },
   {
-    weight: 2,
+    weight: 3,
     arbitrary: fc.record({
       t: fc.constant('renamePath' as const),
       slot: slotArb,
@@ -130,6 +148,7 @@ const cmdArb: fc.Arbitrary<Cmd> = fc.oneof(
       name: fc.oneof(
         { weight: 3, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>('Plan') },
         { weight: 1, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>('Note') },
+        { weight: 1, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>('beta/leaf') },
         { weight: 1, arbitrary: fc.constant<(typeof NAMES)[number] | undefined>(undefined) },
       ),
     }),
@@ -157,21 +176,65 @@ class Model {
     return undefined
   }
 
-  /** The reader's alias table: one entry per path + one per display name. */
-  private resolveAlias(alias: string): string | null {
-    let found: string | null = null
-    let hits = 0
+  /**
+   * The reader's alias table: paths and display names share one space, and
+   * a document whose name equals its own path is ONE owner, not two — the
+   * real table dedupes that row before the resolver sees it.
+   */
+  private owners(alias: string): Set<string> {
+    const out = new Set<string>()
     for (const d of this.docs.values()) {
-      if (d.path === alias) {
-        hits++
-        found = d.id
-      }
-      if (d.name === alias) {
-        hits++
-        found = d.id
-      }
+      if (d.path === alias || d.name === alias) out.add(d.id)
     }
-    return hits === 1 ? found : null
+    return out
+  }
+
+  private resolveAlias(alias: string): string | null {
+    const owners = this.owners(alias)
+    const [only] = owners
+    return owners.size === 1 && only !== undefined ? only : null
+  }
+
+  /** Documents a subtree move at `from` carries, in listing order. */
+  movedBy(from: string): ModelDoc[] {
+    return [...this.docs.values()].filter((d) => d.path === from || d.path.startsWith(`${from}/`))
+  }
+
+  /**
+   * The intended follow semantics, written out independently of
+   * planReferenceRewrite: apply the subtree's path change, then rewrite
+   * every token that uniquely resolved to a moved document — to its new
+   * path when that resolves uniquely too, else to its id.
+   */
+  followMove(from: string, to: string): void {
+    const table = () =>
+      [...this.docs.values()].map((d) => ({ id: d.id, path: d.path, name: d.name }))
+    const ownersIn = (alias: string, rows: { id: string; path: string; name?: string }[]) => {
+      const out = new Set<string>()
+      for (const r of rows) if (r.path === alias || r.name === alias) out.add(r.id)
+      return out
+    }
+    const before = table()
+    const moved = this.movedBy(from)
+    const moves = moved.map((d) => ({ id: d.id, from: d.path, to: to + d.path.slice(from.length) }))
+    for (const d of moved) d.path = to + d.path.slice(from.length)
+    const after = table()
+    const plan = new Map<string, string>()
+    for (const m of moves) {
+      if (m.to === m.from) continue
+      // An alias that spells a live document id resolves to THAT id first
+      // and is never rewritten; a new path that spells one never wins.
+      if (before.some((e) => e.id === m.from)) continue
+      const ob = ownersIn(m.from, before)
+      if (!(ob.size === 1 && ob.has(m.id))) continue
+      const oa = ownersIn(m.to, after)
+      const toIsUnique = oa.size === 1 && oa.has(m.id) && !after.some((e) => e.id === m.to)
+      plan.set(m.from, toIsUnique ? m.to : m.id)
+    }
+    for (const d of this.docs.values()) {
+      d.bodyTokens = d.bodyTokens.map((t) => plan.get(t) ?? t)
+      d.fileRefs = d.fileRefs.map((t) => plan.get(t) ?? t)
+    }
   }
 
   /** sourceId -> reference count into `targetId`. Independent of the SUT. */
@@ -224,6 +287,97 @@ describe('reference semantics under command sequences', () => {
       // slot -> documentId of the doc created into it (dead ids stay, model ignores)
       const slots: (string | null)[] = [null, null, null]
       let nodeSeq = 0
+
+      // Every run OPENS on the state the follow pass exists for — a document
+      // and a reference spelling its path — and the commands then mutate it.
+      // Without this seed the sequences almost never assemble it themselves:
+      // measured at numRuns 40, zero runs held a path reference at move time,
+      // and a no-op'd followReferencesAfterRename survived the property.
+      const seedTarget = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'alpha',
+        kind: 'markdown',
+      })
+      slots[0] = seedTarget.documentId
+      model.docs.set(seedTarget.documentId, {
+        id: seedTarget.documentId,
+        path: 'alpha',
+        kind: 'markdown',
+        bodyTokens: [],
+        embedIds: [],
+        fileRefs: [],
+      })
+      const seedLeaf = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'alpha/leaf',
+        kind: 'markdown',
+      })
+      model.docs.set(seedLeaf.documentId, {
+        id: seedLeaf.documentId,
+        path: 'alpha/leaf',
+        kind: 'markdown',
+        bodyTokens: [],
+        embedIds: [],
+        fileRefs: [],
+      })
+      const seedSource = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'gamma',
+        kind: 'markdown',
+      })
+      slots[1] = seedSource.documentId
+      // A SHADOWED alias on non-pool paths: X's path is also Y's display
+      // name, so '[[shadowed]]' is ambiguous and must stay literal through
+      // any move of X. Off-pool so it never contends with command traffic;
+      // X sits in slot 2 so the commands can move it. With this absent,
+      // dropping the plan's old-alias ambiguity guard survived the property.
+      const seedShadowed = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'shadowed',
+        kind: 'markdown',
+      })
+      slots[2] = seedShadowed.documentId
+      model.docs.set(seedShadowed.documentId, {
+        id: seedShadowed.documentId,
+        path: 'shadowed',
+        kind: 'markdown',
+        bodyTokens: [],
+        embedIds: [],
+        fileRefs: [],
+      })
+      const seedShadowHolder = await wbDocumentCreate(deps, {
+        workspaceId: WS,
+        path: 'shadow-holder',
+        kind: 'markdown',
+        name: 'shadowed',
+      })
+      model.docs.set(seedShadowHolder.documentId, {
+        id: seedShadowHolder.documentId,
+        path: 'shadow-holder',
+        name: 'shadowed',
+        kind: 'markdown',
+        bodyTokens: [],
+        embedIds: [],
+        fileRefs: [],
+      })
+      // The DESCENDANT reference makes every successful move of 'alpha'
+      // exercise subtree derivation: with it absent, dropping descendants
+      // from movesForPathChange survived this property.
+      const seedBody =
+        'mention [[alpha]] here.\nmention [[alpha/leaf]] here.\nmention [[shadowed]] here.\nmention [[Plan]] here.'
+      await setTool.execute({
+        workspaceId: WS,
+        documentId: seedSource.documentId,
+        markdown: `---\ntype: markdown\n---\n${seedBody}`,
+      })
+      model.docs.set(seedSource.documentId, {
+        id: seedSource.documentId,
+        path: 'gamma',
+        kind: 'markdown',
+        bodyTokens: scanReferences(seedBody).map((m) => m.target),
+        embedIds: [],
+        fileRefs: [],
+      })
 
       for (const cmd of cmds) {
         switch (cmd.t) {
@@ -322,15 +476,35 @@ describe('reference semantics under command sequences', () => {
             const id = slots[cmd.slot]
             const doc = id === null || id === undefined ? undefined : model.docs.get(id)
             if (doc === undefined) break
-            if (doc.path === cmd.to) break // real moveDocument refuses from===to? skip both ways
-            if (model.byPath(cmd.to) !== undefined) {
-              await expect(
-                deps.documentIndex.moveDocument({ workspaceId: WS, from: doc.path, to: cmd.to }),
-              ).rejects.toThrow()
+            const from = doc.path
+            const attempt = () =>
+              deps.documentIndex.moveDocument({ workspaceId: WS, from, to: cmd.to })
+            if (cmd.to === from || cmd.to.startsWith(`${from}/`)) {
+              await expect(attempt()).rejects.toThrow()
               break
             }
-            await deps.documentIndex.moveDocument({ workspaceId: WS, from: doc.path, to: cmd.to })
-            doc.path = cmd.to
+            // A subtree move fails when any PRODUCED path is already taken
+            // by a document the move does not carry.
+            const movedPaths = model.movedBy(from).map((d) => d.path)
+            const produced = (path: string) => cmd.to + path.slice(from.length)
+            const collides = movedPaths.some((path) => {
+              const holder = model.byPath(produced(path))
+              return holder !== undefined && !movedPaths.includes(holder.path)
+            })
+            if (collides) {
+              await expect(attempt()).rejects.toThrow()
+              break
+            }
+            // The route's own glue, verbatim: list before, move, follow.
+            const entriesBefore = await deps.documentIndex.listDocuments({ workspaceId: WS })
+            await attempt()
+            const follow = await followReferencesAfterRename(deps, {
+              workspaceId: WS,
+              entriesBefore,
+              moves: movesForPathChange(entriesBefore, from, cmd.to),
+            })
+            expect(follow.failedDocumentIds).toEqual([])
+            model.followMove(from, cmd.to)
             break
           }
           case 'setName': {
@@ -350,14 +524,49 @@ describe('reference semantics under command sequences', () => {
             const id = slots[cmd.slot]
             const doc = id === null || id === undefined ? undefined : model.docs.get(id)
             if (doc === undefined) break
+            if (model.movedBy(doc.path).length > 1) {
+              // Descendants exist — the index refuses the delete.
+              await expect(
+                deps.documentIndex.deleteDocument({ workspaceId: WS, path: doc.path }),
+              ).rejects.toThrow()
+              break
+            }
             await deps.documentIndex.deleteDocument({ workspaceId: WS, path: doc.path })
             model.docs.delete(doc.id)
             break
           }
         }
 
-        // After EVERY command: the CACHED pipeline agrees with the model,
-        // and byte-for-byte with a fresh full scan (backlinks AND mentions).
+        // After EVERY command: what each document SAYS agrees with the model
+        // token-for-token — the follow pass rewrote exactly what the naive
+        // plan says it should, and nothing else.
+        for (const doc of model.docs.values()) {
+          const real = await loadOrCreateDocument(deps, WS, doc.id as DocumentId)
+          if (doc.kind === 'markdown') {
+            expect(
+              scanReferences(readMarkdownBody(real)).map((m) => m.target),
+              `body tokens of ${doc.path}`,
+            ).toEqual(doc.bodyTokens)
+          } else {
+            const canvas = readSpatialCanvas(real)
+            const textTokens = canvas.nodes
+              .filter((node) => node.type === 'text')
+              .flatMap((node) => scanReferences(node.text).map((m) => m.target))
+            expect([...textTokens].sort(), `text tokens of ${doc.path}`).toEqual(
+              [...doc.bodyTokens].sort(),
+            )
+            const plainFiles = canvas.nodes
+              .filter((node) => {
+                if (node.type !== 'file') return false
+                const ext = node['x-whiteboard']
+                return !(ext !== undefined && 'kind' in ext && ext.kind === 'embed')
+              })
+              .map((node) => (node.type === 'file' ? node.file : ''))
+            expect(plainFiles.sort(), `file refs of ${doc.path}`).toEqual([...doc.fileRefs].sort())
+          }
+        }
+        // And the CACHED pipeline agrees with the model, byte-for-byte with
+        // a fresh full scan (backlinks AND mentions).
         for (const doc of model.docs.values()) {
           const cached = await computeBacklinks(
             deps,
@@ -380,5 +589,10 @@ describe('reference semantics under command sequences', () => {
         }
       }
     },
+    // Budget, not numRuns: the seeded state + per-command full-content
+    // assertions price a 40-run pass at 3.5-6s on an idle machine (worst
+    // observed 7.3s under load), so the 5s default reads as a property
+    // failure that never happened.
+    30_000,
   )
 })
