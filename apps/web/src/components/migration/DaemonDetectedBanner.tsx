@@ -87,6 +87,13 @@ interface DaemonDetectedBannerProps {
  * loopback fetches need no extra permission. On https: origins the browser's
  * Local Network Access prompt requires explicit user intent, so the probe
  * only runs from a click.
+ *
+ * Every decision it makes is a pure function in `lib/` with its own tests —
+ * `decideConnectGate`, `explainProbeFailure`, `deriveCapabilityTier`,
+ * `shouldShowDaemonCta`, `candidateBaseUrls`, `discoverDaemons`. What stays
+ * here is the wiring between them and the copy that explains the result to
+ * the user, which is why the file is long and why splitting the copy back
+ * out again reduces nothing a reader has to hold.
  */
 export function DaemonDetectedBanner({
   settingsStore,
