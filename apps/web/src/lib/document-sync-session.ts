@@ -77,6 +77,8 @@ function commandTargetKey(command: EditorCommand): string {
       return `comment:${command.comment.id}`
     case 'set-comment-resolved':
     case 'delete-comment':
+    case 'move-comment':
+    case 'set-comment-text':
       return `comment:${command.id}`
     case 'set-body':
       // One key for the whole body: `text` is always the complete document,
@@ -256,7 +258,9 @@ function writeCommandTarget(
       return true
     }
     case 'create-comment':
-    case 'set-comment-resolved': {
+    case 'set-comment-resolved':
+    case 'move-comment':
+    case 'set-comment-text': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (!comment) return false
@@ -323,6 +327,8 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
     case 'create-comment':
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.comment.id) ?? false
     case 'set-comment-resolved':
+    case 'move-comment':
+    case 'set-comment-text':
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.id) ?? false
     case 'delete-node':
     case 'delete-edge':
@@ -363,7 +369,9 @@ function writeSubCommand(
       return
     }
     case 'create-comment':
-    case 'set-comment-resolved': {
+    case 'set-comment-resolved':
+    case 'move-comment':
+    case 'set-comment-text': {
       const id = command.kind === 'create-comment' ? command.comment.id : command.id
       const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (comment) writer.writeComment(comment)

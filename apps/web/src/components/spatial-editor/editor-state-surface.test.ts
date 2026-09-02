@@ -79,7 +79,9 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
     'not modelled: pinned to an edge id, gated on finding that edge in the render. Nothing here drives the label editor itself',
   groupLabelEditId: 'not modelled: pinned to a node id, gated on finding that group in the render',
   commentCompose:
-    'not modelled: an open compose bubble holding only its anchor; the draft text lives in the bubble. Its commit writes create-comment, covered by comment-create.browser.test.tsx',
+    'not modelled: an open compose bubble holding only its anchor; the draft text lives in the bubble. Its commit writes create-comment or set-comment-text, covered by comment-create / comment-edit.browser.test.tsx',
+  commentDrag:
+    'not modelled: an in-flight pin drag beside the gesture machine (start anchor + live pointer); its release writes move-comment, covered by comment-move.browser.test.tsx',
   linkDialog:
     'not modelled: carries a nodeId in edit mode, gated on finding that node. Its submit writes set-node-url, itself unmodelled',
   canvasPicker:

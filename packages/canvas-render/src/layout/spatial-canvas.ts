@@ -1330,8 +1330,12 @@ const COMMENT_BUBBLE_RADIUS_PX = 8
  * exists (the pin FOLLOWS the node), the stored anchor otherwise. The
  * fallback is what makes a dangling `targetNodeId` harmless, per the model's
  * contract that a comment may outlive its subject.
+ *
+ * Exported because the editor places its compose bubble and its edit bubble
+ * at the same anchor this layer draws from — one producer for the geometry,
+ * so the draft cannot open one place and settle another.
  */
-function commentAnchor(
+export function commentAnchor(
   comment: CanvasComment,
   canvas: SpatialCanvas,
 ): { readonly x: number; readonly y: number } {

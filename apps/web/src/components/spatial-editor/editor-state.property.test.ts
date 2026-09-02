@@ -309,11 +309,14 @@ const COMMAND_COVERAGE = {
   'set-group-label': 'not modelled: group label editor, single-field write',
   'set-group-background': 'not modelled: group inspector, single-field write',
   'create-comment':
-    "not modelled: no comment UI is wired yet (ADR-0024's apps/web interactive-comment-UI follow-up increment, named in its 'This increment' section); the command has no gesture or selection coupling to model here — covered at the applyCommand/session layers instead",
+    'not modelled: written by the compose bubble (comment-create.browser.test.tsx), outside the gesture machine; no gesture or selection coupling to model here — covered at the applyCommand/session layers',
   'set-comment-resolved':
-    "not modelled: no comment UI is wired yet (ADR-0024's apps/web interactive-comment-UI follow-up increment), single-field write",
-  'delete-comment':
-    "not modelled: no comment UI is wired yet (ADR-0024's apps/web interactive-comment-UI follow-up increment)",
+    'not modelled: single-field write; no editor surface writes it yet (the resolve/reopen layer of ADR-0025 is a later increment)',
+  'delete-comment': 'not modelled: MCP-only in v1 per ADR-0025; no editor surface writes it',
+  'move-comment':
+    'not modelled: written by the pin drag (comment-move.browser.test.tsx), a side state beside the gesture machine rather than a GestureState arm; single-field write',
+  'set-comment-text':
+    'not modelled: written by the edit bubble (comment-edit.browser.test.tsx), outside the gesture machine; single-field write',
 } satisfies Record<EditorCommand['kind'], SurfaceCoverage>
 
 /** Every event the gesture state machine accepts. All of them are driven. */
