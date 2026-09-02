@@ -60,6 +60,12 @@ export interface RenderCanvasCoreOptions {
    * exactly where the committed scene placed it, or the press jumps it.
    */
   readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * Draw resolved comments too, muted (canvas-render's `showResolved`).
+   * Per-user VIEW state — it threads through every render of this surface
+   * (committed, worker, drag layers) and is never written to the document.
+   */
+  readonly showResolved?: boolean
 }
 
 export interface RenderedCanvas {
@@ -87,6 +93,7 @@ export function renderCanvasToSvgWith(
     contentCache: options.contentCache,
     suppressedBodyNodeIds: options.suppressedBodyNodeIds,
     commentObstacles: options.commentObstacles,
+    showResolved: options.showResolved,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

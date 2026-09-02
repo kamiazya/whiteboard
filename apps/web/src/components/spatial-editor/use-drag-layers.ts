@@ -61,6 +61,8 @@ export interface DragLayersInputs {
   anchors: RenderedCanvas['anchors']
   /** The committed surface's keyed projection (mount-once patch container). */
   keyed: KeyedSvgRender
+  /** Draw resolved comments in the drag layers too, matching the committed surface. */
+  showResolved?: boolean
   boxes: readonly NodeBox[]
   selectableBoxes: readonly NodeBox[]
   livePoint: Point | null
@@ -79,6 +81,7 @@ export function useDragLayers({
   scene,
   anchors,
   keyed,
+  showResolved,
   boxes,
   selectableBoxes,
   livePoint,
@@ -125,6 +128,7 @@ export function useDragLayers({
         measure: resolvedMeasure,
         theme,
         ...fileSeamOptions,
+        showResolved,
         commentObstacles: ghostObstacles,
       },
     )
@@ -145,6 +149,7 @@ export function useDragLayers({
     theme,
     fileSeamOptions,
     scene,
+    showResolved,
   ])
 
   // The committed layout, FROZEN at gesture start. The worker's next
@@ -201,6 +206,7 @@ export function useDragLayers({
       measure: resolvedMeasure,
       theme,
       ...fileSeamOptions,
+      showResolved,
     })
     const metricsCache = new Map<string, TextMetrics>()
     const measure: MeasureText = (text, font) => {
@@ -237,6 +243,7 @@ export function useDragLayers({
     resolvedMeasure,
     theme,
     fileSeamOptions,
+    showResolved,
   ])
   // The committed surface's mount-once container (see the editor's JSX):
   // during a gesture it patches to the drag backdrop, on drop back to the
@@ -399,6 +406,7 @@ export function useDragLayers({
         measure: dragStatic.measure,
         theme,
         ...fileSeamOptions,
+        showResolved,
       },
     )
     return { svg: rendered.svg, bounds: rendered.bounds }

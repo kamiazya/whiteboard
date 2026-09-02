@@ -27,10 +27,13 @@ import {
   BringToFront,
   ChevronDown,
   ChevronUp,
+  CircleCheck,
   ClipboardPaste,
   Copy as CopyIcon,
   CopyPlus,
   ExternalLink,
+  Eye,
+  EyeOff,
   FileBox,
   Frame,
   Image as ImageIcon,
@@ -44,6 +47,7 @@ import {
   PanelRight,
   PanelTop,
   Pencil,
+  RotateCcw,
   Scissors,
   SendToBack,
   Sparkles,
@@ -146,6 +150,9 @@ export interface CanvasCommands {
   /** Opens the node's full facet editor — the point knows no domain. */
   readonly setFacetPanelOpen: (open: boolean) => void
   readonly setCommentCompose: (state: CommentComposeState | null) => void
+  /** Per-user view state (ADR-0025 decision 2): resolved comments drawn, muted. */
+  readonly showResolvedComments: boolean
+  readonly setShowResolvedComments: (show: boolean) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -213,6 +220,8 @@ export function CanvasContextMenu({
     setDocumentPicker,
     setFacetPanelOpen,
     setCommentCompose,
+    showResolvedComments,
+    setShowResolvedComments,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -232,8 +241,9 @@ export function CanvasContextMenu({
       onClose={() => setContextMenu(null)}
       items={(() => {
         // A comment's menu is its own: it is not content, so none of the
-        // node/edge/canvas verbs apply. Removal stays MCP-only in v1
-        // (ADR-0025), so editing the text is the whole band for now.
+        // node/edge/canvas verbs apply. Its lifecycle is edit and resolve /
+        // reopen — there is no removal anywhere (ADR-0025 decision 2), so
+        // closing the conversation is the only way to put it away.
         const comment =
           contextMenu.commentId === undefined
             ? undefined
@@ -251,6 +261,29 @@ export function CanvasContextMenu({
                   editing: { id: comment.id, initialText: comment.text },
                 }),
             },
+            comment.resolved === true
+              ? {
+                  label: 'Reopen',
+                  icon: <RotateCcw />,
+                  onSelect: () =>
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-comment-resolved', id: comment.id, resolved: false } as const,
+                      ],
+                    }),
+                }
+              : {
+                  label: 'Resolve',
+                  icon: <CircleCheck />,
+                  onSelect: () =>
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        { kind: 'set-comment-resolved', id: comment.id, resolved: true } as const,
+                      ],
+                    }),
+                },
           ]
         }
         const node =
@@ -504,6 +537,13 @@ export function CanvasContextMenu({
             label: 'Comment here',
             icon: <MessageSquarePlus />,
             onSelect: () => setCommentCompose({ point: contextMenu.point }),
+          })
+          // Resolved comments stay in the document; this is the one way to
+          // see them again (and reopen one). View state, per user.
+          emptyItems.push({
+            label: showResolvedComments ? 'Hide resolved comments' : 'Show resolved comments',
+            icon: showResolvedComments ? <EyeOff /> : <Eye />,
+            onSelect: () => setShowResolvedComments(!showResolvedComments),
           })
           return emptyItems
         }

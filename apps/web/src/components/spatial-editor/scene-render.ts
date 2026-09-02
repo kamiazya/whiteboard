@@ -30,6 +30,8 @@ export interface RenderCanvasOptions {
   readonly suppressedBodyNodeIds?: readonly string[]
   /** See RenderCanvasCoreOptions: boxes a comment bubble must not cover. */
   readonly commentObstacles?: readonly BoundingBox[]
+  /** See RenderCanvasCoreOptions: draw resolved comments (muted) too. */
+  readonly showResolved?: boolean
 }
 
 /**

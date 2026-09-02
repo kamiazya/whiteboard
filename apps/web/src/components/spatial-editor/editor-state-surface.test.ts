@@ -80,6 +80,8 @@ const EDITOR_STATE_COVERAGE: Record<string, StateCoverage> = {
   groupLabelEditId: 'not modelled: pinned to a node id, gated on finding that group in the render',
   commentCompose:
     'not modelled: an open compose bubble holding only its anchor; the draft text lives in the bubble. Its commit writes create-comment or set-comment-text, covered by comment-create / comment-edit.browser.test.tsx',
+  showResolvedComments:
+    'not modelled: a per-user view toggle (ADR-0025 decision 2) read by the render paths only; it writes nothing. Covered by comment-resolve.browser.test.tsx',
   commentDrag:
     'not modelled: an in-flight pin drag beside the gesture machine (start anchor + live pointer); its release writes move-comment, covered by comment-move.browser.test.tsx',
   linkDialog:
