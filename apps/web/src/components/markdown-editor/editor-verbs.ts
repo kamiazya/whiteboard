@@ -1,8 +1,8 @@
 import { EditorSelection, type StateCommand } from '@codemirror/state'
 import { insertCodeBlock, insertRule, insertTable } from './block-inserts.js'
-import { toggleLinePrefix } from './line-prefix.js'
+import { toggleBlockquote } from './blockquote.js'
+import { cycleTaskCheckbox, setListMarker } from './list-line.js'
 import { headingLevelAt, setHeadingLevel } from './set-heading-level.js'
-import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
@@ -171,7 +171,7 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     id: 'quote',
     label: 'Quote',
     band: 'block',
-    action: { kind: 'command', command: toggleLinePrefix('quote') },
+    action: { kind: 'command', command: toggleBlockquote },
   },
   {
     id: 'code-block',
@@ -211,20 +211,22 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     id: 'bullet-list',
     label: 'Bullet list',
     band: 'list',
-    action: { kind: 'command', command: toggleLinePrefix('bullet') },
+    action: { kind: 'command', command: setListMarker('bullet') },
   },
   {
     id: 'ordered-list',
     label: 'Numbered list',
     band: 'list',
-    action: { kind: 'command', command: toggleLinePrefix('ordered') },
+    action: { kind: 'command', command: setListMarker('ordered') },
   },
   {
+    // One button walks none -> open -> done -> none (see list-line.ts), the
+    // way the heading slot walks its levels; the same command is Mod-Enter.
     id: 'toggle-task',
-    label: 'Toggle task',
+    label: 'Task',
     band: 'list',
     key: 'Mod-Enter',
-    action: { kind: 'command', command: toggleTaskCheckbox },
+    action: { kind: 'command', command: cycleTaskCheckbox },
   },
 ]
 

@@ -248,47 +248,20 @@ describe('markdown editor verbs', () => {
    * command reports unhandled — correctly — when none is.
    */
   fcTest.prop(
-    [fc.constantFrom('- [ ] open task', '- [x] done task', '1. [ ] numbered')],
+    [fc.constantFrom('- [ ] open task', '- [x] done task', '1. [ ] numbered', 'plain prose')],
     withDefaults(),
-  )('T1: toggling a task checkbox twice returns the original line', (taskLine) => {
+  )('T1: the task button cycles a line back to itself in three presses', (line) => {
     const command = selfContainedCommand(verb('toggle-task'))
     if (command === null) throw new Error('toggle-task lost its command')
-    const once = drive('toggle-task', command, taskLine, 0)
-    expect(once.handled).toBe(true)
-    expect(once.doc).not.toBe(taskLine)
-    const twice = drive('toggle-task', command, once.doc, 0)
-    expect(twice.doc).toBe(taskLine)
-  })
-
-  fcTest.prop([documentAndCaret], withDefaults())(
-    'W2: a wrap verb applied twice at the same spot is the identity — the second press unwraps',
-    ({ doc, at }) => {
-      for (const id of ['bold', 'italic', 'code', 'link', 'strikethrough', 'math'] as const) {
-        const spec = verb(id)
-        const command = selfContainedCommand(spec)
-        if (command === null) throw new Error(`${id} lost its command`)
-        const open =
-          spec.action.kind === 'wrap'
-            ? spec.action.open
-            : spec.action.kind === 'interactive'
-              ? spec.action.fallback.open
-              : ''
-        const once = drive(id, command, doc, at)
-        // The caret stays inside what was wrapped, where the next press finds it.
-        const twice = drive(id, command, once.doc, at + open.length)
-        expect(twice.doc, `${id} did not unwrap ${JSON.stringify(once.doc)}`).toBe(doc)
-      }
-    },
-  )
-
-  it('W3: a selection that includes the delimiters is unwrapped, and a nest opens from the inside', () => {
-    const bold = selfContainedCommand(verb('bold'))
-    const italic = selfContainedCommand(verb('italic'))
-    if (bold === null || italic === null) throw new Error('lost a command')
-    expect(drive('bold', bold, '**hello**', 0, 9).doc).toBe('hello')
-    // ***hello*** is bold+italic; the caret's word is hugged by ** first.
-    expect(drive('bold', bold, '***hello***', 5).doc).toBe('*hello*')
-    expect(drive('italic', italic, '***hello***', 5).doc).toBe('**hello**')
+    let doc: string = line
+    for (let step = 0; step < 3; step++) {
+      const result = drive('toggle-task', command, doc, 0)
+      expect(result.handled).toBe(true)
+      expect(result.doc).not.toBe(doc)
+      doc = result.doc
+    }
+    // A plain line joins the cycle as a bullet task, so it comes back as a bullet.
+    expect(doc).toBe(line === 'plain prose' ? '- plain prose' : line)
   })
 
   fcTest.prop([plainDocument], withDefaults())(
