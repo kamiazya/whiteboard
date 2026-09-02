@@ -28,6 +28,10 @@ import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
+import {
+  SaveVersionAction,
+  type SaveVersionOutcome,
+} from '../components/workspace-top-bar/SaveVersionAction.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
@@ -292,7 +296,7 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
-    setSaveVersionMessage(null)
+    setSaveVersionOutcome(null)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -579,17 +583,14 @@ export function BrowserDocumentPage({
   // daemon page's panel does. Announced on the window like every other
   // save, which is what clears the dot and refreshes the list.
   const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionMessage, setSaveVersionMessage] = useState<{
-    kind: 'success' | 'error'
-    text: string
-  } | null>(null)
+  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
   const saveVersionFromPanel = async (): Promise<void> => {
     if (versionsBackend === null || documentPath === null || savingVersion) return
     setSavingVersion(true)
-    setSaveVersionMessage(null)
+    setSaveVersionOutcome(null)
     try {
       await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label: '' })
-      setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
+      setSaveVersionOutcome('saved')
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
       window.dispatchEvent(
@@ -599,7 +600,7 @@ export function BrowserDocumentPage({
       )
     } catch (err) {
       log.warn('save version from the History panel failed', err)
-      setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+      setSaveVersionOutcome('failed')
     } finally {
       setSavingVersion(false)
     }
@@ -1022,30 +1023,12 @@ export function BrowserDocumentPage({
                           capabilities: { branches: false, autoVersions: false },
                           onRestored: clearLocalUndo,
                           refreshSignal: versionRefreshSignal,
-                          versionPanelExtra: (
-                            <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
-                              <button
-                                type="button"
-                                onClick={() => void saveVersionFromPanel()}
-                                disabled={savingVersion}
-                                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-                              >
-                                {savingVersion ? 'Saving…' : 'Save version'}
-                              </button>
-                              {saveVersionMessage && (
-                                <span
-                                  role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
-                                  aria-live="polite"
-                                  className={
-                                    saveVersionMessage.kind === 'error'
-                                      ? 'text-xs text-destructive'
-                                      : 'text-xs text-muted-foreground'
-                                  }
-                                >
-                                  {saveVersionMessage.text}
-                                </span>
-                              )}
-                            </div>
+                          headerActions: (
+                            <SaveVersionAction
+                              saving={savingVersion}
+                              outcome={saveVersionOutcome}
+                              onSave={() => void saveVersionFromPanel()}
+                            />
                           ),
                         }
                       : undefined,

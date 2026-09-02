@@ -65,7 +65,7 @@ describe('HistoryCluster', () => {
     expect(screen.queryByTestId('history-version-panel')).toBeNull()
   })
 
-  it('renders versionPanelExtra inside the opened version panel', () => {
+  it('renders headerActions inside the opened version panel, beside the title rather than under the list', () => {
     render(
       <HistoryCluster
         onUndo={vi.fn()}
@@ -75,12 +75,12 @@ describe('HistoryCluster', () => {
         versions={{
           workspaceId: 'ws-1',
           path: 'doc-a',
-          versionPanelExtra: <div data-testid="version-panel-extra-slot">extra</div>,
+          headerActions: <div data-testid="version-header-actions-slot">extra</div>,
         }}
       />,
     )
     fireEvent.click(screen.getByRole('button', { name: 'Version history' }))
-    expect(screen.getByTestId('version-panel-extra-slot')).toBeTruthy()
+    expect(screen.getByTestId('version-header-actions-slot')).toBeTruthy()
   })
 
   it('is marked as an editor overlay so canvas gestures ignore it', () => {

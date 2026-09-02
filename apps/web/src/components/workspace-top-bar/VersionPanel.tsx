@@ -8,7 +8,7 @@ interface VersionPanelProps {
   capabilities?: VersionTimelineCapabilities
   onRestored?: () => void
   refreshSignal?: number
-  versionPanelExtra?: ReactNode
+  headerActions?: ReactNode
 }
 
 // Version history panel surface. Position-agnostic: the mount site (the
@@ -20,7 +20,7 @@ export function VersionPanel({
   capabilities,
   onRestored,
   refreshSignal,
-  versionPanelExtra,
+  headerActions,
 }: VersionPanelProps) {
   return (
     <div
@@ -34,8 +34,8 @@ export function VersionPanel({
           capabilities={capabilities}
           onRestored={onRestored}
           refreshSignal={refreshSignal}
+          headerActions={headerActions}
         />
-        {versionPanelExtra}
       </div>
     </div>
   )

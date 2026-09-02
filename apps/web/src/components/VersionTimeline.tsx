@@ -41,11 +41,16 @@ interface Props {
   capabilities?: VersionTimelineCapabilities
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
-  // Bumped by the caller (e.g. after a manual "Save version" action, or a WS
+  // Bumped by the caller (e.g. after a manual save, or a WS
   // version_created broadcast) to force a refetch without waiting for the
   // 15s poll. Only a value CHANGE triggers a refetch, matching
   // HeaderBranchChip's refreshSignal contract.
   refreshSignal?: number
+  // The panel header's action slot — the page's own save affordance. It
+  // sits in the header because that is where the panel's own title is: an
+  // action bar pinned under the list would have put the one control a
+  // phone can reach below 480px of scrolling history.
+  headerActions?: ReactNode
 }
 
 // Render an ISO string as a short relative timestamp.
@@ -120,6 +125,7 @@ export default function VersionTimeline({
   capabilities = { branches: true, autoVersions: true },
   onRestored,
   refreshSignal,
+  headerActions,
 }: Props) {
   const fetchFn = useDaemonApi()
   const versionsBackend = useVersionsBackend()
@@ -274,7 +280,7 @@ export default function VersionTimeline({
           <History className="size-3.5" />
           Version history
         </div>
-        {/* Save actions live in the header now, so this panel stays focused on history. */}
+        {headerActions}
       </div>
 
       <ScrollArea className="min-h-0 flex-1 -mx-1">
@@ -292,7 +298,7 @@ export default function VersionTimeline({
               <br />
               {capabilities.autoVersions
                 ? 'Edit this canvas to trigger auto-save (~30s), or press ⌘/Ctrl+S.'
-                : 'Press ⌘/Ctrl+S to save a version.'}
+                : 'Save one with the button above, or ⌘/Ctrl+S.'}
             </div>
           ) : (
             visibleVersions.map((v) => {

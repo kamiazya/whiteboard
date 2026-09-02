@@ -296,7 +296,7 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
 // so everything it holds about a document has to be dropped by hand.
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   savingVersion: 'no subject: an in-flight flag for this screen’s own submit',
-  saveVersionMessage: 'cleared on switch',
+  saveVersionOutcome: 'cleared on switch',
   versionRefreshSignal:
     'no subject: a counter that nudges the History panel to refetch; the list it refreshes is the panel’s own, and the panel remounts per document',
   // The one that bit: a bare boolean over `triggerCleanup()`, which acts on

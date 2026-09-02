@@ -100,9 +100,11 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // refresh the save announces — not through the panel's mount fetch.
     await userEvent.click(screen.getByRole('button', { name: 'Version history' }))
     const panel = await screen.findByTestId('history-version-panel')
-    // The browser's own empty-state copy: no auto-save to wait for.
+    // The browser's own empty-state copy: no auto-save to wait for, and it
+    // points at the panel's own save icon rather than at a shortcut a phone
+    // does not have.
     const empty = await within(panel).findByText(/No versions yet/)
-    expect(empty.textContent).toContain('Press ⌘/Ctrl+S to save a version.')
+    expect(empty.textContent).toContain('Save one with the button above, or ⌘/Ctrl+S.')
 
     await userEvent.keyboard('{Control>}s{/Control}')
 
@@ -116,10 +118,15 @@ describe('BrowserDocumentPage version history (browser)', () => {
       timeout: 5000,
     })
 
-    // The panel's own button: the route a finger has, where a shortcut is
-    // nothing. Same store, same announcement, one more row.
-    await userEvent.click(within(panel).getByRole('button', { name: 'Save version' }))
-    await within(panel).findByText('Version saved.')
+    // The panel's own icon: the route a finger has, where a shortcut is
+    // nothing. It draws no verb — the name is the accessible name, and what
+    // the save produced is the row below it, not a word beside it.
+    const saveIcon = within(panel).getByRole('button', { name: 'Save version' })
+    expect(saveIcon.textContent).toBe('')
+    await userEvent.click(saveIcon)
+    // Announced for a reader who cannot see the row arrive, and only there.
+    const announced = await within(panel).findByText('Version saved')
+    expect(announced.className).toContain('sr-only')
     await waitFor(() => expect(within(panel).getAllByTestId('version-row')).toHaveLength(2), {
       timeout: 5000,
     })

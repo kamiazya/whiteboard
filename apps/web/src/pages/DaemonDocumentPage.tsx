@@ -25,6 +25,10 @@ import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
+import {
+  SaveVersionAction,
+  type SaveVersionOutcome,
+} from '../components/workspace-top-bar/SaveVersionAction.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
@@ -155,10 +159,7 @@ export function DaemonDocumentPage({
   // without waiting for its 15s poll.
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
   const [savingVersion, setSavingVersion] = useState(false)
-  const [saveVersionMessage, setSaveVersionMessage] = useState<{
-    kind: 'success' | 'error'
-    text: string
-  } | null>(null)
+  const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
 
   // Every listed document is tree-served and syncs at workspace-document
   // granularity; the id is what binds this session's content inside the
@@ -542,7 +543,7 @@ export function DaemonDocumentPage({
   const saveVersion = async (): Promise<void> => {
     if (canvas === null || savingVersion) return
     setSavingVersion(true)
-    setSaveVersionMessage(null)
+    setSaveVersionOutcome(null)
     try {
       const res = await daemonFetch(
         `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
@@ -558,7 +559,7 @@ export function DaemonDocumentPage({
         log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
         throw new Error('save response did not match schema')
       }
-      setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
+      setSaveVersionOutcome('saved')
       setVersionRefreshSignal((n) => n + 1)
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
@@ -567,7 +568,7 @@ export function DaemonDocumentPage({
       // HeaderSaveDot never learns this save happened and stays dirty.
       dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
     } catch {
-      setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+      setSaveVersionOutcome('failed')
     } finally {
       setSavingVersion(false)
     }
@@ -594,30 +595,12 @@ export function DaemonDocumentPage({
     return <LoadDegradedView message={pageState.message} />
   }
 
-  const versionPanelExtra = canvas ? (
-    <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
-      <button
-        type="button"
-        onClick={() => void saveVersion()}
-        disabled={savingVersion}
-        className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
-      >
-        {savingVersion ? 'Saving…' : 'Save version'}
-      </button>
-      {saveVersionMessage && (
-        <span
-          role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
-          aria-live="polite"
-          className={
-            saveVersionMessage.kind === 'error'
-              ? 'text-xs text-destructive'
-              : 'text-xs text-muted-foreground'
-          }
-        >
-          {saveVersionMessage.text}
-        </span>
-      )}
-    </div>
+  const versionHeaderActions = canvas ? (
+    <SaveVersionAction
+      saving={savingVersion}
+      outcome={saveVersionOutcome}
+      onSave={() => void saveVersion()}
+    />
   ) : null
 
   return (
@@ -854,7 +837,7 @@ export function DaemonDocumentPage({
                         path: canvas.path,
                         onRestored: clearLocalUndo,
                         refreshSignal: versionRefreshSignal,
-                        versionPanelExtra,
+                        headerActions: versionHeaderActions,
                       }
                     : undefined,
                 }}

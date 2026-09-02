@@ -36,7 +36,7 @@ export interface HistoryClusterVersionsProps {
   readonly capabilities?: VersionTimelineCapabilities
   readonly onRestored?: () => void
   readonly refreshSignal?: number
-  readonly versionPanelExtra?: ReactNode
+  readonly headerActions?: ReactNode
 }
 
 export interface HistoryClusterProps {
@@ -181,7 +181,7 @@ export function HistoryCluster({
                 capabilities={versions.capabilities}
                 onRestored={versions.onRestored}
                 refreshSignal={versions.refreshSignal}
-                versionPanelExtra={versions.versionPanelExtra}
+                headerActions={versions.headerActions}
               />
             </div>
           )}
