@@ -1,3 +1,10 @@
+export {
+  migrateCanvasCommentsToThreads,
+  readCommentThreads,
+  setCommentThreadStatus,
+  writeCommentThread,
+  writeThreadMessage,
+} from './comment-threads.js'
 export { collectImageRefIds } from './image-refs.js'
 export type { DocumentContainers } from './loro-bridge.js'
 export {
