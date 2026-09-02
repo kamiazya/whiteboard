@@ -71,4 +71,35 @@ describe('waitForMarkdownSaved', () => {
     set(chip, 'pending', null)
     await expect(waitForMarkdownSaved(300)).rejects.toThrow()
   })
+
+  /**
+   * The hole the settle window cannot close, and the CI failure that found
+   * it: the trailing keystrokes' commit reached the doc, but the delivery
+   * that ARMS the next save arrived later than the window — so the indicator
+   * sat on the partial write, unchanged, for the whole of it. A wait built
+   * out of a fixed duration cannot tell that apart from a finished document,
+   * however long the duration is.
+   */
+  it('with an anchor: refuses a write that completed BEFORE the last keystroke', async () => {
+    const chip = mountChip()
+    set(chip, 'saved', PARTIAL_AT)
+    const typedAt = Date.parse(PARTIAL_AT) + 1
+
+    // Nothing re-arms for well over the old settle window — exactly what the
+    // failing run observed.
+    setTimeout(() => set(chip, 'saved', FULL_AT), SAVE_DEBOUNCE_MS * 5)
+
+    await expect(waitForMarkdownSaved({ since: typedAt })).resolves.toBe(FULL_AT)
+  })
+
+  it('with an anchor: settles at once on a write that already covers the typing', async () => {
+    const chip = mountChip()
+    set(chip, 'saved', FULL_AT)
+    const started = Date.now()
+
+    await expect(waitForMarkdownSaved({ since: Date.parse(FULL_AT) - 1000 })).resolves.toBe(FULL_AT)
+    // No settle sleep in anchored mode: the timestamp IS the proof, so the
+    // wait must not spend a debounce period re-confirming it.
+    expect(Date.now() - started).toBeLessThan(SAVE_DEBOUNCE_MS)
+  })
 })

@@ -1,3 +1,4 @@
+import { movesForPathChange } from '@kamiazya/whiteboard-codec'
 import {
   deriveWorkspaceSegment,
   generateDocumentId,
@@ -13,6 +14,7 @@ import {
   WorkspaceSegmentTakenError,
 } from '@kamiazya/whiteboard-ports'
 import {
+  followReferencesAfterRename,
   type ServerDeps,
   wbDocumentCreate,
   wbDocumentDelete,
@@ -449,7 +451,37 @@ export function createWorkspacesRouter(options: WorkspacesRouterOptions = {}) {
       }
       try {
         const deps = options.serverDeps ?? (await getDefaultServerDeps())
+        // The listing BEFORE the move is the table the old path resolved
+        // against; the follow pass needs it and only this side of the
+        // mutation can take it.
+        const entriesBefore = await deps.documentIndex.listDocuments({ workspaceId })
         await deps.documentIndex.moveDocument({ workspaceId, from: path, to: newPath })
+        // References written to the old paths follow the move — every path
+        // the SUBTREE carried, not just the root, which is why the moves are
+        // derived rather than written here. The rename itself already
+        // stands, so a follow failure is a log line and a partially repaired
+        // workspace, never a failed rename.
+        const moves = movesForPathChange(entriesBefore, path, newPath)
+        if (moves.length > 0) {
+          try {
+            const follow = await followReferencesAfterRename(deps, {
+              workspaceId,
+              entriesBefore,
+              moves,
+            })
+            if (follow.failedDocumentIds.length > 0) {
+              getLogger('document').warning(
+                { workspaceId, from: path, to: newPath, failed: follow.failedDocumentIds },
+                'rename followed references, but some documents could not be rewritten',
+              )
+            }
+          } catch (err) {
+            getLogger('document').warning(
+              { workspaceId, from: path, to: newPath, err },
+              'rename succeeded but the reference follow pass failed',
+            )
+          }
+        }
         const response: RenameDocumentPathResponse = { path: newPath }
         return c.json(response)
       } catch (err) {

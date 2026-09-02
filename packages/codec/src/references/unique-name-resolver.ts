@@ -20,7 +20,11 @@ export interface UniqueNameEntry {
 export function createUniqueNameResolver(entries: readonly UniqueNameEntry[]): AliasResolver {
   const byName = new Map<string, string | null>()
   for (const entry of entries) {
-    byName.set(entry.name, byName.has(entry.name) ? null : entry.id)
+    const prev = byName.get(entry.name)
+    // Uniqueness counts OWNERS, not claims: callers feed a path entry and a
+    // name entry per document, so a document named exactly its own path is
+    // one owner arriving twice — still a link, not an ambiguity.
+    byName.set(entry.name, prev === undefined || prev === entry.id ? entry.id : null)
   }
   return (alias) => byName.get(alias) ?? null
 }

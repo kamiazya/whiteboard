@@ -735,6 +735,39 @@ describe('comment commands', () => {
 
     expect(applyCommand(canvas, { kind: 'set-comment-text', id: 'ghost', text: 'x' })).toBe(canvas)
   })
+
+  it('move-comment rewrites only the target anchor; a missing id is a no-op', () => {
+    const canvas: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+    }
+    const next = applyCommand(canvas, { kind: 'move-comment', id: 'c1', x: 300, y: -40 })
+    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c1')).toEqual({
+      ...COMMENT,
+      x: 300,
+      y: -40,
+    })
+    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
+    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(next.nodes).toBe(canvas.nodes)
+
+    expect(applyCommand(canvas, { kind: 'move-comment', id: 'ghost', x: 1, y: 1 })).toBe(canvas)
+  })
+
+  it('set-comment-text rewrites only the target text; a missing id is a no-op', () => {
+    const canvas: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { comments: [COMMENT, OTHER] },
+    }
+    const next = applyCommand(canvas, { kind: 'set-comment-text', id: 'c2', text: 'nicer' })
+    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual({
+      ...OTHER,
+      text: 'nicer',
+    })
+    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c1')).toEqual(COMMENT)
+
+    expect(applyCommand(canvas, { kind: 'set-comment-text', id: 'ghost', text: 'x' })).toBe(canvas)
+  })
 })
 
 // The routing style belongs to the canvas, so the command that sets it names

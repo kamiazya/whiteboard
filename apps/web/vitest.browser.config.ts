@@ -119,6 +119,9 @@ export default defineConfig({
     // Every browser test renders against the app's real stylesheet — see
     // browser-setup.ts for what silently breaks without it.
     setupFiles: ['./src/test-utils/browser-setup.ts'],
-    browser: sharedBrowserTestConfig({ viewport: { width: 1280, height: 900 } }),
+    browser: sharedBrowserTestConfig({
+      viewport: { width: 1280, height: 900 },
+      projectRoot: import.meta.dirname,
+    }),
   },
 })
