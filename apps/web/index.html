@@ -8,10 +8,20 @@
       input; Safari's pinch itself is cancelled in mobile-app-shell.ts),
       viewport-fit=cover so the installed PWA extends under the notch/home
       indicator with index.css's safe-area padding taking over.
+
+      interactive-widget=resizes-content asks the browser to shrink the LAYOUT
+      viewport when the on-screen keyboard opens, not merely the visual one.
+      That is what lets a keyboard-docked strip sit at `bottom: 0` and be held
+      there by the browser, instead of by a script chasing the visual
+      viewport a frame at a time (see lib/software-keyboard.ts for what that
+      chase costs). Chrome 108+ and Firefox 132+ honour it; WebKit has not
+      implemented it (bugs.webkit.org 259770), and an engine that does not
+      understand the key ignores it, which leaves iOS on the fallback path
+      rather than breaking it.
     -->
     <meta
       name="viewport"
-      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover"
+      content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover, interactive-widget=resizes-content"
     />
     <title>Whiteboard</title>
     <meta

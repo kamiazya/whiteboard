@@ -41,10 +41,10 @@ function canvasWithNodeAt(y: number): SpatialCanvas {
   }
 }
 
-function Host({ start }: { start: SpatialCanvas }) {
+function Host({ start, height = 600 }: { start: SpatialCanvas; height?: number }) {
   const [canvas, setCanvas] = useState<SpatialCanvas>(start)
   return (
-    <div style={{ width: 800, height: 600 }}>
+    <div style={{ width: 800, height }}>
       <SpatialEditor
         defaultTool="select"
         canvas={canvas}
@@ -132,6 +132,35 @@ it('on a coarse pointer also clears the formatting bar riding on the keyboard', 
     const { container } = render(<Host start={canvasWithNodeAt(400)} />)
     await startEditing(container, { x: 200, y: 450 })
     raiseKeyboard(fake, rootOf(container), 300)
+    const dy = 500 + EXIT_HINT_ALLOWANCE_PX - (300 - TOUCH_BAR_HEIGHT_PX - PAN_MARGIN_PX)
+    await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
+  } finally {
+    window.matchMedia = realMatchMedia
+  }
+})
+
+it('pans when the keyboard shrank the layout viewport instead of occluding it', async () => {
+  // `interactive-widget=resizes-content` (index.html) makes Chrome and
+  // Firefox shrink the LAYOUT viewport for the keyboard. The keyboard then
+  // occludes nothing and reads as absent from every signal a page has —
+  // while having taken half the canvas away. The edited node still has to be
+  // brought back into what is left, so the pan cannot be gated on occlusion.
+  const realMatchMedia = window.matchMedia
+  window.matchMedia = (query: string) =>
+    query === '(pointer: coarse)'
+      ? ({ matches: true, media: query } as MediaQueryList)
+      : realMatchMedia.call(window, query)
+  try {
+    installFakeVisualViewport()
+    const { container, rerender } = render(<Host start={canvasWithNodeAt(400)} />)
+    await startEditing(container, { x: 200, y: 450 })
+    expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
+
+    // The whole viewport shrinks: the container with it, and the fake visual
+    // viewport to match, so occlusion stays exactly zero throughout.
+    rerender(<Host start={canvasWithNodeAt(400)} height={300} />)
+    window.dispatchEvent(new Event('resize'))
+
     const dy = 500 + EXIT_HINT_ALLOWANCE_PX - (300 - TOUCH_BAR_HEIGHT_PX - PAN_MARGIN_PX)
     await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
   } finally {

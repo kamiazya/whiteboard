@@ -1,7 +1,10 @@
-// The keyboard-docked formatting bar: shown only on a coarse pointer, while
-// a markdown editor holds the caret, and while the software keyboard
-// occludes the layout viewport. Chromium cannot raise a keyboard, so a fake
-// visualViewport stands in (the same stand-in keyboard-avoidance uses).
+// The keyboard-docked formatting bar: shown on a coarse pointer while a
+// markdown editor holds the caret, docked to the window's bottom and lifted
+// onto the keyboard's edge by however much of the window the keyboard covers.
+// Chromium cannot raise a keyboard, so a fake visualViewport stands in (the
+// same stand-in keyboard-avoidance uses). A lift of zero is also the shape
+// `interactive-widget=resizes-content` produces on Chrome and Firefox, where
+// the layout viewport shrinks instead and the keyboard occludes nothing.
 import { cleanup, render, screen } from '@testing-library/react'
 import { afterEach, beforeEach, expect, it, vi } from 'vitest'
 import { page, userEvent } from 'vitest/browser'
@@ -67,6 +70,8 @@ it('follows the visual viewport panning even when no scroll event fires', async 
   // event once the fling settles, not per frame — so a bar that waits to be
   // TOLD where the edge is stays where the pan began, which is under the
   // keyboard. Panning with no event at all is that case at its limit.
+  // (Where it ends up matters even though it is hidden mid-pan: it is what
+  // the strip fades back in onto.)
   fake.offsetTop = 120
   await vi.waitFor(() =>
     expect((bar() as HTMLElement).getBoundingClientRect().bottom).toBeCloseTo(
@@ -76,7 +81,7 @@ it('follows the visual viewport panning even when no scroll event fires', async 
   )
 })
 
-it('appears glued to the visual viewport bottom once a node editor has focus and the keyboard is up', async () => {
+it('docks to the window bottom on focus, then lifts onto the keyboard and back', async () => {
   render(
     <>
       <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
@@ -84,16 +89,54 @@ it('appears glued to the visual viewport bottom once a node editor has focus and
     </>,
   )
   await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
-  expect(bar()).toBeNull()
+
+  // No lift yet — which is also, permanently, the resizes-content case.
+  await vi.waitFor(() => expect(bar()).not.toBeNull())
+  const docked = (bar() as HTMLElement).getBoundingClientRect()
+  expect(docked.bottom).toBeCloseTo(window.innerHeight, 0)
+  expect(docked.height).toBe(TOUCH_BAR_HEIGHT_PX)
 
   raiseKeyboard(300)
-  await vi.waitFor(() => expect(bar()).not.toBeNull())
-  const rect = (bar() as HTMLElement).getBoundingClientRect()
-  expect(rect.bottom).toBeCloseTo(window.innerHeight - 300, 0)
-  expect(rect.height).toBe(TOUCH_BAR_HEIGHT_PX)
+  await vi.waitFor(() =>
+    expect((bar() as HTMLElement).getBoundingClientRect().bottom).toBeCloseTo(
+      window.innerHeight - 300,
+      0,
+    ),
+  )
 
   raiseKeyboard(0)
-  await vi.waitFor(() => expect(bar()).toBeNull())
+  await vi.waitFor(() =>
+    expect((bar() as HTMLElement).getBoundingClientRect().bottom).toBeCloseTo(
+      window.innerHeight,
+      0,
+    ),
+  )
+})
+
+it('steps aside while the visual viewport is panning and returns once it stops', async () => {
+  render(
+    <>
+      <MarkdownNodeEditor box={BOX} initialText="hello" onCommit={vi.fn()} onCancel={vi.fn()} />
+      <TouchFormattingBar />
+    </>,
+  )
+  await vi.waitFor(() => expect(document.activeElement?.closest('.cm-editor')).not.toBeNull())
+  raiseKeyboard(300)
+  await vi.waitFor(() => expect(bar()?.style.opacity).toBe('1'))
+
+  // iOS pans the visual viewport on the compositor, so a main-thread read of
+  // where it is is itself behind — reading per frame narrows the gap and
+  // cannot close it. A strip trailing the keyboard's edge reads as broken;
+  // one that stands down for the scroll reads as deliberate.
+  for (let step = 1; step <= 4; step++) {
+    fake.offsetTop = step * 20
+    await new Promise((resolve) => requestAnimationFrame(resolve))
+  }
+  expect(bar()?.style.opacity).toBe('0')
+  expect(bar()?.style.pointerEvents).toBe('none')
+
+  await vi.waitFor(() => expect(bar()?.style.opacity).toBe('1'))
+  expect(bar()?.style.pointerEvents).not.toBe('none')
 })
 
 it('tapping Bold wraps the caret word without committing the editor', async () => {
