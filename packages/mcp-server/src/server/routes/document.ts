@@ -68,7 +68,13 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
       ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
     }),
   )
-  app.route('/', createWorkspaceDocumentRouter({ triggerAutoVersion }))
+  app.route(
+    '/',
+    createWorkspaceDocumentRouter({
+      triggerAutoVersion,
+      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+    }),
+  )
   app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())
