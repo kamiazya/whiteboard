@@ -102,8 +102,8 @@ Do **not** delete anything automatically. Always confirm with the user before ca
   rather than silently cascading, so report the blocker back to the user instead of retrying
   differently.
 - Deletion is not recoverable through these tools beyond a document's own saved versions
-  (`wb_version_list` / `wb_version_restore`), and those do not survive the document itself being
-  deleted.
+  (`wb_version_list` / `wb_version_restore`) — the same history the History panel shows — and
+  those do not survive the document itself being deleted.
 - This skill has no bulk operation: auditing N documents means N `wb_document_get` /
   `wb_canvas_snapshot` calls. For a very large workspace, sample rather than exhaustively walking
   every document.
