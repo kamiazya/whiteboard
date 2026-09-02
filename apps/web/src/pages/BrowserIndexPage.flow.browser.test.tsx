@@ -109,9 +109,19 @@ describe('browser list landing (browser — real IndexedDB)', () => {
     // below dropped the rest — `expected '# From t' to contain
     // '# From the list'`.
     const typedAt = Date.now()
-    await waitFor(() => {
-      expect(document.querySelector('.cm-content')?.textContent).toBe('# From the list')
-    })
+    // The only wait in this file that was left on testing-library's 1000ms
+    // default, and the one that failed on CI: `Expected: "# From the list" /
+    // Received: "# F"`. `userEvent.keyboard` awaits each key's DISPATCH,
+    // while CodeMirror renders the resulting text afterwards, so under a
+    // loaded runner three characters had landed when the budget expired. The
+    // assertion is unchanged — every keystroke still has to arrive; only the
+    // budget matches the ten waits around it.
+    await waitFor(
+      () => {
+        expect(document.querySelector('.cm-content')?.textContent).toBe('# From the list')
+      },
+      { timeout: 15_000 },
+    )
     await waitForMarkdownSaved({ since: typedAt })
 
     // Back again: both documents listed, the note marked as markdown.
