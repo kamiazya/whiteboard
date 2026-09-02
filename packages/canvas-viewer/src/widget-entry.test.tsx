@@ -9,16 +9,22 @@ interface FakeAppInstance {
   ontoolresult?: (result: unknown) => void
   connect: () => Promise<void>
   callServerTool: (params: unknown) => Promise<unknown>
-  getHostCapabilities: () => { serverTools?: Record<string, unknown> } | undefined
+  sendMessage: (params: unknown) => Promise<unknown>
+  getHostCapabilities: () =>
+    | { serverTools?: Record<string, unknown>; message?: Record<string, unknown> }
+    | undefined
 }
 
 const connectMock = vi.fn()
 const callServerToolMock = vi.fn()
+const sendMessageMock = vi.fn()
 const fakeAppInstances: FakeAppInstance[] = []
 // Real hosts advertise this via the ext-apps handshake; defaulting to
 // "supported" here keeps the existing Refresh-flow tests focused on the
 // connect()/tool-result behavior they exist to cover. Tests for the
-// capability gate itself override this per-case.
+// capability gates themselves override this per-case; `message` (the
+// sendMessage capability) is deliberately absent by default, so the
+// baseline flow tests also pin "no capability, no sendMessage".
 let getHostCapabilitiesMock: FakeAppInstance['getHostCapabilities'] = () => ({ serverTools: {} })
 
 vi.mock('@modelcontextprotocol/ext-apps', () => ({
@@ -26,19 +32,37 @@ vi.mock('@modelcontextprotocol/ext-apps', () => ({
     fakeAppInstances.push(this)
     this.connect = connectMock
     this.callServerTool = callServerToolMock
+    this.sendMessage = sendMessageMock
     this.getHostCapabilities = () => getHostCapabilitiesMock()
   }),
 }))
 
 const REFRESH_SELECTOR = '[data-testid="widget-refresh"]'
-const STICKY_FORM_SELECTOR = '[data-testid="widget-sticky-note"]'
+const COMMENT_FORM_SELECTOR = '[data-testid="widget-comment"]'
 
 function queryRefreshButton(): HTMLButtonElement | null {
   return document.querySelector(REFRESH_SELECTOR)
 }
 
-function queryStickyForm(): HTMLFormElement | null {
-  return document.querySelector(STICKY_FORM_SELECTOR)
+function queryCommentForm(): HTMLFormElement | null {
+  return document.querySelector(COMMENT_FORM_SELECTOR)
+}
+
+// The real mount is mocked, so no SVG exists for the click-to-anchor path to
+// hit-test against. This installs one shaped like the widget's real render:
+// the legacy bodyless-root form (no viewBox), where one SVG user unit is one
+// CSS pixel from the element's own corner.
+function installFakeSvg(rect: { left: number; top: number }): SVGSVGElement {
+  const container = document.getElementById('root') as HTMLElement
+  const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  svg.getBoundingClientRect = () =>
+    ({ left: rect.left, top: rect.top, width: 300, height: 150 }) as DOMRect
+  container.appendChild(svg)
+  return svg
+}
+
+function clickCanvas(svg: SVGSVGElement, clientX: number, clientY: number): void {
+  svg.dispatchEvent(new MouseEvent('click', { clientX, clientY, bubbles: true }))
 }
 
 vi.mock('./mount.js', () => ({
@@ -81,6 +105,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     fakeAppInstances.length = 0
     connectMock.mockReset()
     callServerToolMock.mockReset()
+    sendMessageMock.mockReset()
     getHostCapabilitiesMock = () => ({ serverTools: {} })
     // The mount.js mock module instance persists across vi.resetModules()
     // calls (only the real module graph is reset), so its call history
@@ -403,7 +428,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     expect(opts?.references).toBeUndefined()
   })
 
-  it('reveals the sticky-note control behind the same gate as Refresh', async () => {
+  it('reveals the comment control behind the same gate as Refresh', async () => {
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)
 
@@ -412,7 +437,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     // Connected + serverTools, but nothing committed yet: mounted, hidden.
-    const beforeResult = queryStickyForm()
+    const beforeResult = queryCommentForm()
     if (beforeResult) {
       expect(beforeResult.style.display).toBe('none')
     }
@@ -426,7 +451,7 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
     await Promise.resolve()
 
-    expect(queryStickyForm()?.style.display).toBe('flex')
+    expect(queryCommentForm()?.style.display).toBe('flex')
   })
 
   it('reveals neither control from a validated result that carries no workspaceId', async () => {
@@ -449,10 +474,10 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     await Promise.resolve()
 
     expect(queryRefreshButton()?.style.display).toBe('none')
-    expect(queryStickyForm()?.style.display).toBe('none')
+    expect(queryCommentForm()?.style.display).toBe('none')
   })
 
-  it('submitting a sticky note appends a text node via wb_canvas_edit, clears the input, and refreshes', async () => {
+  it('submit stays disabled until a canvas click picks an anchor', async () => {
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)
 
@@ -466,46 +491,177 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
     })
+    await Promise.resolve()
 
-    const scene2 = {
-      nodes: [{ id: 'b', type: 'text', x: 0, y: 0, width: 10, height: 10, text: 'hello note' }],
+    const form = queryCommentForm() as HTMLFormElement
+    const submit = form.querySelector<HTMLButtonElement>('[data-testid="widget-comment-submit"]')!
+    // A comment is ABOUT a spot; without one there is nothing valid to send
+    // (the server refuses an anchorless comment), so the affordance says so
+    // instead of offering a submit that can only fail.
+    expect(submit.disabled).toBe(true)
+
+    const svg = installFakeSvg({ left: 10, top: 20 })
+    clickCanvas(svg, 110, 80)
+    expect(submit.disabled).toBe(false)
+    expect(
+      form.querySelector('[data-testid="widget-comment-anchor"]')?.textContent ?? '',
+    ).toContain('(100, 60)')
+  })
+
+  it('submitting a comment sends comment.add with the clicked anchor, clears, and refreshes', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 90, y: 50, width: 40, height: 30, text: '' }],
     }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+    await Promise.resolve()
+
     callServerToolMock
       .mockResolvedValueOnce({ structuredContent: { documentId: 'ws/path', applied: 1 } })
       .mockResolvedValueOnce({
-        structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene: scene2 },
+        structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
       })
 
-    const form = queryStickyForm() as HTMLFormElement
-    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-sticky-note-input"]')!
-    input.value = '  hello note  '
+    // Click lands INSIDE node "a" (canvas point 100,60), so the comment also
+    // names it as its target and the pin will follow that node.
+    const svg = installFakeSvg({ left: 10, top: 20 })
+    clickCanvas(svg, 110, 80)
+
+    const form = queryCommentForm() as HTMLFormElement
+    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-comment-input"]')!
+    input.value = '  move this left  '
     form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
     await Promise.resolve()
     await Promise.resolve()
     await Promise.resolve()
     await Promise.resolve()
 
-    // Trimmed text, no geometry: wb_canvas_edit's own auto-placement
-    // positions a node that names none.
     expect(callServerToolMock).toHaveBeenNthCalledWith(1, {
       name: 'wb_canvas_edit',
       arguments: {
         workspaceId: 'ws-1',
         documentId: 'ws/path',
-        ops: [{ op: 'node.add', node: { type: 'text', text: 'hello note' } }],
+        ops: [
+          {
+            op: 'comment.add',
+            comment: { x: 100, y: 60, targetNodeId: 'a', text: 'move this left' },
+          },
+        ],
       },
     })
-    // The follow-up refresh reads the canvas back through canvas_view.
     expect(callServerToolMock).toHaveBeenNthCalledWith(2, {
       name: 'canvas_view',
       arguments: { workspaceId: 'ws-1', documentId: 'ws/path' },
     })
-    // Cleared on WRITE success: the note is committed server-side, and a
-    // kept text would invite a duplicate resubmit if only the refresh failed.
+    // Cleared on WRITE success, and the anchor resets so the next comment
+    // has to point at its own spot.
+    expect(input.value).toBe('')
+    const submit = form.querySelector<HTMLButtonElement>('[data-testid="widget-comment-submit"]')!
+    expect(submit.disabled).toBe(true)
+    // No `message` capability in the default fake host: nothing is injected
+    // into the conversation.
+    expect(sendMessageMock).not.toHaveBeenCalled()
+  })
+
+  it('delivers the comment to the model via sendMessage when the host advertises it', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    getHostCapabilitiesMock = () => ({ serverTools: {}, message: {} })
+    sendMessageMock.mockResolvedValue({})
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+    await Promise.resolve()
+
+    callServerToolMock
+      .mockResolvedValueOnce({ structuredContent: { documentId: 'ws/path', applied: 1 } })
+      .mockResolvedValueOnce({
+        structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+      })
+
+    const svg = installFakeSvg({ left: 0, top: 0 })
+    clickCanvas(svg, 400, 60)
+
+    const form = queryCommentForm() as HTMLFormElement
+    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-comment-input"]')!
+    input.value = 'この矢印は逆では?'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // A user-role message that carries the comment and its anchor, so the
+    // model responds to the feedback instead of waiting for its next read.
+    expect(sendMessageMock).toHaveBeenCalledTimes(1)
+    const params = sendMessageMock.mock.calls[0]?.[0] as {
+      role: string
+      content: { type: string; text: string }[]
+    }
+    expect(params.role).toBe('user')
+    expect(params.content[0]?.text).toContain('この矢印は逆では?')
+    expect(params.content[0]?.text).toContain('(400, 60)')
+  })
+
+  it('a failed sendMessage never loses the comment — the write already landed', async () => {
+    stubEmbeddedIframeParent()
+    connectMock.mockImplementation(async () => undefined)
+    getHostCapabilitiesMock = () => ({ serverTools: {}, message: {} })
+    sendMessageMock.mockRejectedValue(new Error('host refused'))
+
+    await importFreshWidgetEntry()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    const scene = {
+      nodes: [{ id: 'a', type: 'text', x: 0, y: 0, width: 10, height: 10, text: '' }],
+    }
+    fakeAppInstances[0].ontoolresult?.({
+      structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+    })
+    await Promise.resolve()
+
+    callServerToolMock
+      .mockResolvedValueOnce({ structuredContent: { documentId: 'ws/path', applied: 1 } })
+      .mockResolvedValueOnce({
+        structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
+      })
+
+    const svg = installFakeSvg({ left: 0, top: 0 })
+    clickCanvas(svg, 30, 40)
+    const form = queryCommentForm() as HTMLFormElement
+    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-comment-input"]')!
+    input.value = 'kept'
+    form.dispatchEvent(new Event('submit', { bubbles: true, cancelable: true }))
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+    await Promise.resolve()
+
+    // The comment reached the document (write + refresh both ran); only the
+    // immediate model wake-up was lost, and the model still sees the comment
+    // on its next read.
+    expect(callServerToolMock).toHaveBeenCalledTimes(2)
     expect(input.value).toBe('')
   })
 
-  it('keeps the sticky text for retry when the append is refused or the transport fails', async () => {
+  it('keeps the comment text and anchor for retry when the write is refused or fails', async () => {
     stubEmbeddedIframeParent()
     connectMock.mockImplementation(async () => undefined)
 
@@ -519,12 +675,14 @@ describe('widget-entry MCP Apps bridge bootstrap', () => {
     fakeAppInstances[0].ontoolresult?.({
       structuredContent: { workspaceId: 'ws-1', documentId: 'ws/path', scene },
     })
+    await Promise.resolve()
 
-    const form = queryStickyForm() as HTMLFormElement
-    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-sticky-note-input"]')!
-    const submit = form.querySelector<HTMLButtonElement>(
-      '[data-testid="widget-sticky-note-submit"]',
-    )!
+    const svg = installFakeSvg({ left: 0, top: 0 })
+    clickCanvas(svg, 50, 70)
+
+    const form = queryCommentForm() as HTMLFormElement
+    const input = form.querySelector<HTMLInputElement>('[data-testid="widget-comment-input"]')!
+    const submit = form.querySelector<HTMLButtonElement>('[data-testid="widget-comment-submit"]')!
 
     // The ext-apps host resolves a server-side handler exception as
     // {isError: true} rather than rejecting — both shapes must keep the text.
@@ -875,8 +1033,8 @@ describe('widget-entry append-only invariant', () => {
     ].join('\n')
 
     // The widget's whole outbound surface: re-reading the canvas it shows
-    // (canvas_view) and appending one sticky-note text node (wb_canvas_edit,
-    // reached only from the sticky submit path). Anything else a widget
+    // (canvas_view) and writing one comment (wb_canvas_edit, reached only
+    // from the comment submit path). Anything else a widget
     // source calls is a widening someone must do here deliberately, not by
     // accident — the old `annotate` call outlived its tool exactly that way.
     const allowlist = new Set(['canvas_view', 'wb_canvas_edit'])

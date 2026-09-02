@@ -33,7 +33,8 @@ paths:
   thrown `ViewerSceneError` at this one imperative boundary.
 - `widget/`: the self-contained single-file MCP Apps widget build —
   build-time font embedding (`build-fonts-module.ts`), the widget entry
-  bootstrap, refresh/sticky-note controls.
+  bootstrap, the refresh/comment controls, and the click-to-canvas-point
+  mapping (`canvas-point.ts`).
 
 ## What does NOT belong here
 
@@ -42,11 +43,15 @@ paths:
 - OKF/JSON Canvas parsing internals — this package calls into
   `codec`'s `parseSpatial`/`serializeSpatial`, it does not
   reimplement them.
-- Any editing affordance beyond the widget's append-only sticky note — the
-  viewer itself is read-only, and the widget's one write goes through the
-  host session to `wb_canvas_edit` (widget-entry.test.tsx pins the
-  callServerTool allowlist to exactly `canvas_view` + `wb_canvas_edit`).
-  Real editing lives in `apps/web`'s editor surfaces.
+- Any editing affordance beyond the widget's comment (ADR-0024: click to
+  pick an anchor, submit one `comment.add`) — the viewer itself is
+  read-only, and the widget's one write goes through the host session to
+  `wb_canvas_edit` (widget-entry.test.tsx pins the callServerTool allowlist
+  to exactly `canvas_view` + `wb_canvas_edit`). Real editing lives in
+  `apps/web`'s editor surfaces. The comment's DELIVERY half (ext-apps
+  `sendMessage`, gated on the host's `message` capability) injects a
+  user-role message so the model acts on the feedback; it never widens the
+  tool allowlist.
 - Node/CLI/daemon code — this is a browser-runtime UI package.
 
 ## Dependency rules
