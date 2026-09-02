@@ -1,7 +1,7 @@
 import type { CanvasComment, ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
-import { applyCommand, buildFragmentInsertCommand } from './commands.js'
+import { applyCommand, buildFragmentInsertCommand, type EditorCommand } from './commands.js'
 
 function baseCanvas(): SpatialCanvas {
   return {
@@ -694,34 +694,13 @@ describe('comment commands', () => {
     ).toBe(canvas)
   })
 
-  it('delete-comment removes exactly one comment; the last removal drops the comments key and an empty extension disappears', () => {
-    const withBoth: SpatialCanvas = {
-      ...baseCanvas(),
-      'x-whiteboard': { comments: [COMMENT, OTHER] },
-    }
-    const afterOne = applyCommand(withBoth, { kind: 'delete-comment', id: 'c1' })
-    expect(afterOne['x-whiteboard']?.comments).toEqual([OTHER])
-
-    const afterBoth = applyCommand(afterOne, { kind: 'delete-comment', id: 'c2' })
-    expect(afterBoth).not.toHaveProperty('x-whiteboard')
-    expect(spatialCanvasSchema.safeParse(afterBoth).success).toBe(true)
-
-    expect(applyCommand(afterBoth, { kind: 'delete-comment', id: 'ghost' })).toBe(afterBoth)
-  })
-
-  it('delete-comment preserves a sibling extension field (edgeRouting), including once the last comment is removed', () => {
-    const withBoth: SpatialCanvas = {
-      ...baseCanvas(),
-      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
-    }
-    const afterOne = applyCommand(withBoth, { kind: 'delete-comment', id: 'c1' })
-    expect(afterOne['x-whiteboard']?.comments).toEqual([OTHER])
-    expect(afterOne['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
-
-    const afterBoth = applyCommand(afterOne, { kind: 'delete-comment', id: 'c2' })
-    expect(afterBoth['x-whiteboard']).not.toHaveProperty('comments')
-    expect(afterBoth['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
-    expect(spatialCanvasSchema.safeParse(afterBoth).success).toBe(true)
+  it('there is no delete-comment verb: resolving is the only way to close a comment', () => {
+    // ADR-0025 decision 2, after the asymmetry was removed on both sides:
+    // neither the editor nor an agent can erase a comment, so the union has
+    // no removal arm. The type system is the guard.
+    // @ts-expect-error — 'delete-comment' is not an EditorCommand kind
+    const notAKind: EditorCommand['kind'] = 'delete-comment'
+    expect(notAKind).toBe('delete-comment')
   })
 
   it('move-comment rewrites only the target anchor; a missing id is a no-op', () => {

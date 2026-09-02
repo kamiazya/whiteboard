@@ -460,37 +460,6 @@ describe('createDocumentSyncSession', () => {
     expect(comments.find((c) => c.id === 'c-2')).toEqual(other)
   })
 
-  it('debounce coalescing: set-comment-resolved then delete-comment for the same id dedupes to the delete; an unrelated comment survives', async () => {
-    const backend = makeFakeBackend()
-    const session = createDocumentSyncSession(backend, makeDeps())
-    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'going away' }
-    const other: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'stays' }
-    const initial: SpatialCanvas = {
-      ...emptyCanvas(),
-      'x-whiteboard': { comments: [comment, other] },
-    }
-    session.connect()
-    const snapshotBytes = makeSnapshot(initial)
-    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
-
-    const resolveCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
-    const afterResolve = applyCommand(initial, resolveCmd)
-    session.onChange(afterResolve, resolveCmd)
-
-    const deleteCmd: EditorCommand = { kind: 'delete-comment', id: 'c-1' }
-    const afterDelete = applyCommand(afterResolve, deleteCmd)
-    session.onChange(afterDelete, deleteCmd)
-
-    await vi.advanceTimersByTimeAsync(300)
-
-    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
-    const doc = new LoroDoc()
-    doc.import(snapshotBytes)
-    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
-    const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
-    expect(comments.map((c) => c.id)).toEqual(['c-2'])
-  })
-
   it('a batch containing a comment command plus a node command commits fine-grained: a remote comment survives, one undo step', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
@@ -576,15 +545,15 @@ describe('createDocumentSyncSession', () => {
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
-  it('a batch containing set-comment-resolved and delete-comment commits fine-grained: a remote comment survives, one undo step', async () => {
+  it('a batch containing set-comment-resolved and set-comment-text commits fine-grained: a remote comment survives, one undo step', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const toResolve: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'resolve me' }
-    const toDelete: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'delete me' }
+    const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
     const initial: SpatialCanvas = {
       ...twoNodeCanvas(),
-      'x-whiteboard': { comments: [toResolve, toDelete] },
+      'x-whiteboard': { comments: [toResolve, toEdit] },
     }
     const snapshotBytes = makeSnapshot(initial)
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -601,13 +570,18 @@ describe('createDocumentSyncSession', () => {
       kind: 'batch',
       commands: [
         { kind: 'set-comment-resolved', id: 'c-1', resolved: true },
-        { kind: 'delete-comment', id: 'c-2' },
+        { kind: 'set-comment-text', id: 'c-2', text: 'edited' },
         { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
       ],
     }
     const next: SpatialCanvas = {
       ...applyCommand(initial, { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
-      'x-whiteboard': { comments: [{ ...toResolve, resolved: true }] },
+      'x-whiteboard': {
+        comments: [
+          { ...toResolve, resolved: true },
+          { ...toEdit, text: 'edited' },
+        ],
+      },
     }
     session.onChange(next, batch)
     await vi.advanceTimersByTimeAsync(300)
@@ -620,8 +594,9 @@ describe('createDocumentSyncSession', () => {
     merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
     const result = readSpatialCanvas(merged)
     const comments = result['x-whiteboard']?.comments ?? []
-    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'remote-c'])
+    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
     expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ resolved: true })
+    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ text: 'edited' })
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 

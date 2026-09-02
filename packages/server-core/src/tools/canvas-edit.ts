@@ -188,8 +188,11 @@ const canvasOpSchema = z.discriminatedUnion('op', [
     .strict(),
   /**
    * Resolution keeps the record in the document (the conversation is the
-   * point); `resolved: false` reopens. Removal is for a comment that was
-   * never worth keeping, matching the ticketing rule one level down.
+   * point); `resolved: false` reopens. There is deliberately NO remove op:
+   * resolving is the only way to close a comment, for a person in the
+   * editor and for an agent alike (ADR-0025 decision 2) — a verb one side
+   * had and the other did not would let an agent erase feedback a person
+   * could only close.
    */
   z
     .object({
@@ -198,7 +201,6 @@ const canvasOpSchema = z.discriminatedUnion('op', [
       resolved: z.boolean().optional(),
     })
     .strict(),
-  z.object({ op: z.literal('comment.remove'), id: nodeIdSchema }).strict(),
   /**
    * "This group should look like this." The ONE declarative op, and so the
    * only one that deletes something it was not told about.
@@ -310,8 +312,7 @@ function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
     else if (op.op === 'node.patch' || op.op === 'edge.patch') counts.changed += 1
     else if (op.op === 'comment.add') counts.commented += 1
     else if (op.op === 'comment.resolve') resolvedComments += 1
-    else if (op.op === 'node.remove' || op.op === 'edge.remove' || op.op === 'comment.remove')
-      counts.removed += 1
+    else if (op.op === 'node.remove' || op.op === 'edge.remove') counts.removed += 1
     else if (op.op === 'node.lock' || op.op === 'edge.lock') {
       if (op.locked) counts.locked += 1
       else counts.unlocked += 1
@@ -433,7 +434,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_edit' as const,
     description:
-      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add, resolve or remove comments (the annotation layer). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again.',
+      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add or resolve comments (the annotation layer; comments are closed, never removed). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again.',
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
@@ -831,15 +832,6 @@ export function createCanvasEditTool(deps: ServerDeps) {
             comments = comments.map((comment) =>
               comment.id === op.id ? { ...comment, resolved } : comment,
             )
-            touchedComments.add(op.id)
-            return
-          }
-
-          case 'comment.remove': {
-            if (!comments.some((comment) => comment.id === op.id)) {
-              fail(index, op.op, `comment "${op.id}" is not on the canvas`)
-            }
-            comments = comments.filter((comment) => comment.id !== op.id)
             touchedComments.add(op.id)
             return
           }

@@ -177,11 +177,6 @@ export type EditorLeafCommand =
       readonly resolved: boolean
     }
   | {
-      // Removes one comment. A missing id is a no-op.
-      readonly kind: 'delete-comment'
-      readonly id: string
-    }
-  | {
       // Rewrites one comment's stored anchor. Meaningful for a point-anchored
       // comment; on a node-anchored one it only moves the fallback the layer
       // draws at when the target is gone. A missing id is a no-op.
@@ -620,13 +615,6 @@ function setCommentResolved(canvas: SpatialCanvas, id: string, resolved: boolean
   return patchComment(canvas, id, { resolved })
 }
 
-function deleteComment(canvas: SpatialCanvas, id: string): SpatialCanvas {
-  return withComments(canvas, (comments) => {
-    if (!comments.some((comment) => comment.id === id)) return undefined
-    return comments.filter((comment) => comment.id !== id)
-  })
-}
-
 export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): SpatialCanvas {
   switch (command.kind) {
     case 'move-node':
@@ -685,8 +673,6 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createComment(canvas, command.comment)
     case 'set-comment-resolved':
       return setCommentResolved(canvas, command.id, command.resolved)
-    case 'delete-comment':
-      return deleteComment(canvas, command.id)
     case 'move-comment':
       return patchComment(canvas, command.id, { x: command.x, y: command.y })
     case 'set-comment-text':
