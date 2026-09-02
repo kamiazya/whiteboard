@@ -7,6 +7,6 @@ export default defineProject({
   test: {
     name: 'canvas-viewer-browser',
     include: ['src/**/*.browser.test.tsx'],
-    browser: sharedBrowserTestConfig(),
+    browser: sharedBrowserTestConfig({ projectRoot: import.meta.dirname }),
   },
 })

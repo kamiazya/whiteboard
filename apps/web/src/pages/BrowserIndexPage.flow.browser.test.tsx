@@ -102,10 +102,17 @@ describe('browser list landing (browser — real IndexedDB)', () => {
       { timeout: 10_000 },
     )
     await userEvent.keyboard('# From the list')
+    // Anchored on the last keystroke, not on a settle window: the binding
+    // commits into the doc synchronously with each key, so any write that
+    // COMPLETES after this instant contains all of them. Unanchored, this
+    // wait settled on a mid-typing write under CI load and the navigation
+    // below dropped the rest — `expected '# From t' to contain
+    // '# From the list'`.
+    const typedAt = Date.now()
     await waitFor(() => {
       expect(document.querySelector('.cm-content')?.textContent).toBe('# From the list')
     })
-    await waitForMarkdownSaved()
+    await waitForMarkdownSaved({ since: typedAt })
 
     // Back again: both documents listed, the note marked as markdown.
     await router.navigate(-1)

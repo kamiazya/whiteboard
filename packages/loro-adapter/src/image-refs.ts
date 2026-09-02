@@ -6,7 +6,7 @@
  * or purged by the other.
  */
 import { imageRefId, isImageRef } from '@kamiazya/whiteboard-model'
-import type { DocumentContainers } from './loro-bridge.js'
+import type { DocumentContainers } from './containers.js'
 import { readSpatialCanvas } from './loro-bridge.js'
 
 /** Ids of every uploaded file the doc state's current model references. */

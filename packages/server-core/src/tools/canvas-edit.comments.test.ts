@@ -137,7 +137,13 @@ describe('wb_canvas_edit comment ops', () => {
       documentId: DOCUMENT_ID,
       ops: [{ op: 'comment.resolve', id: 'c1', resolved: false }],
     })
-    expect((await storedComments(store))[0]?.resolved).toBe(false)
+    // Reopened, and read back as an open comment with no `resolved` field.
+    // The thread plane stores one bit for a two-value status (ADR-0026), so
+    // the projection emits the canonical encoding of each state — and
+    // `canvasCommentSchema` already made absent and `false` the same state.
+    // Asserting the MEANING is what this test is about; the encoding is
+    // pinned by `comment-source-of-truth.test.ts`.
+    expect((await storedComments(store))[0]?.resolved).toBeFalsy()
   })
 
   test('there is no comment.remove op: the batch is refused whole and the comment stays', async () => {

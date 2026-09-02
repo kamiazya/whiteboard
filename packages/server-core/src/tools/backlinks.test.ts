@@ -43,6 +43,21 @@ async function backlinksOf(deps: ReturnType<typeof makeDeps>, documentId: string
 }
 
 describe('GET /backlinks', () => {
+  it('a document NAMED exactly its own path still receives backlinks', async () => {
+    // A path entry and a name entry both claim the alias — with ONE id, so
+    // it is unique, and the reader navigates it. The resolver used to count
+    // claims instead of owners and dropped the backlink the preview renders
+    // live. Found by the command-sequence property (seed -223444648).
+    const deps = makeDeps()
+    const { create, writeBody } = await seed(deps)
+    const twice = await create('beta/leaf', 'markdown', 'beta/leaf')
+    const source = await create('notes', 'markdown')
+    await writeBody(source.documentId, 'mention [[beta/leaf]] here.')
+
+    const out = await backlinksOf(deps, twice.documentId)
+    expect(out.backlinks.map((b) => b.documentId)).toEqual([source.documentId])
+  })
+
   it('reports an id wikilink, with a context snippet', async () => {
     const deps = makeDeps()
     const { create, target, writeBody } = await seed(deps)
