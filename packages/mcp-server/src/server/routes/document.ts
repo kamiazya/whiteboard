@@ -1,4 +1,4 @@
-import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
+import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
@@ -67,7 +67,20 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   app.route('/', createMaintenanceRouter({ versionStore }))
   app.route('/', createDocumentSvgExportRouter())
   app.route('/', createThumbnailsRouter({ versionStore }))
-  app.route('/', createRestoreRouter({ versionStore }))
+  // Restore progress goes out over the WS surface; same dynamic import as
+  // setAutoVersionTrigger above, for the same eval-order reason.
+  const restoreProgress: RestoreProgress = async (event) => {
+    const { sendRestoreEvent } = await import('./ws.js')
+    sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
+  }
+  app.route(
+    '/',
+    createRestoreRouter({
+      versionStore,
+      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+      progress: restoreProgress,
+    }),
+  )
 
   return app
 }

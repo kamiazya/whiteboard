@@ -3,6 +3,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from './ignored-document-writes.js'
 import { createInMemoryDocumentStore } from './in-memory-document-store.js'
 import { unusedDocumentTeardown } from './unused-document-teardown.js'
+import { unusedLiveDocuments } from './unused-live-documents.js'
 import { unusedVersionHistory } from './unused-version-history.js'
 
 /**
@@ -45,6 +46,7 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     documentTeardown: unusedDocumentTeardown(),
     documentWritten: ignoredDocumentWrites(),
     versions: unusedVersionHistory(),
+    liveDocuments: unusedLiveDocuments(),
     ...overrides,
   }
 }
