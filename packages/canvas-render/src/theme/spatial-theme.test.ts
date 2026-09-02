@@ -190,13 +190,30 @@ describe('createSpatialTheme', () => {
     expect(theme.resolveLabel().fill).toBe(SPATIAL_DARK_PALETTE.labelFill)
   })
 
-  it('gives the comment leader a dashed stroke in the amber ramp, both modes', () => {
+  it('dresses the comment layer as floating chrome, not as a content node', () => {
     for (const [mode, palette] of [
       ['light', SPATIAL_LIGHT_PALETTE],
       ['dark', SPATIAL_DARK_PALETTE],
     ] as const) {
-      const leader = createSpatialTheme({ mode }).resolveComment?.().leader
-      expect(leader).toEqual({
+      const comment = createSpatialTheme({ mode }).resolveComment?.()
+      // The pin: amber dot with a surface-colored ring — no authored node
+      // carries a surface ring, so the marker reads as UI, not content.
+      expect(comment?.pin).toEqual({
+        fill: palette.comment.pin.fill,
+        stroke: palette.surface,
+        strokeWidth: 2,
+        dropShadow: true,
+      })
+      // The bubble: a neutral elevated card with an amber accent border —
+      // never the amber preset tint, which is what made a comment look like
+      // a preset-3 content node.
+      expect(comment?.bubble).toEqual({
+        fill: palette.comment.bubble.fill,
+        stroke: palette.comment.bubble.stroke,
+        dropShadow: true,
+      })
+      expect(palette.comment.bubble.fill).not.toBe(palette.presets['3'].fill)
+      expect(comment?.leader).toEqual({
         stroke: palette.comment.bubble.stroke,
         strokeWidth: 1,
         strokeDasharray: '4 3',

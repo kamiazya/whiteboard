@@ -82,9 +82,20 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
       stroke: presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
     }),
     resolveSyntax: () => palette.syntax,
+    // Floating chrome, not content: shadow + neutral card + surface-ringed
+    // pin are what separate a comment from an authored amber node.
     resolveComment: () => ({
-      pin: { fill: palette.comment.pin.fill, stroke: palette.comment.pin.stroke },
-      bubble: { fill: palette.comment.bubble.fill, stroke: palette.comment.bubble.stroke },
+      pin: {
+        fill: palette.comment.pin.fill,
+        stroke: palette.comment.pin.stroke,
+        strokeWidth: 2,
+        dropShadow: true,
+      },
+      bubble: {
+        fill: palette.comment.bubble.fill,
+        stroke: palette.comment.bubble.stroke,
+        dropShadow: true,
+      },
       // The bubble's stroke color, dashed: the tie must read as comment
       // chrome, not as an authored canvas edge, and dashing is what says so
       // when a dense canvas separates pin from bubble.

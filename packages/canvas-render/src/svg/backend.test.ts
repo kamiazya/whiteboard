@@ -540,6 +540,30 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
     )
   })
 
+  it('a dropShadow shape emits the shared filter def once, referenced per shape', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'shape',
+          bbox: { x: 0, y: 0, w: 20, h: 20 },
+          radius: 10,
+          appearance: { fill: '#d97706', dropShadow: true },
+        },
+        {
+          kind: 'shape',
+          bbox: { x: 30, y: 30, w: 60, h: 24 },
+          radius: 8,
+          appearance: { fill: '#ffffff', stroke: '#d97706', dropShadow: true },
+        },
+      ],
+    }
+    const svg = renderSceneToSvg(scene)
+    expect(svg.match(/<filter /g)?.length).toBe(1)
+    expect(svg).toContain('id="wb-drop-shadow"')
+    expect(svg.match(/filter="url\(#wb-drop-shadow\)"/g)?.length).toBe(2)
+    expect(isWellFormedXmlFragment(svg)).toBe(true)
+  })
+
   it('emits stroke-dasharray presence-only, after the other paint attributes', () => {
     const scene: Scene = {
       nodes: [
