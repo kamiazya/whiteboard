@@ -1,6 +1,6 @@
 # ADR-0026: The annotation layer — one plane per document, threads, and selector anchors
 
-**Status:** Proposed — design of record for generalising comments beyond the canvas
+**Status:** Accepted — data layer first (human gate, 2026-09-02); supersedes ADR-0024 decision 2 and ADR-0025 decision 2
 
 ## Context
 
@@ -50,9 +50,21 @@ have had, now that a second format and a conversation exist.
 
 A document has **content** (what it says) and an **annotation layer** (what
 people and agents say *about* it). They are siblings under the document, not
-parent and child. Comments are never exported, never tidied, never part of what
-the document means — ADR-0024 stated those as rules; this makes them properties
-of where the data lives, which is the only way a rule like that survives.
+parent and child.
+
+> **A correction, because this ADR first got it wrong.** An earlier draft of
+> this document asserted that ADR-0024 had ruled comments "never exported".
+> It did not. ADR-0024 decision 2 deliberately put comments **in** the
+> serialized file at `x-whiteboard.comments`, with strict-mode export dropping
+> them along with the rest of the extension, and its Consequences accepted the
+> loss in as many words: *"A strict JSON Canvas export loses the conversation.
+> Accepted: strict mode is interop with consumers that could not draw it
+> anyway."* The phrase "never exported" appears only in `vocabulary.md`'s
+> **does-not-mean** column for *Comment* — a compression of ADR-0024's argument
+> against modelling a comment as a text NODE (which "would be exported as
+> content, rearranged by `tidy`, counted by every consumer"). No human decided
+> comments are never exported. Decision 1b below decides it now, for reasons
+> that are its own.
 
 **Not a facet**, and the reasons are worth writing down because the question is
 a fair one:
@@ -71,6 +83,49 @@ a fair one:
 **Not a separate document** either: it would need its own identity, its own row
 in the index, its own trash and version semantics, and every read of a document
 would become two. The plane rides the document it annotates.
+
+### 1b. The layer is keeper-side: an exported file carries content, not the conversation
+
+This **supersedes ADR-0024 decision 2**, and the reason is a requirement that
+did not exist when that decision was made rather than a principle it missed.
+
+- **A layer that lives in the canvas envelope cannot serve a document that has
+  no canvas envelope.** `x-whiteboard.comments` is a key on a JSON Canvas file;
+  a markdown document has none. Keeping it there means markdown comments need a
+  second home, which is per-format storage — the thing this whole ADR exists to
+  avoid. This is the argument that decides it.
+- It makes "an annotation is not content" a property of **where the data
+  lives** rather than a rule a reader has to remember. ADR-0024 kept the
+  separation as a convention and the file shape quietly worked against it.
+
+What this costs, stated rather than glossed:
+
+- **An exported file no longer round-trips its conversation** — in extended
+  mode as well as strict. ADR-0024 accepted that loss for strict mode; this
+  extends it to both. A user who exports a canvas, re-imports it, and expects
+  the comments back will not get them, and there is no UI today that says so.
+- **The renderer's input changes.** `layoutSpatialCanvas` reads comments off
+  `canvas['x-whiteboard'].comments` today; it will take them as an argument
+  beside the canvas instead. One seam, mechanical.
+- **`canvas_view`'s payload changes.** The widget gets comments today because
+  the tool ships the whole `SpatialCanvas` and they ride inside it. They will
+  travel beside it. Published contract, so its own increment.
+
+Portability is not abandoned, only unbundled from the content file: if carrying
+annotations with a document is later wanted, it is an explicit export of the
+layer, not a key that rides along by default. Nothing here needs that yet, so
+nothing here builds it.
+
+### 1c. On ADR-0024's "threads are a value-space extension"
+
+ADR-0024's Consequences read *"Threads (replies), mentions, and per-user read
+state are all future value-space extensions of the comment object, not new
+mechanisms."* Half of that holds and half does not, and the difference is
+decision 2. Replies really are value-space — no new container kind, no new sync
+path, no new merge story. But **anchoring and resolution move up a level**,
+from the comment to the thread, which is a reshape of the object rather than a
+field added to it. ADR-0024 did not consider that, because with one message per
+comment the two levels are indistinguishable.
 
 ### 2. A thread is the anchored unit; comments are the messages inside it
 
@@ -201,15 +256,18 @@ already gated on real identity.
 4. **MCP.** Document-scoped ops + smoke.
 
 Landing them in that order is what keeps the migration to one step: every
-increment after step 1 is written against the shape it will keep.
+increment after step 1 is written against the shape it will keep. The gate
+below chose it over landing the UI stack first, so the seven in-flight PRs wait
+on step 1 and are moved onto the new shape before they land.
 
 ## Consequences
 
 - The comment-UX work already in flight (create, edit, move, resolve, reopen,
   the resolved toggle) survives as **thread-level verbs**; what changes under
   it is the schema and the reader, not the gestures. Nothing in that work is
-  wasted, and it is the reason step 1 should not wait long — each further UI
-  increment on the old shape is another call site to move.
+  wasted — and since the gate chose to land step 1 first, those seven PRs are
+  moved onto the new shape before they merge, so no call site is migrated
+  twice.
 - `sceneDigest` already excludes comment chrome (ADR-0025 decision 5), so the
   AI-facing digest needs no change from this.
 - A document's annotation layer becomes something the workspace can count and
@@ -220,18 +278,16 @@ increment after step 1 is written against the shape it will keep.
   keyed by document, and a format that gains comments gains them by having a
   reader, not by having a schema field.
 
-## Open questions for the human gate
+## Settled by the human gate (2026-09-02)
 
-- **Does an exported file carry its conversations?** Today's canvas file does,
-  under `x-whiteboard.comments`, which contradicts ADR-0024's own "never
-  exported" and means a strict-mode export silently drops them. The choices are
-  (a) the layer is keeper-side only — a file is content, and exporting then
-  re-importing loses the conversation; or (b) an explicit sidecar projection so
-  a file can travel with its annotations when the user asks for that. This
-  changes what step 2 writes.
-- **Sequencing against the stack in flight.** Land the seven-PR comment-UX
-  stack first (it is green, its verbs survive), or hold it and put the data
-  layer underneath it first?
+- **Export: keeper-side only** — decision 1b above, with the reasoning made its
+  own rather than inherited. Raised because the user did not recognise the
+  "never exported" premise as anything they had decided; they were right, and
+  the correction is recorded in decision 1 rather than quietly fixed.
+- **Sequencing: the data layer goes first, and the comment-UX stack waits for
+  it.** The seven PRs are green and stay open; step 1 below lands underneath
+  them, then they are moved onto the new shape and land after. This trades a
+  few days of the stack sitting for the smallest migration.
 
 ## Alternatives considered
 
@@ -249,3 +305,13 @@ increment after step 1 is written against the shape it will keep.
 - **Deleting a thread whose anchor is gone** — rejected in decision 4: it makes
   editing a document destroy feedback about it, which is the one thing an
   annotation layer must not do.
+- **Keeping comments in the exported file** (ADR-0024 decision 2, extended
+  mode) — rejected in decision 1b, on one argument and not on principle: the
+  key belongs to a JSON Canvas file and a markdown document has none, so
+  keeping it forces a second home for markdown comments. Its real merit — an
+  exported canvas that round-trips its conversation — is what decision 1b gives
+  up, and says so.
+- **A sidecar file beside the export** (`.comments.json`) — not rejected,
+  deferred: it keeps portability without putting the layer back inside the
+  content, and it needs a write path, a read path and a UI that nothing today
+  asks for.
