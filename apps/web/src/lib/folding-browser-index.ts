@@ -136,8 +136,18 @@ export class FoldingBrowserIndex implements DocumentIndex {
     return this.folded
   }
 
+  /**
+   * Both halves of what a workspace IS: identity (segment, displayName) into
+   * the registry, placement into the tree. The tree index alone cannot do
+   * this — its `createWorkspace` deliberately never writes a registry row —
+   * so delegating only there created a workspace `listWorkspaces` could not
+   * report and `resolveWorkspace` could not address. The registry write is
+   * create-if-absent, so re-creating an existing workspace bare never
+   * clobbers identity it already carries.
+   */
   async createWorkspace(input: CreateWorkspaceInput): Promise<void> {
     await this.ensureFolded()
+    await this.legacy.createWorkspace(input)
     return this.inner.createWorkspace(input)
   }
 
