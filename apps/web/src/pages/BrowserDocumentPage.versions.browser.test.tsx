@@ -115,10 +115,17 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await waitFor(() => expect(within(panel).getAllByTestId('version-row')).toHaveLength(1), {
       timeout: 5000,
     })
-    expect(within(panel).getByText('Manual')).toBeInTheDocument()
-    // No auto-save promise in the browser's empty-state copy path either:
-    // one manual row, and the row says who saved it.
-    expect(within(panel).getByText(/Human/)).toBeInTheDocument()
+
+    // The panel's own button: the route a finger has, where a shortcut is
+    // nothing. Same store, same announcement, one more row.
+    await userEvent.click(within(panel).getByRole('button', { name: 'Save version' }))
+    await within(panel).findByText('Version saved.')
+    await waitFor(() => expect(within(panel).getAllByTestId('version-row')).toHaveLength(2), {
+      timeout: 5000,
+    })
+    // Both rows are manual saves by the person at this browser.
+    expect(within(panel).getAllByText('Manual')).toHaveLength(2)
+    expect(within(panel).getAllByText(/Human/)).toHaveLength(2)
 
     // The document moves on — behind the session's back, then reopened, so
     // the page under test holds the later state the way a reload would.
@@ -129,8 +136,9 @@ describe('BrowserDocumentPage version history (browser)', () => {
 
     await userEvent.click(screen.getByRole('button', { name: 'Version history' }))
     const reopened = await screen.findByTestId('history-version-panel')
-    await waitFor(() => expect(within(reopened).getAllByTestId('version-row')).toHaveLength(1))
-    const row = within(reopened).getAllByTestId('version-row')[0]
+    await waitFor(() => expect(within(reopened).getAllByTestId('version-row')).toHaveLength(2))
+    // Newest first; the OLDER row is the one holding 'first'.
+    const row = within(reopened).getAllByTestId('version-row')[1]
     const restoreTarget = row?.querySelector('button')
     if (!restoreTarget) throw new Error('the version row is not restorable')
     await userEvent.click(restoreTarget)

@@ -292,6 +292,7 @@ export function BrowserDocumentPage({
     setConfirmDelete(false)
     setDuplicateError(null)
     setIsDuplicating(false)
+    setSaveVersionMessage(null)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -572,6 +573,37 @@ export function BrowserDocumentPage({
     window.addEventListener('whiteboard:wb_version_saved', onSaved)
     return () => window.removeEventListener('whiteboard:wb_version_saved', onSaved)
   }, [])
+  // A save the History panel itself offers. The top bar's dot and ⌘/Ctrl+S
+  // are the other two routes; on a phone the shortcut is nothing and the
+  // dot is small, so the panel a finger opens has to carry one too — the
+  // daemon page's panel does. Announced on the window like every other
+  // save, which is what clears the dot and refreshes the list.
+  const [savingVersion, setSavingVersion] = useState(false)
+  const [saveVersionMessage, setSaveVersionMessage] = useState<{
+    kind: 'success' | 'error'
+    text: string
+  } | null>(null)
+  const saveVersionFromPanel = async (): Promise<void> => {
+    if (versionsBackend === null || documentPath === null || savingVersion) return
+    setSavingVersion(true)
+    setSaveVersionMessage(null)
+    try {
+      await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label: '' })
+      setSaveVersionMessage({ kind: 'success', text: 'Version saved.' })
+      // The top bar addresses this document as `local`/path (its
+      // `dataMode="local"` placeholder), so the dot listens under that id.
+      window.dispatchEvent(
+        new CustomEvent('whiteboard:wb_version_saved', {
+          detail: { workspaceId: 'local', path: documentPath },
+        }),
+      )
+    } catch (err) {
+      log.warn('save version from the History panel failed', err)
+      setSaveVersionMessage({ kind: 'error', text: 'Save failed. Please try again.' })
+    } finally {
+      setSavingVersion(false)
+    }
+  }
 
   // The second phase of the page state. `pageState` above is derived from what
   // the INDEX knows; this is what reading the CONTENT said, which can only
@@ -990,6 +1022,31 @@ export function BrowserDocumentPage({
                           capabilities: { branches: false, autoVersions: false },
                           onRestored: clearLocalUndo,
                           refreshSignal: versionRefreshSignal,
+                          versionPanelExtra: (
+                            <div className="flex flex-wrap items-center gap-2 border-t px-2 py-2">
+                              <button
+                                type="button"
+                                onClick={() => void saveVersionFromPanel()}
+                                disabled={savingVersion}
+                                className="rounded-md border px-3 py-1 text-xs font-medium transition-colors hover:bg-accent disabled:cursor-not-allowed disabled:opacity-50"
+                              >
+                                {savingVersion ? 'Saving…' : 'Save version'}
+                              </button>
+                              {saveVersionMessage && (
+                                <span
+                                  role={saveVersionMessage.kind === 'error' ? 'alert' : 'status'}
+                                  aria-live="polite"
+                                  className={
+                                    saveVersionMessage.kind === 'error'
+                                      ? 'text-xs text-destructive'
+                                      : 'text-xs text-muted-foreground'
+                                  }
+                                >
+                                  {saveVersionMessage.text}
+                                </span>
+                              )}
+                            </div>
+                          ),
                         }
                       : undefined,
                   }}
