@@ -1346,6 +1346,27 @@ function composeComments(
     if (comment.resolved === true) continue
     const anchor = commentAnchor(comment, canvas)
 
+    const bubbleX = anchor.x + COMMENT_BUBBLE_OFFSET_PX
+    const bubbleY = anchor.y + COMMENT_BUBBLE_OFFSET_PX
+
+    // The leader FIRST, so pin and bubble paint over its ends: a dashed line
+    // from the anchor to the bubble's near corner keeps the pair reading as
+    // one comment when a dense canvas separates them. Geometry is composed
+    // for every resolver; only its paint is assigned.
+    out.push({
+      kind: 'edge',
+      id: `${comment.id}/leader`,
+      path: [
+        { x: anchor.x, y: anchor.y },
+        { x: bubbleX, y: bubbleY },
+      ],
+      fromSide: 'right',
+      toSide: 'left',
+      fromEnd: 'none',
+      toEnd: 'none',
+      ...(appearance !== undefined ? { appearance: appearance.leader } : {}),
+    })
+
     out.push({
       kind: 'shape',
       bbox: {
@@ -1374,8 +1395,6 @@ function composeComments(
     const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
     const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
 
-    const bubbleX = anchor.x + COMMENT_BUBBLE_OFFSET_PX
-    const bubbleY = anchor.y + COMMENT_BUBBLE_OFFSET_PX
     out.push({
       kind: 'shape',
       bbox: {

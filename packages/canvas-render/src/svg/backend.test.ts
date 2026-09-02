@@ -540,6 +540,50 @@ describe('renderSceneToSvg — appearance on textRun and edge', () => {
     )
   })
 
+  it('emits stroke-dasharray presence-only, after the other paint attributes', () => {
+    const scene: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 10, y: 10 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
+          appearance: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
+        },
+      ],
+    }
+    expect(renderSceneToSvg(scene)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 10,10" fill="none" stroke="#d97706" stroke-width="1" stroke-dasharray="4 3" role="presentation"/></svg>',
+    )
+    // Empty string is unusable, so it is omitted — never emitted blank.
+    const blank: Scene = {
+      nodes: [
+        {
+          kind: 'edge',
+          id: 'e1',
+          path: [
+            { x: 0, y: 0 },
+            { x: 10, y: 10 },
+          ],
+          fromSide: 'right',
+          toSide: 'left',
+          fromEnd: 'none',
+          toEnd: 'none',
+          appearance: { stroke: '#d97706', strokeDasharray: '' },
+        },
+      ],
+    }
+    expect(renderSceneToSvg(blank)).toBe(
+      '<svg xmlns="http://www.w3.org/2000/svg"><polyline points="0,0 10,10" fill="none" stroke="#d97706" role="presentation"/></svg>',
+    )
+  })
+
   it('an appearance-free edge is byte-identical to before', () => {
     const scene: Scene = {
       nodes: [

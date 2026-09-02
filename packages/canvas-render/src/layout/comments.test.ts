@@ -5,7 +5,7 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
-import type { SceneNode, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
+import type { ResolvedEdgeNode, SceneNode, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import {
@@ -24,6 +24,7 @@ const fakeAppearance: SpatialAppearanceResolver = {
   resolveComment: () => ({
     pin: { fill: '#d97706' },
     bubble: { fill: '#fef3c7', stroke: '#d97706' },
+    leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
   }),
 }
 
@@ -107,6 +108,56 @@ describe('comment layer', () => {
     )
     const pinIndex = scene.nodes.indexOf(pin as ShapeSceneNode)
     expect(pinIndex).toBeGreaterThan(nodeChromeIndex)
+  })
+
+  it('ties pin to bubble with a dashed leader line drawn under both', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 400, y: 60, text: 'move this left' }]),
+      baseOptions(),
+    )
+    const leader = scene.nodes.find(
+      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
+    )
+    expect(leader).toBeDefined()
+    // From the anchor (the pin's center) to the bubble's near corner, so the
+    // relation still reads when a dense canvas separates the two.
+    expect(leader?.path).toEqual([
+      { x: 400, y: 60 },
+      { x: 400 + COMMENT_BUBBLE_OFFSET_PX, y: 60 + COMMENT_BUBBLE_OFFSET_PX },
+    ])
+    expect(leader?.fromEnd).toBe('none')
+    expect(leader?.toEnd).toBe('none')
+    expect(leader?.appearance).toEqual({
+      stroke: '#d97706',
+      strokeWidth: 1,
+      strokeDasharray: '4 3',
+    })
+
+    // Under the pin and bubble: both ends tuck beneath the chrome instead of
+    // striking through it.
+    const shapes = shapesOf(scene.nodes)
+    const pin = shapes.find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
+    const bubble = shapes.find((shape) => shape.appearance?.fill === '#fef3c7')
+    const leaderIndex = scene.nodes.indexOf(leader as ResolvedEdgeNode)
+    expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(pin as ShapeSceneNode))
+    expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(bubble as ShapeSceneNode))
+  })
+
+  it('a bare resolver still gets the leader geometry, carrying no appearance', () => {
+    const bare: SpatialAppearanceResolver = {
+      resolveNode: () => ({}),
+      resolveEdge: () => undefined,
+      resolveLabel: () => ({}),
+    }
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still tied' }]),
+      baseOptions({ appearance: bare }),
+    )
+    const leader = scene.nodes.find(
+      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
+    )
+    expect(leader).toBeDefined()
+    expect(leader?.appearance).toBeUndefined()
   })
 
   it('follows the target node when it resolves, and falls back to the anchor when it is gone', () => {
