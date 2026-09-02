@@ -22,11 +22,36 @@ afterEach(async () => {
 })
 
 /**
- * Ten sampler intervals. Long enough that "no tick landed" is a statement
- * about the call rather than about timer granularity, and short enough that
- * the growth loop reaches it in a round or two on any machine.
+ * Sized from the instrument's NOISE, not from timer granularity.
+ *
+ * `blockedMs` is `elapsed - samples * intervalMs`, so every tick that lands
+ * is credited a full interval of availability. `VACUUM INTO` cannot yield,
+ * but the three await points before it — the `stat` that rejects an existing
+ * target, the `mkdir`, and opening the client — can, and under a loaded
+ * runner they do: one CI failure recorded six ticks inside a 103.8ms call,
+ * which is 30ms of real availability the ratio below then charges against a
+ * call that blocked for all of the part being asserted about.
+ *
+ * At ten sampler intervals that 30ms was 29% of the window and the assertion
+ * failed at 0.711. The fix is to make the signal dominate: allowing three
+ * times the worst observed setup (90ms) and requiring it to stay inside the
+ * 20% the ratio tolerates puts the floor at 450ms. 500 is that, rounded.
+ *
+ * A floor rather than a fixture size, for the reason the growth loop exists:
+ * "how many milliseconds is 16MB" is a property of the machine. A slow runner
+ * reaches 500ms at a smaller database than a fast one, and neither has a
+ * cliff to fall off.
  */
-const MIN_SNAPSHOT_MS = 50
+const MIN_SNAPSHOT_MS = 500
+
+/**
+ * Enough doublings for a fast machine to reach the floor — this one arrives
+ * at 591ms on the sixth. Exhausting them fails on the floor assertion below,
+ * which says what happened; a machine fast enough to need more rounds should
+ * get that message rather than a ratio failure that reads like the call
+ * having stopped blocking.
+ */
+const MAX_ATTEMPTS = 7
 
 /**
  * The measurement the backup's architecture rests on, pinned.
@@ -67,19 +92,23 @@ describe('the hot snapshot', () => {
     const payload = Buffer.alloc(64 * 1024, 7)
     let availability: Awaited<ReturnType<typeof measureLoopAvailability<void>>>['availability'] =
       undefined as never
-    for (let attempt = 0; attempt < 5; attempt++) {
-      // Doubling, so a fast machine reaches the floor in a couple of rounds
+    for (let attempt = 0; attempt < MAX_ATTEMPTS; attempt++) {
+      // Doubling, so a fast machine reaches the floor in a few rounds
       // instead of creeping. `VACUUM INTO` refuses an existing target, so
       // each attempt writes its own.
       for (let i = 0; i < 64 * 2 ** attempt; i++) {
         await sql`insert into bulk (payload) values (${payload})`.execute(handle.db)
       }
+      const destPath = join(root, `snapshot-${attempt}.db`)
       availability = (
-        await measureLoopAvailability(
-          () => snapshotDatabaseInto(join(root, 'data'), join(root, `snapshot-${attempt}.db`)),
-          { intervalMs: 5 },
-        )
+        await measureLoopAvailability(() => snapshotDatabaseInto(join(root, 'data'), destPath), {
+          intervalMs: 5,
+        })
       ).availability
+      // Each round's snapshot is as large as the database it came from, and
+      // the database is still growing. Only the measurement is wanted, so the
+      // file goes rather than accumulating a copy per round.
+      await rm(destPath, { force: true })
       if (availability.elapsedMs > MIN_SNAPSHOT_MS) break
     }
 
