@@ -13,9 +13,10 @@ import {
   mountCanvasViewer,
 } from './mount.js'
 import { parseViewerScene, type ViewerScene } from './scene.js'
+import { canvasPointFromClick } from './widget/canvas-point.js'
+import { createCommentControl } from './widget/comment-control.js'
 import { buildFontFaceDescriptors } from './widget/font-registration.js'
 import { createRefreshControl } from './widget/refresh-control.js'
-import { createStickyNoteControl } from './widget/sticky-note-control.js'
 
 declare global {
   interface Window {
@@ -230,28 +231,29 @@ async function mountFromHost(
   const app = new App({ name: 'whiteboard-canvas-view', version: '0.0.0' }, {})
 
   // Committed only once a tool-result has actually passed parseViewerScene —
-  // unvalidated ids must never enable Refresh or the sticky-note affordance
+  // unvalidated ids must never enable Refresh or the comment affordance
   // (either would call back into the daemon with ids nobody confirmed are
   // real). BOTH ids, because every follow-up call's strict input schema
   // requires the workspaceId alongside the documentId — a result carrying
   // only one of them enables nothing.
   let committed: { workspaceId: string; documentId: string } | undefined
+  // The validated scene, kept for click-to-anchor hit-testing: a click
+  // inside a node's stored box names that node as the comment's target, so
+  // the pin follows the node rather than the spot it happened to occupy.
+  let committedScene: ViewerScene | undefined
   let refreshControl: ReturnType<typeof createRefreshControl> | undefined
-  let stickyControl: ReturnType<typeof createStickyNoteControl> | undefined
+  let commentControl: ReturnType<typeof createCommentControl> | undefined
 
-  // `scene` is handed over as part of the "only commit from a VALIDATED
-  // result" contract this callback exists to enforce; nothing reads it —
-  // the sticky-note append carries no geometry and lets wb_canvas_edit's
-  // own auto-placement position the note.
   const commitResult = (
     workspaceId: string | undefined,
     documentId: string | undefined,
-    _scene: ViewerScene,
+    scene: ViewerScene,
   ): void => {
     if (workspaceId === undefined || documentId === undefined) return
     committed = { workspaceId, documentId }
+    committedScene = scene
     refreshControl?.show()
-    stickyControl?.show()
+    commentControl?.show()
   }
 
   app.ontoolresult = (result) => {
@@ -332,47 +334,112 @@ async function mountFromHost(
       void performRefresh()
     })
 
-    // The widget's ONE write: append a text node carrying the submitted
-    // text. No geometry rides along — wb_canvas_edit auto-places a node
-    // that names none, which retires the widget-side placement rule the
-    // old affordance carried. The input clears on WRITE success rather
-    // than after the follow-up refresh: once the edit is committed
-    // server-side, keeping the text would invite a duplicate resubmit if
-    // only the refresh failed; a refused or failed write keeps the text
-    // for retry.
-    const submitSticky = async (text: string): Promise<void> => {
-      if (committed === undefined) return
-      stickyControl?.setBusy(true)
+    // The anchor the next submit pins its comment at. Set by clicking the
+    // canvas, cleared on a successful submit so the next comment has to
+    // point at its own spot.
+    let pendingAnchor: { x: number; y: number; targetNodeId?: string } | undefined
+
+    // The widget's ONE write: a comment.add against the clicked anchor
+    // (ADR-0024). The input clears on WRITE success rather than after the
+    // follow-up refresh: once the edit is committed server-side, keeping
+    // the text would invite a duplicate resubmit if only the refresh
+    // failed; a refused or failed write keeps text AND anchor for retry.
+    const submitComment = async (text: string): Promise<void> => {
+      if (committed === undefined || pendingAnchor === undefined) return
+      const anchor = pendingAnchor
+      commentControl?.setBusy(true)
       try {
         const result = await app.callServerTool({
           name: 'wb_canvas_edit',
           arguments: {
             workspaceId: committed.workspaceId,
             documentId: committed.documentId,
-            ops: [{ op: 'node.add', node: { type: 'text', text } }],
+            ops: [
+              {
+                op: 'comment.add',
+                comment: {
+                  x: anchor.x,
+                  y: anchor.y,
+                  ...(anchor.targetNodeId === undefined
+                    ? {}
+                    : { targetNodeId: anchor.targetNodeId }),
+                  text,
+                },
+              },
+            ],
           },
         })
         if (isErrorResult(result)) {
-          console.error('[whiteboard-widget] sticky-note append refused:', result)
+          console.error('[whiteboard-widget] comment refused:', result)
           return
         }
-        stickyControl?.clear()
+        commentControl?.clear()
+        commentControl?.setAnchor(undefined)
+        pendingAnchor = undefined
+        // The delivery half (ADR-0024 decision 5): where the host accepts
+        // ui/message, inject the comment into the conversation as a
+        // user-role message so the model responds to the feedback now.
+        // Fire-and-forget with its own catch — the comment is already in
+        // the document, and a host that refuses the wake-up only delays the
+        // model to its next read.
+        if (app.getHostCapabilities()?.message !== undefined) {
+          const where =
+            anchor.targetNodeId === undefined
+              ? `at (${anchor.x}, ${anchor.y})`
+              : `on node "${anchor.targetNodeId}" at (${anchor.x}, ${anchor.y})`
+          void app
+            .sendMessage({
+              role: 'user',
+              content: [
+                {
+                  type: 'text',
+                  text: `The user pinned a comment on the canvas ${where}: "${text}". Please take a look at the canvas and respond to the comment.`,
+                },
+              ],
+            })
+            .catch((err) => {
+              console.error('[whiteboard-widget] comment sendMessage failed:', err)
+            })
+        }
         await performRefresh()
       } catch (err) {
-        console.error('[whiteboard-widget] sticky-note append via host failed:', err)
+        console.error('[whiteboard-widget] comment via host failed:', err)
       } finally {
-        stickyControl?.setBusy(false)
+        commentControl?.setBusy(false)
       }
     }
-    stickyControl = createStickyNoteControl((text) => {
-      void submitSticky(text)
+    commentControl = createCommentControl((text) => {
+      void submitComment(text)
+    })
+
+    // Click-to-anchor: any click on the rendered SVG picks the comment's
+    // anchor point; a click inside a node's stored box also names it as the
+    // target. Delegated from the container because remount replaces the SVG
+    // element itself on every refresh.
+    container.addEventListener('click', (event) => {
+      if (commentControl === undefined) return
+      const svg = container.querySelector('svg')
+      if (!(svg instanceof SVGSVGElement)) return
+      const point = canvasPointFromClick(svg, event.clientX, event.clientY)
+      if (point === undefined) return
+      const target = committedScene?.nodes.find(
+        (node) =>
+          point.x >= node.x &&
+          point.x <= node.x + node.width &&
+          point.y >= node.y &&
+          point.y <= node.y + node.height,
+      )
+      pendingAnchor = { ...point, ...(target === undefined ? {} : { targetNodeId: target.id }) }
+      commentControl.setAnchor(
+        target === undefined ? `(${point.x}, ${point.y})` : `${target.id} (${point.x}, ${point.y})`,
+      )
     })
 
     // A tool-result can commit ids during connect() above, before the
     // controls existed to be shown — reveal them if that already happened.
     if (committed !== undefined) {
       refreshControl.show()
-      stickyControl.show()
+      commentControl.show()
     }
   }
 

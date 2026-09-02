@@ -36,7 +36,12 @@ import { assertScannedLedger } from '../../test-utils/coverage-ledger.js'
 // not away, so a moved useState must stay scanned. A new hook that declares
 // state joins this list in the same commit that moves it.
 const sources = import.meta.glob(
-  ['./SpatialEditor.tsx', './use-editor-measurements.ts', './use-file-seam-scene.ts'],
+  [
+    './SpatialEditor.tsx',
+    './use-editor-measurements.ts',
+    './use-file-seam-scene.ts',
+    './use-viewport-controls.ts',
+  ],
   { query: '?raw', import: 'default', eager: true },
 ) as Record<string, string>
 
