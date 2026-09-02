@@ -18,7 +18,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Scene** | the laid-out projection of a spatial document (what `composeCanvasScene` produces) | stored content |
 | **Version** | a saved point in a document's history | a branch |
 | **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |
-| **Comment** | the annotation layer's unit (ADR-0024/0025): anchored feedback ABOUT a spot or node, floating above content; its lifecycle word in user copy is **Resolved** | content (never exported as content, never moved by tidy); "annotation layer" in USER copy (internal term only); "History" / "Archived" / "Done" for the resolved state |
+| **Comment** | the annotation layer's unit (ADR-0024/0025): anchored feedback about a spot or node, floating above content. User-copy lifecycle word: **Resolved** | content (never exported, never tidied); "annotation layer" in user copy; "History"/"Archived"/"Done" for resolved |
 
 Two consequences that catch people out:
 
