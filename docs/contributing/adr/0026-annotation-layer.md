@@ -59,12 +59,13 @@ parent and child.
 > them along with the rest of the extension, and its Consequences accepted the
 > loss in as many words: *"A strict JSON Canvas export loses the conversation.
 > Accepted: strict mode is interop with consumers that could not draw it
-> anyway."* The phrase "never exported" appears only in `vocabulary.md`'s
+> anyway."* The phrase "never exported" appeared only in `vocabulary.md`'s
 > **does-not-mean** column for *Comment* — a compression of ADR-0024's argument
 > against modelling a comment as a text NODE (which "would be exported as
 > content, rearranged by `tidy`, counted by every consumer"). No human decided
-> comments are never exported. Decision 1b below decides it now, for reasons
-> that are its own.
+> comments are never exported. This increment removes the phrase from that
+> cell, so the compression cannot be cited as a decision again, and decision 1b
+> below decides the question now, for reasons that are its own.
 
 **Not a facet**, and the reasons are worth writing down because the question is
 a fair one:

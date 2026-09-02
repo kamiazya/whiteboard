@@ -18,15 +18,7 @@ this rule is how it converges without anyone scheduling a big-bang rename.
 | **Scene** | the laid-out projection of a spatial document (what `composeCanvasScene` produces) | stored content |
 | **Version** | a saved point in a document's history | a branch |
 | **Browser** / **Daemon** | who KEEPS a workspace — the browser's own storage, or the whiteboard daemon | a claim about network locality; both run on the same machine |
-| **Comment** | the annotation layer's unit (ADR-0024/0025/0026): anchored feedback about a spot or node, floating above content. A **thread** is the anchored unit and comments are its messages (ADR-0026). User-copy lifecycle word: **Resolved** | content — it is never tidied, and never part of what the document says; "annotation layer" in user copy; "History"/"Archived"/"Done" for resolved |
-
-**"Not content" is about tidy and meaning, not about export.** That cell has
-been misread once as a rule that comments are never exported, and an ADR was
-drafted citing it as ADR-0024's decision. ADR-0024 decided the opposite for the
-file (comments ride `x-whiteboard`, strict mode drops them); where they live is
-decided in [ADR-0026](../../docs/contributing/adr/0026-annotation-layer.md)
-decision 1b, on its own reasoning. A compressed table cell is not a decision
-record — follow the link before citing one.
+| **Comment** | the annotation layer's unit (ADR-0024/0025/0026): anchored feedback about a spot or node, floating above content. A **thread** is the anchored unit and comments are its messages | content — never tidied, never part of what the document says. Says nothing about EXPORT, which ADR-0026 decision 1b decides; "annotation layer" in user copy; "History"/"Archived"/"Done" for resolved |
 
 Two consequences that catch people out:
 
