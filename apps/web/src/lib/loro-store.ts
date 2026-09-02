@@ -16,7 +16,7 @@
  *   this file's.
  */
 
-import type { DocRef } from '@kamiazya/whiteboard-ports'
+import type { DocRef, DocumentStore } from '@kamiazya/whiteboard-ports'
 import {
   chunkSnapshot,
   isStoredDocumentUnreadableError,
@@ -119,7 +119,7 @@ export async function touchContentTimestamp(documentId: string, dbName?: string)
 }
 
 export class LoroStore {
-  readonly #store: IdbDocumentStore
+  readonly #store: DocumentStore
 
   /**
    * Serialises this instance's read-modify-write sequences per document.
@@ -141,9 +141,24 @@ export class LoroStore {
    * Which database to talk to. Production never passes it; a browser test
    * does, so its fixtures cannot collide with another test FILE's — they
    * share an origin, and therefore one `whiteboard` database.
+   *
+   * `store` is the same kind of seam and exists for one reason a database
+   * name cannot serve: `appendDelta`'s compaction is fenced against another
+   * TAB folding first, and that arrangement cannot be reached by racing two
+   * instances. Measured on the daemon side, whose fold has the same shape —
+   * under microtask lockstep the second writer's read lands after the first
+   * writer's write, so its fold already contains the other's ops and
+   * disabling the fence changed nothing. Reaching the refusal needs a
+   * competing fold placed deliberately inside the window between this
+   * store's read and its write, which a wrapper around the port can do and
+   * nothing outside it can. Production passes nothing and gets the
+   * `IdbDocumentStore` it always had.
    */
-  constructor(private readonly dbName?: string) {
-    this.#store = new IdbDocumentStore(dbName)
+  constructor(
+    private readonly dbName?: string,
+    store?: DocumentStore,
+  ) {
+    this.#store = store ?? new IdbDocumentStore(dbName)
   }
 
   #serialise<T>(documentId: string, body: () => Promise<T>): Promise<T> {
