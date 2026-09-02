@@ -10,7 +10,7 @@ import {
   threadFromCanvasComment,
 } from '@kamiazya/whiteboard-model'
 import { LoroMap } from 'loro-crdt'
-import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './loro-bridge.js'
+import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
 
 /** The nested map of messages inside one thread's container. */
 const MESSAGES_KEY = 'messages'
@@ -61,6 +61,17 @@ function assertFiniteAnchor(thread: CommentThread): void {
  * below therefore refuses to open a container it did not find.
  */
 export function writeCommentThread(doc: DocumentContainers, thread: CommentThread): void {
+  writeThreadInto(doc, thread)
+  doc.commit()
+}
+
+/**
+ * The same write without the commit, for a caller that owns the commit
+ * boundary — `withSpatialBatch`, where an extra commit would split one user
+ * action into two undo steps, and the migration below, which is always run
+ * from a seam that commits after it.
+ */
+export function writeThreadInto(doc: DocumentContainers, thread: CommentThread): void {
   assertFiniteAnchor(thread)
   const container = doc.getMap(THREADS_KEY).getOrCreateContainer(thread.id, new LoroMap())
   container.set(ANCHOR_FIELD, thread.anchor)
@@ -68,7 +79,6 @@ export function writeCommentThread(doc: DocumentContainers, thread: CommentThrea
   if (thread.createdAt !== undefined) container.set(CREATED_AT_FIELD, thread.createdAt)
   const messages = container.getOrCreateContainer(MESSAGES_KEY, new LoroMap())
   for (const message of thread.messages) messages.set(message.id, messageToFields(message))
-  doc.commit()
 }
 
 /**
@@ -145,24 +155,61 @@ export function readCommentThreads(doc: DocumentContainers): CommentThread[] {
 
 /**
  * Reads every stored canvas comment as the one-message thread it always was,
- * and returns how many it converted.
+ * clears the legacy `comments` map, and returns how many it converted.
  *
- * NON-DESTRUCTIVE and idempotent: the `comments` map is left in place, because
- * every reader still projects it (`readSpatialCanvas`), and a thread id that
- * already exists is skipped rather than rewritten — a second pass must not
- * clobber a reply written since the first. Retiring the legacy plane belongs
- * with the readers that move off it, not here.
+ * Idempotent, and destructive on purpose now that every writer puts comments
+ * in the threads plane: a legacy row left behind would outlive the thread it
+ * became, and come back through `readSpatialCanvas`'s fallback as a comment
+ * the user had closed. An id that ALREADY has a thread is dropped rather than
+ * rewritten — a second pass must not clobber a reply written since the first.
+ *
+ * A row the schema rejects is dropped too. It was already unreadable (every
+ * reader parses before projecting), so keeping it would preserve nothing but
+ * the fallback's reason to exist.
+ *
+ * Does NOT commit: every caller is a write seam that commits after it, and
+ * one of them is `withSpatialBatch`, where an extra commit would split a user
+ * action into two undo steps.
  */
 export function migrateCanvasCommentsToThreads(doc: DocumentContainers): number {
   const commentsMap = doc.getMap(COMMENTS_KEY)
   const existing = new Set(doc.getMap(THREADS_KEY).keys())
   let migrated = 0
   for (const commentId of commentsMap.keys()) {
-    if (existing.has(commentId)) continue
     const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
-    if (!parsed.success) continue
-    writeCommentThread(doc, threadFromCanvasComment(parsed.data satisfies CanvasComment))
-    migrated += 1
+    if (parsed.success && !existing.has(commentId)) {
+      writeThreadInto(doc, threadFromCanvasComment(parsed.data satisfies CanvasComment))
+      migrated += 1
+    }
+    commentsMap.delete(commentId)
   }
   return migrated
+}
+
+/**
+ * One thread as the canvas API still sees it: a single comment at a spatial
+ * anchor. Lossy by construction — a thread's replies have nowhere to go in a
+ * `CanvasComment`, and a text anchor has no canvas position at all — which is
+ * why this is a PROJECTION rather than the shape anything stores. The panel
+ * that shows a conversation (ADR-0026 step 3) reads threads directly.
+ */
+export function canvasCommentFromThread(thread: CommentThread): CanvasComment | undefined {
+  if (thread.anchor.kind !== 'spatial') return undefined
+  // `readCommentThreads` sorts by `compareMessages`, so this is the message
+  // the conversation opened with rather than whichever arrived first.
+  const opening = thread.messages[0]
+  if (opening === undefined) return undefined
+  return {
+    id: thread.id,
+    x: thread.anchor.x,
+    y: thread.anchor.y,
+    text: opening.body,
+    ...(opening.author === undefined ? {} : { author: opening.author }),
+    ...(opening.createdAt === undefined ? {} : { createdAt: opening.createdAt }),
+    ...(thread.anchor.nodeId === undefined ? {} : { targetNodeId: thread.anchor.nodeId }),
+    // Only the closed state is spelled out: `resolved: false` and no field
+    // are the same state under `canvasCommentSchema`, and emitting one of
+    // them keeps a reader from treating the other as unknown.
+    ...(thread.status === 'resolved' ? { resolved: true } : {}),
+  }
 }
