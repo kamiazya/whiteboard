@@ -3,7 +3,9 @@ import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId, DocumentKind } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
 import type { LoroDoc } from 'loro-crdt'
+import type { RestoreProgressEvent } from './operations/restore-version.js'
 import type { Embedder } from './search/embedder.js'
+import type { OperatorInfo, VersionEntry } from './versions/version-entry.js'
 
 /**
  * What a batch of agent edits touched, as the browser needs to hear it.
@@ -57,6 +59,23 @@ export interface ViewportRequest {
 export interface CanvasClientNotifier {
   agentActivity(activity: AgentActivity): void
   requestViewport(request: ViewportRequest): Promise<boolean>
+  /**
+   * A version was just saved on this document. What an open History panel
+   * listens for; the HTTP save route sends the same message itself.
+   */
+  versionCreated(event: VersionCreated): void
+  /**
+   * A restore began or ended. A watching client locks its overlay on
+   * `started` and releases it on `complete`, so an implementation must
+   * forward both or neither.
+   */
+  restoreProgress(event: RestoreProgressEvent): void
+}
+
+export interface VersionCreated {
+  readonly workspaceId: string
+  readonly documentId: string
+  readonly version: VersionEntry
 }
 
 export interface ServerDeps {
@@ -166,7 +185,7 @@ export interface ServerDeps {
   /**
    * A document's saved history, as an OPERATION needs to read it.
    *
-   * Three methods, not the eleven the daemon's own version store has. A
+   * Four methods, not the eleven the daemon's own version store has. A
    * seam states what the operation needs; the implementation is free to be
    * larger, and structural typing lets it satisfy this without a wrapper.
    * Thumbnails, pruning and branch rewriting are not read by any operation
@@ -289,11 +308,30 @@ export interface LiveDocuments {
 }
 
 /**
- * `path` addresses the version LIST because a version belongs to a document
- * at the name it had; `load` and `loadWorkspaceAt` take only the version's
- * own id, which is already unique within the workspace.
+ * `path` addresses a document's history because a version belongs to a
+ * document at the name it had; `load` and `loadWorkspaceAt` take only the
+ * version's own id, which is already unique within the workspace.
+ *
+ * This is THE history. The `wb_version_*` tools once kept their own records
+ * inside the document, addressed by a frontier of the per-document
+ * projection — a lineage reborn each time the cache dropped, so every agent
+ * checkpoint died with the daemon's next restart, and the History panel
+ * never listed one while it lived. A version is a row here or it is
+ * nothing; a second place to keep one is the defect, not a feature.
  */
 export interface VersionHistory {
+  /**
+   * Record the document at `path` as it is NOW. `auto` distinguishes a
+   * scheduled checkpoint from one somebody asked for; `operator` says who,
+   * and a composition root that knows its own identity may stamp it when
+   * the caller passes none.
+   */
+  save(
+    workspaceId: string,
+    path: string,
+    doc: LoroDoc,
+    options: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
+  ): Promise<VersionEntry>
   /**
    * The past state of ONE document, as an independent doc — the stored
    * record checked out at this version's frontiers. Null only when the
@@ -308,7 +346,7 @@ export interface VersionHistory {
    */
   loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
   /** Saved versions of the document at `path`, newest first. */
-  list(workspaceId: string, path: string): Promise<readonly { id: string; label?: string }[]>
+  list(workspaceId: string, path: string): Promise<readonly VersionEntry[]>
 }
 
 // Carries the workspaceId because the tree is the address book: resolving a

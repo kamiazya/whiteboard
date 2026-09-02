@@ -10,6 +10,7 @@ import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { LiveDocuments, VersionHistory } from '../server-deps.js'
+import type { VersionEntry } from '../versions/version-entry.js'
 import {
   type RestoreProgressEvent,
   type RestoreVersionResult,
@@ -154,19 +155,28 @@ class FakeVersions implements VersionHistory {
       { doc: LoroDoc | null; workspace: LoroDoc | null; label?: string; path: string }
     >,
   ) {}
+  async save(): Promise<VersionEntry> {
+    throw new Error('restoreVersion never saves a version')
+  }
   async load(_workspaceId: string, id: string): Promise<LoroDoc | null> {
     return this.byId.get(id)?.doc ?? null
   }
   async loadWorkspaceAt(_workspaceId: string, id: string): Promise<LoroDoc | null> {
     return this.byId.get(id)?.workspace ?? null
   }
-  async list(
-    _workspaceId: string,
-    path: string,
-  ): Promise<readonly { id: string; label?: string }[]> {
+  async list(_workspaceId: string, path: string): Promise<readonly VersionEntry[]> {
     return [...this.byId.entries()]
       .filter(([, value]) => value.path === path)
-      .map(([id, value]) => ({ id, ...(value.label === undefined ? {} : { label: value.label }) }))
+      .map(([id, value]) => ({
+        id,
+        path,
+        createdAt: '2026-01-01T00:00:00.000Z',
+        elementCount: 0,
+        auto: false,
+        hasThumbnail: false,
+        branchName: 'main',
+        ...(value.label === undefined ? {} : { label: value.label }),
+      }))
   }
 }
 
@@ -221,6 +231,24 @@ describe('restoreVersion result union', () => {
     const result = await run(live, versionsWith({}))
     expect(result).toEqual({ kind: 'not-found' })
     expectAllCallsLocked(live)
+  })
+
+  it("answers not-found for a version that belongs to ANOTHER document's history, and writes nothing", async () => {
+    // A version id is unique per workspace, so `load` alone would happily
+    // answer another document's past state — and the reconcile would then
+    // overwrite this document with unrelated content. The history the
+    // caller named (`path`) has to hold the id.
+    const live = new FakeLive()
+    const liveDoc = spatialDoc(['mine'])
+    live.seed('canvas-a', liveDoc)
+    const before = liveDoc.oplogVersion()
+    const result = await run(
+      live,
+      versionsWith({ v1: { doc: spatialDoc(['theirs']), path: 'canvas-b' } }),
+    )
+    expect(result).toEqual({ kind: 'not-found' })
+    expect(liveDoc.oplogVersion().compare(before)).toBe(0)
+    expect(live.calls.map((c) => c.method)).not.toContain('save')
   })
 
   it('answers output-exists for an existing target without overwrite, and writes nothing', async () => {
