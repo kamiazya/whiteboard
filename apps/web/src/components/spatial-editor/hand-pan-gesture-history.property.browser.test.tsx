@@ -217,10 +217,26 @@ it('a hand drag from a fresh spot pans, whatever gesture came before it', async 
           if (gesture.kind === 'pinch') stats.afterPinch += 1
 
           expect({
-            // Screen pixels: what the invariant means, and the unit the
-            // transform is serialised in.
-            dx: Math.round((after.x - before.x) * before.zoom * 100) / 100 + 0,
-            dy: Math.round((after.y - before.y) * before.zoom * 100) / 100 + 0,
+            // Screen pixels, to the PIXEL — which is the unit the invariant
+            // is stated in, and as fine as this reading can honestly be.
+            //
+            // The viewport is recovered by parsing the layer's CSS
+            // transform, so what comes back carries the browser's own
+            // serialisation of a translate in CANVAS units. Multiplying by
+            // zoom to get back to screen pixels multiplies that error too,
+            // and the generator reaches extreme zooms: a near-degenerate
+            // pinch three pixels wide produced `zoom: 8.02773`, where the
+            // rounding showed up as `dy: 18.01` against an expected 18 and
+            // failed a two-decimal comparison. Asserting hundredths of a
+            // screen pixel through an 8x magnified round trip was precision
+            // this measurement never had.
+            //
+            // Nothing the property is FOR hides in half a pixel: a drag that
+            // failed to pan reads 0, one that panned the wrong way flips
+            // sign, and a pinch leaking into the drag moves `zoom`, which is
+            // still compared exactly.
+            dx: Math.round((after.x - before.x) * before.zoom) + 0,
+            dy: Math.round((after.y - before.y) * before.zoom) + 0,
             zoom: after.zoom,
           }).toEqual({ dx: -by.x + 0, dy: -by.y + 0, zoom: before.zoom })
         }
