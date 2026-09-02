@@ -2,18 +2,38 @@ import { Check, X } from 'lucide-react'
 import type { CSSProperties, PointerEvent as ReactPointerEvent } from 'react'
 import { cn } from '@/lib/utils'
 import { hasCoarsePointer, isMacPlatform } from '../lib/platform.js'
-import { DOCK_BUTTON_CLASS } from './ui/dock-button.js'
-
-/** Header-height icon button (32px) for the 40px full-screen editor bar. */
-const DENSE_ICON_BUTTON_CLASS =
-  'flex size-8 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground'
 
 const KBD =
   'rounded border border-border bg-background px-1 py-px font-sans text-[10px] text-muted-foreground'
 
+/**
+ * One slot of the touch pill, in screen px — the node-tools pill's slot
+ * (SelectionOverlay), so the two clusters attached to a node read as one
+ * family: 24px slots, 6px radius, background fill, border-coloured edge,
+ * muted 1.5px glyphs, no shadow. Visually 24px; the hit area is widened by
+ * the pseudo-element below, since a 24px target is under the touch floor.
+ */
+const SLOT_CLASS =
+  'relative flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring after:absolute after:-inset-y-2 after:content-[""]'
+
+/**
+ * Where the strip goes, in the coordinates of the layer it renders into.
+ * The touch pill right-aligns to `right` (mirroring node-tools, which hangs
+ * off the node's top-right corner); the decorative strip left-aligns to
+ * `left`. `scale` counter-scales a canvas-space layer's zoom so the pill
+ * keeps its screen size — a tap target has a screen size, not a canvas one.
+ */
+export interface EditorExitHintPlacement {
+  readonly left: number
+  readonly right: number
+  readonly top: number
+  readonly scale?: number
+}
+
 interface EditorExitHintProps {
   readonly className?: string
   readonly style?: CSSProperties
+  readonly placement?: EditorExitHintPlacement
   /**
    * Both handlers turn the strip into real controls on a coarse pointer. A
    * finger has no chord to press, so naming one there is noise — and the
@@ -21,8 +41,6 @@ interface EditorExitHintProps {
    */
   readonly onDone?: () => void
   readonly onCancel?: () => void
-  /** Header-height controls (32px) for a strip that lives in a 40px bar. */
-  readonly dense?: boolean
   /**
    * The strip sits inside the spatial canvas root, which refuses native
    * touch and captures pointers everywhere EXCEPT inside
@@ -43,16 +61,19 @@ interface EditorExitHintProps {
  *
  * On a fine pointer it is decoration by design: `aria-hidden` (the editors
  * carry the same chord in `aria-keyshortcuts`), no pointer target, never
- * focusable. On a coarse pointer, given handlers, it is the two buttons.
+ * focusable. On a coarse pointer, given handlers, it is the two buttons —
+ * icons, not words, in the node-tools pill language; the verbs live in the
+ * accessible names.
  */
 export function EditorExitHint({
   className,
   style,
+  placement,
   onDone,
   onCancel,
-  dense = false,
   canvasOverlay = false,
 }: EditorExitHintProps) {
+  const scale = placement?.scale === undefined ? undefined : `scale(${placement.scale})`
   if (onDone !== undefined && onCancel !== undefined && hasCoarsePointer()) {
     // The editors commit on blur. A tap that moved focus here would commit
     // BEFORE the click could cancel, so Cancel would silently mean Done —
@@ -60,19 +81,25 @@ export function EditorExitHint({
     const keepEditorFocus = (event: ReactPointerEvent) => {
       event.preventDefault()
     }
-    // Icons, not words: the same pill language as the dock and the node
-    // toolbar. The verbs live in the accessible names.
-    const button = dense ? DENSE_ICON_BUTTON_CLASS : DOCK_BUTTON_CLASS
-    const icon = dense ? 'size-4' : 'size-5'
-    return (
+    const pill = (
       <div
         data-testid="editor-exit-hint"
         data-editor-overlay={canvasOverlay ? true : undefined}
         className={cn(
-          'bg-background border-border inline-flex items-center gap-0.5 rounded-lg border p-0.5 shadow-sm select-none',
-          className,
+          'bg-background border-border inline-flex items-center rounded-[6px] border select-none',
+          placement === undefined && className,
         )}
-        style={style}
+        style={
+          placement === undefined
+            ? style
+            : {
+                position: 'absolute',
+                right: 0,
+                top: 0,
+                transform: scale,
+                transformOrigin: 'top right',
+              }
+        }
       >
         <button
           type="button"
@@ -80,21 +107,38 @@ export function EditorExitHint({
           title="Done"
           onPointerDown={keepEditorFocus}
           onClick={onDone}
-          className={cn(button, 'text-foreground')}
+          className={cn(SLOT_CLASS, 'after:right-0 after:-left-2')}
         >
-          <Check aria-hidden="true" className={icon} />
+          <Check aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
         </button>
-        <span aria-hidden="true" className="bg-border h-5 w-px" />
+        <span aria-hidden="true" className="bg-border h-3.5 w-px" />
         <button
           type="button"
           aria-label="Cancel"
           title="Cancel"
           onPointerDown={keepEditorFocus}
           onClick={onCancel}
-          className={button}
+          className={cn(SLOT_CLASS, 'after:left-0 after:-right-2')}
         >
-          <X aria-hidden="true" className={icon} />
+          <X aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
         </button>
+      </div>
+    )
+    if (placement === undefined) return pill
+    // A zero-size anchor at the node's right edge; the pill hangs off it
+    // leftwards, and scaling about its top-right corner keeps that edge put.
+    return (
+      <div
+        className={className}
+        style={{
+          position: 'absolute',
+          left: placement.right,
+          top: placement.top,
+          width: 0,
+          height: 0,
+        }}
+      >
+        {pill}
       </div>
     )
   }
@@ -106,7 +150,17 @@ export function EditorExitHint({
         'text-muted-foreground pointer-events-none inline-flex items-center gap-1 text-[11px] leading-none whitespace-nowrap select-none',
         className,
       )}
-      style={style}
+      style={
+        placement === undefined
+          ? style
+          : {
+              position: 'absolute',
+              left: placement.left,
+              top: placement.top,
+              transform: scale,
+              transformOrigin: 'top left',
+            }
+      }
     >
       <kbd className={KBD}>{isMacPlatform() ? '⌘↩' : 'Ctrl+↩'}</kbd>
       <span>Done</span>

@@ -114,7 +114,7 @@ export function NodeTextEditorOverlay({
           Canvas
         </button>
         <span className="text-foreground truncate text-sm font-medium">{title}</span>
-        <EditorExitHint className="ml-auto" dense onDone={commitAndClose} onCancel={onClose} />
+        <EditorExitHint className="ml-auto" onDone={commitAndClose} onCancel={onClose} />
       </div>
       <div className="min-h-0 flex-1">
         <MarkdownEditor

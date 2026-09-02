@@ -229,12 +229,11 @@ export function MarkdownNodeEditor({
         }}
         onCancel={cancel}
         canvasOverlay
-        style={{
-          position: 'absolute',
+        placement={{
           left: box.x,
+          right: box.x + box.width,
           top: exitHintTop ?? box.y + box.height + 6,
-          transform: exitHintScale === undefined ? undefined : `scale(${exitHintScale})`,
-          transformOrigin: 'top left',
+          scale: exitHintScale,
         }}
       />
     </>

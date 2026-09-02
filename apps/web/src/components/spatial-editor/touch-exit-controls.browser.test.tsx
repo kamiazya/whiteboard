@@ -98,6 +98,10 @@ it('inside the spatial editor, tapping Cancel drops the draft and closes the edi
   await userEvent.dblClick(root, { position: { x: 200, y: 150 } })
   await vi.waitFor(() => expect(nodeEditorContent(container)).not.toBeNull())
   await userEvent.keyboard(' draft')
+  // Mirrors node-tools: hangs off the node's bottom-RIGHT corner.
+  const pill = screen.getByTestId('editor-exit-hint').getBoundingClientRect()
+  expect(pill.right - root.getBoundingClientRect().left).toBeCloseTo(300, 0)
+  expect(pill.height).toBeCloseTo(26, 0)
 
   await userEvent.click(screen.getByRole('button', { name: 'Cancel' }))
   await vi.waitFor(() => expect(nodeEditorContent(container)).toBeNull())
