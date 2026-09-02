@@ -5,7 +5,13 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode, SceneNode, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
+import type {
+  BoundingBox,
+  ResolvedEdgeNode,
+  SceneNode,
+  ShapeSceneNode,
+  TextRunNode,
+} from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import {
@@ -317,5 +323,125 @@ describe('comment layer', () => {
     )
     const runs = runsOf(scene.nodes).filter((run) => run.text !== 'content')
     expect(runs.length).toBeGreaterThan(1)
+  })
+
+  describe('placement', () => {
+    const NEIGHBOUR: SpatialNode = {
+      id: 'n2',
+      type: 'text',
+      x: 214,
+      y: 20,
+      width: 200,
+      height: 100,
+      text: 'neighbour',
+    }
+    function bboxOverlap(a: BoundingBox, b: BoundingBox): number {
+      const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+      const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+      return w > 0 && h > 0 ? w * h : 0
+    }
+
+    it('a node-anchored bubble does not cover the node to its right', () => {
+      const scene = layoutSpatialCanvas(
+        {
+          nodes: [TEXT_NODE, NEIGHBOUR],
+          edges: [],
+          'x-whiteboard': {
+            comments: [{ id: 'c1', x: 0, y: 0, text: 'tighten', targetNodeId: 'n1' }],
+          },
+        },
+        baseOptions(),
+      )
+      const bubble = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      expect(bboxOverlap(bubble.bbox, { x: 214, y: 20, w: 200, h: 100 })).toBe(0)
+      expect(bboxOverlap(bubble.bbox, { x: 0, y: 0, w: 200, h: 100 })).toBe(0)
+      // Up-right of the anchor (200, 0): the leader ends on the bubble's
+      // bottom-left corner arc, the corner nearest the pin.
+      expect(bubble.bbox.y + bubble.bbox.h).toBe(0 - COMMENT_BUBBLE_OFFSET_PX)
+      const leader = scene.nodes.find(
+        (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
+      )
+      const inset = 8 * (1 - Math.SQRT1_2)
+      expect(leader?.path[1]).toEqual({
+        x: bubble.bbox.x + inset,
+        y: bubble.bbox.y + bubble.bbox.h - inset,
+      })
+    })
+
+    it('a later comment fans out around an earlier bubble instead of stacking on it', () => {
+      const scene = layoutSpatialCanvas(
+        canvasWith([
+          { id: 'c1', x: 400, y: 300, text: 'first' },
+          { id: 'c2', x: 406, y: 304, text: 'second' },
+        ]),
+        baseOptions(),
+      )
+      const first = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      const second = bubbleOf(scene.nodes, 'c2') as ShapeSceneNode
+      expect(bboxOverlap(first.bbox, second.bbox)).toBe(0)
+      // The earlier one keeps its default spot: document order decides who yields.
+      expect(first.bbox.x).toBe(400 + COMMENT_BUBBLE_OFFSET_PX)
+      expect(first.bbox.y).toBe(300 + COMMENT_BUBBLE_OFFSET_PX)
+    })
+
+    it('a bubble pushed to the left is led to by its right-hand corner', () => {
+      // A wall to the right of the anchor takes both right-hand quadrants.
+      const scene = layoutSpatialCanvas(
+        {
+          nodes: [
+            { id: 'wall', type: 'text', x: 405, y: -500, width: 400, height: 1000, text: 'w' },
+          ],
+          edges: [],
+          'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 300, text: 'left' }] },
+        },
+        baseOptions(),
+      )
+      const bubble = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      expect(bubble.bbox.x + bubble.bbox.w).toBe(400 - COMMENT_BUBBLE_OFFSET_PX)
+      expect(bubble.bbox.y).toBe(300 + COMMENT_BUBBLE_OFFSET_PX)
+      const leader = scene.nodes.find(
+        (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
+      )
+      const inset = 8 * (1 - Math.SQRT1_2)
+      expect(leader?.path[1]).toEqual({
+        x: bubble.bbox.x + bubble.bbox.w - inset,
+        y: bubble.bbox.y + inset,
+      })
+    })
+
+    it('a group frame is not an obstacle, so a comment inside a group stays inside it', () => {
+      const scene = layoutSpatialCanvas(
+        {
+          nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 800, height: 800 }],
+          edges: [],
+          'x-whiteboard': { comments: [{ id: 'c1', x: 100, y: 100, text: 'in the frame' }] },
+        },
+        baseOptions(),
+      )
+      const bubble = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      expect(bubble.bbox.x).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
+      expect(bubble.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
+    })
+
+    it('honours caller-supplied obstacles, for a comment laid out apart from its canvas', () => {
+      const alone = {
+        nodes: [],
+        edges: [],
+        'x-whiteboard': { comments: [{ id: 'c1', x: 100, y: 100, text: 'x' }] },
+      } satisfies SpatialCanvas
+      const withoutObstacle = bubbleOf(
+        layoutSpatialCanvas(alone, baseOptions()).nodes,
+        'c1',
+      ) as ShapeSceneNode
+      const withObstacle = bubbleOf(
+        layoutSpatialCanvas(
+          alone,
+          baseOptions({ commentObstacles: [{ x: 110, y: 110, w: 300, h: 300 }] }),
+        ).nodes,
+        'c1',
+      ) as ShapeSceneNode
+      expect(withoutObstacle.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
+      expect(withObstacle.bbox.y + withObstacle.bbox.h).toBe(100 - COMMENT_BUBBLE_OFFSET_PX)
+    })
   })
 })

@@ -33,13 +33,13 @@ const start: SpatialCanvas = {
   'x-whiteboard': { comments: [ANCHORED, FREE] },
 }
 
-function makeHost() {
+function makeHost(initial: SpatialCanvas = start) {
   const latest: { canvas: SpatialCanvas; commands: EditorCommand[] } = {
-    canvas: start,
+    canvas: initial,
     commands: [],
   }
   function Host() {
-    const [canvas, setCanvas] = useState<SpatialCanvas>(start)
+    const [canvas, setCanvas] = useState<SpatialCanvas>(initial)
     latest.canvas = canvas
     return (
       <div style={{ width: 800, height: 600 }}>
@@ -189,3 +189,63 @@ it('a node-anchored pin does not detach: no move-comment, the anchor stays the c
   expect(movesOf(latest.commands)).toHaveLength(0)
   expect(commentOf(latest.canvas, 'c-node')).toMatchObject({ targetNodeId: 'n1', x: 300, y: 100 })
 })
+
+// Twelve or more elements send layout to the worker, so the committed scene
+// arrives a round trip AFTER the drop — the case that showed the jank: the
+// preview vanished, the committed group came back at the OLD anchor, and the
+// keyed patcher's FLIP then animated it to the new one.
+const FILLER = Array.from({ length: 12 }, (_, i) => ({
+  id: `f${i}`,
+  type: 'text' as const,
+  x: 20 + (i % 4) * 60,
+  y: 520 + Math.floor(i / 4) * 30,
+  width: 50,
+  height: 24,
+  text: `${i}`,
+}))
+
+it('a drop lands the comment at the new anchor with no flight back from the old one', async () => {
+  const { Host, latest } = makeHost({ ...start, nodes: [...start.nodes, ...FILLER] })
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+      'free note',
+    ),
+  )
+  const committed = () =>
+    container.querySelector(
+      '[data-testid="canvas-content"] [data-wb-key="c-free/bubble"]',
+    ) as SVGGElement | null
+
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 5,
+    clientX: r.left + 600,
+    clientY: r.top + 450,
+  })
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  fireEvent.pointerMove(root, { pointerId: 5, clientX: r.left + 660, clientY: r.top + 500 })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="comment-drag-preview"]')).not.toBeNull(),
+  )
+  // While the preview is up the committed copy is not in the document at
+  // all (hidden is not enough: a hidden group still gets REPLACED on the
+  // drop, and a replaced group is what the patcher animates).
+  expect(committed()).toBeNull()
+
+  fireEvent.pointerUp(root, { pointerId: 5, clientX: r.left + 660, clientY: r.top + 500 })
+  await vi.waitFor(() => expect(movesOf(latest.commands)).toHaveLength(1))
+  // The preview outlives the drop until the committed scene has the comment
+  // at its NEW anchor, and that arrival is an insertion: never animated.
+  // The first worker reply also waits for the worker's font to load.
+  await vi.waitFor(() => expect(committed()).not.toBeNull(), { timeout: 10_000 })
+  const group = committed() as SVGGElement
+  expect(group.getAnimations()).toHaveLength(0)
+  const rect = group.querySelector('rect') as SVGRectElement
+  expect(Number.parseFloat(rect.getAttribute('x') ?? 'NaN')).toBeGreaterThan(660)
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="comment-drag-preview"]')).toBeNull(),
+  )
+}, 20_000)

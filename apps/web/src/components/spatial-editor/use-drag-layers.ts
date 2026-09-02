@@ -7,6 +7,7 @@
 // which side it is on and why.
 
 import type {
+  BoundingBox,
   EdgeSides,
   KeyedSvgRender,
   MeasureText,
@@ -100,6 +101,20 @@ export function useDragLayers({
     // commentExtensionFor): they are drawn at the node's corner, and the
     // corner is what is moving.
     const ghostComments = commentExtensionFor(canvas, carried, true)
+    // A riding comment's bubble is placed against what the COMMITTED scene
+    // placed it against — the bystander nodes and the bubbles staying
+    // behind — so at the press it sits exactly where it was drawn. Rendered
+    // alone it would re-place in an empty canvas and jump quadrant.
+    const ghostObstacles: BoundingBox[] = [
+      ...canvas.nodes
+        .filter((n) => !carried.has(n.id) && n.type !== 'group')
+        .map((n) => ({ x: n.x, y: n.y, w: n.width, h: n.height })),
+      ...scene.nodes.flatMap((n) =>
+        n.kind === 'shape' && n.commentChrome === true && n.id?.endsWith('/bubble') === true
+          ? [n.bbox]
+          : [],
+      ),
+    ]
     const rendered = renderCanvasToSvg(
       {
         nodes,
@@ -110,6 +125,7 @@ export function useDragLayers({
         measure: resolvedMeasure,
         theme,
         ...fileSeamOptions,
+        commentObstacles: ghostObstacles,
       },
     )
     return {
@@ -128,6 +144,7 @@ export function useDragLayers({
     resolvedMeasure,
     theme,
     fileSeamOptions,
+    scene,
   ])
 
   // The committed layout, FROZEN at gesture start. The worker's next

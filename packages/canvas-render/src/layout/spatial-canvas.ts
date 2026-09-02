@@ -50,6 +50,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
+import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
 import {
@@ -278,6 +279,13 @@ export interface SpatialLayoutOptions {
    * to the shared document, only passed here at render time.
    */
   readonly showResolved?: boolean
+  /**
+   * Extra boxes a comment bubble must not cover, beyond this canvas's own
+   * nodes and earlier bubbles. For a caller laying out ONE comment apart
+   * from its canvas (the editor's drag preview renders the dragged comment
+   * alone) and needing it placed exactly as the committed scene placed it.
+   */
+  readonly commentObstacles?: readonly BoundingBox[]
 }
 
 /**
@@ -1319,8 +1327,8 @@ function layoutSpatialCanvasInternal(
 
 /** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
 export const COMMENT_PIN_SIZE_PX = 20
-/** Gap (px) from the anchor point to the bubble's top-left corner. */
-export const COMMENT_BUBBLE_OFFSET_PX = 14
+export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
+
 const COMMENT_TEXT_MAX_WIDTH_PX = 200
 // Exported with the offset so the editor's compose bubble can wear the same
 // box the renderer draws (padding, corner) — the draft and the settled
@@ -1366,9 +1374,12 @@ export function commentAnchor(
  * an addressable document node despite carrying an id of their own (see
  * `ShapeSceneNode.commentChrome`).
  *
- * ponytail: placement is a fixed down-right offset with no collision
- * avoidance; overlapping bubbles on clustered comments are the ceiling, and
- * a greedy占-region placer over sceneBounds is the upgrade path.
+ * Bubbles are placed by `placeCommentBubble`: down-right of the anchor
+ * unless that would cover a node or an earlier comment's bubble, then the
+ * least-covered quadrant. Group frames are not obstacles — a comment inside
+ * a group is about its members, and pushing the bubble out of the frame
+ * would carry it away from them. Document order decides who yields:
+ * a later comment fans out around an earlier one.
  */
 function composeComments(
   canvas: SpatialCanvas,
@@ -1378,6 +1389,12 @@ function composeComments(
   if (comments === undefined || comments.length === 0) return []
 
   const chrome = options.appearance.resolveComment?.()
+  const obstacles: BoundingBox[] = [
+    ...canvas.nodes
+      .filter((node) => node.type !== 'group')
+      .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
+    ...(options.commentObstacles ?? []),
+  ]
   const out: SceneNode[] = []
   for (const comment of comments) {
     if (comment.resolved === true && options.showResolved !== true) continue
@@ -1388,23 +1405,41 @@ function composeComments(
     const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
     const anchor = commentAnchor(comment, canvas)
 
-    const bubbleX = anchor.x + COMMENT_BUBBLE_OFFSET_PX
-    const bubbleY = anchor.y + COMMENT_BUBBLE_OFFSET_PX
+    // The text goes through the same mdast pipeline as a text node's body,
+    // so wrapping (CJK included) and theming have one producer. A parse
+    // failure degrades to the single-line label run, like a body's does.
+    let laid: Scene
+    try {
+      laid = layoutMdastBlocks(
+        options.parseBody(comment.text),
+        mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      )
+    } catch (err) {
+      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err })
+      laid = { nodes: [labelRun(comment.text, options, COMMENT_TEXT_MAX_WIDTH_PX)] }
+    }
+    const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
+    const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
+    const bubble = placeCommentBubble(
+      anchor,
+      {
+        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
+        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
+      },
+      obstacles,
+    )
+    obstacles.push(bubble)
 
     // The leader FIRST, so pin and bubble paint over its ends: a dashed line
     // from the anchor to the bubble's near corner keeps the pair reading as
     // one comment when a dense canvas separates them. Geometry is composed
-    // for every resolver; only its paint is assigned. The endpoint sits ON
-    // the rounded corner's arc, not the bbox corner — the corner point
-    // itself is outside the rounded fill, which leaves a visible gap
-    // between the dash end and the bubble border.
-    const leaderInsetPx = COMMENT_BUBBLE_RADIUS_PX * (1 - Math.SQRT1_2)
+    // for every resolver; only its paint is assigned.
     out.push({
       kind: 'edge',
       id: `${comment.id}/leader`,
       path: [
         { x: anchor.x, y: anchor.y },
-        { x: bubbleX + leaderInsetPx, y: bubbleY + leaderInsetPx },
+        commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),
       ],
       fromSide: 'right',
       toSide: 'left',
@@ -1427,40 +1462,19 @@ function composeComments(
       ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
     })
 
-    // The text goes through the same mdast pipeline as a text node's body,
-    // so wrapping (CJK included) and theming have one producer. A parse
-    // failure degrades to the single-line label run, like a body's does.
-    let laid: Scene
-    try {
-      laid = layoutMdastBlocks(
-        options.parseBody(comment.text),
-        mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
-      )
-    } catch (err) {
-      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err })
-      laid = { nodes: [labelRun(comment.text, options, COMMENT_TEXT_MAX_WIDTH_PX)] }
-    }
-    const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
-    const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
-
     out.push({
       kind: 'shape',
       id: `${comment.id}/bubble`,
       commentChrome: true,
-      bbox: {
-        x: bubbleX,
-        y: bubbleY,
-        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
-        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
-      },
+      bbox: bubble,
       radius: COMMENT_BUBBLE_RADIUS_PX,
       ...(appearance !== undefined ? { appearance: appearance.bubble } : {}),
     })
     out.push(
       ...translateScene(
         laid,
-        bubbleX + COMMENT_BUBBLE_PADDING_PX,
-        bubbleY + COMMENT_BUBBLE_PADDING_PX,
+        bubble.x + COMMENT_BUBBLE_PADDING_PX,
+        bubble.y + COMMENT_BUBBLE_PADDING_PX,
       ).nodes,
     )
   }
