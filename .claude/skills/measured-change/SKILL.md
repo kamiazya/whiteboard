@@ -121,6 +121,54 @@ concrete counts, and recommend one. ("42% less ink through a box, 8% more
 crossings" was decided by a human in ten seconds; guessing it would have
 been a coin flip.)
 
+## A decomposition is a measured change too
+
+"This file is 700 lines" is an argument, not a measurement, and it is the
+one an audit reaches for when it has run out of defects. The number that
+decides a split is **how much body an extraction removes against how many
+identifiers cross its seam** — because a component whose extracted half
+needs fourteen props has moved lines without moving knowledge, and the
+reader still has to hold both files at once.
+
+Calibrate against the split this repo ACCEPTED rather than against a number
+you like. `CanvasContextMenu`'s four extractions measured, in lines per
+crossing identifier:
+
+| extraction | lines | seam | ratio |
+|---|---|---|---|
+| `color-row` | 73 | 3 | 24.3 |
+| `edge-menu-items` | 155 | 8 | 19.4 |
+| `node-menu-items` | 433 | 32 | 13.5 |
+| `canvas-menu-items` | 117 | 14 | 8.4 |
+
+So ~8 is the floor an accepted extraction has cleared, not a bar invented
+here. Measured against it, the two components a maintainability audit
+flagged next were both **rejected**:
+
+- `HeaderBranchChip` (663 lines) — rename dialog 43 lines / 10 crossing
+  identifiers = **4.3**, delete dialog 49 / 7 = **7.0**, both under the
+  floor. And the ratio is the smaller objection: its `SCOPE RESET` effect
+  clears eight state slices on `[workspaceId, path]`, so an extraction that
+  takes the state with it breaks the invariant, and one that leaves the
+  state behind is the prop-drilling those ratios are measuring. There is no
+  version that both pays and preserves.
+- `DaemonDetectedBanner` (741 lines) — only the LNA gate rows clear the bar
+  (57 lines / 3 = **19.0**); the port row is 7.8 and the failure notices
+  9.7. But its nine decision functions are ALREADY extracted into
+  `lib/` with their own tests (`decideConnectGate`, `explainProbeFailure`,
+  `deriveCapabilityTier`, `shouldShowDaemonCta`, …), so what is left is
+  wiring and copy. Of the 34 tests, 12 assert on those rows and every one
+  of them is about WHEN the row appears, not what it says — so the reader
+  the extraction would serve does not exist.
+
+Two things generalise. **Count the seam, not the props you would like to
+pass**: a fair count is every identifier the extracted body reads that is
+declared outside it, callbacks and setters included. And **ask what is left
+after the pure decisions are already extracted** — when the answer is
+wiring plus user-facing prose, a split relocates prose between files and
+reduces nothing a reader must hold. Both files are ~535 lines of code under
+a comment ratio of 15-22%; their size is where their explanations live.
+
 ## Before a big rewrite, ask whether the target is reachable
 
 Cheapest experiment in the batch: for every route still cutting through a
