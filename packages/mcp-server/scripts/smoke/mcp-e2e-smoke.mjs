@@ -1008,6 +1008,38 @@ async function main() {
   }
   console.log(`[e2e] wb_version_restore → ${restored.restoredVersionId}`)
 
+  // wb_version_restore into a targetPath — the copy mode, so the
+  // structuredContent for the into-target shape is validated at runtime too.
+  const copied = await callTool('wb_version_restore', {
+    workspaceId: WORKSPACE_ID,
+    documentId,
+    versionId: saved.version.id,
+    targetPath: 'e2e-restored-copy',
+  })
+  if (
+    copied.mode !== 'into-target' ||
+    copied.targetPath !== 'e2e-restored-copy' ||
+    typeof copied.elementCount !== 'number'
+  ) {
+    throw new Error(
+      `wb_version_restore(targetPath) returned unexpected shape: ${JSON.stringify(copied)}`,
+    )
+  }
+  await expectToolError(
+    'wb_version_restore',
+    {
+      workspaceId: WORKSPACE_ID,
+      documentId,
+      versionId: saved.version.id,
+      targetPath: 'e2e-restored-copy',
+    },
+    'into a targetPath that already exists',
+    'already exists',
+  )
+  console.log(
+    `[e2e] wb_version_restore(targetPath) → ${copied.targetPath} (${copied.elementCount} node(s))`,
+  )
+
   // wb_document_set → wb_document_get round-trip, including the core
   // facets (type/title/tags) — these are stored via writeCoreFacets, a
   // separate code path from the extension `facets` bucket below, so this is
