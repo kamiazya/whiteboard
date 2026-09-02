@@ -189,4 +189,18 @@ describe('createSpatialTheme', () => {
     expect(theme.resolveEdge(edge())).toEqual({ stroke: SPATIAL_DARK_PALETTE.edgeStroke })
     expect(theme.resolveLabel().fill).toBe(SPATIAL_DARK_PALETTE.labelFill)
   })
+
+  it('gives the comment leader a dashed stroke in the amber ramp, both modes', () => {
+    for (const [mode, palette] of [
+      ['light', SPATIAL_LIGHT_PALETTE],
+      ['dark', SPATIAL_DARK_PALETTE],
+    ] as const) {
+      const leader = createSpatialTheme({ mode }).resolveComment?.().leader
+      expect(leader).toEqual({
+        stroke: palette.comment.bubble.stroke,
+        strokeWidth: 1,
+        strokeDasharray: '4 3',
+      })
+    }
+  })
 })

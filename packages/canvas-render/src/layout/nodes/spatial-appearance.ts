@@ -51,4 +51,6 @@ export interface SpatialAppearanceResolver {
 export interface SpatialCommentAppearance {
   readonly pin: Appearance
   readonly bubble: Appearance
+  /** The dashed line tying pin to bubble, so the pair reads as one comment. */
+  readonly leader: Appearance
 }
