@@ -28,6 +28,7 @@ export {
   type NodeOutline,
   nodeOutline,
   outlineContains,
+  outlineContentBox,
   outlineEntryPoint,
 } from './layout/nodes/node-outline.js'
 export type {
