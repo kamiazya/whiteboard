@@ -39,6 +39,7 @@ export type PaintAttrs = {
   'font-size'?: number
   'fill-opacity'?: number
   'stroke-opacity'?: number
+  'stroke-dasharray'?: string
 }
 
 export type TextEmphasisAttrs = {

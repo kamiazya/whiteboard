@@ -62,6 +62,14 @@ export interface Appearance {
    * the single-element output byte-identical.
    */
   readonly halo?: string
+  /**
+   * SVG `stroke-dasharray` value, verbatim ("4 3"). A dash pattern is paint
+   * the way a stroke color is — assigned by a resolver, never invented here.
+   * Deliberately NOT scaled by `scaleScene` (the svgFragment/arrowhead
+   * class): parsing and rescaling a pattern string buys visual fidelity only
+   * at scales where a dashed hairline is unreadable anyway.
+   */
+  readonly strokeDasharray?: string
 }
 
 /** A single styled run of inline text, positioned within its parent block. */

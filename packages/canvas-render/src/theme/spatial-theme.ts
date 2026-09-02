@@ -46,6 +46,9 @@ export interface SpatialThemeOptions {
   readonly palette?: SpatialPalette
 }
 
+/** Dash pattern for the comment leader line (SVG stroke-dasharray). */
+const COMMENT_LEADER_DASH = '4 3'
+
 /** A numbered preset resolved through the palette; null for hex/unknown. */
 function presetAccent(color: CanvasColor | undefined, palette: SpatialPalette) {
   if (color === undefined || color.startsWith('#')) return null
@@ -82,6 +85,14 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
     resolveComment: () => ({
       pin: { fill: palette.comment.pin.fill, stroke: palette.comment.pin.stroke },
       bubble: { fill: palette.comment.bubble.fill, stroke: palette.comment.bubble.stroke },
+      // The bubble's stroke color, dashed: the tie must read as comment
+      // chrome, not as an authored canvas edge, and dashing is what says so
+      // when a dense canvas separates pin from bubble.
+      leader: {
+        stroke: palette.comment.bubble.stroke,
+        strokeWidth: 1,
+        strokeDasharray: COMMENT_LEADER_DASH,
+      },
     }),
     resolveLabel: () => ({
       fill: palette.labelFill,

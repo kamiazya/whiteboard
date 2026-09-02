@@ -85,6 +85,9 @@ function appearanceAttrs(appearance?: Appearance): PaintAttrs {
   ) {
     attrs['stroke-opacity'] = appearance.strokeOpacity
   }
+  if (isNonEmptyString(appearance.strokeDasharray)) {
+    attrs['stroke-dasharray'] = appearance.strokeDasharray
+  }
   return attrs
 }
 
