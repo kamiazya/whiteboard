@@ -31,6 +31,10 @@ const SCANNED_PATHS = [
   './scene-render.ts',
   './viewport.ts',
   './node-factories.ts',
+  // Pointer snapping serves preview AND commit from one call path, so it
+  // must stay a pure function of its inputs — an ambient read here could
+  // make the two disagree.
+  './gesture-snap.ts',
 ]
 
 describe('theme resolver purity (no ambient DOM read)', () => {
@@ -104,17 +108,46 @@ describe('file seams reach every render path', () => {
     // one (that hook memoizes on its identity, so spreading there would
     // rebuild the options every render and defeat it) — counting one spelling
     // would miss the other, and counting both matched dependency arrays too.
-    const callsWithoutSeams = [...source.matchAll(/renderCanvasToSvg\(|useWorkerScene\(/g)]
-      .map((match) => ({
-        at: match.index ?? 0,
-        window: source.slice(match.index ?? 0, (match.index ?? 0) + 300),
-      }))
-      .filter((call) => !call.window.includes('fileSeamOptions'))
-      .map((call) => source.slice(call.at, call.at + 60))
-    expect(callsWithoutSeams, 'scene-building calls not given the shared seam object').toEqual([])
-    // A seam named at a call site instead of inside the shared object is the
-    // regression this pins.
-    expect(source).not.toMatch(/renderCanvasToSvg\([\s\S]{0,400}?resolveReference,/)
+    // The gesture-overlay call sites live in use-drag-layers.ts now, so the
+    // property is asserted over both files — an extraction moves a call
+    // site, not out of the rule.
+    //
+    // The window is the call's own ARGUMENT SPAN (paren-matched), not a
+    // fixed character count: a fixed window reached past the call into the
+    // memo's dependency array, where `fileSeamOptions` also appears — so a
+    // call that dropped the spread still scanned as covered. Measured: with
+    // the 300-char window, deleting `...fileSeamOptions` from the liveNode
+    // render left this test green.
+    const callArgSpan = (text: string, openParen: number): string => {
+      let depth = 0
+      for (let i = openParen; i < text.length; i += 1) {
+        if (text[i] === '(') depth += 1
+        if (text[i] === ')') {
+          depth -= 1
+          if (depth === 0) return text.slice(openParen, i + 1)
+        }
+      }
+      throw new Error('unbalanced parens in scanned call')
+    }
+    for (const path of ['./SpatialEditor.tsx', './use-drag-layers.ts']) {
+      const scanned = modules[path] as string
+      const callsWithoutSeams = [...scanned.matchAll(/renderCanvasToSvg\(|useWorkerScene\(/g)]
+        .map((match) => ({
+          at: match.index ?? 0,
+          window: callArgSpan(scanned, (match.index ?? 0) + match[0].length - 1),
+        }))
+        .filter((call) => !call.window.includes('fileSeamOptions'))
+        .map((call) => `${path}: ${scanned.slice(call.at, call.at + 60)}`)
+      expect(callsWithoutSeams, 'scene-building calls not given the shared seam object').toEqual([])
+      // A seam named at a call site instead of inside the shared object is
+      // the regression this pins.
+      expect(scanned).not.toMatch(/renderCanvasToSvg\([\s\S]{0,400}?resolveReference,/)
+    }
+    // The property above degrades to vacuous if the drag-layer hook stops
+    // building scenes at all (a rename, a second extraction): pin that the
+    // scan still sees the synchronous call sites somewhere.
+    const dragSource = modules['./use-drag-layers.ts'] as string
+    expect((dragSource.match(/renderCanvasToSvg\(/g) ?? []).length).toBeGreaterThanOrEqual(1)
   })
 })
 
@@ -162,6 +195,8 @@ describe('single content path (S10 guardrail)', () => {
       // Creation goes through applyResult, so this one holds zero onChange
       // calls today — scanned so a future direct write cannot slip in.
       './use-node-creation.ts',
+      // The keyboard resize path folds commands over a `running` canvas.
+      './use-editor-keyboard.ts',
     ]
     for (const path of MUTATING_SOURCES) {
       const source = modules[path] as string

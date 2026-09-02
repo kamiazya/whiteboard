@@ -59,24 +59,19 @@
  */
 
 import type {
-  EdgeSides,
   MeasureText,
   ResolvedReference,
   SpatialPresetKey,
-  TextMetrics,
 } from '@kamiazya/whiteboard-canvas-render'
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
-  layoutSpatialEdges,
-  renderSceneToSvg,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
   SPATIAL_THEME_GEOMETRY,
-  sceneBounds,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
@@ -95,7 +90,6 @@ import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
-import { useKeyedSvg } from '../../lib/use-keyed-svg.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
@@ -109,31 +103,15 @@ import { applyCommand } from './commands.js'
 import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
-import { computeDragPreview, isInFlightGesture } from './drag-preview.js'
+import { isInFlightGesture } from './drag-preview.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
-import type { Box, ResizeHandleKind } from './geometry.js'
-import {
-  distanceToPolyline,
-  findFreeSpot,
-  HANDLE_SIGN,
-  hitTest,
-  indexNodeBoxes,
-  resizeBoxByDelta,
-  scaleBoxWithin,
-  unionBox,
-} from './geometry.js'
+import { distanceToPolyline, findFreeSpot, hitTest, indexNodeBoxes, unionBox } from './geometry.js'
+import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
-import {
-  type CarriedSideCache,
-  canReuseCarriedSides,
-  carriedByGesture,
-  carriedSideCacheKey,
-  frozenSidesOf,
-  liveNodesFor,
-} from './gesture-view.js'
+import { carriedByGesture } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
 import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
@@ -152,7 +130,7 @@ import {
 } from './navigation.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
-import { renderCanvasToSvg, requiredTextNodeHeight } from './scene-render.js'
+import { requiredTextNodeHeight } from './scene-render.js'
 import { renderedCanvasKeyed } from './scene-render-core.js'
 import {
   EMPTY_SELECTION,
@@ -160,8 +138,7 @@ import {
   type SelectionEvent,
   type SelectionState,
 } from './selection.js'
-import { findShortcut, isTextEntryEvent, type ShortcutId } from './shortcuts.js'
-import { type SnapBox, snapBox, snapEdge } from './snap.js'
+import { isTextEntryEvent } from './shortcuts.js'
 import { TextNodeEditor } from './TextNodeEditor.js'
 import {
   type DraggableCreation,
@@ -170,21 +147,20 @@ import {
   ToolPalette,
 } from './ToolPalette.js'
 import { useClipboardActions } from './use-clipboard-actions.js'
+import { useDragLayers } from './use-drag-layers.js'
+import { useEditorKeyboard } from './use-editor-keyboard.js'
 import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-measurements.js'
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
-import { useGestureCaptured } from './use-gesture-captured.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeCreation } from './use-node-creation.js'
+import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   canvasToScreen,
   fitViewportToBoxes,
-  frameViewport,
-  IDENTITY_VIEWPORT,
   type Point,
   panBy,
   screenToCanvas,
-  contentBounds as unionContentBounds,
   type Viewport,
   viewportTransformCss,
   zoomAt,
@@ -196,25 +172,7 @@ import {
  */
 export const SPATIAL_EDITOR_UNSUPPORTED = ['persistence', 'sync'] as const
 
-/**
- * Attraction radius in SCREEN pixels, converted to canvas units per gesture
- * so the pull feels the same at every zoom — a fixed canvas threshold would
- * be imperceptible zoomed out and violent zoomed in.
- */
-const SNAP_THRESHOLD_SCREEN_PX = 6
-/**
- * Grid pitch in canvas units. Deliberately wider than
- * `2 * SNAP_THRESHOLD_SCREEN_PX`: a pitch at or below that makes every
- * lattice line reachable from everywhere, which is silent rounding rather
- * than snapping, and it would out-pull the neighbour edges the user aimed
- * at. At 20 the grid attracts near a line and leaves the rest of the plane
- * alone.
- */
-const SNAP_GRID_CANVAS_PX = 20
-
 /** Overview size. Big enough to aim at, small enough not to cover content. */
-/** One keyboard step of zoom — finer than the double press, which jumps. */
-const STEP_ZOOM_FACTOR = 1.25
 const MINIMAP_WIDTH_PX = 160
 const MINIMAP_HEIGHT_PX = 110
 
@@ -413,18 +371,7 @@ const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
 
 /** Breathing room kept around framed content (zoom to fit / selection). */
-const FRAME_MARGIN_PX = 24
 const ZOOM_WHEEL_FACTOR = 1.1
-/** Canvas-space px per arrow-key nudge on a focused resize handle; Shift multiplies by 4. */
-const RESIZE_KEYBOARD_STEP = 8
-const RESIZE_KEYBOARD_STEP_LARGE = 32
-const ARROW_KEY_DELTA: Record<string, { dx: number; dy: number }> = {
-  ArrowLeft: { dx: -1, dy: 0 },
-  ArrowRight: { dx: 1, dy: 0 },
-  ArrowUp: { dx: 0, dy: -1 },
-  ArrowDown: { dx: 0, dy: 1 },
-}
-
 function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
   const rect = root.getBoundingClientRect()
   return { x: e.clientX - rect.left, y: e.clientY - rect.top }
@@ -479,7 +426,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
     const rootRef = useRef<HTMLDivElement | null>(null)
 
-    const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
     const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
       useEditorMeasurements(rootRef)
 
@@ -538,6 +484,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * delete paths). Cleared whenever the primary selection clears.
      */
     const extraIds = selectionState.extraIds
+    const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
+    const selectedBox = useMemo(
+      () => (selectedId === null ? undefined : boxes.find((b) => b.id === selectedId)?.box),
+      [boxes, selectedId],
+    )
+    const selectedNode = useMemo(
+      () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
+      [canvas, selectedId],
+    )
+    /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
+    const selection =
+      selectedId !== null && selectedBox !== undefined
+        ? { id: selectedId, box: selectedBox }
+        : undefined
+    // The pan/zoom viewport and its frame/zoom verbs — see
+    // use-viewport-controls.ts. Wheel/hand/pinch navigation stays with the
+    // pointer wiring below and drives the same setViewport.
+    const { viewport, setViewport, stepZoom, frameContent, frameSelection } = useViewportControls({
+      rootRef,
+      boxes,
+      selection,
+      extraIds,
+      viewportCenterScreen,
+      containerSizeOf,
+    })
     /**
      * Armed by a second same-target press inside the double-press window;
      * RESOLVED at pointerup: zero movement opens the editor (node) or
@@ -787,7 +758,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // ordinary open — the earlier version of this returned null and stranded
     // the flag, which only a new selection could get out of.
     if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
-    const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
      * without `onToggleNodeLock` has no way to unlock, so blocking there
@@ -837,137 +807,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // isLocked closes over lockedNodeIds/lockEnabled, both listed here.
     }, [lockEnabled, lockedNodeIds, selectedId, extraIds, gestureState])
 
-    /**
-     * The dragged node's own content, rendered ONCE per drag (the reducer's
-     * pointermove passthrough returns the same state reference, so this memo
-     * holds for the whole gesture; a single-node render costs ~0.4ms).
-     * Per-frame motion is then a pure CSS transform in DragPreviewLayer —
-     * the full-canvas render stays untouched during the drag.
-     */
-    const dragContentSvg = useMemo(() => {
-      if (gestureState.kind !== 'moving') return undefined
-      const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
-      const nodes = canvas.nodes.filter((n) => carried.has(n.id))
-      if (nodes.length === 0) return undefined
-      // Same embed options as the committed scene: a ghost that drops an
-      // expanded miniature back to a bare card mid-drag reads as data loss.
-      const rendered = renderCanvasToSvg(
-        { nodes, edges: [] },
-        {
-          measure: resolvedMeasure,
-          theme,
-          ...fileSeamOptions,
-        },
-      )
-      return {
-        svg: rendered.svg,
-        originX: gestureState.startX - rendered.bounds.x,
-        originY: gestureState.startY - rendered.bounds.y,
-      }
-      // isLocked closes over lockedNodeIds/lockEnabled, both listed.
-    }, [
-      gestureState,
-      canvas,
-      extraIds,
-      lockEnabled,
-      lockedNodeIds,
-      resolvedMeasure,
-      theme,
-      fileSeamOptions,
-    ])
-
-    /**
-     * The scene WITHOUT everything the drag layers draw live: carried
-     * nodes travel as the ghost, and EVERY edge re-routes per frame in
-     * the live-edges layer — a bystander edge is excluded too, because
-     * the moving node entering or leaving its path changes its route and
-     * its line jumps, and a frozen copy would disagree with the drop
-     * result. Rendered ONCE per drag (gestureState is reference-stable
-     * across pointermoves), so per-frame cost stays with the small layers.
-     * The returned `measure` memoizes per drag: edge labels measure on the
-     * first live frame and every later frame re-places the cached metrics,
-     * keeping pointermoves free of text measurement.
-     * ponytail: the backdrop render here is ~21ms at 45 nodes (the anchor
-     * pass, formerly ~7x that, now arrives with the committed scene); if
-     * start jank reappears on much larger documents, the next rung is
-     * reusing the committed scene graph for the backdrop instead of
-     * re-rendering — drop the carried node runs, truncate at the first
-     * edge, re-render the remainder (composeNode is per-node pure, so the
-     * prefix equivalence holds while the backdrop stays edge-free).
-     */
-    // The committed layout, FROZEN at gesture start. The worker's next
-    // reply may land mid-gesture, and BOTH halves matter: the anchors are
-    // the points bystander edges are pinned to, and the scene is what
-    // decides which edges are pin-eligible at all (frozenSidesOf) — a
-    // swapped scene silently un-pins every bystander even with the anchors
-    // held, which is the same re-fraction by another door.
-    const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
-    const gestureCommitted = useGestureCaptured(
-      gestureState.kind === 'moving' ||
-        gestureState.kind === 'resizing' ||
-        gestureState.kind === 'connecting',
-      committedPair,
-    )
-    // Last optimized sides for the gesture's carried edges (see liveEdges).
-    const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
-    useEffect(() => {
-      if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') {
-        carriedSideCacheRef.current = null
-      }
-    }, [gestureState.kind])
-
-    const dragStatic = useMemo(() => {
-      if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
-      const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
-      const base: SpatialCanvas = {
-        ...canvas,
-        nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
-        edges: [],
-      }
-      const rendered = renderCanvasToSvg(base, {
-        measure: resolvedMeasure,
+    // The drag/resize/connect render layers (ghost, backdrop, live edges,
+    // live resize, preview geometry, and the committed surface's mount-once
+    // patch container) — one derivation hook, no state of its own. See
+    // use-drag-layers.ts for the per-gesture vs per-frame split.
+    const { dragContentSvg, dragStatic, dragPreview, liveEdges, liveNode, canvasContentRef } =
+      useDragLayers({
+        gestureState,
+        canvas,
+        extraIds,
+        isLocked,
+        lockEnabled,
+        lockedNodeIds,
+        resolvedMeasure,
         theme,
-        ...fileSeamOptions,
+        fileSeamOptions,
+        scene,
+        anchors,
+        keyed,
+        boxes,
+        selectableBoxes,
+        livePoint,
       })
-      const metricsCache = new Map<string, TextMetrics>()
-      const measure: MeasureText = (text, font) => {
-        const key = `${font.family}|${font.weight}|${font.style}|${font.sizePx}\u0000${text}`
-        const hit = metricsCache.get(key)
-        if (hit !== undefined) return hit
-        const metrics = resolvedMeasure(text, font)
-        metricsCache.set(key, metrics)
-        return metrics
-      }
-      // The committed anchor state: liveEdges pins bystander edges to these
-      // exact points so a carried edge joining their (node, side) group
-      // cannot re-fraction them mid-drag. Taken from the committed scene's
-      // OWN layout rather than re-run here — the anchor pass is the most
-      // expensive step of a layout (measured: ~7x the backdrop render), and
-      // these are also the anchors the pixels on screen were routed with,
-      // which a fresh pass over a newer canvas is not.
-      return {
-        carried,
-        keyed: renderedCanvasKeyed(rendered),
-        bounds: rendered.bounds,
-        measure,
-        committedAnchors: gestureCommitted.anchors,
-      }
-      // isLocked closes over lockedNodeIds/lockEnabled, both listed.
-    }, [
-      gestureState,
-      canvas,
-      gestureCommitted,
-      extraIds,
-      lockEnabled,
-      lockedNodeIds,
-      resolvedMeasure,
-      theme,
-      fileSeamOptions,
-    ])
-    // The committed surface's mount-once container (see the JSX below):
-    // during a gesture it patches to the drag backdrop, on drop back to the
-    // committed render — both through the same keyed reconciliation.
-    const canvasContentRef = useKeyedSvg(dragStatic?.keyed ?? keyed)
 
     useImperativeHandle(
       forwardedRef,
@@ -980,20 +841,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }),
       [boxes],
     )
-
-    const selectedBox = useMemo(
-      () => (selectedId === null ? undefined : boxes.find((b) => b.id === selectedId)?.box),
-      [boxes, selectedId],
-    )
-    const selectedNode = useMemo(
-      () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
-      [canvas, selectedId],
-    )
-    /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
-    const selection =
-      selectedId !== null && selectedBox !== undefined
-        ? { id: selectedId, box: selectedBox }
-        : undefined
 
     /**
      * Every selected node with the box it currently occupies, primary first.
@@ -1017,160 +864,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const isMultiSelection = selectionMembers.length > 1
 
     /**
-     * The in-flight preview geometry, derived per frame from the gesture's own
-     * start snapshot plus the live pointer. Move/resize never read `canvas`
-     * (see drag-preview.ts for why, and for the single-source
-     * `resizeBoxByDelta` guarantee it documents); the connecting branch does —
-     * it routes the prospective edge through the committed producer, a few
-     * routeEdge calls per frame.
-     */
-    const dragPreview = useMemo(() => {
-      // Existing edges keep their committed sides while a connect gesture
-      // is in flight — same freeze the live drag overlay applies, so the
-      // canvas around the pointer stays still and pointer frames skip the
-      // crossing-optimization loop. The prospective edge itself derives
-      // fresh each frame.
-      const frozenEdgeSides = frozenSidesOf(gestureCommitted.scene)
-      return computeDragPreview(gestureState, boxes, livePoint, {
-        canvas,
-        selectableBoxes,
-        frozenEdgeSides,
-      })
-    }, [gestureState, livePoint, boxes, canvas, selectableBoxes, gestureCommitted])
-
-    /**
-     * EVERY edge, re-composed against the ghost's snapped live position and
-     * rendered as an overlay — the per-frame half of live drag rendering.
-     * Goes through canvas-render's `layoutSpatialEdges`, the same producer
-     * the committed render uses, so routing detours around the moving node,
-     * line jumps, and label placement all match the drop result exactly
-     * (one producer per geometry). Per pointermove this is edge routing
-     * plus a small serialization; text measurement is absorbed by
-     * `dragStatic.measure`'s per-drag cache.
-     */
-    const liveEdges = useMemo(() => {
-      if (
-        (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') ||
-        dragPreview === undefined ||
-        dragPreview.kind !== 'box' ||
-        dragStatic === undefined ||
-        canvas.edges.length === 0
-      ) {
-        return undefined
-      }
-      const liveNodes = [...liveNodesFor(canvas, gestureState, dragPreview.box, dragStatic.carried)]
-      // BYSTANDER sides stay frozen at their committed choices for the whole
-      // gesture: re-optimizing them per frame would let unrelated routes
-      // flip sides mid-drag. Edges attached to a CARRIED node re-optimize
-      // through the same side optimizer the committed render uses (so the
-      // drop cannot re-side an edge the preview never showed that way) —
-      // but only once per CARRIED_RESIDE_STEP_PX of travel: the optimizer's
-      // trial loop costs ~8-14ms and a side decision rarely changes within
-      // a few pixels, so in-between frames reuse the cached sides as a full
-      // override map, which skips the optimizer entirely.
-      const carried = dragStatic.carried
-      const carriedEdgeIds = new Set(
-        canvas.edges
-          .filter((edge) => carried.has(edge.fromNode) || carried.has(edge.toNode))
-          .map((edge) => edge.id),
-      )
-      const frozenSides = new Map(
-        [...frozenSidesOf(gestureCommitted.scene)]
-          .filter(([id]) => !carriedEdgeIds.has(id))
-          .map(([id, pair]) => {
-            const pin = dragStatic.committedAnchors.get(id)
-            return [
-              id,
-              {
-                ...pair,
-                from: pin?.from,
-                fromLaneDepth: pin?.fromLaneDepth,
-                to: pin?.to,
-                toLaneDepth: pin?.toLaneDepth,
-              },
-            ] as const
-          }),
-      )
-      const cacheKey = carriedSideCacheKey(carriedEdgeIds)
-      const cache = carriedSideCacheRef.current
-      const reuse = canReuseCarriedSides(cache, cacheKey, dragPreview.box.x, dragPreview.box.y)
-      const overrides =
-        reuse && cache !== null ? new Map([...frozenSides, ...cache.sides]) : frozenSides
-      const nodes = layoutSpatialEdges(
-        { ...canvas, nodes: liveNodes },
-        {
-          measure: dragStatic.measure,
-          appearance: createEditorAppearance(theme),
-          edgeSideOverrides: overrides,
-        },
-      )
-      if (!reuse) {
-        const sides = new Map<string, EdgeSides>()
-        for (const node of nodes) {
-          if (node.kind === 'edge' && carriedEdgeIds.has(node.id)) {
-            sides.set(node.id, { fromSide: node.fromSide, toSide: node.toSide })
-          }
-        }
-        carriedSideCacheRef.current = {
-          key: cacheKey,
-          anchorX: dragPreview.box.x,
-          anchorY: dragPreview.box.y,
-          sides,
-        }
-      }
-      const liveBounds = sceneBounds({ nodes })
-      return {
-        svg: renderSceneToSvg(
-          { nodes },
-          { width: liveBounds.w, height: liveBounds.h, viewBox: liveBounds },
-        ),
-        bounds: liveBounds,
-      }
-    }, [gestureState, dragPreview, dragStatic, canvas, theme, gestureCommitted])
-
-    /**
-     * The resized node's own content, re-rendered at its PREVIEW size each
-     * frame — a resize changes geometry, so the move ghost's render-once-
-     * transform-per-frame trick cannot apply. Affordable because it is one
-     * node (~0.4ms) and `dragStatic.measure` memoizes text metrics for the
-     * gesture: the first frame warms the cache and later frames re-wrap
-     * with zero new measure calls.
-     *
-     * File-node LOD (card vs inline embed) deliberately stays at its
-     * COMMITTED decision for the whole gesture — the same freeze-then-
-     * settle rule edge sides follow: a mid-gesture card/embed swap is
-     * exactly the kind of flicker the freeze exists to prevent, and the
-     * expansion hysteresis is stateful over the committed canvas. The
-     * crossing of a size threshold takes effect on release.
-     */
-    const liveNode = useMemo(() => {
-      if (
-        gestureState.kind !== 'resizing' ||
-        dragPreview === undefined ||
-        dragPreview.kind !== 'box' ||
-        dragStatic === undefined
-      ) {
-        return undefined
-      }
-      const resized = liveNodesFor(
-        canvas,
-        gestureState,
-        dragPreview.box,
-        new Set([gestureState.nodeId]),
-      ).find((n) => n.id === gestureState.nodeId)
-      if (resized === undefined) return undefined
-      const rendered = renderCanvasToSvg(
-        { nodes: [resized], edges: [] },
-        {
-          measure: dragStatic.measure,
-          theme,
-          ...fileSeamOptions,
-        },
-      )
-      return { svg: rendered.svg, bounds: rendered.bounds }
-    }, [gestureState, dragPreview, dragStatic, canvas, theme, fileSeamOptions])
-
-    /**
      * How far a snap guide extends, in canvas space: across all content plus
      * a margin. Spanning the content rather than the window keeps the line a
      * function of the document alone, so it renders identically at any zoom
@@ -1188,91 +881,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         maxY: Math.max(...ys) + GUIDE_MARGIN_PX,
       }
     }, [boxes])
-
-    /**
-     * Nudges the POINTER, not the emitted command, so preview and commit see
-     * the same value: the reducer derives both from `point`, and adjusting
-     * only one of them would let the box render in one place and land in
-     * another.
-     *
-     * Serves both gestures, but they snap DIFFERENT things: a move snaps the
-     * box (three lines per axis — edge, centre, edge), a resize snaps only the
-     * edge under the handle. Feeding a resize the move candidates would let
-     * the box's own centre or far edge pull the handle, which reads as the
-     * handle fighting the pointer.
-     */
-    const snapGesturePoint = (
-      raw: Point,
-      suspended: boolean,
-    ): { point: Point; guides: { x: readonly number[]; y: readonly number[] } } => {
-      const unchanged = { point: raw, guides: { x: [], y: [] } }
-      if (suspended) return unchanged
-      const options = {
-        thresholdCanvasPx: SNAP_THRESHOLD_SCREEN_PX / viewport.zoom,
-        gridSize: SNAP_GRID_CANVAS_PX,
-      }
-
-      if (gestureState.kind === 'resizing') {
-        // Only the node being resized is excluded — nothing else moves with a
-        // resize, so every other box stays a legitimate target.
-        const others = boxes
-          .filter((entry) => entry.id !== gestureState.nodeId)
-          .map((entry) => entry.box)
-        const sign = HANDLE_SIGN[gestureState.handle]
-        const start = gestureState.startBox
-        const guides: { x: number[]; y: number[] } = { x: [], y: [] }
-        let point = raw
-
-        // sign 0 means that axis is anchored (an edge handle moves one axis
-        // only), -1 the leading edge travels, +1 the trailing one.
-        if (sign.x !== 0) {
-          const dx = raw.x - gestureState.startPoint.x
-          const edge = sign.x === -1 ? start.x + dx : start.x + start.width + dx
-          const snapped = snapEdge(edge, others, options, 'x')
-          point = { ...point, x: raw.x + (snapped.position - edge) }
-          if (snapped.guide !== undefined) guides.x.push(snapped.guide)
-        }
-        if (sign.y !== 0) {
-          const dy = raw.y - gestureState.startPoint.y
-          const edge = sign.y === -1 ? start.y + dy : start.y + start.height + dy
-          const snapped = snapEdge(edge, others, options, 'y')
-          point = { ...point, y: raw.y + (snapped.position - edge) }
-          if (snapped.guide !== undefined) guides.y.push(snapped.guide)
-        }
-        return { point, guides }
-      }
-
-      if (gestureState.kind !== 'moving') return unchanged
-      const moving = boxes.find((entry) => entry.id === gestureState.nodeId)
-      if (moving === undefined) return unchanged
-
-      const candidate: SnapBox = {
-        x: gestureState.startX + (raw.x - gestureState.startPoint.x),
-        y: gestureState.startY + (raw.y - gestureState.startPoint.y),
-        width: moving.box.width,
-        height: moving.box.height,
-      }
-      // Everything travelling WITH the drag is excluded: a multi-selection
-      // member, or a frame's geometrically contained members (same rule the
-      // commit uses). Left in, a carried node would attract its own carrier
-      // and peg the gesture at a fixed offset.
-      //
-      // A LOCKED contained member is the exception, and it has to mirror the
-      // commit path exactly: that path refuses to move a locked member with
-      // its frame, so the member stays put and remains a legitimate
-      // alignment target. Dropping it here would silently discard one.
-      const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
-
-      const result = snapBox(
-        candidate,
-        boxes.filter((entry) => !carried.has(entry.id)).map((entry) => entry.box),
-        options,
-      )
-      return {
-        point: { x: raw.x + (result.x - candidate.x), y: raw.y + (result.y - candidate.y) },
-        guides: { x: result.guidesX, y: result.guidesY },
-      }
-    }
 
     /**
      * Folds `result.commands` in order over a LOCAL running canvas (seeded
@@ -1746,6 +1354,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const snapped = snapGesturePoint(
         screenToCanvas(screenPoint, viewport),
         e.metaKey || e.ctrlKey,
+        {
+          gestureState,
+          canvas,
+          boxes,
+          extraIds,
+          isLocked,
+          zoom: viewport.zoom,
+        },
       )
       setSnapGuides(snapped.guides)
       setLivePoint(snapped.point)
@@ -1841,6 +1457,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       const point = snapGesturePoint(
         screenToCanvas(screenPoint, viewport),
         e.metaKey || e.ctrlKey,
+        {
+          gestureState,
+          canvas,
+          boxes,
+          extraIds,
+          isLocked,
+          zoom: viewport.zoom,
+        },
       ).point
       const targetNodeId =
         gestureState.kind === 'connecting' ? hitTest(selectableBoxes, point) : undefined
@@ -2051,284 +1675,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * would let the chord fall through to the browser's own select-all,
      * highlighting the whole page. A handled no-op still consumes it.
      */
-    const selectAllNodes = (): boolean => {
-      const allIds = canvasRef.current.nodes.map((node) => node.id).filter((id) => !isLocked(id))
-      if (allIds.length === 0) return true
-      applySelection({ type: 'set-members', ids: allIds })
-      setSelectedEdgeId(null)
-      return true
-    }
-
-    /**
-     * Toggle the lock on the current selection. Lock is host state, so
-     * this reports through the callback and never touches the canvas
-     * value — a lock is not an edit to the document.
-     */
-    const toggleSelectionLock = (): boolean => {
-      // An edge selection is exclusive with a node selection, so this is a
-      // dispatch, not a merge.
-      if (edgeLockEnabled && selectedEdgeId !== null) {
-        onToggleEdgeLock?.(selectedEdgeId, !isEdgeLocked(selectedEdgeId))
-        return true
-      }
-      if (!lockEnabled || onToggleNodeLock === undefined || selection === undefined) return false
-      const ids = [selection.id, ...extraIds]
-      // The primary's current state decides the direction, so a mixed
-      // selection lands on ONE state instead of flipping each node.
-      const next = !isLocked(selection.id)
-      for (const id of ids) onToggleNodeLock(id, next)
-      if (next) {
-        applySelection({ type: 'clear' })
-      }
-      return true
-    }
-
-    /** Table-dispatched shortcut handlers, keyed by the catalog's ids. */
-    const runShortcut = (id: ShortcutId): boolean => {
-      switch (id) {
-        case 'toggle-lock':
-          return toggleSelectionLock()
-        case 'zoom-in':
-          return stepZoom(STEP_ZOOM_FACTOR)
-        case 'zoom-out':
-          return stepZoom(1 / STEP_ZOOM_FACTOR)
-        case 'zoom-to-fit':
-          return frameContent()
-        case 'zoom-to-selection':
-          return frameSelection()
-        case 'select-all':
-          return selectAllNodes()
-        case 'duplicate-selection':
-          return duplicateSelection()
-        case 'reorder-forward':
-          return reorderSelection('forward')
-        case 'reorder-backward':
-          return reorderSelection('backward')
-        case 'reorder-front':
-          return reorderSelection('front')
-        case 'reorder-back':
-          return reorderSelection('back')
-        default:
-          // Inline-handled ids never reach here (findShortcut skips them).
-          return false
-      }
-    }
-
-    const handleKeyDown = (e: React.KeyboardEvent<HTMLDivElement>) => {
-      // Declarative shortcuts first — see shortcuts.ts, the single catalog.
-      const shortcut = findShortcut(e.nativeEvent, tool)
-      if (shortcut !== undefined && runShortcut(shortcut.id)) {
-        e.preventDefault()
-        return
-      }
-      // Keyboard equivalent of pointercancel: discards an in-flight
-      // resize/move/connect gesture without committing it.
-      if (e.key === 'Escape' && selectedEdgeId !== null) {
-        e.preventDefault()
-        setSelectedEdgeId(null)
-        return
-      }
-      if (
-        (e.key === 'Delete' || e.key === 'Backspace') &&
-        selectedEdgeId !== null &&
-        gestureState.kind !== 'editing-text'
-      ) {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
-          e.preventDefault()
-          applyResult({
-            state: { kind: 'idle' },
-            commands: [{ kind: 'delete-edge', id: selectedEdgeId } as const],
-          })
-          setSelectedEdgeId(null)
-          return
-        }
-      }
-      if (e.key === 'Escape' && gestureState.kind === 'idle' && pendingCut !== null) {
-        e.preventDefault()
-        // Escape lifts only the HOLD. The envelope stays: the clipboard
-        // keeps working as a plain copy, matching what the OS side already
-        // holds (which no Escape of ours could clear).
-        setPendingCut(null)
-        return
-      }
-      if (e.key === 'Escape' && gestureState.kind !== 'idle') {
-        e.preventDefault()
-        // Escape is the PERSON's cancel, not the platform's: it routes to
-        // cancel-text-edit, whose empty-note branch keeps a freshly placed
-        // box. pointercancel is reserved for genuine gesture teardown (see
-        // the lost-capture handling), where the half-made node is debris.
-        // For every non-editing gesture the two arms behave identically.
-        applyResult(reduceGesture(gestureState, canvas, { type: 'cancel-text-edit' }))
-        return
-      }
-      // Delete/Backspace deletes the current selection — but never while the
-      // event's own target is a text-entry surface (the open TextNodeEditor's
-      // textarea, or any other input this root might contain), or Backspace
-      // while typing would delete the node instead of a character. The
-      // reducer's own editing-text guard is the second, machine-checkable
-      // layer of that same policy (see gestures.ts's delete-selection arm).
-      // Arrow keys nudge the SELECTED node (standard canvas-tool parity);
-      // Shift multiplies the step. A focused resize handle handles arrows
-      // itself and stops propagation there, so an arrow reaching THIS
-      // handler is never a resize.
-      if (e.key === ' ' && gestureState.kind === 'idle') {
-        // Held Space turns the next left-drag into a pan (Excalidraw
-        // semantics). preventDefault stops the page scrolling on Space —
-        // but never while the key originates in a text-entry surface. Node
-        // text editing is covered by the gesture-state check (editing-text
-        // is not idle); the edge label editor keeps the gesture idle, so a
-        // typed space would otherwise be swallowed here.
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName
-        if (tag !== 'INPUT' && tag !== 'TEXTAREA' && !target?.isContentEditable) {
-          e.preventDefault()
-          spaceDownRef.current = true
-        }
-        return
-      }
-      const nudge = ARROW_KEY_DELTA[e.key]
-      if (
-        nudge !== undefined &&
-        selection !== undefined &&
-        selectedNode !== undefined &&
-        gestureState.kind === 'idle'
-      ) {
-        e.preventDefault()
-        const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
-        // Nudge the WHOLE selection, not just the primary: a multi-selection
-        // that tore apart under the arrow keys was a latent bug select-all
-        // makes trivial to hit. Positions are read from canvasRef, not the
-        // render closure — key auto-repeat delivers keydowns faster than
-        // commits re-render, and a stale base clobbers the previous nudge.
-        const ids = [selectedNode.id, ...extraIds]
-        const moves = ids.flatMap((id) => {
-          const current = canvasRef.current.nodes.find((n) => n.id === id)
-          if (current === undefined) return []
-          return [
-            {
-              kind: 'move-node' as const,
-              id: current.id,
-              x: current.x + nudge.dx * step,
-              y: current.y + nudge.dy * step,
-            },
-          ]
-        })
-        if (moves.length === 0) return
-        // ONE batch, not N commands: a multi-node nudge is one user action
-        // and must undo as one step (N separate commits would only group by
-        // the UndoManager's merge-timing heuristic).
-        applyResult({ state: gestureState, commands: [{ kind: 'batch', commands: moves }] })
-        return
-      }
-      if (
-        (e.key === 'Delete' || e.key === 'Backspace') &&
-        selection !== undefined &&
-        extraIds.size > 0 &&
-        gestureState.kind !== 'editing-text'
-      ) {
-        e.preventDefault()
-        const ids = [selection.id, ...extraIds]
-        applyResult({
-          state: { kind: 'idle' },
-          commands: ids.map((id) => ({ kind: 'delete-node' as const, id })),
-          selectedId: null,
-        })
-        return
-      }
-      if ((e.key === 'Delete' || e.key === 'Backspace') && selection !== undefined) {
-        const target = e.target as HTMLElement | null
-        const tag = target?.tagName
-        if (tag === 'INPUT' || tag === 'TEXTAREA' || target?.isContentEditable) return
-        e.preventDefault()
-        applyResult(
-          reduceGesture(gestureState, canvas, { type: 'delete-selection', nodeId: selection.id }),
-        )
-      }
-    }
-
-    const handleResizeHandleKeyDown = (
-      handle: ResizeHandleKind,
-      _handleBox: Box,
-      e: React.KeyboardEvent,
-    ) => {
-      if (selection === undefined) return
-      // Geometry comes from `canvasRef`, not from the render snapshot the
-      // pointer path can afford to use. Key repeat delivers the next press
-      // before React has re-rendered, and a parent that applies `onChange`
-      // asynchronously lags further still — reading the stale snapshot would
-      // make every press compute the same coordinates, so holding the key
-      // would resize once and then appear to stick.
-      const members = [selection.id, ...extraIds].flatMap((id) => {
-        const node = canvasRef.current.nodes.find((candidate) => candidate.id === id)
-        return node === undefined
-          ? []
-          : [{ id, box: { x: node.x, y: node.y, width: node.width, height: node.height } }]
-      })
-      // The resize anchor is the box the HANDLES surround, not the handle's
-      // own tiny hit-box `_handleBox` describes — same reasoning as
-      // onHandlePointerDown's `box: selectionBox` below.
-      const box = unionBox(members.map((member) => member.box))
-      if (box === undefined) return
-      const step = e.shiftKey ? RESIZE_KEYBOARD_STEP_LARGE : RESIZE_KEYBOARD_STEP
-      const delta = ARROW_KEY_DELTA[e.key]
-      if (delta === undefined) return
-      e.preventDefault()
-      const nextBox = resizeBoxByDelta(box, handle, delta.dx * step, delta.dy * step)
-      if (
-        nextBox.x === box.x &&
-        nextBox.y === box.y &&
-        nextBox.width === box.width &&
-        nextBox.height === box.height
-      ) {
-        return
-      }
-      // Same handles, same meaning as the pointer drag: a lone node takes the
-      // dragged box verbatim, a selection has each member re-placed inside it.
-      const commands: readonly EditorCommand[] =
-        members.length > 1
-          ? members.map((member) => {
-              const scaled = scaleBoxWithin(box, nextBox, member.box)
-              return {
-                kind: 'resize-node',
-                id: member.id,
-                x: scaled.x,
-                y: scaled.y,
-                width: scaled.width,
-                height: scaled.height,
-              }
-            })
-          : [
-              {
-                kind: 'resize-node',
-                id: selection.id,
-                x: nextBox.x,
-                y: nextBox.y,
-                width: nextBox.width,
-                height: nextBox.height,
-              },
-            ]
-      // Threaded through a running canvas, not re-applied to `canvasRef`
-      // each time: the ref does not advance within this tick, so a second
-      // command built on it would discard the first.
-      let running = canvasRef.current
-      for (const command of commands) {
-        running = applyCommand(running, command)
-        onChange(running, command)
-      }
-      // Same write-back the gesture path does (see applyResult): without it
-      // the ref keeps describing the pre-keypress canvas until the parent's
-      // re-render lands.
-      canvasRef.current = running
-    }
-
-    const handleConnectKeyDown = () => {
-      if (selection === undefined) return
-      applyResult(
-        reduceGesture(gestureState, canvas, { type: 'pointerdown-connect', nodeId: selection.id }),
-      )
-    }
 
     const handleWheel = (e: WheelEvent) => {
       const root = rootRef.current
@@ -2373,12 +1719,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
-    /** Keyboard zoom: about the viewport centre, since there is no pointer. */
-    const stepZoom = (factor: number): boolean => {
-      setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
-      return true
-    }
-
     /**
      * Node boxes for the overview, with each authored colour resolved to the
      * accent the scene already uses for it. A preset key resolves through the
@@ -2401,27 +1741,37 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping the current zoom (the hand-mode "where did my content go"
      * recovery). No boxes → no-op.
      */
-    /**
-     * Frames the given content: pans so its center sits at the viewport
-     * center, and zooms so the whole box fits with a small margin —
-     * magnifying a small selection as readily as it shrinks an oversized
-     * canvas, which is the whole point of zoom-to-selection. Never
-     * magnifies past 1:1 (a two-word note would otherwise fill the screen)
-     * and stays inside the viewport module's own [MIN_ZOOM, MAX_ZOOM].
-     */
-    const frameContent = (ids?: ReadonlySet<string>) => {
-      const bounds = unionContentBounds(boxes, ids)
-      if (bounds === undefined) return false
-      const containerSize = containerSizeOf(rootRef.current)
-      setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX))
-      return true
-    }
-
-    /** Frames the selection, or everything when nothing is selected. */
-    const frameSelection = (): boolean => {
-      if (selection === undefined) return frameContent()
-      return frameContent(new Set([selection.id, ...extraIds]))
-    }
+    // The keyboard surface — shortcut dispatch plus the three keydown
+    // handlers the JSX wires (canvas root, focused resize handle, connect
+    // handle). See use-editor-keyboard.ts; shortcuts.ts stays the catalog.
+    const { handleKeyDown, handleResizeHandleKeyDown, handleConnectKeyDown } = useEditorKeyboard({
+      tool,
+      canvas,
+      canvasRef,
+      gestureState,
+      selection,
+      selectedNode,
+      extraIds,
+      selectedEdgeId,
+      setSelectedEdgeId,
+      pendingCut,
+      setPendingCut,
+      spaceDownRef,
+      lockEnabled,
+      edgeLockEnabled,
+      isLocked,
+      isEdgeLocked,
+      onToggleNodeLock,
+      onToggleEdgeLock,
+      onChange,
+      applyResult,
+      applySelection,
+      duplicateSelection,
+      reorderSelection,
+      stepZoom,
+      frameContent,
+      frameSelection,
+    })
 
     /** Places one of the directly-creatable kinds at a canvas-space point. */
     const createAt = (kind: DraggableCreation, point: Point) => {
