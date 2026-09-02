@@ -69,7 +69,7 @@ writeFileSync(schemaPath, JSON.stringify(schema))
 const prompt = [
   'Use the whiteboard MCP server.',
   'Create a canvas with path "codex-strict-smoke", add one rectangle annotation at absolute target {x:10,y:10} with width 40 and height 20, then call wb_version_save with label "codex-strict-smoke" for that canvas.',
-  'Return a JSON object with path, documentId, and versionId only.',
+  'Return a JSON object with path, documentId, and versionId only (versionId is the `version.id` field of the wb_version_save result).',
 ].join(' ')
 
 const configOverride = [

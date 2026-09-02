@@ -34,7 +34,13 @@ export function readVitestProjects(repoRoot) {
     return {
       configPath,
       name: configContent.match(/name:\s*'([^']+)'/)?.[1],
-      isBrowser: /browser:\s*\{\s*\n?\s*enabled:\s*true/.test(configContent),
+      // Two shapes count as browser-enabled: the inline literal, and the
+      // shared factory every browser config spreads since the dedupe —
+      // sharedBrowserTestConfig() always sets enabled: true, so its call
+      // site is as reliable a marker as the literal it replaced.
+      isBrowser:
+        /browser:\s*\{\s*\n?\s*enabled:\s*true/.test(configContent) ||
+        /browser:\s*sharedBrowserTestConfig\(/.test(configContent),
     }
   })
 }

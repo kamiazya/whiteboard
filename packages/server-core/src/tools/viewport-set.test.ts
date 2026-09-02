@@ -39,6 +39,8 @@ describe('wb_viewport_set tool', () => {
       ...makeDeps(store),
       clientNotifier: {
         agentActivity: () => {},
+        versionCreated: () => {},
+        restoreProgress: () => {},
         requestViewport: async (request) => {
           sent.push(request)
           return true
@@ -79,6 +81,8 @@ describe('wb_viewport_set tool', () => {
       ...makeDeps(store),
       clientNotifier: {
         agentActivity: () => {},
+        versionCreated: () => {},
+        restoreProgress: () => {},
         requestViewport: async () => false,
       },
     })
