@@ -69,7 +69,7 @@ export function createExportRouter() {
         } catch (err) {
           if (err instanceof OutputPathError) {
             const { status, body: errBody } = toDocumentOutputPathErrorBody(err, workspaceId)
-            return c.json(errBody as ExportErrorBody, status)
+            return c.json(errBody, status)
           }
           throw err
         }

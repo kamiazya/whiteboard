@@ -1,24 +1,13 @@
 import { z } from 'zod'
-import { operatorInfoSchema } from './api-contracts/document.js'
+import { operatorInfoSchema, versionEntrySchema } from './api-contracts/document.js'
 
-// Server's VersionEntry / OperatorInfo (in server/store/version-store.ts) is
-// the runtime source of truth for these payloads. We don't import that type
-// from the `shared/` layer to keep client-only consumers free of server
-// modules; instead the server-side compile pass on `tools/canvas.ts` /
-// `routes/ws.ts` exercises the equivalence by passing VersionEntry into
-// `sendVersionCreated`, which expects a payload that satisfies this schema.
-
-const versionCreatedPayloadSchema = z.object({
-  id: z.string(),
-  path: z.string(),
-  createdAt: z.string(),
-  elementCount: z.number().finite(),
-  auto: z.boolean(),
-  label: z.string().optional(),
-  hasThumbnail: z.boolean(),
-  branchName: z.string(),
-  operator: operatorInfoSchema.optional(),
-})
+// One schema for a version wherever it travels: the REST listing and this
+// broadcast used to carry sibling copies of the same shape, and a field
+// added server-side reached whichever one somebody remembered — the wire
+// silently dropped it from the other. The server's own VersionEntry type is
+// z.infer of this same schema (version-store.ts), so producing a version
+// and publishing it cannot disagree.
+const versionCreatedPayloadSchema = versionEntrySchema
 
 export const versionCreatedMessageSchema = z.object({
   type: z.literal('version_created'),

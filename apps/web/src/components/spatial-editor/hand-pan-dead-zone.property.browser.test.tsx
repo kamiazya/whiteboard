@@ -269,10 +269,13 @@ it('a hand-tool press pans from any point on the canvas, at any pan and zoom', a
 
   // A property that never reached an overlay riding the canvas would pass
   // whatever those overlays do with a press — the exact blindness this test
-  // exists to remove. Floors, not targets: measured at 106 asserted runs of
-  // 120 and 17 of them over a canvas-space affordance. The seed is random per
-  // run, so the floors sit well below the measurement; a count near them is
+  // exists to remove. Floors, not targets: first measured at 106 asserted
+  // runs of 120 and 17 of them over a canvas-space affordance; re-measured
+  // 2026-09-02 at 8-14 overlay hits across six local runs with a CI run
+  // under full parallel load landing at 5 — the old floor of >5 sat inside
+  // the real distribution's tail, not below it. The seed is random per run,
+  // so the floors sit well below the measurement; a count near them is
   // evidence the board or the generator drifted, not good news.
   expect(stats.asserted).toBeGreaterThan(80)
-  expect(stats.onCanvasSpaceOverlay).toBeGreaterThan(5)
+  expect(stats.onCanvasSpaceOverlay).toBeGreaterThan(2)
 })
