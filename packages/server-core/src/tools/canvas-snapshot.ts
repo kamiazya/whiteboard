@@ -7,6 +7,7 @@ import { readEdgeLocks, readNodeLocks } from '@kamiazya/whiteboard-loro-adapter'
 import {
   type CanvasEdge,
   canvasColorSchema,
+  canvasCommentSchema,
   documentIdSchema,
   nodeIdSchema,
   type SpatialCanvas,
@@ -95,6 +96,12 @@ export const canvasSnapshotSchema = z
     nodeCount: z.number().int().nonnegative(),
     edgeCount: z.number().int().nonnegative(),
     truncated: z.boolean(),
+    /**
+     * The annotation layer (ADR-0024), resolved records included — they are
+     * the conversation about the board, which is exactly what a reader
+     * deciding what to change needs to see.
+     */
+    comments: z.array(canvasCommentSchema),
     /**
      * Present only when asked for. Derived from a full LAYOUT pass, which is
      * why it is opt-in: these boxes are where things actually get drawn
@@ -201,6 +208,7 @@ export function projectCanvasSnapshot(
     documentId,
     nodes: projected.map((entry) => entry.node),
     edges,
+    comments: canvas['x-whiteboard']?.comments ?? [],
     nodeCount: canvas.nodes.length,
     edgeCount: canvas.edges.length,
     truncated:
