@@ -981,7 +981,12 @@ describe('canvas comments bridge', () => {
     author: 'human:reviewer',
     createdAt: '2026-09-01T10:00:00+09:00',
     targetNodeId: 'node-1',
-    resolved: false,
+    // `true` rather than `false` so the fixture exercises every optional
+    // field through the round trip: a thread's status has two values, so the
+    // projection emits `resolved: true` or no field at all, and `false` would
+    // come back as the canonical spelling of the same state.
+    // `comment-source-of-truth.test.ts` pins that canonicalisation.
+    resolved: true,
   }
 
   test('round-trips comments beside the rendering preferences', () => {
@@ -1011,7 +1016,10 @@ describe('canvas comments bridge', () => {
     expect(doc.getMap('canvas').get('x-whiteboard')).toEqual({
       edgeRouting: { style: 'orthogonal' },
     })
-    expect(doc.getMap('comments').keys()).toEqual(['c1'])
+    // In the threads plane (ADR-0026), keyed per thread — the legacy
+    // `comments` map is not written any more.
+    expect(doc.getMap('threads').keys()).toEqual(['c1'])
+    expect(doc.getMap('comments').keys()).toEqual([])
   })
 
   test('CRDT merge: two peers comment concurrently and both survive', () => {
@@ -1058,7 +1066,10 @@ describe('canvas comments bridge', () => {
   test('a corrupt stored comment is dropped on read, never the whole layer', () => {
     const doc = makeDoc()
     writeCanvasComment(doc, COMMENT)
-    doc.getMap('comments').set('bad', { nope: true })
+    // Written straight into the thread plane, since that is what a read
+    // parses now; the legacy map's own corrupt row is covered by the
+    // migration's test.
+    doc.getMap('threads').set('bad', { nope: true })
     doc.commit()
 
     expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([COMMENT])
