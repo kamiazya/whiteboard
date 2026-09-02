@@ -13,10 +13,11 @@ import {
   type StoredCoreFacets,
   spatialNodeSchema,
   storedCoreFacetsSchema,
-  threadFromCanvasComment,
   type TrustFacets,
+  threadFromCanvasComment,
   trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
+import type { z } from 'zod'
 import {
   canvasCommentFromThread,
   migrateCanvasCommentsToThreads,
@@ -24,7 +25,6 @@ import {
   writeThreadInto,
 } from './comment-threads.js'
 import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
-import type { z } from 'zod'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'

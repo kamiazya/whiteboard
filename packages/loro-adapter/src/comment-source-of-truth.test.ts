@@ -108,7 +108,11 @@ describe('a document written before the threads plane', () => {
     seedLegacy(doc, COMMENT)
     writeCanvasComment(doc, { ...COMMENT, id: 'c2', text: 'a newer one' })
     expect(doc.getMap('comments').keys()).toEqual([])
-    expect(commentsOf(doc).map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+    expect(
+      commentsOf(doc)
+        .map((c) => c.id)
+        .sort(),
+    ).toEqual(['c1', 'c2'])
   })
 
   it('does not resurrect a legacy entry the thread plane has already deleted', () => {
