@@ -47,6 +47,8 @@ export type LayoutRequest = {
    * seam's `missing` field, precomputed against THIS canvas's file nodes
    * (a function cannot cross the wire; a small ref list can). */
   readonly missingFileRefs?: readonly string[]
+  /** Node ids whose body an editor overlay owns — plain data, like the refs. */
+  readonly suppressedBodyNodeIds?: readonly string[]
 }
 
 /**

@@ -46,6 +46,13 @@ export interface RenderCanvasCoreOptions {
    * so its measurer is stable for its whole serving lifetime.
    */
   readonly contentCache?: SpatialContentCache
+  /**
+   * The node whose text a DOM editor overlay owns right now, threaded to
+   * canvas-render so the scene draws its chrome (silhouette included) and
+   * not its body — what lets the overlay be transparent instead of an
+   * opaque rectangle erasing a shaped node for the whole edit.
+   */
+  readonly suppressedBodyNodeIds?: readonly string[]
 }
 
 export interface RenderedCanvas {
@@ -71,6 +78,7 @@ export function renderCanvasToSvgWith(
     resolveReference: options.resolveReference,
     expandFileNode: options.expandFileNode,
     contentCache: options.contentCache,
+    suppressedBodyNodeIds: options.suppressedBodyNodeIds,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))

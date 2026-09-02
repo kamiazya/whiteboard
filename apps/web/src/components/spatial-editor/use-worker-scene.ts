@@ -75,7 +75,14 @@ function createLayoutWorker(): Worker | null {
  */
 export function useWorkerScene(
   canvas: SpatialCanvas,
-  base: { readonly measure: MeasureText; readonly theme: ResolvedTheme },
+  base: {
+    readonly measure: MeasureText
+    readonly theme: ResolvedTheme
+    /** Node ids whose body an editor overlay owns (see RenderCanvasOptions).
+     *  Must be referentially stable across renders, like the seams object —
+     *  it participates in the memo below. */
+    readonly suppressedBodyNodeIds?: readonly string[]
+  },
   fileSeamOptions: Omit<RenderCanvasOptions, 'measure' | 'theme'> & {
     /**
      * The host's CONTENT resolver, uncomposed. `resolveReference` beside it
@@ -90,10 +97,10 @@ export function useWorkerScene(
   // resolved as dangling in THIS canvas. The composed seam serves the
   // synchronous path; only this list can cross to the worker.
   missingFileRefs?: readonly string[],
-): RenderedCanvas {
+): RenderedCanvas & { readonly sceneCurrent: boolean } {
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
-    [base.measure, base.theme, fileSeamOptions],
+    [base.measure, base.theme, base.suppressedBodyNodeIds, fileSeamOptions],
   )
   const offloadable = canLayoutInWorker(fileSeamOptions, canvas) && worthOffloading(canvas)
   // Synchronous layout of the CURRENT inputs, computed only when it is needed:
@@ -122,8 +129,14 @@ export function useWorkerScene(
   const shownFor = useRef<unknown>(null)
 
   const inputs = useMemo(
-    () => ({ canvas, theme: options.theme, fileRefLabels, missingFileRefs }),
-    [canvas, options.theme, fileRefLabels, missingFileRefs],
+    () => ({
+      canvas,
+      theme: options.theme,
+      fileRefLabels,
+      missingFileRefs,
+      suppressedBodyNodeIds: options.suppressedBodyNodeIds,
+    }),
+    [canvas, options.theme, fileRefLabels, missingFileRefs, options.suppressedBodyNodeIds],
   )
 
   useEffect(() => {
@@ -188,6 +201,7 @@ export function useWorkerScene(
       theme: inputs.theme,
       fileRefLabels: inputs.fileRefLabels,
       missingFileRefs: inputs.missingFileRefs,
+      suppressedBodyNodeIds: inputs.suppressedBodyNodeIds,
     }
     worker.postMessage(request)
     return () => {
@@ -210,5 +224,11 @@ export function useWorkerScene(
 
   useEffect(() => () => workerRef.current?.terminate(), [])
 
-  return synchronous ?? rendered
+  // Whether the scene handed back was built from the CURRENT inputs. The
+  // synchronous path always is; the offloaded path lags by one worker round
+  // trip after any input change. The editor overlay reads this to keep the
+  // old opaque cover up for exactly that gap, so a big canvas never shows
+  // its committed text doubled under the transparent editor.
+  const sceneCurrent = synchronous !== undefined || shownFor.current === inputs
+  return { ...(synchronous ?? rendered), sceneCurrent }
 }

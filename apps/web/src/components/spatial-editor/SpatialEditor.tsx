@@ -68,6 +68,7 @@ import {
   BODY_LINE_HEIGHT_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
+  outlineContentBox,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
@@ -600,9 +601,17 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // fast route through carried-side caching, and a round trip per frame
     // would be the wrong trade there. This is the path that blocks on every
     // node added and every drag dropped.
-    const { bounds, scene, anchors } = useWorkerScene(
+    // The node whose text the editor overlay owns: the scene keeps its
+    // chrome and suppresses its body, so the overlay can be transparent and
+    // a shaped node keeps its silhouette for the whole edit.
+    const editingTextNodeId = gestureState.kind === 'editing-text' ? gestureState.nodeId : undefined
+    const suppressedBodyNodeIds = useMemo(
+      () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
+      [editingTextNodeId],
+    )
+    const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
-      { measure: resolvedMeasure, theme },
+      { measure: resolvedMeasure, theme, suppressedBodyNodeIds },
       fileSeamOptions,
       fileRefOptions,
       missingFileRefs,
@@ -2406,33 +2415,63 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               selectedNode?.type === 'text' &&
               selection !== undefined && (
                 <MarkdownNodeEditor
-                  box={selection.box}
-                  initialText={selectedNode.text}
-                  style={(() => {
-                    const resolved = createEditorAppearance(theme).resolveNode(selectedNode)
-                    const fill = resolved.appearance?.fill
-                    return {
-                      // The node's own fill when it has one; dark-mode nodes are
-                      // unfilled outlines, so fall back to the canvas surface.
-                      background:
-                        fill !== undefined && fill !== 'none'
-                          ? fill
-                          : theme === 'dark'
-                            ? 'oklch(0.145 0 0)'
-                            : '#ffffff',
-                      color: editorTextFill(theme),
-                      fontFamily: SPATIAL_THEME_FONT_FAMILY,
-                      fontSize: BODY_FONT_SIZE_PX,
-                      // The overlay must advance by the SAME line box the
-                      // committed render uses, or the text moves under the
-                      // cursor on entering edit mode. Shared constant, not a
-                      // second copy of the number — these were equal until the
-                      // markdown theme took body line height to 1.5.
-                      lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
-                      padding: SPATIAL_THEME_GEOMETRY.paddingPx,
-                      borderRadius: resolved.radius,
+                  // The scene keeps drawing this node's chrome (its body is
+                  // suppressed while this editor is open), so the editor is
+                  // TRANSPARENT and sits in the same box the committed text
+                  // uses: the silhouette's inscribed content box. A shaped
+                  // node therefore keeps its silhouette for the whole edit,
+                  // and the text does not jump on entering edit mode.
+                  box={(() => {
+                    const chrome = scene.nodes.find(
+                      (entry) => entry.kind === 'shape' && entry.id === selectedNode.id,
+                    )
+                    const shapeId =
+                      chrome !== undefined && chrome.kind === 'shape' ? chrome.shape : undefined
+                    const bbox = {
+                      x: selection.box.x,
+                      y: selection.box.y,
+                      w: selection.box.width,
+                      h: selection.box.height,
                     }
+                    const inner = outlineContentBox(shapeId, bbox)
+                    return { x: inner.x, y: inner.y, width: inner.w, height: inner.h }
                   })()}
+                  initialText={selectedNode.text}
+                  exitHintTop={selection.box.y + selection.box.height + 6}
+                  centerContent={scene.nodes.some(
+                    (entry) =>
+                      entry.kind === 'shape' &&
+                      entry.id === selectedNode.id &&
+                      entry.shape !== undefined,
+                  )}
+                  style={{
+                    // Transparent once the scene below has stopped drawing
+                    // this node's text. An offloaded canvas lags one worker
+                    // round trip behind the suppression change, so for that
+                    // gap the overlay keeps the old opaque cover — otherwise
+                    // the committed text shows doubled under the draft.
+                    background: sceneCurrent
+                      ? 'transparent'
+                      : (() => {
+                          const fill =
+                            createEditorAppearance(theme).resolveNode(selectedNode).appearance?.fill
+                          return fill !== undefined && fill !== 'none'
+                            ? fill
+                            : theme === 'dark'
+                              ? 'oklch(0.145 0 0)'
+                              : '#ffffff'
+                        })(),
+                    color: editorTextFill(theme),
+                    fontFamily: SPATIAL_THEME_FONT_FAMILY,
+                    fontSize: BODY_FONT_SIZE_PX,
+                    // The overlay must advance by the SAME line box the
+                    // committed render uses, or the text moves under the
+                    // cursor on entering edit mode. Shared constant, not a
+                    // second copy of the number — these were equal until the
+                    // markdown theme took body line height to 1.5.
+                    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
+                    padding: SPATIAL_THEME_GEOMETRY.paddingPx,
+                  }}
                   onCommit={(text) => {
                     applyResult(
                       reduceGesture(gestureState, canvas, { type: 'commit-text-edit', text }),

@@ -14,7 +14,6 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { createEditorAppearance } from './editor-appearance.js'
 import { nodeEditor } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 
@@ -49,8 +48,10 @@ it('the edit overlay box styling equals the rendered chrome (shared theme produc
     expect(el).not.toBeNull()
     return el as HTMLElement
   })
-  const resolved = createEditorAppearance('light').resolveNode(node)
-  expect(editor.style.borderRadius).toBe(`${resolved.radius}px`)
+  // No painted chrome of its own any more: the scene draws the node's
+  // chrome and the editor is transparent, so radius parity retired with the
+  // opaque background. The METRIC parity below is still load-bearing.
+  expect(editor.style.background).toBe('transparent')
   expect(editor.style.padding).toBe(`${SPATIAL_THEME_GEOMETRY.paddingPx}px`)
   // The overlay advances by the same LINE BOX the committed render uses
   // (mdast-blocks' `BODY_LINE_HEIGHT_PX`), which is what stops the text

@@ -151,6 +151,16 @@ export interface SpatialLayoutOptions {
    */
   readonly nodeOutlines?: Readonly<Record<string, string>>
   /**
+   * Nodes whose BODY the scene must not draw this pass, because a DOM
+   * editor overlay owns their text right now. The chrome — silhouette,
+   * stroke, fill, decorations — still draws, which is what lets that
+   * overlay be transparent instead of an opaque rectangle covering a
+   * non-rectangular node. Plain data (ids, not a predicate) so it crosses
+   * a worker boundary the way `nodeOutlines` does. Absent or empty means
+   * nothing is suppressed.
+   */
+  readonly suppressedBodyNodeIds?: readonly string[]
+  /**
    * Silhouettes by namespaced id, merged OVER the built-in table — the same
    * shape as `SvgDocumentOptions.icons`. The backend must be handed the same
    * table, or a contributed shape lays out correctly and paints as a rect.
@@ -581,6 +591,9 @@ function composeTextNode(
   node: Extract<SpatialNode, { type: 'text' }>,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
+  // The editor overlay owns this node's text: draw the chrome alone, with
+  // no truncation mark — there is no drawn text for the mark to be about.
+  if (options.suppressedBodyNodeIds?.includes(node.id)) return [chromeShape(node, options)]
   const maxWidth = contentWidth(node, options)
   // Position deliberately absent from the key: the cached value is
   // origin-relative (see `contentCache`'s contract), so a moved node hits.
