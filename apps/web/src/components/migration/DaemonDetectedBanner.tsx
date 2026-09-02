@@ -88,12 +88,15 @@ interface DaemonDetectedBannerProps {
  * Local Network Access prompt requires explicit user intent, so the probe
  * only runs from a click.
  *
- * Every decision it makes is a pure function in `lib/` with its own tests —
- * `decideConnectGate`, `explainProbeFailure`, `deriveCapabilityTier`,
- * `shouldShowDaemonCta`, `candidateBaseUrls`, `discoverDaemons`. What stays
- * here is the wiring between them and the copy that explains the result to
- * the user, which is why the file is long and why splitting the copy back
- * out again reduces nothing a reader has to hold.
+ * The DOMAIN decisions — what a probe failure means, whether the browser can
+ * be asked, which tier a responder earns, whether the CTA is due — are pure
+ * functions in `lib/` with their own tests: `decideConnectGate`,
+ * `explainProbeFailure`, `deriveCapabilityTier`, `shouldShowDaemonCta`,
+ * `candidateBaseUrls`, `discoverDaemons`. What stays here is the orchestration
+ * between them (which row is showing, what the port field accepts, when to
+ * re-probe) and the copy that explains the outcome to the user. That is why
+ * the file is long, and why moving the copy into row components of its own
+ * reduces nothing a reader has to hold.
  */
 export function DaemonDetectedBanner({
   settingsStore,
