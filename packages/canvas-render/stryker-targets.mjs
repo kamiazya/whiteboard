@@ -79,6 +79,16 @@ export const MUTATED = [
  * anyway.
  */
 export const KNOWN_EQUIVALENT = {
+  // A placed bubble sits a whole offset to one side of its anchor on each
+  // axis, so the anchor is never on a centre line and `<=` cannot differ from
+  // `<`; a zero-extent overlap contributes nothing to the sum whether the
+  // guard admits it or not. Hand-verified against the comment suites.
+  'src/layout/comment-placement.ts': {
+    'EqualityOperator: anchor.x <= centerX -> anchor.x < centerX': 1,
+    'EqualityOperator: anchor.y <= centerY -> anchor.y < centerY': 1,
+    'EqualityOperator: w > 0 -> w >= 0': 1,
+    'EqualityOperator: h > 0 -> h >= 0': 1,
+  },
   // Belt-and-braces guards whose removal is masked by a guarantee the caller
   // already makes, plus type tests that a second test repeats. The load-bearing
   // ones are pinned by examples in `hoist.test.ts`; these are not, because

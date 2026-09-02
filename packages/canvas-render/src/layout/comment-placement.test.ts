@@ -73,6 +73,20 @@ describe('placeCommentBubble', () => {
     })
   })
 
+  it('compares covered AREA, not the shape of the overlap', () => {
+    // Both left-hand quadrants are walled off. Down-right is crossed by a
+    // thin strip the bubble's full height (2 x 40 = 80); up-right holds a
+    // small block (4 x 4 = 16). The block covers less, whatever its aspect.
+    const leftWall = { x: -600, y: -600, w: 690, h: 1200 }
+    const strip = { x: 100 + D + 10, y: 100 + D, w: 2, h: SIZE.h }
+    const block = { x: 100 + D + 10, y: 100 - D - 10, w: 4, h: 4 }
+    expect(placeCommentBubble({ x: 100, y: 100 }, SIZE, [leftWall, strip, block])).toEqual({
+      x: 100 + D,
+      y: 100 - D - SIZE.h,
+      ...SIZE,
+    })
+  })
+
   // The placer is a search over four candidates, so its whole contract is
   // "the least-covered one, ties to the earlier". An oracle that scores the
   // candidates from the definition of overlap shares nothing with it.

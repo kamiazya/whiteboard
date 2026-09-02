@@ -59,9 +59,10 @@ export function placeCommentBubble(
   const candidates = commentBubbleCandidates(anchor, size)
   let best = candidates[0] as BoundingBox
   let bestCovered = Number.POSITIVE_INFINITY
+  // Strictly less, so an earlier candidate keeps a tie — including a tie at
+  // zero, which is why a free quadrant needs no early return of its own.
   for (const candidate of candidates) {
     const covered = coveredArea(candidate, obstacles)
-    if (covered === 0) return candidate
     if (covered < bestCovered) {
       best = candidate
       bestCovered = covered
@@ -80,6 +81,9 @@ export function commentLeaderEnd(anchor: Point, bubble: BoundingBox, radius: num
   const inset = radius * (1 - Math.SQRT1_2)
   const centerX = bubble.x + bubble.w / 2
   const centerY = bubble.y + bubble.h / 2
+  // `<=` and `<` cannot differ for a placed bubble: every candidate sits a
+  // whole offset to one side of the anchor on each axis, so the anchor is
+  // never on a centre line. The equal case is unreachable, not decided.
   return {
     x: anchor.x <= centerX ? bubble.x + inset : bubble.x + bubble.w - inset,
     y: anchor.y <= centerY ? bubble.y + inset : bubble.y + bubble.h - inset,
@@ -91,6 +95,8 @@ function coveredArea(box: BoundingBox, obstacles: readonly BoundingBox[]): numbe
   for (const obstacle of obstacles) {
     const w = Math.min(box.x + box.w, obstacle.x + obstacle.w) - Math.max(box.x, obstacle.x)
     const h = Math.min(box.y + box.h, obstacle.y + obstacle.h) - Math.max(box.y, obstacle.y)
+    // A zero-width or zero-height overlap contributes nothing either way;
+    // the guard only keeps a negative extent from being multiplied.
     if (w > 0 && h > 0) sum += w * h
   }
   return sum
