@@ -2,23 +2,22 @@ import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import type {
   AgentActivity,
   CanvasClientNotifier,
+  RestoreProgressEvent,
+  VersionCreated,
   ViewportRequest,
 } from '@kamiazya/whiteboard-server-core'
 import { nanoid } from 'nanoid'
+import { DAEMON_PEER_ID } from './daemon-peer.js'
 import { getLogger } from './log.js'
-import { getReadyClientCount, sendAgentActivity, sendViewportRequest } from './routes/ws.js'
+import {
+  getReadyClientCount,
+  sendAgentActivity,
+  sendRestoreEvent,
+  sendVersionCreated,
+  sendViewportRequest,
+} from './routes/ws.js'
 
 const log = getLogger('canvas-client-notifier')
-
-/**
- * The daemon's identity as an editing peer, minted once per process.
- *
- * server-core deliberately does not supply this — it has no idea who the
- * daemon's peer is, and inventing one there would put a second source of
- * truth beside `operatorInfoSchema`. Stable for the daemon's lifetime so a
- * browser can tell "the same agent again" from "a second agent".
- */
-const DAEMON_PEER_ID = `daemon-${nanoid(10)}`
 
 /**
  * Bridges server-core's `CanvasClientNotifier` port onto the daemon's
@@ -29,7 +28,7 @@ const DAEMON_PEER_ID = `daemon-${nanoid(10)}`
  * - **documentId -> path.** The WS routes are keyed by workspace and document
  *   PATH, which is placement, and placement lives in the index rather than
  *   in a tool's arguments.
- * - **Operator identity.** `kind: 'ai'` plus the peer id above.
+ * - **Operator identity.** `kind: 'ai'` plus `DAEMON_PEER_ID`.
  *
  * Every method swallows its own failures. The port's contract is that a tool
  * may call it AFTER its write is committed, so a transport error here must
@@ -65,6 +64,34 @@ export function createCanvasClientNotifier(documentIndex: DocumentIndex): Canvas
           )
         }
       })()
+    },
+
+    versionCreated(event: VersionCreated): void {
+      void (async () => {
+        try {
+          const path = await pathOf(event.workspaceId, event.documentId)
+          if (path === null) return
+          sendVersionCreated(event.workspaceId, path, event.version)
+        } catch (err) {
+          log.warning(
+            { workspaceId: event.workspaceId, documentId: event.documentId, err },
+            'failed to announce a saved version',
+          )
+        }
+      })()
+    },
+
+    restoreProgress(event: RestoreProgressEvent): void {
+      // Already path-addressed: the operation resolved the document before
+      // it started, so there is no lookup here that could fail.
+      try {
+        sendRestoreEvent(event.workspaceId, event.path, event.phase, event.label)
+      } catch (err) {
+        log.warning(
+          { workspaceId: event.workspaceId, path: event.path, phase: event.phase, err },
+          'failed to announce restore progress',
+        )
+      }
     },
 
     async requestViewport(request: ViewportRequest): Promise<boolean> {

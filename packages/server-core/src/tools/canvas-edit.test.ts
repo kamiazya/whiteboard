@@ -716,6 +716,8 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
         agentActivity: (activity: AgentActivity) => {
           activities.push(activity)
         },
+        versionCreated: () => {},
+        restoreProgress: () => {},
         requestViewport: async (request: ViewportRequest) => {
           viewports.push(request)
           return true
@@ -848,6 +850,8 @@ describe('wb_canvas_edit — telling the browser what happened', () => {
         agentActivity: () => {
           throw new Error('socket exploded')
         },
+        versionCreated: () => {},
+        restoreProgress: () => {},
         requestViewport: async () => {
           throw new Error('socket exploded')
         },

@@ -204,10 +204,18 @@ files, under the standing "fix what you touch" rule.
 > transport's own entry point. One count above was stale when written:
 > restore.ts held 4 edges, not 5, so the four adapters held 16 of the 39.
 > The "no MCP twin yet" premise also deserves a correction rather than a
-> rewrite: `wb_version_restore` existed, but restores the in-document Loro
-> versions map — a separate history system from the file-backed store
-> restore.ts wraps — so the second-surface argument stood, with the twin
-> still to come.
+> rewrite: `wb_version_restore` existed, but restored an in-document Loro
+> `versions` map — a separate history from the file-backed store restore.ts
+> wraps — so the second-surface argument stood, with the twin still to come.
+> It has since come: the three `wb_version_*` tools now run over the
+> `VersionHistory` seam and `restoreVersion`, and the in-document map is
+> deleted. Measured before that change, the map's records were addressed by
+> a frontier of the per-document projection, whose lineage is reborn when
+> the cache drops — a restore that worked in-process threw
+> `The given ID (…) is not contained by the doc` after `clearCache()`, so
+> every agent checkpoint died with the daemon's next idle shutdown, and the
+> History panel never listed one while it lived. Two histories was not a
+> duplication but a defect, which is the strongest form of this ADR's case.
 
 **What would make raising the ceiling right.** It is a decision, not a
 failure: an operation that genuinely belongs to this deployment, or a fix

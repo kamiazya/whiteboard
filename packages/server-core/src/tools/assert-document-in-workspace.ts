@@ -1,5 +1,5 @@
 import type { WorkspaceId } from '@kamiazya/whiteboard-model'
-import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
+import type { DocumentEntry, DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 
 /**
@@ -17,6 +17,20 @@ export async function assertDocumentInWorkspace(
   workspaceId: WorkspaceId,
   documentId: string,
 ): Promise<void> {
+  await resolveDocumentInWorkspace(documentIndex, workspaceId, documentId)
+}
+
+/**
+ * The same guard, answering with the placement it found — for a tool that
+ * is addressed by `documentId` and has to speak to a seam addressed by
+ * `path` (the version history, the live-document store).
+ */
+export async function resolveDocumentInWorkspace(
+  documentIndex: DocumentIndex,
+  workspaceId: WorkspaceId,
+  documentId: string,
+): Promise<DocumentEntry> {
   const entry = await documentIndex.resolveDocumentById({ workspaceId, documentId })
   if (entry === null) throw new WorkspaceDocumentNotFoundError(workspaceId, documentId)
+  return entry
 }
