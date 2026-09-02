@@ -8,7 +8,12 @@ import {
   writeCommentThread,
   writeThreadMessage,
 } from './comment-threads.js'
-import { writeCanvasComment } from './loro-bridge.js'
+
+/** Seeds the legacy `comments` map the way the pre-threads writer did. */
+function seedLegacy(doc: LoroDoc, comment: Record<string, unknown>): void {
+  doc.getMap('comments').set(String(comment.id), comment)
+  doc.commit()
+}
 
 const THREAD: CommentThread = {
   id: 't1',
@@ -91,7 +96,7 @@ describe('comment threads storage', () => {
 describe('migrateCanvasCommentsToThreads', () => {
   it('turns each stored comment into a one-message thread', () => {
     const doc = new LoroDoc()
-    writeCanvasComment(doc, {
+    seedLegacy(doc, {
       id: 'c1',
       x: 1,
       y: 2,
@@ -110,16 +115,18 @@ describe('migrateCanvasCommentsToThreads', () => {
     ])
   })
 
-  it('leaves the comments plane in place, because its readers have not moved yet', () => {
+  it('empties the legacy plane, so a row cannot outlive the thread it became', () => {
+    // A legacy row left behind would come back through `readSpatialCanvas`'s
+    // fallback after the thread was closed or deleted.
     const doc = new LoroDoc()
-    writeCanvasComment(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
+    seedLegacy(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
     migrateCanvasCommentsToThreads(doc)
-    expect(doc.getMap('comments').keys()).toEqual(['c1'])
+    expect(doc.getMap('comments').keys()).toEqual([])
   })
 
   it('is idempotent, and a second pass does not clobber a reply added since', () => {
     const doc = new LoroDoc()
-    writeCanvasComment(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
+    seedLegacy(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
     migrateCanvasCommentsToThreads(doc)
     writeThreadMessage(doc, 'c1', { id: 'm2', body: 'reply' })
     expect(migrateCanvasCommentsToThreads(doc)).toBe(0)
@@ -128,7 +135,7 @@ describe('migrateCanvasCommentsToThreads', () => {
 
   it('skips a comment the schema rejects rather than failing the whole pass', () => {
     const doc = new LoroDoc()
-    writeCanvasComment(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
+    seedLegacy(doc, { id: 'c1', x: 1, y: 2, text: 'x' })
     doc.getMap('comments').set('bad', { id: 'bad', x: 0, y: 0 })
     doc.commit()
     expect(migrateCanvasCommentsToThreads(doc)).toBe(1)

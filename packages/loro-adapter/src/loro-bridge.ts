@@ -14,34 +14,17 @@ import {
   spatialNodeSchema,
   storedCoreFacetsSchema,
   type TrustFacets,
+  threadFromCanvasComment,
   trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
-import type { LoroMap, LoroText } from 'loro-crdt'
 import type { z } from 'zod'
-
-/**
- * Where one document's containers live.
- *
- * Every function below reaches for containers by name and never for the
- * document as a whole, so the only thing it needs is something that can hand
- * one over. `LoroDoc` satisfies this structurally — a document's containers
- * are its roots — and so does a workspace-tree node, whose containers hang off
- * its own meta map. That is the whole reason this type exists: the two storage
- * models differ in WHERE a container is found and in nothing else, so the
- * bridge should not have to be written twice.
- *
- * Call sites that pass a `LoroDoc` keep compiling unchanged.
- */
-export interface DocumentContainers {
-  getMap(key: string): LoroMap
-  getText(key: string): LoroText
-  /**
-   * Part of the seam because the bridge decides where a write ENDS, and that
-   * is not something to leave each caller to remember. A tree-node host
-   * delegates to the document its node belongs to.
-   */
-  commit(): void
-}
+import {
+  canvasCommentFromThread,
+  migrateCanvasCommentsToThreads,
+  readCommentThreads,
+  writeThreadInto,
+} from './comment-threads.js'
+import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
@@ -57,27 +40,6 @@ const EDGES_KEY = 'edges'
  */
 const CANVAS_KEY = 'canvas'
 const EXTENSION_FIELD = 'x-whiteboard'
-/**
- * The comment annotation layer (ADR-0024), keyed per comment like nodes and
- * edges — NOT stored inside the canvas envelope above, although the model
- * type carries comments on `x-whiteboard`. The envelope is whole-value LWW,
- * which is right for a preference and exactly wrong for comments: two peers
- * commenting concurrently must both survive a merge. `writeSpatialCanvas`
- * splits the field out on write and `readSpatialCanvas` reassembles it.
- */
-export const COMMENTS_KEY = 'comments'
-/**
- * The annotation layer's thread plane (ADR-0026), one level deeper than the
- * comments map above: a map of thread containers, each holding its anchor and
- * status beside a nested map of MESSAGES keyed by message id. The extra level
- * is the whole point — a thread stored as one value would lose one of two
- * concurrent replies to last-writer-wins, silently.
- *
- * Read and written by `comment-threads.ts`; the key lives here so this file
- * stays the one place a container is named and `CONTENT_CONTAINER_KEYS` below
- * cannot fall out of step with it.
- */
-export const THREADS_KEY = 'threads'
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -215,14 +177,17 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
     canvasMap.set(EXTENSION_FIELD, envelope)
   }
 
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  const existingCommentIds = new Set<string>(commentsMap.keys())
+  // Before the incoming set is applied, so a legacy entry the resync omits is
+  // migrated and THEN dropped by the sweep below rather than surviving it.
+  migrateCanvasCommentsToThreads(doc)
+  const threadsMap = doc.getMap(THREADS_KEY)
+  const existingCommentIds = new Set<string>(threadsMap.keys())
   for (const comment of comments ?? []) {
     existingCommentIds.delete(comment.id)
-    commentsMap.set(comment.id, commentToFields(comment))
+    writeCommentInto(doc, comment)
   }
   // A resync states the whole truth, comments included.
-  for (const id of existingCommentIds) commentsMap.delete(id)
+  for (const id of existingCommentIds) threadsMap.delete(id)
 
   const existingNodeIds = new Set<string>(nodesMap.keys())
   const existingEdgeIds = new Set<string>(edgesMap.keys())
@@ -299,14 +264,22 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
 // projection (including commentToFields' loud non-finite-anchor refusal)
 // cannot drift between the single-commit and withSpatialBatch paths.
 function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
-  doc.getMap(COMMENTS_KEY).set(comment.id, commentToFields(comment))
+  // `commentToFields` is still what refuses a non-finite anchor, loudly and
+  // before anything is stored — a thread whose anchor fails the schema would
+  // be dropped by every reader instead.
+  commentToFields(comment)
+  migrateCanvasCommentsToThreads(doc)
+  writeThreadInto(doc, threadFromCanvasComment(comment))
 }
 
 /** Returns false (writing nothing) when the comment id is absent. */
 function deleteCommentInto(doc: DocumentContainers, commentId: string): boolean {
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  if (!commentsMap.keys().includes(commentId)) return false
-  commentsMap.delete(commentId)
+  // The legacy entry goes too, or the fallback read below would resurrect a
+  // comment this call closed.
+  migrateCanvasCommentsToThreads(doc)
+  const threadsMap = doc.getMap(THREADS_KEY)
+  if (!threadsMap.keys().includes(commentId)) return false
+  threadsMap.delete(commentId)
   return true
 }
 
@@ -499,9 +472,20 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
     ? parsedEnvelope.data
     : {}
 
-  const commentsMap = doc.getMap(COMMENTS_KEY)
+  // Threads are where a comment lives (ADR-0026); the legacy map is read only
+  // for a document no writer has touched since, and the first write empties
+  // it. A read never migrates — it would turn opening a document into a
+  // commit, and a reader may not even hold the write lock.
   const comments: CanvasComment[] = []
+  const threadIds = new Set<string>()
+  for (const thread of readCommentThreads(doc)) {
+    threadIds.add(thread.id)
+    const projected = canvasCommentFromThread(thread)
+    if (projected !== undefined) comments.push(projected)
+  }
+  const commentsMap = doc.getMap(COMMENTS_KEY)
   for (const commentId of commentsMap.keys()) {
+    if (threadIds.has(commentId)) continue
     const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
     if (parsed.success) comments.push(parsed.data)
   }

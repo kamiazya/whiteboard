@@ -87,6 +87,16 @@ interface DaemonDetectedBannerProps {
  * loopback fetches need no extra permission. On https: origins the browser's
  * Local Network Access prompt requires explicit user intent, so the probe
  * only runs from a click.
+ *
+ * The DOMAIN decisions — what a probe failure means, whether the browser can
+ * be asked, which tier a responder earns, whether the CTA is due — are pure
+ * functions in `lib/` with their own tests: `decideConnectGate`,
+ * `explainProbeFailure`, `deriveCapabilityTier`, `shouldShowDaemonCta`,
+ * `candidateBaseUrls`, `discoverDaemons`. What stays here is the orchestration
+ * between them (which row is showing, what the port field accepts, when to
+ * re-probe) and the copy that explains the outcome to the user. That is why
+ * the file is long, and why moving the copy into row components of its own
+ * reduces nothing a reader has to hold.
  */
 export function DaemonDetectedBanner({
   settingsStore,
