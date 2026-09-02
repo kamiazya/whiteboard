@@ -34,6 +34,7 @@ export type {
   DocumentWritten,
   LiveDocuments,
   ServerDeps,
+  VersionCreated,
   VersionHistory,
   ViewportRequest,
   WorkspaceDocuments,
@@ -166,3 +167,5 @@ export {
   workspaceEditInputSchema,
   workspaceEditOutputSchema,
 } from './tools/workspace-edit.js'
+export type { OperatorInfo, VersionEntry } from './versions/version-entry.js'
+export { operatorInfoSchema, versionEntrySchema } from './versions/version-entry.js'

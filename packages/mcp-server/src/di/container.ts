@@ -13,6 +13,7 @@ import { documentTeardown } from '../server/store/document-store.js'
 import { documentWritten } from '../server/store/document-written.js'
 import { liveDocuments, workspaceDocuments } from '../server/store/live-documents.js'
 import { FileVersionStore } from '../server/store/version-store.js'
+import { agentVersionHistory } from './agent-version-history.js'
 import { storeMemoryModule } from './store-memory.module.js'
 
 export function createContainer(storeModule: ContainerModule = storeMemoryModule): Container {
@@ -91,10 +92,9 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // than in the HTTP route registration, which is what confined the old
     // saved-listener to one deployment shape.
     documentWritten,
-    // The daemon's own version store satisfies the seam structurally: it has
-    // eleven methods and the seam names the three an operation reads, so no
-    // adapter class is needed to bridge them.
-    versions: new FileVersionStore(),
+    // The daemon's own version store behind the seam, stamping the daemon's
+    // agent identity on a save that names no operator (see the wrapper).
+    versions: agentVersionHistory(new FileVersionStore()),
     // Same reason as documentTeardown: this package's own store, cache and
     // lock, bundled once so operations reach them through the seam instead
     // of any adapter importing a mechanic.
