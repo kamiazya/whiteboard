@@ -55,6 +55,11 @@ const ALLOWED_ROOT_FILES: ReadonlySet<string> = new Set([
   'pnpm-workspace.yaml',
   'release-please-config.json',
   'server.json',
+  // The one definition of the browser-mode project config, spread by the
+  // three vitest.browser.config.ts files. Root on purpose: it sits beside
+  // vitest.config.ts (which registers those projects) and belongs to no
+  // single package.
+  'vitest.browser.shared.ts',
   'vitest.config.ts',
 ])
 

@@ -2,12 +2,11 @@ import { dirname, resolve } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import tailwindcss from '@tailwindcss/vite'
 import react from '@vitejs/plugin-react'
-import { playwright } from '@vitest/browser-playwright'
 import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
-import { resolveBrowserLaunchOptions } from '../../packages/mcp-server/src/server/browser-test-config.js'
+import { sharedBrowserTestConfig } from '../../vitest.browser.shared.js'
 import { mcpSourceAlias } from './mcp-source-alias.js'
 import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 
@@ -120,22 +119,6 @@ export default defineConfig({
     // Every browser test renders against the app's real stylesheet — see
     // browser-setup.ts for what silently breaks without it.
     setupFiles: ['./src/test-utils/browser-setup.ts'],
-    browser: {
-      enabled: true,
-      headless: true,
-      connectTimeout: 120_000,
-      screenshotFailures: false,
-      trace: {
-        mode: 'retain-on-failure',
-        tracesDir: './tmp/vitest-traces',
-        screenshots: true,
-        snapshots: true,
-      },
-      viewport: { width: 1280, height: 900 },
-      provider: playwright({
-        launchOptions: resolveBrowserLaunchOptions(process.env),
-      }),
-      instances: [{ browser: 'chromium' }],
-    },
+    browser: sharedBrowserTestConfig({ viewport: { width: 1280, height: 900 } }),
   },
 })
