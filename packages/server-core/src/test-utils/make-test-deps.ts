@@ -3,6 +3,7 @@ import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from './ignored-document-writes.js'
 import { createInMemoryDocumentStore } from './in-memory-document-store.js'
 import { unusedDocumentTeardown } from './unused-document-teardown.js'
+import { unusedVersionHistory } from './unused-version-history.js'
 
 /**
  * The `ServerDeps` a server-core test builds when its subject is something
@@ -43,6 +44,7 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     documentIndex: new InMemoryDocumentIndex(),
     documentTeardown: unusedDocumentTeardown(),
     documentWritten: ignoredDocumentWrites(),
+    versions: unusedVersionHistory(),
     ...overrides,
   }
 }

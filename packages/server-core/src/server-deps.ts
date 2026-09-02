@@ -2,6 +2,7 @@ import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { FacetRegistry } from '@kamiazya/whiteboard-facet-engine'
 import type { DocumentId } from '@kamiazya/whiteboard-model'
 import type { BlobStore, DocumentIndex, DocumentStore } from '@kamiazya/whiteboard-ports'
+import type { LoroDoc } from 'loro-crdt'
 import type { Embedder } from './search/embedder.js'
 
 /**
@@ -162,6 +163,48 @@ export interface ServerDeps {
    * than leaving it to a comment.
    */
   documentWritten: DocumentWritten
+  /**
+   * A document's saved history, as an OPERATION needs to read it.
+   *
+   * Three methods, not the eleven the daemon's own version store has. A
+   * seam states what the operation needs; the implementation is free to be
+   * larger, and structural typing lets it satisfy this without a wrapper.
+   * Thumbnails, pruning and branch rewriting are not read by any operation
+   * here, and publishing them would make this a second name for a mechanic
+   * rather than a seam.
+   *
+   * REQUIRED, for the reason `documentTeardown` is: a composition root that
+   * forgets it should be a compile error, not a server whose restore
+   * silently answers "no such version" for every version that exists.
+   *
+   * Not a `packages/ports` port, despite the shape. Ports may depend on
+   * model and zod only, and these answer with a `LoroDoc` — so this belongs
+   * beside the other seams, exactly as `documentTeardown` does.
+   */
+  versions: VersionHistory
+}
+
+/**
+ * `path` addresses the version LIST because a version belongs to a document
+ * at the name it had; `load` and `loadWorkspaceAt` take only the version's
+ * own id, which is already unique within the workspace.
+ */
+export interface VersionHistory {
+  /**
+   * The past state of ONE document, as an independent doc — the stored
+   * record checked out at this version's frontiers. Null only when the
+   * version does not exist.
+   */
+  load(workspaceId: string, id: string): Promise<LoroDoc | null>
+  /**
+   * The whole WORKSPACE at this version, which is what a subtree rollback
+   * walks. Null when the version exists but is not workspace-scoped, which
+   * is a real answer and not an error: a per-document version cannot say
+   * where its siblings were.
+   */
+  loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
+  /** Saved versions of the document at `path`, newest first. */
+  list(workspaceId: string, path: string): Promise<readonly { id: string; label?: string }[]>
 }
 
 // Carries the workspaceId because the tree is the address book: resolving a
