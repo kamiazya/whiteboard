@@ -30,6 +30,7 @@ import {
   canReuseCarriedSides,
   carriedByGesture,
   carriedSideCacheKey,
+  commentExtensionFor,
   frozenSidesOf,
   liveNodesFor,
 } from './gesture-view.js'
@@ -95,8 +96,16 @@ export function useDragLayers({
     if (nodes.length === 0) return undefined
     // Same embed options as the committed scene: a ghost that drops an
     // expanded miniature back to a bare card mid-drag reads as data loss.
+    // The carried nodes' own comments ride the ghost too (see
+    // commentExtensionFor): they are drawn at the node's corner, and the
+    // corner is what is moving.
+    const ghostComments = commentExtensionFor(canvas, carried, true)
     const rendered = renderCanvasToSvg(
-      { nodes, edges: [] },
+      {
+        nodes,
+        edges: [],
+        ...(ghostComments === undefined ? {} : { 'x-whiteboard': ghostComments }),
+      },
       {
         measure: resolvedMeasure,
         theme,
@@ -164,10 +173,12 @@ export function useDragLayers({
   const dragStatic = useMemo(() => {
     if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
     const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
+    const baseComments = commentExtensionFor(canvas, carried, false)
     const base: SpatialCanvas = {
       ...canvas,
       nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
       edges: [],
+      ...(baseComments === undefined ? {} : { 'x-whiteboard': baseComments }),
     }
     const rendered = renderCanvasToSvg(base, {
       measure: resolvedMeasure,
@@ -358,8 +369,15 @@ export function useDragLayers({
       new Set([gestureState.nodeId]),
     ).find((n) => n.id === gestureState.nodeId)
     if (resized === undefined) return undefined
+    // The resized node's comments re-anchor to its LIVE corner each frame,
+    // for the same reason the move ghost carries them.
+    const liveComments = commentExtensionFor(canvas, dragStatic.carried, true)
     const rendered = renderCanvasToSvg(
-      { nodes: [resized], edges: [] },
+      {
+        nodes: [resized],
+        edges: [],
+        ...(liveComments === undefined ? {} : { 'x-whiteboard': liveComments }),
+      },
       {
         measure: dragStatic.measure,
         theme,

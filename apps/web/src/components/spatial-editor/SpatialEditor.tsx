@@ -66,6 +66,7 @@ import type {
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
+  COMMENT_BUBBLE_OFFSET_PX,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
   outlineContentBox,
@@ -94,6 +95,7 @@ import { hasCoarsePointer } from '../../lib/platform.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
+  type CommentComposeState,
   type ContextMenuTarget,
   type DocumentPickerState,
   type LinkDialogState,
@@ -115,7 +117,13 @@ import { snapGesturePoint } from './gesture-snap.js'
 import { describeTarget, gestureTrace } from './gesture-trace.js'
 import { carriedByGesture } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
-import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from './gestures.js'
+import {
+  createIdleState,
+  defaultCreateId,
+  NEW_NODE_HEIGHT,
+  NEW_NODE_WIDTH,
+  reduceGesture,
+} from './gestures.js'
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
@@ -339,6 +347,10 @@ export interface SpatialEditorHandle {
 
 const EDGE_LABEL_EDITOR_WIDTH_PX = 160
 const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
+/** The compose bubble sits where the saved comment's bubble will be drawn,
+ * so committing reads as the draft settling rather than jumping. */
+const COMMENT_COMPOSE_WIDTH_PX = 216
+const COMMENT_COMPOSE_HEIGHT_PX = 64
 
 /**
  * Opaque surface + label typography for the edge/group label editors. The
@@ -681,6 +693,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (touched) setPendingCut(null)
     }, [canvas, pendingCut])
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
+    const [commentCompose, setCommentCompose] = useState<CommentComposeState | null>(null)
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
@@ -2048,6 +2061,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 setLinkDialog,
                 setDocumentPicker,
                 setFacetPanelOpen,
+                setCommentCompose,
               }}
               contextMenu={contextMenu}
               setContextMenu={setContextMenu}
@@ -2424,6 +2438,46 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   />
                 )
               })()}
+            {commentCompose !== null && (
+              <TextNodeEditor
+                exitHintScale={1 / viewport.zoom}
+                box={{
+                  x: commentCompose.point.x + COMMENT_BUBBLE_OFFSET_PX,
+                  y: commentCompose.point.y + COMMENT_BUBBLE_OFFSET_PX,
+                  width: COMMENT_COMPOSE_WIDTH_PX,
+                  height: COMMENT_COMPOSE_HEIGHT_PX,
+                }}
+                initialText=""
+                testId="comment-compose"
+                style={labelEditorStyle(theme)}
+                onCommit={(draft) => {
+                  const text = draft.trim()
+                  // A blank commit is a cancel: an empty comment says nothing
+                  // and would still ask the reader to resolve it.
+                  if (text.length > 0) {
+                    const { point, targetNodeId } = commentCompose
+                    applyResult({
+                      state: { kind: 'idle' },
+                      commands: [
+                        {
+                          kind: 'create-comment',
+                          comment: {
+                            id: (createId ?? defaultCreateId)(),
+                            x: point.x,
+                            y: point.y,
+                            text,
+                            createdAt: new Date().toISOString(),
+                            ...(targetNodeId === undefined ? {} : { targetNodeId }),
+                          },
+                        } as const,
+                      ],
+                    })
+                  }
+                  setCommentCompose(null)
+                }}
+                onCancel={() => setCommentCompose(null)}
+              />
+            )}
             {gestureState.kind === 'editing-text' &&
               selectedNode?.type === 'text' &&
               selection !== undefined && (

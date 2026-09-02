@@ -86,6 +86,7 @@ function baseInput(
     setLinkDialog: vi.fn(),
     setDocumentPicker: vi.fn(),
     setFacetPanelOpen: vi.fn(),
+    setCommentCompose: vi.fn(),
     ...overrides,
   }
 }
@@ -101,7 +102,9 @@ describe('nodeMenuItems', () => {
     const items = nodeMenuItems(
       baseInput(textNode, canvas, { isLocked: () => true, onToggleNodeLock }),
     )
-    expect(items.map(labelOf)).toEqual(['Unlock'])
+    // A comment is about the node and never edits it, so a locked node
+    // keeps it beside Unlock.
+    expect(items.map(labelOf)).toEqual(['Unlock', 'Comment on this'])
     ;(items[0] as { onSelect: () => void }).onSelect()
     expect(onToggleNodeLock).toHaveBeenCalledWith('a', false)
   })

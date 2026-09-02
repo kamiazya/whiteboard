@@ -28,6 +28,7 @@ import {
   ImageOff,
   Lock as LockIcon,
   LockOpen,
+  MessageSquarePlus,
   Pencil,
   Scissors,
   SendToBack,
@@ -79,6 +80,7 @@ export interface NodeMenuItemsInput {
   readonly setLinkDialog: CanvasCommands['setLinkDialog']
   readonly setDocumentPicker: CanvasCommands['setDocumentPicker']
   readonly setFacetPanelOpen: CanvasCommands['setFacetPanelOpen']
+  readonly setCommentCompose: CanvasCommands['setCommentCompose']
 }
 
 export function nodeMenuItems({
@@ -114,6 +116,7 @@ export function nodeMenuItems({
   setLinkDialog,
   setDocumentPicker,
   setFacetPanelOpen,
+  setCommentCompose,
 }: NodeMenuItemsInput): ContextMenuItem[] {
   // The catalog's band order, shared by both vessels (list and grid):
   // 1. properties (state pickers — the menu stays open),
@@ -121,6 +124,19 @@ export function nodeMenuItems({
   // 3. the destructive entry, alone at the bottom.
   const properties: ContextMenuItem[] = []
   const verbs: ContextMenuItem[] = []
+  // Anchored at the node's top-right corner, the same convention the MCP
+  // `comment` op uses, so a comment reads the same whoever made it. A
+  // comment is ABOUT the node and never touches it, which is why it is
+  // the one verb a LOCKED node keeps beside Unlock.
+  const commentOnThis: ContextMenuItem = {
+    label: 'Comment on this',
+    icon: <MessageSquarePlus />,
+    onSelect: () =>
+      setCommentCompose({
+        point: { x: node.x + node.width, y: node.y },
+        targetNodeId: node.id,
+      }),
+  }
   if (node.type === 'group') {
     verbs.push({
       label: 'Edit label',
@@ -244,6 +260,7 @@ export function nodeMenuItems({
         icon: <LockOpen />,
         onSelect: () => onToggleNodeLock?.(node.id, false),
       },
+      commentOnThis,
     ]
   }
   verbs.push({
@@ -409,6 +426,7 @@ export function nodeMenuItems({
       onSelect: () => onToggleNodeLock?.(node.id, true),
     })
   }
+  verbs.push(commentOnThis)
   return [
     ...properties,
     // Extensions come after every core row, behind their own fence.

@@ -34,6 +34,7 @@ function baseInput(canvas: SpatialCanvas) {
     createGroupAtViewportCenter: vi.fn(),
     setDocumentPicker: vi.fn(),
     applyBoxMoves: vi.fn(),
+    setCommentCompose: vi.fn(),
   }
 }
 
@@ -42,13 +43,23 @@ describe('canvasMenuItems', () => {
     clearClipboardFragmentForTests()
   })
 
-  it('offers only the creation entries when nothing extra is wired', () => {
+  it('offers the creation entries, then a comment band, when nothing extra is wired', () => {
     const items = canvasMenuItems(baseInput(emptyCanvas))
-    expect(items.map((item) => (item as { label: string }).label)).toEqual([
+    expect(items.map((item) => (item as { label?: string }).label ?? item.kind)).toEqual([
       'Note',
       'Link',
       'Group',
+      'separator',
+      'Comment here',
     ])
+  })
+
+  it('"Comment here" opens a compose anchored at the click point, about no node', () => {
+    const input = baseInput(emptyCanvas)
+    const items = canvasMenuItems(input)
+    const item = items.find((entry) => (entry as { label?: string }).label === 'Comment here')
+    ;(item as { onSelect: () => void }).onSelect()
+    expect(input.setCommentCompose).toHaveBeenCalledWith({ point: { x: 5, y: 5 } })
   })
 
   it('prepends Paste here (and a separator) only when a clipboard fragment exists', () => {

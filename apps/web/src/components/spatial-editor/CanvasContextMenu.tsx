@@ -40,6 +40,16 @@ export type DocumentPickerState =
   | { readonly mode: 'retarget'; readonly nodeId: string }
 
 /**
+ * An open comment compose bubble: the anchor the comment will carry, plus
+ * the node it is about when it came from a node's menu. The draft text
+ * lives in the bubble itself — only the anchor is decided at menu time.
+ */
+export interface CommentComposeState {
+  readonly point: Point
+  readonly targetNodeId?: string
+}
+
+/**
  * Everything the menu can DO, as one object.
  *
  * The menu is a command surface: thirty-six flat props made it read as a
@@ -76,6 +86,7 @@ export interface CanvasCommands {
   readonly setDocumentPicker: (state: DocumentPickerState | null) => void
   /** Opens the node's full facet editor — the point knows no domain. */
   readonly setFacetPanelOpen: (open: boolean) => void
+  readonly setCommentCompose: (state: CommentComposeState | null) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -142,6 +153,7 @@ export function CanvasContextMenu({
     setLinkDialog,
     setDocumentPicker,
     setFacetPanelOpen,
+    setCommentCompose,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -191,6 +203,7 @@ export function CanvasContextMenu({
             createGroupAtViewportCenter,
             setDocumentPicker,
             applyBoxMoves,
+            setCommentCompose,
           })
         : nodeMenuItems({
             node,
@@ -225,6 +238,7 @@ export function CanvasContextMenu({
             setLinkDialog,
             setDocumentPicker,
             setFacetPanelOpen,
+            setCommentCompose,
           })
 
   return (

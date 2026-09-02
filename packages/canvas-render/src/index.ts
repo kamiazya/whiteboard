@@ -48,6 +48,7 @@ export type {
   SpatialLayoutOptions,
 } from './layout/spatial-canvas.js'
 export {
+  COMMENT_BUBBLE_OFFSET_PX,
   layoutSpatialCanvas,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,

@@ -10,6 +10,7 @@ import {
   Frame,
   Image as ImageIcon,
   Link,
+  MessageSquarePlus,
   Sparkles,
   StickyNote,
 } from 'lucide-react'
@@ -36,6 +37,7 @@ export interface CanvasMenuItemsInput {
   readonly createGroupAtViewportCenter: CanvasCommands['createGroupAtViewportCenter']
   readonly setDocumentPicker: CanvasCommands['setDocumentPicker']
   readonly applyBoxMoves: CanvasCommands['applyBoxMoves']
+  readonly setCommentCompose: CanvasCommands['setCommentCompose']
 }
 
 export function canvasMenuItems({
@@ -53,6 +55,7 @@ export function canvasMenuItems({
   createGroupAtViewportCenter,
   setDocumentPicker,
   applyBoxMoves,
+  setCommentCompose,
 }: CanvasMenuItemsInput): ContextMenuItem[] {
   // The same creation set as the dock's + menu, anchored at
   // the click point — "here" is exactly the information the
@@ -113,5 +116,13 @@ export function canvasMenuItems({
       onSelect: () => applyBoxMoves(tidyNodes(canvasRef.current.nodes, { locked: isLocked })),
     })
   }
+  // Its own band: a comment is not content, so it sits apart from the
+  // creation set rather than reading as a sixth node kind.
+  emptyItems.push({ kind: 'separator' })
+  emptyItems.push({
+    label: 'Comment here',
+    icon: <MessageSquarePlus />,
+    onSelect: () => setCommentCompose({ point }),
+  })
   return emptyItems
 }

@@ -43,6 +43,36 @@ export function carriedByGesture(
 }
 
 /**
+ * The canvas extension with only the comments that ride on a CARRIED node
+ * (`carried === true`) or only those that do not (`carried === false`).
+ *
+ * A node-anchored comment is drawn at its target's top-right corner, so it
+ * belongs to whichever layer draws the target: the ghost/live-node layer
+ * while the node travels, the static base otherwise. A point-anchored
+ * comment is anchored to the canvas and stays in the base. Splitting it
+ * here, rather than letting the base keep every comment, is what stops the
+ * base drawing a stale copy at the pre-gesture corner while the ghost draws
+ * the live one — `composeComments` falls back to the comment's stored x/y
+ * when its target is missing from the nodes it is given, and the base is
+ * given the canvas WITHOUT the carried nodes.
+ */
+export function commentExtensionFor(
+  canvas: SpatialCanvas,
+  carriedIds: ReadonlySet<string>,
+  carried: boolean,
+): SpatialCanvas['x-whiteboard'] {
+  const extension = canvas['x-whiteboard']
+  if (extension?.comments === undefined) return carried ? undefined : extension
+  return {
+    ...extension,
+    comments: extension.comments.filter(
+      (comment) =>
+        (comment.targetNodeId !== undefined && carriedIds.has(comment.targetNodeId)) === carried,
+    ),
+  }
+}
+
+/**
  * The canvas' nodes with the gesture's transform applied at the live
  * preview geometry: a move translates every carried node by the preview
  * delta, a resize reshapes the one resized node to the preview box, and
