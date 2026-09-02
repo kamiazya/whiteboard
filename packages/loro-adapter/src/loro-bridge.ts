@@ -65,7 +65,19 @@ const EXTENSION_FIELD = 'x-whiteboard'
  * commenting concurrently must both survive a merge. `writeSpatialCanvas`
  * splits the field out on write and `readSpatialCanvas` reassembles it.
  */
-const COMMENTS_KEY = 'comments'
+export const COMMENTS_KEY = 'comments'
+/**
+ * The annotation layer's thread plane (ADR-0026), one level deeper than the
+ * comments map above: a map of thread containers, each holding its anchor and
+ * status beside a nested map of MESSAGES keyed by message id. The extra level
+ * is the whole point — a thread stored as one value would lose one of two
+ * concurrent replies to last-writer-wins, silently.
+ *
+ * Read and written by `comment-threads.ts`; the key lives here so this file
+ * stays the one place a container is named and `CONTENT_CONTAINER_KEYS` below
+ * cannot fall out of step with it.
+ */
+export const THREADS_KEY = 'threads'
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -826,6 +838,7 @@ export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 
   { key: EDGES_KEY, kind: 'map' },
   { key: CANVAS_KEY, kind: 'map' },
   { key: COMMENTS_KEY, kind: 'map' },
+  { key: THREADS_KEY, kind: 'map' },
   { key: FACETS_KEY, kind: 'map' },
   { key: NODE_LOCKS_KEY, kind: 'map' },
   { key: EDGE_LOCKS_KEY, kind: 'map' },

@@ -41,6 +41,14 @@ paths:
   the `human:` prefix (§5.3 keys trust tiers off it), and `isHumanActor` is the single place that
   check lives. `trustTier` is DERIVED on read and never stored — OKF's whole position is that a
   stored verdict is subjective, unportable and goes stale.
+- **The annotation layer (`annotation.ts`, ADR-0026) is format-agnostic except
+  for its anchor.** A thread carries where it points, whether it is open, and
+  its messages; only `annotationAnchorSchema` varies by document kind, and it
+  is a CLOSED discriminated union so every renderer's switch over it stays
+  exhaustive. Every arm has the same shape — an optional object reference plus
+  a positional fallback — because the reference is what survives the object
+  moving and the position is what survives it being deleted. Supporting a new
+  document format means adding an arm here, never widening an existing one.
 - A key joins `RESERVED_ROOT_KEYS` the moment something INTERPRETS it, and not before. Until then
   `facetsRaw` is the right home: preserved verbatim, never half-understood.
 

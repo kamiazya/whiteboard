@@ -39,12 +39,54 @@ function expectSettled(): string {
   return at as string
 }
 
+export interface WaitForSavedOptions {
+  /**
+   * When the caller finished typing, as `Date.now()`. Turns the wait from a
+   * DURATION into a PROOF: the CodeMirror binding commits into the Loro doc
+   * synchronously with the keystroke, and a write serialises the doc as it
+   * stands when it RUNS — so a write that COMPLETED at or after this instant
+   * necessarily contains every keystroke before it. The last edit's own
+   * debounce guarantees such a write arrives, so the wait only has to be
+   * patient rather than precisely timed.
+   */
+  readonly since?: number
+  readonly timeout?: number
+}
+
 /**
- * Resolves once a write has landed AND nothing further was scheduled while
- * we watched. Returns the `data-last-saved-at` it settled on, so a caller
- * that cares which write it waited for can say so.
+ * Resolves once a write has landed that provably covers the caller's typing
+ * (with `since`), or — without an anchor — once a write has landed and
+ * nothing further was scheduled while we watched. Returns the
+ * `data-last-saved-at` it settled on, so a caller that cares which write it
+ * waited for can say so.
+ *
+ * The settle window below is the weaker of the two and is kept only for
+ * callers with nothing to anchor on. It closes the window it was written for
+ * and no more: a fixed duration cannot tell "finished" from "the delivery
+ * that arms the next save has not arrived yet", and under a full browser
+ * project the second is unbounded — measured elsewhere in this repo at 1.5s
+ * alone versus 30-39s with every browser file in flight. That is the run
+ * that failed CI on a partial body while the indicator sat, unchanged and
+ * truthful, on the write before it.
  */
-export async function waitForMarkdownSaved(timeout = 15_000): Promise<string> {
+export async function waitForMarkdownSaved(
+  options: WaitForSavedOptions | number = {},
+): Promise<string> {
+  const { since, timeout = 15_000 } =
+    typeof options === 'number' ? { since: undefined, timeout: options } : options
+  if (since !== undefined) {
+    return await waitFor(
+      () => {
+        const at = expectSettled()
+        expect(
+          Date.parse(at) >= since,
+          `the latest write (${at}) completed before the typing it must cover`,
+        ).toBe(true)
+        return at
+      },
+      { timeout },
+    )
+  }
   await waitFor(expectSettled, { timeout })
   await new Promise((resolve) => setTimeout(resolve, SETTLE_MS))
   return await waitFor(expectSettled, { timeout })

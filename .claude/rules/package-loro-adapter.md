@@ -78,6 +78,22 @@ implementations live in the composition roots.
   `doc.getMap('edges')` keyed by edgeId. Each value is a plain object
   (not a nested LoroMap container) — this preserves node-level CRDT
   merge while avoiding Loro's nested-container overwrite issues.
+- **A nested container is the right shape only when the thing inside it must
+  merge per ENTRY**, and it buys that at a price worth naming. The annotation
+  layer's `threads` map (`comment-threads.ts`, ADR-0026) is the one that
+  qualifies: a thread's messages are a set two peers append to concurrently,
+  and stored as one value the second reply would erase the first, silently.
+  Nodes, edges and comments are each ONE value with one meaning, so a plain
+  object is right for them and a container would only add the hazard below.
+
+  The price, measured on loro-crdt 1.13.6: when two replicas create a
+  container under the same key with **no common ancestor for that key**, the
+  merge keeps one of them and every entry the other side put in it is gone —
+  no conflict, no marker. So only the CREATION path may open a thread
+  container (its id is minted, and cannot collide); a reply or a status change
+  to a thread this replica has not received writes nothing rather than opening
+  a rival. `setContainer` is banned here for the reason it is banned on tree
+  nodes, and `getOrCreateContainer` alone is not enough.
 - A third map, `doc.getMap('canvas')`, holds the canvas ENVELOPE —
   properties of the canvas rather than of anything on it (today
   `x-whiteboard`, the rendering preferences). Separate because the merge

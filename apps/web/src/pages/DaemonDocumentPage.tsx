@@ -695,11 +695,7 @@ export function DaemonDocumentPage({
                 )}
                 workspaceId={canvas.workspaceId}
                 path={canvas.path}
-                capabilities={{
-                  versions: capabilities.versions,
-                  branches: capabilities.branches,
-                  merge: capabilities.merge,
-                }}
+                capabilities={capabilities}
                 branchRefreshSignal={branchRefreshSignal}
                 onNavigateBack={onNavigateBack}
                 // Version thumbnails come from the same PNG export path the
