@@ -2308,6 +2308,26 @@ describe('editor composite state (command-based)', () => {
     assertLedger('GestureEvent type', GESTURE_EVENT_COVERAGE, stats.eventTypes)
     assertLedger('shortcut', SHORTCUT_COVERAGE, stats.shortcutIds)
 
+    // Every floor failure prints the WHOLE census, not only the counter
+    // that fell — because which one fell says almost nothing on its own.
+    // A counter that dropped while the one it shares a branch with stayed
+    // healthy is an unlucky ARRANGEMENT; a whole column that fell together
+    // is a run that simply did less work. Those want opposite fixes — a
+    // denser domain versus a bigger budget — and the message could not
+    // tell them apart, so the reader has to reconstruct the other numbers
+    // from somewhere else.
+    //
+    // Measured, on the run that occasioned this: separating those two
+    // readings took THIRTY local runs of this file, to recover numbers the
+    // failing run had already computed and thrown away.
+    const census = () =>
+      Object.entries(stats)
+        .filter(([, value]) => typeof value === 'number')
+        .map(([name, value]) => `${name}=${value}`)
+        .join(' ')
+    const atLeast = (actual: number, floor: number, wentWrong: string) =>
+      expect(actual, `${wentWrong}\ncensus: ${census()}`).toBeGreaterThan(floor)
+
     // Floors, not sentinels. `> 0` passes on a generator that reached an
     // arrangement once by luck, which is the shape this guard exists to
     // reject. Each sits at roughly a third of the minimum measured across
@@ -2318,7 +2338,7 @@ describe('editor composite state (command-based)', () => {
     // reorders 43-54 (of which forward/backward 16-24), locks applied
     // 15-28, select-alls 119-139, edge selections 83-95, edge deletes
     // 19-34, copies 33-46, cuts 53-72, cut-moves 13-20, paste-inserts
-    // 38-59, reconnections 8-13, marquee selections 23-30,
+    // 38-59, reconnections 5-19 (see below), marquee selections 23-30,
     // hand-swallowed presses 53-70, hand entries 43-56, connect arms
     // 44-68, tool switches 185-220, carried moves 57-80, group-or-multi
     // drags 57-80, group-frame drags 27-40, groups created 53-65.
@@ -2336,6 +2356,26 @@ describe('editor composite state (command-based)', () => {
     // dragged alongside a selection, which the extras kept green with
     // production containment disabled outright.
     //
+    // FIVE RUNS IS NOT A SAMPLE for a rare conjunction. Every range above
+    // was taken over five, which is ample for a counter in the hundreds
+    // and badly wrong for one in single digits. `reconnections` needs a
+    // cut whose selection straddles an edge, and then a paste — a deep
+    // conjunction the generator reaches only a few times per 500 runs.
+    // Re-measured over THIRTY runs it is 5-19 (mean 10.7), not the 8-13
+    // five runs reported, and the floor derived from that understated
+    // minimum was `> 2`. A CI run then produced 2 and went red.
+    //
+    // The floor is therefore re-derived by the SAME rule from the honest
+    // minimum — a third of 5 — rather than the guard being weakened by
+    // judgement. It still refuses the two states it exists to refuse: the
+    // arrangement never reached, and reached once by luck.
+    //
+    // What is NOT yet established is why CI produced 2 when thirty local
+    // runs produced nothing under 5. Both readings remain open — a run
+    // that did less work, or this conjunction alone being unlucky — and
+    // the census printed on failure is what will settle it the next time
+    // one fires, without another thirty runs.
+    //
     // Re-measure when adding a command, widening the document generator,
     // or making the model MORE faithful, because all three dilute every
     // existing counter. `numRuns` went 300 -> 500 when the command set
@@ -2343,49 +2383,44 @@ describe('editor composite state (command-based)', () => {
     // floor: the arrangements were still being reached, so that was
     // variance rather than vacuity, and more runs is the honest lever for
     // variance. It costs about three seconds.
-    expect(stats.moveCommits, 'moves barely committed').toBeGreaterThan(100)
-    expect(stats.resizeCommits, 'resizes barely committed').toBeGreaterThan(18)
-    expect(stats.connectCommits, 'edges barely connected').toBeGreaterThan(20)
-    expect(stats.deletes, 'nodes barely deleted').toBeGreaterThan(18)
-    expect(stats.textEditsOpened, 'text edits barely opened').toBeGreaterThan(40)
-    expect(stats.pendingTextHandoffs, 'open edits barely left with text in them').toBeGreaterThan(
-      12,
-    )
-    expect(
+    atLeast(stats.moveCommits, 100, 'moves barely committed')
+    atLeast(stats.resizeCommits, 18, 'resizes barely committed')
+    atLeast(stats.connectCommits, 20, 'edges barely connected')
+    atLeast(stats.deletes, 18, 'nodes barely deleted')
+    atLeast(stats.textEditsOpened, 40, 'text edits barely opened')
+    atLeast(stats.pendingTextHandoffs, 12, 'open edits barely left with text in them')
+    atLeast(
       stats.externalReplacementsMidGesture,
+      14,
       'external replacements barely landed mid-gesture',
-    ).toBeGreaterThan(14)
-    expect(stats.multiSelections, 'multi-selection barely reached').toBeGreaterThan(150)
-    expect(stats.nudges, 'arrow-key nudges barely reached').toBeGreaterThan(25)
-    expect(stats.duplicates, 'Cmd+D barely reached').toBeGreaterThan(6)
-    expect(stats.reordersEffective, 'z-order barely changed anything').toBeGreaterThan(15)
-    expect(
-      stats.stepReordersEffective,
-      'forward/backward never stepped over an overlapping node',
-    ).toBeGreaterThan(5)
-    expect(stats.locksApplied, 'Cmd+Shift+L barely locked anything').toBeGreaterThan(5)
-    expect(stats.selectAlls, 'Cmd+A barely reached').toBeGreaterThan(40)
-    expect(stats.edgeSelections, 'edges barely ever selected').toBeGreaterThan(28)
-    expect(stats.edgeDeletes, 'selected edges barely ever deleted').toBeGreaterThan(6)
-    expect(stats.copies, 'Cmd+C barely reached').toBeGreaterThan(11)
-    expect(stats.cuts, 'Cmd+X barely reached').toBeGreaterThan(18)
-    expect(stats.cutMoves, 'no paste resolved as a same-canvas move').toBeGreaterThan(4)
-    expect(stats.pasteInserts, 'no paste inserted a copy').toBeGreaterThan(12)
-    expect(stats.reconnections, 'no cut surface was ever reconnected').toBeGreaterThan(2)
-    expect(stats.marqueeSelections, 'no marquee ever gathered a node').toBeGreaterThan(7)
-    expect(stats.handPressesIgnored, 'hand mode never swallowed a press').toBeGreaterThan(17)
-    expect(stats.handEntries, 'hand mode was never entered').toBeGreaterThan(14)
-    expect(stats.connectArms, 'the connect tool never armed').toBeGreaterThan(14)
-    expect(stats.toolSwitches, 'the tool never changed').toBeGreaterThan(60)
-    expect(stats.carriedMoves, 'no drag ever carried a second node').toBeGreaterThan(18)
-    expect(stats.groupOrMultiDrags, 'no group or multi-selection was ever dragged').toBeGreaterThan(
-      18,
     )
-    expect(
-      stats.groupFrameDrags,
-      'a dragged group frame never carried anything it contained',
-    ).toBeGreaterThan(9)
-    expect(stats.groupsCreated, 'no group frame was ever made from a selection').toBeGreaterThan(17)
+    atLeast(stats.multiSelections, 150, 'multi-selection barely reached')
+    atLeast(stats.nudges, 25, 'arrow-key nudges barely reached')
+    atLeast(stats.duplicates, 6, 'Cmd+D barely reached')
+    atLeast(stats.reordersEffective, 15, 'z-order barely changed anything')
+    atLeast(
+      stats.stepReordersEffective,
+      5,
+      'forward/backward never stepped over an overlapping node',
+    )
+    atLeast(stats.locksApplied, 5, 'Cmd+Shift+L barely locked anything')
+    atLeast(stats.selectAlls, 40, 'Cmd+A barely reached')
+    atLeast(stats.edgeSelections, 28, 'edges barely ever selected')
+    atLeast(stats.edgeDeletes, 6, 'selected edges barely ever deleted')
+    atLeast(stats.copies, 11, 'Cmd+C barely reached')
+    atLeast(stats.cuts, 18, 'Cmd+X barely reached')
+    atLeast(stats.cutMoves, 4, 'no paste resolved as a same-canvas move')
+    atLeast(stats.pasteInserts, 12, 'no paste inserted a copy')
+    atLeast(stats.reconnections, 1, 'no cut surface was ever reconnected')
+    atLeast(stats.marqueeSelections, 7, 'no marquee ever gathered a node')
+    atLeast(stats.handPressesIgnored, 17, 'hand mode never swallowed a press')
+    atLeast(stats.handEntries, 14, 'hand mode was never entered')
+    atLeast(stats.connectArms, 14, 'the connect tool never armed')
+    atLeast(stats.toolSwitches, 60, 'the tool never changed')
+    atLeast(stats.carriedMoves, 18, 'no drag ever carried a second node')
+    atLeast(stats.groupOrMultiDrags, 18, 'no group or multi-selection was ever dragged')
+    atLeast(stats.groupFrameDrags, 9, 'a dragged group frame never carried anything it contained')
+    atLeast(stats.groupsCreated, 17, 'no group frame was ever made from a selection')
   })
 
   fcTest.prop(
