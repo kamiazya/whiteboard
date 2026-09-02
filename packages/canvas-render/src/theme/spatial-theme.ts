@@ -79,6 +79,10 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
       stroke: presetAccent(edge.color, palette)?.stroke ?? rawHex(edge.color) ?? palette.edgeStroke,
     }),
     resolveSyntax: () => palette.syntax,
+    resolveComment: () => ({
+      pin: { fill: palette.comment.pin.fill, stroke: palette.comment.pin.stroke },
+      bubble: { fill: palette.comment.bubble.fill, stroke: palette.comment.bubble.stroke },
+    }),
     resolveLabel: () => ({
       fill: palette.labelFill,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,

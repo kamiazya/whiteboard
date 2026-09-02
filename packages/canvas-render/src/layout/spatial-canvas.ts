@@ -27,6 +27,7 @@
 
 import { parseMarkdownBody } from '@kamiazya/whiteboard-codec'
 import type {
+  CanvasComment,
   CanvasEdge,
   EdgeRoutingStyle,
   SpatialCanvas,
@@ -1288,7 +1289,122 @@ function layoutSpatialCanvasInternal(
     ...composeDecorations(node, resolved),
   ])
   const { content, anchors } = composeEdgesAndLabels(canvas, resolved)
-  return { scene: { nodes: [...nodeContent, ...content] }, anchors }
+  // Comments LAST: the annotation layer paints above every node and edge,
+  // which a flat document-order paint list can only express by position.
+  const commentContent = composeComments(canvas, resolved)
+  return { scene: { nodes: [...nodeContent, ...content, ...commentContent] }, anchors }
+}
+
+/** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
+export const COMMENT_PIN_SIZE_PX = 20
+/** Gap (px) from the anchor point to the bubble's top-left corner. */
+export const COMMENT_BUBBLE_OFFSET_PX = 14
+const COMMENT_TEXT_MAX_WIDTH_PX = 200
+const COMMENT_BUBBLE_PADDING_PX = 8
+const COMMENT_BUBBLE_RADIUS_PX = 8
+
+/**
+ * Where a comment points: the target node's top-right corner while the node
+ * exists (the pin FOLLOWS the node), the stored anchor otherwise. The
+ * fallback is what makes a dangling `targetNodeId` harmless, per the model's
+ * contract that a comment may outlive its subject.
+ */
+function commentAnchor(
+  comment: CanvasComment,
+  canvas: SpatialCanvas,
+): { readonly x: number; readonly y: number } {
+  if (comment.targetNodeId !== undefined) {
+    const target = canvas.nodes.find((node) => node.id === comment.targetNodeId)
+    if (target !== undefined) return { x: target.x + target.width, y: target.y }
+  }
+  return { x: comment.x, y: comment.y }
+}
+
+/**
+ * The comment annotation layer (ADR-0024 decision 4): one pin (a circle on
+ * the anchor) plus one bubble (rounded rect holding the text, floating
+ * offset from the anchor) per unresolved comment, composed from existing
+ * scene kinds so no consumer of the closed union changes. Resolved comments
+ * stay in the document and are deliberately not drawn. Appearance comes
+ * from the resolver's optional `resolveComment` — assigned, never invented —
+ * so a resolver that predates the layer still lays comments out, bare.
+ *
+ * ponytail: placement is a fixed down-right offset with no collision
+ * avoidance; overlapping bubbles on clustered comments are the ceiling, and
+ * a greedy占-region placer over sceneBounds is the upgrade path.
+ */
+function composeComments(
+  canvas: SpatialCanvas,
+  options: ResolvedLayoutOptions,
+): readonly SceneNode[] {
+  const comments = canvas['x-whiteboard']?.comments
+  if (comments === undefined || comments.length === 0) return []
+
+  const appearance = options.appearance.resolveComment?.()
+  const out: SceneNode[] = []
+  for (const comment of comments) {
+    if (comment.resolved === true) continue
+    const anchor = commentAnchor(comment, canvas)
+
+    out.push({
+      kind: 'shape',
+      bbox: {
+        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
+        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
+        w: COMMENT_PIN_SIZE_PX,
+        h: COMMENT_PIN_SIZE_PX,
+      },
+      radius: COMMENT_PIN_SIZE_PX / 2,
+      ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
+    })
+
+    // The text goes through the same mdast pipeline as a text node's body,
+    // so wrapping (CJK included) and theming have one producer. A parse
+    // failure degrades to the single-line label run, like a body's does.
+    let laid: Scene
+    try {
+      laid = layoutMdastBlocks(
+        options.parseBody(comment.text),
+        mdastOptionsFor(COMMENT_TEXT_MAX_WIDTH_PX, options),
+      )
+    } catch (err) {
+      options.onDegrade?.({ kind: 'body-parse-failed', nodeId: comment.id, err })
+      laid = { nodes: [labelRun(comment.text, options, COMMENT_TEXT_MAX_WIDTH_PX)] }
+    }
+    const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
+    const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
+
+    const bubbleX = anchor.x + COMMENT_BUBBLE_OFFSET_PX
+    const bubbleY = anchor.y + COMMENT_BUBBLE_OFFSET_PX
+    out.push({
+      kind: 'shape',
+      bbox: {
+        x: bubbleX,
+        y: bubbleY,
+        w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
+        h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
+      },
+      radius: COMMENT_BUBBLE_RADIUS_PX,
+      ...(appearance !== undefined ? { appearance: appearance.bubble } : {}),
+    })
+    out.push(
+      ...translateScene(
+        laid,
+        bubbleX + COMMENT_BUBBLE_PADDING_PX,
+        bubbleY + COMMENT_BUBBLE_PADDING_PX,
+      ).nodes,
+    )
+  }
+  return out
+}
+
+/** Right/bottom extents of a laid-out block at origin, for sizing a bubble. */
+function sceneRight(node: SceneNode): number {
+  return node.kind === 'edge' ? 0 : node.bbox.x + node.bbox.w
+}
+
+function sceneBottom(node: SceneNode): number {
+  return node.kind === 'edge' ? 0 : node.bbox.y + node.bbox.h
 }
 
 function composeEdgesAndLabels(

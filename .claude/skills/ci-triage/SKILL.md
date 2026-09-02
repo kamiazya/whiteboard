@@ -14,7 +14,7 @@ description: Monitor and triage the POST-PUSH automated-review surface for the w
 | **`verify`** | GitHub Actions CI (lint:noconsole + tests/typecheck/smoke per `.github/workflows/`) | `gh pr checks <PR>`; logs: `gh run view <run-id> --log-failed` |
 | **CodeRabbit** | AI PR review (line comments + summary). **Skips while the PR title contains `WIP`/draft** | `gh pr view <PR> --json reviews,comments`; `gh api repos/{owner}/{repo}/pulls/<PR>/comments` |
 | **AccessLint** | accessibility review app | its check + PR review comments |
-| **WIP** | blocks merge while the title says WIP | `gh pr checks` shows it pending; remove `WIP`/`(WIP)` from the title to release it + un-skip CodeRabbit |
+| **WIP** | reports work-in-progress from the title — **informational, measured not to block a merge** (#1201: with WIP the sole non-success check, `mergeable_state` read `unstable`, never `blocked`; Draft is the one mechanical merge block) | `gh pr checks` shows it pending; remove `WIP`/`(WIP)` from the title to settle it + un-skip CodeRabbit |
 | **CodeQL** | security code-scanning | **primary (scope-free):** its findings post as PR review comments by `github-advanced-security[bot]` — `gh api repos/{owner}/{repo}/pulls/<PR>/comments --jq '.[]\|select(.user.login=="github-advanced-security[bot]")'`. **enrichment (may 404 on scope / "no analysis"):** `gh api repos/{owner}/{repo}/code-scanning/alerts` (needs `security_events`/admin) for severity/state |
 | **Dependabot** | dependency-bump PRs + security alerts | **handled by its own flow** — the `dependabot-triage` workflow + `dependabot-review` skill (semver×ecosystem classify, conflict-cascade-safe merge, `pnpm audit --prod` gate). Don't triage it here. |
 

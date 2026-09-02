@@ -14,8 +14,10 @@ import {
   writeDocumentKind,
 } from '@kamiazya/whiteboard-loro-adapter'
 import {
+  type CanvasComment,
   type CanvasEdge,
   canvasColorSchema,
+  canvasCommentSchema,
   canvasEdgeSchema,
   documentIdSchema,
   nodeIdSchema,
@@ -172,6 +174,32 @@ const canvasOpSchema = z.discriminatedUnion('op', [
   z.object({ op: z.literal('edge.lock'), id: nodeIdSchema, locked: z.boolean() }).strict(),
   z.object({ op: z.literal('tidy'), scope: z.array(nodeIdSchema).min(1).optional() }).strict(),
   /**
+   * The annotation layer (ADR-0024). A draft may omit the id (minted) and
+   * the anchor point — a comment about a NODE names `targetNodeId` and the
+   * server anchors it at that node's top-right corner. `createdAt` defaults
+   * to now, stamped by the server so the record orders without trusting
+   * every caller's clock format.
+   */
+  z
+    .object({
+      op: z.literal('comment.add'),
+      comment: canvasCommentSchema.partial({ id: true, x: true, y: true }),
+    })
+    .strict(),
+  /**
+   * Resolution keeps the record in the document (the conversation is the
+   * point); `resolved: false` reopens. Removal is for a comment that was
+   * never worth keeping, matching the ticketing rule one level down.
+   */
+  z
+    .object({
+      op: z.literal('comment.resolve'),
+      id: nodeIdSchema,
+      resolved: z.boolean().optional(),
+    })
+    .strict(),
+  z.object({ op: z.literal('comment.remove'), id: nodeIdSchema }).strict(),
+  /**
    * "This group should look like this." The ONE declarative op, and so the
    * only one that deletes something it was not told about.
    *
@@ -238,7 +266,13 @@ const canvasEditOutputSchema = z
      * Sorted, so the payload is reproducible across runs rather than
      * carrying Set iteration order.
      */
-    touched: z.object({ nodes: z.array(nodeIdSchema), edges: z.array(nodeIdSchema) }).strict(),
+    touched: z
+      .object({
+        nodes: z.array(nodeIdSchema),
+        edges: z.array(nodeIdSchema),
+        comments: z.array(nodeIdSchema),
+      })
+      .strict(),
     /**
      * Final geometry of every node this batch positioned WITHOUT being told
      * the numbers — an auto-placed add, or a node `tidy` moved. A node whose
@@ -268,12 +302,16 @@ function fail(opIndex: number, op: string, detail: string): never {
  * nodes" are the same set of ids and a human needs to know which happened.
  */
 function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
-  const counts = { added: 0, changed: 0, removed: 0, locked: 0, unlocked: 0 }
+  const counts = { added: 0, changed: 0, removed: 0, locked: 0, unlocked: 0, commented: 0 }
   let tidied = false
+  let resolvedComments = 0
   for (const op of ops) {
     if (op.op === 'node.add' || op.op === 'edge.add') counts.added += 1
     else if (op.op === 'node.patch' || op.op === 'edge.patch') counts.changed += 1
-    else if (op.op === 'node.remove' || op.op === 'edge.remove') counts.removed += 1
+    else if (op.op === 'comment.add') counts.commented += 1
+    else if (op.op === 'comment.resolve') resolvedComments += 1
+    else if (op.op === 'node.remove' || op.op === 'edge.remove' || op.op === 'comment.remove')
+      counts.removed += 1
     else if (op.op === 'node.lock' || op.op === 'edge.lock') {
       if (op.locked) counts.locked += 1
       else counts.unlocked += 1
@@ -285,6 +323,8 @@ function summarizeOps(ops: readonly CanvasOpSummaryInput[]): string {
   if (counts.removed > 0) parts.push(`removed ${counts.removed}`)
   if (counts.locked > 0) parts.push(`locked ${counts.locked}`)
   if (counts.unlocked > 0) parts.push(`unlocked ${counts.unlocked}`)
+  if (counts.commented > 0) parts.push(`commented ${counts.commented}`)
+  if (resolvedComments > 0) parts.push(`resolved ${resolvedComments}`)
   if (tidied) parts.push('tidied the layout')
   // `ops` is `.min(1)`, and every op kind above contributes, so this is
   // unreachable rather than a fallback anyone should see.
@@ -393,7 +433,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
   return {
     name: 'wb_canvas_edit' as const,
     description:
-      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges. Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again.',
+      'Apply a batch of edits to a spatial canvas in one transaction: add, patch, remove, lock and tidy nodes and edges, and add, resolve or remove comments (the annotation layer). Either every op applies or none does, and a refusal names the op that failed. Node geometry is optional — a node with no x/y/width/height is placed for you and the chosen position is reported back. The result carries the resulting board, so there is no need to read it again.',
     inputSchema: canvasEditInputSchema,
     outputSchema: canvasEditOutputSchema,
     async execute(input: CanvasEditInput): Promise<CanvasEditOutput> {
@@ -420,10 +460,12 @@ export function createCanvasEditTool(deps: ServerDeps) {
       // write through to the doc's sidecar map as they were applied.
       let nodes: SpatialNode[] = [...canvas.nodes]
       let edges: CanvasEdge[] = [...canvas.edges]
+      let comments: CanvasComment[] = [...(canvas['x-whiteboard']?.comments ?? [])]
       const nodeLocks = new Set(readNodeLocks(doc))
       const edgeLocks = new Set(readEdgeLocks(doc))
       const touchedNodes = new Set<string>()
       const touchedEdges = new Set<string>()
+      const touchedComments = new Set<string>()
       const geometry = new Map<string, z.infer<typeof geometryEntrySchema>>()
       const cursor = new PlacementCursor()
 
@@ -748,6 +790,60 @@ export function createCanvasEditTool(deps: ServerDeps) {
             return
           }
 
+          case 'comment.add': {
+            const draft = op.comment
+            const id = draft.id ?? mintId(new Set(comments.map((comment) => comment.id)), 'c')
+            if (comments.some((comment) => comment.id === id)) {
+              fail(index, op.op, `comment id "${id}" is already on the canvas`)
+            }
+            let at =
+              draft.x !== undefined && draft.y !== undefined
+                ? { x: draft.x, y: draft.y }
+                : undefined
+            if (at === undefined && draft.targetNodeId !== undefined) {
+              const target = nodeAt(draft.targetNodeId)
+              if (target !== undefined) at = { x: target.x + target.width, y: target.y }
+            }
+            if (at === undefined) {
+              fail(
+                index,
+                op.op,
+                'a comment needs an anchor: give x/y, or a targetNodeId that is on the canvas',
+              )
+            }
+            const parsed = canvasCommentSchema.safeParse({
+              ...draft,
+              id,
+              ...at,
+              createdAt: draft.createdAt ?? new Date().toISOString(),
+            })
+            if (!parsed.success) fail(index, op.op, issues(parsed.error))
+            comments = [...comments, parsed.data]
+            touchedComments.add(id)
+            return
+          }
+
+          case 'comment.resolve': {
+            if (!comments.some((comment) => comment.id === op.id)) {
+              fail(index, op.op, `comment "${op.id}" is not on the canvas`)
+            }
+            const resolved = op.resolved ?? true
+            comments = comments.map((comment) =>
+              comment.id === op.id ? { ...comment, resolved } : comment,
+            )
+            touchedComments.add(op.id)
+            return
+          }
+
+          case 'comment.remove': {
+            if (!comments.some((comment) => comment.id === op.id)) {
+              fail(index, op.op, `comment "${op.id}" is not on the canvas`)
+            }
+            comments = comments.filter((comment) => comment.id !== op.id)
+            touchedComments.add(op.id)
+            return
+          }
+
           case 'tidy': {
             // Locks bind tidy exactly as they bind the editor: a locked node
             // is a fixed obstacle it routes around, never one it moves.
@@ -774,7 +870,19 @@ export function createCanvasEditTool(deps: ServerDeps) {
         }
       })
 
-      const candidate: SpatialCanvas = { nodes, edges }
+      // The batch writes back the WHOLE canvas, so the canvas-level extension
+      // — rendering preferences and every comment the batch did not touch —
+      // must ride along, or the save deletes them (writeSpatialCanvas resyncs
+      // by omission).
+      const { comments: _stored, ...extensionRest } = canvas['x-whiteboard'] ?? {}
+      const keptExtension = {
+        ...extensionRest,
+        ...(comments.length > 0 ? { comments } : {}),
+      }
+      const hasExtension = Object.values(keptExtension).some((value) => value !== undefined)
+      const candidate: SpatialCanvas = hasExtension
+        ? { nodes, edges, 'x-whiteboard': keptExtension }
+        : { nodes, edges }
       const parsed = spatialCanvasSchema.safeParse(candidate)
       if (!parsed.success) {
         throw new CanvasEditError(
@@ -795,6 +903,7 @@ export function createCanvasEditTool(deps: ServerDeps) {
       const touched = {
         nodes: [...touchedNodes].sort(),
         edges: [...touchedEdges].sort(),
+        comments: [...touchedComments].sort(),
       }
 
       // Only now, with the write committed. A human must never be shown an

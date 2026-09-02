@@ -1,6 +1,7 @@
 import { z } from 'zod'
 import { extensionFacetsSchema } from './facets.js'
 import { documentIdSchema, nodeIdSchema } from './ids.js'
+import { okfActorSchema, okfTimestampSchema } from './trust.js'
 
 // JSON Canvas 1.0 (https://jsoncanvas.org/spec/1.0/): color is either one of
 // six numbered presets or a 6-digit hex string.
@@ -163,6 +164,36 @@ export const edgeRoutingSchema = z.object({
 })
 
 /**
+ * A comment pinned to the canvas — the annotation layer (ADR-0024).
+ *
+ * `x`/`y` is the ANCHOR: the point the comment is about, in JSON Canvas
+ * integer canvas coordinates. It is deliberately not a bounding box — where
+ * the comment's bubble draws is a renderer decision (floating near the
+ * anchor), never stored. `targetNodeId` narrows the anchor to "about this
+ * node"; a renderer follows the node's current position and falls back to
+ * the anchor point when the node is gone. A dangling `targetNodeId` is
+ * VALID: a comment may outlive its subject, and the annotation layer must
+ * never make the document unreadable.
+ *
+ * `author` is an OKF actor string (`human:<id>` / `process:<id>`, ADR-0016)
+ * so the `human:` prefix keeps its trust meaning across layers; `createdAt`
+ * is an OKF timestamp. Both optional: identity is a keeper concern this
+ * model does not solve.
+ */
+export const canvasCommentSchema = z.object({
+  id: nodeIdSchema,
+  x: z.number().int(),
+  y: z.number().int(),
+  text: z.string().min(1),
+  author: okfActorSchema.optional(),
+  createdAt: okfTimestampSchema.optional(),
+  targetNodeId: nodeIdSchema.optional(),
+  resolved: z.boolean().optional(),
+})
+
+export type CanvasComment = z.infer<typeof canvasCommentSchema>
+
+/**
  * `x-whiteboard` at the CANVAS level — separate from the node-level key of the
  * same name, and holding preferences rather than content.
  *
@@ -173,6 +204,21 @@ export const edgeRoutingSchema = z.object({
  */
 export const canvasExtensionSchema = z.object({
   edgeRouting: edgeRoutingSchema.optional(),
+  /**
+   * The comment annotation layer (ADR-0024). Lives under the canvas-level
+   * extension because a strict JSON Canvas consumer that drops the key still
+   * holds the complete CONTENT — what it loses is the conversation about it,
+   * which is exactly what an annotation is. The bucket carries its own catch
+   * for the same reason `facets` does: a malformed comment costs the
+   * comments, not the preferences beside them.
+   *
+   * NOTE the storage shape differs from this file shape: the Loro bridge
+   * stores each comment under its own key in a dedicated `comments` map
+   * (per-comment CRDT merge, so two peers commenting concurrently both
+   * survive), never inside the canvas envelope value — see loro-adapter's
+   * `writeSpatialCanvas`.
+   */
+  comments: z.array(canvasCommentSchema).optional().catch(undefined),
   /**
    * Canvas-target facets (ADR-0013 decision 5): the spatial counterpart of a
    * markdown document's `facets` bucket, carrying `{namespace}.{name}/v{n}`

@@ -83,6 +83,12 @@ describe('canvas_view tool', () => {
     const result = await tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID })
 
     expect(result.documentId).toBe(DOCUMENT_ID)
+    // BOTH ids echo, because the widget's follow-up calls (Refresh, the
+    // sticky-note append) re-invoke tools whose strict input schemas require
+    // the workspaceId too — an echo of documentId alone leaves the widget
+    // unable to construct a valid call.
+    expect(result.workspaceId).toBe(WORKSPACE_ID)
+    expect(canvasViewOutputSchema.parse(result).workspaceId).toBe(WORKSPACE_ID)
     // Sorted: node order is whatever `readSpatialCanvas` gives back, not the
     // order they were written in. What this pins is that the whole document
     // reaches the widget, not a projection of it.
@@ -106,6 +112,7 @@ describe('canvas_view tool', () => {
     // so `references` is schematized rather than passed as unknown — a
     // hand-written type on the widget side is the drift this prevents.
     const parsed = canvasViewOutputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       scene: { nodes: [], edges: [] },
       references: { [NOTE_ID]: { label: 'Weekly', body: { type: 'root', children: [] } } },
@@ -115,6 +122,7 @@ describe('canvas_view tool', () => {
 
   test('rejects a reference body that is not a real mdast root', () => {
     const parsed = canvasViewOutputSchema.safeParse({
+      workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       scene: { nodes: [], edges: [] },
       references: { x: { body: { type: 'nonsense' } } },

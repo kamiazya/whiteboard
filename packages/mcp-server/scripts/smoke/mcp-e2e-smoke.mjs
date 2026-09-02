@@ -630,10 +630,71 @@ async function main() {
   if (viewed.documentId !== documentId) {
     throw new Error(`canvas_view echoed the wrong documentId: ${JSON.stringify(viewed)}`)
   }
+  // BOTH ids echo: the widget commits the pair from this result and passes
+  // it back verbatim on Refresh and on the sticky-note append — an echo of
+  // documentId alone leaves the widget unable to construct a valid call.
+  if (typeof viewed.workspaceId !== 'string' || viewed.workspaceId.length === 0) {
+    throw new Error(`canvas_view did not echo the workspaceId: ${JSON.stringify(viewed)}`)
+  }
   if (!Array.isArray(viewed.scene?.nodes) || typeof viewed.references !== 'object') {
     throw new Error(`canvas_view returned unexpected shape: ${JSON.stringify(viewed)}`)
   }
-  console.log('[e2e] canvas_view → scene + references for the widget')
+  console.log('[e2e] canvas_view → scene + references + both ids for the widget')
+
+  // The widget's sticky-note append, in ITS EXACT argument shape (a text
+  // node with no geometry, auto-placed server-side) — the runtime guard
+  // against cross-package literal drift between widget-entry.ts and
+  // wb_canvas_edit's schema, which no type check crosses.
+  const sticky = await callTool('wb_canvas_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [{ op: 'node.add', node: { type: 'text', text: 'sticky note from the widget shape' } }],
+  })
+  if (sticky.applied !== 1) {
+    throw new Error(`widget-shaped sticky append did not apply: ${JSON.stringify(sticky)}`)
+  }
+  const afterSticky = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  const stickyLanded = afterSticky.scene.nodes.some(
+    (node) => node.type === 'text' && node.text === 'sticky note from the widget shape',
+  )
+  if (!stickyLanded) {
+    throw new Error('widget-shaped sticky append is not in the refreshed canvas_view scene')
+  }
+  console.log('[e2e] wb_canvas_edit → widget-shaped sticky note lands and refreshes')
+
+  // The comment annotation layer (ADR-0024): a node-targeted comment.add,
+  // its echo through canvas_view (the widget's read), and its resolve —
+  // exercised through the real MCP SDK because the ops union, the stored
+  // per-comment map, and the outputSchema's `touched.comments` all travel
+  // separately from any type the compiler checks.
+  const commented = await callTool('wb_canvas_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [{ op: 'comment.add', comment: { targetNodeId: 'lockable', text: 'smoke comment' } }],
+  })
+  const commentId = commented.touched?.comments?.[0]
+  if (commented.applied !== 1 || commentId === undefined) {
+    throw new Error(`comment.add did not report its comment: ${JSON.stringify(commented)}`)
+  }
+  const afterComment = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  const commentInScene = (afterComment.scene['x-whiteboard']?.comments ?? []).some(
+    (comment) => comment.id === commentId && comment.text === 'smoke comment',
+  )
+  if (!commentInScene) {
+    throw new Error('comment.add is not in the refreshed canvas_view scene')
+  }
+  const resolvedBatch = await callTool('wb_canvas_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [{ op: 'comment.resolve', id: commentId }],
+  })
+  const resolvedComment = (resolvedBatch.snapshot.comments ?? []).find(
+    (comment) => comment.id === commentId,
+  )
+  if (resolvedComment?.resolved !== true) {
+    throw new Error(`comment.resolve did not mark the record: ${JSON.stringify(resolvedBatch)}`)
+  }
+  console.log('[e2e] wb_canvas_edit → comment.add reaches canvas_view, comment.resolve marks it')
 
   // The opt-in layout analysis is a SECOND composition through the same
   // output schema, reached only when `layout` is set, so the default read
