@@ -73,7 +73,7 @@ describe('shell mark over a real document kept in this browser', () => {
     fireEvent.click(mark)
     expect(await screen.findByText(/other browsers cannot see them/i)).toBeInTheDocument()
     expect(
-      await screen.findByText(/Connect a daemon \(MCP\) for version history/i),
+      await screen.findByText(/Connect a daemon \(MCP\) for automatic checkpoints/i),
     ).toBeInTheDocument()
   })
 
