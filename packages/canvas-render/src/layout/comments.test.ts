@@ -25,6 +25,11 @@ const fakeAppearance: SpatialAppearanceResolver = {
     pin: { fill: '#d97706' },
     bubble: { fill: '#fef3c7', stroke: '#d97706' },
     leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
+    resolvedOverlay: {
+      pin: { fill: '#d97706', fillOpacity: 0.45 },
+      bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
+      leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3', strokeOpacity: 0.45 },
+    },
   }),
 }
 
@@ -67,6 +72,17 @@ function shapesOf(nodes: readonly SceneNode[]): ShapeSceneNode[] {
   return nodes.filter((node): node is ShapeSceneNode => node.kind === 'shape')
 }
 
+// The handle the editor's hit-testing consumes: `${comment.id}/pin` and
+// `${comment.id}/bubble`, mirroring the shipped `${comment.id}/leader`
+// convention.
+function pinOf(nodes: readonly SceneNode[], commentId: string): ShapeSceneNode | undefined {
+  return shapesOf(nodes).find((shape) => shape.id === `${commentId}/pin`)
+}
+
+function bubbleOf(nodes: readonly SceneNode[], commentId: string): ShapeSceneNode | undefined {
+  return shapesOf(nodes).find((shape) => shape.id === `${commentId}/bubble`)
+}
+
 // Comment text lays out through the mdast pipeline, so its runs sit inside
 // paragraph/heading BLOCK nodes rather than at the top level.
 function runsOf(nodes: readonly SceneNode[]): TextRunNode[] {
@@ -84,17 +100,18 @@ describe('comment layer', () => {
       baseOptions(),
     )
 
-    const shapes = shapesOf(scene.nodes)
-    const pin = shapes.find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
+    const pin = pinOf(scene.nodes, 'c1')
     expect(pin).toBeDefined()
+    expect(pin?.commentChrome).toBe(true)
     expect(pin?.bbox.x).toBe(400 - COMMENT_PIN_SIZE_PX / 2)
     expect(pin?.bbox.y).toBe(60 - COMMENT_PIN_SIZE_PX / 2)
     // A circle: the rect chrome with radius = half its side.
     expect(pin?.radius).toBe(COMMENT_PIN_SIZE_PX / 2)
     expect(pin?.appearance).toEqual({ fill: '#d97706' })
 
-    const bubble = shapes.find((shape) => shape.appearance?.fill === '#fef3c7')
+    const bubble = bubbleOf(scene.nodes, 'c1')
     expect(bubble).toBeDefined()
+    expect(bubble?.commentChrome).toBe(true)
     expect(bubble?.bbox.x).toBe(400 + COMMENT_BUBBLE_OFFSET_PX)
     expect(bubble?.bbox.y).toBe(60 + COMMENT_BUBBLE_OFFSET_PX)
 
@@ -138,9 +155,8 @@ describe('comment layer', () => {
 
     // Under the pin and bubble: both ends tuck beneath the chrome instead of
     // striking through it.
-    const shapes = shapesOf(scene.nodes)
-    const pin = shapes.find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
-    const bubble = shapes.find((shape) => shape.appearance?.fill === '#fef3c7')
+    const pin = pinOf(scene.nodes, 'c1')
+    const bubble = bubbleOf(scene.nodes, 'c1')
     const leaderIndex = scene.nodes.indexOf(leader as ResolvedEdgeNode)
     expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(pin as ShapeSceneNode))
     expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(bubble as ShapeSceneNode))
@@ -168,9 +184,7 @@ describe('comment layer', () => {
       canvasWith([{ id: 'c1', x: 999, y: 999, text: 'about n1', targetNodeId: 'n1' }]),
       baseOptions(),
     )
-    const followedPin = shapesOf(followed.nodes).find(
-      (shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX,
-    )
+    const followedPin = pinOf(followed.nodes, 'c1')
     // Pinned to the node's top-right corner, not the stored anchor.
     expect(followedPin?.bbox.x).toBe(200 - COMMENT_PIN_SIZE_PX / 2)
     expect(followedPin?.bbox.y).toBe(0 - COMMENT_PIN_SIZE_PX / 2)
@@ -179,9 +193,7 @@ describe('comment layer', () => {
       canvasWith([{ id: 'c1', x: 50, y: 70, text: 'about a deleted node', targetNodeId: 'gone' }]),
       baseOptions(),
     )
-    const danglingPin = shapesOf(dangling.nodes).find(
-      (shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX,
-    )
+    const danglingPin = pinOf(dangling.nodes, 'c1')
     expect(danglingPin?.bbox.x).toBe(50 - COMMENT_PIN_SIZE_PX / 2)
     expect(danglingPin?.bbox.y).toBe(70 - COMMENT_PIN_SIZE_PX / 2)
   })
@@ -214,10 +226,81 @@ describe('comment layer', () => {
       canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still drawn' }]),
       baseOptions({ appearance: bare }),
     )
-    const pin = shapesOf(scene.nodes).find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
+    const pin = pinOf(scene.nodes, 'c1')
     expect(pin).toBeDefined()
+    expect(pin?.commentChrome).toBe(true)
     expect(pin?.appearance).toBeUndefined()
     expect(runsOf(scene.nodes).map((run) => run.text)).toContain('still drawn')
+  })
+
+  it('draws a resolved comment muted, with ids, when showResolved is on — unresolved stays base', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([
+        { id: 'c1', x: 10, y: 10, text: 'still open' },
+        { id: 'c2', x: 400, y: 60, text: 'done already', resolved: true },
+      ]),
+      baseOptions({ showResolved: true }),
+    )
+
+    const openPin = pinOf(scene.nodes, 'c1')
+    expect(openPin?.appearance).toEqual({ fill: '#d97706' })
+
+    const resolvedPin = pinOf(scene.nodes, 'c2')
+    const resolvedBubble = bubbleOf(scene.nodes, 'c2')
+    expect(resolvedPin).toBeDefined()
+    expect(resolvedPin?.commentChrome).toBe(true)
+    expect(resolvedBubble).toBeDefined()
+    expect(resolvedBubble?.commentChrome).toBe(true)
+    expect(resolvedPin?.appearance).toEqual({ fill: '#d97706', fillOpacity: 0.45 })
+    expect(resolvedBubble?.appearance).toEqual({
+      fill: '#fef3c7',
+      stroke: '#d97706',
+      fillOpacity: 0.45,
+    })
+
+    const resolvedLeader = scene.nodes.find(
+      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c2/leader',
+    )
+    expect(resolvedLeader?.appearance).toEqual({
+      stroke: '#d97706',
+      strokeWidth: 1,
+      strokeDasharray: '4 3',
+      strokeOpacity: 0.45,
+    })
+
+    const texts = runsOf(scene.nodes).map((run) => run.text)
+    expect(texts).toContain('done already')
+  })
+
+  it('showResolved absent/false is byte-identical to before it existed — a resolved comment stays hidden', () => {
+    const withoutFlag = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
+      baseOptions(),
+    )
+    const withFlagOff = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
+      baseOptions({ showResolved: false }),
+    )
+    expect(withFlagOff).toEqual(withoutFlag)
+  })
+
+  it('a bare resolver composes a resolved comment under showResolved too, carrying no appearance', () => {
+    const bare: SpatialAppearanceResolver = {
+      resolveNode: () => ({}),
+      resolveEdge: () => undefined,
+      resolveLabel: () => ({}),
+    }
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 5, y: 5, text: 'done, no theme', resolved: true }]),
+      baseOptions({ appearance: bare, showResolved: true }),
+    )
+    const pin = pinOf(scene.nodes, 'c1')
+    const bubble = bubbleOf(scene.nodes, 'c1')
+    expect(pin).toBeDefined()
+    expect(pin?.appearance).toBeUndefined()
+    expect(bubble).toBeDefined()
+    expect(bubble?.appearance).toBeUndefined()
+    expect(runsOf(scene.nodes).map((run) => run.text)).toContain('done, no theme')
   })
 
   it('wraps long comment text within the bubble width instead of one endless line', () => {

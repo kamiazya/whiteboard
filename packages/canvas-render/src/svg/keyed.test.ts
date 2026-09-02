@@ -1,6 +1,11 @@
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
+import type { SpatialAppearanceResolver } from '../layout/nodes/spatial-appearance.js'
+import { layoutSpatialCanvas } from '../layout/spatial-canvas.js'
 import { sceneEntryKeys } from '../scene-entry-keys.js'
 import type { Scene } from '../scene-graph.js'
+import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import { renderSceneToSvg } from './backend.js'
 import { renderSceneToKeyedSvg } from './keyed.js'
 
@@ -112,5 +117,37 @@ describe('renderSceneToKeyedSvg', () => {
     const beforeByKey = new Map(before.groups.map((g) => [g.key, g.svg]))
     const changed = after.groups.filter((g) => beforeByKey.get(g.key) !== g.svg).map((g) => g.key)
     expect(changed).toEqual(['node-b'])
+  })
+})
+
+describe('renderSceneToKeyedSvg over a comment scene', () => {
+  it('keys the pin and bubble by the editor hit-testing handle, not a leader ordinal', () => {
+    const appearance: SpatialAppearanceResolver = {
+      resolveNode: () => ({}),
+      resolveEdge: () => ({}),
+      resolveLabel: () => ({ fill: '#000', fontFamily: 'sans-serif' }),
+    }
+    const parseBody = (text: string): MdastRoot => ({
+      type: 'root',
+      children: [{ type: 'paragraph', children: [{ type: 'text', value: text }] }],
+    })
+    const canvas: SpatialCanvas = {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 100, height: 60, text: 'n1' }],
+      edges: [],
+      'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 60, text: 'move this left' }] },
+    }
+    const laidOut = layoutSpatialCanvas(canvas, {
+      measure: createFakeMeasure(),
+      parseBody,
+      appearance,
+      geometry: { paddingPx: 8, labelFontSizePx: 12, minContentWidthPx: 1 },
+    })
+
+    const keys = renderSceneToKeyedSvg(laidOut).groups.map((g) => g.key)
+    expect(keys).toContain('c1/pin')
+    expect(keys).toContain('c1/bubble')
+    // The comment's text runs follow the bubble in document order, so they
+    // rebase onto its ordinal rather than the old c1/leader#N spelling.
+    expect(keys.some((key) => key.startsWith('c1/bubble#'))).toBe(true)
   })
 })

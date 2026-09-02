@@ -220,4 +220,38 @@ describe('createSpatialTheme', () => {
       })
     }
   })
+
+  it('mutes the comment overlay for showResolved, from the same palette colors and no dropShadow', () => {
+    for (const [mode, palette] of [
+      ['light', SPATIAL_LIGHT_PALETTE],
+      ['dark', SPATIAL_DARK_PALETTE],
+    ] as const) {
+      const overlay = createSpatialTheme({ mode }).resolveComment?.().resolvedOverlay
+      // Same colors as the unresolved pin, muted — no ring-color drift, no
+      // second color introduced for the resolved state.
+      expect(overlay?.pin).toEqual({
+        fill: palette.comment.pin.fill,
+        stroke: palette.comment.pin.stroke,
+        strokeWidth: 2,
+        fillOpacity: 0.45,
+        strokeOpacity: 0.45,
+      })
+      expect(overlay?.bubble).toEqual({
+        fill: palette.comment.bubble.fill,
+        stroke: palette.comment.bubble.stroke,
+        fillOpacity: 0.45,
+        strokeOpacity: 0.45,
+      })
+      expect(overlay?.leader).toEqual({
+        stroke: palette.comment.bubble.stroke,
+        strokeWidth: 1,
+        strokeDasharray: '4 3',
+        strokeOpacity: 0.45,
+      })
+      // A resolved comment recedes rather than floating above the canvas
+      // plane — the shadow is what the unresolved pin/bubble carry instead.
+      expect(overlay?.pin.dropShadow).toBeUndefined()
+      expect(overlay?.bubble.dropShadow).toBeUndefined()
+    }
+  })
 })

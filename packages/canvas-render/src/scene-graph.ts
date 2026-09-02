@@ -177,6 +177,17 @@ export interface ShapeSceneNode {
    */
   readonly id?: string
   readonly bbox: BoundingBox
+  /**
+   * This shape is comment-layer chrome (a pin or a bubble; ADR-0025 decision
+   * 5), never a document node — even though it carries an `id` of its own
+   * for hit-testing (`${commentId}/pin`, `${commentId}/bubble`).
+   * `sceneDigest` reads this marker, not the id's shape, to keep comment
+   * chrome out of its addressable node set: `nodeIdSchema` is
+   * `z.string().min(1)`, and a stored comment id reuses it, so `/` is legal
+   * in both — "id contains a slash" is not a sound way to tell chrome from
+   * an ordinary document node id and must not be used as one.
+   */
+  readonly commentChrome?: true
   /** Uniform corner radius. Non-finite or <= 0 omits `rx` entirely.
    * Applies to the rect form only — ignored when `shape` is set. */
   readonly radius?: number

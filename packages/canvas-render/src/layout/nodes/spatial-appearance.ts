@@ -47,10 +47,27 @@ export interface SpatialAppearanceResolver {
   resolveComment?(): SpatialCommentAppearance
 }
 
-/** What a resolver decided for the comment layer's chrome. */
-export interface SpatialCommentAppearance {
+/**
+ * The three shapes a comment composes, whichever visual treatment is
+ * assigned to them — the unresolved default, or the resolved/muted overlay.
+ */
+export interface SpatialCommentChromeAppearance {
   readonly pin: Appearance
   readonly bubble: Appearance
   /** The dashed line tying pin to bubble, so the pair reads as one comment. */
   readonly leader: Appearance
+}
+
+/** What a resolver decided for the comment layer's chrome. */
+export interface SpatialCommentAppearance extends SpatialCommentChromeAppearance {
+  /**
+   * The muted treatment for a comment shown under `showResolved` (ADR-0025
+   * decision 2 — resolved comments recede, never disappear from the toggle).
+   * Required on the interface, unlike the rest of this file's optional
+   * fields: a resolver that implements `resolveComment` at all must say what
+   * a resolved comment looks like, or `composeComments` would have to invent
+   * a muted appearance itself, which is exactly what this package's
+   * appearance-is-assigned-not-invented rule forbids.
+   */
+  readonly resolvedOverlay: SpatialCommentChromeAppearance
 }

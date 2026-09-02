@@ -48,6 +48,14 @@ export interface SpatialThemeOptions {
 
 /** Dash pattern for the comment leader line (SVG stroke-dasharray). */
 const COMMENT_LEADER_DASH = '4 3'
+/**
+ * Alpha for a RESOLVED comment shown under `showResolved` (ADR-0025 decision
+ * 2): muted enough to read as receded/settled without disappearing, applied
+ * to the same palette colors the unresolved chrome already uses rather than
+ * naming a second color. `composeComments` never chooses this value itself —
+ * it only reads whichever appearance the resolver hands it.
+ */
+const COMMENT_RESOLVED_OPACITY = 0.45
 
 /** A numbered preset resolved through the palette; null for hex/unknown. */
 function presetAccent(color: CanvasColor | undefined, palette: SpatialPalette) {
@@ -103,6 +111,30 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
         stroke: palette.comment.bubble.stroke,
         strokeWidth: 1,
         strokeDasharray: COMMENT_LEADER_DASH,
+      },
+      // Same palette colors as above, muted — no dropShadow: a resolved
+      // comment recedes rather than floating above the canvas plane like an
+      // active one.
+      resolvedOverlay: {
+        pin: {
+          fill: palette.comment.pin.fill,
+          stroke: palette.comment.pin.stroke,
+          strokeWidth: 2,
+          fillOpacity: COMMENT_RESOLVED_OPACITY,
+          strokeOpacity: COMMENT_RESOLVED_OPACITY,
+        },
+        bubble: {
+          fill: palette.comment.bubble.fill,
+          stroke: palette.comment.bubble.stroke,
+          fillOpacity: COMMENT_RESOLVED_OPACITY,
+          strokeOpacity: COMMENT_RESOLVED_OPACITY,
+        },
+        leader: {
+          stroke: palette.comment.bubble.stroke,
+          strokeWidth: 1,
+          strokeDasharray: COMMENT_LEADER_DASH,
+          strokeOpacity: COMMENT_RESOLVED_OPACITY,
+        },
       },
     }),
     resolveLabel: () => ({
