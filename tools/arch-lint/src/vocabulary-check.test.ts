@@ -174,6 +174,26 @@ const BANNED = [
 ] as const
 
 /**
+ * How many times a file's bytes were actually pulled off disk. Four retired
+ * words share three scan roots between them, so a per-word walk reads most of
+ * the tree several times over; `scannedFileCount` is what that work SHOULD
+ * cost. Asserted below, because the difference is not visible in the source
+ * and only shows up as a load-dependent timeout on CI.
+ */
+let fileReadCount = 0
+let scannedFileCount = 0
+const lineCache = new Map<string, string[]>()
+
+function linesOf(file: string): string[] {
+  const cached = lineCache.get(file)
+  if (cached !== undefined) return cached
+  fileReadCount += 1
+  const lines = readFileSync(file, 'utf-8').split('\n')
+  lineCache.set(file, lines)
+  return lines
+}
+
+/**
  * Throws rather than skipping when a scan root is gone: a silently-missing
  * directory turns this guard into one that passes by scanning nothing, which
  * is the failure mode a rename is most likely to cause.
@@ -205,28 +225,55 @@ function listSourceFiles(dir: string): string[] {
   return files
 }
 
-describe('retired vocabulary', () => {
-  for (const entry of BANNED) {
-    const { pattern, word, instead } = entry
-    // A word retired only within one package scans only that package, so the
-    // guard never claims coverage it does not have.
-    const dirs: readonly string[] = 'dirs' in entry ? entry.dirs : SCAN_DIRS
-    // Per-word, never per-file: exempting a file for one retired word must
-    // not quietly stop another word being checked in it.
-    const exempt: readonly string[] = 'exempt' in entry ? entry.exempt : []
-    it(`no source file says "${word}" — use ${instead}`, () => {
-      const hits: string[] = []
-      for (const dir of dirs) {
-        for (const file of listSourceFiles(join(REPO_ROOT, dir))) {
-          const relativePath = relative(REPO_ROOT, file).split(sep).join('/')
-          if (relativePath in EXEMPT_FILES || exempt.includes(relativePath)) continue
-          const lines = readFileSync(file, 'utf-8').split('\n')
-          for (const [index, line] of lines.entries()) {
-            if (pattern.test(line)) hits.push(`${relativePath}:${index + 1}: ${line.trim()}`)
-          }
-        }
+/**
+ * The scan runs HERE, at module scope, rather than inside each `it`.
+ *
+ * It is filesystem-bound work whose wall clock is set by how much else the
+ * machine is doing: ~255ms with the tree in page cache, 6315ms measured under
+ * the full parallel suite — past vitest's 5000ms default. A per-test timeout
+ * does not bound module evaluation, so the cost lands in the collection phase
+ * where nothing is racing it, the same reason `.claude/rules/integrator-flow.md`
+ * says to hoist a heavy `await import()` out of a test body.
+ *
+ * It also fixes what the failure SAID. A timed-out `it` named `no source file
+ * says "slug"` reports a retired word and a five-second budget in one message,
+ * and reads as a vocabulary violation that is not there.
+ */
+const hitsByWord = BANNED.map((entry) => {
+  const { pattern } = entry
+  // A word retired only within one package scans only that package, so the
+  // guard never claims coverage it does not have.
+  const dirs: readonly string[] = 'dirs' in entry ? entry.dirs : SCAN_DIRS
+  // Per-word, never per-file: exempting a file for one retired word must not
+  // quietly stop another word being checked in it.
+  const exempt: readonly string[] = 'exempt' in entry ? entry.exempt : []
+  const hits: string[] = []
+  for (const dir of dirs) {
+    for (const file of listSourceFiles(join(REPO_ROOT, dir))) {
+      const relativePath = relative(REPO_ROOT, file).split(sep).join('/')
+      if (relativePath in EXEMPT_FILES || exempt.includes(relativePath)) continue
+      scannedFileCount += 1
+      for (const [index, line] of linesOf(file).entries()) {
+        if (pattern.test(line)) hits.push(`${relativePath}:${index + 1}: ${line.trim()}`)
       }
-      expect(hits).toEqual([])
+    }
+  }
+  return hits
+})
+
+describe('retired vocabulary', () => {
+  for (const [index, { word, instead }] of BANNED.entries()) {
+    it(`no source file says "${word}" — use ${instead}`, () => {
+      expect(hitsByWord[index]).toEqual([])
     })
   }
+
+  it('reads each scanned file once, however many words share its directory', () => {
+    // Measured with the cache removed: 4826 reads over 2141 distinct files,
+    // because `apps/web/src` alone is a scan root for all four words. The
+    // redundancy is invisible in the source and shows up only as a
+    // load-dependent timeout, so it is pinned rather than left to a reader.
+    expect(scannedFileCount).toBeGreaterThan(lineCache.size)
+    expect(fileReadCount).toBe(lineCache.size)
+  })
 })

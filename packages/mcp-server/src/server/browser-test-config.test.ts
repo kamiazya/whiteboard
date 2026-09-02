@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-
-const { resolveBrowserLaunchOptions } = await import('./browser-test-config.js')
+import { resolveBrowserLaunchOptions } from './browser-test-config.js'
 
 describe('resolveBrowserLaunchOptions', () => {
   it('defaults to Playwright-managed browsers when no override is provided', () => {
