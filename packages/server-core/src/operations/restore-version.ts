@@ -93,6 +93,15 @@ export async function restoreVersion(
     const doc = await live.get(workspaceId, path)
     const past = await versions.load(workspaceId, versionId)
     if (past === null) return { kind: 'not-found' }
+    // A version id is unique per WORKSPACE, so `load` alone would answer
+    // another document's past state — and the reconcile below would then
+    // overwrite this document with unrelated content. The history named by
+    // `path` has to hold the id; one that does not is, to this caller, a
+    // version that does not exist. The same row carries the label the
+    // progress events show.
+    const owned = (await versions.list(workspaceId, path)).find((v) => v.id === versionId)
+    if (owned === undefined) return { kind: 'not-found' }
+    const label = owned.label
 
     const targetPath = input.targetPath
     if (targetPath !== undefined && targetPath !== path) {
@@ -107,10 +116,6 @@ export async function restoreVersion(
       }
 
       if (targetAlreadyExists) {
-        // The version id belongs to the SOURCE document's history, so its
-        // label lives in the source's version list even though the reconcile
-        // lands on the target.
-        const label = await labelOf(versions, workspaceId, path, versionId)
         const targetDoc = await live.get(workspaceId, targetPath)
         // The merged content is the source's own shape (spatial nodes/edges
         // vs. a markdown body), so the target's stored kind must follow it or
@@ -165,7 +170,6 @@ export async function restoreVersion(
         row.id === undefined ? [] : [{ id: row.id, path: row.path }],
       )
       const rowsById = new Map(rows.map((row) => [row.id, row]))
-      const label = await labelOf(versions, workspaceId, path, versionId)
       await progress({
         workspaceId,
         path,
@@ -209,19 +213,9 @@ export async function restoreVersion(
       return { kind: 'restored-subtree', restoredCount: pastDocs.length }
     }
 
-    const label = await labelOf(versions, workspaceId, path, versionId)
     await reconcileAndSave(live, workspaceId, path, doc, past, { label, kind: null, progress })
     return { kind: 'restored-in-place' }
   })
-}
-
-async function labelOf(
-  versions: Pick<ServerDeps, 'versions'>['versions'],
-  workspaceId: string,
-  path: string,
-  versionId: string,
-): Promise<string | undefined> {
-  return (await versions.list(workspaceId, path)).find((v) => v.id === versionId)?.label
 }
 
 // Reconciles `past` onto `doc` (the LIVE doc for workspaceId/targetPath),
