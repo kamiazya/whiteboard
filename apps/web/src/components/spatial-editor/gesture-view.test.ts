@@ -12,6 +12,7 @@ import {
   carriedByGesture,
   carriedSideCacheKey,
   frozenSidesOf,
+  ghostCommentObstacles,
   liveNodesFor,
 } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
@@ -96,6 +97,69 @@ describe('liveNodesFor', () => {
     )
     expect(live.find((n) => n.id === 'a')).toMatchObject({ width: 220, height: 90 })
     expect(live.find((n) => n.id === 'b')).toMatchObject({ x: 400 })
+  })
+})
+
+describe('ghostCommentObstacles', () => {
+  /** A committed scene holding two comment bubbles and one node shape. */
+  function committed(): Scene {
+    return {
+      nodes: [
+        { kind: 'shape', id: 'a', bbox: { x: 100, y: 100, w: 120, h: 60 } },
+        {
+          kind: 'shape',
+          id: 'rides/bubble',
+          commentChrome: true,
+          bbox: { x: 234, y: 174, w: 180, h: 40 },
+        },
+        {
+          kind: 'shape',
+          id: 'stays/bubble',
+          commentChrome: true,
+          bbox: { x: 500, y: 300, w: 180, h: 40 },
+        },
+      ],
+    }
+  }
+
+  const withComments: SpatialCanvas = {
+    ...canvas,
+    'x-whiteboard': {
+      comments: [
+        { id: 'rides', x: 220, y: 160, text: 'on the carried node', targetNodeId: 'a' },
+        { id: 'stays', x: 486, y: 286, text: 'on the bystander', targetNodeId: 'b' },
+      ],
+    },
+  }
+
+  it('leaves out the bubble of a comment that rides the ghost', () => {
+    // The ghost re-places that comment's bubble, and its own committed
+    // bubble covers the very quadrant the committed placement chose — so
+    // counting it flips the ghost to another quadrant at the press, which
+    // is the jump the obstacle set exists to prevent.
+    const boxes = ghostCommentObstacles(withComments, committed(), new Set(['a']))
+    expect(boxes).not.toContainEqual({ x: 234, y: 174, w: 180, h: 40 })
+  })
+
+  it('keeps a bystander comment\u2019s bubble, and every node staying behind', () => {
+    const boxes = ghostCommentObstacles(withComments, committed(), new Set(['a']))
+    expect(boxes).toContainEqual({ x: 500, y: 300, w: 180, h: 40 })
+    expect(boxes).toContainEqual({ x: 400, y: 100, w: 120, h: 60 })
+    // The carried node travels with the ghost; it is not something to avoid.
+    expect(boxes).not.toContainEqual({ x: 100, y: 100, w: 120, h: 60 })
+  })
+
+  it('counts a free-floating comment as a bystander: it has no node to ride', () => {
+    const free: SpatialCanvas = {
+      ...canvas,
+      'x-whiteboard': { comments: [{ id: 'rides', x: 220, y: 160, text: 'anchored to a spot' }] },
+    }
+    expect(ghostCommentObstacles(free, committed(), new Set(['a']))).toContainEqual({
+      x: 234,
+      y: 174,
+      w: 180,
+      h: 40,
+    })
   })
 })
 
