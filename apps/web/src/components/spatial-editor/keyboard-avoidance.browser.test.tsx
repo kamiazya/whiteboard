@@ -10,6 +10,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/touch-bar-layout.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 import { EXIT_HINT_ALLOWANCE_PX } from './use-keyboard-avoidance.js'
@@ -118,4 +119,22 @@ it('stops listening once the edit ends', async () => {
   raiseKeyboard(fake, rootOf(container), 300)
   await new Promise((resolve) => setTimeout(resolve, 50))
   expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
+})
+
+it('on a coarse pointer also clears the formatting bar riding on the keyboard', async () => {
+  const realMatchMedia = window.matchMedia
+  window.matchMedia = (query: string) =>
+    query === '(pointer: coarse)'
+      ? ({ matches: true, media: query } as MediaQueryList)
+      : realMatchMedia.call(window, query)
+  try {
+    const fake = installFakeVisualViewport()
+    const { container } = render(<Host start={canvasWithNodeAt(400)} />)
+    await startEditing(container, { x: 200, y: 450 })
+    raiseKeyboard(fake, rootOf(container), 300)
+    const dy = 500 + EXIT_HINT_ALLOWANCE_PX - (300 - TOUCH_BAR_HEIGHT_PX - PAN_MARGIN_PX)
+    await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
+  } finally {
+    window.matchMedia = realMatchMedia
+  }
 })

@@ -9,6 +9,8 @@
 // inside the visible strip above the keyboard.
 
 import { useEffect } from 'react'
+import { hasCoarsePointer } from '../../lib/platform.js'
+import { TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/touch-bar-layout.js'
 import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
 import { panToShowTarget } from './viewport.js'
 
@@ -62,9 +64,12 @@ export function useKeyboardAvoidance({
       if (containerSize === null) return
       const occluded = keyboardOccludedBottomPx(root.getBoundingClientRect().bottom, visual)
       if (occluded <= 0) return
+      // A phone's keyboard carries the formatting bar on top of it, so the
+      // strip to clear is the keyboard plus the bar.
+      const bottom = occluded + (hasCoarsePointer() ? TOUCH_BAR_HEIGHT_PX : 0)
       setViewport((viewport) => {
         const target = { x, y, width, height: height + EXIT_HINT_ALLOWANCE_PX / viewport.zoom }
-        return panToShowTarget(target, viewport, containerSize, { bottom: occluded }) ?? viewport
+        return panToShowTarget(target, viewport, containerSize, { bottom }) ?? viewport
       })
     }
     // The keyboard may already be up (editing one node, then tapping into

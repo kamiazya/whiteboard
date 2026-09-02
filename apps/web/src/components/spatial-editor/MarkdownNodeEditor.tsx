@@ -37,9 +37,15 @@ import { EditorView, keymap } from '@codemirror/view'
 import { GFM } from '@lezer/markdown'
 import { type CSSProperties, useLayoutEffect, useRef } from 'react'
 import { EditorExitHint } from '../EditorExitHint.js'
+import {
+  type ActiveMarkdownEditor,
+  clearActiveMarkdownEditor,
+  setActiveMarkdownEditor,
+} from '../markdown-editor/active-markdown-editor.js'
 import { markdownStyleKeymap } from '../markdown-editor/editor-verbs.js'
 import { exitEmptyListItem } from '../markdown-editor/exit-empty-list-item.js'
 import { markdownHighlightStyle } from '../markdown-editor/SourcePane.js'
+import { headingLevelAt } from '../markdown-editor/set-heading-level.js'
 import type { Box } from './geometry.js'
 
 export interface MarkdownNodeEditorProps {
@@ -87,6 +93,8 @@ export function MarkdownNodeEditor({
 }: MarkdownNodeEditorProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
+  // Filled once the view exists; the focus/blur handlers read it lazily.
+  const activeRef = useRef<ActiveMarkdownEditor | null>(null)
   const finishedRef = useRef(false)
   const mountedRef = useRef(false)
   // Latest callbacks without recreating the EditorView per parent render.
@@ -147,7 +155,13 @@ export function MarkdownNodeEditor({
           if (update.docChanged) callbacksRef.current.onChange?.(update.state.doc.toString())
         }),
         EditorView.domEventHandlers({
+          // The touch formatting bar follows whichever host holds the caret.
+          focus: () => {
+            if (activeRef.current !== null) setActiveMarkdownEditor(activeRef.current)
+            return false
+          },
           blur: (_event, view) => {
+            if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
             commit(view)
             return false
           },
@@ -176,6 +190,13 @@ export function MarkdownNodeEditor({
     mountedRef.current = true
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
+    activeRef.current = {
+      run: (command) => {
+        command({ state: view.state, dispatch: view.dispatch })
+        view.focus()
+      },
+      headingLevel: () => headingLevelAt(view.state),
+    }
     view.focus()
     // Continue typing where the text ends — programmatic focus leaves the
     // caret at position 0, which reads as "my text got replaced".
@@ -185,6 +206,7 @@ export function MarkdownNodeEditor({
       // BEFORE destroy: EditorView.destroy() blurs a focused content DOM,
       // and that blur must find this editor already retired.
       mountedRef.current = false
+      if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
       viewRef.current = null
       view.destroy()
     }

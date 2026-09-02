@@ -1,5 +1,7 @@
 import { EditorSelection, type StateCommand } from '@codemirror/state'
-import { setHeadingLevel } from './set-heading-level.js'
+import { insertCodeBlock, insertRule, insertTable } from './block-inserts.js'
+import { toggleLinePrefix } from './line-prefix.js'
+import { headingLevelAt, setHeadingLevel } from './set-heading-level.js'
 import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { rangeToActOn } from './word-at.js'
 
@@ -61,7 +63,21 @@ export type MarkdownVerbAction =
       readonly fallback: { readonly open: string; readonly close: string }
     }
 
-export type MarkdownVerbId = 'heading' | 'bold' | 'italic' | 'code' | 'link' | 'toggle-task'
+export type MarkdownVerbId =
+  | 'heading'
+  | 'quote'
+  | 'code-block'
+  | 'table'
+  | 'rule'
+  | 'bold'
+  | 'italic'
+  | 'strikethrough'
+  | 'code'
+  | 'link'
+  | 'math'
+  | 'bullet-list'
+  | 'ordered-list'
+  | 'toggle-task'
 
 /**
  * Which run of the catalog a verb belongs to. The catalog draws a separator
@@ -69,7 +85,7 @@ export type MarkdownVerbId = 'heading' | 'bold' | 'italic' | 'code' | 'link' | '
  * the separators are derived — a list of literal separator positions goes
  * stale the moment a verb is inserted.
  */
-export type MarkdownVerbBand = 'block' | 'inline' | 'task'
+export type MarkdownVerbBand = 'block' | 'inline' | 'list'
 
 export interface MarkdownVerbSpec {
   readonly id: MarkdownVerbId
@@ -111,6 +127,20 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
       ],
     },
   },
+  {
+    id: 'quote',
+    label: 'Quote',
+    band: 'block',
+    action: { kind: 'command', command: toggleLinePrefix('quote') },
+  },
+  {
+    id: 'code-block',
+    label: 'Code block',
+    band: 'block',
+    action: { kind: 'command', command: insertCodeBlock },
+  },
+  { id: 'table', label: 'Table', band: 'block', action: { kind: 'command', command: insertTable } },
+  { id: 'rule', label: 'Divider', band: 'block', action: { kind: 'command', command: insertRule } },
   { id: 'bold', label: 'Bold', band: 'inline', key: 'Mod-b', action: { kind: 'wrap', open: '**' } },
   {
     id: 'italic',
@@ -118,6 +148,12 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     band: 'inline',
     key: 'Mod-i',
     action: { kind: 'wrap', open: '*' },
+  },
+  {
+    id: 'strikethrough',
+    label: 'Strikethrough',
+    band: 'inline',
+    action: { kind: 'wrap', open: '~~' },
   },
   { id: 'code', label: 'Code', band: 'inline', key: 'Mod-e', action: { kind: 'wrap', open: '`' } },
   {
@@ -130,10 +166,23 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     band: 'inline',
     action: { kind: 'interactive', fallback: { open: '[[', close: ']]' } },
   },
+  { id: 'math', label: 'Math', band: 'inline', action: { kind: 'wrap', open: '$' } },
+  {
+    id: 'bullet-list',
+    label: 'Bullet list',
+    band: 'list',
+    action: { kind: 'command', command: toggleLinePrefix('bullet') },
+  },
+  {
+    id: 'ordered-list',
+    label: 'Numbered list',
+    band: 'list',
+    action: { kind: 'command', command: toggleLinePrefix('ordered') },
+  },
   {
     id: 'toggle-task',
     label: 'Toggle task',
-    band: 'task',
+    band: 'list',
     key: 'Mod-Enter',
     action: { kind: 'command', command: toggleTaskCheckbox },
   },
@@ -150,6 +199,45 @@ export function verb(id: MarkdownVerbId): MarkdownVerbSpec {
 export function levelCommand(level: number): StateCommand {
   return setHeadingLevel(level)
 }
+
+/**
+ * One tap on the touch bar's heading slot: advance to the next level in the
+ * heading verb's own band, wrapping from the last back to body text. Derived
+ * from the same `levels` the catalog renders, so the two cannot disagree
+ * about what "next" is; a level the band does not list (H4-H6) restarts at
+ * the band's first entry.
+ */
+export const cycleHeadingLevel: StateCommand = ({ state, dispatch }) => {
+  const action = verb('heading').action
+  if (action.kind !== 'levels') return false
+  const levels = action.levels.map((option) => option.level)
+  const index = levels.indexOf(headingLevelAt(state))
+  const next = levels[(index + 1) % levels.length]
+  return setHeadingLevel(next)({ state, dispatch })
+}
+
+/**
+ * The touch bar's priority order: what stays on screen first as the bar
+ * narrows (`layoutTouchBar` takes a prefix of this). A permutation of every
+ * verb id, pinned by the property test, so a new verb has to be given a
+ * place here rather than silently never reaching the bar.
+ */
+export const TOUCH_BAR_ORDER: readonly MarkdownVerbId[] = [
+  'heading',
+  'bold',
+  'italic',
+  'code',
+  'link',
+  'bullet-list',
+  'toggle-task',
+  'ordered-list',
+  'quote',
+  'code-block',
+  'table',
+  'rule',
+  'strikethrough',
+  'math',
+]
 
 /**
  * The document transform a verb performs with no further input, or `null`

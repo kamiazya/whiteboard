@@ -21,15 +21,17 @@
  * counter got wrong, passing on 16 attempts and 2 actual effects.
  */
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
-import { afterAll, describe, expect } from 'vitest'
+import { afterAll, describe, expect, it } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
+  cycleHeadingLevel,
   levelCommand,
   MARKDOWN_EDITOR_VERBS,
   type MarkdownVerbId,
   type MarkdownVerbSpec,
   selfContainedCommand,
+  TOUCH_BAR_ORDER,
   verb,
 } from './editor-verbs.js'
 
@@ -48,7 +50,23 @@ const VERB_COVERAGE = {
   code: 'covered',
   link: 'covered',
   'toggle-task': 'covered',
+  'bullet-list': 'covered',
+  'ordered-list': 'covered',
+  quote: 'covered',
+  'code-block': 'covered',
+  table: 'covered',
+  rule: 'covered',
+  strikethrough: 'covered',
+  math: 'covered',
 } satisfies Record<MarkdownVerbId, SurfaceCoverage>
+
+/**
+ * The verbs whose whole point is to ADD lines — a fence needs its own two,
+ * a table its header and separator, a rule its own line. V1 is about every
+ * other verb staying on the lines it was given; these are excluded by
+ * name so a new line-inserting verb has to be listed here deliberately.
+ */
+const LINE_INSERTERS: ReadonlySet<MarkdownVerbId> = new Set(['code-block', 'table', 'rule'])
 
 const drives = emptyTally(VERB_COVERAGE)
 /** How often driving a verb actually changed the document. Guards against a sparse generator. */
@@ -107,6 +125,16 @@ const documentAndCaret = document.chain((doc) =>
 const selfContained: readonly MarkdownVerbSpec[] = MARKDOWN_EDITOR_VERBS.filter(
   (spec) => selfContainedCommand(spec) !== null,
 )
+const keepsLineCount: readonly MarkdownVerbSpec[] = selfContained.filter(
+  (spec) => !LINE_INSERTERS.has(spec.id),
+)
+
+/** Lines carrying none of the list/quote prefixes, so a toggle's second application is exactly its inverse. */
+const plainLine = fc.constantFrom('weekly review', 'ship the thing', 'notes and more', '')
+const plainDocument = fc
+  .array(plainLine, { minLength: 1, maxLength: 4 })
+  .filter((lines) => lines.some((l) => l !== ''))
+  .map((lines) => lines.join('\n'))
 
 /**
  * The offset of line `index` (clamped), which is how a caret has to be
@@ -142,10 +170,10 @@ describe('markdown editor verbs', () => {
    * verb at least once, which is what the ledger tallies.
    */
   fcTest.prop(
-    [documentAndCaret, fc.integer({ min: 0, max: selfContained.length - 1 })],
+    [documentAndCaret, fc.integer({ min: 0, max: keepsLineCount.length - 1 })],
     withDefaults(),
-  )('V1: no verb changes the line count', ({ doc, at }, which) => {
-    const spec = selfContained[which]
+  )('V1: no verb but the declared line inserters changes the line count', ({ doc, at }, which) => {
+    const spec = keepsLineCount[which]
     const command = selfContainedCommand(spec)
     if (command === null) throw new Error(`${spec.id} lost its command`)
     const result = drive(spec.id, command, doc, at)
@@ -160,7 +188,7 @@ describe('markdown editor verbs', () => {
   fcTest.prop([documentAndCaret], withDefaults())(
     'W1: wrapping never loses a character of the document',
     ({ doc, at }) => {
-      for (const id of ['bold', 'italic', 'code', 'link'] as const) {
+      for (const id of ['bold', 'italic', 'code', 'link', 'strikethrough', 'math'] as const) {
         const spec = verb(id)
         const command = selfContainedCommand(spec)
         if (command === null) throw new Error(`${id} lost its command`)
@@ -230,6 +258,72 @@ describe('markdown editor verbs', () => {
     expect(once.doc).not.toBe(taskLine)
     const twice = drive('toggle-task', command, once.doc, 0)
     expect(twice.doc).toBe(taskLine)
+  })
+
+  fcTest.prop([plainDocument], withDefaults())(
+    'L1: a list or quote prefix toggled twice over the whole document returns the original',
+    (doc) => {
+      for (const id of ['bullet-list', 'ordered-list', 'quote'] as const) {
+        const command = selfContainedCommand(verb(id))
+        if (command === null) throw new Error(`${id} lost its command`)
+        const once = drive(id, command, doc, 0, doc.length)
+        expect(once.handled, `${id} did nothing to ${JSON.stringify(doc)}`).toBe(true)
+        expect(once.doc).not.toBe(doc)
+        const twice = drive(id, command, once.doc, 0, once.doc.length)
+        expect(twice.doc).toBe(doc)
+      }
+    },
+  )
+
+  it('L2: a line already carrying the prefix is stripped, not doubled', () => {
+    const cases = [
+      ['bullet-list', '- item'],
+      ['ordered-list', '1. item'],
+      ['quote', '> item'],
+    ] as const
+    for (const [id, line] of cases) {
+      const command = selfContainedCommand(verb(id))
+      if (command === null) throw new Error(`${id} lost its command`)
+      expect(drive(id, command, line, 0).doc).toBe('item')
+    }
+  })
+
+  fcTest.prop([documentAndCaret], withDefaults())(
+    'B1: a block inserter never loses a character and always adds lines',
+    ({ doc, at }) => {
+      for (const id of ['code-block', 'table', 'rule'] as const) {
+        const command = selfContainedCommand(verb(id))
+        if (command === null) throw new Error(`${id} lost its command`)
+        const result = drive(id, command, doc, at)
+        expect(isSubsequence(doc, result.doc), `${id} dropped text`).toBe(true)
+        expect(countLines(result.doc)).toBeGreaterThan(countLines(doc))
+      }
+    },
+  )
+
+  it('B2: a code block around a selection fences the selected lines', () => {
+    const command = selfContainedCommand(verb('code-block'))
+    if (command === null) throw new Error('code-block lost its command')
+    expect(drive('code-block', command, 'alpha\nbeta', 0, 10).doc).toBe('```\nalpha\nbeta\n```')
+  })
+
+  fcTest.prop(
+    [fc.constantFrom('weekly review', 'ship the thing', 'notes and more')],
+    withDefaults(),
+  )('H3: cycling the heading level has period four on a body line', (body) => {
+    let doc: string = body
+    for (let step = 0; step < 4; step++) {
+      const result = drive('heading', cycleHeadingLevel, doc, 0)
+      expect(result.handled).toBe(true)
+      doc = result.doc
+    }
+    expect(doc).toBe(body)
+  })
+
+  it('the touch bar order places every verb exactly once', () => {
+    const ids = MARKDOWN_EDITOR_VERBS.map((spec) => spec.id)
+    expect([...TOUCH_BAR_ORDER].sort()).toEqual([...ids].sort())
+    expect(new Set(TOUCH_BAR_ORDER).size).toBe(TOUCH_BAR_ORDER.length)
   })
 
   afterAll(() => {
