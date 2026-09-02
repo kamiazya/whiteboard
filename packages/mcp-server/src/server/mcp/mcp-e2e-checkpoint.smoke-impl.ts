@@ -275,37 +275,38 @@ export async function runE2eCheckpointSmoke({
       documentId,
       label: 'e2e-version-1',
     })
+    const savedVersion = saved.version as
+      | { id?: string; label?: string; auto?: boolean }
+      | undefined
     if (
-      !saved.versionId ||
       saved.documentId !== documentId ||
-      saved.label !== 'e2e-version-1' ||
-      !saved.timestamp ||
-      !saved.frontier
+      !savedVersion?.id ||
+      savedVersion.label !== 'e2e-version-1' ||
+      savedVersion.auto !== false
     ) {
       throw new Error(`wb_version_save returned unexpected shape: ${JSON.stringify(saved)}`)
     }
-    console.log(`[e2e] wb_version_save → ${saved.versionId}`)
+    console.log(`[e2e] wb_version_save → ${savedVersion.id}`)
 
     const versions = await callTool('wb_version_list', { workspaceId: WORKSPACE_ID, documentId })
     if (versions.documentId !== documentId || !Array.isArray(versions.versions)) {
       throw new Error(`wb_version_list returned unexpected shape: ${JSON.stringify(versions)}`)
     }
-    const versionEntries = versions.versions as Array<{ versionId: string }>
-    if (!versionEntries.some((v) => v.versionId === saved.versionId)) {
-      throw new Error(`wb_version_list missing saved versionId: ${JSON.stringify(versions)}`)
+    const versionEntries = versions.versions as Array<{ id: string }>
+    if (!versionEntries.some((v) => v.id === savedVersion.id)) {
+      throw new Error(`wb_version_list missing saved version id: ${JSON.stringify(versions)}`)
     }
     console.log(`[e2e] wb_version_list → ${versionEntries.length} version(s)`)
 
     const restored = await callTool('wb_version_restore', {
       workspaceId: WORKSPACE_ID,
       documentId,
-      versionId: saved.versionId,
+      versionId: savedVersion.id,
     })
     if (
       restored.documentId !== documentId ||
-      restored.restoredVersionId !== saved.versionId ||
-      restored.label !== saved.label ||
-      restored.frontier !== saved.frontier
+      restored.restoredVersionId !== savedVersion.id ||
+      restored.label !== savedVersion.label
     ) {
       throw new Error(`wb_version_restore returned unexpected shape: ${JSON.stringify(restored)}`)
     }

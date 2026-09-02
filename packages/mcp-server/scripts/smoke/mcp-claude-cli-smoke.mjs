@@ -58,7 +58,7 @@ const prompt = [
   '1. call wb_document_create with path="claude-smoke".',
   '2. call wb_canvas_edit on the document id returned above with ops=[{op:"node.add",node:{id:"box",type:"text",text:"claude smoke"}}].',
   '3. call wb_version_save for that canvas id with label "claude-smoke".',
-  'Return only the versionId on the last line, nothing else.',
+  'Return only the saved version id (the `version.id` field of the wb_version_save result) on the last line, nothing else.',
 ].join('\n')
 
 const args = [
