@@ -491,6 +491,55 @@ describe('createDocumentSyncSession', () => {
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
+  it('a batch containing set-comment-resolved and delete-comment commits fine-grained: a remote comment survives, one undo step', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const toResolve: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'resolve me' }
+    const toDelete: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'delete me' }
+    const initial: SpatialCanvas = {
+      ...twoNodeCanvas(),
+      'x-whiteboard': { comments: [toResolve, toDelete] },
+    }
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    // A remote peer's concurrent comment — the fine-grained-write tell, same
+    // as the create-comment batch test above.
+    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
+    const remoteDoc = new LoroDoc()
+    remoteDoc.import(snapshotBytes)
+    writeCanvasComment(remoteDoc, remoteComment)
+    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
+
+    const batch: EditorCommand = {
+      kind: 'batch',
+      commands: [
+        { kind: 'set-comment-resolved', id: 'c-1', resolved: true },
+        { kind: 'delete-comment', id: 'c-2' },
+        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
+      ],
+    }
+    const next: SpatialCanvas = {
+      ...applyCommand(initial, { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
+      'x-whiteboard': { comments: [{ ...toResolve, resolved: true }] },
+    }
+    session.onChange(next, batch)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const merged = new LoroDoc()
+    merged.import(snapshotBytes)
+    merged.import(remoteDoc.export({ mode: 'update' }))
+    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const result = readSpatialCanvas(merged)
+    const comments = result['x-whiteboard']?.comments ?? []
+    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'remote-c'])
+    expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ resolved: true })
+    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
+  })
+
   it('debounce coalescing: create-node then move-node for the same id dedupes to a single write of the final node value', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())

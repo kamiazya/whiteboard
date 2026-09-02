@@ -675,7 +675,7 @@ describe('comment commands', () => {
   it('set-comment-resolved flips only the target comment; a missing id is a no-op', () => {
     const canvas: SpatialCanvas = {
       ...baseCanvas(),
-      'x-whiteboard': { comments: [COMMENT, OTHER] },
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
     }
     const next = applyCommand(canvas, {
       kind: 'set-comment-resolved',
@@ -687,6 +687,7 @@ describe('comment commands', () => {
       resolved: true,
     })
     expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
+    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
 
     expect(
       applyCommand(canvas, { kind: 'set-comment-resolved', id: 'ghost', resolved: true }),
@@ -706,6 +707,21 @@ describe('comment commands', () => {
     expect(spatialCanvasSchema.safeParse(afterBoth).success).toBe(true)
 
     expect(applyCommand(afterBoth, { kind: 'delete-comment', id: 'ghost' })).toBe(afterBoth)
+  })
+
+  it('delete-comment preserves a sibling extension field (edgeRouting), including once the last comment is removed', () => {
+    const withBoth: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+    }
+    const afterOne = applyCommand(withBoth, { kind: 'delete-comment', id: 'c1' })
+    expect(afterOne['x-whiteboard']?.comments).toEqual([OTHER])
+    expect(afterOne['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+
+    const afterBoth = applyCommand(afterOne, { kind: 'delete-comment', id: 'c2' })
+    expect(afterBoth['x-whiteboard']).not.toHaveProperty('comments')
+    expect(afterBoth['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(spatialCanvasSchema.safeParse(afterBoth).success).toBe(true)
   })
 })
 
