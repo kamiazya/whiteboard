@@ -167,4 +167,7 @@ try {
 // panels were two different renders rather than one file used twice.
 console.log(`[compose-figure] wrote ${outPath}`)
 console.log(`  before ${beforeDigest}  after ${afterDigest}`)
-console.log(`  next: gh image ${outPath}   → paste under a "## Visual repro" heading`)
+console.log(
+  `  next: reference ![…](${outPath}) under a "## Visual repro" heading, then pass\n` +
+    `        --attach ${outPath} to \`gh pr create\`/\`gh pr comment\` (gh ≥2.99.0) to upload it`,
+)
