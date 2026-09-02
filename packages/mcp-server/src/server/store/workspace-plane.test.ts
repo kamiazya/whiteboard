@@ -12,6 +12,7 @@ import {
   readSpatialCanvas,
   readTrashEntries,
   resolveWorkspaceDocumentById,
+  writeDocumentKind,
   writeSpatialCanvas,
 } from '@kamiazya/whiteboard-loro-adapter'
 import { chunkSnapshot, reassembleSnapshot } from '@kamiazya/whiteboard-ports'
@@ -292,4 +293,30 @@ it('does not keep serving an agent write whose persistence failed', async () => 
   saveSpy.mockRestore()
 
   expect(readText(await loadDocument('ws-a', 'design'))).toBe('persisted')
+})
+
+it("a tool save whose content declares a different kind moves the entry's kind with it", async () => {
+  // The restore route used to do this by hand, passing the source kind to
+  // saveDocument. Through the port the only channel is the document itself,
+  // which is also the channel every tool write already uses.
+  const { routed, index } = await stores()
+  await saveDocument('ws-a', 'design', canvasDoc('spatial-at-first'), { kind: 'spatial' })
+  const rowId = await resolveDocumentIdAtPath('ws-a', 'design')
+  if (rowId === null) throw new Error('document missing from the tree')
+
+  const restored = canvasDoc('markdown-now')
+  writeDocumentKind(restored, 'markdown')
+  const { manifest, chunks } = chunkSnapshot(
+    new Uint8Array(restored.export({ mode: 'snapshot' })),
+    1_000_000,
+  )
+  await routed.saveSnapshot({
+    docRef: { kind: 'document', workspaceId: 'ws-a', documentId: rowId },
+    manifest,
+    chunks,
+    frontier: new Uint8Array(restored.oplogVersion().encode()),
+  })
+
+  const entry = await index.resolveDocument({ workspaceId: 'ws-a', path: 'design' })
+  expect(entry?.kind).toBe('markdown')
 })

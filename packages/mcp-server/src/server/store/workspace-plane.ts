@@ -11,7 +11,9 @@
  * (versions, branches and the fold still key off it).
  */
 import {
+  readDocumentKind,
   resolveWorkspaceDocumentById,
+  updateWorkspaceDocumentMeta,
   writeWorkspaceDocumentContent,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
@@ -130,6 +132,17 @@ export class WorkspaceRoutedDocumentStore implements DocumentStore {
         // edit back out.
         const live = await getDoc(workspaceId, entry.path)
         live.import(doc.export({ mode: 'update' }))
+        // The entry's kind follows what the content DECLARES. Every tool
+        // write stamps its kind into the document (document-set, canvas-edit,
+        // document-crud), and a restore that lands markdown content on a
+        // spatial entry stamps the source's. Without this the tree would keep
+        // saying "spatial" over a markdown body and a kind-aware reader would
+        // open it under the wrong editor. A document that declares nothing
+        // changes nothing, so an ordinary edit cannot flip an entry.
+        const declared = readDocumentKind(live)
+        if (declared !== undefined && declared !== entry.kind) {
+          updateWorkspaceDocumentMeta(workspaceDoc, documentId, { kind: declared })
+        }
         if (!writeWorkspaceDocumentContent(workspaceDoc, documentId, live)) return false
         await saveWorkspaceDoc(workspaceId, workspaceDoc)
         return true
