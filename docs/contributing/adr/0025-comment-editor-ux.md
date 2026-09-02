@@ -153,7 +153,10 @@ look correct in every single-user test.
   interaction), with race cases stated per slice: a compose bubble whose
   anchor node is deleted by a remote peer mid-edit keeps the draft and falls
   back to the point anchor; a resolve/reopen whose bubble unmounts mid-write
-  still lands or reports failure via toast.
+  still lands, and a failed one leaves the document — and therefore the pin
+  — as it was. (This bullet named a toast, which the decision above says is
+  deliberately not built. A test written to it would have been asserting on
+  a mechanism that does not exist.)
 - User copy vocabulary: the feature is a **Comment** (the layer name
   "annotation layer" stays an internal term), and the lifecycle word is
   **Resolved** — never "History", "Archived", or "Done".
