@@ -7,7 +7,6 @@ import {
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { LoroWorkspaceDocumentIndex } from '@kamiazya/whiteboard-workspace-index'
 import { Container, type ContainerModule } from 'inversify'
-import { createCanvasClientNotifier } from '../server/canvas-client-notifier.js'
 import { createOpentypeMeasureText } from '../server/export/measure-text.js'
 import { resolveSearchEmbedder } from '../server/search/search-embedder.js'
 import { documentTeardown } from '../server/store/document-store.js'
@@ -68,10 +67,14 @@ export function resolveServerDeps(container: Container): ServerDeps {
     // line lands. Memoized inside the measurer, so this reference costs
     // nothing until a render actually asks for it.
     measure: createOpentypeMeasureText,
-    // Wired here rather than bound as a port: it is a bridge onto this
-    // package's own WebSocket routes, not an interchangeable implementation
-    // anyone would swap.
-    clientNotifier: createCanvasClientNotifier(documentIndex),
+    // clientNotifier is deliberately NOT wired here. It is a bridge onto
+    // this package's own WebSocket routes, and importing those from the di
+    // graph closes a value cycle (di -> canvas-client-notifier -> ws.ts ->
+    // di, now that the routes resolve their deps through
+    // getDefaultServerDeps). The field is optional by design — "absent
+    // means nobody is told anything" — so the two roots with a live-socket
+    // audience (http-server.ts, mcp/index.ts) attach it themselves, and the
+    // route-fallback deps correctly carry none.
     // undefined unless the user opted in, and even then the model loads on
     // the first search rather than here — a daemon that starts must not pay
     // a model download before it can answer anything.

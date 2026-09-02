@@ -1,7 +1,9 @@
 import type { IncomingMessage } from 'node:http'
+import { applyWorkspaceDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { SpanKind } from '@opentelemetry/api'
 import type { LoroDoc } from 'loro-crdt'
 import type { RawData, WebSocket } from 'ws'
+import type { VersionEntry } from '../../shared/api-contracts/document.js'
 import type { AgentActivityMessage, ServerTextMessage } from '../../shared/ws-messages.js'
 import { getLogger } from '../log.js'
 import { extractContextFromHeaders, getTracer } from '../observability/tracing.js'
@@ -11,24 +13,8 @@ import {
   requiredScopesForClientTextMessage,
   WS_BINARY_UPDATE_REQUIRED_SCOPES,
 } from '../security/ws-scope-registry.js'
-import { evictWorkspaceDocs } from '../store/doc-cache.js'
-import {
-  evictWorkspaceDocCache,
-  getDoc,
-  getWorkspaceDoc,
-  onWorkspaceDocUpdated,
-  saveWorkspaceDoc,
-  workspaceExists,
-} from '../store/document-store.js'
-import type { VersionEntry } from '../store/version-store.js'
-import { withWorkspaceWriteLock } from '../store/workspace-lock.js'
 import { resolveWorkspaceHandleToId } from '../workspace-handle.js'
-import {
-  setSyncSseHooks,
-  sseBroadcastText,
-  sseBroadcastTextToReady,
-  sseBroadcastWorkspaceUpdate,
-} from './sync-sse.js'
+import { setSyncSseHooks, sseBroadcastText, sseBroadcastTextToReady } from './sync-sse.js'
 import { parseWsClientTextMessage, parseWsTargetFromRequestUrl } from './ws-validation.js'
 
 // Connection registry: key = "workspaceId/path", value = Set<WebSocket>.
@@ -64,15 +50,24 @@ export function subscribedWorkspaceIds(): string[] {
 // save, a delete/rename, a restore — lands here once, with the exact bytes
 // the store persisted. No sender exclusion: a sender importing its own ops
 // back is a no-op by CRDT semantics.
-onWorkspaceDocUpdated((workspaceId, update) => {
-  const clients = workspaceConnections.get(workspaceId)
-  if (clients) {
-    for (const ws of clients) ws.send(update)
-  }
-  // The SSE transport is the same audience over a different pipe: a stream
-  // subscribed at workspace granularity gets the same persisted bytes.
-  sseBroadcastWorkspaceUpdate(workspaceId, update)
-})
+//
+// Subscribed through the WorkspaceDocuments seam rather than a store import
+// (ADR-0018), and installed by this transport's own entry points — every
+// upgrade, plus http-server at boot — because a subscription is only owed
+// where an audience can exist. The SSE transport installs its own (see
+// sync-sse.ts); each transport's fan-out is a property of its own call path
+// rather than of whichever one happened to load first.
+let wsFanoutInstalled = false
+export function installWsUpdateFanout(deps: ServerDeps): void {
+  if (wsFanoutInstalled) return
+  wsFanoutInstalled = true
+  deps.workspaceDocuments.onUpdated((workspaceId, update) => {
+    const clients = workspaceConnections.get(workspaceId)
+    if (clients) {
+      for (const ws of clients) ws.send(update)
+    }
+  })
+}
 
 // Sticky viewport state per canvas. The MCP `viewport_set` tool only fires the
 // `viewport_request` once and broadcasts to whoever is connected at that
@@ -258,6 +253,10 @@ export async function handleWsUpgrade(
   req: IncomingMessage,
   ws: WebSocket,
   scopes: readonly AuthScope[] = ALL_AUTH_SCOPES,
+  // The seams the connection reads and writes through. Production passes
+  // the deps http-server built; omitted, the same wiring resolves via
+  // getDefaultServerDeps.
+  deps?: ServerDeps,
 ): Promise<void> {
   let workspaceId = ''
   let path = ''
@@ -277,6 +276,13 @@ export async function handleWsUpgrade(
   // silent.
   workspaceId = await resolveWorkspaceHandleToId(workspaceId)
 
+  // Dynamic for the same reason document.ts imports ws.js dynamically: the
+  // di wiring's import chain reaches back into this module through
+  // canvas-client-notifier, and a static edge here closes a value cycle.
+  const resolvedDeps =
+    deps ?? (await (await import('../../di/default-server-deps.js')).getDefaultServerDeps())
+  installWsUpdateFanout(resolvedDeps)
+
   const key = `${workspaceId}/${path}`
 
   // Before anything is registered or served: a workspace this daemon has
@@ -290,7 +296,7 @@ export async function handleWsUpgrade(
   // keeps the lazy empty doc, which is how opening a just-deleted canvas
   // degrades. 4404 because RFC 6455 reserves 4000-4999 for application use
   // and no registered close code means "not found".
-  if (!(await workspaceExists(workspaceId))) {
+  if (!(await resolvedDeps.workspaceDocuments.exists(workspaceId))) {
     ws.close(4404, `Workspace "${workspaceId}" not found`)
     return
   }
@@ -309,7 +315,7 @@ export async function handleWsUpgrade(
 
   // On connect, send the workspace document's snapshot as binary for the
   // initial load. Every socket rides the workspace lineage.
-  const workspaceDoc = await getWorkspaceDoc(workspaceId)
+  const workspaceDoc = await resolvedDeps.workspaceDocuments.get(workspaceId)
   ws.send(workspaceDoc.export({ mode: 'snapshot' }))
 
   // Holds the most recent W3C trace-context the client announced via
@@ -426,43 +432,42 @@ export async function handleWsUpgrade(
       : getTracer('whiteboard.ws').startSpan('ws.message.binary', spanStartOptions)
     try {
       // Import into the live workspace document under the same lock every
-      // other mutation path holds. Fan-out to subscribers happens inside
-      // saveWorkspaceDoc's listener, with the exact persisted bytes.
-      const persisted = await withWorkspaceWriteLock(workspaceId, async () => {
-        const workspaceDoc = await getWorkspaceDoc(workspaceId)
-        // A second (or later) frame's handler can pass the `isClosing` check
-        // above before this frame's await resolves — both were still false
-        // at the top when they started. Recheck after the await so a frame
-        // that lost that race does not import, persist, or close a socket
-        // the earlier frame already tore down.
-        if (isClosing) return false
-        // `LoroDoc.import` throws synchronously (loro-crdt's wasm layer may
-        // throw a non-Error value) whenever the bytes are not a valid Loro
-        // update/snapshot. A write-scope credential is real authorization to
-        // send edits, not a guarantee the bytes are well-formed CRDT data, so
-        // this boundary must not be able to crash the daemon on one bad
-        // frame. Treat it as a protocol violation: discard the frame, never
-        // persist or broadcast it, and close 1003 (Unsupported Data) — the
-        // socket was authorized, only this frame's payload was not decodable.
-        try {
-          workspaceDoc.import(bytes)
-        } catch (err: unknown) {
-          getLogger('ws').warning(
-            { workspaceId, path, updateBytes: bytes.byteLength, err },
-            'ws binary update rejected: malformed Loro import data',
-          )
-          closeSocket(1003, 'Malformed workspace update')
-          return false
-        }
-        await saveWorkspaceDoc(workspaceId, workspaceDoc)
-        // Every cached per-document projection of this workspace is now
-        // stale; a stale one would diff old content back over this import
-        // on its next save. Dropped inside the lock so no reader grabs a
-        // stale projection between the import and the eviction.
-        evictWorkspaceDocs(workspaceId)
-        return true
-      })
-      if (!persisted) return
+      // other mutation path holds — the operation owns the lock, the
+      // import, the persist and the projection eviction (ADR-0018); this
+      // surface supplies only what is socket-shaped:
+      //
+      // abortIf: a second (or later) frame's handler can pass the
+      // `isClosing` check above before this frame's await resolves — both
+      // were still false at the top when they started. Rechecked inside the
+      // lock so a frame that lost that race does not import, persist, or
+      // close a socket the earlier frame already tore down.
+      //
+      // onMalformed: a write-scope credential is real authorization to send
+      // edits, not a guarantee the bytes are well-formed CRDT data, so this
+      // boundary must not crash the daemon on one bad frame. Close 1003
+      // (Unsupported Data) INSIDE the lock — the socket was authorized,
+      // only this frame's payload was not decodable, and closing while the
+      // lock still excludes other writers stops a queued valid frame from
+      // persisting onto a closing socket.
+      const result = await applyWorkspaceDocumentUpdate(
+        resolvedDeps,
+        { workspaceId, update: bytes },
+        {
+          abortIf: () => isClosing,
+          onMalformed: () => {
+            // The socket-shaped half of the refusal: the operation logged the
+            // seam-level rejection, but only this surface knows the PATH the
+            // socket is registered under, and only it may close. Never log
+            // the frame bytes themselves.
+            getLogger('ws').warning(
+              { workspaceId, path, updateBytes: bytes.byteLength },
+              'ws binary update rejected: malformed Loro import data',
+            )
+            closeSocket(1003, 'Malformed workspace update')
+          },
+        },
+      )
+      if (result !== 'applied') return
       // Isolated in its own try/catch: this hook exists only so tests can
       // await a deterministic "persisted" signal instead of polling. A
       // callback throwing must never be able to make an already-successful
@@ -476,7 +481,8 @@ export async function handleWsUpgrade(
         )
       }
       // Auto-version for the socket's own path over the fresh projection.
-      getDoc(workspaceId, path)
+      resolvedDeps.liveDocuments
+        .get(workspaceId, path)
         .then((doc) => autoVersionTrigger(workspaceId, path, doc))
         .then((entry) => {
           if (entry) sendVersionCreated(workspaceId, path, entry)
@@ -494,8 +500,8 @@ export async function handleWsUpgrade(
       // (Internal Error) so the client reconnects and resyncs from the
       // persisted state instead.
       getLogger('ws').error({ workspaceId, path, err }, 'ws binary update failed')
-      evictWorkspaceDocs(workspaceId)
-      evictWorkspaceDocCache(workspaceId)
+      resolvedDeps.workspaceDocuments.evictProjections(workspaceId)
+      resolvedDeps.workspaceDocuments.evict(workspaceId)
       closeSocket(1011, 'Failed to persist canvas update')
     } finally {
       wsSpan.end()

@@ -193,6 +193,22 @@ The remaining 22 edges across 13 adapters are mostly one or two apiece and
 are not scheduled here. They come along with whatever work next opens those
 files, under the standing "fix what you touch" rule.
 
+> **2026-09-02 — the scheduled burn-down is complete.** The four adapters
+> above landed one PR apiece in the listed order (restore.ts, live-doc.ts,
+> workspace-document.ts, ws.ts), each lowering the ceiling in the commit
+> that removed its edges: 37 → 33 → 29 → 25 → 21. Their operations live in
+> server-core (`restore-version`, `apply-document-update`,
+> `apply-workspace-document-update`) behind the `LiveDocuments` and
+> `WorkspaceDocuments` seams; ws.ts's update funnel became
+> `WorkspaceDocuments.onUpdated`, installed per transport by each
+> transport's own entry point. One count above was stale when written:
+> restore.ts held 4 edges, not 5, so the four adapters held 16 of the 39.
+> The "no MCP twin yet" premise also deserves a correction rather than a
+> rewrite: `wb_version_restore` existed, but restores the in-document Loro
+> versions map — a separate history system from the file-backed store
+> restore.ts wraps — so the second-surface argument stood, with the twin
+> still to come.
+
 **What would make raising the ceiling right.** It is a decision, not a
 failure: an operation that genuinely belongs to this deployment, or a fix
 that cannot wait for the move. The requirement is only that the PR says which

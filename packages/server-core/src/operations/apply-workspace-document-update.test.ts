@@ -104,4 +104,56 @@ describe('applyWorkspaceDocumentUpdate', () => {
     expect(fake.wasSaved()).toBe(false)
     expect(fake.wasEvicted()).toBe(false)
   })
+
+  it('abortIf is consulted INSIDE the lock after the read, and aborted saves nothing', async () => {
+    const fake = fakes()
+    let observedInsideLock: boolean | null = null
+    const result = await applyWorkspaceDocumentUpdate(
+      { liveDocuments: fake.live, workspaceDocuments: fake.workspaceDocuments },
+      { workspaceId: WS, update: workspaceUpdateBytes('canvas-a') },
+      {
+        abortIf: () => {
+          // The frame-race guard only means anything inside the hold: a
+          // check taken before acquisition is the race it exists to close.
+          observedInsideLock = fake.calls.some((c) => c.method === 'get' && c.lockDepth === 1)
+          return true
+        },
+      },
+    )
+    expect(result).toBe('aborted')
+    expect(observedInsideLock).toBe(true)
+    expect(fake.wasSaved()).toBe(false)
+    expect(fake.wasEvicted()).toBe(false)
+  })
+
+  it('onMalformed fires INSIDE the lock before malformed-update returns', async () => {
+    const fake = fakes()
+    let malformedLockDepth: number | null = null
+    let lockDepthProbe = 0
+    const live = {
+      ...fake.live,
+      async withWriteLock<T>(workspaceId: string, fn: () => Promise<T>): Promise<T> {
+        lockDepthProbe += 1
+        try {
+          return await fake.live.withWriteLock(workspaceId, fn)
+        } finally {
+          lockDepthProbe -= 1
+        }
+      },
+    }
+    const result = await applyWorkspaceDocumentUpdate(
+      { liveDocuments: live, workspaceDocuments: fake.workspaceDocuments },
+      { workspaceId: WS, update: new Uint8Array([9, 9, 9]) },
+      {
+        onMalformed: () => {
+          malformedLockDepth = lockDepthProbe
+        },
+      },
+    )
+    expect(result).toBe('malformed-update')
+    // Fired while the lock still excludes other writers, so a surface can
+    // mark its socket closing before any queued frame acquires the hold.
+    expect(malformedLockDepth).toBe(1)
+    expect(fake.wasSaved()).toBe(false)
+  })
 })
