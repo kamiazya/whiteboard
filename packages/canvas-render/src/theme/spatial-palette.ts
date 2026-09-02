@@ -73,6 +73,13 @@ export interface SpatialPalette {
   readonly presets: Readonly<Record<SpatialPresetKey, SpatialPresetAccent>>
   /** Fills for syntax-highlighted code runs. */
   readonly syntax: SpatialSyntaxPalette
+  /**
+   * The comment annotation layer's chrome (ADR-0024): the anchor pin and
+   * the bubble behind the comment text. Amber on both modes — the one hue
+   * the node presets reserve for warm emphasis — so a comment reads as
+   * distinct from every content node at a glance.
+   */
+  readonly comment: { readonly pin: SpatialNodeStyle; readonly bubble: SpatialNodeStyle }
 }
 
 // Quiet-tool direction (apps/web/DESIGN.md): node and edge strokes sit at
@@ -113,6 +120,12 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
     number: '#c2410c',
     comment: '#5b6472',
   },
+  // The preset-3 amber pair: stroke 4.5:1 on white, labelFill 9.3:1 on the
+  // tint — the same contrast-tested ramp the presets pin.
+  comment: {
+    pin: { fill: '#d97706', stroke: '#b45309' },
+    bubble: { fill: '#fef3c7', stroke: '#d97706' },
+  },
 }
 
 // Seeded from the pre-theme editor's dark palette (EDITOR_DARK_PALETTE) — a
@@ -151,5 +164,10 @@ export const SPATIAL_DARK_PALETTE: SpatialPalette = {
     string: '#34d399',
     number: '#fb923c',
     comment: '#9ba3af',
+  },
+  // The preset-3 dark pair (Tailwind 400 over 950), same ramp as above.
+  comment: {
+    pin: { fill: '#fbbf24', stroke: '#f59e0b' },
+    bubble: { fill: '#451a03', stroke: '#fbbf24' },
   },
 }
