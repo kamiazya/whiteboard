@@ -1,4 +1,4 @@
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import {
@@ -13,10 +13,15 @@ import { EditorView, keymap, placeholder } from '@codemirror/view'
 import { tags } from '@lezer/highlight'
 import { GFM } from '@lezer/markdown'
 import { type RefObject, useEffect, useRef } from 'react'
+import {
+  type ActiveMarkdownEditor,
+  clearActiveMarkdownEditor,
+  setActiveMarkdownEditor,
+} from './active-markdown-editor.js'
 import { markdownStyleKeymap } from './editor-verbs.js'
 import { exitEmptyListItem } from './exit-empty-list-item.js'
+import { headingLevelAt } from './line-prefix.js'
 import { minimalChange } from './minimal-change.js'
-import { headingLevelAt } from './set-heading-level.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
@@ -151,6 +156,12 @@ export interface SourcePaneProps {
    * The view's content then flows only editor->out. Default true.
    */
   reconcileExternalValue?: boolean
+  /**
+   * Lets the keyboard-docked bar's Link slot open the editor's picker.
+   * Answers whether a picker opened; undefined means the pane has none and
+   * the bar wraps instead.
+   */
+  onRequestLinkPicker?: () => boolean
 }
 
 /**
@@ -168,6 +179,7 @@ export function SourcePane({
   apiRef,
   extensions,
   reconcileExternalValue = true,
+  onRequestLinkPicker,
 }: SourcePaneProps) {
   const hostRef = useRef<HTMLDivElement | null>(null)
   const viewRef = useRef<EditorView | null>(null)
@@ -175,6 +187,10 @@ export function SourcePane({
   // re-run (and recreate the EditorView) on every parent re-render.
   const onChangeRef = useRef(onChange)
   onChangeRef.current = onChange
+  const onRequestLinkPickerRef = useRef(onRequestLinkPicker)
+  onRequestLinkPickerRef.current = onRequestLinkPicker
+  // Filled once the view exists; the focus/blur handlers below read it lazily.
+  const activeRef = useRef<ActiveMarkdownEditor | null>(null)
 
   useEffect(() => {
     const host = hostRef.current
@@ -206,10 +222,9 @@ export function SourcePane({
         syntaxHighlighting(markdownHighlightStyle),
         history(),
         // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any
-        // default binding; indentWithTab keeps Tab in the editor (Escape
-        // then Tab remains the keyboard escape hatch, per CodeMirror's
-        // own accessibility guidance).
-        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        // default binding; it also owns Tab (indent / outdent) and keeps it
+        // in the editor.
+        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         // Prose, not code: long paragraphs soft-wrap instead of growing a
         // horizontal scrollbar.
         EditorView.lineWrapping,
@@ -251,10 +266,29 @@ export function SourcePane({
             onChangeRef.current(update.state.doc.toString())
           }
         }),
+        // The touch formatting bar follows whichever host holds the caret.
+        EditorView.domEventHandlers({
+          focus: () => {
+            if (activeRef.current !== null) setActiveMarkdownEditor(activeRef.current)
+            return false
+          },
+          blur: () => {
+            if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
+            return false
+          },
+        }),
       ],
     })
     const view = new EditorView({ state, parent: host })
     viewRef.current = view
+    activeRef.current = {
+      run: (command) => {
+        command({ state: view.state, dispatch: view.dispatch })
+        view.focus()
+      },
+      headingLevel: () => headingLevelAt(view.state),
+      openLinkPicker: () => onRequestLinkPickerRef.current?.() ?? false,
+    }
     if (apiRef) {
       apiRef.current = {
         run: (command) => {
@@ -328,6 +362,7 @@ export function SourcePane({
     }
 
     return () => {
+      if (activeRef.current !== null) clearActiveMarkdownEditor(activeRef.current)
       view.destroy()
       viewRef.current = null
       if (apiRef) apiRef.current = null

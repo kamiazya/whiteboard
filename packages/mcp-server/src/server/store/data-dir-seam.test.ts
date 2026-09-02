@@ -17,6 +17,10 @@ import { afterAll, afterEach, describe, expect, it } from 'vitest'
 const importBaseDir = mkdtempSync(join(tmpdir(), 'whiteboard-seam-base-'))
 process.env.WHITEBOARD_DATA_DIR = importBaseDir
 
+// lazy-import: WHITEBOARD_DATA_DIR above has to be set BEFORE these modules
+// evaluate — a static import is hoisted above it and would freeze the
+// DATA_DIR snapshot at the developer's real home directory, which is exactly
+// what this test exists to prove cannot happen.
 const { overrideDataDir, resetDataDirForTests } = await import('../../shared/data-dir-secure.js')
 const { saveDocument, resolveDocumentIdAtPath } = await import('./document-store.js')
 const { closeDb, getDb } = await import('./db/index.js')

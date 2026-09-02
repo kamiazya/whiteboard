@@ -3,12 +3,14 @@ import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
-
 // server-mode-backup-restore.ts only imports backup-restore.ts and
-// server-mode-record.ts — neither pulls in config.js, so no mock needed.
-const { backupServerModeDataDir, restoreServerModeDataDir, BackupError } = await import(
-  './server-mode-backup-restore.js'
-)
+// server-mode-record.ts — neither pulls in config.js, so the deferral this
+// used to be written as bought nothing.
+import {
+  BackupError,
+  backupServerModeDataDir,
+  restoreServerModeDataDir,
+} from './server-mode-backup-restore.js'
 
 async function makeRoots() {
   const root = await mkdtemp(join(tmpdir(), 'wb-sm-br-test-'))

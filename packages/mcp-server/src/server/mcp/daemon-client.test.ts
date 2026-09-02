@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest'
-
-const { createDaemonClient } = await import('./daemon-client.js')
+import { createDaemonClient } from './daemon-client.js'
 
 describe('createDaemonClient', () => {
   it('request builds URLs from baseUrl and attaches bearer auth', async () => {

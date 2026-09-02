@@ -1,6 +1,5 @@
 import { describe, expect, it } from 'vitest'
-
-const { resolveDataDir } = await import('./config.js')
+import { resolveDataDir } from './config.js'
 
 describe('resolveDataDir', () => {
   it('prefers WHITEBOARD_DATA_DIR above all other candidates', () => {

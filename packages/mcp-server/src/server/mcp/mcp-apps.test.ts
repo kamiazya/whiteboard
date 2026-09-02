@@ -2,18 +2,17 @@ import { mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-
 // The widget HTML fixture lives in a per-test temp dir, injected via
 // resetWidgetHtmlCacheForTests — never the real WIDGET_HTML_PATH, whose
 // build output a test must not delete out from under a same-machine
 // smoke run.
-const {
+import {
+  CANVAS_VIEW_RESOURCE_URI,
+  EXTENSION_ID,
+  RESOURCE_MIME_TYPE,
   registerMcpAppsExtension,
   resetWidgetHtmlCacheForTests,
-  CANVAS_VIEW_RESOURCE_URI,
-  RESOURCE_MIME_TYPE,
-  EXTENSION_ID,
-} = await import('./mcp-apps.js')
+} from './mcp-apps.js'
 
 function fakeServer() {
   const registerResource = vi.fn()

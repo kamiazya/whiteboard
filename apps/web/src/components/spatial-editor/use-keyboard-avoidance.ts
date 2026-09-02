@@ -9,6 +9,10 @@
 // inside the visible strip above the keyboard.
 
 import { useEffect } from 'react'
+import {
+  TOUCH_BAR_HEIGHT_PX,
+  touchFormattingBarShown,
+} from '../markdown-editor/touch-bar-layout.js'
 import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
 import { panToShowTarget } from './viewport.js'
 
@@ -61,22 +65,39 @@ export function useKeyboardAvoidance({
       const containerSize = containerSizeOf(root)
       if (containerSize === null) return
       const occluded = keyboardOccludedBottomPx(root.getBoundingClientRect().bottom, visual)
-      if (occluded <= 0) return
+      // A phone's keyboard carries the formatting bar on top of it, so the
+      // strip to clear is the keyboard plus the bar — asked of the bar's own
+      // predicate, since a coarse pointer is not the same question (an edge
+      // label is edited in a textarea the bar does not attach to). It no
+      // longer returns early on
+      // zero occlusion: under `interactive-widget=resizes-content` the
+      // keyboard shrinks the LAYOUT viewport, so it occludes nothing and
+      // reads as absent — while having taken half the canvas away. The node
+      // still has to be panned back into what is left. `panToShowTarget`
+      // answers null when nothing needs to move, so a pass that finds the
+      // node already visible costs a comparison.
+      const bottom = occluded + (touchFormattingBarShown() ? TOUCH_BAR_HEIGHT_PX : 0)
+      if (bottom <= 0) return
       setViewport((viewport) => {
         const target = { x, y, width, height: height + EXIT_HINT_ALLOWANCE_PX / viewport.zoom }
-        return panToShowTarget(target, viewport, containerSize, { bottom: occluded }) ?? viewport
+        return panToShowTarget(target, viewport, containerSize, { bottom }) ?? viewport
       })
     }
     // The keyboard may already be up (editing one node, then tapping into
     // another), so run once on entry; after that, resize covers the
     // keyboard animating in and scroll covers iOS panning its visual
-    // viewport, which moves the occluded strip without a resize.
+    // viewport, which moves the occluded strip without a resize. The
+    // listener registration follows the comment on `bottom` above.
     apply()
     visual.addEventListener('resize', apply)
     visual.addEventListener('scroll', apply)
+    // The layout viewport shrinking is a `window` resize, not a visual one,
+    // and it is the only signal the resizes-content path gives at all.
+    window.addEventListener('resize', apply)
     return () => {
       visual.removeEventListener('resize', apply)
       visual.removeEventListener('scroll', apply)
+      window.removeEventListener('resize', apply)
     }
   }, [editing, x, y, width, height, rootRef, containerSizeOf, setViewport])
 }
