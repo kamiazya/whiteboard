@@ -70,6 +70,15 @@ export interface Appearance {
    * at scales where a dashed hairline is unreadable anyway.
    */
   readonly strokeDasharray?: string
+  /**
+   * Paint a soft drop shadow under the element so it reads as floating
+   * ABOVE the canvas plane — annotation chrome, not authored content.
+   * Consumed by the rect chrome today (the comment layer's pin and bubble);
+   * presence-only like every appearance field, and the shadow's reach is a
+   * fixed backend constant (the arrowhead class: bounds keep reading the
+   * bbox, and the blur never exceeds the hit tolerance).
+   */
+  readonly dropShadow?: true
 }
 
 /** A single styled run of inline text, positioned within its parent block. */
