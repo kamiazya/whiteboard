@@ -1,6 +1,6 @@
+import { countAliveNodes, countLegacyTombstones } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { isAuthorized } from '../security/bearer-token.js'
-import { countAliveNodes, countLegacyTombstones } from '../store/count-alive-nodes.js'
 import { getCacheKeys, peekDoc } from '../store/doc-cache.js'
 import { listDocuments, listWorkspaces, loadDocument } from '../store/document-store.js'
 
