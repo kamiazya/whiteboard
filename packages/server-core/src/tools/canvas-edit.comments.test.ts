@@ -1,5 +1,7 @@
 // The comment ops of `wb_canvas_edit` (ADR-0024): comment.add /
-// comment.resolve / comment.remove, plus the preservation rule the layer
+// comment.resolve — and, pinned here, NO comment.remove (ADR-0025 decision
+// 2: resolving is the only close, for agents and people alike) — plus the
+// preservation rule the layer
 // depends on — a batch writes back the WHOLE canvas, so everything the batch
 // did not touch (the canvas-level extension, every stored comment) must
 // survive the save.
@@ -144,35 +146,48 @@ describe('wb_canvas_edit comment ops', () => {
     expect((await storedComments(store))[0]?.resolved).toBeFalsy()
   })
 
-  test('comment.remove deletes one comment; unknown ids fail loudly for all three ops', async () => {
+  test('there is no comment.remove op: the batch is refused whole and the comment stays', async () => {
     const store = new FakeDocumentStore()
     await seedCanvas(store, {
       nodes: [],
       edges: [],
-      'x-whiteboard': {
-        comments: [
-          { id: 'c1', x: 0, y: 0, text: 'goes away' },
-          { id: 'c2', x: 5, y: 5, text: 'stays' },
-        ],
-      },
+      'x-whiteboard': { comments: [{ id: 'c1', x: 0, y: 0, text: 'kept' }] },
     })
     const tool = createCanvasEditTool(makeDeps(store))
 
-    await tool.execute({
+    // The op union is the contract the SDK validates every call against
+    // BEFORE `execute` runs, so a guessed verb is refused with nothing
+    // written — including the rest of the batch. Asserted on the schema the
+    // tool registers, which is the same object the SDK is handed.
+    const refused = tool.inputSchema.safeParse({
       workspaceId: WORKSPACE_ID,
       documentId: DOCUMENT_ID,
       ops: [{ op: 'comment.remove', id: 'c1' }],
     })
-    expect((await storedComments(store)).map((comment) => comment.id)).toEqual(['c2'])
+    expect(refused.success).toBe(false)
+    expect(
+      JSON.stringify(
+        tool.inputSchema.safeParse({
+          workspaceId: WORKSPACE_ID,
+          documentId: DOCUMENT_ID,
+          ops: [{ op: 'comment.resolve', id: 'c1' }],
+        }).success,
+      ),
+    ).toBe('true')
+    expect((await storedComments(store)).map((comment) => comment.id)).toEqual(['c1'])
+  })
 
-    for (const op of [
-      { op: 'comment.resolve' as const, id: 'nope' },
-      { op: 'comment.remove' as const, id: 'nope' },
-    ]) {
-      await expect(
-        tool.execute({ workspaceId: WORKSPACE_ID, documentId: DOCUMENT_ID, ops: [op] }),
-      ).rejects.toMatchObject({ message: expect.stringMatching(/"nope"/) })
-    }
+  test('comment.resolve on an unknown id fails loudly', async () => {
+    const store = new FakeDocumentStore()
+    await seedCanvas(store, { nodes: [], edges: [] })
+    const tool = createCanvasEditTool(makeDeps(store))
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        ops: [{ op: 'comment.resolve', id: 'nope' }],
+      }),
+    ).rejects.toMatchObject({ message: expect.stringMatching(/"nope"/) })
   })
 
   test('a batch that never mentions comments preserves them AND the rendering preferences', async () => {

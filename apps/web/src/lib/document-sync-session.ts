@@ -1,6 +1,5 @@
 import {
   type DocumentContainers,
-  deleteCanvasComment,
   deleteSpatialNode,
   documentContainers,
   readCoreFacets,
@@ -76,7 +75,6 @@ function commandTargetKey(command: EditorCommand): string {
     case 'create-comment':
       return `comment:${command.comment.id}`
     case 'set-comment-resolved':
-    case 'delete-comment':
     case 'move-comment':
     case 'set-comment-text':
       return `comment:${command.id}`
@@ -267,11 +265,6 @@ function writeCommandTarget(
       writeCanvasComment(doc, comment)
       return true
     }
-    case 'delete-comment':
-      // Always "handled", matching delete-node: deleteCanvasComment is a
-      // documented no-op for an already-absent id.
-      deleteCanvasComment(doc, command.id)
-      return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the
       // whole SpatialCanvas, which would leave the body container untouched
@@ -332,7 +325,6 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
       return next['x-whiteboard']?.comments?.some((c) => c.id === command.id) ?? false
     case 'delete-node':
     case 'delete-edge':
-    case 'delete-comment':
       // Deletes are no-ops for absent ids — always writable.
       return true
     default:
@@ -377,9 +369,6 @@ function writeSubCommand(
       if (comment) writer.writeComment(comment)
       return
     }
-    case 'delete-comment':
-      writer.deleteComment(command.id)
-      return
     case 'delete-node':
       writer.deleteNode(command.id)
       return

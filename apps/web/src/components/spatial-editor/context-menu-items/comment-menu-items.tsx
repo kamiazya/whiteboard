@@ -1,7 +1,8 @@
 /**
  * The comment branch: a comment is not content, so none of the node, edge
- * or canvas verbs apply — its band is its own lifecycle. Removal stays
- * MCP-only in v1 (ADR-0025), so editing the text is the whole band for now.
+ * or canvas verbs apply — its band is its own lifecycle. There is no
+ * removal anywhere (ADR-0025 decision 2): closing the conversation is the
+ * only way to put a comment away, so editing the text is the band for now.
  */
 import { commentAnchor } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
