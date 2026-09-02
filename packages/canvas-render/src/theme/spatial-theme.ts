@@ -57,6 +57,20 @@ const COMMENT_LEADER_DASH = '4 3'
  */
 const COMMENT_RESOLVED_OPACITY = 0.45
 
+/**
+ * The resolved-overlay treatment, DERIVED from the base chrome so the two
+ * can never disagree on color: same fields, each present paint channel
+ * muted, and no dropShadow — a resolved comment recedes rather than
+ * floating above the canvas plane like an active one.
+ */
+function muteForResolved({ dropShadow: _dropShadow, ...base }: Appearance): Appearance {
+  return {
+    ...base,
+    ...(base.fill === undefined ? {} : { fillOpacity: COMMENT_RESOLVED_OPACITY }),
+    ...(base.stroke === undefined ? {} : { strokeOpacity: COMMENT_RESOLVED_OPACITY }),
+  }
+}
+
 /** A numbered preset resolved through the palette; null for hex/unknown. */
 function presetAccent(color: CanvasColor | undefined, palette: SpatialPalette) {
   if (color === undefined || color.startsWith('#')) return null
@@ -92,51 +106,37 @@ function buildTheme(palette: SpatialPalette): SpatialAppearanceResolver {
     resolveSyntax: () => palette.syntax,
     // Floating chrome, not content: shadow + neutral card + surface-ringed
     // pin are what separate a comment from an authored amber node.
-    resolveComment: () => ({
-      pin: {
+    resolveComment: () => {
+      const pin: Appearance = {
         fill: palette.comment.pin.fill,
         stroke: palette.comment.pin.stroke,
         strokeWidth: 2,
         dropShadow: true,
-      },
-      bubble: {
+      }
+      const bubble: Appearance = {
         fill: palette.comment.bubble.fill,
         stroke: palette.comment.bubble.stroke,
         dropShadow: true,
-      },
+      }
       // The bubble's stroke color, dashed: the tie must read as comment
       // chrome, not as an authored canvas edge, and dashing is what says so
       // when a dense canvas separates pin from bubble.
-      leader: {
+      const leader: Appearance = {
         stroke: palette.comment.bubble.stroke,
         strokeWidth: 1,
         strokeDasharray: COMMENT_LEADER_DASH,
-      },
-      // Same palette colors as above, muted — no dropShadow: a resolved
-      // comment recedes rather than floating above the canvas plane like an
-      // active one.
-      resolvedOverlay: {
-        pin: {
-          fill: palette.comment.pin.fill,
-          stroke: palette.comment.pin.stroke,
-          strokeWidth: 2,
-          fillOpacity: COMMENT_RESOLVED_OPACITY,
-          strokeOpacity: COMMENT_RESOLVED_OPACITY,
+      }
+      return {
+        pin,
+        bubble,
+        leader,
+        resolvedOverlay: {
+          pin: muteForResolved(pin),
+          bubble: muteForResolved(bubble),
+          leader: muteForResolved(leader),
         },
-        bubble: {
-          fill: palette.comment.bubble.fill,
-          stroke: palette.comment.bubble.stroke,
-          fillOpacity: COMMENT_RESOLVED_OPACITY,
-          strokeOpacity: COMMENT_RESOLVED_OPACITY,
-        },
-        leader: {
-          stroke: palette.comment.bubble.stroke,
-          strokeWidth: 1,
-          strokeDasharray: COMMENT_LEADER_DASH,
-          strokeOpacity: COMMENT_RESOLVED_OPACITY,
-        },
-      },
-    }),
+      }
+    },
     resolveLabel: () => ({
       fill: palette.labelFill,
       fontFamily: SPATIAL_THEME_FONT_FAMILY,
