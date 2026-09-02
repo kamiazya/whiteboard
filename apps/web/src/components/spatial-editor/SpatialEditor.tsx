@@ -105,7 +105,7 @@ import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
 import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
-import { editorTextFill } from './editor-appearance.js'
+import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
 import { GhostOverlay } from './GhostOverlay.js'
@@ -609,7 +609,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       () => (editingTextNodeId === undefined ? undefined : [editingTextNodeId]),
       [editingTextNodeId],
     )
-    const { bounds, scene, anchors } = useWorkerScene(
+    const { bounds, scene, anchors, sceneCurrent } = useWorkerScene(
       canvas,
       { measure: resolvedMeasure, theme, suppressedBodyNodeIds },
       fileSeamOptions,
@@ -2445,7 +2445,22 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                       entry.shape !== undefined,
                   )}
                   style={{
-                    background: 'transparent',
+                    // Transparent once the scene below has stopped drawing
+                    // this node's text. An offloaded canvas lags one worker
+                    // round trip behind the suppression change, so for that
+                    // gap the overlay keeps the old opaque cover — otherwise
+                    // the committed text shows doubled under the draft.
+                    background: sceneCurrent
+                      ? 'transparent'
+                      : (() => {
+                          const fill =
+                            createEditorAppearance(theme).resolveNode(selectedNode).appearance?.fill
+                          return fill !== undefined && fill !== 'none'
+                            ? fill
+                            : theme === 'dark'
+                              ? 'oklch(0.145 0 0)'
+                              : '#ffffff'
+                        })(),
                     color: editorTextFill(theme),
                     fontFamily: SPATIAL_THEME_FONT_FAMILY,
                     fontSize: BODY_FONT_SIZE_PX,

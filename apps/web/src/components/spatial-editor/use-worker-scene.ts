@@ -97,7 +97,7 @@ export function useWorkerScene(
   // resolved as dangling in THIS canvas. The composed seam serves the
   // synchronous path; only this list can cross to the worker.
   missingFileRefs?: readonly string[],
-): RenderedCanvas {
+): RenderedCanvas & { readonly sceneCurrent: boolean } {
   const options = useMemo(
     () => ({ ...base, ...fileSeamOptions }),
     [base.measure, base.theme, base.suppressedBodyNodeIds, fileSeamOptions],
@@ -224,5 +224,11 @@ export function useWorkerScene(
 
   useEffect(() => () => workerRef.current?.terminate(), [])
 
-  return synchronous ?? rendered
+  // Whether the scene handed back was built from the CURRENT inputs. The
+  // synchronous path always is; the offloaded path lags by one worker round
+  // trip after any input change. The editor overlay reads this to keep the
+  // old opaque cover up for exactly that gap, so a big canvas never shows
+  // its committed text doubled under the transparent editor.
+  const sceneCurrent = synchronous !== undefined || shownFor.current === inputs
+  return { ...(synchronous ?? rendered), sceneCurrent }
 }

@@ -149,7 +149,10 @@ export function MarkdownNodeEditor({
         // styles live there so the SVG render and the editor agree.
         EditorView.theme({
           '&': centerContent
-            ? { maxHeight: '100%', backgroundColor: 'transparent' }
+            ? // minHeight 0 lets the column-flex child SHRINK below its
+              // content height, so overflow reaches the scroller instead of
+              // being clipped by the host's overflow:hidden.
+              { maxHeight: '100%', minHeight: '0', backgroundColor: 'transparent' }
             : { height: '100%', backgroundColor: 'transparent' },
           '.cm-scroller': {
             fontFamily: 'inherit',
