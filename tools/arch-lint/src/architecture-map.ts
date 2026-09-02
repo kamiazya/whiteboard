@@ -318,13 +318,6 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
   'routes/document/thumbnails.ts -> version-store',
   'routes/document/versions.ts -> document-store',
   'routes/document/versions.ts -> version-store',
-  // The workspace-granularity twin of live-doc.ts, carrying the same four
-  // edges for the same reasons — it retires WITH live-doc's when the sync
-  // surface gets its server-core home.
-  'routes/document/workspace-document.ts -> doc-cache',
-  'routes/document/workspace-document.ts -> document-store',
-  'routes/document/workspace-document.ts -> version-store',
-  'routes/document/workspace-document.ts -> workspace-lock',
   'routes/export.ts -> document-store',
   'routes/files.ts -> file-gc',
   'routes/files.ts -> version-store',
@@ -349,11 +342,11 @@ export const ADAPTERS_REACHING_MECHANICS: readonly string[] = [
  *
  * Raising it is a decision, not a fix. Do it only when the alternative is
  * worse than the debt, and say in the PR why the operation could not go to
- * server-core instead. The burn-down order is in the ADR; restore.ts's and
- * live-doc.ts's edges are paid off, and the two remaining scheduled adapters
- * (workspace-document.ts, ws.ts) hold 8 of these 29.
+ * server-core instead. The burn-down order is in the ADR; restore.ts's,
+ * live-doc.ts's and workspace-document.ts's edges are paid off, and the one
+ * remaining scheduled adapter (ws.ts) holds 4 of these 25.
  */
-export const ADAPTERS_REACHING_MECHANICS_CEILING = 29
+export const ADAPTERS_REACHING_MECHANICS_CEILING = 25
 
 /**
  * Modules under `store/` the adapter rule does NOT count.

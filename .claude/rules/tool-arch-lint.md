@@ -72,7 +72,7 @@ further down.
 
 **`ADAPTERS_REACHING_MECHANICS`** records the edges that exist today.
 
-**`ADAPTERS_REACHING_MECHANICS_CEILING` pins the count by equality — 29 today.**
+**`ADAPTERS_REACHING_MECHANICS_CEILING` pins the count by equality — 25 today.**
 It exists because the two both-sides guards reject a fabricated entry and a
 stale one and have nothing to say about a real new edge added along with its
 allowlist line, which is the ordinary way a list grows. Measured: a genuine
@@ -81,10 +81,10 @@ assertions, and the list went 37 -> 36 -> 35 -> 36 -> 40 in a week while the
 rule and the test's own comment both said it could only shrink. Adding an edge
 now fails until someone raises the ceiling deliberately, and paying one off
 fails until someone lowers it. ADR-0018 is **Accepted** (2026-08-31) and
-carries the burn-down order; `restore.ts`'s and `live-doc.ts`'s four edges
-each are paid off (their operations live in server-core behind the
-`LiveDocuments` seam), and the two remaining scheduled adapters
-(`workspace-document.ts`, `ws.ts`) hold 8 of the 29.
+carries the burn-down order; `restore.ts`, `live-doc.ts` and
+`workspace-document.ts` are paid off (their operations live in server-core
+behind the `LiveDocuments`/`WorkspaceDocuments` seams), and the one
+remaining scheduled adapter (`ws.ts`) holds 4 of the 25.
 
 `corrupt-stored-data` is excluded and says why: an error taxonomy an adapter
 reads to pick a status code is translation, which is an adapter's job, and

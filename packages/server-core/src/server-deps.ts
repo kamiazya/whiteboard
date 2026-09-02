@@ -198,6 +198,41 @@ export interface ServerDeps {
    * `unusedLiveDocuments()`, which refuses.
    */
   liveDocuments: LiveDocuments
+  /**
+   * The workspace-granularity half of the live-document surface: ONE Loro
+   * doc per workspace holding the tree and every document's content plane.
+   * The axis the restore increment named and deferred; ws.ts's migration
+   * (the last scheduled adapter) reuses it.
+   *
+   * Deliberately has NO lock method: the workspace write lock is
+   * `liveDocuments.withWriteLock`, and it is the SAME lock — a second
+   * spelling would let two surfaces each hold "the" lock and interleave.
+   *
+   * REQUIRED, like `liveDocuments`, and for the same reason.
+   */
+  workspaceDocuments: WorkspaceDocuments
+}
+
+export interface WorkspaceDocuments {
+  /** Whether the workspace is registered at all — a refusal, not a mint. */
+  exists(workspaceId: string): Promise<boolean>
+  /**
+   * The live workspace doc. Inside a registered workspace a missing record
+   * is minted empty: the workspace is real, it just has no tree-plane
+   * documents yet.
+   */
+  get(workspaceId: string): Promise<LoroDoc>
+  /**
+   * Persists the workspace doc. Fan-out to update subscribers happens
+   * INSIDE the implementation, so a caller never broadcasts separately.
+   */
+  save(workspaceId: string, doc: LoroDoc): Promise<void>
+  /**
+   * Drops every cached per-document projection of this workspace. After a
+   * workspace-granularity import each projection is stale, and a stale one
+   * would diff old content back over the import on its next save.
+   */
+  evictProjections(workspaceId: string): void
 }
 
 /**

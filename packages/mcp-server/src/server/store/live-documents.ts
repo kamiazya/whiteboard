@@ -1,15 +1,18 @@
 import { DocumentPathTakenError } from '@kamiazya/whiteboard-ports'
-import type { LiveDocuments } from '@kamiazya/whiteboard-server-core'
-import { evictDoc } from './doc-cache.js'
+import type { LiveDocuments, WorkspaceDocuments } from '@kamiazya/whiteboard-server-core'
+import { evictDoc, evictWorkspaceDocs } from './doc-cache.js'
 import {
   ConflictError,
   deleteDocument,
   documentExists,
   getDoc,
   getDocumentKind,
+  getWorkspaceDoc,
   listDocuments,
   renameDocumentPath,
   saveDocument,
+  saveWorkspaceDoc,
+  workspaceExists,
 } from './document-store.js'
 import { withWorkspaceWriteLock } from './workspace-lock.js'
 
@@ -44,5 +47,24 @@ export function liveDocuments(): LiveDocuments {
     },
     evict: evictDoc,
     withWriteLock: withWorkspaceWriteLock,
+  }
+}
+
+/**
+ * The workspace-granularity half of the same seam, in the same bundle file
+ * (one mechanic bundle per composition, not one per axis). `save`'s
+ * subscriber fan-out lives inside `saveWorkspaceDoc`, which is what lets
+ * the seam promise callers never broadcast separately.
+ */
+export function workspaceDocuments(): WorkspaceDocuments {
+  return {
+    exists: workspaceExists,
+    get: getWorkspaceDoc,
+    async save(workspaceId, doc) {
+      // saveWorkspaceDoc answers the update bytes it fanned out; the seam
+      // promises only persistence, so the value is deliberately dropped.
+      await saveWorkspaceDoc(workspaceId, doc)
+    },
+    evictProjections: evictWorkspaceDocs,
   }
 }

@@ -5,6 +5,7 @@ import { createInMemoryDocumentStore } from './in-memory-document-store.js'
 import { unusedDocumentTeardown } from './unused-document-teardown.js'
 import { unusedLiveDocuments } from './unused-live-documents.js'
 import { unusedVersionHistory } from './unused-version-history.js'
+import { unusedWorkspaceDocuments } from './unused-workspace-documents.js'
 
 /**
  * The `ServerDeps` a server-core test builds when its subject is something
@@ -47,6 +48,7 @@ export function makeTestDeps(overrides: Partial<ServerDeps> = {}): ServerDeps {
     documentWritten: ignoredDocumentWrites(),
     versions: unusedVersionHistory(),
     liveDocuments: unusedLiveDocuments(),
+    workspaceDocuments: unusedWorkspaceDocuments(),
     ...overrides,
   }
 }

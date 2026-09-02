@@ -1,18 +1,14 @@
 import { resolveWorkspaceDocumentById } from '@kamiazya/whiteboard-loro-adapter'
+import { applyWorkspaceDocumentUpdate, type ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
-import type { UpdateDocumentResponse } from '../../../shared/api-contracts/document.js'
+import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
+import type {
+  UpdateDocumentResponse,
+  VersionEntry,
+} from '../../../shared/api-contracts/document.js'
 import { getLogger } from '../../log.js'
-import { evictWorkspaceDocs } from '../../store/doc-cache.js'
-import {
-  getDoc,
-  getWorkspaceDoc,
-  saveWorkspaceDoc,
-  workspaceExists,
-} from '../../store/document-store.js'
-import type { VersionEntry } from '../../store/version-store.js'
-import { withWorkspaceWriteLock } from '../../store/workspace-lock.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
 
@@ -26,6 +22,10 @@ export interface WorkspaceDocumentRouterOptions {
     path: string,
     doc: LoroDoc,
   ) => Promise<VersionEntry | null>
+  // The workspace-document seam the routes read and write through.
+  // Production wires this from document.ts; a router built without it falls
+  // back to the same wiring via getDefaultServerDeps.
+  serverDeps?: ServerDeps
 }
 
 // The workspace-granularity sync surface (order 7 of the workspace-document
@@ -33,10 +33,17 @@ export interface WorkspaceDocumentRouterOptions {
 // protocol already carried a docRef per message; what changes here is only
 // the granularity of the subscription.
 //
+// Translation-only adapters (ADR-0018): the reads go through the
+// WorkspaceDocuments seam, and the update path — lock bracket, import,
+// persist, projection eviction — lives in server-core's
+// applyWorkspaceDocumentUpdate.
+//
 // GET  /api/w/:workspaceId/workspace-document/snapshot
 // POST /api/w/:workspaceId/workspace-document/update?documentId=<ulid>
 export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOptions) {
   const app = new Hono()
+  const depsOf = async (): Promise<ServerDeps> =>
+    options.serverDeps ?? (await getDefaultServerDeps())
 
   app.get('/api/w/:workspaceId/workspace-document/snapshot', async (c) => {
     const handle = c.req.param('workspaceId')
@@ -48,14 +55,15 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       throw err
     }
     const workspaceId = await workspaceIdFromHandle(c, handle)
+    const deps = await depsOf()
     // Same honesty rule as the per-document snapshot: an unregistered
     // workspace is a refusal, not a phantom. Inside a registered workspace,
     // a missing workspace document is minted empty — the workspace is real,
     // it just has no tree-plane documents yet.
-    if (!(await workspaceExists(workspaceId))) {
+    if (!(await deps.workspaceDocuments.exists(workspaceId))) {
       return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
     }
-    const doc = await getWorkspaceDoc(workspaceId)
+    const doc = await deps.workspaceDocuments.get(workspaceId)
     const snapshot = doc.export({ mode: 'snapshot' }) as Uint8Array<ArrayBuffer>
     return c.body(snapshot, 200, { 'Content-Type': 'application/octet-stream' })
   })
@@ -83,35 +91,14 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         throw err
       }
       const workspaceId = await workspaceIdFromHandle(c, handle)
-      if (!(await workspaceExists(workspaceId))) {
+      const deps = await depsOf()
+      if (!(await deps.workspaceDocuments.exists(workspaceId))) {
         return c.json({ title: `Workspace "${workspaceId}" not found` }, 404)
       }
       const bytes = new Uint8Array(await c.req.arrayBuffer())
 
-      // Import + persist under the workspace write lock so a concurrent
-      // per-document save (which projects, diffs, and writes through the
-      // same live workspace document) settles into a definite order.
-      const imported = await withWorkspaceWriteLock(workspaceId, async () => {
-        const doc = await getWorkspaceDoc(workspaceId)
-        try {
-          doc.import(bytes)
-        } catch (err: unknown) {
-          getLogger('document').warning(
-            { workspaceId, updateBytes: bytes.byteLength, err },
-            'workspace-document update rejected: malformed Loro import data',
-          )
-          return false
-        }
-        // Fan-out to subscribers happens inside saveWorkspaceDoc.
-        await saveWorkspaceDoc(workspaceId, doc)
-        // Every cached per-document projection of this workspace is now
-        // stale; a stale one would diff old content back over this import
-        // on its next save. Dropped inside the lock so no reader can grab
-        // a stale projection between the import and the eviction.
-        evictWorkspaceDocs(workspaceId)
-        return true
-      })
-      if (!imported) {
+      const result = await applyWorkspaceDocumentUpdate(deps, { workspaceId, update: bytes })
+      if (result === 'malformed-update') {
         return c.json({ title: 'Malformed workspace-document update' }, 400)
       }
 
@@ -120,10 +107,10 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
       const documentId = c.req.query('documentId')
       if (documentId !== undefined) {
         void (async () => {
-          const workspaceDoc = await getWorkspaceDoc(workspaceId)
+          const workspaceDoc = await deps.workspaceDocuments.get(workspaceId)
           const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
           if (entry === null) return
-          const doc = await getDoc(workspaceId, entry.path)
+          const doc = await deps.liveDocuments.get(workspaceId, entry.path)
           const version = await options.triggerAutoVersion(workspaceId, entry.path, doc)
           if (!version) return
           const { sendVersionCreated } = await import('../ws.js')

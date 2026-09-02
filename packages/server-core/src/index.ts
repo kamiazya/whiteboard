@@ -4,6 +4,8 @@ export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
 export type { ApplyDocumentUpdateInput } from './operations/apply-document-update.js'
 export { applyDocumentUpdate } from './operations/apply-document-update.js'
+export type { ApplyWorkspaceDocumentUpdateInput } from './operations/apply-workspace-document-update.js'
+export { applyWorkspaceDocumentUpdate } from './operations/apply-workspace-document-update.js'
 export type {
   RestoreProgress,
   RestoreProgressEvent,
@@ -34,6 +36,7 @@ export type {
   ServerDeps,
   VersionHistory,
   ViewportRequest,
+  WorkspaceDocuments,
 } from './server-deps.js'
 export type { BacklinksInput, BacklinksOutput } from './tools/backlinks.js'
 export { backlinksInputSchema, backlinksOutputSchema, computeBacklinks } from './tools/backlinks.js'
