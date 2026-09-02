@@ -67,6 +67,8 @@ import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
   COMMENT_BUBBLE_OFFSET_PX,
+  COMMENT_BUBBLE_PADDING_PX,
+  COMMENT_BUBBLE_RADIUS_PX,
   commentAnchor,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
@@ -353,6 +355,40 @@ const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
  * so committing reads as the draft settling rather than jumping. */
 const COMMENT_COMPOSE_WIDTH_PX = 216
 const COMMENT_COMPOSE_HEIGHT_PX = 64
+
+/**
+ * The compose bubble wears the theme's comment chrome — the same palette
+ * entry, padding and corner the renderer draws the settled bubble with —
+ * so the draft and the saved comment read as one object rather than a
+ * plain editor a card replaces on commit. The shadow mirrors the SVG
+ * drop-shadow filter (dy 1, blur ~3px at 30% black) that lifts the
+ * settled chrome off the canvas plane.
+ */
+function commentComposeStyle(theme: ResolvedTheme): React.CSSProperties {
+  const { bubble } = (theme === 'dark' ? SPATIAL_DARK_PALETTE : SPATIAL_LIGHT_PALETTE).comment
+  return {
+    background: bubble.fill,
+    color: editorTextFill(theme),
+    border: `1px solid ${bubble.stroke}`,
+    borderRadius: COMMENT_BUBBLE_RADIUS_PX,
+    padding: COMMENT_BUBBLE_PADDING_PX,
+    // Focus is shown as a soft halo in the bubble's own stroke colour
+    // rather than the UA's dark outline ring, which read as a second,
+    // heavier border around the card. The bubble is only ever mounted
+    // focused, so the halo is always the focus indicator.
+    outline: 'none',
+    boxShadow: `0 0 0 2px ${bubble.stroke}55, 0 1px 3px rgba(0, 0, 0, 0.3)`,
+    fontFamily: SPATIAL_THEME_FONT_FAMILY,
+    fontSize: BODY_FONT_SIZE_PX,
+    lineHeight: `${BODY_LINE_HEIGHT_PX}px`,
+    // Size to the draft like the settled bubble sizes to its text: one
+    // line to start, growing as lines are added (`field-sizing`; browsers
+    // without it keep the one-line minimum and scroll).
+    height: 'auto',
+    minHeight: BODY_LINE_HEIGHT_PX + 2 * COMMENT_BUBBLE_PADDING_PX + 2,
+    ...({ fieldSizing: 'content' } as React.CSSProperties),
+  }
+}
 
 /**
  * Opaque surface + label typography for the edge/group label editors. The
@@ -2589,7 +2625,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 }}
                 initialText={commentCompose.editing?.initialText ?? ''}
                 testId="comment-compose"
-                style={labelEditorStyle(theme)}
+                style={commentComposeStyle(theme)}
                 onCommit={(draft) => {
                   const text = draft.trim()
                   // A blank commit is a cancel: an empty comment says nothing
