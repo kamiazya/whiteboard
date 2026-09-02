@@ -253,6 +253,32 @@ export const ARCHITECTURE_MAP: Readonly<Record<string, PackageArchEntry>> = {
 export const KNOWN_IMPORT_CYCLES: readonly (readonly string[])[] = []
 
 /**
+ * Cross-PACKAGE dependency cycles found and not yet dissolved — the
+ * manifest-level companion to {@link KNOWN_IMPORT_CYCLES}, over
+ * `dependencies` AND `devDependencies` (package-cycle-check.ts). Same
+ * both-sides contract: a cycle not listed here fails the build, and an
+ * entry whose cycle no longer exists fails it too.
+ *
+ * A listed cycle is not thereby safe at the SOURCE level: the manifest edge
+ * only says the loop could be closed, and whatever keeps the closing import
+ * type-only needs its own guard, named in the reason.
+ */
+export const KNOWN_PACKAGE_CYCLES: readonly {
+  readonly packages: readonly string[]
+  readonly reason: string
+}[] = [
+  {
+    packages: ['@kamiazya/whiteboard-canvas-render', '@kamiazya/whiteboard-plugin-visual'],
+    reason:
+      'plugin-visual imports canvas-render scene-node vocabulary TYPE-ONLY (devDependency) while ' +
+      'canvas-render consumes plugin-visual decorations at runtime. The type-only property is ' +
+      "guarded by plugin-visual's canvas-render-type-only.test.ts; the honest dissolution is a " +
+      'package below both holding the scene vocabulary, worth extracting when a second plugin ' +
+      'needs it (see architecture-map.md).',
+  },
+]
+
+/**
  * Mechanics an ADAPTER still reaches directly, pending ADR-0018's migration.
  *
  * Each entry is one `<adapter file> -> <mechanic module>` edge, relative to
