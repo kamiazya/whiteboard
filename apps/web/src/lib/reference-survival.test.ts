@@ -1,21 +1,27 @@
 /**
- * What a `[[reference]]` survives, measured rather than assumed.
- *
- * Nothing rewrites a reference when a document moves or is renamed — there
- * is no backlink index and no rewriting pass anywhere. Whichever identifier
- * the author wrote has to keep being true, and the three accepted forms fail
- * in complementary ways:
+ * What a `[[reference]]` survives AT THE RESOLVER, measured rather than
+ * assumed. The three accepted forms fail in complementary ways:
  *
  *   | written as   | path move | display-name change |
  *   |--------------|-----------|---------------------|
  *   | the path     | breaks    | survives            |
- *   | the name     | survives  | breaks              |
+ *   | the name     | survives  | breaks               |
  *   | the id       | survives  | survives            |
  *
  * This is the contract, not a defect list: `daemonLinkEntries` accepts both
  * human forms on purpose, because both are identifiers a reader would type.
- * The table is here so a change to either resolver has to state which column
- * it is moving, and so anyone adding a move affordance knows what it costs.
+ *
+ * The two breaking cells are answered differently, and on purpose:
+ *
+ * - the PATH cell is repaired one layer up — a move rewrites references
+ *   written to the old path (codec's `planReferenceRewrite`, applied by the
+ *   daemon's move route and by `local-files-source`). The repair cannot
+ *   reach a body edited outside the workspace or pasted back in, so the
+ *   cell stays true here at the resolver.
+ * - the NAME cell is being RETIRED, not repaired: path + id become the only
+ *   written forms, with display names shown at render time instead (owner
+ *   decision, 2026-09-03). Following a form on its way out would have been
+ *   work spent propping up the fragility being removed.
  */
 
 import {
