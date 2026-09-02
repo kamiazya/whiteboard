@@ -733,4 +733,68 @@ describe('overwrite restore reconciles instead of replacing', () => {
     const body = (await restoreRes.json()) as { error: string }
     expect(body.error).toBe('output_exists')
   })
+
+  // The overlay a client shows while a restore runs is driven by these two
+  // messages, and until now nothing asserted the server SENDS them. The
+  // consumer side is well covered — `sse-backend`, `daemon-backend` and
+  // apps/web's sync hooks all test what happens when one ARRIVES — so a
+  // change that stopped emitting them would leave every one of those tests
+  // green while the overlay silently stopped appearing and, worse, stopped
+  // being dismissed.
+  it('brackets a restore with restore_started and restore_complete for a connected client', async () => {
+    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const initial = new LoroDoc()
+    const vv0 = initial.version()
+    writeSpatialCanvas(initial, {
+      nodes: [{ id: 'n1', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'before' }],
+      edges: [],
+    })
+    initial.commit()
+    await app.request('/api/w/session1/document/canvas-a/update', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/octet-stream' },
+      body: initial.export({ mode: 'update', from: vv0 }),
+    })
+    const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'v1' }),
+    })
+    const { version } = (await saveRes.json()) as { version: { id: string } }
+
+    const sent: string[] = []
+    const socket = {
+      send: (data: unknown) => {
+        if (typeof data === 'string') sent.push(data)
+      },
+      on: () => {},
+      close: () => {},
+    }
+    const { handleWsUpgrade } = await import('../ws.js')
+    await handleWsUpgrade(
+      { url: '/ws/session1/canvas-a', headers: { host: 'localhost:3099' } } as never,
+      socket as never,
+    )
+    sent.length = 0
+
+    const res = await app.request(
+      `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/restore`,
+      { method: 'POST' },
+    )
+    expect(res.status).toBe(200)
+
+    const phases = sent
+      .flatMap((raw) => {
+        try {
+          return [JSON.parse(raw) as { type?: string }]
+        } catch {
+          return []
+        }
+      })
+      .map((m) => m.type)
+      .filter((t) => t === 'restore_started' || t === 'restore_complete')
+    // Both, and in that order: `complete` is what releases the overlay, so a
+    // restore that only announced its start would lock the client forever.
+    expect(phases).toEqual(['restore_started', 'restore_complete'])
+  })
 })
