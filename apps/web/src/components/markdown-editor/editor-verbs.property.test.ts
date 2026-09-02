@@ -325,6 +325,36 @@ describe('markdown editor verbs', () => {
     },
   )
 
+  /**
+   * N1. Indent and outdent are the two verbs whose effect depends on the
+   * lines ABOVE, so V1's random caret reaches them only by luck — it drove
+   * `outdent` ten times without once landing on an indented line, and the
+   * ledger's vacuity guard caught exactly that. This drives both on a
+   * document where each must act: a second item always has a sibling above
+   * to nest under, and a nested item is always liftable.
+   */
+  fcTest.prop(
+    [
+      fc.constantFrom('-', '1.'),
+      fc.constantFrom('-', '1.'),
+      fc.constantFrom('milk', 'tea', 'bread'),
+    ],
+    withDefaults(),
+  )('N1: nesting the second item and lifting it back returns the document', (above, item, text) => {
+    const doc = `${above} first\n${item} ${text}`
+    const indent = selfContainedCommand(verb('indent'))
+    const outdent = selfContainedCommand(verb('outdent'))
+    if (indent === null || outdent === null) throw new Error('the indent band lost a command')
+    // Caret at the end, where typing leaves it — and re-derived after the
+    // edit, since the indent moved every offset on that line.
+    const nested = drive('indent', indent, doc, doc.length)
+    expect(nested.handled, `nothing to nest under in ${JSON.stringify(doc)}`).toBe(true)
+    expect(nested.doc).not.toBe(doc)
+    const lifted = drive('outdent', outdent, nested.doc, nested.doc.length)
+    expect(lifted.handled).toBe(true)
+    expect(lifted.doc).toBe(doc)
+  })
+
   it('L2: a line already carrying the prefix is stripped, not doubled', () => {
     const cases = [
       ['bullet-list', '- item'],
