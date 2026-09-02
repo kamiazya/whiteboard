@@ -195,6 +195,8 @@ describe('single content path (S10 guardrail)', () => {
       // Creation goes through applyResult, so this one holds zero onChange
       // calls today — scanned so a future direct write cannot slip in.
       './use-node-creation.ts',
+      // The keyboard resize path folds commands over a `running` canvas.
+      './use-editor-keyboard.ts',
     ]
     for (const path of MUTATING_SOURCES) {
       const source = modules[path] as string
