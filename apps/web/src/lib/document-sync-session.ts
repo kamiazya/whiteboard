@@ -362,13 +362,10 @@ function writeSubCommand(
       if (edge) writer.writeEdge(edge)
       return
     }
-    case 'create-comment': {
-      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === command.comment.id)
-      if (comment) writer.writeComment(comment)
-      return
-    }
+    case 'create-comment':
     case 'set-comment-resolved': {
-      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === command.id)
+      const id = command.kind === 'create-comment' ? command.comment.id : command.id
+      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
       if (comment) writer.writeComment(comment)
       return
     }
