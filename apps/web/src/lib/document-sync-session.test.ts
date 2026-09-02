@@ -375,8 +375,8 @@ describe('createDocumentSyncSession', () => {
 
     const localComment: CanvasComment = { id: 'local-c', x: 1, y: 1, text: 'local note' }
     const next: SpatialCanvas = { ...emptyCanvas(), 'x-whiteboard': { comments: [localComment] } }
-    const command = { kind: 'create-comment', comment: localComment }
-    session.onChange(next, command as unknown as EditorCommand)
+    const command: EditorCommand = { kind: 'create-comment', comment: localComment }
+    session.onChange(next, command)
     await vi.advanceTimersByTimeAsync(300)
 
     // The fallback's tell: if the comment command fell through to the full
@@ -389,6 +389,106 @@ describe('createDocumentSyncSession', () => {
     for (const bytes of backend._ctrl.pushLocalUpdateCalls) merged.import(bytes)
     const comments = readSpatialCanvas(merged)['x-whiteboard']?.comments ?? []
     expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
+  })
+
+  it('debounce coalescing: create-comment then set-comment-resolved for the same id dedupes to a single write of the final comment value', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(emptyCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'first pass' }
+    const createCmd: EditorCommand = { kind: 'create-comment', comment }
+    const afterCreate = applyCommand(emptyCanvas(), createCmd)
+    session.onChange(afterCreate, createCmd)
+
+    const resolveCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
+    const afterResolve = applyCommand(afterCreate, resolveCmd)
+    session.onChange(afterResolve, resolveCmd)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    // commandTargetKey maps both commands to `comment:c-1` — proof the
+    // comment case is not falling into the default arm's fresh-key-per-call
+    // behavior, which would push twice.
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+    expect(comments).toEqual([{ ...comment, resolved: true }])
+  })
+
+  it('debounce coalescing: set-comment-resolved then delete-comment for the same id dedupes to the delete; an unrelated comment survives', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'going away' }
+    const other: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'stays' }
+    const initial: SpatialCanvas = {
+      ...emptyCanvas(),
+      'x-whiteboard': { comments: [comment, other] },
+    }
+    session.connect()
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const resolveCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
+    const afterResolve = applyCommand(initial, resolveCmd)
+    session.onChange(afterResolve, resolveCmd)
+
+    const deleteCmd: EditorCommand = { kind: 'delete-comment', id: 'c-1' }
+    const afterDelete = applyCommand(afterResolve, deleteCmd)
+    session.onChange(afterDelete, deleteCmd)
+
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const doc = new LoroDoc()
+    doc.import(snapshotBytes)
+    doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
+    expect(comments.map((c) => c.id)).toEqual(['c-2'])
+  })
+
+  it('a batch containing a comment command plus a node command commits fine-grained: a remote comment survives, one undo step', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const snapshotBytes = makeSnapshot(twoNodeCanvas())
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
+    const remoteDoc = new LoroDoc()
+    remoteDoc.import(snapshotBytes)
+    writeCanvasComment(remoteDoc, remoteComment)
+    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
+
+    const localComment: CanvasComment = { id: 'local-c', x: 1, y: 1, text: 'local note' }
+    const batch: EditorCommand = {
+      kind: 'batch',
+      commands: [
+        { kind: 'create-comment', comment: localComment },
+        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
+      ],
+    }
+    const next: SpatialCanvas = {
+      ...applyCommand(twoNodeCanvas(), { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
+      'x-whiteboard': { comments: [localComment] },
+    }
+    session.onChange(next, batch)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const merged = new LoroDoc()
+    merged.import(snapshotBytes)
+    merged.import(remoteDoc.export({ mode: 'update' }))
+    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const result = readSpatialCanvas(merged)
+    const comments = result['x-whiteboard']?.comments ?? []
+    expect(comments.map((c) => c.id).sort()).toEqual(['local-c', 'remote-c'])
+    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
   it('debounce coalescing: create-node then move-node for the same id dedupes to a single write of the final node value', async () => {

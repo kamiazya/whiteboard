@@ -1,4 +1,5 @@
 import {
+  deleteCanvasComment,
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
@@ -12,6 +13,7 @@ import {
   withSpatialBatch,
   setEdgeLock as workspaceSetEdgeLock,
   setNodeLock as workspaceSetNodeLock,
+  writeCanvasComment,
   writeCoreFacets,
   writeMarkdownBody,
   writeSpatialCanvas,
@@ -71,6 +73,11 @@ function commandTargetKey(command: EditorCommand): string {
       return `edge:${command.edgeId}`
     case 'create-node':
       return `node:${command.node.id}`
+    case 'create-comment':
+      return `comment:${command.comment.id}`
+    case 'set-comment-resolved':
+    case 'delete-comment':
+      return `comment:${command.id}`
     case 'set-body':
       // One key for the whole body: `text` is always the complete document,
       // so a burst of keystrokes inside one debounce window collapses to the
@@ -248,6 +255,19 @@ function writeCommandTarget(
       writeSpatialNode(doc, node)
       return true
     }
+    case 'create-comment':
+    case 'set-comment-resolved': {
+      const id = command.kind === 'create-comment' ? command.comment.id : command.id
+      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === id)
+      if (!comment) return false
+      writeCanvasComment(doc, comment)
+      return true
+    }
+    case 'delete-comment':
+      // Always "handled", matching delete-node: deleteCanvasComment is a
+      // documented no-op for an already-absent id.
+      deleteCanvasComment(doc, command.id)
+      return true
     case 'set-body':
       // Always "handled", and it MUST be: the fallback below writes the
       // whole SpatialCanvas, which would leave the body container untouched
@@ -300,8 +320,13 @@ function isBatchWritable(command: EditorLeafCommand, next: SpatialCanvas): boole
       return next.edges.some((e) => e.id === command.edgeId)
     case 'create-edge':
       return next.edges.some((e) => e.id === command.edge.id)
+    case 'create-comment':
+      return next['x-whiteboard']?.comments?.some((c) => c.id === command.comment.id) ?? false
+    case 'set-comment-resolved':
+      return next['x-whiteboard']?.comments?.some((c) => c.id === command.id) ?? false
     case 'delete-node':
     case 'delete-edge':
+    case 'delete-comment':
       // Deletes are no-ops for absent ids — always writable.
       return true
     default:
@@ -337,6 +362,19 @@ function writeSubCommand(
       if (edge) writer.writeEdge(edge)
       return
     }
+    case 'create-comment': {
+      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === command.comment.id)
+      if (comment) writer.writeComment(comment)
+      return
+    }
+    case 'set-comment-resolved': {
+      const comment = next['x-whiteboard']?.comments?.find((c) => c.id === command.id)
+      if (comment) writer.writeComment(comment)
+      return
+    }
+    case 'delete-comment':
+      writer.deleteComment(command.id)
+      return
     case 'delete-node':
       writer.deleteNode(command.id)
       return

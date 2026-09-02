@@ -1069,6 +1069,38 @@ describe('canvas comments bridge', () => {
     expect(() => writeCanvasComment(doc, { ...COMMENT, x: Number.NaN })).toThrow(TypeError)
   })
 
+  test('the non-finite-anchor refusal also propagates through withSpatialBatch, and the batch commits NOTHING (no undo step)', () => {
+    const doc = makeDoc()
+    writeCanvasComment(doc, COMMENT)
+    const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+    expect(undoManager.canUndo()).toBe(false)
+
+    // A batch that swallowed this would let a NaN anchor delete the comment
+    // for every reader — the same failure commentToFields' loud refusal
+    // exists to prevent on the committing path. The throw happens before
+    // the poisoned comment is ever written, so it never reaches the doc at
+    // all — only OTHER (written before the throw) is pending, uncommitted.
+    expect(() =>
+      withSpatialBatch(doc, (writer) => {
+        writer.writeComment(OTHER)
+        writer.writeComment({ ...COMMENT, x: Number.NaN })
+      }),
+    ).toThrow(TypeError)
+    // No undo step — commit is an undo/sync boundary, not a visibility
+    // boundary, matching the node/edge error-contract test above.
+    expect(undoManager.canUndo()).toBe(false)
+    expect(
+      readSpatialCanvas(doc)
+        ['x-whiteboard']?.comments?.map((c) => c.id)
+        .sort(),
+    ).toEqual(['c1', 'c2'])
+    // The session-layer fallback converges exactly as it does for a
+    // node/edge batch throw: one committing writeCanvasComment absorbs the
+    // pending op into a single undo step.
+    writeCanvasComment(doc, COMMENT)
+    expect(undoManager.canUndo()).toBe(true)
+  })
+
   test('comments alone produce an extension; no comments and no envelope produce none', () => {
     const doc = makeDoc()
     writeCanvasComment(doc, COMMENT)
@@ -1076,5 +1108,62 @@ describe('canvas comments bridge', () => {
 
     deleteCanvasComment(doc, 'c1')
     expect(readSpatialCanvas(doc)).not.toHaveProperty('x-whiteboard')
+  })
+
+  describe('withSpatialBatch writeComment/deleteComment', () => {
+    test('a batch of one writeComment is byte-identical to writeCanvasComment', () => {
+      const a = new LoroDoc()
+      a.setPeerId(1n)
+      const b = new LoroDoc()
+      b.setPeerId(1n)
+      writeCanvasComment(a, COMMENT)
+      withSpatialBatch(b, (w) => w.writeComment(COMMENT))
+      expect(b.export({ mode: 'update' })).toEqual(a.export({ mode: 'update' }))
+    })
+
+    test('a batch of one deleteComment is byte-identical to deleteCanvasComment; an absent id is a no-op', () => {
+      const base = new LoroDoc()
+      base.setPeerId(9n)
+      writeCanvasComment(base, COMMENT)
+      writeCanvasComment(base, OTHER)
+      const snapshot = base.export({ mode: 'snapshot' })
+
+      const a = new LoroDoc()
+      a.import(snapshot)
+      a.setPeerId(1n)
+      const b = new LoroDoc()
+      b.import(snapshot)
+      b.setPeerId(1n)
+      deleteCanvasComment(a, COMMENT.id)
+      withSpatialBatch(b, (w) => w.deleteComment(COMMENT.id))
+      expect(b.export({ mode: 'update' })).toEqual(a.export({ mode: 'update' }))
+
+      const undoManager = new UndoManager(b, { mergeInterval: 0 })
+      expect(undoManager.canUndo()).toBe(false)
+      withSpatialBatch(b, (w) => w.deleteComment('never-existed'))
+      expect(undoManager.canUndo()).toBe(false)
+      expect(readSpatialCanvas(b)['x-whiteboard']?.comments).toEqual([OTHER])
+    })
+
+    test('one batch of a comment write + a node write is exactly one undo step', () => {
+      const doc = makeDoc()
+      writeCanvasComment(doc, COMMENT)
+      const undoManager = new UndoManager(doc, { mergeInterval: 0 })
+      expect(undoManager.canUndo()).toBe(false)
+      withSpatialBatch(doc, (w) => {
+        w.writeComment(OTHER)
+        w.writeNode(TEXT_NODE)
+      })
+      expect(
+        readSpatialCanvas(doc)
+          ['x-whiteboard']?.comments?.map((c) => c.id)
+          .sort(),
+      ).toEqual(['c1', 'c2'])
+      expect(readSpatialCanvas(doc).nodes.map((n) => n.id)).toContain(TEXT_NODE.id)
+      undoManager.undo()
+      expect(readSpatialCanvas(doc)['x-whiteboard']?.comments).toEqual([COMMENT])
+      expect(readSpatialCanvas(doc).nodes).toEqual([])
+      expect(undoManager.canUndo()).toBe(false)
+    })
   })
 })
