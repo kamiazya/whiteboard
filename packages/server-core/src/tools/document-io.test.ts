@@ -4,21 +4,15 @@ import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { unusedDocumentIndex } from '../test-utils/unused-document-index.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { loadDocument, SnapshotNotFoundError, saveDocumentBodySnapshot } from './document-io.js'
 
 const WORKSPACE_ID = 'ws-1'
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
 
-const canvasDeps = (documentStore: FakeDocumentStore) => ({
-  documentStore,
-  blobStore: {} as never,
-  documentIndex: unusedDocumentIndex(),
-  documentTeardown: unusedDocumentTeardown(),
-  documentWritten: ignoredDocumentWrites(),
-})
+const canvasDeps = (documentStore: FakeDocumentStore) =>
+  makeTestDeps({ documentStore, documentIndex: unusedDocumentIndex() })
 
 describe('document-io', () => {
   test('loadDocument throws SnapshotNotFoundError when no snapshot exists', async () => {

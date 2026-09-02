@@ -1,30 +1,15 @@
-/**
- * ADR-0019's mint boundary: the SERVER decides a workspace's canonical id,
- * and the string a caller sent becomes its `segment`.
- *
- * This is the one place a workspace comes into existence on this side —
- * `wbDocumentCreate`'s `createWorkspace: true` branch, which `wb_workspace_edit`
- * and the HTTP create route both delegate to — so it is the one place the
- * rule can be stated.
- */
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
 
 const CANONICAL = /^[0-7][0-9A-HJKMNP-TV-Z]{25}$/
 
 function makeDeps(): ServerDeps {
-  return {
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
+  return makeTestDeps({
     documentTeardown: inMemoryDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  })
 }
 
 describe('wbDocumentCreate mints the workspace id', () => {

@@ -6,11 +6,12 @@
 // canvas's layout analysis move
 // whenever a DIFFERENT document was edited, which is the property that makes
 // that analysis usable as a change signal at all.
+
 import { writeDocumentKind, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
+import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { canvasRenderSvgInputSchema, createCanvasRenderSvgTool } from './canvas-render-svg.js'
 import { createCanvasSnapshotTool } from './canvas-snapshot.js'
 
@@ -19,14 +20,11 @@ const NOTE_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V8'
 const DIAGRAM_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V9'
 const WORKSPACE_ID = 'ws-1'
 
-function makeDeps(documentStore: FakeDocumentStore) {
-  return {
-    documentStore,
-    blobStore: {} as never,
+function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+  return makeTestDeps({
+    documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  })
 }
 
 /**

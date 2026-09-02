@@ -3,8 +3,7 @@ import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createDocumentSetTool, documentSetInputSchema } from './document-set.js'
 import { exportOkf } from './export-okf.js'
 
@@ -15,13 +14,7 @@ const NOW = '2026-08-23T12:00:00.000Z'
 async function setup() {
   const store = new FakeDocumentStore()
   await registerDocumentInWorkspace(store, WORKSPACE_ID, DOCUMENT_ID)
-  const deps = {
-    documentStore: store,
-    blobStore: {} as never,
-    documentIndex: store.documentIndex,
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  const deps = makeTestDeps({ documentStore: store, documentIndex: store.documentIndex })
   return { deps, documentSet: createDocumentSetTool(deps) }
 }
 

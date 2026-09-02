@@ -15,12 +15,10 @@
  * independently below.
  */
 import { scanReferences } from '@kamiazya/whiteboard-codec'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect } from 'vitest'
 import { fc, fcTest, withDefaults } from '../test-utils/fast-check.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { computeBacklinks } from '../tools/backlinks.js'
 import { createCanvasEditTool } from '../tools/canvas-edit.js'
 import { wbDocumentCreate } from '../tools/document-crud.js'
@@ -209,13 +207,7 @@ describe('reference semantics under command sequences', () => {
   fcTest.prop([fc.array(cmdArb, { minLength: 1, maxLength: 12 })], withDefaults({ numRuns: 40 }))(
     'the real pipeline agrees with an independent model after every command',
     async (cmds) => {
-      const deps = {
-        documentStore: createInMemoryDocumentStore(),
-        blobStore: {} as never,
-        documentIndex: new InMemoryDocumentIndex(),
-        documentTeardown: unusedDocumentTeardown(),
-        documentWritten: ignoredDocumentWrites(),
-      }
+      const deps = makeTestDeps({ documentStore: createInMemoryDocumentStore() })
       // The workspace exists because this run says so, not as a side effect of
       // whichever command happens to create first: creating one is ADR-0019's
       // MINT boundary, which keys it by a fresh ULID — and here that would

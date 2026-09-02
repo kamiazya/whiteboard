@@ -1,10 +1,9 @@
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
-import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, it } from 'vitest'
 import type { ServerDeps } from '../server-deps.js'
 import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { createInMemoryDocumentStore } from '../test-utils/in-memory-document-store.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
 import { wbDocumentCreate } from './document-crud.js'
 import { createDocumentGetTool, DocumentKindUnknownError } from './document-get.js'
@@ -36,13 +35,7 @@ function withResolveOverride(
 }
 
 function makeDeps(): ServerDeps {
-  return {
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  return makeTestDeps()
 }
 
 async function createDoc(deps: ServerDeps, kind: 'spatial' | 'markdown') {

@@ -3,12 +3,12 @@ import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { chunkSnapshot } from '@kamiazya/whiteboard-ports'
 import { LoroDoc } from 'loro-crdt'
 import { describe, expect, test } from 'vitest'
+import type { ServerDeps } from '../server-deps.js'
 import {
   FakeDocumentStore,
   registerDocumentInWorkspace,
 } from '../test-utils/fake-document-store.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { createBodyPatchTool } from './body-patch.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { NodeNotFoundError, NotATextNodeError, PatchValidationError } from './errors.js'
@@ -29,14 +29,11 @@ async function seedCanvas(documentStore: FakeDocumentStore, canvas: SpatialCanva
   })
 }
 
-function makeDeps(documentStore: FakeDocumentStore) {
-  return {
-    documentStore,
-    blobStore: {} as never,
+function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+  return makeTestDeps({
+    documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  })
 }
 
 describe('wb_body_patch tool', () => {

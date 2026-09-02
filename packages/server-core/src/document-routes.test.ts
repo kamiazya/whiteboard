@@ -1,25 +1,21 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
-import { ignoredDocumentWrites } from './test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
-import {
-  inMemoryDocumentTeardown,
-  unusedDocumentTeardown,
-} from './test-utils/unused-document-teardown.js'
+import { makeTestDeps } from './test-utils/make-test-deps.js'
+import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
 import {
   wbDocumentCreateOutputSchema,
   wbDocumentListOutputSchema,
 } from './tools/document-crud.schemas.js'
 
 function makeServer() {
-  return createServer({
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: new InMemoryDocumentIndex(),
-    documentTeardown: inMemoryDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  })
+  return createServer(
+    makeTestDeps({
+      documentStore: createInMemoryDocumentStore(),
+      documentTeardown: inMemoryDocumentTeardown(),
+    }),
+  )
 }
 
 function makeApp() {
@@ -172,13 +168,7 @@ describe('canvas OKF read route', () => {
     // here.
     const store = createInMemoryDocumentStore()
     const documentIndex = new InMemoryDocumentIndex()
-    const { app } = createServer({
-      documentStore: store,
-      blobStore: {} as never,
-      documentIndex,
-      documentTeardown: unusedDocumentTeardown(),
-      documentWritten: ignoredDocumentWrites(),
-    })
+    const { app } = createServer(makeTestDeps({ documentStore: store, documentIndex }))
     await documentIndex.createWorkspace({ workspaceId: 'ws-1' })
     const { documentId } = await documentIndex.createDocument({
       workspaceId: 'ws-1',

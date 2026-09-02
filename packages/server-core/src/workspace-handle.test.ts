@@ -10,20 +10,20 @@
 import { InMemoryDocumentIndex } from '@kamiazya/whiteboard-ports/test-utils'
 import { beforeEach, describe, expect, it } from 'vitest'
 import { createServer } from './create-server.js'
-import { ignoredDocumentWrites } from './test-utils/ignored-document-writes.js'
 import { createInMemoryDocumentStore } from './test-utils/in-memory-document-store.js'
+import { makeTestDeps } from './test-utils/make-test-deps.js'
 import { inMemoryDocumentTeardown } from './test-utils/unused-document-teardown.js'
 
 const CANONICAL = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
 
 function makeServer(index: InMemoryDocumentIndex) {
-  return createServer({
-    documentStore: createInMemoryDocumentStore(),
-    blobStore: {} as never,
-    documentIndex: index,
-    documentTeardown: inMemoryDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  })
+  return createServer(
+    makeTestDeps({
+      documentStore: createInMemoryDocumentStore(),
+      documentIndex: index,
+      documentTeardown: inMemoryDocumentTeardown(),
+    }),
+  )
 }
 
 describe('workspace handles at the server boundary', () => {

@@ -1,8 +1,8 @@
 import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { describe, expect, test } from 'vitest'
+import type { ServerDeps } from '../server-deps.js'
 import { FakeDocumentStore, seedDoc } from '../test-utils/fake-document-store.js'
-import { ignoredDocumentWrites } from '../test-utils/ignored-document-writes.js'
-import { unusedDocumentTeardown } from '../test-utils/unused-document-teardown.js'
+import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import { SnapshotNotFoundError } from './document-io.js'
 import { exportJsonCanvas } from './export-json-canvas.js'
 
@@ -23,14 +23,11 @@ const NODE_WITH_EXTENSION = {
   },
 }
 
-function makeDeps(documentStore: FakeDocumentStore) {
-  return {
-    documentStore,
-    blobStore: {} as never,
+function makeDeps(documentStore: FakeDocumentStore): ServerDeps {
+  return makeTestDeps({
+    documentStore: documentStore,
     documentIndex: documentStore.documentIndex,
-    documentTeardown: unusedDocumentTeardown(),
-    documentWritten: ignoredDocumentWrites(),
-  }
+  })
 }
 
 describe('exportJsonCanvas', () => {
