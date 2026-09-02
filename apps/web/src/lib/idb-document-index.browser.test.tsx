@@ -12,9 +12,12 @@
 // fidelity contract (transaction/upgrade/abort semantics fake-indexeddb only
 // approximates). IndexedDB-only suites with no such stake run in jsdom via
 // fake-indexeddb instead — see e.g. local-document-summary.test.tsx.
+import { generateDocumentId } from '@kamiazya/whiteboard-model'
 import { describeDocumentIndexConformance } from '@kamiazya/whiteboard-ports/test-utils'
-import { describe } from 'vitest'
+import { describe, expect, it } from 'vitest'
+import { DOCUMENT_INDEX_STORE } from './browser-idb.js'
 import { IdbDocumentIndex } from './idb-document-index.js'
+import { inTransaction, request } from './idb-tx.js'
 
 // Its OWN database, not the app's. Browser tests share an origin, so deleting
 // `whiteboard` between conformance cases would tear it out from under whatever
@@ -37,6 +40,33 @@ async function deleteDb(): Promise<void> {
     req.onerror = () => reject(req.error)
   })
 }
+
+describe('IdbDocumentIndex row hydration', () => {
+  it('a malformed stored row fails the read loudly instead of flowing into the UI as a DocumentEntry', async () => {
+    await deleteDb()
+    try {
+      const index = new IdbDocumentIndex(DB_NAME)
+      await index.createWorkspace({ workspaceId: 'ws' })
+      // Plant a corrupt row through the same transaction helper the class
+      // uses, bypassing its own validated write path — the shape a buggy
+      // writer, a devtools edit, or a future schema drift would leave
+      // behind. `path` as a number is still a valid IndexedDB key, so
+      // nothing below the schema refuses it.
+      await inTransaction(DB_NAME, [DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
+        await request(
+          tx
+            .objectStore(DOCUMENT_INDEX_STORE)
+            .put({ workspaceId: 'ws', documentId: generateDocumentId(), path: 42 }),
+        )
+      })
+      // A cast would answer this with `path: 42` inside a DocumentEntry —
+      // corrupt data wearing the contract's type. The schema names the field.
+      await expect(index.listDocuments({ workspaceId: 'ws' })).rejects.toThrow(/path/)
+    } finally {
+      await deleteDb()
+    }
+  })
+})
 
 describe('IdbDocumentIndex', () => {
   describeDocumentIndexConformance(async () => {
