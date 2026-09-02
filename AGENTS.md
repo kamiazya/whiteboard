@@ -72,7 +72,16 @@ pnpm run test:browser        # canvas-viewer-browser + web-browser + canvas-rend
 pnpm run test:browser:trace  # same, with trace artifacts on failure
 ```
 
-- Failure traces are stored under `<package>/tmp/vitest-traces`.
+- Failure traces are stored under `<package>/tmp/vitest-traces`, and are kept
+  for the **most recent run only** — `vitest.browser.shared.ts` clears the
+  directory as the config loads. Nothing else ever deleted them and each
+  retained trace carries screenshots and DOM snapshots: measured, one
+  session's failing runs left **19GB** under `apps/web/tmp/vitest-traces` and
+  filled the disk. What that looks like is worth knowing, because it names
+  nothing — browser runs stop producing output and hang until the per-test
+  timeout, with no error mentioning space. One run's worth is also all that
+  is useful: the traces you read are from the run that just failed, and a
+  second run at the same path would overwrite them anyway.
 - Check traces before adding temporary debug code.
 - **Keep a browser test's `describe` + `it` titles under 155 characters
   combined** (characters, not UTF-8 bytes: vitest replaces every
