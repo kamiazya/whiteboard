@@ -145,19 +145,21 @@ on the first read: `server-mode-http.ts` — the MULTI-INSTANCE root, the one th
 backup lease was built for — was starting no background work at all, so
 scheduled backups reached only the local daemon.
 
-**A cross-package cycle is caught by nothing, so the one that exists is
-guarded where it is.** `plugin-visual` imports `canvas-render`'s scene-node
-vocabulary to build the decorations `canvas-render` then uses as its default —
-a source-level loop closed only by the import being TYPE-ONLY. Nothing
-mechanical holds that: the cycle check is intra-package, and the direction
-check reads `dependencies` while this edge sits in `devDependencies`, which it
-documents as never inspected. Measured — turning the import into a value
-import left all 102 arch-lint tests green.
-`plugin-visual/src/canvas-render-type-only.test.ts` is what actually fails,
-naming the offending line. The honest fix is a package below both holding the
-scene vocabulary, since it is a contract between the renderer and every plugin
-rather than the renderer's private type; worth extracting when a second plugin
-needs it, and recorded on `decorations.ts` until then.
+**A cross-package cycle is caught at the MANIFEST level, and its type-only
+property by a hand guard.** `plugin-visual` imports `canvas-render`'s
+scene-node vocabulary to build the decorations `canvas-render` then uses as
+its default — a source-level loop closed only by the import being TYPE-ONLY.
+`package-cycle-check.ts` now reads every workspace manifest's `dependencies`
+AND `devDependencies` (the door the direction check never inspects) and
+fails on any package loop not in `KNOWN_PACKAGE_CYCLES`, which carries this
+one edge with its reason. What stays hand-guarded is the type-only property
+itself — the manifest cannot see it, and measured, turning the import into
+a value import leaves the rest of arch-lint green:
+`plugin-visual/src/canvas-render-type-only.test.ts` is what fails, naming
+the offending line. The honest dissolution is a package below both holding
+the scene vocabulary, since it is a contract between the renderer and every
+plugin rather than the renderer's private type; worth extracting when a
+second plugin needs it, and recorded on `decorations.ts` until then.
 
 `lowlight` is a DEFAULT, not an opt-in. `layoutSpatialCanvas` supplies this
 package's own tokeniser the way it already supplies codec's markdown parser,

@@ -33,6 +33,16 @@ silently leave the graph.
 `KNOWN_IMPORT_CYCLES` is the allowlist for cycles found and not yet fixed. It
 is **currently empty**.
 
+`package-cycle-check.ts` is the cross-PACKAGE half: a graph over every
+workspace manifest (enumerated from pnpm-workspace's globs, so a new package
+joins unlisted) reading `dependencies` AND `devDependencies` — the latter is
+the door the direction check never inspects, and measured, the one real
+cycle (canvas-render <-> plugin-visual) enters through it.
+`KNOWN_PACKAGE_CYCLES` allowlists it, both-sides guarded; the type-only
+property of the closing edge stays with
+`plugin-visual/src/canvas-render-type-only.test.ts`, because a manifest
+cannot see how an import is spelled.
+
 ## What the composition roots do and do not get
 
 `mcp-server` and `apps/web` are registered for the dependency-direction guard,
