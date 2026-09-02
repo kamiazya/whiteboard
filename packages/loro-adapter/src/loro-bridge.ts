@@ -283,6 +283,21 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
   return true
 }
 
+// Shared with writeCanvasComment/deleteCanvasComment below, so field
+// projection (including commentToFields' loud non-finite-anchor refusal)
+// cannot drift between the single-commit and withSpatialBatch paths.
+function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
+  doc.getMap(COMMENTS_KEY).set(comment.id, commentToFields(comment))
+}
+
+/** Returns false (writing nothing) when the comment id is absent. */
+function deleteCommentInto(doc: DocumentContainers, commentId: string): boolean {
+  const commentsMap = doc.getMap(COMMENTS_KEY)
+  if (!commentsMap.keys().includes(commentId)) return false
+  commentsMap.delete(commentId)
+  return true
+}
+
 /**
  * Writes exactly one node's LoroMap entry, leaving every other node/edge in
  * the doc untouched. This is the node-level CRDT merge granularity a full
@@ -333,6 +348,10 @@ export interface SpatialBatchWriter {
   /** Same edge-cascade as `deleteSpatialNode`; absent ids write nothing. */
   deleteNode(nodeId: string): void
   deleteEdge(edgeId: string): void
+  /** Comment counterpart of writeNode/writeEdge — create AND update (an
+   * id-keyed rewrite), matching `writeCanvasComment`. */
+  writeComment(comment: CanvasComment): void
+  deleteComment(commentId: string): void
 }
 
 /**
@@ -373,6 +392,13 @@ export function withSpatialBatch(
     },
     deleteEdge(edgeId) {
       if (deleteEdgeInto(doc, edgeId)) wrote = true
+    },
+    writeComment(comment) {
+      writeCommentInto(doc, comment)
+      wrote = true
+    },
+    deleteComment(commentId) {
+      if (deleteCommentInto(doc, commentId)) wrote = true
     },
   }
   fn(writer)
@@ -485,7 +511,7 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
  * of the same id with `resolved: true`.
  */
 export function writeCanvasComment(doc: DocumentContainers, comment: CanvasComment): void {
-  doc.getMap(COMMENTS_KEY).set(comment.id, commentToFields(comment))
+  writeCommentInto(doc, comment)
   doc.commit()
 }
 
@@ -494,10 +520,7 @@ export function writeCanvasComment(doc: DocumentContainers, comment: CanvasComme
  * absent from the doc, matching `deleteSpatialEdge`.
  */
 export function deleteCanvasComment(doc: DocumentContainers, commentId: string): void {
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  if (!commentsMap.keys().includes(commentId)) return
-  commentsMap.delete(commentId)
-  doc.commit()
+  if (deleteCommentInto(doc, commentId)) doc.commit()
 }
 
 /**

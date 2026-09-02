@@ -1,4 +1,4 @@
-import type { ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+import type { CanvasComment, ClipboardFragment, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { spatialCanvasSchema } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { applyCommand, buildFragmentInsertCommand } from './commands.js'
@@ -637,6 +637,91 @@ describe('create-edge', () => {
         edge: { ...fullEdge, id: 'y', fromNode: 'a', toNode: 'a' },
       }),
     ).toBe(canvas)
+  })
+})
+
+// The comment annotation layer (ADR-0024). These commands ride the same
+// x-whiteboard.comments envelope loro-adapter's writeCanvasComment/
+// deleteCanvasComment split out into their own per-comment CRDT keys — see
+// commands.ts's withComments doc comment for the canonicality rules pinned
+// below.
+describe('comment commands', () => {
+  const COMMENT: CanvasComment = { id: 'c1', x: 10, y: 20, text: 'looks off' }
+  const OTHER: CanvasComment = { id: 'c2', x: -5, y: 0, text: 'nice', resolved: false }
+
+  const withComment = (canvas: SpatialCanvas, comment: CanvasComment): SpatialCanvas => ({
+    ...canvas,
+    'x-whiteboard': { ...canvas['x-whiteboard'], comments: [comment] },
+  })
+
+  it('create-comment appends under x-whiteboard.comments, preserving other envelope fields', () => {
+    const canvas: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [OTHER] },
+    }
+    const next = applyCommand(canvas, { kind: 'create-comment', comment: COMMENT })
+    expect(next['x-whiteboard']?.comments?.map((c) => c.id).sort()).toEqual(['c1', 'c2'])
+    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(next.nodes).toBe(canvas.nodes)
+  })
+
+  it('create-comment with a colliding id is a no-op returning the input canvas reference', () => {
+    const canvas = withComment(baseCanvas(), COMMENT)
+    expect(applyCommand(canvas, { kind: 'create-comment', comment: { ...COMMENT, x: 99 } })).toBe(
+      canvas,
+    )
+  })
+
+  it('set-comment-resolved flips only the target comment; a missing id is a no-op', () => {
+    const canvas: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+    }
+    const next = applyCommand(canvas, {
+      kind: 'set-comment-resolved',
+      id: 'c1',
+      resolved: true,
+    })
+    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c1')).toEqual({
+      ...COMMENT,
+      resolved: true,
+    })
+    expect(next['x-whiteboard']?.comments?.find((c) => c.id === 'c2')).toEqual(OTHER)
+    expect(next['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+
+    expect(
+      applyCommand(canvas, { kind: 'set-comment-resolved', id: 'ghost', resolved: true }),
+    ).toBe(canvas)
+  })
+
+  it('delete-comment removes exactly one comment; the last removal drops the comments key and an empty extension disappears', () => {
+    const withBoth: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { comments: [COMMENT, OTHER] },
+    }
+    const afterOne = applyCommand(withBoth, { kind: 'delete-comment', id: 'c1' })
+    expect(afterOne['x-whiteboard']?.comments).toEqual([OTHER])
+
+    const afterBoth = applyCommand(afterOne, { kind: 'delete-comment', id: 'c2' })
+    expect(afterBoth).not.toHaveProperty('x-whiteboard')
+    expect(spatialCanvasSchema.safeParse(afterBoth).success).toBe(true)
+
+    expect(applyCommand(afterBoth, { kind: 'delete-comment', id: 'ghost' })).toBe(afterBoth)
+  })
+
+  it('delete-comment preserves a sibling extension field (edgeRouting), including once the last comment is removed', () => {
+    const withBoth: SpatialCanvas = {
+      ...baseCanvas(),
+      'x-whiteboard': { edgeRouting: { style: 'orthogonal' }, comments: [COMMENT, OTHER] },
+    }
+    const afterOne = applyCommand(withBoth, { kind: 'delete-comment', id: 'c1' })
+    expect(afterOne['x-whiteboard']?.comments).toEqual([OTHER])
+    expect(afterOne['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+
+    const afterBoth = applyCommand(afterOne, { kind: 'delete-comment', id: 'c2' })
+    expect(afterBoth['x-whiteboard']).not.toHaveProperty('comments')
+    expect(afterBoth['x-whiteboard']?.edgeRouting).toEqual({ style: 'orthogonal' })
+    expect(spatialCanvasSchema.safeParse(afterBoth).success).toBe(true)
   })
 })
 

@@ -21,6 +21,7 @@
 
 import type {
   CanvasColor,
+  CanvasComment,
   CanvasEdge,
   ClipboardFragment,
   EdgeRoutingStyle,
@@ -161,6 +162,24 @@ export type EditorLeafCommand =
       readonly endpoint: 'from' | 'to'
       // undefined returns the endpoint to derived (auto) routing.
       readonly side: 'top' | 'right' | 'bottom' | 'left' | undefined
+    }
+  | {
+      // Appends one comment verbatim (ADR-0024's annotation layer). A
+      // colliding id is a no-op, like create-node/create-edge.
+      readonly kind: 'create-comment'
+      readonly comment: CanvasComment
+    }
+  | {
+      // Rewrites one comment's `resolved` field. A missing target id is a
+      // no-op, matching every other single-field write in this union.
+      readonly kind: 'set-comment-resolved'
+      readonly id: string
+      readonly resolved: boolean
+    }
+  | {
+      // Removes one comment. A missing id is a no-op.
+      readonly kind: 'delete-comment'
+      readonly id: string
     }
 
 /**
@@ -538,6 +557,52 @@ function setEdgeLabel(canvas: SpatialCanvas, id: string, label: string): Spatial
   }
 }
 
+/**
+ * Rewrites the canvas's `x-whiteboard.comments` array via `update`, which
+ * receives the CURRENT comments (empty when none) and returns either the
+ * next array or `undefined` to signal a no-op (matching every other
+ * command's totality contract: a missing/colliding target id returns the
+ * input canvas reference unchanged). Same envelope-canonicality discipline
+ * as `withEdgeStyle`/`setNodeFacet`: an empty `comments` result drops the
+ * key, an empty extension disappears entirely, and sibling extension fields
+ * (edgeRouting, facets) survive untouched.
+ */
+function withComments(
+  canvas: SpatialCanvas,
+  update: (comments: readonly CanvasComment[]) => CanvasComment[] | undefined,
+): SpatialCanvas {
+  const { 'x-whiteboard': extension, ...rest } = canvas
+  const nextComments = update(extension?.comments ?? [])
+  if (nextComments === undefined) return canvas
+  const { comments: _previous, ...otherExtension } = extension ?? {}
+  const nextExtension = {
+    ...otherExtension,
+    ...(nextComments.length > 0 ? { comments: nextComments } : {}),
+  }
+  return Object.keys(nextExtension).length === 0 ? rest : { ...rest, 'x-whiteboard': nextExtension }
+}
+
+function createComment(canvas: SpatialCanvas, comment: CanvasComment): SpatialCanvas {
+  return withComments(canvas, (comments) => {
+    if (comments.some((existing) => existing.id === comment.id)) return undefined
+    return [...comments, comment]
+  })
+}
+
+function setCommentResolved(canvas: SpatialCanvas, id: string, resolved: boolean): SpatialCanvas {
+  return withComments(canvas, (comments) => {
+    if (!comments.some((comment) => comment.id === id)) return undefined
+    return comments.map((comment) => (comment.id === id ? { ...comment, resolved } : comment))
+  })
+}
+
+function deleteComment(canvas: SpatialCanvas, id: string): SpatialCanvas {
+  return withComments(canvas, (comments) => {
+    if (!comments.some((comment) => comment.id === id)) return undefined
+    return comments.filter((comment) => comment.id !== id)
+  })
+}
+
 export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): SpatialCanvas {
   switch (command.kind) {
     case 'move-node':
@@ -592,6 +657,12 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return reorderNodes(canvas, command.ids, command.placement)
     case 'create-edge':
       return createEdge(canvas, command.edge)
+    case 'create-comment':
+      return createComment(canvas, command.comment)
+    case 'set-comment-resolved':
+      return setCommentResolved(canvas, command.id, command.resolved)
+    case 'delete-comment':
+      return deleteComment(canvas, command.id)
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,
       // preserving the union-wide "nothing changed → same object" contract.
