@@ -12,6 +12,9 @@ const KBD =
  * family: 24px slots, 6px radius, background fill, border-coloured edge,
  * muted 1.5px glyphs, no shadow. Visually 24px; the hit area is widened by
  * the pseudo-element below, since a 24px target is under the touch floor.
+ * The glyph stroke is ABSOLUTE: lucide's strokeWidth is in 24-unit viewBox
+ * units, so at 14px a nominal 1.5 draws 0.9px and reads thinner than the
+ * node-tools arrow beside it.
  */
 const SLOT_CLASS =
   'relative flex size-6 items-center justify-center rounded-[6px] text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring after:absolute after:-inset-y-2 after:content-[""]'
@@ -109,7 +112,7 @@ export function EditorExitHint({
           onClick={onDone}
           className={cn(SLOT_CLASS, 'after:right-0 after:-left-2')}
         >
-          <Check aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
+          <Check aria-hidden="true" className="size-3.5" strokeWidth={1.5} absoluteStrokeWidth />
         </button>
         <span aria-hidden="true" className="bg-border h-3.5 w-px" />
         <button
@@ -120,7 +123,7 @@ export function EditorExitHint({
           onClick={onCancel}
           className={cn(SLOT_CLASS, 'after:left-0 after:-right-2')}
         >
-          <X aria-hidden="true" className="size-3.5" strokeWidth={1.5} />
+          <X aria-hidden="true" className="size-3.5" strokeWidth={1.5} absoluteStrokeWidth />
         </button>
       </div>
     )
