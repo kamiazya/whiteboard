@@ -401,6 +401,9 @@ describe('markdown editor verbs', () => {
       const lineIndex = lineChoice % countLines(doc)
       const at = lineStart(doc, lineIndex) + doc.split('\n')[lineIndex].length
       const before = blocksOf(doc)
+      // Where it landed, not merely that it landed: an inserter that always
+      // appended would satisfy "one block added, the rest unchanged".
+      const expectedIndex = blocksOf(doc.slice(0, at)).length
       for (const [id, type] of [
         ['rule', 'thematicBreak'],
         ['code-block', 'code'],
@@ -413,6 +416,9 @@ describe('markdown editor verbs', () => {
           (block, index) => block.type === type && before[index]?.type !== type,
         )
         expect(added, `${id} added no ${type} to ${JSON.stringify(doc)}`).toBeGreaterThanOrEqual(0)
+        expect(added, `${id} put its block somewhere other than after the tapped line`).toBe(
+          expectedIndex,
+        )
         expect([...after.slice(0, added), ...after.slice(added + 1)]).toEqual(before)
       }
     },

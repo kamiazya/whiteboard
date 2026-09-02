@@ -9,8 +9,10 @@
 // inside the visible strip above the keyboard.
 
 import { useEffect } from 'react'
-import { hasCoarsePointer } from '../../lib/platform.js'
-import { TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/touch-bar-layout.js'
+import {
+  TOUCH_BAR_HEIGHT_PX,
+  touchFormattingBarShown,
+} from '../markdown-editor/touch-bar-layout.js'
 import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
 import { panToShowTarget } from './viewport.js'
 
@@ -64,15 +66,17 @@ export function useKeyboardAvoidance({
       if (containerSize === null) return
       const occluded = keyboardOccludedBottomPx(root.getBoundingClientRect().bottom, visual)
       // A phone's keyboard carries the formatting bar on top of it, so the
-      // strip to clear is the keyboard plus the bar. On a coarse pointer the
-      // bar is always there, which is why this no longer returns early on
+      // strip to clear is the keyboard plus the bar — asked of the bar's own
+      // predicate, since a coarse pointer is not the same question (an edge
+      // label is edited in a textarea the bar does not attach to). It no
+      // longer returns early on
       // zero occlusion: under `interactive-widget=resizes-content` the
       // keyboard shrinks the LAYOUT viewport, so it occludes nothing and
       // reads as absent — while having taken half the canvas away. The node
       // still has to be panned back into what is left. `panToShowTarget`
       // answers null when nothing needs to move, so a pass that finds the
       // node already visible costs a comparison.
-      const bottom = occluded + (hasCoarsePointer() ? TOUCH_BAR_HEIGHT_PX : 0)
+      const bottom = occluded + (touchFormattingBarShown() ? TOUCH_BAR_HEIGHT_PX : 0)
       if (bottom <= 0) return
       setViewport((viewport) => {
         const target = { x, y, width, height: height + EXIT_HINT_ALLOWANCE_PX / viewport.zoom }

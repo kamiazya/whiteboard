@@ -1,6 +1,6 @@
 import { lazy, Suspense } from 'react'
-import { hasCoarsePointer } from '../../lib/platform.js'
 import { useActiveMarkdownEditor } from './active-markdown-editor.js'
+import { touchFormattingBarShown } from './touch-bar-layout.js'
 
 const TouchFormattingBarPanel = lazy(() => import('./TouchFormattingBarPanel.js'))
 
@@ -30,8 +30,10 @@ const TouchFormattingBarPanel = lazy(() => import('./TouchFormattingBarPanel.js'
  * budget when it was imported eagerly.
  */
 export function TouchFormattingBar() {
-  const editor = useActiveMarkdownEditor()
-  if (editor === null || !hasCoarsePointer()) return null
+  // Subscribed for the re-render; the predicate is what decides, and is
+  // shared with keyboard avoidance so the two cannot drift.
+  useActiveMarkdownEditor()
+  if (!touchFormattingBarShown()) return null
   return (
     <Suspense fallback={null}>
       <TouchFormattingBarPanel />

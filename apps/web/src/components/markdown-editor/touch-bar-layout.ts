@@ -1,3 +1,6 @@
+import { hasCoarsePointer } from '../../lib/platform.js'
+import { getActiveMarkdownEditor } from './active-markdown-editor.js'
+
 /**
  * The keyboard-docked bar's slot arithmetic, shared by the bar and its
  * test. Slot and height are the dock's coarse-pointer control size
@@ -51,4 +54,18 @@ export function layoutTouchBar<Id, Band>(
     }
   }
   return { visible: ids.slice(0, count), overflow: ids.slice(count) }
+}
+
+/**
+ * Whether the formatting bar is on screen. The one answer both the bar's own
+ * gate and keyboard avoidance's clearance ask, so a node can never be panned
+ * up to clear a strip that is not there.
+ *
+ * Not `hasCoarsePointer()` alone, which is what made them disagree: an edge
+ * or group LABEL is edited in a plain textarea (`TextNodeEditor`), which
+ * registers no markdown host, so the bar stays away for that edit while the
+ * pointer is just as coarse.
+ */
+export function touchFormattingBarShown(): boolean {
+  return getActiveMarkdownEditor() !== null && hasCoarsePointer()
 }
