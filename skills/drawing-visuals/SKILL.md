@@ -264,7 +264,8 @@ Redrawing on a fresh document is normal whiteboard behavior when the structure i
   `wb_version_save({ workspaceId, documentId, label })` before a risky one and call
   `wb_version_restore({ workspaceId, documentId, versionId: version.id })` to roll back if it goes
   wrong. The version lands in the same history the person's History panel shows, so they can see
-  the checkpoint and restore it themselves.
+  the checkpoint and restore it themselves. To try an alternative without touching the original,
+  restore the checkpoint into a new document with `targetPath` instead of in place.
 - **whiteboard MCP is a local dev tool**: documents live under `~/.whiteboard/`, outside git. If you
   need the SVG in a PR or other artifact, save the string `wb_scene_render` returns to a file.
 - **A document's format is fixed at creation.** `kind: "spatial"` gives you nodes and edges;

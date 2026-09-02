@@ -173,31 +173,55 @@ describe('versionRestoreInputSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('accepts targetPath, overwrite and subtree, and rejects a malformed targetPath', () => {
+    const base = { workspaceId: 'default', documentId: VALID_DOCUMENT_ID, versionId: 'ver-1' }
+    expect(
+      versionRestoreInputSchema.safeParse({ ...base, targetPath: 'notes/copy', overwrite: true })
+        .success,
+    ).toBe(true)
+    expect(versionRestoreInputSchema.safeParse({ ...base, subtree: true }).success).toBe(true)
+    expect(versionRestoreInputSchema.safeParse({ ...base, targetPath: '../escape' }).success).toBe(
+      false,
+    )
+  })
 })
 
 describe('versionRestoreOutputSchema', () => {
-  it('accepts valid output, with and without a label', () => {
+  it('accepts each mode, with and without a label', () => {
+    const base = { documentId: VALID_DOCUMENT_ID, restoredVersionId: 'ver-1' }
+    expect(
+      versionRestoreOutputSchema.safeParse({ ...base, label: 'Initial draft', mode: 'in-place' })
+        .success,
+    ).toBe(true)
+    expect(versionRestoreOutputSchema.safeParse({ ...base, mode: 'in-place' }).success).toBe(true)
     expect(
       versionRestoreOutputSchema.safeParse({
-        documentId: VALID_DOCUMENT_ID,
-        restoredVersionId: 'ver-1',
-        label: 'Initial draft',
+        ...base,
+        mode: 'into-target',
+        targetPath: 'notes/copy',
+        elementCount: 3,
       }).success,
     ).toBe(true)
     expect(
-      versionRestoreOutputSchema.safeParse({
-        documentId: VALID_DOCUMENT_ID,
-        restoredVersionId: 'ver-1',
-      }).success,
+      versionRestoreOutputSchema.safeParse({ ...base, mode: 'subtree', restoredCount: 2 }).success,
     ).toBe(true)
   })
 
-  it('rejects missing restoredVersionId', () => {
-    const result = versionRestoreOutputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
-      label: 'draft',
-    })
-    expect(result.success).toBe(false)
+  it('rejects a missing mode and a missing restoredVersionId', () => {
+    expect(
+      versionRestoreOutputSchema.safeParse({
+        documentId: VALID_DOCUMENT_ID,
+        restoredVersionId: 'ver-1',
+      }).success,
+    ).toBe(false)
+    expect(
+      versionRestoreOutputSchema.safeParse({
+        documentId: VALID_DOCUMENT_ID,
+        label: 'draft',
+        mode: 'in-place',
+      }).success,
+    ).toBe(false)
   })
 })
 

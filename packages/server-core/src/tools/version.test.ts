@@ -19,7 +19,13 @@ import { makeTestDeps } from '../test-utils/make-test-deps.js'
 import type { VersionEntry } from '../versions/version-entry.js'
 import { WorkspaceDocumentNotFoundError } from './document-crud.errors.js'
 import { createVersionListTool } from './version-list.js'
-import { createVersionRestoreTool, VersionNotFoundError } from './version-restore.js'
+import {
+  createVersionRestoreTool,
+  RestoreTargetExistsError,
+  SubtreeNeedsWorkspaceVersionError,
+  SubtreeTakesNoTargetError,
+  VersionNotFoundError,
+} from './version-restore.js'
 import { createVersionSaveTool } from './version-save.js'
 
 const DOCUMENT_ID = '01H8XJZ9K5N4M3P2Q1R0S9T8V7'
@@ -257,6 +263,7 @@ describe('wb_version_restore', () => {
       documentId: DOCUMENT_ID,
       restoredVersionId: saved.id,
       label: 'checkpoint',
+      mode: 'in-place',
     })
     expect(textOf(liveDoc)).toBe('original')
     // The SAME doc instance moved forward — a reconcile, not a swap — so a
@@ -282,6 +289,103 @@ describe('wb_version_restore', () => {
       { workspaceId: WORKSPACE_ID, path: PATH, phase: 'started', label: 'checkpoint' },
       { workspaceId: WORKSPACE_ID, path: PATH, phase: 'complete' },
     ])
+  })
+
+  test('restores into a NEW targetPath as a copy, reporting the mode and the element count', async () => {
+    const { deps, versions, live } = await setup()
+    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+      auto: false,
+      label: 'checkpoint',
+    })
+    const source = textDoc('moved on since')
+    live.docs.set(PATH, source)
+
+    const result = await createVersionRestoreTool(deps).execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      versionId: saved.id,
+      targetPath: 'notes/plan-copy',
+    })
+
+    expect(result).toEqual({
+      documentId: DOCUMENT_ID,
+      restoredVersionId: saved.id,
+      label: 'checkpoint',
+      mode: 'into-target',
+      targetPath: 'notes/plan-copy',
+      elementCount: 1,
+    })
+    const copy = live.docs.get('notes/plan-copy')
+    expect(copy && textOf(copy)).toBe('original')
+    // The source stayed as it was: a copy is not an in-place restore.
+    expect(live.docs.get(PATH)).toBe(source)
+    expect(textOf(source)).toBe('moved on since')
+  })
+
+  test('refuses an existing targetPath without overwrite, and reconciles onto it with overwrite', async () => {
+    const { deps, versions, live } = await setup()
+    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+      auto: false,
+      label: 'checkpoint',
+    })
+    const occupant = textDoc('occupant')
+    live.docs.set('notes/other', occupant)
+    const tool = createVersionRestoreTool(deps)
+
+    await expect(
+      tool.execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        versionId: saved.id,
+        targetPath: 'notes/other',
+      }),
+    ).rejects.toThrow(RestoreTargetExistsError)
+    expect(textOf(occupant)).toBe('occupant')
+
+    const result = await tool.execute({
+      workspaceId: WORKSPACE_ID,
+      documentId: DOCUMENT_ID,
+      versionId: saved.id,
+      targetPath: 'notes/other',
+      overwrite: true,
+    })
+    expect(result).toMatchObject({ mode: 'into-target', targetPath: 'notes/other' })
+    // Reconciled onto the SAME instance a client may hold, not swapped.
+    expect(live.docs.get('notes/other')).toBe(occupant)
+    expect(textOf(occupant)).toBe('original')
+  })
+
+  test('refuses a subtree rollback from a version that is not workspace-scoped', async () => {
+    const { deps, versions } = await setup()
+    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+      auto: false,
+      label: 'checkpoint',
+    })
+    await expect(
+      createVersionRestoreTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        versionId: saved.id,
+        subtree: true,
+      }),
+    ).rejects.toThrow(SubtreeNeedsWorkspaceVersionError)
+  })
+
+  test('refuses subtree combined with a distinct targetPath', async () => {
+    const { deps, versions } = await setup()
+    const saved = await versions.save(WORKSPACE_ID, PATH, textDoc('original'), {
+      auto: false,
+      label: 'checkpoint',
+    })
+    await expect(
+      createVersionRestoreTool(deps).execute({
+        workspaceId: WORKSPACE_ID,
+        documentId: DOCUMENT_ID,
+        versionId: saved.id,
+        targetPath: 'notes/other',
+        subtree: true,
+      }),
+    ).rejects.toThrow(SubtreeTakesNoTargetError)
   })
 
   test('throws VersionNotFoundError for a versionId the history does not hold', async () => {
