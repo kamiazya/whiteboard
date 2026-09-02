@@ -328,6 +328,7 @@ export function WorkspaceMenu({
             </label>
             <input
               id={urlId}
+              enterKeyHint="done"
               value={urlDraft ?? active.segment ?? ''}
               readOnly={rename === undefined}
               placeholder={active.workspaceId}
@@ -416,6 +417,7 @@ export function WorkspaceMenu({
               </label>
               <input
                 id={`${nameId}-new`}
+                enterKeyHint="done"
                 ref={newNameRef}
                 value={newName}
                 onChange={(event) => setNewName(event.target.value)}

@@ -27,6 +27,12 @@ export interface TextNodeEditorProps {
   /** Overrides the testid for non-node uses (e.g. the edge label editor). */
   readonly testId?: string
   /**
+   * Screen-size correction for the exit strip: the strip is positioned in
+   * canvas coordinates and would otherwise scale with the zoom, and a tap
+   * target has a screen size, not a canvas size. Callers pass `1 / zoom`.
+   */
+  readonly exitHintScale?: number
+  /**
    * Merged over the base style. Callers pass the edited object's own
    * rendered appearance (fill, font, padding) so entering edit mode reads
    * as "the text became editable" rather than a second box appearing —
@@ -45,6 +51,7 @@ export function TextNodeEditor({
   box,
   initialText,
   testId = 'text-node-editor',
+  exitHintScale,
   style,
   onCommit,
   onCancel,
@@ -117,7 +124,17 @@ export function TextNodeEditor({
           }
         }}
       />
-      <EditorExitHint style={{ position: 'absolute', left: box.x, top: box.y + box.height + 6 }} />
+      <EditorExitHint
+        onDone={commit}
+        onCancel={cancel}
+        canvasOverlay
+        placement={{
+          left: box.x,
+          right: box.x + box.width,
+          top: box.y + box.height + 6,
+          scale: exitHintScale,
+        }}
+      />
     </>
   )
 }

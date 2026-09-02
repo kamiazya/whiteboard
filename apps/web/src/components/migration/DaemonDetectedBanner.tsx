@@ -624,6 +624,7 @@ export function DaemonDetectedBanner({
             data-testid="daemon-port-input"
             type="text"
             inputMode="numeric"
+            enterKeyHint="go"
             value={portInput}
             onChange={(event) => setPortInput(event.target.value)}
             onKeyDown={(event) => {

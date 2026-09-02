@@ -48,6 +48,15 @@ describe('DocumentProperties', () => {
     expect(textboxValue(/title/i)).toBe('Release plan')
   })
 
+  it("labels the software keyboard's Enter as Done on the title field", () => {
+    // The one keyboard extension point the web has: Enter finishes the edit
+    // here, so the key says so instead of showing a return arrow.
+    render(<DocumentProperties {...titleProps()} facets={meta()} onFacetsChange={vi.fn()} />)
+    expect(screen.getByRole('textbox', { name: /title/i }).getAttribute('enterkeyhint')).toBe(
+      'done',
+    )
+  })
+
   it('keeps type and tags behind the disclosure until it is opened', async () => {
     render(<DocumentProperties {...titleProps()} facets={meta()} onFacetsChange={vi.fn()} />)
     expect(screen.queryByRole('combobox', { name: /type/i })).toBeNull()

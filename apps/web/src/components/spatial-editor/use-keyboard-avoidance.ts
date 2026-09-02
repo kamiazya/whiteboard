@@ -13,10 +13,12 @@ import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
 import { panToShowTarget } from './viewport.js'
 
 /**
- * Screen px kept visible below the edited node's box, so the exit hint
- * ("⌘↩ to finish") rendered just under it rises above the keyboard too.
+ * Screen px kept visible below the edited node's box, so the exit strip
+ * rendered just under it rises above the keyboard too. Sized for the strip's
+ * touch form — the 24px ✓/✕ pill a phone shows, its 6px gap, and the pill's
+ * widened tap band — since a phone is where a keyboard occludes anything.
  */
-export const EXIT_HINT_ALLOWANCE_PX = 36
+export const EXIT_HINT_ALLOWANCE_PX = 40
 
 /**
  * How many px of the root's bottom the on-screen keyboard covers. Client

@@ -114,6 +114,7 @@ export function LinkPickerDialog({
     >
       <input
         id="link-picker-search"
+        enterKeyHint="go"
         ref={inputRef}
         role="combobox"
         aria-expanded

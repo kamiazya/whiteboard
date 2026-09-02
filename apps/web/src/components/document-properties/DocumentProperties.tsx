@@ -123,6 +123,7 @@ export function DocumentProperties({
         </label>
         <input
           id={`${suggestionsId}-title`}
+          enterKeyHint="done"
           value={draftTitle ?? title}
           onChange={(event) => {
             if (onTitleChange === undefined) return
