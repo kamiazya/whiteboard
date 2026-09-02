@@ -1,6 +1,7 @@
 import { EditorSelection, type StateCommand } from '@codemirror/state'
 import { insertCodeBlock, insertRule, insertTable } from './block-inserts.js'
 import {
+  changeIndent,
   cycleTaskCheckbox,
   headingLevelAt,
   setHeadingLevel,
@@ -197,6 +198,8 @@ export type MarkdownVerbId =
   | 'bullet-list'
   | 'ordered-list'
   | 'toggle-task'
+  | 'outdent'
+  | 'indent'
 
 /**
  * Which run of the catalog a verb belongs to. The catalog draws a separator
@@ -307,6 +310,23 @@ export const MARKDOWN_EDITOR_VERBS: readonly MarkdownVerbSpec[] = [
     key: 'Mod-Enter',
     action: { kind: 'command', command: cycleTaskCheckbox },
   },
+  {
+    // The pair reads left to right as "less, more", the way every toolbar
+    // draws it. A list line moves in the tree; any other line by the
+    // indent unit (line-prefix.ts).
+    id: 'outdent',
+    label: 'Outdent',
+    band: 'list',
+    key: 'Shift-Tab',
+    action: { kind: 'command', command: changeIndent(-1) },
+  },
+  {
+    id: 'indent',
+    label: 'Indent',
+    band: 'list',
+    key: 'Tab',
+    action: { kind: 'command', command: changeIndent(1) },
+  },
 ]
 
 /** The one verb of a given id. Throws rather than returning undefined: the id is a closed union. */
@@ -347,10 +367,12 @@ export const TOUCH_BAR_ORDER: readonly MarkdownVerbId[] = [
   'heading',
   'bold',
   'italic',
-  'code',
-  'link',
   'bullet-list',
   'toggle-task',
+  'outdent',
+  'indent',
+  'code',
+  'link',
   'ordered-list',
   'quote',
   'code-block',
@@ -389,8 +411,16 @@ export function selfContainedCommand(spec: MarkdownVerbSpec): StateCommand | nul
  * Derived from the table rather than written beside it, so a verb cannot
  * gain a key in one list and keep the old delimiters in the other.
  */
-export const markdownStyleKeymap = MARKDOWN_EDITOR_VERBS.flatMap((spec) => {
-  if (spec.key === undefined) return []
-  const command = selfContainedCommand(spec)
-  return command === null ? [] : [{ key: spec.key, run: command }]
-})
+export const markdownStyleKeymap = [
+  ...MARKDOWN_EDITOR_VERBS.flatMap((spec) => {
+    if (spec.key === undefined) return []
+    const command = selfContainedCommand(spec)
+    return command === null ? [] : [{ key: spec.key, run: command }]
+  }),
+  // Tab stays in the editor even when there is nothing to indent — a
+  // Shift-Tab at the margin must not walk focus out of the text. Escape
+  // then Tab remains the keyboard's way out, per CodeMirror's own
+  // accessibility guidance.
+  { key: 'Tab', run: () => true },
+  { key: 'Shift-Tab', run: () => true },
+]

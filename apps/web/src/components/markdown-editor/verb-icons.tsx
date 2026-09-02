@@ -2,6 +2,8 @@ import {
   Bold,
   Code,
   Heading,
+  IndentDecrease,
+  IndentIncrease,
   Italic,
   Link2,
   List,
@@ -38,6 +40,8 @@ export const VERB_ICONS = {
   link: <Link2 aria-hidden className="size-4" />,
   math: <Sigma aria-hidden className="size-4" />,
   'bullet-list': <List aria-hidden className="size-4" />,
+  outdent: <IndentDecrease aria-hidden className="size-4" />,
+  indent: <IndentIncrease aria-hidden className="size-4" />,
   'ordered-list': <ListOrdered aria-hidden className="size-4" />,
   'toggle-task': <SquareCheck aria-hidden className="size-4" />,
 } satisfies Record<MarkdownVerbId, ReactNode>

@@ -4,6 +4,7 @@
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
 import { describe, expect, it } from 'vitest'
 import {
+  changeIndent,
   cycleTaskCheckbox,
   headingLevelAt,
   setHeadingLevel,
@@ -168,5 +169,39 @@ describe('headingLevelAt', () => {
 
   it('does not mistake a hash without a space for a heading', () => {
     expect(levelOf('#tag not a heading', 4)).toBe(0)
+  })
+})
+
+describe('changeIndent', () => {
+  const indent = changeIndent(1)
+  const outdent = changeIndent(-1)
+
+  it("nests a list line under the sibling above, at that sibling's content column", () => {
+    expect(docAfter(indent, '- a\n- b', 7)).toBe('- a\n  - b')
+    expect(docAfter(indent, '1. a\n- b', 8)).toBe('1. a\n   - b')
+    expect(docAfter(indent, '> - a\n> - b', 11)).toBe('> - a\n>   - b')
+  })
+
+  it('reports unhandled when there is no sibling to nest under', () => {
+    expect(apply(indent, '- a', 3)).toBeNull()
+    expect(apply(indent, '- a\n  - b', 9)).toBeNull()
+    expect(apply(indent, 'prose\n- a', 9)).toBeNull()
+  })
+
+  it('outdents to the nearest shallower list line, and not past the margin', () => {
+    expect(docAfter(outdent, '1. a\n   - b\n     - c', 20)).toBe('1. a\n   - b\n   - c')
+    expect(docAfter(outdent, '- a\n  - b', 9)).toBe('- a\n- b')
+    expect(apply(outdent, '- a\n- b', 7)).toBeNull()
+  })
+
+  it('moves any other line by the indent unit, the way Tab does', () => {
+    expect(apply(indent, 'prose', 5)).toEqual({ doc: '  prose', head: 7 })
+    expect(docAfter(outdent, '    prose', 9)).toBe('  prose')
+    expect(apply(outdent, 'prose', 2)).toBeNull()
+  })
+
+  it("moves every covered line by the first line's delta, keeping the shape below it", () => {
+    const doc = '- a\n- b\n  - c'
+    expect(docAfter(indent, doc, 4, doc.length)).toBe('- a\n  - b\n    - c')
   })
 })

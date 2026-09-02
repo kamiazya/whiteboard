@@ -68,6 +68,10 @@ const VERB_COVERAGE = {
   'bullet-list': 'covered',
   'ordered-list': 'covered',
   'toggle-task': 'covered',
+  outdent:
+    'not modelled: its meaning comes from the lines above; list-nesting.model.property.test.ts',
+  indent:
+    'not modelled: its meaning comes from the lines above; list-nesting.model.property.test.ts',
   'code-block':
     'not modelled: takes the caret into the fence, where what a verb means is undecided; B1-B3 in editor-verbs.property.test.ts',
   table:

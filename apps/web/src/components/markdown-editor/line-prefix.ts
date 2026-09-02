@@ -17,8 +17,11 @@ type ListMarker = 'none' | 'bullet' | 'ordered'
 type TaskCheckbox = 'none' | 'open' | 'done'
 
 interface LinePrefix {
-  readonly indent: string
+  /** Whitespace before a quote marker; empty on an unquoted line. */
+  readonly quoteIndent: string
   readonly quote: boolean
+  /** Whitespace right before the marker (or text) — the nesting indent. */
+  readonly indent: string
   readonly marker: ListMarker
   /** What an ordered marker shows; kept on conversion, 1 when freshly made. */
   readonly number: number
@@ -37,15 +40,18 @@ const MAX_HEADING_LEVEL = 6
  * matching rather than a lexer: the shape is shallow, and the same regex
  * gives every band the same reading of the line.
  */
-const PREFIX_RE = /^(\s*)(>\s?)?(?:(?:([-*+])|(\d+)[.)])\s+(?:\[([ xX])\]\s?)?)?(?:(#{1,6})\s+)?/
+const PREFIX_RE =
+  /^(\s*)(?:>\s?(\s*))?(?:(?:([-*+])|(\d+)[.)])\s+(?:\[([ xX])\]\s?)?)?(?:(#{1,6})\s+)?/
 
 function parseLinePrefix(text: string): LinePrefix {
   const match = PREFIX_RE.exec(text)
   if (match === null) throw new Error('PREFIX_RE matches every string')
-  const [whole, indent, quote, bullet, number, box, hashes] = match
+  const [whole, leading, afterQuote, bullet, number, box, hashes] = match
+  const quote = afterQuote !== undefined
   return {
-    indent,
-    quote: quote !== undefined,
+    quoteIndent: quote ? leading : '',
+    quote,
+    indent: quote ? afterQuote : leading,
     marker: bullet !== undefined ? 'bullet' : number !== undefined ? 'ordered' : 'none',
     number: number !== undefined ? Number.parseInt(number, 10) : 1,
     checkbox: box === undefined ? 'none' : box === ' ' ? 'open' : 'done',
@@ -58,7 +64,7 @@ function renderLinePrefix(line: LinePrefix): string {
   const marker = line.marker === 'none' ? '' : line.marker === 'bullet' ? '- ' : `${line.number}. `
   const checkbox = line.checkbox === 'none' ? '' : line.checkbox === 'open' ? '[ ] ' : '[x] '
   const heading = line.heading === 0 ? '' : `${'#'.repeat(line.heading)} `
-  return `${line.indent}${line.quote ? '> ' : ''}${marker}${checkbox}${heading}${line.text}`
+  return `${line.quoteIndent}${line.quote ? '> ' : ''}${line.indent}${marker}${checkbox}${heading}${line.text}`
 }
 
 /**
@@ -186,6 +192,75 @@ export function setHeadingLevel(level: number): StateCommand {
       ...line,
       heading: level,
       checkbox: level > 0 ? 'none' : line.checkbox,
+    }))(target)
+  }
+}
+
+const INDENT_UNIT = 2
+
+/** Where this list line's content starts, relative to its indent: the column a child must begin at. */
+function markerWidth(line: LinePrefix): number {
+  return line.marker === 'bullet' ? 2 : `${line.number}. `.length
+}
+
+/**
+ * The indent a list line moves to, or null when the tree has no such move.
+ * Nesting is the one verb whose meaning comes from the lines ABOVE: a
+ * child must start at its parent's content column, so indenting means
+ * "become a child of the sibling above" and the width is that sibling's,
+ * not a fixed unit (`1. ` is three wide, `- ` two). With no sibling above
+ * — the line is its parent's first child, or the first item of all — there
+ * is nothing to nest under, and a unit of indent would be whitespace the
+ * parser ignores. Outdenting moves to the nearest shallower list line's
+ * indent; at the top there is nowhere shallower to go.
+ */
+function nestingIndent(
+  state: EditorState,
+  lineNumber: number,
+  current: LinePrefix,
+  direction: 1 | -1,
+): number | null {
+  const depth = current.indent.length
+  if (direction < 0 && depth === 0) return null
+  for (let n = lineNumber - 1; n >= 1; n--) {
+    const text = state.doc.line(n).text
+    if (text.trim() === '') continue
+    const above = parseLinePrefix(text)
+    if (above.marker === 'none' || above.quote !== current.quote) break
+    const aboveDepth = above.indent.length
+    if (direction > 0) {
+      if (aboveDepth > depth) continue
+      return aboveDepth === depth ? aboveDepth + markerWidth(above) : null
+    }
+    if (aboveDepth < depth) return aboveDepth
+  }
+  // Outdenting a nested line with nothing shallower above it lands at the margin.
+  return direction < 0 ? 0 : null
+}
+
+/**
+ * The indent / outdent button (Tab / Shift-Tab). A list line moves in the
+ * tree (see `nestingIndent`); any other line moves by the indent unit, as
+ * Tab does in every editor — CommonMark reads four of those as a code
+ * block, and that is the author's to spend. A selection moves every
+ * covered line by the FIRST line's delta, so nested structure under it
+ * keeps its shape.
+ */
+export function changeIndent(direction: 1 | -1): StateCommand {
+  return (target) => {
+    const { state } = target
+    const first = targetLines(state)[0]
+    const parsed = parseLinePrefix(first.text)
+    const to =
+      parsed.marker === 'none'
+        ? Math.max(0, parsed.indent.length + direction * INDENT_UNIT)
+        : nestingIndent(state, first.number, parsed, direction)
+    if (to === null) return false
+    const delta = to - parsed.indent.length
+    if (delta === 0) return false
+    return rewritePrefixes((line) => ({
+      ...line,
+      indent: ' '.repeat(Math.max(0, line.indent.length + delta)),
     }))(target)
   }
 }

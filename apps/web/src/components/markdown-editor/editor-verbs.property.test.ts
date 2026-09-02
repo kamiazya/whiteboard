@@ -53,6 +53,8 @@ const VERB_COVERAGE = {
   'toggle-task': 'covered',
   'bullet-list': 'covered',
   'ordered-list': 'covered',
+  outdent: 'covered',
+  indent: 'covered',
   quote: 'covered',
   'code-block': 'covered',
   table: 'covered',
@@ -112,6 +114,8 @@ const line = fc.oneof(
     weight: 3,
     arbitrary: fc.constantFrom('- [ ] open task', '- [x] done task', '1. [ ] numbered'),
   },
+  // Indented lines, so outdent has something to take off.
+  { weight: 1, arbitrary: fc.constantFrom('  - nested item', '  indented prose') },
   { weight: 1, arbitrary: fc.constant('') },
 )
 
@@ -126,7 +130,12 @@ const document = fc.array(line, { minLength: 1, maxLength: 6 }).map((lines) => l
  */
 const isListLine = (text: string) => /^(-|\d+\.) /.test(text)
 const blockDocument = fc
-  .array(line, { minLength: 1, maxLength: 4 })
+  // An indented line after a list item is that item's continuation, so
+  // only lines starting at the margin are blocks of their own.
+  .array(
+    line.filter((text) => !text.startsWith(' ')),
+    { minLength: 1, maxLength: 4 },
+  )
   .filter((lines) => {
     // Blank lines do not end a list, so adjacency is judged over the
     // non-blank lines: `- a`, blank, blank, `- b` is still one list.

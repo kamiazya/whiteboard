@@ -1,4 +1,4 @@
-import { defaultKeymap, history, historyKeymap, indentWithTab } from '@codemirror/commands'
+import { defaultKeymap, history, historyKeymap } from '@codemirror/commands'
 import { markdown } from '@codemirror/lang-markdown'
 import { HighlightStyle, syntaxHighlighting } from '@codemirror/language'
 import {
@@ -222,10 +222,9 @@ export function SourcePane({
         syntaxHighlighting(markdownHighlightStyle),
         history(),
         // styleKeymap precedes defaultKeymap so Mod-b/Mod-i win over any
-        // default binding; indentWithTab keeps Tab in the editor (Escape
-        // then Tab remains the keyboard escape hatch, per CodeMirror's
-        // own accessibility guidance).
-        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap, indentWithTab]),
+        // default binding; it also owns Tab (indent / outdent) and keeps it
+        // in the editor.
+        keymap.of([...markdownStyleKeymap, ...defaultKeymap, ...historyKeymap]),
         // Prose, not code: long paragraphs soft-wrap instead of growing a
         // horizontal scrollbar.
         EditorView.lineWrapping,
