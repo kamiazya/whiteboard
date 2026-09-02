@@ -21,6 +21,7 @@ export function unusedVersionHistory(): VersionHistory {
     )
   }
   return {
+    save: refuse('save'),
     load: refuse('load'),
     loadWorkspaceAt: refuse('loadWorkspaceAt'),
     list: refuse('list'),

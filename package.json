@@ -84,6 +84,7 @@
     "knip": "6.26.0",
     "lefthook": "^2.1.10",
     "secretlint": "13.0.2",
+    "@vitest/browser-playwright": "catalog:",
     "vitest": "catalog:"
   }
 }

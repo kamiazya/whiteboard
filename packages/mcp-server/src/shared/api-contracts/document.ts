@@ -41,15 +41,12 @@ export const setPinnedRequestSchema = z.object({
   pinned: z.boolean(),
 })
 
-// OperatorInfo: who saved the version. The version-store also accepts this
-// shape via VersionStore.save({ operator }).
-export const operatorInfoSchema = z.object({
-  kind: z.enum(['ai', 'human', 'system']),
-  peerId: z.string().min(1),
-  displayName: z.string().optional(),
-  agentId: z.string().optional(),
-  workspaceId: z.string().optional(),
-})
+// OperatorInfo is declared in server-core beside the VersionHistory seam
+// and re-exported here so this barrel stays the one place apps/web reads a
+// daemon contract from.
+import { operatorInfoSchema, versionEntrySchema } from '@kamiazya/whiteboard-server-core'
+
+export { operatorInfoSchema, versionEntrySchema }
 
 export const saveVersionRequestSchema = z.object({
   label: z.string().optional(),
@@ -82,21 +79,6 @@ export const exportDocumentJsonRequestSchema = z.object({
   includeCustomFields: z.boolean().optional(),
   outputPath: z.string().optional(),
   overwrite: z.boolean().optional(),
-})
-
-// VersionEntry: a row in the canvas version history. The server hydrates
-// missing legacy metadata before returning, so branchName is always present
-// on the wire.
-export const versionEntrySchema = z.object({
-  id: z.string(),
-  path: z.string(),
-  createdAt: z.string(),
-  elementCount: z.number().finite(),
-  label: z.string().optional(),
-  auto: z.boolean(),
-  operator: operatorInfoSchema.optional(),
-  hasThumbnail: z.boolean(),
-  branchName: z.string(),
 })
 
 export const listVersionsResponseSchema = z.object({

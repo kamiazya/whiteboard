@@ -9,10 +9,22 @@
 import { describe, expect, it } from 'vitest'
 import contextMenuSource from './CanvasContextMenu.tsx?raw'
 import displaySettingsSource from './CanvasDisplaySettings.tsx?raw'
+import canvasMenuItemsSource from './context-menu-items/canvas-menu-items.tsx?raw'
+import colorRowSource from './context-menu-items/color-row.tsx?raw'
+import edgeMenuItemsSource from './context-menu-items/edge-menu-items.tsx?raw'
+import nodeMenuItemsSource from './context-menu-items/node-menu-items.tsx?raw'
 
 const CORE_SURFACES = [
   ['CanvasContextMenu.tsx', contextMenuSource],
   ['CanvasDisplaySettings.tsx', displaySettingsSource],
+  // The context menu's item builders — the facet doorway (nodePropertyItems)
+  // moved into node-menu-items.tsx, so a guard left scanning only the old
+  // file would go green while the rule it enforces is violated in the new
+  // one.
+  ['context-menu-items/color-row.tsx', colorRowSource],
+  ['context-menu-items/edge-menu-items.tsx', edgeMenuItemsSource],
+  ['context-menu-items/canvas-menu-items.tsx', canvasMenuItemsSource],
+  ['context-menu-items/node-menu-items.tsx', nodeMenuItemsSource],
 ] as const
 
 const DOMAIN_MARKS = [

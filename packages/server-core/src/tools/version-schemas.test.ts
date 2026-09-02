@@ -8,6 +8,16 @@ import {
 import { versionSaveInputSchema, versionSaveOutputSchema } from './version-save.js'
 
 const VALID_DOCUMENT_ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
+const VALID_ENTRY = {
+  id: 'ver-1',
+  path: 'notes/plan',
+  createdAt: '2026-07-30T00:00:00.000Z',
+  elementCount: 3,
+  label: 'Initial draft',
+  auto: false,
+  hasThumbnail: false,
+  branchName: 'main',
+}
 
 describe('versionSaveInputSchema', () => {
   it('accepts valid input', () => {
@@ -63,23 +73,19 @@ describe('versionSaveInputSchema', () => {
 })
 
 describe('versionSaveOutputSchema', () => {
-  it('accepts valid output', () => {
+  it('accepts the History panel row as the saved version', () => {
     const result = versionSaveOutputSchema.safeParse({
       documentId: VALID_DOCUMENT_ID,
-      versionId: 'ver-1',
-      label: 'Initial draft',
-      timestamp: '2026-07-30T00:00:00.000Z',
-      frontier: 'abcdef0123',
+      version: VALID_ENTRY,
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects missing frontier', () => {
+  it('rejects a version missing the fields the panel relies on (branchName)', () => {
+    const { branchName: _dropped, ...partial } = VALID_ENTRY
     const result = versionSaveOutputSchema.safeParse({
       documentId: VALID_DOCUMENT_ID,
-      versionId: 'ver-1',
-      label: 'draft',
-      timestamp: '2026-07-30T00:00:00.000Z',
+      version: partial,
     })
     expect(result.success).toBe(false)
   })
@@ -112,21 +118,20 @@ describe('versionListOutputSchema', () => {
     expect(result.success).toBe(true)
   })
 
-  it('accepts versions with valid entries', () => {
+  it('accepts versions with valid entries, label being optional (an auto checkpoint has none)', () => {
+    const { label: _dropped, ...unlabelled } = VALID_ENTRY
     const result = versionListOutputSchema.safeParse({
       documentId: VALID_DOCUMENT_ID,
-      versions: [
-        { versionId: 'v1', label: 'first', timestamp: '2026-01-01T00:00:00Z', frontier: 'aa' },
-        { versionId: 'v2', label: 'second', timestamp: '2026-01-02T00:00:00Z', frontier: 'bb' },
-      ],
+      versions: [VALID_ENTRY, { ...unlabelled, id: 'v2', auto: true }],
     })
     expect(result.success).toBe(true)
   })
 
-  it('rejects version entry missing label', () => {
+  it('rejects a version entry missing its id', () => {
+    const { id: _dropped, ...noId } = VALID_ENTRY
     const result = versionListOutputSchema.safeParse({
       documentId: VALID_DOCUMENT_ID,
-      versions: [{ versionId: 'v1', timestamp: '2026-01-01T00:00:00Z', frontier: 'aa' }],
+      versions: [noId],
     })
     expect(result.success).toBe(false)
   })
@@ -168,26 +173,55 @@ describe('versionRestoreInputSchema', () => {
     })
     expect(result.success).toBe(false)
   })
+
+  it('accepts targetPath, overwrite and subtree, and rejects a malformed targetPath', () => {
+    const base = { workspaceId: 'default', documentId: VALID_DOCUMENT_ID, versionId: 'ver-1' }
+    expect(
+      versionRestoreInputSchema.safeParse({ ...base, targetPath: 'notes/copy', overwrite: true })
+        .success,
+    ).toBe(true)
+    expect(versionRestoreInputSchema.safeParse({ ...base, subtree: true }).success).toBe(true)
+    expect(versionRestoreInputSchema.safeParse({ ...base, targetPath: '../escape' }).success).toBe(
+      false,
+    )
+  })
 })
 
 describe('versionRestoreOutputSchema', () => {
-  it('accepts valid output', () => {
-    const result = versionRestoreOutputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
-      restoredVersionId: 'ver-1',
-      label: 'Initial draft',
-      frontier: 'abcdef0123',
-    })
-    expect(result.success).toBe(true)
+  it('accepts each mode, with and without a label', () => {
+    const base = { documentId: VALID_DOCUMENT_ID, restoredVersionId: 'ver-1' }
+    expect(
+      versionRestoreOutputSchema.safeParse({ ...base, label: 'Initial draft', mode: 'in-place' })
+        .success,
+    ).toBe(true)
+    expect(versionRestoreOutputSchema.safeParse({ ...base, mode: 'in-place' }).success).toBe(true)
+    expect(
+      versionRestoreOutputSchema.safeParse({
+        ...base,
+        mode: 'into-target',
+        targetPath: 'notes/copy',
+        elementCount: 3,
+      }).success,
+    ).toBe(true)
+    expect(
+      versionRestoreOutputSchema.safeParse({ ...base, mode: 'subtree', restoredCount: 2 }).success,
+    ).toBe(true)
   })
 
-  it('rejects missing restoredVersionId', () => {
-    const result = versionRestoreOutputSchema.safeParse({
-      documentId: VALID_DOCUMENT_ID,
-      label: 'draft',
-      frontier: 'aa',
-    })
-    expect(result.success).toBe(false)
+  it('rejects a missing mode and a missing restoredVersionId', () => {
+    expect(
+      versionRestoreOutputSchema.safeParse({
+        documentId: VALID_DOCUMENT_ID,
+        restoredVersionId: 'ver-1',
+      }).success,
+    ).toBe(false)
+    expect(
+      versionRestoreOutputSchema.safeParse({
+        documentId: VALID_DOCUMENT_ID,
+        label: 'draft',
+        mode: 'in-place',
+      }).success,
+    ).toBe(false)
   })
 })
 
