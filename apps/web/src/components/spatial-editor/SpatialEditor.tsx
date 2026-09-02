@@ -1418,7 +1418,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         const dx = released.x - commentDrag.startPoint.x
         const dy = released.y - commentDrag.startPoint.y
         // A press that never travelled is a press (the double-press pairing
-        // above owns it), not a zero-distance move.
+        // above owns it), not a zero-distance move. The anchor is ROUNDED:
+        // the model requires an integer, and a reader silently drops a
+        // comment that fails the schema — a fractional anchor from a zoomed
+        // viewport would survive this session and vanish on the next undo,
+        // reload or remote import.
         if (dx !== 0 || dy !== 0) {
           applyResult({
             state: { kind: 'idle' },
@@ -1426,8 +1430,8 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
               {
                 kind: 'move-comment',
                 id: commentDrag.comment.id,
-                x: commentDrag.comment.x + dx,
-                y: commentDrag.comment.y + dy,
+                x: Math.round(commentDrag.comment.x + dx),
+                y: Math.round(commentDrag.comment.y + dy),
               } as const,
             ],
           })
@@ -2614,8 +2618,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                           kind: 'create-comment',
                           comment: {
                             id: (createId ?? defaultCreateId)(),
-                            x: point.x,
-                            y: point.y,
+                            // Rounded for the same reason the pin drag rounds:
+                            // an integer by schema, and a fractional anchor
+                            // is dropped on read rather than rejected here.
+                            x: Math.round(point.x),
+                            y: Math.round(point.y),
                             text,
                             createdAt: new Date().toISOString(),
                             ...(targetNodeId === undefined ? {} : { targetNodeId }),
