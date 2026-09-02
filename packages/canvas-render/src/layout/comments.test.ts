@@ -120,10 +120,13 @@ describe('comment layer', () => {
     )
     expect(leader).toBeDefined()
     // From the anchor (the pin's center) to the bubble's near corner, so the
-    // relation still reads when a dense canvas separates the two.
+    // relation still reads when a dense canvas separates the two. The end
+    // lands ON the rounded corner's arc (radius 8), not the bbox corner,
+    // which sits outside the rounded fill and would leave a gap.
+    const inset = 8 * (1 - Math.SQRT1_2)
     expect(leader?.path).toEqual([
       { x: 400, y: 60 },
-      { x: 400 + COMMENT_BUBBLE_OFFSET_PX, y: 60 + COMMENT_BUBBLE_OFFSET_PX },
+      { x: 400 + COMMENT_BUBBLE_OFFSET_PX + inset, y: 60 + COMMENT_BUBBLE_OFFSET_PX + inset },
     ])
     expect(leader?.fromEnd).toBe('none')
     expect(leader?.toEnd).toBe('none')
