@@ -153,16 +153,14 @@ import { MINIMAP_MIN_ROOT_WIDTH_PX, useEditorMeasurements } from './use-editor-m
 import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-scene.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
 import { useNodeCreation } from './use-node-creation.js'
+import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
 import {
   canvasToScreen,
   fitViewportToBoxes,
-  frameViewport,
-  IDENTITY_VIEWPORT,
   type Point,
   panBy,
   screenToCanvas,
-  contentBounds as unionContentBounds,
   type Viewport,
   viewportTransformCss,
   zoomAt,
@@ -373,7 +371,6 @@ const LONG_PRESS_SLOP_PX = 10
 const DEFAULT_TEST_ID = 'spatial-editor'
 
 /** Breathing room kept around framed content (zoom to fit / selection). */
-const FRAME_MARGIN_PX = 24
 const ZOOM_WHEEL_FACTOR = 1.1
 function clientPointToRootLocal(e: { clientX: number; clientY: number }, root: HTMLElement) {
   const rect = root.getBoundingClientRect()
@@ -429,7 +426,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
     const rootRef = useRef<HTMLDivElement | null>(null)
 
-    const [viewport, setViewport] = useState<Viewport>(IDENTITY_VIEWPORT)
     const { shellRef, rootSize, inspectorIsSheet, viewportCenterScreen, containerSizeOf } =
       useEditorMeasurements(rootRef)
 
@@ -488,6 +484,31 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * delete paths). Cleared whenever the primary selection clears.
      */
     const extraIds = selectionState.extraIds
+    const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
+    const selectedBox = useMemo(
+      () => (selectedId === null ? undefined : boxes.find((b) => b.id === selectedId)?.box),
+      [boxes, selectedId],
+    )
+    const selectedNode = useMemo(
+      () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
+      [canvas, selectedId],
+    )
+    /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
+    const selection =
+      selectedId !== null && selectedBox !== undefined
+        ? { id: selectedId, box: selectedBox }
+        : undefined
+    // The pan/zoom viewport and its frame/zoom verbs — see
+    // use-viewport-controls.ts. Wheel/hand/pinch navigation stays with the
+    // pointer wiring below and drives the same setViewport.
+    const { viewport, setViewport, stepZoom, frameContent, frameSelection } = useViewportControls({
+      rootRef,
+      boxes,
+      selection,
+      extraIds,
+      viewportCenterScreen,
+      containerSizeOf,
+    })
     /**
      * Armed by a second same-target press inside the double-press window;
      * RESOLVED at pointerup: zero movement opens the editor (node) or
@@ -737,7 +758,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     // ordinary open — the earlier version of this returned null and stranded
     // the flag, which only a new selection could get out of.
     if (facetPanelOpen && selectedId === null) setFacetPanelOpen(false)
-    const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
     /**
      * Lock only binds when the host wired the seam — an editor mounted
      * without `onToggleNodeLock` has no way to unlock, so blocking there
@@ -821,20 +841,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       }),
       [boxes],
     )
-
-    const selectedBox = useMemo(
-      () => (selectedId === null ? undefined : boxes.find((b) => b.id === selectedId)?.box),
-      [boxes, selectedId],
-    )
-    const selectedNode = useMemo(
-      () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
-      [canvas, selectedId],
-    )
-    /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
-    const selection =
-      selectedId !== null && selectedBox !== undefined
-        ? { id: selectedId, box: selectedBox }
-        : undefined
 
     /**
      * Every selected node with the box it currently occupies, primary first.
@@ -1713,12 +1719,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * CURRENT node boxes (read from `canvasRef.current`, not the possibly-
      * stale `canvas` prop) so two rapid clicks still see each other's result.
      */
-    /** Keyboard zoom: about the viewport centre, since there is no pointer. */
-    const stepZoom = (factor: number): boolean => {
-      setViewport((vp) => zoomAt(vp, viewportCenterScreen(), factor))
-      return true
-    }
-
     /**
      * Node boxes for the overview, with each authored colour resolved to the
      * accent the scene already uses for it. A preset key resolves through the
@@ -1741,28 +1741,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * keeping the current zoom (the hand-mode "where did my content go"
      * recovery). No boxes → no-op.
      */
-    /**
-     * Frames the given content: pans so its center sits at the viewport
-     * center, and zooms so the whole box fits with a small margin —
-     * magnifying a small selection as readily as it shrinks an oversized
-     * canvas, which is the whole point of zoom-to-selection. Never
-     * magnifies past 1:1 (a two-word note would otherwise fill the screen)
-     * and stays inside the viewport module's own [MIN_ZOOM, MAX_ZOOM].
-     */
-    const frameContent = (ids?: ReadonlySet<string>) => {
-      const bounds = unionContentBounds(boxes, ids)
-      if (bounds === undefined) return false
-      const containerSize = containerSizeOf(rootRef.current)
-      setViewport((vp) => frameViewport(bounds, containerSize, vp.zoom, FRAME_MARGIN_PX))
-      return true
-    }
-
-    /** Frames the selection, or everything when nothing is selected. */
-    const frameSelection = (): boolean => {
-      if (selection === undefined) return frameContent()
-      return frameContent(new Set([selection.id, ...extraIds]))
-    }
-
     // The keyboard surface — shortcut dispatch plus the three keydown
     // handlers the JSX wires (canvas root, focused resize handle, connect
     // handle). See use-editor-keyboard.ts; shortcuts.ts stays the catalog.
