@@ -37,6 +37,7 @@ import {
   Link,
   Lock as LockIcon,
   LockOpen,
+  MessageSquarePlus,
   PanelBottom,
   PanelLeft,
   PanelRight,
@@ -88,6 +89,16 @@ export type DocumentPickerState =
   | { readonly mode: 'retarget'; readonly nodeId: string }
 
 /**
+ * An open comment compose bubble: the anchor the comment will carry, plus
+ * the node it is about when it came from a node's menu. The draft text
+ * lives in the bubble itself — only the anchor is decided at menu time.
+ */
+export interface CommentComposeState {
+  readonly point: Point
+  readonly targetNodeId?: string
+}
+
+/**
  * Everything the menu can DO, as one object.
  *
  * The menu is a command surface: thirty-six flat props made it read as a
@@ -124,6 +135,7 @@ export interface CanvasCommands {
   readonly setDocumentPicker: (state: DocumentPickerState | null) => void
   /** Opens the node's full facet editor — the point knows no domain. */
   readonly setFacetPanelOpen: (open: boolean) => void
+  readonly setCommentCompose: (state: CommentComposeState | null) => void
 }
 
 export interface CanvasContextMenuProps {
@@ -190,6 +202,7 @@ export function CanvasContextMenu({
     setLinkDialog,
     setDocumentPicker,
     setFacetPanelOpen,
+    setCommentCompose,
   } = commands
 
   // Both derive from whether the host wired the matching toggle callback —
@@ -452,6 +465,14 @@ export function CanvasContextMenu({
                 applyBoxMoves(tidyNodes(canvasRef.current.nodes, { locked: isLocked })),
             })
           }
+          // Its own band: a comment is not content, so it sits apart from
+          // the creation set rather than reading as a sixth node kind.
+          emptyItems.push({ kind: 'separator' })
+          emptyItems.push({
+            label: 'Comment here',
+            icon: <MessageSquarePlus />,
+            onSelect: () => setCommentCompose({ point: contextMenu.point }),
+          })
           return emptyItems
         }
         // The catalog's band order, shared by both vessels (list and grid):
@@ -575,9 +596,21 @@ export function CanvasContextMenu({
         // Touch path to Cmd/Ctrl+D (see shortcuts.ts). The menu's
         // right-click already made this node the primary selection,
         // so the shared handler clones the full multi-selection.
-        // A locked node's menu offers exactly one action: unlock.
-        // Showing Delete/Edit next to a lock the user deliberately
-        // set would make the lock read as decorative.
+        // Anchored at the node's top-right corner, the same convention the
+        // MCP `comment` op uses, so a comment reads the same whoever made it.
+        const commentOnThis: ContextMenuItem = {
+          label: 'Comment on this',
+          icon: <MessageSquarePlus />,
+          onSelect: () =>
+            setCommentCompose({
+              point: { x: node.x + node.width, y: node.y },
+              targetNodeId: node.id,
+            }),
+        }
+        // A locked node's menu offers unlock, and nothing that edits the
+        // node: showing Delete/Edit next to a lock the user deliberately
+        // set would make the lock read as decorative. A comment is ABOUT
+        // the node and never touches it, so it stays.
         if (isLocked(node.id)) {
           return [
             {
@@ -585,6 +618,7 @@ export function CanvasContextMenu({
               icon: <LockOpen />,
               onSelect: () => onToggleNodeLock?.(node.id, false),
             },
+            commentOnThis,
           ]
         }
         verbs.push({
@@ -756,6 +790,7 @@ export function CanvasContextMenu({
             onSelect: () => onToggleNodeLock?.(node.id, true),
           })
         }
+        verbs.push(commentOnThis)
         return [
           ...properties,
           // Extensions come after every core row, behind their own fence.
