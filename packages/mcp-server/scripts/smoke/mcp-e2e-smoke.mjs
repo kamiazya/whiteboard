@@ -662,6 +662,40 @@ async function main() {
   }
   console.log('[e2e] wb_canvas_edit → widget-shaped sticky note lands and refreshes')
 
+  // The comment annotation layer (ADR-0024): a node-targeted comment.add,
+  // its echo through canvas_view (the widget's read), and its resolve —
+  // exercised through the real MCP SDK because the ops union, the stored
+  // per-comment map, and the outputSchema's `touched.comments` all travel
+  // separately from any type the compiler checks.
+  const commented = await callTool('wb_canvas_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [{ op: 'comment.add', comment: { targetNodeId: 'lockable', text: 'smoke comment' } }],
+  })
+  const commentId = commented.touched?.comments?.[0]
+  if (commented.applied !== 1 || commentId === undefined) {
+    throw new Error(`comment.add did not report its comment: ${JSON.stringify(commented)}`)
+  }
+  const afterComment = await callTool('canvas_view', { workspaceId: WORKSPACE_ID, documentId })
+  const commentInScene = (afterComment.scene['x-whiteboard']?.comments ?? []).some(
+    (comment) => comment.id === commentId && comment.text === 'smoke comment',
+  )
+  if (!commentInScene) {
+    throw new Error('comment.add is not in the refreshed canvas_view scene')
+  }
+  const resolvedBatch = await callTool('wb_canvas_edit', {
+    workspaceId: viewed.workspaceId,
+    documentId: viewed.documentId,
+    ops: [{ op: 'comment.resolve', id: commentId }],
+  })
+  const resolvedComment = (resolvedBatch.snapshot.comments ?? []).find(
+    (comment) => comment.id === commentId,
+  )
+  if (resolvedComment?.resolved !== true) {
+    throw new Error(`comment.resolve did not mark the record: ${JSON.stringify(resolvedBatch)}`)
+  }
+  console.log('[e2e] wb_canvas_edit → comment.add reaches canvas_view, comment.resolve marks it')
+
   // The opt-in layout analysis is a SECOND composition through the same
   // output schema, reached only when `layout` is set, so the default read
   // below cannot cover it. It is also the only tool result still built

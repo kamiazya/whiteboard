@@ -70,6 +70,7 @@ describe('wb_canvas_snapshot tool', () => {
         { id: 'n4', type: 'file', x: 0, y: 200, width: 200, height: 60, file: 'notes.md' },
       ],
       edges: [{ id: 'e1', fromNode: 'n1', toNode: 'n3', label: 'leads to' }],
+      comments: [],
       nodeCount: 4,
       edgeCount: 1,
       truncated: false,
