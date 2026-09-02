@@ -59,6 +59,7 @@
  */
 
 import type {
+  BoundingBox,
   MeasureText,
   ResolvedReference,
   SpatialPresetKey,
@@ -66,13 +67,13 @@ import type {
 import {
   BODY_FONT_SIZE_PX,
   BODY_LINE_HEIGHT_PX,
-  COMMENT_BUBBLE_OFFSET_PX,
   COMMENT_BUBBLE_PADDING_PX,
   COMMENT_BUBBLE_RADIUS_PX,
   commentAnchor,
   edgeLabelAnchor,
   flattenDrawnEdgePath,
   outlineContentBox,
+  placeCommentBubble,
   SPATIAL_DARK_PALETTE,
   SPATIAL_LIGHT_PALETTE,
   SPATIAL_THEME_FONT_FAMILY,
@@ -147,7 +148,7 @@ import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
 import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { requiredTextNodeHeight } from './scene-render.js'
-import { renderedCanvasKeyed } from './scene-render-core.js'
+import { keyedWithoutPrefix, renderedCanvasKeyed } from './scene-render-core.js'
 import {
   EMPTY_SELECTION,
   reduceSelection,
@@ -355,6 +356,22 @@ const EDGE_LABEL_EDITOR_HEIGHT_PX = 28
  * so committing reads as the draft settling rather than jumping. */
 const COMMENT_COMPOSE_WIDTH_PX = 216
 const COMMENT_COMPOSE_HEIGHT_PX = 64
+/**
+ * Where the draft opens: placed by canvas-render's own bubble placer over
+ * the same obstacles, so it opens in the quadrant the settled bubble will
+ * take rather than over the node the comment is about.
+ */
+function commentDraftBox(
+  anchor: Point,
+  obstacles: readonly BoundingBox[],
+): { x: number; y: number; width: number; height: number } {
+  const placed = placeCommentBubble(
+    anchor,
+    { w: COMMENT_COMPOSE_WIDTH_PX, h: COMMENT_COMPOSE_HEIGHT_PX },
+    obstacles,
+  )
+  return { x: placed.x, y: placed.y, width: placed.w, height: placed.h }
+}
 
 /**
  * The compose bubble wears the theme's comment chrome — the same palette
@@ -715,10 +732,32 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           if (node.kind !== 'shape' || node.commentChrome !== true || node.id === undefined)
             return []
           const cut = node.id.lastIndexOf('/')
-          return cut <= 0 ? [] : [{ commentId: node.id.slice(0, cut), bbox: node.bbox }]
+          if (cut <= 0) return []
+          const part = node.id.slice(cut + 1)
+          if (part !== 'pin' && part !== 'bubble') return []
+          return [{ commentId: node.id.slice(0, cut), part, bbox: node.bbox }]
         }),
       [scene],
     )
+    /**
+     * What a comment's bubble is placed around — the same obstacle set
+     * canvas-render's placer sees for it: every node that is not a group
+     * frame, plus the bubbles of the comments BEFORE it in document order
+     * (all of them for a comment about to be created, which goes last). The
+     * editor's draft and its drag preview both place through this, so a
+     * bubble opens, drags and settles in one spot.
+     */
+    const commentPlacementObstacles = (beforeCommentId?: string): BoundingBox[] => {
+      const out: BoundingBox[] = canvasRef.current.nodes
+        .filter((node) => node.type !== 'group')
+        .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height }))
+      for (const entry of commentChromeBoxes) {
+        if (entry.part !== 'bubble') continue
+        if (entry.commentId === beforeCommentId) break
+        out.push(entry.bbox)
+      }
+      return out
+    }
     const hitTestComment = (point: Point): string | undefined => {
       for (let i = commentChromeBoxes.length - 1; i >= 0; i -= 1) {
         const entry = commentChromeBoxes[i]
@@ -784,7 +823,39 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       readonly comment: CanvasComment
       readonly startPoint: Point
       readonly live: Point | null
+      /** The obstacle set at the press, so the preview places like the committed chrome. */
+      readonly obstacles: readonly BoundingBox[]
+      /**
+       * Set on release: the anchor the move was committed at. The drag then
+       * SETTLES rather than ending — the preview stays up, and the committed
+       * copy stays out of the surface, until the committed scene carries the
+       * comment at this anchor (a worker round trip later on a large canvas).
+       * Ending at the release instead showed the old copy for a frame and
+       * animated it to the new anchor.
+       */
+      readonly dropped: Point | null
     } | null>(null)
+    useEffect(() => {
+      if (commentDrag?.dropped == null) return
+      const { dropped } = commentDrag
+      const pin = commentChromeBoxes.find(
+        (entry) => entry.commentId === commentDrag.comment.id && entry.part === 'pin',
+      )
+      const arrived =
+        pin !== undefined &&
+        pin.bbox.x + pin.bbox.w / 2 === dropped.x &&
+        pin.bbox.y + pin.bbox.h / 2 === dropped.y
+      // Gone (removed underneath the drag) settles too: nothing to wait for.
+      if (arrived || commentById(commentDrag.comment.id) === undefined) setCommentDrag(null)
+    }, [commentDrag, commentChromeBoxes])
+    // The committed surface without the comment in flight (see
+    // keyedWithoutPrefix for why it leaves rather than hides).
+    const draggedCommentId = commentDrag?.comment.id
+    const surfaceKeyed = useMemo(
+      () =>
+        draggedCommentId === undefined ? keyed : keyedWithoutPrefix(keyed, `${draggedCommentId}/`),
+      [keyed, draggedCommentId],
+    )
     // The URL dialog serves both palette-create and context-menu-edit; which
     // one decides what its submit does.
     const [groupLabelEditId, setGroupLabelEditId] = useState<string | null>(null)
@@ -857,7 +928,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         fileSeamOptions,
         scene,
         anchors,
-        keyed,
+        keyed: surfaceKeyed,
         boxes,
         selectableBoxes,
         livePoint,
@@ -1209,7 +1280,13 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           return
         }
         if (comment.targetNodeId === undefined) {
-          setCommentDrag({ comment, startPoint: point, live: null })
+          setCommentDrag({
+            comment,
+            startPoint: point,
+            live: null,
+            obstacles: commentPlacementObstacles(comment.id),
+            dropped: null,
+          })
         }
         return
       }
@@ -1403,6 +1480,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       )
       if (!navigation.fallThrough) return
       if (commentDrag !== null) {
+        if (commentDrag.dropped !== null) return
         setCommentDrag({ ...commentDrag, live: screenToCanvas(screenPoint, viewport) })
         return
       }
@@ -1449,7 +1527,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // selection the gather just built.
       if (!navigation.fallThrough) return
       if (commentDrag !== null) {
-        setCommentDrag(null)
+        if (commentDrag.dropped !== null) return
         const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
         const dx = released.x - commentDrag.startPoint.x
         const dy = released.y - commentDrag.startPoint.y
@@ -1459,19 +1537,28 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // comment that fails the schema — a fractional anchor from a zoomed
         // viewport would survive this session and vanish on the next undo,
         // reload or remote import.
-        if (dx !== 0 || dy !== 0) {
-          applyResult({
-            state: { kind: 'idle' },
-            commands: [
-              {
-                kind: 'move-comment',
-                id: commentDrag.comment.id,
-                x: Math.round(commentDrag.comment.x + dx),
-                y: Math.round(commentDrag.comment.y + dy),
-              } as const,
-            ],
-          })
+        if (dx === 0 && dy === 0) {
+          setCommentDrag(null)
+          return
         }
+        const dropped = {
+          x: Math.round(commentDrag.comment.x + dx),
+          y: Math.round(commentDrag.comment.y + dy),
+        }
+        // The preview parks exactly on the rounded anchor, so the committed
+        // copy takes over without a sub-pixel step.
+        setCommentDrag({
+          ...commentDrag,
+          live: {
+            x: commentDrag.startPoint.x + (dropped.x - commentDrag.comment.x),
+            y: commentDrag.startPoint.y + (dropped.y - commentDrag.comment.y),
+          },
+          dropped,
+        })
+        applyResult({
+          state: { kind: 'idle' },
+          commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
+        })
         return
       }
       const armed = doublePressRef.current
@@ -2539,6 +2626,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 }}
                 measure={resolvedMeasure}
                 theme={theme}
+                obstacles={commentDrag.obstacles}
               />
             )}
             {selectedEdgeId !== null && (
@@ -2617,12 +2705,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
             {commentCompose !== null && (
               <TextNodeEditor
                 exitHintScale={1 / viewport.zoom}
-                box={{
-                  x: commentCompose.point.x + COMMENT_BUBBLE_OFFSET_PX,
-                  y: commentCompose.point.y + COMMENT_BUBBLE_OFFSET_PX,
-                  width: COMMENT_COMPOSE_WIDTH_PX,
-                  height: COMMENT_COMPOSE_HEIGHT_PX,
-                }}
+                box={commentDraftBox(
+                  commentCompose.point,
+                  commentPlacementObstacles(commentCompose.editing?.id),
+                )}
                 initialText={commentCompose.editing?.initialText ?? ''}
                 testId="comment-compose"
                 style={commentComposeStyle(theme)}

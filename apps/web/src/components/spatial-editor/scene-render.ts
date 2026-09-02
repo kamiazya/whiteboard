@@ -5,7 +5,11 @@
  * `renderSceneToSvg`, exactly as `CanvasViewer` does in canvas-viewer.
  */
 
-import type { MeasureText, ResolvedReference } from '@kamiazya/whiteboard-canvas-render'
+import type {
+  BoundingBox,
+  MeasureText,
+  ResolvedReference,
+} from '@kamiazya/whiteboard-canvas-render'
 import { naturalNodeContentSize, SPATIAL_THEME_GEOMETRY } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
@@ -24,6 +28,8 @@ export interface RenderCanvasOptions {
   readonly expandFileNode?: (node: Extract<SpatialNode, { type: 'file' }>) => boolean
   /** See RenderCanvasCoreOptions: the node ids whose body an editor overlay owns. */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /** See RenderCanvasCoreOptions: boxes a comment bubble must not cover. */
+  readonly commentObstacles?: readonly BoundingBox[]
 }
 
 /**

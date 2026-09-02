@@ -3,9 +3,15 @@
  * comment's own chrome (leader, pin, bubble) rendered ONCE at the drag's
  * start anchor and translated per frame, the same render-once/transform-
  * per-frame trick the node drag ghost uses (DragPreviewLayer). While it is
- * up, the committed copy of that comment is hidden through its keyed SVG
- * groups (`data-wb-key="<id>/…"`), so the comment is drawn exactly once —
- * a second copy left at the old anchor reads as the drag not working.
+ * up, the committed copy of that comment is LEFT OUT of the keyed surface
+ * (see `keyedWithoutPrefix`), so the comment is drawn exactly once — a
+ * second copy left at the old anchor reads as the drag not working, and a
+ * hidden one comes back animated on the drop.
+ *
+ * `obstacles` are what the committed scene placed this comment's bubble
+ * against — the canvas's nodes and the bubbles before it — so the preview
+ * at delta zero coincides with the drawn chrome instead of re-placing the
+ * bubble in the empty canvas it is rendered in.
  *
  * A side layer rather than a GestureState arm, deliberately: the gesture
  * machine's snapshots, snapping and live-edge routing are all about NODES,
@@ -14,7 +20,7 @@
  * this into GestureState and gesture-view's carried set instead.
  */
 
-import type { MeasureText } from '@kamiazya/whiteboard-canvas-render'
+import type { BoundingBox, MeasureText } from '@kamiazya/whiteboard-canvas-render'
 import type { CanvasComment } from '@kamiazya/whiteboard-model'
 import { useMemo } from 'react'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
@@ -28,9 +34,17 @@ export interface CommentDragLayerProps {
   readonly delta: Point
   readonly measure: MeasureText
   readonly theme: ResolvedTheme
+  /** Boxes the bubble is placed around; reference-stable for the gesture. */
+  readonly obstacles: readonly BoundingBox[]
 }
 
-export function CommentDragLayer({ comment, delta, measure, theme }: CommentDragLayerProps) {
+export function CommentDragLayer({
+  comment,
+  delta,
+  measure,
+  theme,
+  obstacles,
+}: CommentDragLayerProps) {
   // Rendered once per drag: `comment` is reference-stable for the gesture
   // (it is the snapshot taken at the press), and the per-frame work is the
   // translate below.
@@ -38,17 +52,12 @@ export function CommentDragLayer({ comment, delta, measure, theme }: CommentDrag
     () =>
       renderCanvasToSvg(
         { nodes: [], edges: [], 'x-whiteboard': { comments: [comment] } },
-        { measure, theme },
+        { measure, theme, commentObstacles: obstacles },
       ),
-    [comment, measure, theme],
+    [comment, measure, theme, obstacles],
   )
-  // A CSS string, so quotes and backslashes in an id cannot break out of
-  // the attribute selector; `^=` keeps the match to this comment's own
-  // `<id>/pin`, `<id>/bubble`, `<id>/leader` and bubble-content groups.
-  const hideCommitted = `[data-testid="canvas-content"] [data-wb-key^=${JSON.stringify(`${comment.id}/`)}]{visibility:hidden}`
   return (
     <>
-      <style>{hideCommitted}</style>
       <div
         data-testid="comment-drag-preview"
         aria-hidden="true"
