@@ -23,6 +23,9 @@ const overlaySources = import.meta.glob(
     './MemberOutlinesOverlay.tsx',
     './DragPreviewLayer.tsx',
     './SpatialEditor.tsx',
+    './MarqueeOverlay.tsx',
+    './SnapGuidesOverlay.tsx',
+    './EdgeSelectionHighlight.tsx',
   ],
   { query: '?raw', eager: true, import: 'default' },
 ) as Record<string, string>
@@ -36,7 +39,7 @@ const HEX_LITERAL = /(?:stroke|fill|color)\s*[:=]\s*["'{]*#[0-9a-fA-F]{3,8}\b/g
 
 describe('manipulation overlays read tokens, not hex literals', () => {
   it('scans the overlay set it claims to', () => {
-    expect(Object.keys(overlaySources)).toHaveLength(5)
+    expect(Object.keys(overlaySources)).toHaveLength(8)
   })
 
   it('has no raw hex color in any overlay source', () => {

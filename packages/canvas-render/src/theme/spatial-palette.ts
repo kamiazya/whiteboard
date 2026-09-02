@@ -120,11 +120,14 @@ export const SPATIAL_LIGHT_PALETTE: SpatialPalette = {
     number: '#c2410c',
     comment: '#5b6472',
   },
-  // The preset-3 amber pair: stroke 4.5:1 on white, labelFill 9.3:1 on the
-  // tint — the same contrast-tested ramp the presets pin.
+  // Comment chrome is NOT a preset pair: an amber-tinted bubble read as a
+  // preset-3 content node. The bubble is a neutral card (the surface white,
+  // separated by the drop shadow the theme adds) with the amber 600 as an
+  // accent border (4.5:1 on white); the pin keeps the amber fill and gets a
+  // surface-colored ring, which no authored node carries.
   comment: {
-    pin: { fill: '#d97706', stroke: '#b45309' },
-    bubble: { fill: '#fef3c7', stroke: '#d97706' },
+    pin: { fill: '#d97706', stroke: '#ffffff' },
+    bubble: { fill: '#ffffff', stroke: '#d97706' },
   },
 }
 
@@ -165,9 +168,13 @@ export const SPATIAL_DARK_PALETTE: SpatialPalette = {
     number: '#fb923c',
     comment: '#9ba3af',
   },
-  // The preset-3 dark pair (Tailwind 400 over 950), same ramp as above.
+  // Same chrome-not-preset rule as the light palette: the bubble is an
+  // ELEVATED neutral card (#262626, one step above the #0a0a0a surface so
+  // the float reads even where a dark shadow cannot) with the amber 400
+  // accent border (~8:1 on the card); labelFill on it is ~11:1. The pin's
+  // ring is the surface color, punching a gap against whatever it overlaps.
   comment: {
-    pin: { fill: '#fbbf24', stroke: '#f59e0b' },
-    bubble: { fill: '#451a03', stroke: '#fbbf24' },
+    pin: { fill: '#fbbf24', stroke: '#0a0a0a' },
+    bubble: { fill: '#262626', stroke: '#fbbf24' },
   },
 }

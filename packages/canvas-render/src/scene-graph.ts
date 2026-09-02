@@ -62,6 +62,23 @@ export interface Appearance {
    * the single-element output byte-identical.
    */
   readonly halo?: string
+  /**
+   * SVG `stroke-dasharray` value, verbatim ("4 3"). A dash pattern is paint
+   * the way a stroke color is — assigned by a resolver, never invented here.
+   * Deliberately NOT scaled by `scaleScene` (the svgFragment/arrowhead
+   * class): parsing and rescaling a pattern string buys visual fidelity only
+   * at scales where a dashed hairline is unreadable anyway.
+   */
+  readonly strokeDasharray?: string
+  /**
+   * Paint a soft drop shadow under the element so it reads as floating
+   * ABOVE the canvas plane — annotation chrome, not authored content.
+   * Consumed by the rect chrome today (the comment layer's pin and bubble);
+   * presence-only like every appearance field, and the shadow's reach is a
+   * fixed backend constant (the arrowhead class: bounds keep reading the
+   * bbox, and the blur never exceeds the hit tolerance).
+   */
+  readonly dropShadow?: true
 }
 
 /** A single styled run of inline text, positioned within its parent block. */

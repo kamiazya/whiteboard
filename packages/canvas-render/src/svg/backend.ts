@@ -85,6 +85,9 @@ function appearanceAttrs(appearance?: Appearance): PaintAttrs {
   ) {
     attrs['stroke-opacity'] = appearance.strokeOpacity
   }
+  if (isNonEmptyString(appearance.strokeDasharray)) {
+    attrs['stroke-dasharray'] = appearance.strokeDasharray
+  }
   return attrs
 }
 
@@ -160,6 +163,35 @@ const FADE_DEFS: ReadonlyArray<SvgDef> = [
     node: el('mask', { id: FADE_MASK_ID, maskContentUnits: 'objectBoundingBox' }, [
       el('rect', { x: 0, y: 0, width: 1, height: 1, fill: `url(#${FADE_MASK_ID}-gradient)` }),
     ]),
+  },
+]
+
+const DROP_SHADOW_ID = 'wb-drop-shadow'
+
+/**
+ * One shared soft shadow for everything that floats (the comment layer's
+ * chrome). Declared per referencing element and hoisted by `collectDefs`,
+ * exactly like the fade mask, so a shadow-free scene stays byte-identical.
+ * The region is widened past the default -10%..110% because the blur's
+ * reach (3·stdDeviation + dy ≈ 5.5px) exceeds 10% of a small element like
+ * the 20px pin, and a clipped shadow reads as a rendering artifact.
+ */
+const DROP_SHADOW_DEFS: ReadonlyArray<SvgDef> = [
+  {
+    id: DROP_SHADOW_ID,
+    node: el(
+      'filter',
+      { id: DROP_SHADOW_ID, x: '-30%', y: '-30%', width: '160%', height: '160%' },
+      [
+        el('feDropShadow', {
+          dx: 0,
+          dy: 1,
+          stdDeviation: 1.5,
+          'flood-color': '#000000',
+          'flood-opacity': 0.3,
+        }),
+      ],
+    ),
   },
 ]
 
@@ -307,11 +339,13 @@ function renderShape(node: ShapeSceneNode, tables?: ResolveTables): SvgChild {
 /** The historic rect, byte-for-byte — also what a node falls back to when its
  *  shape id resolves to nothing. */
 function renderChromeRect(node: ShapeSceneNode): SvgChild {
-  return el('rect', {
+  const rect = el('rect', {
     ...rectAttrs(node.bbox),
     rx: isPositiveLength(node.radius) ? node.radius : undefined,
     ...appearanceAttrs(node.appearance),
+    filter: node.appearance?.dropShadow === true ? `url(#${DROP_SHADOW_ID})` : undefined,
   })
+  return node.appearance?.dropShadow === true ? withDefs(rect, DROP_SHADOW_DEFS) : rect
 }
 
 function renderListItem(item: ListItemNode, tables?: ResolveTables): SvgChild {

@@ -4,6 +4,7 @@ import {
   projectWorkspaceDocument,
   resolveWorkspaceDocument,
 } from '@kamiazya/whiteboard-loro-adapter'
+import { countAliveNodes } from '@kamiazya/whiteboard-server-core'
 import { DocumentStoreWorkspaceDocs } from '@kamiazya/whiteboard-workspace-index'
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc } from 'loro-crdt'
@@ -17,7 +18,6 @@ import {
   validateWorkspaceId,
 } from '../validators.js'
 import { corruptStoredData, isMissingFileError } from './corrupt-stored-data.js'
-import { countAliveNodes } from './count-alive-nodes.js'
 import { getDb } from './db/index.js'
 import { prepareDataDir } from './db/prepare.js'
 import { DocumentNotFoundError } from './document-not-found-error.js'

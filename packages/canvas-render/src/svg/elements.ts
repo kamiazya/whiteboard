@@ -39,6 +39,7 @@ export type PaintAttrs = {
   'font-size'?: number
   'fill-opacity'?: number
   'stroke-opacity'?: number
+  'stroke-dasharray'?: string
 }
 
 export type TextEmphasisAttrs = {
@@ -68,7 +69,7 @@ export type SvgElements = {
     role?: SvgRole
     'data-wb-key'?: string
   }
-  rect: SvgBoxAttrs & PaintAttrs & { rx?: number; role?: SvgRole }
+  rect: SvgBoxAttrs & PaintAttrs & { rx?: number; filter?: string; role?: SvgRole }
   // width/height appear on <text> only through the legacy codeBlock/rawHtml
   // box-placement path (rectAttrs spread); x/y are the baseline contract.
   // 'middle' is the only anchor emitted: body runs are left-anchored by
@@ -125,6 +126,18 @@ export type SvgElements = {
   linearGradient: { id: string; x1?: number; y1?: number; x2?: number; y2?: number }
   stop: { offset: number; 'stop-color': string }
   mask: { id: string; maskContentUnits?: 'objectBoundingBox' }
+  // The filter region fields are percentage STRINGS on purpose: the default
+  // region (-10%..110%) clips a blur on a small element like the 20px
+  // comment pin, and a percentage scales to every referencing element where
+  // a userSpace number could not.
+  filter: { id: string; x?: string; y?: string; width?: string; height?: string }
+  feDropShadow: {
+    dx: number
+    dy: number
+    stdDeviation: number
+    'flood-color': string
+    'flood-opacity': number
+  }
 }
 
 export type SvgTagName = keyof SvgElements

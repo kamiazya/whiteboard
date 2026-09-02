@@ -47,7 +47,13 @@ const MIN_SNAPSHOT_MS = 50
  * stable across machines in a way "this takes 1242ms" is not.
  */
 describe('the hot snapshot', () => {
-  it('blocks the event loop for its whole duration', async () => {
+  // The growth loop's cost is a property of the machine, so the BUDGET has
+  // to cover the slowest runner too: under a loaded CI runner the sibling
+  // snapshot.test.ts measured 24.6s for one capture, and this test's insert
+  // rounds plus up to five snapshots blew the project's 10s default. 60s is
+  // sized from that measurement, not the seed/timeout confusion the
+  // integrator flow warns about — the property itself never failed.
+  it('blocks the event loop for its whole duration', { timeout: 60_000 }, async () => {
     // The fixture GROWS until the snapshot is long enough for the answer to
     // mean anything, rather than being a size someone measured once.
     //
