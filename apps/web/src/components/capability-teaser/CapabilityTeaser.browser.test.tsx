@@ -7,7 +7,7 @@ afterEach(cleanup)
 
 describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
   it('opens the Radix tooltip with the guidance text on real hover', async () => {
-    render(<CapabilityTeaser label="Version history" enabled={false} />)
+    render(<CapabilityTeaser label="Version history" />)
     const control = screen.getByRole('button', { name: 'Version history' })
 
     await userEvent.hover(control)
@@ -26,7 +26,7 @@ describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
     render(
       <>
         <button type="button">before</button>
-        <CapabilityTeaser label="Workspaces" enabled={false} />
+        <CapabilityTeaser label="Workspaces" />
       </>,
     )
 
@@ -46,19 +46,11 @@ describe('CapabilityTeaser (browser — real Radix Tooltip open/close)', () => {
     // the closed (default) state the button's aria-describedby still resolves to
     // an element carrying the guidance text — so screen-reader users get the
     // description without having to open the tooltip.
-    render(<CapabilityTeaser label="Branches" enabled={false} />)
+    render(<CapabilityTeaser label="Branches" />)
     const control = screen.getByRole('button', { name: 'Branches' })
     const describedBy = control.getAttribute('aria-describedby')
     expect(describedBy).toBeTruthy()
     const descEl = document.getElementById(describedBy!.split(' ')[0])
     expect(descEl?.textContent).toBe('Connect a daemon (MCP) to enable Branches')
-  })
-
-  it('does not render a Radix tooltip trigger once the capability is enabled', async () => {
-    render(<CapabilityTeaser label="Merge" enabled={true} />)
-    const control = screen.getByRole('button', { name: 'Merge' })
-
-    await userEvent.hover(control)
-    expect(screen.queryByText('Connect a daemon (MCP) to enable Merge')).toBeNull()
   })
 })

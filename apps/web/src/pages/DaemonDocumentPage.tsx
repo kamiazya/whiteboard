@@ -727,13 +727,9 @@ export function DaemonDocumentPage({
                 {/* WorkspaceTopBar owns the real History/HeaderSaveDot/HeaderBranchChip
               affordances once a canvas is selected; these page-level teasers only
               surface guidance while the capability itself is unavailable. */}
-                {!capabilities.versions && (
-                  <CapabilityTeaser label="Version history" enabled={capabilities.versions} />
-                )}
-                {!capabilities.branches && (
-                  <CapabilityTeaser label="Variations" enabled={capabilities.branches} />
-                )}
-                {!capabilities.merge && <CapabilityTeaser label="Combine" enabled={false} />}
+                {!capabilities.versions && <CapabilityTeaser label="Version history" />}
+                {!capabilities.branches && <CapabilityTeaser label="Variations" />}
+                {!capabilities.merge && <CapabilityTeaser label="Combine" />}
               </div>
             )}
           </>
