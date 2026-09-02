@@ -260,6 +260,37 @@ describe('markdown editor verbs', () => {
     expect(twice.doc).toBe(taskLine)
   })
 
+  fcTest.prop([documentAndCaret], withDefaults())(
+    'W2: a wrap verb applied twice at the same spot is the identity — the second press unwraps',
+    ({ doc, at }) => {
+      for (const id of ['bold', 'italic', 'code', 'link', 'strikethrough', 'math'] as const) {
+        const spec = verb(id)
+        const command = selfContainedCommand(spec)
+        if (command === null) throw new Error(`${id} lost its command`)
+        const open =
+          spec.action.kind === 'wrap'
+            ? spec.action.open
+            : spec.action.kind === 'interactive'
+              ? spec.action.fallback.open
+              : ''
+        const once = drive(id, command, doc, at)
+        // The caret stays inside what was wrapped, where the next press finds it.
+        const twice = drive(id, command, once.doc, at + open.length)
+        expect(twice.doc, `${id} did not unwrap ${JSON.stringify(once.doc)}`).toBe(doc)
+      }
+    },
+  )
+
+  it('W3: a selection that includes the delimiters is unwrapped, and a nest opens from the inside', () => {
+    const bold = selfContainedCommand(verb('bold'))
+    const italic = selfContainedCommand(verb('italic'))
+    if (bold === null || italic === null) throw new Error('lost a command')
+    expect(drive('bold', bold, '**hello**', 0, 9).doc).toBe('hello')
+    // ***hello*** is bold+italic; the caret's word is hugged by ** first.
+    expect(drive('bold', bold, '***hello***', 5).doc).toBe('*hello*')
+    expect(drive('italic', italic, '***hello***', 5).doc).toBe('**hello**')
+  })
+
   fcTest.prop([plainDocument], withDefaults())(
     'L1: a list or quote prefix toggled twice over the whole document returns the original',
     (doc) => {

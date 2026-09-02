@@ -6,20 +6,60 @@ import { toggleTaskCheckbox } from './toggle-task-checkbox.js'
 import { rangeToActOn } from './word-at.js'
 
 /**
- * Wraps what the caret is ON in `open`/`close` (Mod-b -> **, Mod-i -> *,
+ * Toggles `open`/`close` around what the caret is ON (Mod-b -> **, Mod-i -> *,
  * the catalog's [[ ]] passing two different delimiters). With a selection
  * that is the selection; without one it is the WORD under the caret, which
  * is what lets every verb work on a phone, where making a selection is the
  * hard part. A caret on whitespace has no word: that inserts an empty pair
  * and parks the cursor between the delimiters so the next keystroke lands
- * inside. Toggling (detecting an already-wrapped range and unwrapping) is
- * deliberately not attempted: markdown emphasis nesting makes reliable
- * detection lexer work, and a wrong unwrap corrupts text — insert-only is
- * predictable.
+ * inside.
+ *
+ * Unwrapping is decided at the text level, never by a lexer: the range is
+ * unwrapped when EXACTLY these delimiters hug it (the characters right
+ * before and after), or when the selection itself begins and ends with
+ * them. Reading the adjacent characters is what makes a nest open from the
+ * inside — on `***word***` the word is hugged by `**` and by `*` alike, and
+ * each verb removes only its own. Anything else wraps, so a second press
+ * always undoes the first, which is what a B button means everywhere else.
  */
 export function wrapSelectionWith(open: string, close: string = open): StateCommand {
   return ({ state, dispatch }) => {
     const scope = rangeToActOn(state)
+    const before = state.doc.sliceString(Math.max(0, scope.from - open.length), scope.from)
+    const after = state.doc.sliceString(scope.to, scope.to + close.length)
+    if (before === open && after === close) {
+      dispatch(
+        state.update({
+          changes: [
+            { from: scope.from - open.length, to: scope.from },
+            { from: scope.to, to: scope.to + close.length },
+          ],
+          selection: EditorSelection.range(scope.from - open.length, scope.to - open.length),
+          scrollIntoView: true,
+          userEvent: 'delete',
+        }),
+      )
+      return true
+    }
+    const selected = state.doc.sliceString(scope.from, scope.to)
+    if (
+      selected.length >= open.length + close.length &&
+      selected.startsWith(open) &&
+      selected.endsWith(close)
+    ) {
+      dispatch(
+        state.update({
+          changes: [
+            { from: scope.from, to: scope.from + open.length },
+            { from: scope.to - close.length, to: scope.to },
+          ],
+          selection: EditorSelection.range(scope.from, scope.to - open.length - close.length),
+          scrollIntoView: true,
+          userEvent: 'delete',
+        }),
+      )
+      return true
+    }
     dispatch(
       state.update({
         changes: [

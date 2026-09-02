@@ -93,6 +93,11 @@ it('tapping Bold wraps the caret word without committing the editor', async () =
   expect(onChange).toHaveBeenLastCalledWith('**hello**')
   expect(onCommit).not.toHaveBeenCalled()
   expect(document.activeElement?.closest('.cm-editor')).not.toBeNull()
+
+  // A second tap toggles it back off — the phone's B behaves like every other B.
+  await userEvent.click(screen.getByRole('button', { name: 'Bold' }))
+  await settle()
+  expect(onChange).toHaveBeenLastCalledWith('hello')
 })
 
 it('"…" opens the overflow sheet, and a verb from it acts on the document', async () => {
