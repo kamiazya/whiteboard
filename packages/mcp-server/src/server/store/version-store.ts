@@ -261,84 +261,99 @@ export class FileVersionStore implements VersionStore {
     })
   }
 
+  // The three reads below open the STORED workspace record on the shared
+  // connection, and they take the same reentrant lock every writer holds.
+  // Not for the phantom-row hazard the write side guards against — a read
+  // cannot insert anything — but because a multi-statement read interleaved
+  // with a writer's COMMIT on one libsql connection fails the commit
+  // ("SQL statements in progress") and the read ("database is locked").
+  // The HTTP restore route used to hold this lock around the whole handler,
+  // which serialised these reads by accident; an operation expressed over
+  // the seam holds no lock, so the mechanic has to own its own safety.
   async load(workspaceId: string, id: string): Promise<LoroDoc | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
-    const db = await dbReady()
-    const row = await db
-      .selectFrom('versions')
-      .select(['frontiers', 'documentId'])
-      .where('workspaceId', '=', workspaceId)
-      .where('id', '=', id)
-      .executeTakeFirst()
-    if (!row) return null
-    // Checked out against the STORED workspace document, whose oplog the
-    // frontiers were recorded in — never against a live per-document
-    // projection, whose fresh lineage does not contain them. The past state
-    // is then projected back out as a standalone doc, which is the shape
-    // every caller expects.
-    const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
-      workspaceId,
-    )
-    if (storedWorkspace === null) {
-      throw corruptStoredData(
-        `versions/${id}`,
-        'workspace-scoped version has no stored workspace document to check out against',
-      )
-    }
-    const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
-    try {
-      clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
-    } catch (error) {
-      throw corruptStoredData(
-        `versions/${id}`,
-        `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
-      )
-    }
-    return projectWorkspaceDocument(clone, row.documentId)
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await dbReady()
+      const row = await db
+        .selectFrom('versions')
+        .select(['frontiers', 'documentId'])
+        .where('workspaceId', '=', workspaceId)
+        .where('id', '=', id)
+        .executeTakeFirst()
+      if (!row) return null
+      // Checked out against the STORED workspace document, whose oplog the
+      // frontiers were recorded in — never against a live per-document
+      // projection, whose fresh lineage does not contain them. The past state
+      // is then projected back out as a standalone doc, which is the shape
+      // every caller expects.
+      const storedWorkspace = await new DocumentStoreWorkspaceDocs(
+        new LibsqlDocumentStore(db),
+      ).open(workspaceId)
+      if (storedWorkspace === null) {
+        throw corruptStoredData(
+          `versions/${id}`,
+          'workspace-scoped version has no stored workspace document to check out against',
+        )
+      }
+      const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
+      try {
+        clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
+      } catch (error) {
+        throw corruptStoredData(
+          `versions/${id}`,
+          `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
+        )
+      }
+      return projectWorkspaceDocument(clone, row.documentId)
+    })
   }
 
   async loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null> {
     validateWorkspaceId(workspaceId)
     validateVersionId(id)
-    const db = await dbReady()
-    const row = await db
-      .selectFrom('versions')
-      .select(['frontiers'])
-      .where('workspaceId', '=', workspaceId)
-      .where('id', '=', id)
-      .executeTakeFirst()
-    if (!row) return null
-    const storedWorkspace = await new DocumentStoreWorkspaceDocs(new LibsqlDocumentStore(db)).open(
-      workspaceId,
-    )
-    if (storedWorkspace === null) return null
-    const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
-    try {
-      clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
-    } catch (error) {
-      throw corruptStoredData(
-        `versions/${id}`,
-        `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
-      )
-    }
-    return clone
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await dbReady()
+      const row = await db
+        .selectFrom('versions')
+        .select(['frontiers'])
+        .where('workspaceId', '=', workspaceId)
+        .where('id', '=', id)
+        .executeTakeFirst()
+      if (!row) return null
+      const storedWorkspace = await new DocumentStoreWorkspaceDocs(
+        new LibsqlDocumentStore(db),
+      ).open(workspaceId)
+      if (storedWorkspace === null) return null
+      const clone = LoroDoc.fromSnapshot(storedWorkspace.export({ mode: 'snapshot' }))
+      try {
+        clone.checkout(decodeFrontiers(base64ToBytes(row.frontiers)))
+      } catch (error) {
+        throw corruptStoredData(
+          `versions/${id}`,
+          `frontiers could not be checked out against the workspace document (${errorMessage(error)})`,
+        )
+      }
+      return clone
+    })
   }
 
   async list(workspaceId: string, path: string): Promise<VersionEntry[]> {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
-    const db = await dbReady()
-    const documentId = await this.resolveDocumentId(db, workspaceId, path)
-    if (!documentId) return []
-    const rows = await db
-      .selectFrom('versions')
-      .selectAll()
-      .where('documentId', '=', documentId)
-      .orderBy('createdAt', 'desc')
-      .orderBy('id', 'desc')
-      .execute()
-    return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
+    return withWorkspaceWriteLock(workspaceId, async () => {
+      const db = await dbReady()
+      const documentId = await this.resolveDocumentId(db, workspaceId, path)
+      if (!documentId) return []
+      const rows = await db
+        .selectFrom('versions')
+        .selectAll()
+        .where('documentId', '=', documentId)
+        .orderBy('createdAt', 'desc')
+        .orderBy('id', 'desc')
+        .execute()
+      return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
+    })
   }
 
   async saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void> {
