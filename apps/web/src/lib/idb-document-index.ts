@@ -109,12 +109,11 @@ export class IdbDocumentIndex implements DocumentIndex {
       // blind `put` of the input let the bare `{ workspaceId }` call clear
       // whatever identity layers the row already carried.
       //
-      // No caller reaches that today: `FoldingBrowserIndex` routes
-      // `createWorkspace` to the tree index and keeps this one for
-      // `listWorkspaces`/`renameWorkspace`/`listDocuments`/`deleteDocument`
-      // only. It is fixed because the row it would clobber is the one
-      // `renameWorkspace` — right below, on this same store — writes, so the
-      // two halves of one registry sat one call apart from disagreeing.
+      // Load-bearing for `FoldingBrowserIndex`, whose `createWorkspace`
+      // writes its registry half through this call: `ensureLocalWorkspace`
+      // re-creates the browser workspace bare on every boot path, and an
+      // overwrite here would strip the identity `renameWorkspace` — right
+      // below, on this same store — had written.
       //
       // Read and return inside the SAME transaction, so the check and the
       // write cannot be split by a concurrent create.
