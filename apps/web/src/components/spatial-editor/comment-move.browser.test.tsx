@@ -132,6 +132,40 @@ it('a press on a pin that does not travel is not a move', async () => {
   expect(commentOf(latest.canvas, 'c-free')).toMatchObject({ x: 600, y: 450 })
 })
 
+it('a pointercancel mid-drag writes nothing, and the torn-down drag cannot commit on a later release', async () => {
+  const { Host, latest } = makeHost()
+  const { container } = render(<Host />)
+  const root = rootOf(container)
+  const r = root.getBoundingClientRect()
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="canvas-content"]')?.textContent).toContain(
+      'free note',
+    ),
+  )
+  fireEvent.pointerDown(root, {
+    button: 0,
+    pointerId: 4,
+    clientX: r.left + 600,
+    clientY: r.top + 450,
+  })
+  await new Promise((resolve) => requestAnimationFrame(resolve))
+  fireEvent.pointerMove(root, { pointerId: 4, clientX: r.left + 640, clientY: r.top + 480 })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="comment-drag-preview"]')).not.toBeNull(),
+  )
+  fireEvent.pointerCancel(root, { pointerId: 4 })
+  await vi.waitFor(() =>
+    expect(container.querySelector('[data-testid="comment-drag-preview"]')).toBeNull(),
+  )
+  // The platform tore the drag down: a later move/release from the same
+  // pointer must not revive it into a commit.
+  fireEvent.pointerMove(root, { pointerId: 4, clientX: r.left + 700, clientY: r.top + 520 })
+  fireEvent.pointerUp(root, { pointerId: 4, clientX: r.left + 700, clientY: r.top + 520 })
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  expect(movesOf(latest.commands)).toHaveLength(0)
+  expect(commentOf(latest.canvas, 'c-free')).toMatchObject({ x: 600, y: 450 })
+})
+
 it('a node-anchored pin does not detach: no move-comment, the anchor stays the corner', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)

@@ -531,6 +531,51 @@ describe('createDocumentSyncSession', () => {
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
+  it('a batch containing move-comment and set-comment-text commits fine-grained: a remote comment survives, one undo step', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const toMove: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'move me' }
+    const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
+    const initial: SpatialCanvas = {
+      ...twoNodeCanvas(),
+      'x-whiteboard': { comments: [toMove, toEdit] },
+    }
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
+    const remoteDoc = new LoroDoc()
+    remoteDoc.import(snapshotBytes)
+    writeCanvasComment(remoteDoc, remoteComment)
+    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
+
+    const batch: EditorCommand = {
+      kind: 'batch',
+      commands: [
+        { kind: 'move-comment', id: 'c-1', x: 120, y: -30 },
+        { kind: 'set-comment-text', id: 'c-2', text: 'edited' },
+        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
+      ],
+    }
+    const next = batch.commands.reduce(applyCommand, initial)
+    session.onChange(next, batch)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const merged = new LoroDoc()
+    merged.import(snapshotBytes)
+    merged.import(remoteDoc.export({ mode: 'update' }))
+    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const result = readSpatialCanvas(merged)
+    const comments = result['x-whiteboard']?.comments ?? []
+    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
+    expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ x: 120, y: -30 })
+    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ text: 'edited' })
+    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
+  })
+
   it('a batch containing set-comment-resolved and delete-comment commits fine-grained: a remote comment survives, one undo step', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
