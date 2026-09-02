@@ -25,6 +25,7 @@ import { createRoot } from 'react-dom/client'
 import { BrowserRouter } from 'react-router-dom'
 import { App } from './App.js'
 import { dismissBootSplash } from './boot-splash.js'
+import { TouchFormattingBar } from './components/markdown-editor/TouchFormattingBar.js'
 import { getAppLogger } from './lib/app-logger.js'
 import { parseWorkspaceRoute } from './lib/app-routes.js'
 import { resolveBrowserWorkspaceId } from './lib/browser-workspace-id.js'
@@ -48,7 +49,15 @@ export interface BootSequenceOptions {
 
 function renderApp(root: HTMLElement): void {
   createRoot(root).render(
-    createElement(StrictMode, null, createElement(BrowserRouter, null, createElement(App))),
+    createElement(
+      StrictMode,
+      null,
+      createElement(BrowserRouter, null, createElement(App)),
+      // Once, beside the app: it follows the focused markdown editor through
+      // the active-editor registry and renders nothing until a phone's
+      // keyboard is up.
+      createElement(TouchFormattingBar),
+    ),
   )
 }
 

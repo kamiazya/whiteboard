@@ -128,8 +128,9 @@ describe('SourcePane markdown ergonomics (real browser)', () => {
     await userEvent.keyboard('- [[ ] task')
     await userEvent.keyboard(mod('{Enter}'))
     expect(lastValue(onChange)).toBe('- [x] task')
+    // The chord walks the checkbox cycle on: done -> no checkbox, marker kept.
     await userEvent.keyboard(mod('{Enter}'))
-    expect(lastValue(onChange)).toBe('- [ ] task')
+    expect(lastValue(onChange)).toBe('- task')
   })
 
   it('Mod-e wraps the selection in backticks', async () => {
