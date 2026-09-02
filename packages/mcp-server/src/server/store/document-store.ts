@@ -52,6 +52,7 @@ import {
 import type { Frontiers } from 'loro-crdt'
 import { decodeFrontiers, encodeFrontiers, LoroDoc, VersionVector } from 'loro-crdt'
 import type { DocumentSummary } from '../../shared/api-contracts/document.js'
+import { errorMessage } from '../../shared/error-message.js'
 import { getDataDir } from '../config.js'
 import { getLogger } from '../log.js'
 import { validateDocumentPath, validateWorkspaceId } from '../validators.js'
@@ -83,10 +84,6 @@ export class ConflictError extends Error {
     super(message)
     this.name = 'ConflictError'
   }
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
 }
 
 // Soft cap for snapshot size. Do not block saves when exceeded because preserving user

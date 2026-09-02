@@ -865,11 +865,7 @@ export function BrowserDocumentPage({
                       ?.requestFullscreen()
                       .catch((err) => log.warn('requestFullscreen rejected', err))
                 }}
-                capabilities={{
-                  versions: capabilities.versions,
-                  branches: capabilities.branches,
-                  merge: capabilities.merge,
-                }}
+                capabilities={capabilities}
               />
             </Suspense>
           )}
