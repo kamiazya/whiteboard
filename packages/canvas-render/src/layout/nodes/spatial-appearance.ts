@@ -38,4 +38,17 @@ export interface SpatialAppearanceResolver {
    * absence assigns no appearance rather than inventing one.
    */
   resolveSyntax?(): SpatialSyntaxPalette
+  /**
+   * Chrome for the comment annotation layer (ADR-0024): the anchor pin and
+   * the floating bubble behind the comment's text. Optional for the same
+   * reason `resolveSyntax` is — a resolver that predates the layer still
+   * lays comments out; they simply carry no appearance.
+   */
+  resolveComment?(): SpatialCommentAppearance
+}
+
+/** What a resolver decided for the comment layer's chrome. */
+export interface SpatialCommentAppearance {
+  readonly pin: Appearance
+  readonly bubble: Appearance
 }
