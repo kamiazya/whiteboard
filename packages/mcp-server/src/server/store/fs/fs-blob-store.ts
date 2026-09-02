@@ -13,6 +13,7 @@ import type {
   BlobStore,
 } from '@kamiazya/whiteboard-ports'
 import { z } from 'zod'
+import { errorMessage } from '../../../shared/error-message.js'
 import { writeFileAtomic } from '../../atomic-write.js'
 import { getLogger } from '../../log.js'
 import { corruptStoredData, isMissingFileError } from '../corrupt-stored-data.js'
@@ -32,10 +33,6 @@ type BlobEnvelope = z.infer<typeof blobEnvelopeSchema>
 
 function digestHex(bytes: Uint8Array): string {
   return createHash('sha256').update(bytes).digest('hex')
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
 }
 
 /**

@@ -58,3 +58,4 @@ See [template.md](template.md) for the standard structure (MADR-lite: Title, Sta
 | [ADR-0023](0023-replica-model.md) | A workspace has one keeper; every other copy is a replica | Proposed — design of record for the demote/cache work |
 | [ADR-0024](0024-canvas-comments.md) | Canvas comments are a first-class annotation layer, keyed per comment | Accepted |
 | [ADR-0025](0025-comment-editor-ux.md) | Comment editor UX: context-menu create, resolved toggle, authorless v1, pull-by-convention AI delivery | Accepted |
+| [ADR-0026](0026-annotation-layer.md) | The annotation layer — one plane per document, threads, and selector anchors | Proposed — design of record for comments beyond the canvas |

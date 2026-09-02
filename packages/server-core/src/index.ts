@@ -13,6 +13,11 @@ export type {
   RestoreVersionResult,
 } from './operations/restore-version.js'
 export { restoreVersion } from './operations/restore-version.js'
+export {
+  type FollowRenameInput,
+  type FollowRenameResult,
+  followReferencesAfterRename,
+} from './references/follow-rename.js'
 export type { Embedder } from './search/embedder.js'
 export type { ConfidenceInterval, Judgments, PermutationResult } from './search/eval.js'
 export {

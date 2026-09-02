@@ -1,3 +1,4 @@
+import type { AnnotationAnchor, CommentMessage, CommentThread } from '../annotation.js'
 import { RESERVED_ROOT_KEYS } from '../facets.js'
 import { DOCUMENT_PATH_SEGMENT_PATTERN } from '../ids.js'
 import type {
@@ -519,6 +520,77 @@ export const canvasCommentArbitrary: fc.Arbitrary<CanvasComment> = fc.record(
     resolved: fc.boolean(),
   },
   { requiredKeys: ['id', 'x', 'y', 'text'] },
+)
+
+/**
+ * The annotation layer's generators (ADR-0026). Valid-by-construction against
+ * `annotationAnchorSchema` / `commentThreadSchema`, and deliberately covering
+ * BOTH anchor arms: a property that only ever saw the spatial arm would say
+ * nothing about the shape's whole reason for existing.
+ */
+export const annotationAnchorArbitrary: fc.Arbitrary<AnnotationAnchor> = fc.oneof(
+  fc.record(
+    {
+      kind: fc.constant('spatial' as const),
+      nodeId: nodeIdArbitrary,
+      x: geometryArbitrary,
+      y: geometryArbitrary,
+    },
+    { requiredKeys: ['kind', 'x', 'y'] },
+  ),
+  fc
+    .record(
+      {
+        kind: fc.constant('text' as const),
+        quote: fc.record(
+          {
+            prefix: fc.string({ maxLength: 8 }),
+            exact: fc.string({ minLength: 1, maxLength: 24 }),
+            suffix: fc.string({ maxLength: 8 }),
+          },
+          { requiredKeys: ['exact'] },
+        ),
+        start: fc.nat({ max: 4000 }),
+        length: fc.nat({ max: 200 }),
+      },
+      { requiredKeys: ['kind', 'quote', 'start', 'length'] },
+    )
+    // `end` is derived rather than generated so the range is never backwards —
+    // the schema rejects that, and a filter would just discard half the runs.
+    .map(({ length, ...anchor }) => ({ ...anchor, end: anchor.start + length })),
+)
+
+export const commentMessageArbitrary: fc.Arbitrary<CommentMessage> = fc.record(
+  {
+    id: nodeIdArbitrary,
+    body: fc.string({ minLength: 1, maxLength: 40 }),
+    author: fc.constantFrom('human:reviewer', 'process:layout-agent'),
+    createdAt: fc.constantFrom(
+      '2026-09-01T10:00:00+09:00',
+      '2026-09-01T11:30:00Z',
+      '2026-09-02T09:15:00Z',
+    ),
+  },
+  { requiredKeys: ['id', 'body'] },
+)
+
+export const commentThreadArbitrary: fc.Arbitrary<CommentThread> = fc.record(
+  {
+    id: nodeIdArbitrary,
+    anchor: annotationAnchorArbitrary,
+    status: fc.constantFrom('open' as const, 'resolved' as const),
+    createdAt: fc.constant('2026-09-01T10:00:00+09:00'),
+    // Unique ids for the same reason the canvas arbitrary dedupes node ids:
+    // `nodeIdArbitrary` collides often enough at small sizes to pass hundreds
+    // of runs and then fail on someone else's seed, and a thread whose two
+    // messages share an id is not a thread the storage can represent.
+    messages: fc.uniqueArray(commentMessageArbitrary, {
+      minLength: 1,
+      maxLength: 4,
+      selector: (message) => message.id,
+    }),
+  },
+  { requiredKeys: ['id', 'anchor', 'status', 'messages'] },
 )
 
 export const spatialCanvasArbitrary: fc.Arbitrary<SpatialCanvas> = fc

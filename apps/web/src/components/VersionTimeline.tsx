@@ -25,6 +25,7 @@ import { buildMiniGraph } from '@/lib/mini-graph'
 import { displayBranchName } from '@/lib/utils'
 import { SquiggleLoader } from './SquiggleLoader.js'
 import { VersionThumbnail } from './VersionThumbnail.js'
+import { formatRelative } from './workspace-files/format-relative.js'
 
 const log = getAppLogger('VersionTimeline')
 
@@ -38,20 +39,6 @@ interface Props {
   // 15s poll. Only a value CHANGE triggers a refetch, matching
   // HeaderBranchChip's refreshSignal contract.
   refreshSignal?: number
-}
-
-// Render an ISO string as a short relative timestamp.
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return iso
-  // Clamp: server clocks slightly ahead of the client would otherwise yield
-  // "-5s ago".
-  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (diffSec < 60) return `${diffSec}s ago`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
-  const d = new Date(then)
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
 // A version's display title: its explicit label, or a fallback naming its origin.
@@ -370,7 +357,8 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
                           </span>
                         )}
                         <span className="text-[11px] text-muted-foreground">
-                          {formatRelative(v.createdAt)} · {v.elementCount} els
+                          {formatRelative(v.createdAt, { pastDay: 'absolute', invalid: 'echo' })} ·{' '}
+                          {v.elementCount} els
                           {row?.branchOut ? (
                             <>
                               {' · '}
@@ -418,9 +406,13 @@ export default function VersionTimeline({ workspaceId, path, onRestored, refresh
               {pendingRestore && (
                 <>
                   Restoring <strong>{versionTitle(pendingRestore)}</strong> (
-                  {formatRelative(pendingRestore.createdAt)}, {pendingRestore.elementCount}{' '}
-                  elements) will merge that state into the current canvas and broadcast the change
-                  to every connected tab. Per-peer Ctrl+Z history is cleared.
+                  {formatRelative(pendingRestore.createdAt, {
+                    pastDay: 'absolute',
+                    invalid: 'echo',
+                  })}
+                  , {pendingRestore.elementCount} elements) will merge that state into the current
+                  canvas and broadcast the change to every connected tab. Per-peer Ctrl+Z history is
+                  cleared.
                 </>
               )}
               {restoreError && <span className="mt-2 block text-destructive">{restoreError}</span>}

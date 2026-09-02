@@ -1,7 +1,16 @@
 import {
+  type DocumentMove,
+  movesForPathChange,
+  planReferenceRewrite,
+  rewriteCanvasReferences,
+  rewriteReferenceTargets,
+} from '@kamiazya/whiteboard-codec'
+import {
   readCoreFacets,
   readMarkdownBody,
   readSpatialCanvas,
+  writeMarkdownBody,
+  writeSpatialNode,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type { DocumentKind } from '@kamiazya/whiteboard-model'
 import { type DocumentIndex, WorkspaceNotFoundError } from '@kamiazya/whiteboard-ports'
@@ -69,6 +78,58 @@ export function createLocalFilesSource(
    * measured workspace makes the first search slow.
    */
   const corpus = new Map<string, { stamp: string; texts: string[] }>()
+
+  /**
+   * After a move, repoint references other documents wrote to the old path — the same codec plan the daemon's
+   * rename routes apply, so both keepers give one answer. Scans every
+   * document rather than keeping a reference index: a rename is a rare,
+   * user-initiated click, and the search corpus above already prices the
+   * full read (60 documents / 202KB = 176ms against real IndexedDB).
+   * ponytail: full scan per rename; share a facts cache with search if a
+   * measured workspace makes the click slow.
+   *
+   * One unreadable document must not abort the rest — the rename already
+   * stands, and every reference this CAN repair is one fewer silently
+   * broken link.
+   */
+  async function followReferences(
+    entriesBefore: readonly WorkspaceDocumentEntry[],
+    moves: readonly DocumentMove[],
+  ): Promise<void> {
+    const plan = planReferenceRewrite({
+      entries: entriesBefore.map((entry) => ({
+        id: entry.documentId,
+        path: entry.path,
+        ...(entry.name === undefined ? {} : { name: entry.name }),
+      })),
+      moves,
+    })
+    if (plan.size === 0) return
+    const entries = await index.listDocuments({ workspaceId: getBrowserWorkspaceId() })
+    for (const entry of entries) {
+      try {
+        const doc = await loadCurrentDoc(entry)
+        if (entry.kind === 'spatial') {
+          const result = rewriteCanvasReferences(readSpatialCanvas(doc), plan)
+          if (!result.changed) continue
+          // Targeted writes, never a whole-canvas resync: readSpatialCanvas
+          // drops records this build cannot parse, and writing the whole
+          // canvas back would DELETE them.
+          for (const node of result.changedNodes) writeSpatialNode(doc, node)
+        } else {
+          const body = readMarkdownBody(doc)
+          const next = rewriteReferenceTargets(body, plan)
+          if (next === body) continue
+          writeMarkdownBody(doc, next)
+        }
+        await loro.save(entry.documentId, doc.export({ mode: 'snapshot' }))
+        // The content moved, so the search corpus entry for it is stale.
+        corpus.delete(entry.documentId)
+      } catch {
+        // Unreadable or unsaveable: leave it; the reference stays as written.
+      }
+    }
+  }
 
   async function loadCurrentDoc(entry: WorkspaceDocumentEntry): Promise<Loro> {
     // The workspace document first — that is where the editor persists — and
@@ -163,7 +224,16 @@ export function createLocalFilesSource(
     },
 
     async renameDocumentPath(path: string, newPath: string): Promise<void> {
+      const entriesBefore = await this.listDocuments()
       await index.moveDocument({ workspaceId: getBrowserWorkspaceId(), from: path, to: newPath })
+      // Every path the SUBTREE carried, derived rather than written here.
+      // The move already stands: a follow failure repairs less, it must not
+      // turn a completed rename into a rejection.
+      try {
+        await followReferences(entriesBefore, movesForPathChange(entriesBefore, path, newPath))
+      } catch {
+        // References the pass could not reach stay as written.
+      }
     },
 
     async searchDocuments(query, limit = 20) {
@@ -219,7 +289,9 @@ export function createLocalFilesSource(
       await index.setDocumentName({
         workspaceId: getBrowserWorkspaceId(),
         documentId: entry.documentId,
-        // The port spells "clear" as absence, not empty string.
+        // The port spells "clear" as absence, not empty string. No follow
+        // pass here: name references are being retired from resolution, so
+        // a name change breaks nothing worth rewriting.
         ...(name === undefined ? {} : { name }),
       })
     },

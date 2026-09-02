@@ -43,6 +43,7 @@ const MAX_THUMBNAIL_BYTES = 2 * 1024 * 1024
 // written interface beside a Zod schema is the drift recipe the Zod
 // discipline names, and this pair had three copies of one shape.
 import type { OperatorInfo, VersionEntry } from '../../shared/api-contracts/document.js'
+import { errorMessage } from '../../shared/error-message.js'
 
 export type { OperatorInfo, VersionEntry }
 
@@ -117,10 +118,6 @@ function bytesToBase64(bytes: Uint8Array): string {
 
 function base64ToBytes(b64: string): Uint8Array {
   return new Uint8Array(Buffer.from(b64, 'base64'))
-}
-
-function errorMessage(error: unknown): string {
-  return error instanceof Error && error.message.length > 0 ? error.message : 'unknown error'
 }
 
 async function dbReady() {

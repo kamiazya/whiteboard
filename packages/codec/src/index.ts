@@ -17,6 +17,15 @@ export type { AliasResolver } from './references/resolve.js'
 export { resolveReferences } from './references/resolve.js'
 export type { DocumentPathResolver } from './references/resolve-for-export.js'
 export { resolveReferencesForExport } from './references/resolve-for-export.js'
+export {
+  type CanvasRewriteResult,
+  type DocumentMove,
+  movesForPathChange,
+  planReferenceRewrite,
+  type ReferenceRewritePlanInput,
+  rewriteCanvasReferences,
+  rewriteReferenceTargets,
+} from './references/rewrite.js'
 export { type ReferenceMatch, scanReferences } from './references/scan.js'
 export {
   createUniqueNameResolver,
