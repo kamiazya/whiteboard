@@ -2,6 +2,8 @@ export { createServer } from './create-server.js'
 export { countAliveNodes, countLegacyTombstones } from './document-counts.js'
 export type { Logger, LogSink } from './log.js'
 export { getLogger, setLogSink } from './log.js'
+export type { ApplyDocumentUpdateInput } from './operations/apply-document-update.js'
+export { applyDocumentUpdate } from './operations/apply-document-update.js'
 export type {
   RestoreProgress,
   RestoreProgressEvent,

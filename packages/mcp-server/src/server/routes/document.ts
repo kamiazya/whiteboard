@@ -61,7 +61,13 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   app.route('/', createWorkspacesRouter({ serverDeps: options.serverDeps }))
   app.route('/', createTrashRouter({ serverDeps: options.serverDeps }))
   app.route('/', createDocumentMetadataRouter())
-  app.route('/', createLiveDocRouter({ triggerAutoVersion }))
+  app.route(
+    '/',
+    createLiveDocRouter({
+      triggerAutoVersion,
+      ...(options.serverDeps === undefined ? {} : { serverDeps: options.serverDeps }),
+    }),
+  )
   app.route('/', createWorkspaceDocumentRouter({ triggerAutoVersion }))
   app.route('/', createVersionsRouter({ versionStore, getHeadBranch: options.getHeadBranch }))
   app.route('/', createMaintenanceRouter({ versionStore }))
