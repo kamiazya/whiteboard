@@ -23,6 +23,7 @@ import {
   DocumentMoveIntoSelfError,
   DocumentNotFoundError,
   DocumentPathTakenError,
+  documentEntrySchema,
   findDescendantPath,
   isSelfOrDescendant,
   type ListDocumentsInput,
@@ -38,22 +39,26 @@ import {
   WorkspaceSegmentTakenError,
   workspaceEntrySchema,
 } from '@kamiazya/whiteboard-ports'
+import { z } from 'zod'
 import { DOCUMENT_INDEX_STORE, WORKSPACES_STORE } from './browser-idb.js'
 import { inTransaction, request } from './idb-tx.js'
 
 /**
- * A row as stored. `name` and `kind` are absent rather than null when unset,
+ * A row as stored: the port's own entry shape plus the `workspaceId` the
+ * store keys on. `name` and `kind` are absent rather than null when unset,
  * matching `DocumentEntry` — IndexedDB round-trips `undefined` properties by
  * dropping them, so writing the entry shape directly keeps the read path free
  * of null-to-absent conversions the daemon's SQL twin has to perform.
+ *
+ * Derived from `documentEntrySchema` rather than written beside it, and
+ * every read below hydrates through it — the same discipline
+ * `listWorkspaces` applies with `workspaceEntrySchema.parse`. A cast here
+ * let a corrupt row (a devtools edit, a buggy writer, schema drift) flow
+ * into the UI wearing the contract's type; the parse fails loudly and names
+ * the field instead.
  */
-interface IndexRow {
-  readonly workspaceId: string
-  readonly documentId: string
-  readonly path: string
-  readonly kind?: DocumentEntry['kind']
-  readonly name?: string
-}
+const indexRowSchema = documentEntrySchema.extend({ workspaceId: z.string().min(1) })
+type IndexRow = z.infer<typeof indexRowSchema>
 
 function toEntry(row: IndexRow): DocumentEntry {
   return {
@@ -72,7 +77,13 @@ async function requireWorkspace(tx: IDBTransaction, workspaceId: string): Promis
 /** Every row in one workspace, unordered. */
 async function rowsIn(tx: IDBTransaction, workspaceId: string): Promise<IndexRow[]> {
   const range = IDBKeyRange.bound([workspaceId], [workspaceId, []])
-  return (await request(tx.objectStore(DOCUMENT_INDEX_STORE).getAll(range))) as IndexRow[]
+  const rows = await request(tx.objectStore(DOCUMENT_INDEX_STORE).getAll(range))
+  return rows.map((row) => indexRowSchema.parse(row))
+}
+
+/** Hydrates one stored value, passing an absent row through. */
+function parseRow(value: unknown): IndexRow | undefined {
+  return value === undefined ? undefined : indexRowSchema.parse(value)
 }
 
 export class IdbDocumentIndex implements DocumentIndex {
@@ -208,9 +219,9 @@ export class IdbDocumentIndex implements DocumentIndex {
     path,
   }: ResolveDocumentInput): Promise<DocumentEntry | null> {
     return this.tx([DOCUMENT_INDEX_STORE], 'readonly', async (tx) => {
-      const row = (await request(tx.objectStore(DOCUMENT_INDEX_STORE).get([workspaceId, path]))) as
-        | IndexRow
-        | undefined
+      const row = parseRow(
+        await request(tx.objectStore(DOCUMENT_INDEX_STORE).get([workspaceId, path])),
+      )
       return row === undefined ? null : toEntry(row)
     })
   }
@@ -223,9 +234,11 @@ export class IdbDocumentIndex implements DocumentIndex {
       // Keyed by [workspaceId, documentId], so an id from another workspace
       // misses rather than reaching across — the port calls an id a handle
       // within a workspace, not a capability.
-      const row = (await request(
-        tx.objectStore(DOCUMENT_INDEX_STORE).index('byId').get([workspaceId, documentId]),
-      )) as IndexRow | undefined
+      const row = parseRow(
+        await request(
+          tx.objectStore(DOCUMENT_INDEX_STORE).index('byId').get([workspaceId, documentId]),
+        ),
+      )
       return row === undefined ? null : toEntry(row)
     })
   }
@@ -280,9 +293,7 @@ export class IdbDocumentIndex implements DocumentIndex {
   async setDocumentName({ workspaceId, documentId, name }: SetDocumentNameInput): Promise<void> {
     await this.tx([DOCUMENT_INDEX_STORE], 'readwrite', async (tx) => {
       const store = tx.objectStore(DOCUMENT_INDEX_STORE)
-      const row = (await request(store.index('byId').get([workspaceId, documentId]))) as
-        | IndexRow
-        | undefined
+      const row = parseRow(await request(store.index('byId').get([workspaceId, documentId])))
       if (row === undefined) throw new DocumentNotFoundError(workspaceId, documentId)
       // Rebuilt rather than spread-with-undefined: a stored `name: undefined`
       // is not the same as an absent one to `'name' in entry`, which the
