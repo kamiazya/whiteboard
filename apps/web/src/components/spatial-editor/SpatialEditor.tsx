@@ -103,6 +103,7 @@ import { CREATION_LABELS } from './creation-labels.js'
 import { DocumentPickerDialog, type FileRefOption } from './DocumentPickerDialog.js'
 import { DragPreviewLayer } from './DragPreviewLayer.js'
 import { isInFlightGesture } from './drag-preview.js'
+import { EdgeSelectionHighlight } from './EdgeSelectionHighlight.js'
 import { createEditorAppearance, editorTextFill } from './editor-appearance.js'
 import { FacetFormPanel } from './facet-widgets/FacetFormPanel.js'
 import { isFollowableUrl } from './followable-url.js'
@@ -116,6 +117,7 @@ import { createIdleState, NEW_NODE_HEIGHT, NEW_NODE_WIDTH, reduceGesture } from 
 import { LinkEmbedLayer } from './LinkEmbedLayer.js'
 import { LinkUrlDialog } from './LinkUrlDialog.js'
 import { MarkdownNodeEditor } from './MarkdownNodeEditor.js'
+import { MarqueeOverlay } from './MarqueeOverlay.js'
 import { MemberOutlinesOverlay } from './MemberOutlinesOverlay.js'
 import { MinimapOverlay } from './MinimapOverlay.js'
 import {
@@ -129,6 +131,7 @@ import {
 } from './navigation.js'
 import { PendingCutChip } from './PendingCutChip.js'
 import { SelectionOverlay } from './SelectionOverlay.js'
+import { SnapGuidesOverlay } from './SnapGuidesOverlay.js'
 import { requiredTextNodeHeight } from './scene-render.js'
 import { renderedCanvasKeyed } from './scene-render-core.js'
 import {
@@ -768,25 +771,6 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       [selectionMembers],
     )
     const isMultiSelection = selectionMembers.length > 1
-
-    /**
-     * How far a snap guide extends, in canvas space: across all content plus
-     * a margin. Spanning the content rather than the window keeps the line a
-     * function of the document alone, so it renders identically at any zoom
-     * or scroll position and needs no measured element size.
-     */
-    const guideSpan = useMemo(() => {
-      const GUIDE_MARGIN_PX = 40
-      if (boxes.length === 0) return { minX: 0, maxX: 0, minY: 0, maxY: 0 }
-      const xs = boxes.flatMap((entry) => [entry.box.x, entry.box.x + entry.box.width])
-      const ys = boxes.flatMap((entry) => [entry.box.y, entry.box.y + entry.box.height])
-      return {
-        minX: Math.min(...xs) - GUIDE_MARGIN_PX,
-        maxX: Math.max(...xs) + GUIDE_MARGIN_PX,
-        minY: Math.min(...ys) - GUIDE_MARGIN_PX,
-        maxY: Math.max(...ys) + GUIDE_MARGIN_PX,
-      }
-    }, [boxes])
 
     /**
      * Folds `result.commands` in order over a LOCAL running canvas (seeded
@@ -2214,100 +2198,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 node.height * viewport.zoom >= EXPAND_MIN_H
               }
             />
-            {marquee !== null && (
-              <svg
-                data-testid="marquee-rect"
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  overflow: 'visible',
-                  left: 0,
-                  top: 0,
-                  pointerEvents: 'none',
-                }}
-              >
-                <rect
-                  x={Math.min(marquee.start.x, marquee.current.x)}
-                  y={Math.min(marquee.start.y, marquee.current.y)}
-                  width={Math.abs(marquee.current.x - marquee.start.x)}
-                  height={Math.abs(marquee.current.y - marquee.start.y)}
-                  fill="var(--manipulation)"
-                  fillOpacity={0.08}
-                  stroke="var(--manipulation)"
-                  strokeWidth={1 / viewport.zoom}
-                  strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
-                />
-              </svg>
-            )}
-            {snapGuides !== null && snapGuides.x.length + snapGuides.y.length > 0 && (
-              <svg
-                data-testid="snap-guides"
-                aria-hidden="true"
-                style={{
-                  position: 'absolute',
-                  overflow: 'visible',
-                  left: 0,
-                  top: 0,
-                  pointerEvents: 'none',
-                }}
-              >
-                {/* Dashed with a dot at each end: a ruler showing a measured
-                  extent, not an alert line. The dash and dot sizes divide by
-                  zoom for the same reason every handle does — the ruler is
-                  chrome, and chrome keeps its on-screen size. */}
-                {snapGuides.x.map((x) => (
-                  <g key={`x${x}`}>
-                    <line
-                      data-axis="x"
-                      x1={x}
-                      x2={x}
-                      y1={guideSpan.minY}
-                      y2={guideSpan.maxY}
-                      stroke="var(--manipulation-guide)"
-                      strokeWidth={1 / viewport.zoom}
-                      strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
-                    />
-                    <circle
-                      cx={x}
-                      cy={guideSpan.minY}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                    <circle
-                      cx={x}
-                      cy={guideSpan.maxY}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                  </g>
-                ))}
-                {snapGuides.y.map((y) => (
-                  <g key={`y${y}`}>
-                    <line
-                      data-axis="y"
-                      x1={guideSpan.minX}
-                      x2={guideSpan.maxX}
-                      y1={y}
-                      y2={y}
-                      stroke="var(--manipulation-guide)"
-                      strokeWidth={1 / viewport.zoom}
-                      strokeDasharray={`${4 / viewport.zoom} ${3 / viewport.zoom}`}
-                    />
-                    <circle
-                      cx={guideSpan.minX}
-                      cy={y}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                    <circle
-                      cx={guideSpan.maxX}
-                      cy={y}
-                      r={2 / viewport.zoom}
-                      fill="var(--manipulation-guide)"
-                    />
-                  </g>
-                ))}
-              </svg>
+            {marquee !== null && <MarqueeOverlay marquee={marquee} zoom={viewport.zoom} />}
+            {snapGuides !== null && (
+              <SnapGuidesOverlay guides={snapGuides} boxes={boxes} zoom={viewport.zoom} />
             )}
             {/* Which nodes are in the selection. The overlay above outlines the
             region the handles act on, which says nothing about membership —
@@ -2438,32 +2331,9 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 contentSvg={dragContentSvg}
               />
             )}
-            {selectedEdgeId !== null &&
-              (() => {
-                const selected = edgePaths.find((edge) => edge.id === selectedEdgeId)
-                if (selected === undefined || selected.path.length < 2) return null
-                return (
-                  <svg
-                    style={{
-                      position: 'absolute',
-                      overflow: 'visible',
-                      left: 0,
-                      top: 0,
-                      pointerEvents: 'none',
-                    }}
-                  >
-                    <title>Selected connection</title>
-                    <polyline
-                      data-testid="edge-selection-highlight"
-                      points={selected.path.map((p) => `${p.x},${p.y}`).join(' ')}
-                      fill="none"
-                      stroke="var(--manipulation)"
-                      strokeWidth={3}
-                      strokeLinecap="round"
-                    />
-                  </svg>
-                )
-              })()}
+            {selectedEdgeId !== null && (
+              <EdgeSelectionHighlight selectedEdgeId={selectedEdgeId} edgePaths={edgePaths} />
+            )}
             {gestureState.kind === 'connecting' && (
               <ConnectOverlay
                 gestureState={gestureState}
