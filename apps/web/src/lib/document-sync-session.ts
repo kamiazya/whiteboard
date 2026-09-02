@@ -1,6 +1,6 @@
 import {
-  deleteCanvasComment,
   type DocumentContainers,
+  deleteCanvasComment,
   deleteSpatialNode,
   documentContainers,
   readCoreFacets,
