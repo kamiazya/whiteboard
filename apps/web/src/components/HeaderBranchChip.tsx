@@ -565,6 +565,7 @@ export function HeaderBranchChip({
           </DialogHeader>
           <Input
             autoFocus
+            enterKeyHint="done"
             value={renameDraft}
             onChange={(e) => setRenameDraft(e.target.value)}
             onKeyDown={(e) => {

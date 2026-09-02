@@ -1,4 +1,5 @@
 /** Selection outline + resize handles + in-flight connect line, drawn in canvas space. */
+import { hasCoarsePointer } from '../../lib/platform.js'
 import type { Box, ResizeHandleKind } from './geometry.js'
 import { cornerHitBoxes, edgeBandBoxes, resizeHandleBoxes } from './geometry.js'
 import type { Point } from './viewport.js'
@@ -100,8 +101,7 @@ export function SelectionOverlay({
   // small nodes are not swallowed, while the transparent hit shapes below
   // meet WCAG 2.5.8's 24px floor — 32px where the pointer is a finger
   // (matchMedia is cheap and correct here; a resize re-render re-reads it).
-  const hitPx =
-    typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches ? 32 : 24
+  const hitPx = hasCoarsePointer() ? 32 : 24
   const cornerHits = cornerHitBoxes(box, zoom, hitPx)
   const edgeBands = edgeBandBoxes(box, zoom, hitPx / 2, hitPx)
   const connectHandleSize = 10 / zoom

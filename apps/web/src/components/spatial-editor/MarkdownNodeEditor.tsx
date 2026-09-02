@@ -60,6 +60,12 @@ export interface MarkdownNodeEditorProps {
    * under `box`.
    */
   readonly exitHintTop?: number
+  /**
+   * Screen-size correction for the exit strip: the strip is positioned in
+   * canvas coordinates and would otherwise scale with the zoom, and a tap
+   * target has a screen size, not a canvas size. Callers pass `1 / zoom`.
+   */
+  readonly exitHintScale?: number
   readonly style?: CSSProperties
   readonly testId?: string
   readonly onCommit: (text: string) => void
@@ -72,6 +78,7 @@ export function MarkdownNodeEditor({
   initialText,
   centerContent = false,
   exitHintTop,
+  exitHintScale,
   style,
   testId = 'text-node-editor',
   onCommit,
@@ -86,6 +93,17 @@ export function MarkdownNodeEditor({
   const callbacksRef = useRef({ onCommit, onCancel, onChange })
   callbacksRef.current = { onCommit, onCancel, onChange }
 
+  const commit = (view: EditorView) => {
+    if (!mountedRef.current || finishedRef.current) return
+    finishedRef.current = true
+    callbacksRef.current.onCommit(view.state.doc.toString())
+  }
+  const cancel = () => {
+    if (finishedRef.current) return
+    finishedRef.current = true
+    callbacksRef.current.onCancel()
+  }
+
   // useLayoutEffect, not useEffect: passive cleanups run AFTER React has
   // detached the host DOM, and detaching a focused contentDOM fires a
   // native blur while our handler is still attached and mountedRef is
@@ -95,17 +113,6 @@ export function MarkdownNodeEditor({
   useLayoutEffect(() => {
     const host = hostRef.current
     if (host === null) return
-
-    const commit = (view: EditorView) => {
-      if (!mountedRef.current || finishedRef.current) return
-      finishedRef.current = true
-      callbacksRef.current.onCommit(view.state.doc.toString())
-    }
-    const cancel = () => {
-      if (finishedRef.current) return
-      finishedRef.current = true
-      callbacksRef.current.onCancel()
-    }
 
     const state = EditorState.create({
       doc: initialText,
@@ -216,7 +223,19 @@ export function MarkdownNodeEditor({
         }}
       />
       <EditorExitHint
-        style={{ position: 'absolute', left: box.x, top: exitHintTop ?? box.y + box.height + 6 }}
+        onDone={() => {
+          const view = viewRef.current
+          if (view !== null) commit(view)
+        }}
+        onCancel={cancel}
+        canvasOverlay
+        style={{
+          position: 'absolute',
+          left: box.x,
+          top: exitHintTop ?? box.y + box.height + 6,
+          transform: exitHintScale === undefined ? undefined : `scale(${exitHintScale})`,
+          transformOrigin: 'top left',
+        }}
       />
     </>
   )

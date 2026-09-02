@@ -11,3 +11,15 @@
 export function isMacPlatform(): boolean {
   return typeof navigator !== 'undefined' && /Mac|iPhone|iPad|iPod/.test(navigator.platform)
 }
+
+/**
+ * Whether the primary pointer is a finger. One definition for every surface
+ * that grows a touch target or swaps a keyboard chord for a tap — the two
+ * inline `matchMedia` reads this replaced were already identical, and a
+ * third would have drifted. Read at call time so a test can stub
+ * `matchMedia`; a runtime without it (jsdom) answers false, the fine-pointer
+ * default.
+ */
+export function hasCoarsePointer(): boolean {
+  return typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches
+}

@@ -90,6 +90,7 @@ import { writeLastTool } from '@/lib/initial-tool'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { parseClipboardText } from '../../lib/clipboard-fragment.js'
 import { hapticTick } from '../../lib/haptics.js'
+import { hasCoarsePointer } from '../../lib/platform.js'
 import type { BoxMove } from './align.js'
 import {
   CanvasContextMenu,
@@ -1935,7 +1936,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           {pendingCut !== null && (
             <PendingCutChip
               count={pendingCut.snapshot.size}
-              coarse={typeof matchMedia !== 'undefined' && matchMedia('(pointer: coarse)').matches}
+              coarse={hasCoarsePointer()}
               onCancel={() => setPendingCut(null)}
             />
           )}
@@ -2374,6 +2375,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 if (mid === undefined) return null
                 return (
                   <TextNodeEditor
+                    exitHintScale={1 / viewport.zoom}
                     box={{
                       x: mid.x - EDGE_LABEL_EDITOR_WIDTH_PX / 2,
                       y: mid.y - EDGE_LABEL_EDITOR_HEIGHT_PX / 2,
@@ -2402,6 +2404,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 if (group === undefined || group.type !== 'group') return null
                 return (
                   <TextNodeEditor
+                    exitHintScale={1 / viewport.zoom}
                     // The label renders OUTSIDE, above the frame (container
                     // convention) — the editor sits on that band.
                     box={{ x: group.x, y: group.y - 44, width: group.width, height: 40 }}
@@ -2448,6 +2451,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                   })()}
                   initialText={selectedNode.text}
                   exitHintTop={selection.box.y + selection.box.height + 6}
+                  exitHintScale={1 / viewport.zoom}
                   centerContent={scene.nodes.some(
                     (entry) =>
                       entry.kind === 'shape' &&
