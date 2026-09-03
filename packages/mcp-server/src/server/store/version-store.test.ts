@@ -77,6 +77,75 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.branchName).toBe('main')
   })
 
+  /**
+   * The merge point a restore creates, through the real column.
+   *
+   * The value crosses a migration, a nullable text column and `selectAll`,
+   * and every one of those can drop it without anything else noticing — the
+   * entry would simply come back without the field, which is also exactly
+   * what an ordinary checkpoint looks like. So the absence is asserted
+   * beside the presence: a store that never reads the column back would
+   * pass the first half alone.
+   */
+  it('carries restoredFrom through save and list, and leaves an ordinary point without it', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+
+    const merge = await store.save('sess-1', 'canvas-a', doc, {
+      auto: true,
+      restoredFrom: 'v-earlier',
+    })
+    expect(merge.restoredFrom).toBe('v-earlier')
+
+    const plain = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    expect(plain.restoredFrom).toBeUndefined()
+
+    const listed = await store.list('sess-1', 'canvas-a')
+    expect(listed.find((v) => v.id === merge.id)?.restoredFrom).toBe('v-earlier')
+    expect(listed.find((v) => v.id === plain.id)?.restoredFrom).toBeUndefined()
+  })
+
+  /**
+   * Lineage outlives the automatic cap.
+   *
+   * A restore records its merge point as an AUTOMATIC version, which makes
+   * both ends of a restore ordinary sweep candidates once fifty checkpoints
+   * pile up on top: the merge itself, and the point it named. A swept
+   * checkpoint is recoverable by editing again; a swept lineage is not — the
+   * history simply stops being able to say where a state came from.
+   *
+   * Fifty-one rows, so exactly one is over the cap, and it is arranged to be
+   * the restore's source. Both survivors are asserted, because keeping the
+   * merge and losing what it points at leaves a row naming a version that no
+   * longer exists.
+   */
+  it('never sweeps a restore merge or the point it names, even past the automatic cap', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+
+    const source = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    const merge = await store.save('sess-1', 'canvas-a', doc, {
+      auto: true,
+      restoredFrom: source.id,
+    })
+    // Ordinary checkpoints on top: 53 rows against a cap of 50, so THREE are
+    // over it — the lineage pair and one ordinary checkpoint.
+    for (let i = 0; i < 51; i++) {
+      await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    }
+
+    const ids = new Set((await store.list('sess-1', 'canvas-a')).map((v) => v.id))
+    expect(ids.has(merge.id)).toBe(true)
+    expect(ids.has(source.id)).toBe(true)
+    // 52 is the whole claim in one number, and it is why the count is
+    // asserted rather than a survivor list: the sweep ran (53 - 1 ordinary),
+    // and it spared exactly the two rows lineage needs. Had the protection
+    // not applied, all three over the cap would have gone and this would be
+    // 50 — so the count cannot pass by the pair merely happening to sit
+    // inside the cap.
+    expect(ids.size).toBe(52)
+  })
+
   it('save counts nodes-model nodes, not the retired legacy elements list', async () => {
     const doc = makeSpatialDoc({
       nodes: [

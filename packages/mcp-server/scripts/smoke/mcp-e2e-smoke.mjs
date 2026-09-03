@@ -137,6 +137,7 @@ const EXPECTED_TOOLS = [
   'wb_body_patch',
   'wb_canvas_snapshot',
   'wb_canvas_edit',
+  'wb_thread_edit',
   'wb_document_get',
   'wb_document_search',
   'wb_document_set',
@@ -695,6 +696,51 @@ async function main() {
     throw new Error(`comment.resolve did not mark the record: ${JSON.stringify(resolvedBatch)}`)
   }
   console.log('[e2e] wb_canvas_edit → comment.add reaches canvas_view, comment.resolve marks it')
+
+  // The DOCUMENT-scoped surface (ADR-0026 decision 6): the same layer through
+  // `wb_thread_edit`, which is the only way an agent can comment on a format
+  // with no canvas. Run against a MARKDOWN document deliberately — reaching it
+  // on the spatial canvas would prove nothing the ops above do not, and the
+  // gap it closes is precisely the one wb_canvas_edit cannot cross.
+  const noteForThreads = await callTool('wb_document_create', {
+    workspaceId: WORKSPACE_ID,
+    path: 'smoke/threaded-note',
+    kind: 'markdown',
+  })
+  const noteId = noteForThreads.documentId
+  const opened = await callTool('wb_thread_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId: noteId,
+    ops: [
+      {
+        op: 'thread.add',
+        anchor: { kind: 'text', quote: { exact: 'threaded' }, start: 0, end: 8 },
+        body: 'smoke thread',
+        author: 'agent:smoke',
+      },
+    ],
+  })
+  const threadId = opened.threads?.[0]?.id
+  if (threadId === undefined || opened.threads[0]?.messageCount !== 1) {
+    throw new Error(`thread.add did not report its thread: ${JSON.stringify(opened)}`)
+  }
+  const replied = await callTool('wb_thread_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId: noteId,
+    ops: [{ op: 'message.add', threadId, body: 'smoke reply' }],
+  })
+  if (replied.threads?.[0]?.messageCount !== 2) {
+    throw new Error(`message.add did not append: ${JSON.stringify(replied)}`)
+  }
+  const closed = await callTool('wb_thread_edit', {
+    workspaceId: WORKSPACE_ID,
+    documentId: noteId,
+    ops: [{ op: 'thread.resolve', threadId }],
+  })
+  if (closed.threads?.[0]?.status !== 'resolved') {
+    throw new Error(`thread.resolve did not close the thread: ${JSON.stringify(closed)}`)
+  }
+  console.log('[e2e] wb_thread_edit → thread.add / message.add / thread.resolve on a markdown note')
 
   // The opt-in layout analysis is a SECOND composition through the same
   // output schema, reached only when `layout` is set, so the default read

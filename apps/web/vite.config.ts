@@ -8,6 +8,7 @@ import svgr from 'vite-plugin-svgr'
 import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { rendererBuildDefine } from './renderer-build-id.js'
 import { cloudflareDevHeadersPlugin } from './vite-dev-headers.js'
 import { manualChunks } from './vite-manual-chunks.js'
 import { stripWasmSourceMapPlugin } from './vite-plugin-strip-wasm-sourcemap.js'
@@ -17,6 +18,7 @@ import { workerSafeDepsAlias } from './worker-safe-deps-alias.js'
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  define: { ...rendererBuildDefine },
   // Both workers are constructed with `type: 'module'`, but Vite's default
   // worker output is `iife` — which happened to run anyway, since a module
   // worker executes IIFE code fine. It stops being harmless the moment a

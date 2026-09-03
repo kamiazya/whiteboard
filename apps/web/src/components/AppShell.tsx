@@ -266,9 +266,9 @@ export function AppShell({ daemon, onWorkInBrowser, workspaces }: AppShellProps)
         {connection?.state.keeper === 'browser' && (
           <>
             <p className="text-muted-foreground">
-              Connect a daemon (MCP) for version history, variations and merging. Once connected,
-              you can move this workspace to it from Settings — documents, their history and images
-              together.
+              Connect a daemon (MCP) for automatic checkpoints, variations and merging. Once
+              connected, you can move this workspace to it from Settings — documents, their history
+              and images together.
             </p>
             <PromotedElsewhereNotice settingsStore={settingsStore} />
             <Suspense fallback={null}>

@@ -10,7 +10,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
-import { TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/touch-bar-layout.js'
+import { DESKTOP_BAR_HEIGHT_PX, TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/verb-bar-layout.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 import { EXIT_HINT_ALLOWANCE_PX } from './use-keyboard-avoidance.js'
@@ -119,6 +119,17 @@ it('stops listening once the edit ends', async () => {
   raiseKeyboard(fake, rootOf(container), 300)
   await new Promise((resolve) => setTimeout(resolve, 50))
   expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
+})
+
+it('pans a node out from under the strip the desktop bar puts below the header', async () => {
+  // The fine-pointer counterpart of the keyboard: no viewport shrinks, but
+  // the canvas's own top edge is covered while an edit is open, and a node
+  // opened up there is as invisible as one under a keyboard.
+  installFakeVisualViewport()
+  const { container } = render(<Host start={canvasWithNodeAt(0)} />)
+  await startEditing(container, { x: 200, y: 40 })
+  const dy = 0 - (DESKTOP_BAR_HEIGHT_PX + PAN_MARGIN_PX)
+  await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
 })
 
 it('on a coarse pointer also clears the formatting bar riding on the keyboard', async () => {

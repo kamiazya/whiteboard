@@ -31,7 +31,7 @@ vi.mock('./hooks/useDaemonConnection.js', () => ({
 
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
-  capabilities: { versions: false, branches: false, merge: false },
+  capabilities: { branches: false, merge: false },
 }
 
 // Fixed rather than minted: two ULIDs made inside one millisecond order

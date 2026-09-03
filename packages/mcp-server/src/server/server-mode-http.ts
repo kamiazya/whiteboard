@@ -13,6 +13,7 @@ import { createApp } from './app.js'
 import { startBackgroundWork } from './background-work.js'
 import { LOOP_COSTS } from './background-work-costs.js'
 import { getDataDir } from './config.js'
+import type { AutoVersionTrigger } from './routes/document.js'
 import type { AsyncAuthStrategy } from './security/oauth-resource-strategy.js'
 import { createBackupLease, createBackupScheduler } from './store/backup-scheduler.js'
 import { createFileGcSweeper } from './store/file-gc-sweeper.js'
@@ -75,10 +76,28 @@ export async function startServerModeHttp(
         else resolve()
       })
     })
+
+    // A SECOND flush, after the listener is closed and every in-flight
+    // request has finished.
+    //
+    // The registry's stop already flushed, and that one is not redundant: it
+    // is what runs on a bind-failure teardown, where there is no server to
+    // close. But `server.close()` keeps serving the requests already in
+    // progress, and an update handler completing during that window arms a
+    // fresh debounce — against a timer that is `unref`ed and will never fire,
+    // so the checkpoint it scheduled would leave with the process. Flushing
+    // once more here is the point at which no handler can arm another.
+    await autoVersionTrigger?.flush()
   }
 
+  // Filled synchronously by createApp below, and read only by the
+  // auto-checkpoint declaration's stop() — which runs long after.
+  let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'server-mode',
+    onAutoVersionTrigger: (trigger) => {
+      autoVersionTrigger = trigger
+    },
     publicBaseUrl: options.publicBaseUrl,
     allowedOrigins: options.allowedOrigins,
     authStrategy: options.authStrategy,
@@ -124,6 +143,30 @@ export async function startServerModeHttp(
   const backupSchedule = parseBackupSchedule(process.env)
   const backupKeep = parseBackupKeep(process.env)
   const backgroundWork = startBackgroundWork([
+    {
+      name: 'auto-checkpoint',
+      trigger: 'a document update, taken once that document has been quiet for five minutes',
+      instances: {
+        runs: 'every-instance',
+        because:
+          'the debounce is about documents THIS process is holding edits for — another ' +
+          'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
+          'taken from, so a leader could not take it',
+      },
+      loop: LOOP_COSTS['auto-checkpoint'],
+      // Nothing to arm: the trigger schedules itself from the update that
+      // signalled it, which is why it is declared here for its STOP rather
+      // than its start. A trailing debounce loses exactly the checkpoint it
+      // exists to take if the process goes away without flushing — the one
+      // at the pause where editing stopped — so shutting down TAKES the
+      // pending checkpoints instead of dropping them.
+      worker: {
+        start: () => {},
+        stop: async () => {
+          await autoVersionTrigger?.flush()
+        },
+      },
+    },
     {
       name: 'backup-scheduler',
       trigger: backupSchedule.ok ? backupSchedule.value.expression : '0 3 * * *',

@@ -56,7 +56,7 @@ describe('workspace-document routes and the deps they were handed', () => {
       },
     }
 
-    const app = createDocumentRouter({ serverDeps: deps, autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ serverDeps: deps, autoVersionQuietMs: 60_000 })
     const res = await app.request(`/api/w/${WS}/workspace-document/update`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },

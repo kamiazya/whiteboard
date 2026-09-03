@@ -80,10 +80,52 @@ CodeRabbit does **not** auto-review a **Draft** PR or a PR whose title contains 
 
 **Strategic timing (free OSS tier = strict rate limits).** Do NOT trigger on every commit. Trigger at meaningful points: a milestone batch landed + green, just before requesting human review, or after a large fold. One review per accumulated batch, not per push.
 
+**CodeRabbit EDITS one sticky comment; it does not post a new one per state.**
+Watch the comment BODY, never "is there a new `coderabbitai[bot]` comment".
+The same comment id carried, in order: the rate-limit warning, then
+`Currently processing new changes in this PR`, then the finished review. A
+monitor waiting for a new comment saw the "I will review" acknowledgement and
+then nothing for 26 minutes, while the result was being written into a
+comment posted half an hour earlier. Poll
+`gh api repos/{o}/{r}/issues/comments/<comment-id>` (or the issue-comments
+list, reading `.body` and `.updated_at` of the one it already owns) and match
+on its text:
+
+| body contains | state |
+|---|---|
+| `Review limit reached` | rate-limited, not started |
+| `Currently processing` | running |
+| `Actionable comments posted: N` | finished |
+
+**The body alone is not enough — take a BASELINE before triggering.** That
+same persistence is what makes the table a trap on a re-review: the comment
+already holds the PREVIOUS run's `Actionable comments posted: N`, so a monitor
+that only matches text reports "finished" on its first poll, before the new
+review has written anything. Record the sticky comment's `id` and its
+`updated_at` BEFORE posting the trigger, and accept a terminal state only from
+a body whose `updated_at` is newer than that baseline:
+
+```bash
+base=$(gh api repos/{o}/{r}/issues/<PR>/comments \
+  --jq '[.[]|select(.user.login=="coderabbitai[bot]")]|last|{id,updated_at}')
+# ... post @coderabbitai review, then poll that id and require
+# .updated_at > the recorded one before believing the body.
+```
+
+A PR with no `coderabbitai[bot]` comment yet has no baseline and no trap —
+there the first comment to appear is this run's.
+
+Inline findings arrive separately as PR **review comments**
+(`gh api repos/{o}/{r}/pulls/<PR>/comments`), so a run with zero of those and
+a finished sticky body is a genuine clean review — not a monitor that missed
+something.
+
 **Rate-limit → re-queue at the stated recovery time.** When rate-limited, CodeRabbit replies with a comment saying when it will reset (e.g. "rate limit … try again in N minutes" / a timestamp). Flow:
-1. Trigger `@coderabbitai review`.
-2. Watch for CodeRabbit's response (the `Monitor` tool polling `gh api repos/{o}/{r}/issues/<PR>/comments` for the latest `coderabbitai[bot]` comment).
-3. If the response is a **rate-limit** message, parse the reset time and `ScheduleWakeup({ delaySeconds: <until reset + small buffer> })` — on wake, re-post `@coderabbitai review`. Loop until it actually reviews (cap the retries).
-4. If it **starts reviewing**, let it finish, then triage its comments via this skill / the `ci-triage` workflow.
+1. Record the sticky comment's `id` + `updated_at` as the baseline, THEN
+   trigger `@coderabbitai review`.
+2. Watch that comment per the table above — a state counts only once its
+   `updated_at` is newer than the baseline.
+3. If it says **rate-limited**, parse the reset time and `ScheduleWakeup({ delaySeconds: <until reset + small buffer> })` — on wake, re-post `@coderabbitai review`. Loop until it actually reviews (cap the retries).
+4. If it **starts reviewing**, let it finish, then triage its comments via this skill / the `ci-triage` workflow. `Currently processing` can also STALL: one run sat on it for ~50 minutes with the comment's `updated_at` frozen at the acknowledgement. **Cut it off at 20 minutes with no movement in `updated_at`** — clear of a slow-but-live run (the ones that finish move within a few minutes, which is what CodeRabbit's own copy promises) and well short of the one dead run measured — then treat it as unavailable and fall back to the standing decision that AI review's absence does not block a merge (`dev-flow.md`), rather than waiting indefinitely. A deadline off two data points is a starting number, not a law: widen it if a run is ever seen to recover past it, and say so here.
 
 Bypass note: removing a PR from Draft (`gh pr ready <PR>`) is a deliberate human step (it signals "ready for human review/merge") — don't auto-undraft.

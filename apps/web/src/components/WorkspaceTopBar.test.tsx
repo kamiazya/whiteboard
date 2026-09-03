@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react'
 import type { ComponentProps } from 'react'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -118,39 +118,6 @@ describe('WorkspaceTopBar — names fetch race (RED-first)', () => {
   })
 })
 
-describe('WorkspaceTopBar — saveVersion double-invoke race (RED-first)', () => {
-  it('issues exactly one POST /versions when Cmd/Ctrl+S fires twice before the first request resolves', async () => {
-    let resolvePost!: (r: Response) => void
-    const deferred = new Promise<Response>((resolve) => {
-      resolvePost = resolve
-    })
-    let postCount = 0
-    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
-      const u = String(url)
-      if (u.includes('/names')) return mkNamesOk()
-      if (u.includes('/versions') && (init as RequestInit | undefined)?.method === 'POST') {
-        postCount++
-        return deferred
-      }
-      return new Response('{}', { status: 200 })
-    })
-
-    renderBar()
-
-    // Fire both keydowns inside a single act() batch so no intermediate
-    // render (and thus no updated `saving` closure) happens between them —
-    // this is the actual shape of the race: two dispatches landing before
-    // React has a chance to re-render with saving=true.
-    act(() => {
-      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
-      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
-    })
-
-    resolvePost(new Response('{}', { status: 200 }))
-    await waitFor(() => expect(postCount).toBe(1))
-  })
-})
-
 describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
   it('with no DaemonApiContext provider mounted, loads names through the default apiFetch (fallback stays byte-identical)', async () => {
     renderBar()
@@ -195,7 +162,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch (RED-first)', () => {
 // module-level apiFetch would fall back to same-origin requests silently.
 describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (RED-first)', () => {
   function renderBarWithDaemonFetch(overrides?: {
-    getThumbnailBlob?: () => Promise<Blob | null>
     titleSlot?: ComponentProps<typeof WorkspaceTopBar>['titleSlot']
   }) {
     const daemonFetch = vi.fn(async (url: string | URL | Request) => {
@@ -210,7 +176,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
           path="canvas-a"
           onToggleFullscreen={() => {}}
           onNavigateBack={() => {}}
-          getThumbnailBlob={overrides?.getThumbnailBlob}
           titleSlot={overrides?.titleSlot}
         />
       </DaemonApiContext.Provider>,
@@ -219,68 +184,6 @@ describe('WorkspaceTopBar — daemon-context-aware fetch, remaining call sites (
 
     return daemonFetch
   }
-
-  function mkSaveVersionOk(id = 'v1') {
-    return new Response(
-      JSON.stringify({
-        version: {
-          id,
-          path: 'canvas-a',
-          createdAt: '2026-04-23T00:00:00Z',
-          elementCount: 0,
-          auto: false,
-          hasThumbnail: false,
-          branchName: 'main',
-        },
-      }),
-      { status: 200, headers: { 'Content-Type': 'application/json' } },
-    )
-  }
-
-  it('quick-saves a version through the injected daemon fetch on Cmd/Ctrl+S', async () => {
-    const daemonFetch = renderBarWithDaemonFetch()
-    daemonFetch.mockImplementation(async (url: string | URL | Request) => {
-      const u = String(url)
-      if (u.includes('/names')) return mkNamesOk()
-      if (u.includes('/versions')) return mkSaveVersionOk()
-      return new Response('{}', { status: 200 })
-    })
-
-    act(() => {
-      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
-    })
-
-    await waitFor(() => {
-      expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/versions'),
-        expect.objectContaining({ method: 'POST' }),
-      )
-    })
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
-
-  it('uploads the version thumbnail through the injected daemon fetch after a successful save', async () => {
-    const blob = new Blob(['x'], { type: 'image/png' })
-    const daemonFetch = renderBarWithDaemonFetch({ getThumbnailBlob: async () => blob })
-    daemonFetch.mockImplementation(async (url: string | URL | Request) => {
-      const u = String(url)
-      if (u.includes('/names')) return mkNamesOk()
-      if (u.includes('/versions')) return mkSaveVersionOk('v1')
-      return new Response('{}', { status: 200 })
-    })
-
-    act(() => {
-      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
-    })
-
-    await waitFor(() => {
-      expect(daemonFetch).toHaveBeenCalledWith(
-        expect.stringContaining('/versions/v1/thumbnail'),
-        expect.objectContaining({ method: 'PUT' }),
-      )
-    })
-    expect(apiFetch).not.toHaveBeenCalled()
-  })
 
   it('commits a rename made through the title slot via the injected daemon fetch', async () => {
     const daemonFetch = renderBarWithDaemonFetch({
@@ -333,52 +236,6 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
     expect(screen.queryByLabelText('Fullscreen')).toBeNull()
   })
 
-  it('hides HeaderVersionDot when capabilities.versions is false', () => {
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        onNavigateBack={() => {}}
-        onToggleFullscreen={() => {}}
-        capabilities={{ versions: false, branches: true, merge: true }}
-      />,
-      { container: document.body },
-    )
-    expect(screen.queryByTestId('header-version-dot')).toBeNull()
-    // The version-history trigger lives in the canvas HistoryCluster now,
-    // never in the top bar.
-    expect(screen.queryByRole('button', { name: /history/i })).toBeNull()
-  })
-
-  it('never issues a POST /versions on Cmd/Ctrl+S when capabilities.versions is false', async () => {
-    let postCount = 0
-    vi.mocked(apiFetch).mockImplementation(async (url, init) => {
-      const u = String(url)
-      if (u.includes('/names')) return mkNamesOk()
-      if (u.includes('/versions') && (init as RequestInit | undefined)?.method === 'POST') {
-        postCount++
-      }
-      return new Response('{}', { status: 200 })
-    })
-
-    render(
-      <WorkspaceTopBar
-        workspaceId="ws_1"
-        path="canvas-a"
-        onNavigateBack={() => {}}
-        onToggleFullscreen={() => {}}
-        capabilities={{ versions: false, branches: true, merge: true }}
-      />,
-      { container: document.body },
-    )
-
-    act(() => {
-      fireEvent.keyDown(window, { ctrlKey: true, key: 's', code: 'KeyS' })
-    })
-    await Promise.resolve()
-    expect(postCount).toBe(0)
-  })
-
   it('hides HeaderBranchChip when capabilities.branches is false', () => {
     render(
       <WorkspaceTopBar
@@ -386,7 +243,7 @@ describe('WorkspaceTopBar — optional daemon-context props (RED-first)', () => 
         path="canvas-a"
         onNavigateBack={() => {}}
         onToggleFullscreen={() => {}}
-        capabilities={{ versions: true, branches: false, merge: true }}
+        capabilities={{ branches: false, merge: true }}
       />,
       { container: document.body },
     )

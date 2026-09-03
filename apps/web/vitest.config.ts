@@ -6,10 +6,12 @@ import topLevelAwait from 'vite-plugin-top-level-await'
 import wasm from 'vite-plugin-wasm'
 import { defineConfig } from 'vitest/config'
 import { mcpSourceAlias } from './mcp-source-alias.js'
+import { rendererBuildDefine } from './renderer-build-id.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 
 export default defineConfig({
+  define: { ...rendererBuildDefine },
   plugins: [react(), svgr(), wasm(), topLevelAwait()],
   resolve: {
     alias: {

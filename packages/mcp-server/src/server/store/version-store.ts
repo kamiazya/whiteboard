@@ -52,7 +52,14 @@ export interface VersionStore {
     workspaceId: string,
     path: string,
     doc: LoroDoc,
-    opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
+    opts: {
+      auto: boolean
+      label?: string
+      branchName?: string
+      operator?: OperatorInfo
+      /** The version this point was produced by restoring; see `versionEntrySchema`. */
+      restoredFrom?: string
+    },
   ): Promise<VersionEntry>
   // Returns an independent past-state doc: the stored workspace record
   // checked out at the version's frontiers, projected back to a standalone
@@ -140,6 +147,7 @@ interface VersionRow {
   frontiers: string
   hasThumbnail: number
   createdAt: number
+  restoredFrom: string | null
   // The store hydrates this from the documents row at list time so callers
   // still see a path field on each entry.
   path: string
@@ -166,6 +174,7 @@ function rowToEntry(row: VersionRow): VersionEntry {
     hasThumbnail: row.hasThumbnail === 1,
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
+    ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
   }
 }
 
@@ -174,7 +183,14 @@ export class FileVersionStore implements VersionStore {
     workspaceId: string,
     path: string,
     doc: LoroDoc,
-    opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
+    opts: {
+      auto: boolean
+      label?: string
+      branchName?: string
+      operator?: OperatorInfo
+      /** The version this point was produced by restoring; see `versionEntrySchema`. */
+      restoredFrom?: string
+    },
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
@@ -239,6 +255,7 @@ export class FileVersionStore implements VersionStore {
           frontiers,
           hasThumbnail: 0,
           createdAt,
+          restoredFrom: opts.restoredFrom ?? null,
         })
         .execute()
 
@@ -254,6 +271,7 @@ export class FileVersionStore implements VersionStore {
         hasThumbnail: false,
         ...(opts.label !== undefined ? { label: opts.label } : {}),
         ...(operator !== undefined ? { operator } : {}),
+        ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
       }
     })
   }
@@ -517,14 +535,34 @@ export class FileVersionStore implements VersionStore {
     const db = await dbReady()
     const autos = await db
       .selectFrom('versions')
-      .select(['id'])
+      .select(['id', 'restoredFrom'])
       .where('documentId', '=', documentId)
       .where('auto', '=', 1)
       .orderBy('createdAt', 'desc')
       .orderBy('id', 'desc')
       .execute()
     if (autos.length <= MAX_AUTO_PER_DOCUMENT) return
-    const toRemove = autos.slice(MAX_AUTO_PER_DOCUMENT).map((r) => r.id)
+    // Lineage outlives the cap. A restore records its merge point as an
+    // automatic version, so without this both ENDS of a restore are ordinary
+    // sweep candidates: the merge itself, and the point it named. Losing
+    // either leaves a history that once explained where a state came from
+    // and no longer can — and unlike a swept checkpoint, that is not
+    // recoverable by editing again. A merge is rare, so the cap it stretches
+    // is stretched by very little.
+    const referenced = new Set(
+      (
+        await db
+          .selectFrom('versions')
+          .select(['restoredFrom'])
+          .where('documentId', '=', documentId)
+          .where('restoredFrom', 'is not', null)
+          .execute()
+      ).flatMap((r) => (r.restoredFrom === null ? [] : [r.restoredFrom])),
+    )
+    const toRemove = autos
+      .slice(MAX_AUTO_PER_DOCUMENT)
+      .filter((r) => r.restoredFrom === null && !referenced.has(r.id))
+      .map((r) => r.id)
     if (toRemove.length === 0) return
     await db
       .deleteFrom('versions')

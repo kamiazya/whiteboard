@@ -205,9 +205,15 @@ export function useBranches(
   workspaceId: string,
   path: string,
   fetchFn: typeof fetch = apiFetch,
+  // `enabled: false` is a keeper with no branches (the browser): the hook
+  // answers the resting state — one lane, `main`, not loading — and never
+  // fetches, so a panel that reads `head` for its mini-graph gets an answer
+  // instead of a 404 it would have to log and ignore.
+  options: { enabled?: boolean } = {},
 ): UseBranchesResult {
+  const enabled = options.enabled !== false
   const [state, setState] = useState<BranchesState>({ branches: [], head: 'main' })
-  const [loading, setLoading] = useState(true)
+  const [loading, setLoading] = useState(enabled)
   const [error, setError] = useState<BranchApiError | Error | null>(null)
   // Recreated synchronously during render (compare-and-update below) rather
   // than in an effect: refetch() reads apiRef.current, and an effect-based
@@ -245,10 +251,11 @@ export function useBranches(
     setPrevDocumentKey(documentKey)
     setState({ branches: [], head: 'main' })
     setError(null)
-    setLoading(true)
+    setLoading(enabled)
   }
 
   const refetch = useCallback(async () => {
+    if (!enabled) return
     const seq = ++fetchSeqRef.current
     setLoading(true)
     try {
@@ -262,7 +269,7 @@ export function useBranches(
     } finally {
       if (seq === fetchSeqRef.current) setLoading(false)
     }
-  }, [])
+  }, [enabled])
 
   useEffect(() => {
     void refetch()

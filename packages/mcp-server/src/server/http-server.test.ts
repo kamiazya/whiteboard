@@ -464,11 +464,12 @@ describe('startHttpServer file-gc sweeper wiring', () => {
       secondResolved = true
     })
 
-    // Give queued microtasks a chance to run -- neither call may resolve
-    // while the shared shutdown is gated on stopGate.
-    await Promise.resolve()
-    await Promise.resolve()
-    await Promise.resolve()
+    // Wait until the shared shutdown has actually REACHED the gated worker,
+    // rather than counting microtask turns to get there: the registry runs
+    // its workers in declaration order, so a fixed number of turns silently
+    // stops being enough the moment another worker is declared ahead of this
+    // one. Once inside the gate, neither call may resolve.
+    while (stopCalls === 0) await new Promise((resolve) => setTimeout(resolve, 1))
     expect(firstResolved).toBe(false)
     expect(secondResolved).toBe(false)
     expect(stopCalls).toBe(1)

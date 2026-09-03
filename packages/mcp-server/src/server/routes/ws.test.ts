@@ -28,6 +28,7 @@ const { createAutoVersionTrigger } = await import('./document.js')
 const {
   handleWsUpgrade,
   setAutoVersionTrigger,
+  sendVersionCreated,
   sendViewportRequest,
   setOnPersistedForTests,
   getClientCount,
@@ -213,7 +214,15 @@ describe('handleWsUpgrade auto-version corruption', () => {
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
     }
-    setAutoVersionTrigger(createAutoVersionTrigger(versionStore, 0))
+    // The broadcast moved to the trigger: the checkpoint lands long after the
+    // update that signalled it, so ws.ts has no entry to send. Wired here the
+    // way document.ts wires it in production.
+    setAutoVersionTrigger(
+      createAutoVersionTrigger(versionStore, {
+        quietMs: 0,
+        onSaved: (workspaceId, path, saved) => sendVersionCreated(workspaceId, path, saved),
+      }),
+    )
     await saveDocument('session1', 'canvas-a', new LoroDoc())
 
     const ws = new FakeWebSocket()
@@ -262,7 +271,15 @@ describe('handleWsUpgrade auto-version corruption', () => {
       getFrontiersBase64: vi.fn(),
       renameBranchInVersions: vi.fn(),
     }
-    setAutoVersionTrigger(createAutoVersionTrigger(versionStore, 0))
+    // The broadcast moved to the trigger: the checkpoint lands long after the
+    // update that signalled it, so ws.ts has no entry to send. Wired here the
+    // way document.ts wires it in production.
+    setAutoVersionTrigger(
+      createAutoVersionTrigger(versionStore, {
+        quietMs: 0,
+        onSaved: (workspaceId, path, saved) => sendVersionCreated(workspaceId, path, saved),
+      }),
+    )
 
     const ws = new FakeWebSocket()
     await handleWsUpgrade(

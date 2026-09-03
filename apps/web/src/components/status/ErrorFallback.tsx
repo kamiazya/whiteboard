@@ -1,5 +1,6 @@
 import type { JSX } from 'react'
 import ErrorMark from '../../brand/error-mark.svg?react'
+import { reloadFresh } from '../../pwa/reload-fresh.js'
 import { StatusPageButton, StatusPageLayout } from './StatusPageLayout.js'
 
 /**
@@ -18,7 +19,12 @@ export function ErrorFallback({ onRetry }: { onRetry: () => void }): JSX.Element
       actions={
         <>
           <StatusPageButton label="Try again" onClick={onRetry} primary />
-          <StatusPageButton label="Reload" onClick={() => window.location.reload()} />
+          {/* `reloadFresh`, not `location.reload()`: under the worker's
+              `prompt` registration a plain reload re-runs the SAME cached
+              bundle, so for the failure this screen is most often reached by
+              — chunks that no longer agree with each other — the button
+              would return the user to the identical error. */}
+          <StatusPageButton label="Reload" onClick={() => void reloadFresh()} />
         </>
       }
     />

@@ -95,6 +95,8 @@ const EXEMPT: Record<string, string> = {
     'a disclosure triangle: the chevron ROTATES, which is the state expression a tree row wants',
   './components/workspace-files/WorkspaceFolderTree.tsx':
     'a disclosure triangle, same as the file tree',
+  './components/workspace-top-bar/VersionPanel.tsx':
+    'a grab handle whose CHEVRON swaps (ChevronDown expanded, ChevronUp collapsed), so the state is shown by the glyph rather than by a background — the same shape as the two trees above',
   './components/spatial-editor/ContextMenu.tsx':
     'its aria-expanded is the colour SUBMENU while its bg-accent is the SELECTED colour — two different subjects, so deriving one from the other would be wrong',
 }

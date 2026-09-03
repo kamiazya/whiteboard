@@ -228,17 +228,33 @@ describe('PromoteWorkspaceSection', () => {
       />,
     )
     await userEvent.click(screen.getByTestId('promote-workspace-open'))
-    await userEvent.click(await screen.findByTestId('promote-confirm'))
-
-    const progress = await screen.findByTestId('promote-progress')
-    expect(progress.getAttribute('role')).toBe('status')
-    expect(progress.getAttribute('aria-live')).toBe('polite')
-    expect(progress.textContent).toMatch(/moving documents and their history/i)
-    // The text advances with the transfer's real phases, before the flow ends.
-    await waitFor(() => {
-      expect(screen.getByTestId('promote-progress').textContent).toMatch(/referenced images/i)
+    // Record every text the live region shows, in order, from before the
+    // transfer starts. Reading it once after `findBy` resolved raced the
+    // first phase: under CI load the 150ms document phase was already over
+    // and the region read "Moving referenced images…" — a real sequence
+    // reported as a missing step. The observer sees each phase as it lands.
+    const seen: string[] = []
+    const observer = new MutationObserver(() => {
+      const text = screen.queryByTestId('promote-progress')?.textContent ?? ''
+      if (text !== '' && seen[seen.length - 1] !== text) seen.push(text)
     })
-    await screen.findByTestId('promote-last-result')
+    observer.observe(document.body, { subtree: true, childList: true, characterData: true })
+    try {
+      await userEvent.click(await screen.findByTestId('promote-confirm'))
+
+      const progress = await screen.findByTestId('promote-progress')
+      expect(progress.getAttribute('role')).toBe('status')
+      expect(progress.getAttribute('aria-live')).toBe('polite')
+      // The text advances with the transfer's real phases, before the flow ends.
+      await waitFor(() => expect(seen.some((t) => /referenced images/i.test(t))).toBe(true))
+      const documentsAt = seen.findIndex((t) => /moving documents and their history/i.test(t))
+      const imagesAt = seen.findIndex((t) => /referenced images/i.test(t))
+      expect(documentsAt, `phases seen: ${JSON.stringify(seen)}`).toBeGreaterThanOrEqual(0)
+      expect(imagesAt).toBeGreaterThan(documentsAt)
+      await screen.findByTestId('promote-last-result')
+    } finally {
+      observer.disconnect()
+    }
   })
 
   it('the result persists across a remount and ids resolve unchanged — never a toast', async () => {

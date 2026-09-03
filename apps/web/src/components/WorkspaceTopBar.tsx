@@ -1,15 +1,12 @@
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
-import { useDirtyState } from '@/hooks/useDirtyState'
-import { getAppLogger } from '@/lib/app-logger'
-import { isMacPlatform } from '../lib/platform.js'
+import { cn } from '@/lib/utils'
 import { HeaderBranchChip } from './HeaderBranchChip'
-import { HeaderVersionDot } from './HeaderVersionDot'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
-import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
 
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
 // default), every capability behaves as if it were `true` — this keeps every
@@ -25,8 +22,19 @@ export interface DocumentIdentity {
   readonly onRename?: (next: string) => void
 }
 
+/**
+ * What the bar needs to show a LOOKING-AT state. Structurally the panel's
+ * `VersionPreviewSession` minus the state itself, which the bar never draws.
+ */
+export interface TopBarPreview {
+  readonly title: string
+  readonly isRestoring: boolean
+  readonly error: string | null
+  readonly stop: () => void
+  readonly restore: () => void
+}
+
 export interface WorkspaceTopBarCapabilities {
-  versions?: boolean
   branches?: boolean
   merge?: boolean
 }
@@ -34,7 +42,6 @@ export interface WorkspaceTopBarCapabilities {
 interface Props {
   workspaceId: string
   path: string
-  getThumbnailBlob?: () => Promise<Blob | null>
   /**
    * Leaves the document for the document browser, which is where finding one
    * happens (user decision 2026-08-22). apps/web has no react-router-dom
@@ -52,10 +59,38 @@ interface Props {
   // Omitted when the host page has no fullscreen affordance of its own.
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
-  // Gates HeaderVersionDot/Cmd+S/History (versions), HeaderBranchChip (branches),
-  // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
-  // "all capabilities on", matching every existing caller's behavior.
+  // Gates HeaderBranchChip (branches) and its mergeEnabled passthrough
+  // (merge). Undefined means "all capabilities on", matching every existing
+  // caller's behavior.
   capabilities?: WorkspaceTopBarCapabilities
+  /**
+   * Opens and closes the document's history. The PAGE owns both the state and
+   * the panel: history is a column of the editor row, not a popover hanging
+   * off this bar, so the bar carries only the control that asks for it.
+   *
+   * Omitted for a document with no history to open, which hides the control
+   * rather than rendering it inert. It is deliberately NOT gated on the
+   * document's kind — a markdown document's history is its keeper's business,
+   * and gating it here is what left one unreachable.
+   */
+  onToggleHistory?: () => void
+  historyOpen?: boolean
+  /**
+   * A past version on screen in place of the document, and the two things to
+   * do about it.
+   *
+   * It lives HERE rather than in the history panel because the thing that
+   * changed is the document: the panel is beside it on a wide screen and a
+   * sheet at the far edge on a narrow one, so a person who has just replaced
+   * what they are looking at would be told about it, and offered the way
+   * back, in the one place they are not looking. The bar's ordinary actions
+   * are hidden while this is set — every one of them acts on a document that
+   * is not currently drawn.
+   */
+  preview?: TopBarPreview
+  // Bumped by the host page on an externally observed HEAD/version change
+  // (another client, an MCP tool call) so the chip/timeline refetch without
+  // waiting for their own poll interval.
   // Bumped by the host page on an externally observed HEAD/version change
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
@@ -92,18 +127,18 @@ export default function WorkspaceTopBar({
   path,
   onToggleFullscreen,
   isFullscreen,
-  getThumbnailBlob,
   onNavigateBack,
   dataMode = 'daemon',
   capabilities,
+  onToggleHistory,
+  historyOpen = false,
+  preview,
   branchRefreshSignal,
   titleSlot,
 }: Props) {
   const isLocalMode = dataMode === 'local'
-  const versionsEnabled = capabilities?.versions ?? true
   const branchesEnabled = capabilities?.branches ?? true
   const mergeEnabled = capabilities?.merge ?? true
-  const log = getAppLogger('workspace-top-bar')
   const daemonFetch = useDaemonApi()
 
   const { effectiveNames, renameDocument } = useDocumentNames({
@@ -112,26 +147,55 @@ export default function WorkspaceTopBar({
     daemonFetch,
   })
 
-  // Save state: dirty dot + Cmd/Ctrl+S only.
-  // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
-  // → LoroDoc → WebSocket → daemon → SQLite blob in real time, so closing the
-  // tab cannot lose persisted content. The dirty dot here only tracks
-  // "haven't named a manual version yet"; warning the user about it via the
-  // browser's leave-confirmation dialog is misleading and was getting in the
-  // way of automation (e.g. Playwright workflows).
-  const { isDirty } = useDirtyState(workspaceId, path)
-  const { saving, saveVersion } = useSaveVersion({
-    workspaceId,
-    path,
-    daemonFetch,
-    getThumbnailBlob,
-    log,
-  })
-  useQuickSaveShortcut(versionsEnabled, saveVersion)
-  const isMac = isMacPlatform()
-  const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
-
   const canvasCustomName = effectiveNames.documents[path]
+
+  if (preview !== undefined) {
+    return (
+      <header
+        data-testid="version-preview-bar"
+        className="relative z-30 flex h-12 shrink-0 items-center gap-2 border-b border-primary/40 bg-primary/5 px-3"
+      >
+        <span className="min-w-0 flex-1 leading-tight">
+          <b className="block truncate text-sm font-medium">Viewing {preview.title}</b>
+          {preview.error === null ? (
+            <span className="text-[11px] text-muted-foreground">read-only</span>
+          ) : (
+            <span role="alert" className="text-[11px] text-destructive">
+              {preview.error}
+            </span>
+          )}
+        </span>
+        {/* Native `disabled` on both: neither carries a tooltip to keep
+            alive, and an in-flight restore is exactly the state a pointer
+            should bounce off rather than queue behind. Stopping mid-restore
+            would put the live document back while the past state is still
+            landing on it. */}
+        <button
+          type="button"
+          aria-label="Stop viewing"
+          disabled={preview.isRestoring}
+          onClick={preview.stop}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
+        {/* The heavier of the two, so it carries the weight — a pair of
+            identical round buttons would say the acts are alike. */}
+        <button
+          type="button"
+          aria-label="Restore this version"
+          disabled={preview.isRestoring}
+          onClick={preview.restore}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          <RotateCcw
+            aria-hidden="true"
+            className={cn('size-4', preview.isRestoring && 'animate-spin')}
+          />
+        </button>
+      </header>
+    )
+  }
 
   return (
     <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">
@@ -174,14 +238,25 @@ export default function WorkspaceTopBar({
           </>
         )}
 
-        {/* Save-state dot. */}
-        {versionsEnabled && (
-          <HeaderVersionDot
-            dirty={isDirty}
-            saving={saving}
-            onSave={() => void saveVersion('')}
-            shortcutHint={shortcutHint}
-          />
+        {/* The document's history. Kind-agnostic on purpose — see the prop. */}
+        {onToggleHistory && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="History"
+                aria-expanded={historyOpen}
+                onClick={onToggleHistory}
+                className={cn(
+                  'shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground',
+                  TOGGLE_STATE_CLASS,
+                )}
+              >
+                <History aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>History</TooltipContent>
+          </Tooltip>
         )}
       </div>
 
