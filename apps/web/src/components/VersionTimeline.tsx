@@ -280,6 +280,15 @@ export default function VersionTimeline({
    */
   const openPreview = useCallback(
     async (v: VersionEntry) => {
+      // Never while a restore is in flight, and not merely because two
+      // states on screen would be confusing: `restorePreviewed` decides
+      // whether to run its success effects by comparing the version it
+      // asked for against whatever the panel is showing when the response
+      // lands. Choosing another row in that window makes the comparison
+      // fail for a restore that SUCCEEDED — the undo history keeps the
+      // pre-restore document and the list never refreshes, while the
+      // document itself has already moved.
+      if (isRestoring) return
       setRestoreError(null)
       setPreviewing(v)
       try {
@@ -300,7 +309,7 @@ export default function VersionTimeline({
         setRestoreError('That version could not be read.')
       }
     },
-    [workspaceId, path, versionsBackend, onPreview],
+    [isRestoring, workspaceId, path, versionsBackend],
   )
 
   const closePreview = useCallback(() => {

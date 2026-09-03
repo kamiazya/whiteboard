@@ -76,6 +76,18 @@ export async function startServerModeHttp(
         else resolve()
       })
     })
+
+    // A SECOND flush, after the listener is closed and every in-flight
+    // request has finished.
+    //
+    // The registry's stop already flushed, and that one is not redundant: it
+    // is what runs on a bind-failure teardown, where there is no server to
+    // close. But `server.close()` keeps serving the requests already in
+    // progress, and an update handler completing during that window arms a
+    // fresh debounce — against a timer that is `unref`ed and will never fire,
+    // so the checkpoint it scheduled would leave with the process. Flushing
+    // once more here is the point at which no handler can arm another.
+    await autoVersionTrigger?.flush()
   }
 
   // Filled synchronously by createApp below, and read only by the

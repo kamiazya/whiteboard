@@ -333,6 +333,12 @@ export function DaemonDocumentPage({
   // through unchanged.
   const canvasesRef = useRef(controller.documents)
   canvasesRef.current = controller.documents
+
+  // The document on screen, written during render so a handler that outlives
+  // a switch can ask what arrived rather than reading the `canvas` its own
+  // closure captured. This page switches documents without remounting.
+  const currentDocumentPathRef = useRef(canvas?.path)
+  currentDocumentPathRef.current = canvas?.path
   const resolveRefPath = useCallback(
     (ref: string) => canvasesRef.current.find((entry) => entry.id === ref)?.path,
     [],
@@ -570,6 +576,10 @@ export function DaemonDocumentPage({
 
   const saveVersion = async (label: string): Promise<void> => {
     if (canvas === null || savingVersion) return
+    // The document this run is about, fixed before the first await — a save
+    // that started on A must not report itself under B. The scope-reset has
+    // already cleared the outcome by then, so the message would read as B's.
+    const startedOn = canvas.path
     setSavingVersion(true)
     setSaveVersionOutcome(null)
     try {
@@ -587,6 +597,7 @@ export function DaemonDocumentPage({
         log.error('POST /versions response did not match saveVersionResponseSchema:', parsed.error)
         throw new Error('save response did not match schema')
       }
+      if (currentDocumentPathRef.current !== startedOn) return
       setSaveVersionOutcome('saved')
       setVersionRefreshSignal((n) => n + 1)
       // The thumbnail rides with the bookmark, as it did when the top bar
@@ -611,9 +622,10 @@ export function DaemonDocumentPage({
       // HeaderSaveDot never learns this save happened and stays dirty.
       dispatchIdentityEvent('whiteboard:wb_version_saved', canvas ?? undefined)
     } catch {
+      if (currentDocumentPathRef.current !== startedOn) return
       setSaveVersionOutcome('failed')
     } finally {
-      setSavingVersion(false)
+      if (currentDocumentPathRef.current === startedOn) setSavingVersion(false)
     }
   }
 
@@ -841,7 +853,7 @@ export function DaemonDocumentPage({
             </Button>
           </div>
         ) : preview ? (
-          <DocumentPreview past={preview.past} />
+          <DocumentPreview past={preview.past} theme={resolvedTheme} />
         ) : (
           <DocumentEditorSurface
             kind={documentKind}

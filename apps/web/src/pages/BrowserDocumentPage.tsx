@@ -610,10 +610,17 @@ export function BrowserDocumentPage({
   const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
   const saveVersionFromPanel = async (label: string): Promise<void> => {
     if (versionsBackend === null || documentPath === null || savingVersion) return
+    // The document this run is about, fixed before the first await. The page
+    // switches documents without remounting, so a save that started on A can
+    // settle after B is on screen — and the scope-reset effect has already
+    // cleared the outcome by then, so the message would appear under B as if
+    // B had been saved. Same residual `handleDuplicate` guards against.
+    const startedOn = currentDocumentIdRef.current
     setSavingVersion(true)
     setSaveVersionOutcome(null)
     try {
       await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
+      if (currentDocumentIdRef.current !== startedOn) return
       setSaveVersionOutcome('saved')
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
@@ -624,9 +631,10 @@ export function BrowserDocumentPage({
       )
     } catch (err) {
       log.warn('save version from the History panel failed', err)
+      if (currentDocumentIdRef.current !== startedOn) return
       setSaveVersionOutcome('failed')
     } finally {
-      setSavingVersion(false)
+      if (currentDocumentIdRef.current === startedOn) setSavingVersion(false)
     }
   }
 
@@ -1009,7 +1017,7 @@ export function BrowserDocumentPage({
         )}
         <div className="relative h-full min-h-0">
           {preview ? (
-            <DocumentPreview past={preview.past} />
+            <DocumentPreview past={preview.past} theme={resolvedTheme} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}

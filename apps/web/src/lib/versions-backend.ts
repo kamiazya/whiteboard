@@ -97,11 +97,19 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
       if (!res.ok) throw new VersionsRequestError(res.status, 'restore request')
     },
     async putThumbnail(workspaceId, path, versionId, blob) {
-      await fetchFn(documentsApiUrl(workspaceId, path, `versions/${versionId}/thumbnail`), {
-        method: 'PUT',
-        headers: { 'Content-Type': 'image/png' },
-        body: blob,
-      })
+      const res = await fetchFn(
+        documentsApiUrl(workspaceId, path, `versions/${versionId}/thumbnail`),
+        {
+          method: 'PUT',
+          headers: { 'Content-Type': 'image/png' },
+          body: blob,
+        },
+      )
+      // A fetch RESOLVES for 4xx and 5xx, so without this the daemon
+      // refusing the upload is indistinguishable from it accepting one, and
+      // the caller's failure path is unreachable by anything but a network
+      // error.
+      if (!res.ok) throw new VersionsRequestError(res.status, 'thumbnail upload')
     },
   }
 }
