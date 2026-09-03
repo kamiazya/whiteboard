@@ -91,3 +91,13 @@ export function layoutVerbBar<Id, Band>(
 export function touchFormattingBarShown(): boolean {
   return getActiveMarkdownEditor() !== null && hasCoarsePointer()
 }
+
+/**
+ * Whether the canvas's under-the-header strip is on screen — the fine-pointer
+ * counterpart of the question above, and the same reason for asking it in one
+ * place: keyboard avoidance reserves the strip's height and must not reserve
+ * it for a strip that is not there.
+ */
+export function canvasVerbBarShown(): boolean {
+  return getActiveMarkdownEditor() !== null && !hasCoarsePointer()
+}

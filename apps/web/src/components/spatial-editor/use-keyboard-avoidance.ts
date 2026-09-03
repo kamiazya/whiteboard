@@ -9,7 +9,12 @@
 // inside the visible strip above the keyboard.
 
 import { useEffect } from 'react'
-import { TOUCH_BAR_HEIGHT_PX, touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
+import {
+  canvasVerbBarShown,
+  DESKTOP_BAR_HEIGHT_PX,
+  TOUCH_BAR_HEIGHT_PX,
+  touchFormattingBarShown,
+} from '../markdown-editor/verb-bar-layout.js'
 import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
 import { panToShowTarget } from './viewport.js'
 
@@ -74,10 +79,13 @@ export function useKeyboardAvoidance({
       // answers null when nothing needs to move, so a pass that finds the
       // node already visible costs a comparison.
       const bottom = occluded + (touchFormattingBarShown() ? TOUCH_BAR_HEIGHT_PX : 0)
-      if (bottom <= 0) return
+      // The desktop strip sits under the header, over the canvas's own top
+      // edge — a node opened beneath it is as hidden as one under a keyboard.
+      const top = canvasVerbBarShown() ? DESKTOP_BAR_HEIGHT_PX : 0
+      if (bottom <= 0 && top <= 0) return
       setViewport((viewport) => {
         const target = { x, y, width, height: height + EXIT_HINT_ALLOWANCE_PX / viewport.zoom }
-        return panToShowTarget(target, viewport, containerSize, { bottom }) ?? viewport
+        return panToShowTarget(target, viewport, containerSize, { top, bottom }) ?? viewport
       })
     }
     // The keyboard may already be up (editing one node, then tapping into
