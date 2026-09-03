@@ -55,6 +55,31 @@ describe('a saved point carries a picture, whoever keeps it', () => {
     ).toBe(false)
   })
 
+  it.each(PAGES)('%s starts the capture before it asks for the save', async (page) => {
+    // The check above is satisfied by a page that renders AFTER its save
+    // resolves and only then assigns the variable — the very ordering the
+    // change was about. So compare where each happens: the capture has to
+    // come first in the source, which for two straight-line functions is
+    // the order they run in.
+    const source = await read(page)
+    const at = (label: string, pattern: RegExp): number => {
+      const found = [...source.matchAll(pattern)]
+      // Exactly one, or "the first occurrence" would be a different
+      // statement from the one that matters and the order would say nothing.
+      expect(found.length, `${page}: expected one ${label}, found ${found.length}`).toBe(1)
+      return found[0]?.index ?? -1
+    }
+    const capture = at(
+      'picture capture',
+      /const picture = (?:exportScene\('png'\)|getThumbnailBlob\(\))/g,
+    )
+    const save = at('version save', /versionsBackend\.save\(|documentsApiUrl\([^)]*'versions'\)/g)
+    expect(
+      capture,
+      `${page} asks for the picture at ${capture} and saves at ${save} — capture it first, or the picture can hold an edit made during the save`,
+    ).toBeLessThan(save)
+  })
+
   it.each(PAGES)('%s asks its own renderer for the bytes', async (page) => {
     // PNG explicitly: the daemon's route validates the signature on upload
     // and rejects anything else, and one keeper rejecting what the other
