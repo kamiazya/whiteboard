@@ -23,7 +23,10 @@ import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
-import type { VersionPreviewSession } from '../components/VersionTimeline'
+import {
+  DAEMON_HISTORY_CAPABILITIES,
+  type VersionPreviewSession,
+} from '../components/VersionTimeline'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
 import {
   BookmarkAction,
@@ -668,6 +671,7 @@ export function DaemonDocumentPage({
             <VersionPanel
               workspaceId={canvas.workspaceId}
               path={canvas.path}
+              capabilities={DAEMON_HISTORY_CAPABILITIES}
               onRestored={clearLocalUndo}
               onPreview={setPreview}
               refreshSignal={versionRefreshSignal}

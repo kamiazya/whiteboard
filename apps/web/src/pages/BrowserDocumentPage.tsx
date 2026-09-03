@@ -27,7 +27,10 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import type { VersionPreviewSession } from '../components/VersionTimeline'
+import {
+  BROWSER_HISTORY_CAPABILITIES,
+  type VersionPreviewSession,
+} from '../components/VersionTimeline'
 import {
   BookmarkAction,
   type SaveVersionOutcome,
@@ -926,8 +929,7 @@ export function BrowserDocumentPage({
             <VersionPanel
               workspaceId={getBrowserWorkspaceId()}
               path={renderState.snapshot.path}
-              // One lane, and a version only when asked for.
-              capabilities={{ branches: false, autoVersions: false }}
+              capabilities={BROWSER_HISTORY_CAPABILITIES}
               onRestored={clearLocalUndo}
               onPreview={setPreview}
               refreshSignal={versionRefreshSignal}

@@ -22,9 +22,21 @@
  * The four answers are the vocabulary below. `gap` is a first-class one:
  * the point is not that both keepers must have everything, it is that a
  * difference is a decision somebody took rather than one nobody noticed.
+ *
+ * What the scan cannot see, and what the second block here is for: a
+ * difference that lives entirely in the daemon's own server code reaches no
+ * apps/web module at all. Automatic checkpoints are the standing example —
+ * the daemon saves one after work settles and the browser keeper saves only
+ * when asked, and nothing in this app fetches that. It surfaces here as a
+ * PROP, and a prop with a default surfaces as nothing: the mount that
+ * forgets it claims the daemon's shape in silence.
  */
 
 import { describe, expect, it } from 'vitest'
+import {
+  BROWSER_HISTORY_CAPABILITIES,
+  DAEMON_HISTORY_CAPABILITIES,
+} from '../components/VersionTimeline.js'
 import { assertScannedLedger } from '../test-utils/coverage-ledger.js'
 import { BROWSER_CAPABILITIES, DAEMON_CAPABILITIES } from './provider.js'
 
@@ -205,5 +217,48 @@ describe('each answer is checked, so none of them can be a word in front of an o
   it.each(daemonItself)('%s says why there is nothing to mirror', (_path, entry) => {
     if (entry.reach !== 'daemon-itself') return
     expect(entry.why.split(/\s+/).length).toBeGreaterThan(8)
+  })
+})
+
+describe('a panel whose behaviour differs by keeper is told which keeper it is', () => {
+  const mounts = Object.entries(sources)
+    .filter(([path]) => !path.includes('.test.'))
+    .flatMap(([path, text]) =>
+      [...text.matchAll(/<(VersionPanel|VersionTimeline)\s([^>]*?)\/?>/g)].map((m) => ({
+        path: path.replace(/^\//, ''),
+        component: m[1] as string,
+        props: m[2] as string,
+      })),
+    )
+
+  it('finds every production mount of the history panel', () => {
+    // Two pages decide, and VersionPanel forwards to VersionTimeline. A
+    // regex that stopped matching would report zero mounts and pass every
+    // case below vacuously.
+    expect(mounts.length).toBeGreaterThanOrEqual(3)
+  })
+
+  it.each(
+    mounts.map((m) => [`${m.path} -> ${m.component}`, m] as const),
+  )('%s states its keeper', (_label, mount) => {
+    // `VersionTimelineCapabilities` defaults to the daemon's shape so that
+    // a test mount reads as one line. That default is exactly what makes a
+    // production mount able to claim automatic checkpoints and branches it
+    // does not have, without a word of code saying so — which is how a
+    // keeper difference goes back to being invisible.
+    expect(
+      /\bcapabilities=/.test(mount.props),
+      `${mount.path} mounts ${mount.component} without capabilities, so it silently takes the daemon's shape — pass DAEMON_HISTORY_CAPABILITIES or BROWSER_HISTORY_CAPABILITIES, or forward the prop it was given`,
+    ).toBe(true)
+  })
+
+  it('agrees with the provider about branches', () => {
+    // Two capability surfaces describing one keeper: the provider's map,
+    // which gates the teaser copy, and the panel's prop, which decides
+    // whether a lane column is drawn. Disagreeing is a silent difference of
+    // its own — the chrome would promise branches while the panel drew one
+    // lane, or the reverse.
+    expect(BROWSER_HISTORY_CAPABILITIES.branches).toBe(BROWSER_CAPABILITIES.branches)
+    expect(DAEMON_HISTORY_CAPABILITIES.branches).toBe(DAEMON_CAPABILITIES.branches)
   })
 })
