@@ -621,7 +621,14 @@ export function DaemonDocumentPage({
         versionId: parsed.data.version.id,
         getBlob: getThumbnailBlob,
       }).then((outcome) => {
-        if (outcome === 'failed') log.error('bookmark thumbnail upload failed')
+        if (outcome === 'failed') {
+          log.error('bookmark thumbnail upload failed')
+          return
+        }
+        // Refresh a SECOND time, for the reason the browser page does: the
+        // row landed before its picture did, so the list refreshed above
+        // holds a row that says it has none.
+        setVersionRefreshSignal((n) => n + 1)
       })
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves

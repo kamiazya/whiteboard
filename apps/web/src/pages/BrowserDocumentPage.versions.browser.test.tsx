@@ -198,4 +198,42 @@ describe('BrowserDocumentPage version history (browser)', () => {
       timeout: 5000,
     })
   })
+  it('shows the picture the bookmark carries, without waiting for a reload', async () => {
+    const index = new FoldingBrowserIndex()
+    const workspaceId = getBrowserWorkspaceId()
+    await index.createWorkspace({ workspaceId })
+    const { documentId } = await index.createDocument({
+      workspaceId,
+      path: 'canvas-a',
+      kind: 'spatial',
+    })
+    await writeContent(documentId, 'something to draw')
+
+    await openPage()
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const panel = await screen.findByTestId('history-panel')
+    await userEvent.click(within(panel).getByRole('button', { name: 'Bookmark this point' }))
+    await userEvent.fill(
+      await within(panel).findByRole('textbox', { name: 'Name this point' }),
+      'with a picture',
+    )
+    await userEvent.keyboard('{Enter}')
+
+    // The picture is rendered and stored AFTER the row lands, so the list the
+    // save refreshed says `hasThumbnail: false` — a row that draws nothing
+    // until something else happens to refetch it, which for a person means
+    // reloading the page. Measured by hand before this was written: the
+    // bytes reach IndexedDB (8323 of them) and the row shows them only after
+    // a reload.
+    const img = await within(panel).findByRole(
+      'img',
+      { name: 'Version thumbnail' },
+      {
+        timeout: 10_000,
+      },
+    )
+    await waitFor(() => expect((img as HTMLImageElement).naturalWidth).toBeGreaterThan(0), {
+      timeout: 10_000,
+    })
+  })
 })

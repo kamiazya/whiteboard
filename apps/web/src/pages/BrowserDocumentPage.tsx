@@ -637,7 +637,19 @@ export function BrowserDocumentPage({
         versionId: saved.id,
         getBlob: () => exportScene('png'),
       }).then((outcome) => {
-        if (outcome === 'failed') log.warn('bookmark thumbnail failed')
+        if (outcome === 'failed') {
+          log.warn('bookmark thumbnail failed')
+          return
+        }
+        // Announce a SECOND time. The row landed before its picture did, so
+        // the list this save already refreshed holds a row that says it has
+        // none — and without this the picture appears only when something
+        // else happens to refetch, which for a person means reloading.
+        window.dispatchEvent(
+          new CustomEvent('whiteboard:wb_version_saved', {
+            detail: { workspaceId: 'local', path: documentPath },
+          }),
+        )
       })
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
