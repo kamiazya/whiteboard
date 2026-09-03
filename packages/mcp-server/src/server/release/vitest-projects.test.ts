@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sharedBrowserTestConfig } from '../../../../../vitest.browser.shared.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -337,22 +338,17 @@ describe('sharedBrowserTestConfig trace budget', () => {
     else process.env[VAR] = before
   })
 
-  async function load(): Promise<{ trace: { snapshots: boolean } }> {
-    // Cache-busted: the config is read at module scope in the real configs,
-    // and this suite needs a fresh read per env-var setting.
-    const mod = await import(
-      `${pathToFileURL(join(ROOT, 'vitest.browser.shared.ts')).href}?t=${Date.now()}`
-    )
-    return mod.sharedBrowserTestConfig() as { trace: { snapshots: boolean } }
-  }
-
-  it('records no DOM snapshots by default', async () => {
+  // Statically imported, and the env var read PER CALL rather than at module
+  // load, so no dynamic import is needed to see a changed value. An in-body
+  // `await import()` would also trip `test-lazy-import-check` — which is how
+  // the first version of this suite was written, and what caught it.
+  it('records no DOM snapshots by default', () => {
     delete process.env[VAR]
-    expect((await load()).trace.snapshots).toBe(false)
+    expect(sharedBrowserTestConfig().trace.snapshots).toBe(false)
   })
 
-  it('records them when the trace script asks for them', async () => {
+  it('records them when the trace script asks for them', () => {
     process.env[VAR] = '1'
-    expect((await load()).trace.snapshots).toBe(true)
+    expect(sharedBrowserTestConfig().trace.snapshots).toBe(true)
   })
 })
