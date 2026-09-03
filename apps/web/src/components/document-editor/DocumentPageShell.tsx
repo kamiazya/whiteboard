@@ -11,6 +11,12 @@ import { cn } from '@/lib/utils'
  * `<h1>` landmark by hand; owning them here means a layout or a11y drift
  * between the two modes cannot happen quietly.
  *
+ * `aside` is the document's history column. It rides in the editor row
+ * rather than beside the whole page, so the top bar keeps the full width and
+ * the column is exactly as tall as the editor it belongs to. The row is only
+ * wrapped when there IS an aside — without one the editor stays a direct
+ * grid child, which is what every page had before this slot existed.
+ *
  * `mainRef` and `mainClassName` exist for one caller and one reason that
  * travel together: the browser page fullscreens this element, and a
  * fullscreened element without its own background is composited over black —
@@ -21,6 +27,7 @@ export function DocumentPageShell({
   srTitle,
   header,
   children,
+  aside,
   mainRef,
   mainClassName,
 }: {
@@ -30,6 +37,8 @@ export function DocumentPageShell({
   header: ReactNode
   /** The editor row, and any banner rows the page stacks above it. */
   children: ReactNode
+  /** The history column, placed beside the editor row. */
+  aside?: ReactNode
   mainRef?: Ref<HTMLElement>
   mainClassName?: string
 }) {
@@ -42,7 +51,14 @@ export function DocumentPageShell({
         <h1 className="sr-only">{srTitle}</h1>
         {header}
       </div>
-      {children}
+      {aside === undefined ? (
+        children
+      ) : (
+        <div className="flex min-h-0 min-w-0">
+          <div className="flex min-h-0 min-w-0 flex-1 flex-col">{children}</div>
+          {aside}
+        </div>
+      )}
     </main>
   )
 }

@@ -30,6 +30,7 @@ import {
   type SaveVersionOutcome,
 } from '../components/workspace-top-bar/SaveVersionAction.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
+import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
 import { useAgentActivity } from '../hooks/use-agent-activity.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
@@ -154,6 +155,10 @@ export function DaemonDocumentPage({
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
+  // The document's history column. Cleared on a document switch: this page
+  // does not remount, and a panel left open across a switch would be listing
+  // the departed document's versions under the arrived document's name.
+  const [historyOpen, setHistoryOpen] = useState(false)
   // Bumped on any version_created broadcast (covers this button's own save,
   // MCP tool saves, and other peers) so an open VersionTimeline updates
   // without waiting for its 15s poll.
@@ -387,6 +392,11 @@ export function DaemonDocumentPage({
     onChange,
     `${controller.workspaceId}:${controller.path}`,
   )
+  // SCOPE RESET — see the state's own note above.
+  useEffect(() => {
+    setHistoryOpen(false)
+  }, [controller.path])
+
   const canvasValueRef = useRef(canvasValue)
   canvasValueRef.current = canvasValue
   const setMarkdownBody = useCallback(
@@ -607,6 +617,17 @@ export function DaemonDocumentPage({
     <DaemonApiContext.Provider value={daemonFetch}>
       <DocumentPageShell
         srTitle="Whiteboard (daemon)"
+        aside={
+          historyOpen && canvas ? (
+            <VersionPanel
+              workspaceId={canvas.workspaceId}
+              path={canvas.path}
+              onRestored={clearLocalUndo}
+              refreshSignal={versionRefreshSignal}
+              headerActions={versionHeaderActions}
+            />
+          ) : undefined
+        }
         header={
           <>
             {canvas && (
@@ -681,6 +702,11 @@ export function DaemonDocumentPage({
                   branches: capabilities.branches,
                   merge: capabilities.merge,
                 }}
+                // Whatever the document holds: the daemon writes a history for
+                // every kind, and gating this on the editor is what left a
+                // markdown document's checkpoints unreachable.
+                onToggleHistory={canvas ? () => setHistoryOpen((open) => !open) : undefined}
+                historyOpen={historyOpen}
                 branchRefreshSignal={branchRefreshSignal}
                 onNavigateBack={onNavigateBack}
                 // Version thumbnails come from the same PNG export path the
@@ -831,15 +857,6 @@ export function DaemonDocumentPage({
                   onRedo: () => void redo(),
                   canUndo: canUndo(),
                   canRedo: canRedo(),
-                  versions: canvas
-                    ? {
-                        workspaceId: canvas.workspaceId,
-                        path: canvas.path,
-                        onRestored: clearLocalUndo,
-                        refreshSignal: versionRefreshSignal,
-                        headerActions: versionHeaderActions,
-                      }
-                    : undefined,
                 }}
                 overlayTitle={canvas?.path ?? 'Untitled'}
                 resolveAlias={resolveAlias}

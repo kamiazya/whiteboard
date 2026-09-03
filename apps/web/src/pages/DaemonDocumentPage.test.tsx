@@ -103,8 +103,10 @@ async function switchDocumentViaConnections(name: string) {
   fireEvent.click(await screen.findByRole('button', { name: new RegExp(name, 'i') }))
 }
 
-// The bar's History button opens the version popover, which now also
-// carries the page's own "Save version" button/message via versionPanelExtra.
+// The top bar's History control opens the document's history column. It is
+// in the bar rather than the canvas dock because history belongs to the
+// document, not to one editor — which is what lets a markdown document
+// reach it too.
 function toggleHistoryPanel() {
   fireEvent.click(screen.getByRole('button', { name: /history/i }))
 }
@@ -975,11 +977,11 @@ describe('DaemonDocumentPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
+      // Select mode is not required to reach history any more — the control
+      // is in the top bar — but these cases also exercise the canvas.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const toggle = screen.getByRole('button', { name: 'Version history' })
+      const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -1033,11 +1035,11 @@ describe('DaemonDocumentPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
+      // Select mode is not required to reach history any more — the control
+      // is in the top bar — but these cases also exercise the canvas.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const toggle = screen.getByRole('button', { name: 'Version history' })
+      const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -1102,11 +1104,11 @@ describe('DaemonDocumentPage', () => {
         )
       })
       await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
+      // Select mode is not required to reach history any more — the control
+      // is in the top bar — but these cases also exercise the canvas.
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
-      const toggle = screen.getByRole('button', { name: 'Version history' })
+      const toggle = screen.getByRole('button', { name: 'History' })
       await act(async () => {
         toggle.click()
       })
@@ -1772,6 +1774,70 @@ describe('DaemonDocumentPage', () => {
       await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(1))
       const wsUrl = new URL(FakeWebSocket.instances[0]!.url)
       expect(wsUrl.origin).toBe(new URL(DAEMON_BASE_URL).origin.replace('http:', 'ws:'))
+    })
+  })
+  // A markdown document's history was unreachable: the entry point rode the
+  // spatial editor's dock, which markdown never renders, while the daemon's
+  // auto-version trigger looks at no document kind and the top bar defaulted
+  // its version capability on. So checkpoints were being WRITTEN for a
+  // surface that could not read them.
+  describe('a markdown document reaches its own history', () => {
+    it('offers History in the top bar and opens the column', async () => {
+      mockListDocuments.mockResolvedValue({
+        documents: [{ path: 'notes', id: 'id-notes', updatedAt: '2026-01-01', kind: 'markdown' }],
+      })
+      const fetchMock = vi.fn(async (input: RequestInfo | URL) => {
+        const url = String(input)
+        if (url.includes('/branches')) {
+          return new Response(JSON.stringify({ head: 'main', branches: [{ name: 'main' }] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        if (url.includes('/versions')) {
+          return new Response(JSON.stringify({ versions: [] }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          })
+        }
+        return new Response('{}', { status: 200, headers: { 'Content-Type': 'application/json' } })
+      })
+      vi.stubGlobal('fetch', fetchMock)
+
+      await act(async () => {
+        render(
+          <DaemonDocumentPage
+            daemonBaseUrl={DAEMON_BASE_URL}
+            createBackend={makeCreateBackend()}
+          />,
+          { container: document.body },
+        )
+      })
+      await waitFor(() => expect(screen.getByTestId('markdown-source-wrap')).toBeTruthy())
+
+      // No canvas dock on this page at all — the old entry point could not
+      // have been here.
+      expect(screen.queryByTestId('history-cluster')).toBeNull()
+
+      const historyButton = await screen.findByRole('button', { name: 'History' })
+      expect(historyButton.getAttribute('aria-expanded')).toBe('false')
+      await act(async () => {
+        historyButton.click()
+      })
+
+      const panel = await screen.findByTestId('history-panel')
+      await waitFor(() => expect(panel.textContent).toContain('Version history'))
+      expect(screen.getByRole('button', { name: 'History' }).getAttribute('aria-expanded')).toBe(
+        'true',
+      )
+      // The daemon's own versions route is what the column read.
+      expect(
+        fetchMock.mock.calls.some(([url]) =>
+          String(url).includes('/workspaces/w1/documents/notes/versions'),
+        ),
+      ).toBe(true)
+
+      vi.unstubAllGlobals()
     })
   })
 })

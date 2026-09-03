@@ -1,9 +1,10 @@
-import { ChevronLeft } from 'lucide-react'
+import { ChevronLeft, History } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { useDirtyState } from '@/hooks/useDirtyState'
 import { getAppLogger } from '@/lib/app-logger'
+import { cn } from '@/lib/utils'
 import { isMacPlatform } from '../lib/platform.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
 import { HeaderVersionDot } from './HeaderVersionDot'
@@ -62,6 +63,18 @@ interface Props {
    * dot and the shortcut. Undefined means "yes".
    */
   versionsEnabled?: boolean
+  /**
+   * Opens and closes the document's history. The PAGE owns both the state and
+   * the panel: history is a column of the editor row, not a popover hanging
+   * off this bar, so the bar carries only the control that asks for it.
+   *
+   * Omitted for a document with no history to open, which hides the control
+   * rather than rendering it inert. It is deliberately NOT gated on the
+   * document's kind — a markdown document's history is its keeper's business,
+   * and gating it here is what left one unreachable.
+   */
+  onToggleHistory?: () => void
+  historyOpen?: boolean
   // Bumped by the host page on an externally observed HEAD/version change
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
@@ -103,6 +116,8 @@ export default function WorkspaceTopBar({
   dataMode = 'daemon',
   capabilities,
   versionsEnabled = true,
+  onToggleHistory,
+  historyOpen = false,
   branchRefreshSignal,
   titleSlot,
 }: Props) {
@@ -177,6 +192,27 @@ export default function WorkspaceTopBar({
               mergeEnabled={mergeEnabled}
             />
           </>
+        )}
+
+        {/* The document's history. Kind-agnostic on purpose — see the prop. */}
+        {onToggleHistory && (
+          <Tooltip>
+            <TooltipTrigger asChild>
+              <button
+                type="button"
+                aria-label="History"
+                aria-expanded={historyOpen}
+                onClick={onToggleHistory}
+                className={cn(
+                  'shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground',
+                  historyOpen && 'bg-accent text-foreground',
+                )}
+              >
+                <History aria-hidden="true" className="size-4" />
+              </button>
+            </TooltipTrigger>
+            <TooltipContent>History</TooltipContent>
+          </Tooltip>
         )}
 
         {/* Save-state dot. */}

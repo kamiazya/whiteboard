@@ -44,11 +44,12 @@ export function SaveVersionAction({
           Save failed
         </span>
       )}
-      {outcome === 'saved' && (
-        <span role="status" aria-live="polite" className="sr-only">
-          Version saved
-        </span>
-      )}
+      {/* Mounted from the start and given its words later: a role="status"
+          that ARRIVES carrying its message is announced inconsistently
+          (polite-live-region.test.ts holds the rule). */}
+      <span role="status" aria-live="polite" className="sr-only">
+        {outcome === 'saved' ? 'Version saved' : ''}
+      </span>
       <Tooltip>
         <TooltipTrigger asChild>
           <button

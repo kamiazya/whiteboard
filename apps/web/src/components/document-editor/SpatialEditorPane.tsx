@@ -1,10 +1,7 @@
 import type { ReactNode, Ref } from 'react'
 import type { DocumentFileSeams } from '../../hooks/use-document-file-seams.js'
 import { readLastTool, resolveInitialTool } from '../../lib/initial-tool.js'
-import {
-  HistoryCluster,
-  type HistoryClusterVersionsProps,
-} from '../history-cluster/HistoryCluster.js'
+import { HistoryCluster } from '../history-cluster/HistoryCluster.js'
 import {
   SpatialEditor,
   type SpatialEditorHandle,
@@ -66,7 +63,6 @@ export interface SpatialEditorPaneProps extends PassedThrough {
     onRedo: () => void
     canUndo: boolean
     canRedo: boolean
-    versions?: HistoryClusterVersionsProps
   }
   overlayTitle: string
   resolveAlias: NodeTextEditorOverlayProps['resolveAlias']

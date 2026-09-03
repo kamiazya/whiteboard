@@ -2,7 +2,7 @@ import type { ReactNode, Ref } from 'react'
 import VersionTimeline, { type VersionTimelineCapabilities } from '@/components/VersionTimeline'
 
 interface VersionPanelProps {
-  panelRef: Ref<HTMLDivElement>
+  panelRef?: Ref<HTMLDivElement>
   workspaceId: string
   path: string
   capabilities?: VersionTimelineCapabilities
@@ -11,8 +11,18 @@ interface VersionPanelProps {
   headerActions?: ReactNode
 }
 
-// Version history panel surface. Position-agnostic: the mount site (the
-// canvas history cluster) owns placement; this component owns the surface.
+/**
+ * The document's history, as a COLUMN of the editor row.
+ *
+ * It was a 340x480 popover hanging off the spatial editor's dock, which cost
+ * it two things: a markdown document has no dock to hang it from, and a past
+ * state cannot be previewed inside a box that size. As a column it is as tall
+ * as the editor beside it and belongs to the document rather than to one
+ * editor — which is what lets both kinds reach the same history.
+ *
+ * Position-agnostic within that: the shell's `aside` slot owns where the
+ * column sits, this component owns the surface.
+ */
 export function VersionPanel({
   panelRef,
   workspaceId,
@@ -25,18 +35,17 @@ export function VersionPanel({
   return (
     <div
       ref={panelRef}
-      className="w-[340px] max-w-[calc(100vw-1.5rem)] overflow-hidden rounded-lg border bg-background shadow-lg"
+      data-testid="history-panel"
+      className="flex w-[300px] max-w-[calc(100vw-1.5rem)] min-h-0 shrink-0 flex-col border-l bg-background"
     >
-      <div className="flex h-[480px] min-h-0 flex-col">
-        <VersionTimeline
-          workspaceId={workspaceId}
-          path={path}
-          capabilities={capabilities}
-          onRestored={onRestored}
-          refreshSignal={refreshSignal}
-          headerActions={headerActions}
-        />
-      </div>
+      <VersionTimeline
+        workspaceId={workspaceId}
+        path={path}
+        capabilities={capabilities}
+        onRestored={onRestored}
+        refreshSignal={refreshSignal}
+        headerActions={headerActions}
+      />
     </div>
   )
 }

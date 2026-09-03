@@ -73,8 +73,9 @@ async function openPage() {
 }
 
 // The browser keeper's version history, end to end through the real page:
-// the top bar's quick save writes a row, the History panel lists it, and a
-// restore from the panel puts the saved state back into the record.
+// the top bar's quick save writes a row, the History column lists it, and a
+// restore from it puts the saved state back into the record. The entry point
+// is the top bar, not the canvas dock — history belongs to the document.
 describe('BrowserDocumentPage version history (browser)', () => {
   beforeEach(async () => {
     await clearDb()
@@ -98,8 +99,8 @@ describe('BrowserDocumentPage version history (browser)', () => {
     const view = await openPage()
     // Panel open BEFORE the save, so the row has to arrive through the
     // refresh the save announces — not through the panel's mount fetch.
-    await userEvent.click(screen.getByRole('button', { name: 'Version history' }))
-    const panel = await screen.findByTestId('history-version-panel')
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const panel = await screen.findByTestId('history-panel')
     // The browser's own empty-state copy: no auto-save to wait for, and it
     // points at the panel's own save icon rather than at a shortcut a phone
     // does not have.
@@ -141,8 +142,8 @@ describe('BrowserDocumentPage version history (browser)', () => {
     expect(await storedText(documentId)).toBe('second')
     await openPage()
 
-    await userEvent.click(screen.getByRole('button', { name: 'Version history' }))
-    const reopened = await screen.findByTestId('history-version-panel')
+    await userEvent.click(screen.getByRole('button', { name: 'History' }))
+    const reopened = await screen.findByTestId('history-panel')
     await waitFor(() => expect(within(reopened).getAllByTestId('version-row')).toHaveLength(2))
     // Newest first; the OLDER row is the one holding 'first'.
     const row = within(reopened).getAllByTestId('version-row')[1]

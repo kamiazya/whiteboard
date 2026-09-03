@@ -295,6 +295,7 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
 // switching rather than remounting — `App.tsx` says so at the mount site —
 // so everything it holds about a document has to be dropped by hand.
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
+  historyOpen: 'cleared on switch',
   savingVersion: 'no subject: an in-flight flag for this screen’s own submit',
   saveVersionOutcome: 'cleared on switch',
   versionRefreshSignal:

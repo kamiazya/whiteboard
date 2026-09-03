@@ -1,7 +1,10 @@
 /**
- * The history cluster — every Loro-timeline affordance in one group:
- * step undo/redo, and (when the daemon capability exists) the
- * version-history panel.
+ * The step cluster — undo and redo for the spatial editor.
+ *
+ * Version history LEFT this group: it belongs to the document rather than to
+ * one editor, so its entry point is the top bar and its panel is a column of
+ * the editor row. What stays here is the pair whose lifetime is the editing
+ * session — a markdown document keeps its own undo in CodeMirror.
  *
  * This component is deliberately UNPOSITIONED: it renders as the bottom
  * dock's leading group (SpatialEditor's `paletteLeading` slot), because
@@ -20,32 +23,18 @@
  * ignore presses originating here (see SpatialEditor's isOverlayEvent).
  */
 
-import { History, Redo2, Undo2 } from 'lucide-react'
-import { type ReactNode, useEffect, useRef, useState } from 'react'
+import { Redo2, Undo2 } from 'lucide-react'
+import type { ReactNode } from 'react'
 import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { isMacPlatform } from '../../lib/platform.js'
-import type { VersionTimelineCapabilities } from '../VersionTimeline.js'
-import { VersionPanel } from '../workspace-top-bar/VersionPanel.js'
-
-export interface HistoryClusterVersionsProps {
-  readonly workspaceId: string
-  readonly path: string
-  /** What the keeper can do; absent means the daemon's full shape. */
-  readonly capabilities?: VersionTimelineCapabilities
-  readonly onRestored?: () => void
-  readonly refreshSignal?: number
-  readonly headerActions?: ReactNode
-}
 
 export interface HistoryClusterProps {
   readonly onUndo: () => void
   readonly onRedo: () => void
   readonly canUndo: boolean
   readonly canRedo: boolean
-  /** Present only when the version capability exists (daemon-backed pages). */
-  readonly versions?: HistoryClusterVersionsProps
 }
 
 const IS_MAC = isMacPlatform()
@@ -92,43 +81,13 @@ function StepButton({
   )
 }
 
-export function HistoryCluster({
-  onUndo,
-  onRedo,
-  canUndo,
-  canRedo,
-  versions,
-}: HistoryClusterProps) {
-  const [versionOpen, setVersionOpen] = useState(false)
-  const versionPanelRef = useRef<HTMLDivElement | null>(null)
-
-  // Close the version panel on outside clicks. Radix dialogs (the restore
-  // confirmation) portal into document.body — outside this subtree — so
-  // clicks inside any dialog count as "inside", or confirming a restore
-  // would also close the panel behind it.
-  useEffect(() => {
-    if (!versionOpen) return
-    const onClick = (e: MouseEvent) => {
-      const panel = versionPanelRef.current
-      if (!panel) return
-      const target = e.target as Node | null
-      if (target && !panel.contains(target)) {
-        const targetEl = e.target as HTMLElement
-        const isTrigger = targetEl.closest('[data-version-trigger]')
-        const isInPortalDialog = targetEl.closest('[role="dialog"], [role="alertdialog"]')
-        if (!isTrigger && !isInPortalDialog) setVersionOpen(false)
-      }
-    }
-    document.addEventListener('mousedown', onClick)
-    return () => document.removeEventListener('mousedown', onClick)
-  }, [versionOpen])
-
+export function HistoryCluster({ onUndo, onRedo, canUndo, canRedo }: HistoryClusterProps) {
   return (
     <div
       data-editor-overlay
       data-testid="history-cluster"
       role="toolbar"
-      aria-label="History"
+      aria-label="Undo and redo"
       className="relative flex items-center gap-0.5"
     >
       <StepButton
@@ -149,44 +108,6 @@ export function HistoryCluster({
       >
         <Redo2 aria-hidden="true" className="size-4" />
       </StepButton>
-      {versions && (
-        <>
-          <div aria-hidden="true" className="mx-0.5 h-5 w-px bg-border" />
-          <Tooltip>
-            <TooltipTrigger asChild>
-              <button
-                type="button"
-                data-version-trigger
-                aria-label="Version history"
-                aria-expanded={versionOpen}
-                onClick={() => setVersionOpen((v) => !v)}
-                className={cn(CLUSTER_BUTTON_CLASS, versionOpen && 'bg-accent text-foreground')}
-              >
-                <History aria-hidden="true" className="size-4" />
-              </button>
-            </TooltipTrigger>
-            <TooltipContent>Version history</TooltipContent>
-          </Tooltip>
-          {versionOpen && (
-            <div
-              data-testid="history-version-panel"
-              // Opens UPWARD from the cluster, origin-aware at the trigger
-              // corner (never scale(0) — see DESIGN.md Motion).
-              className="absolute bottom-[calc(100%+6px)] left-0 origin-bottom-left animate-in fade-in-0 zoom-in-[0.98] duration-(--motion-duration-normal) ease-(--motion-ease-out)"
-            >
-              <VersionPanel
-                panelRef={versionPanelRef}
-                workspaceId={versions.workspaceId}
-                path={versions.path}
-                capabilities={versions.capabilities}
-                onRestored={versions.onRestored}
-                refreshSignal={versions.refreshSignal}
-                headerActions={versions.headerActions}
-              />
-            </div>
-          )}
-        </>
-      )}
     </div>
   )
 }

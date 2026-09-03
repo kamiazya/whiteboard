@@ -33,6 +33,7 @@ import {
   type SaveVersionOutcome,
 } from '../components/workspace-top-bar/SaveVersionAction.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
+import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
 import { useDocumentFileSeams } from '../hooks/use-document-file-seams.js'
 import { useMarkdownEmbedContent } from '../hooks/use-markdown-embed-content.js'
@@ -297,6 +298,7 @@ export function BrowserDocumentPage({
     setDuplicateError(null)
     setIsDuplicating(false)
     setSaveVersionOutcome(null)
+    setHistoryOpen(false)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -571,6 +573,10 @@ export function BrowserDocumentPage({
   // The panel refetches on a CHANGE of this signal. A manual save announces
   // itself on the window (`useSaveVersion` dispatches it after the keeper
   // confirmed the save), which is the same event the daemon page bumps on.
+  // The document's history column. This page keeps its own document
+  // switching rather than remounting, so an open panel is cleared by hand
+  // with the rest of the document-scoped state.
+  const [historyOpen, setHistoryOpen] = useState(false)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
   useEffect(() => {
     const onSaved = () => setVersionRefreshSignal((n) => n + 1)
@@ -889,6 +895,25 @@ export function BrowserDocumentPage({
         srTitle={renderState.snapshot.name}
         mainRef={mainRef}
         mainClassName="bg-background"
+        aside={
+          historyOpen && versionsEnabled ? (
+            <VersionPanel
+              workspaceId={getBrowserWorkspaceId()}
+              path={renderState.snapshot.path}
+              // One lane, and a version only when asked for.
+              capabilities={{ branches: false, autoVersions: false }}
+              onRestored={clearLocalUndo}
+              refreshSignal={versionRefreshSignal}
+              headerActions={
+                <SaveVersionAction
+                  saving={savingVersion}
+                  outcome={saveVersionOutcome}
+                  onSave={() => void saveVersionFromPanel()}
+                />
+              }
+            />
+          ) : undefined
+        }
         header={
           <>
             {/* Fullscreen means the CANVAS, maximised: the whole top-bar row —
@@ -937,6 +962,10 @@ export function BrowserDocumentPage({
                     merge: capabilities.merge,
                   }}
                   versionsEnabled={versionsEnabled}
+                  onToggleHistory={
+                    versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
+                  }
+                  historyOpen={historyOpen}
                 />
               </Suspense>
             )}
@@ -1015,23 +1044,6 @@ export function BrowserDocumentPage({
                     onRedo: () => void redo(),
                     canUndo: canUndo(),
                     canRedo: canRedo(),
-                    versions: versionsEnabled
-                      ? {
-                          workspaceId: getBrowserWorkspaceId(),
-                          path: renderState.snapshot.path,
-                          // One lane, and a version only when asked for.
-                          capabilities: { branches: false, autoVersions: false },
-                          onRestored: clearLocalUndo,
-                          refreshSignal: versionRefreshSignal,
-                          headerActions: (
-                            <SaveVersionAction
-                              saving={savingVersion}
-                              outcome={saveVersionOutcome}
-                              onSave={() => void saveVersionFromPanel()}
-                            />
-                          ),
-                        }
-                      : undefined,
                   }}
                   overlayTitle={documentName ?? 'Untitled'}
                   resolveAlias={resolveAlias}

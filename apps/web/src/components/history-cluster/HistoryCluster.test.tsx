@@ -45,47 +45,9 @@ describe('HistoryCluster', () => {
     expect(screen.queryByRole('button', { name: 'Version history' })).toBeNull()
   })
 
-  it('with versions, the history trigger toggles the version panel', () => {
-    render(
-      <HistoryCluster
-        onUndo={vi.fn()}
-        onRedo={vi.fn()}
-        canUndo
-        canRedo
-        versions={{ workspaceId: 'ws-1', path: 'doc-a' }}
-      />,
-    )
-    // VersionTimeline fetches on mount — jsdom has no fetch mock here, so
-    // only assert the panel container appears/disappears.
-    const trigger = screen.getByRole('button', { name: 'Version history' })
-    expect(screen.queryByTestId('history-version-panel')).toBeNull()
-    fireEvent.click(trigger)
-    expect(screen.getByTestId('history-version-panel')).toBeTruthy()
-    fireEvent.click(trigger)
-    expect(screen.queryByTestId('history-version-panel')).toBeNull()
-  })
-
-  it('renders headerActions inside the opened version panel, beside the title rather than under the list', () => {
-    render(
-      <HistoryCluster
-        onUndo={vi.fn()}
-        onRedo={vi.fn()}
-        canUndo
-        canRedo
-        versions={{
-          workspaceId: 'ws-1',
-          path: 'doc-a',
-          headerActions: <div data-testid="version-header-actions-slot">extra</div>,
-        }}
-      />,
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'Version history' }))
-    expect(screen.getByTestId('version-header-actions-slot')).toBeTruthy()
-  })
-
   it('is marked as an editor overlay so canvas gestures ignore it', () => {
     render(<HistoryCluster onUndo={vi.fn()} onRedo={vi.fn()} canUndo canRedo />)
-    const toolbar = screen.getByRole('toolbar', { name: 'History' })
+    const toolbar = screen.getByRole('toolbar', { name: 'Undo and redo' })
     expect(toolbar.hasAttribute('data-editor-overlay')).toBe(true)
   })
 })
