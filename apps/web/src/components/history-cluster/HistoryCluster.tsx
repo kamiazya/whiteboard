@@ -22,7 +22,7 @@
 
 import { History, Redo2, Undo2 } from 'lucide-react'
 import { type ReactNode, useEffect, useRef, useState } from 'react'
-import { DOCK_BUTTON_CLASS } from '@/components/ui/dock-button'
+import { DOCK_BUTTON_CLASS, TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { cn } from '@/lib/utils'
 import { isMacPlatform } from '../../lib/platform.js'
@@ -157,7 +157,7 @@ export function HistoryCluster({
                 aria-label="Version history"
                 aria-expanded={versionOpen}
                 onClick={() => setVersionOpen((v) => !v)}
-                className={cn(CLUSTER_BUTTON_CLASS, versionOpen && 'bg-accent text-foreground')}
+                className={cn(CLUSTER_BUTTON_CLASS, TOGGLE_STATE_CLASS)}
               >
                 <History aria-hidden="true" className="size-4" />
               </button>

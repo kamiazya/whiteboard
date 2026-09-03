@@ -14,6 +14,8 @@
  */
 import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { useMemo, useState } from 'react'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
+import { cn } from '@/lib/utils'
 
 /**
  * Which conversations the reader is looking at. **Per-user view state, never
@@ -66,11 +68,13 @@ export function CommentsPanel({ threads, resolveAnchor, onSelect }: CommentsPane
             type="button"
             aria-pressed={filter === value}
             onClick={() => setFilter(value)}
-            className={
-              filter === value
-                ? 'rounded px-2 py-1 text-xs font-medium bg-neutral-200 dark:bg-neutral-700'
-                : 'rounded px-2 py-1 text-xs text-neutral-600 dark:text-neutral-400'
-            }
+            // Theme TOKENS, not raw palette steps: `bg-neutral-200
+            // dark:bg-neutral-700` was a second colour system beside the one
+            // every other control uses, and it does not follow a theme change.
+            className={cn(
+              'rounded px-2 py-1 text-xs text-muted-foreground aria-pressed:font-medium',
+              TOGGLE_STATE_CLASS,
+            )}
           >
             {label}
           </button>

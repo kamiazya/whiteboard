@@ -82,9 +82,11 @@ export function EditorToolbar({
                     onClick={() => onModeChange(option)}
                     className={cn(
                       'focus-visible:ring-ring inline-flex h-6 items-center justify-center rounded-md px-2 transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:outline-none',
-                      active
-                        ? 'bg-background text-foreground shadow-sm'
-                        : 'text-muted-foreground hover:text-foreground',
+                      // A segmented control: its selected segment is RAISED
+                      // rather than accent-filled, so it derives its own look
+                      // from the attribute instead of wearing the shared one.
+                      'text-muted-foreground hover:text-foreground',
+                      'aria-pressed:bg-background aria-pressed:text-foreground aria-pressed:shadow-sm',
                     )}
                   >
                     <Icon aria-hidden className="size-3.5" />
