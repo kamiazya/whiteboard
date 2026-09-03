@@ -62,6 +62,7 @@ import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import { uploadVersionThumbnail } from '../lib/version-thumbnail.js'
 import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
@@ -591,19 +592,18 @@ export function DaemonDocumentPage({
       // The thumbnail rides with the bookmark, as it did when the top bar
       // owned the save. It moved here with the save itself: the bar no
       // longer takes versions, so it no longer needs the scene exporter.
-      void (async () => {
-        try {
-          const blob = await getThumbnailBlob()
-          if (blob && parsed.data.version.id) {
-            await daemonFetch(
-              `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, `versions/${parsed.data.version.id}/thumbnail`)}`,
-              { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: blob },
-            )
-          }
-        } catch (err) {
-          log.error('bookmark thumbnail upload failed:', err)
-        }
-      })()
+      // Not awaited — the bookmark has landed, and its picture arriving late
+      // or not at all must not hold up the row.
+      void uploadVersionThumbnail({
+        daemonBaseUrl,
+        workspaceId: canvas.workspaceId,
+        path: canvas.path,
+        versionId: parsed.data.version.id,
+        getBlob: getThumbnailBlob,
+        fetchImpl: daemonFetch,
+      }).then((outcome) => {
+        if (outcome === 'failed') log.error('bookmark thumbnail upload failed')
+      })
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
