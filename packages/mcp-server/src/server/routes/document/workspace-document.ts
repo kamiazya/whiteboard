@@ -17,11 +17,7 @@ import { workspaceIdFromHandle } from '../../workspace-handle.js'
 const WORKSPACE_DOC_UPDATE_LIMIT_BYTES = 16 * 1024 * 1024
 
 export interface WorkspaceDocumentRouterOptions {
-  triggerAutoVersion: (
-    workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-  ) => Promise<VersionEntry | null>
+  triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
   // The workspace-document seam the routes read and write through.
   // Production wires this from document.ts; a router built without it falls
   // back to the same wiring via getDefaultServerDeps.
@@ -102,8 +98,8 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
         return c.json({ title: 'Malformed workspace-document update' }, 400)
       }
 
-      // Auto-version for the document the client says it is editing. The
-      // trigger is throttled; failures never fail the update itself.
+      // Signal the document the client says it is editing. The checkpoint
+      // lands once it goes quiet; failures never fail the update itself.
       const documentId = c.req.query('documentId')
       if (documentId !== undefined) {
         void (async () => {
@@ -111,10 +107,7 @@ export function createWorkspaceDocumentRouter(options: WorkspaceDocumentRouterOp
           const entry = resolveWorkspaceDocumentById(workspaceDoc, documentId)
           if (entry === null) return
           const doc = await deps.liveDocuments.get(workspaceId, entry.path)
-          const version = await options.triggerAutoVersion(workspaceId, entry.path, doc)
-          if (!version) return
-          const { sendVersionCreated } = await import('../ws.js')
-          sendVersionCreated(workspaceId, entry.path, version)
+          options.triggerAutoVersion(workspaceId, entry.path, doc)
         })().catch((err: unknown) => {
           getLogger('document').error({ err: err as Error }, 'auto-version trigger failed')
         })

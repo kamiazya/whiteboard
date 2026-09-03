@@ -45,7 +45,7 @@ describe('thumbnail PUT/GET endpoints', () => {
   })
 
   it('saves a PNG through PUT /versions/:id/thumbnail and fetches it through GET', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -76,7 +76,7 @@ describe('thumbnail PUT/GET endpoints', () => {
   })
 
   it('rejects an oversized thumbnail body with 413 payload_too_large', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -100,7 +100,7 @@ describe('thumbnail PUT/GET endpoints', () => {
   })
 
   it('rejects non-PNG magic bytes such as JPEG with 400 on PUT /thumbnail', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -117,7 +117,7 @@ describe('thumbnail PUT/GET endpoints', () => {
   })
 
   it('returns 404 for an unsaved thumbnail id on GET /thumbnail', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/no-thumb/thumbnail',
     )
@@ -131,7 +131,7 @@ describe('thumbnail PUT/GET endpoints', () => {
   // error is logged, while the empty body still triggers <img> onError → the
   // FileText placeholder.
   it('returns 204 (not 404) from GET /latest-thumbnail when the canvas has no thumbnail', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/latest-thumbnail')
     expect(res.status).toBe(204)
     expect(await res.arrayBuffer()).toEqual(new ArrayBuffer(0))
@@ -164,7 +164,7 @@ describe('thumbnail PUT/GET endpoints', () => {
       recursive: true,
     })
 
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request(
       '/api/workspaces/session1/documents/canvas-a/versions/broken-thumb/thumbnail',
     )
@@ -177,7 +177,7 @@ describe('thumbnail PUT/GET endpoints', () => {
   })
 
   it('returns hasThumbnail=true in the version list after saving a thumbnail', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const saveRes = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },

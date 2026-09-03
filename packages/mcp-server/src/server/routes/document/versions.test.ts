@@ -47,7 +47,7 @@ describe('versions API', () => {
     clearCache()
   })
 
-  it('saves an auto-version immediately when autoVersionIntervalMs=0', async () => {
+  it('saves an auto-version immediately when autoVersionQuietMs=0', async () => {
     const clientDoc = new LoroDoc()
     const prevVV = clientDoc.version()
     const list = clientDoc.getMovableList('elements')
@@ -56,7 +56,7 @@ describe('versions API', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    const app = createDocumentRouter({ autoVersionIntervalMs: 0 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 0 })
     const resUpdate = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -78,7 +78,7 @@ describe('versions API', () => {
   })
 
   it('saves a manual version with a label through POST /versions', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -91,7 +91,7 @@ describe('versions API', () => {
   })
 
   it('POST /versions persists an explicit operator', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -129,7 +129,7 @@ describe('versions API', () => {
   })
 
   it('POST /versions defaults operator to human when omitted', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -154,7 +154,7 @@ describe('versions API', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
-    const app = createDocumentRouter({ autoVersionIntervalMs: 0 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 0 })
     const resUpdate = await app.request('/api/w/session1/document/canvas-a/update', {
       method: 'POST',
       headers: { 'Content-Type': 'application/octet-stream' },
@@ -176,7 +176,7 @@ describe('versions API', () => {
   })
 
   it('filters GET /versions by path and returns newest first', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
       method: 'POST',
       body: JSON.stringify({ label: 'a1' }),

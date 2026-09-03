@@ -18,11 +18,7 @@ import { onDocumentAction } from './path-route.js'
 const LIVE_DOC_UPDATE_LIMIT_BYTES = 16 * 1024 * 1024
 
 export interface LiveDocRouterOptions {
-  triggerAutoVersion: (
-    workspaceId: string,
-    path: string,
-    doc: LoroDoc,
-  ) => Promise<VersionEntry | null>
+  triggerAutoVersion: (workspaceId: string, path: string, doc: LoroDoc) => void
   // The live-document seam the routes read and write through. Production
   // wires this from document.ts; a router built without it falls back to the
   // same wiring via getDefaultServerDeps.
@@ -79,18 +75,10 @@ export function createLiveDocRouter(options: LiveDocRouterOptions) {
       // record, whose funnel already fanned the persisted bytes to every
       // subscriber (including the sender, whose re-import is a CRDT no-op).
 
-      // Trigger auto-versioning. The throttle is built in, so below-threshold calls return null.
-      // Even if saving the version fails, keep this API at 200 because the update itself is the priority.
-      options
-        .triggerAutoVersion(workspaceId, path, doc)
-        .then(async (entry) => {
-          if (!entry) return
-          const { sendVersionCreated } = await import('../ws.js')
-          sendVersionCreated(workspaceId, path, entry)
-        })
-        .catch((err: unknown) => {
-          getLogger('document').error({ err: err as Error }, 'auto-version trigger failed')
-        })
+      // Signal that the document changed. The checkpoint lands once it goes
+      // quiet, and the trigger broadcasts it from there — this call is
+      // synchronous and cannot fail the update.
+      options.triggerAutoVersion(workspaceId, path, doc)
 
       const response: UpdateDocumentResponse = { ok: true }
       return c.json(response)
