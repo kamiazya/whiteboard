@@ -45,7 +45,8 @@ it('appears only while a node is being edited, and acts on it without closing th
   await vi.waitFor(() => expect(nodeEditorText(container)).not.toBeNull())
   await vi.waitFor(() => expect(bar()).not.toBeNull())
 
-  await userEvent.keyboard('{Control>}a{/Control}')
+  // The verb acts on the caret's word, so no selection is made first.
+  await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}')
   const bold = bar()?.querySelector('button[aria-label="Bold"]') as HTMLElement
   await userEvent.click(bold)
   await vi.waitFor(() => expect(nodeEditorText(container)).toBe('**milk**'))

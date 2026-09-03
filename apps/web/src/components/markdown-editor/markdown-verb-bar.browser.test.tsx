@@ -41,8 +41,12 @@ it('runs a verb on the caret and leaves the caret in the editor', async () => {
   const onChange = await mount()
   await vi.waitFor(() => expect(slots().length).toBeGreaterThan(0))
 
+  // No selection is made first, deliberately: a verb resolves its own scope
+  // from the caret (see rangeToActOn), which is what makes the bar usable
+  // where selecting text is the awkward part. {Home} pins the caret inside
+  // "milk" without a chord whose modifier differs per platform.
   await userEvent.click(source())
-  await userEvent.keyboard('{Control>}a{/Control}')
+  await userEvent.keyboard('{Home}{ArrowRight}{ArrowRight}')
   await userEvent.click(screen.getByRole('button', { name: 'Bold' }))
   await vi.waitFor(() => expect(lastValue(onChange)).toBe('**milk**'))
   expect(document.activeElement?.closest('.cm-editor')).not.toBeNull()
