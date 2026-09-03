@@ -2631,12 +2631,20 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
                 contentSvg={dragContentSvg}
               />
             )}
-            {commentDrag?.live != null && (
+            {/* Rendered for the WHOLE drag, not only once a live point
+                exists. The committed copy leaves the surface the moment the
+                drag starts (`surfaceKeyed` above), so gating the preview on
+                `live` left the comment in neither place until the first
+                pointermove — it vanished. Worst on touch, where a long-press
+                starts the drag and a finger held still sends no move. Before
+                the pointer travels the delta is zero, which draws the preview
+                exactly over the anchor it was pressed at. */}
+            {commentDrag !== null && (
               <CommentDragLayer
                 comment={commentDrag.comment}
                 delta={{
-                  x: commentDrag.live.x - commentDrag.startPoint.x,
-                  y: commentDrag.live.y - commentDrag.startPoint.y,
+                  x: (commentDrag.live?.x ?? commentDrag.startPoint.x) - commentDrag.startPoint.x,
+                  y: (commentDrag.live?.y ?? commentDrag.startPoint.y) - commentDrag.startPoint.y,
                 }}
                 measure={resolvedMeasure}
                 theme={theme}
