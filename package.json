@@ -23,7 +23,7 @@
     "test:web-jsdom": "vitest run --project web-jsdom",
     "test:distribution": "pnpm --filter @kamiazya/whiteboard-mcp test:distribution",
     "test:browser": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser",
-    "test:browser:trace": "vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser --browser.trace=on",
+    "test:browser:trace": "WHITEBOARD_TRACE_SNAPSHOTS=1 vitest run --project web-browser --project canvas-viewer-browser --project canvas-render-browser --browser.trace=on",
     "test:watch": "vitest --project mcp-node",
     "check:local": "pnpm lint && pnpm secretlint && pnpm test:scripts && pnpm knip && pnpm intent:validate && pnpm audit --prod --audit-level=high && pnpm typecheck",
     "check:pr-title": "pnpm --filter @kamiazya/whiteboard-mcp check:pr-title",

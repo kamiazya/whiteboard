@@ -305,3 +305,54 @@ describe('run-shared-layer-tests.mjs (CLI)', () => {
     expect(stderr.chunks.join('')).toMatch(/pnpm could not start/)
   })
 })
+
+/**
+ * `sharedBrowserTestConfig`'s trace budget.
+ *
+ * The default browser run must not record DOM snapshots. Measured on
+ * `apps/web`'s 16 page files (63 tests, all passing): with snapshots on, the
+ * run writes 302MB of trace scratch, 284MB of it the `.network` file that
+ * carries every resource body vite served so the viewer can replay the DOM.
+ * With them off, the same subset writes 7.5MB and a `.network` of zero. A
+ * whole `web-browser` run measured 22GB and exhausted this container's disk
+ * MID-RUN — reported not as "no space" but as `Failed to fetch dynamically
+ * imported module`, `Cannot connect to the iframe`, and a summary of
+ * `774 passed` against a true total of 929. 155 tests silently never ran and
+ * the smaller total read like good news.
+ *
+ * Fidelity is not lost, only moved: `pnpm test:browser:trace` sets the env
+ * var and gets the full trace back. That escape hatch is why the default is
+ * allowed to be lean, so it is pinned here too — a CLI `--browser.trace=on`
+ * cannot restore snapshots on its own (measured: a config carrying
+ * `snapshots: false` still produced a zero-byte `.network` under that flag,
+ * because vitest MERGES the override rather than replacing the object), so
+ * this env var is the only thing that can.
+ */
+describe('sharedBrowserTestConfig trace budget', () => {
+  const VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
+  const before = process.env[VAR]
+
+  afterEach(() => {
+    if (before === undefined) delete process.env[VAR]
+    else process.env[VAR] = before
+  })
+
+  async function load(): Promise<{ trace: { snapshots: boolean } }> {
+    // Cache-busted: the config is read at module scope in the real configs,
+    // and this suite needs a fresh read per env-var setting.
+    const mod = await import(
+      `${pathToFileURL(join(ROOT, 'vitest.browser.shared.ts')).href}?t=${Date.now()}`
+    )
+    return mod.sharedBrowserTestConfig() as { trace: { snapshots: boolean } }
+  }
+
+  it('records no DOM snapshots by default', async () => {
+    delete process.env[VAR]
+    expect((await load()).trace.snapshots).toBe(false)
+  })
+
+  it('records them when the trace script asks for them', async () => {
+    process.env[VAR] = '1'
+    expect((await load()).trace.snapshots).toBe(true)
+  })
+})
