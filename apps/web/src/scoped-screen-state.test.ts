@@ -304,6 +304,8 @@ const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
 
   isFullscreen:
     'no subject: how you are looking at the page rather than what at — and the browser owns the real state, so a reset here would disagree with the `document.fullscreenElement` the label follows',
+  commentsOpen:
+    'no subject: whether the rail is open, not what is in it — the threads themselves arrive on the session\u2019s annotation channel and are republished per document, so a switch changes the LIST while leaving the reader where they chose to be',
   documents:
     'no subject: the WORKSPACE’s list, which a document switch does not change; its own refresh effect keys on the document identity that belongs in it',
   canvasOpsButtonRef: 'no subject: the kebab’s DOM node',

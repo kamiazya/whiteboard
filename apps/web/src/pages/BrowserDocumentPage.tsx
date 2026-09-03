@@ -2,9 +2,10 @@ import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
-import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
+import { Braces, Copy, MessageSquare, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
+import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
@@ -523,6 +524,7 @@ export function BrowserDocumentPage({
   // represented as null instead of a throwaway placeholder canvas id.
   const {
     canvas,
+    annotations,
     loaded: canvasLoaded,
     onChange,
     externalVersion,
@@ -549,6 +551,14 @@ export function BrowserDocumentPage({
     pageState,
     isDocumentReadFailure(backendError) ? backendError : null,
   )
+
+  /**
+   * Whether the comments rail is open. Per-user view state, held here and
+   * written nowhere: the panel is an answer to a question the reader asks,
+   * not a rail that takes a third of the surface from everyone.
+   */
+  const [commentsOpen, setCommentsOpen] = useState(false)
+  const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
@@ -890,72 +900,94 @@ export function BrowserDocumentPage({
           <Minimize2 aria-hidden="true" className="size-4" />
         </Button>
       )}
-      <div className="relative h-full min-h-0">
-        <DocumentEditorSurface
-          kind={documentKind}
-          documentKey={documentId ?? 'no-canvas'}
-          markdown={
-            markdownDoc.coreFacets === null
-              ? { body: null, setBody: markdownDoc.setBody }
-              : {
-                  body: markdownDoc.body,
-                  setBody: markdownDoc.setBody,
-                  sourceExtensions: markdownBinding,
-                  autoFocus: true,
-                  theme: resolvedTheme,
-                  meta: markdownDoc.coreFacets,
-                  title: titleOf(documentName, documentPath),
-                  resolveAlias,
-                  linkTargets,
-                  onOpenDocument: (id) => navigateToDocument(id),
-                  resolveEmbed,
-                }
-          }
-          spatial={() => (
-            <div className="flex h-full min-h-0 flex-col">
-              <SpatialEditorPane
-                className="relative min-h-0 flex-1"
-                editorKey={documentId ?? 'no-canvas'}
-                canvasLoaded={canvasLoaded}
-                canvas={canvas}
-                onChange={onChange}
-                externalVersion={externalVersion}
-                theme={resolvedTheme}
-                // File-node reference = canvas id minted in the browser; the
-                // current canvas is excluded (a self-reference card is pure
-                // noise).
-                fileRefOptions={documents
-                  .filter((entry) => entry.documentId !== documentId)
-                  .map((entry) => ({
-                    file: entry.documentId,
-                    label: entry.name,
-                    kind: entry.kind,
-                  }))}
-                onOpenDocument={navigateToDocument}
-                missingFileRef={missingFileRef}
-                fileSeams={fileSeams}
-                lockedNodeIds={lockedNodeIds}
-                lockedEdgeIds={lockedEdgeIds}
-                onToggleNodeLock={setNodeLock}
-                onToggleEdgeLock={setEdgeLock}
-                nodeInEditor={nodeInEditor}
-                history={{
-                  onUndo: () => void undo(),
-                  onRedo: () => void redo(),
-                  canUndo: canUndo(),
-                  canRedo: canRedo(),
-                }}
-                overlayTitle={documentName ?? 'Untitled'}
-                resolveAlias={resolveAlias}
-                resolveEmbed={resolveEmbed}
-                linkTargets={linkTargets}
-              />
-            </div>
-          )}
-        />
-        {/* Markdown documents keep CodeMirror's own history (its keymap
+      {/* The annotation layer's document-level surface (ADR-0026 decision 5)
+          sits BESIDE the editor rather than inside it, because one panel
+          serves both document kinds and a markdown document has no canvas
+          chrome to host one. */}
+      <div className="relative flex h-full min-h-0">
+        <Button
+          variant="outline"
+          size="sm"
+          aria-label={openThreadCount === 0 ? 'Comments' : `Comments, ${openThreadCount} open`}
+          aria-pressed={commentsOpen}
+          onClick={() => setCommentsOpen((open) => !open)}
+          className="absolute top-3 right-3 z-10 bg-background/80 backdrop-blur"
+        >
+          <MessageSquare aria-hidden="true" className="size-4" />
+          {openThreadCount > 0 ? <span className="ml-1 text-xs">{openThreadCount}</span> : null}
+        </Button>
+        <div className="relative min-w-0 flex-1">
+          <DocumentEditorSurface
+            kind={documentKind}
+            documentKey={documentId ?? 'no-canvas'}
+            markdown={
+              markdownDoc.coreFacets === null
+                ? { body: null, setBody: markdownDoc.setBody }
+                : {
+                    body: markdownDoc.body,
+                    setBody: markdownDoc.setBody,
+                    sourceExtensions: markdownBinding,
+                    autoFocus: true,
+                    theme: resolvedTheme,
+                    meta: markdownDoc.coreFacets,
+                    title: titleOf(documentName, documentPath),
+                    resolveAlias,
+                    linkTargets,
+                    onOpenDocument: (id) => navigateToDocument(id),
+                    resolveEmbed,
+                  }
+            }
+            spatial={() => (
+              <div className="flex h-full min-h-0 flex-col">
+                <SpatialEditorPane
+                  className="relative min-h-0 flex-1"
+                  editorKey={documentId ?? 'no-canvas'}
+                  canvasLoaded={canvasLoaded}
+                  canvas={canvas}
+                  onChange={onChange}
+                  externalVersion={externalVersion}
+                  theme={resolvedTheme}
+                  // File-node reference = canvas id minted in the browser; the
+                  // current canvas is excluded (a self-reference card is pure
+                  // noise).
+                  fileRefOptions={documents
+                    .filter((entry) => entry.documentId !== documentId)
+                    .map((entry) => ({
+                      file: entry.documentId,
+                      label: entry.name,
+                      kind: entry.kind,
+                    }))}
+                  onOpenDocument={navigateToDocument}
+                  missingFileRef={missingFileRef}
+                  fileSeams={fileSeams}
+                  lockedNodeIds={lockedNodeIds}
+                  lockedEdgeIds={lockedEdgeIds}
+                  onToggleNodeLock={setNodeLock}
+                  onToggleEdgeLock={setEdgeLock}
+                  nodeInEditor={nodeInEditor}
+                  history={{
+                    onUndo: () => void undo(),
+                    onRedo: () => void redo(),
+                    canUndo: canUndo(),
+                    canRedo: canRedo(),
+                  }}
+                  overlayTitle={documentName ?? 'Untitled'}
+                  resolveAlias={resolveAlias}
+                  resolveEmbed={resolveEmbed}
+                  linkTargets={linkTargets}
+                />
+              </div>
+            )}
+          />
+          {/* Markdown documents keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}
+        </div>
+        {commentsOpen ? (
+          <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
+            <CommentsPanel threads={annotations} />
+          </aside>
+        ) : null}
       </div>
     </DocumentPageShell>
   )
