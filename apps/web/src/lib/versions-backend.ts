@@ -42,7 +42,15 @@ export interface VersionsBackend {
   loadPast(workspaceId: string, path: string, versionId: string): Promise<PastDocument | null>
   save(workspaceId: string, path: string, input: { label: string }): Promise<VersionEntry>
   restore(workspaceId: string, path: string, versionId: string): Promise<void>
-  putThumbnail?(workspaceId: string, path: string, versionId: string, blob: Blob): Promise<void>
+  /**
+   * Keep the picture drawn for a saved point. Not optional, and neither is
+   * its reader: a keeper that drew none was the difference nobody declared —
+   * the panel asked the daemon's route directly, so the same row in the
+   * browser had nowhere to get a picture from and simply showed less.
+   */
+  putThumbnail(workspaceId: string, path: string, versionId: string, blob: Blob): Promise<void>
+  /** The picture, or `null` for a point that has none — and for one this document does not own. */
+  loadThumbnail(workspaceId: string, path: string, versionId: string): Promise<Blob | null>
 }
 
 /** A refusal the daemon answered with a status, kept so a caller can log it. */
@@ -95,6 +103,23 @@ export function createDaemonVersionsBackend(fetchFn: typeof globalThis.fetch): V
         },
       )
       if (!res.ok) throw new VersionsRequestError(res.status, 'restore request')
+    },
+    async loadThumbnail(workspaceId, path, versionId) {
+      const res = await fetchFn(
+        documentsApiUrl(workspaceId, path, `versions/${versionId}/thumbnail`),
+      )
+      // 404 is "not this document's, or no such point".
+      if (res.status === 404) return null
+      if (!res.ok) throw new VersionsRequestError(res.status, 'thumbnail request')
+      const blob = await res.blob()
+      // An empty body is the same answer as a 404 — there is no picture —
+      // and it must not become a zero-byte object URL, which renders as a
+      // broken image rather than as nothing. This is also how the daemon's
+      // "none yet" arrives: 204 is a SUCCESS status that slips past `res.ok`,
+      // and it carries no body, so it needs no branch of its own. Measured:
+      // with only a `status === 204` check the empty-200 case fails; with
+      // only this one both pass.
+      return blob.size === 0 ? null : blob
     },
     async putThumbnail(workspaceId, path, versionId, blob) {
       const res = await fetchFn(

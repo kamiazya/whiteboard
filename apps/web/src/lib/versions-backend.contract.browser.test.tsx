@@ -142,6 +142,7 @@ async function browserHarness(): Promise<VersionsBackendHarness> {
 function daemonHarness(): VersionsBackendHarness {
   const versions: VersionEntry[] = []
   const content = new Map<string, string>()
+  const thumbnails = new Map<string, Blob>()
   let current = ''
   let seq = 0
   const OTHER = 'v-belongs-to-another-document'
@@ -154,6 +155,22 @@ function daemonHarness(): VersionsBackendHarness {
         status: 200,
         headers: { 'Content-Type': 'application/json' },
       })
+
+    const thumbnail = url.match(/\/versions\/([^/]+)\/thumbnail$/)
+    if (thumbnail) {
+      const id = thumbnail[1] as string
+      if (init?.method === 'PUT') {
+        if (!content.has(id)) return new Response('{}', { status: 404 })
+        thumbnails.set(id, new Blob([init.body as BlobPart], { type: 'image/png' }))
+        const row = versions.find((v) => v.id === id)
+        if (row !== undefined) versions[versions.indexOf(row)] = { ...row, hasThumbnail: true }
+        return json({ ok: true })
+      }
+      const blob = thumbnails.get(id)
+      // 204, the way the daemon answers a point that has no picture yet.
+      if (blob === undefined) return new Response(null, { status: 204 })
+      return new Response(blob, { status: 200, headers: { 'Content-Type': 'image/png' } })
+    }
 
     const restore = url.match(/\/versions\/([^/]+)\/restore$/)
     if (restore && init?.method === 'POST') {

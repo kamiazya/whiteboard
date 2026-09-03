@@ -75,12 +75,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
   },
   'src/components/MergeToast.tsx': { reach: 'capability', capability: 'merge' },
-  'src/components/VersionThumbnail.tsx': {
-    reach: 'gap',
-    missing:
-      'a saved point carries a picture only for the daemon; the browser VersionsBackend leaves putThumbnail out and its rows are drawn without one',
-    followUp: 'task #33',
-  },
   'src/components/WorkspaceTopBar.tsx': {
     reach: 'both-keepers',
     browser: BROWSER_PAGE,
@@ -112,12 +106,6 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     note: 'the two DocumentFileAdapter bindings; the seams above them are keeper-agnostic',
   },
   'src/lib/daemon-files-source.ts': { reach: 'both-keepers', browser: BROWSER_FILES },
-  'src/lib/version-thumbnail.ts': {
-    reach: 'gap',
-    missing:
-      'uploads a rendered picture for a saved point to the daemon; the browser keeper renders none and stores none',
-    followUp: 'task #33',
-  },
   'src/lib/versions-backend.ts': { reach: 'both-keepers', browser: BROWSER_VERSIONS },
   'src/pages/DaemonDocumentPage.tsx': {
     reach: 'both-keepers',

@@ -120,6 +120,37 @@ export function versionsBackendContract(
     }
   })
 
+  it('keeps the picture a saved point is given, and answers none for one without', async () => {
+    const h = await create()
+    try {
+      await h.write('drawn')
+      const withPicture = await h.backend.save(h.workspaceId, h.path, { label: 'drawn' })
+      const without = await h.backend.save(h.workspaceId, h.path, { label: 'plain' })
+
+      // A row says whether there is one, because that is what the panel reads
+      // to decide whether to leave room for a picture at all — asking for
+      // bytes that were never put must answer none rather than a broken image.
+      expect(await h.backend.loadThumbnail(h.workspaceId, h.path, without.id)).toBeNull()
+
+      await h.backend.putThumbnail(
+        h.workspaceId,
+        h.path,
+        withPicture.id,
+        new Blob(['picture-bytes'], { type: 'image/png' }),
+      )
+
+      expect(
+        await (await h.backend.loadThumbnail(h.workspaceId, h.path, withPicture.id))?.text(),
+      ).toBe('picture-bytes')
+      expect(
+        (await h.backend.list(h.workspaceId, h.path)).find((v) => v.id === withPicture.id)
+          ?.hasThumbnail,
+      ).toBe(true)
+    } finally {
+      await h.cleanup()
+    }
+  })
+
   it('records the merge a restore creates, naming what it restored', async () => {
     const h = await create()
     try {
