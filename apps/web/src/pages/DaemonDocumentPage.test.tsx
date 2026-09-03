@@ -1113,9 +1113,10 @@ describe('DaemonDocumentPage', () => {
         toggle.click()
       })
 
-      const row = await screen.findByText('⚙ System')
+      const row = await screen.findByTestId('version-row')
+      // The row IS the wrapper now; the restore control is inside it.
       await act(async () => {
-        fireEvent.click(row.closest('button')!)
+        fireEvent.click(row.querySelector('button') as HTMLElement)
       })
       await waitFor(() => {
         expect(screen.getByText('Restore this version?')).toBeTruthy()

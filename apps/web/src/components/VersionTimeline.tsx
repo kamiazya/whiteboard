@@ -67,20 +67,36 @@ function formatRelative(iso: string): string {
   return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
 }
 
-// A version's display title: its explicit label, or a fallback naming its origin.
-function versionTitle(version: Pick<VersionEntry, 'label' | 'auto'>): string {
-  return version.label || (version.auto ? 'Auto-save' : 'Manual')
+/**
+ * A version's title, from the content side.
+ *
+ * The label if a person gave it one; otherwise WHEN. Every unlabelled
+ * version used to be titled "Auto-save", which made three consecutive
+ * checkpoints read as three identical rows and named the mechanism rather
+ * than the thing. What tells them apart is the time, so the time is the
+ * title.
+ *
+ * A label existing is also what says a person marked this deliberately —
+ * which is why there is no "manual" badge any more, and no third vocabulary
+ * saying it again.
+ */
+function versionTitle(version: Pick<VersionEntry, 'label' | 'createdAt'>): string {
+  return version.label || formatRelative(version.createdAt)
 }
 
-function getOperatorAffordance(operator?: OperatorInfo): { icon: string; label: string } {
-  const kind = operator?.kind ?? 'system'
-  const icon = kind === 'ai' ? '🤖' : kind === 'human' ? '👤' : '⚙'
-  const label = operator?.displayName?.trim()
-  if (label) return { icon, label }
-  return {
-    icon,
-    label: kind === 'ai' ? 'AI' : kind === 'human' ? 'Human' : 'System',
-  }
+/**
+ * Who took it, said once, and only when there is someone to name.
+ *
+ * An automatic checkpoint has no author — it answers `null` rather than
+ * "System", which was the same fact the old "Auto-save" title had already
+ * stated one line above.
+ */
+function versionAuthor(operator?: OperatorInfo): string | null {
+  const named = operator?.displayName?.trim()
+  if (named) return named
+  if (operator?.kind === 'ai') return 'Agent'
+  if (operator?.kind === 'human') return 'You'
+  return null
 }
 
 // Branch operations and save controls live in the header.
@@ -131,6 +147,8 @@ export default function VersionTimeline({
   const versionsBackend = useVersionsBackend()
   const [versions, setVersions] = useState<VersionEntry[]>([])
   const [loading, setLoading] = useState(false)
+  /** The last read failed, so what is on screen is older than it looks. */
+  const [stale, setStale] = useState(false)
   const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
@@ -152,8 +170,14 @@ export default function VersionTimeline({
       const next = await versionsBackend.list(workspaceId, path)
       if (seq !== fetchSeqRef.current) return
       setVersions(next)
+      setStale(false)
     } catch (err) {
       if (seq !== fetchSeqRef.current) return
+      // A failed read used to be logged and nothing else, so the panel kept
+      // showing the rows it happened to have — with no way to tell them from
+      // a current list. The rows stay (they are still the last true answer)
+      // and stop claiming to be up to date.
+      setStale(true)
       if (err instanceof VersionsRequestError) {
         log.error('versions request failed', { status: err.status, workspaceId, path })
       } else if (err instanceof Error && err.message.includes('schema validation')) {
@@ -283,6 +307,12 @@ export default function VersionTimeline({
         {headerActions}
       </div>
 
+      {stale && (
+        <div data-testid="version-list-stale" className="text-[11px] text-muted-foreground px-1">
+          Could not refresh — showing what was last read.
+        </div>
+      )}
+
       <ScrollArea className="min-h-0 flex-1 -mx-1">
         <div className="flex flex-col gap-1.5 px-1">
           {branchesLoading || (loading && visibleVersions.length === 0) ? (
@@ -303,44 +333,55 @@ export default function VersionTimeline({
           ) : (
             visibleVersions.map((v) => {
               const row = miniGraphById.get(v.id)
-              const operator = getOperatorAffordance(v.operator)
+              const author = versionAuthor(v.operator)
               return (
                 <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
-                  {/* Mini-graph lane. */}
-                  {/* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */}
-                  <svg className="shrink-0" width={24} height={36} viewBox="0 0 24 36" aria-hidden>
-                    {row?.connectorBefore ? (
+                  {/* The lane column, only where lanes exist. A keeper with
+                      one branch drew a straight line down the left of every
+                      row and spent the width saying nothing. */}
+                  {capabilities.branches && (
+                    /* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */
+                    <svg
+                      data-testid="version-lane"
+                      className="shrink-0"
+                      width={24}
+                      height={36}
+                      viewBox="0 0 24 36"
+                      aria-hidden
+                    >
+                      {row?.connectorBefore ? (
+                        <line
+                          x1={12}
+                          y1={0}
+                          x2={12}
+                          y2={14}
+                          stroke={row.dotColor}
+                          strokeWidth={1.5}
+                          strokeOpacity={0.6}
+                        />
+                      ) : null}
+                      {/* Solid on the lane HEAD is on, a ring on the others —
+                        mini-graph's own rule, reachable now that the rows are
+                        no longer pre-filtered to HEAD. */}
+                      <circle
+                        cx={12}
+                        cy={18}
+                        r={4}
+                        fill={row?.active === false ? 'none' : (row?.dotColor ?? '#94a3b8')}
+                        stroke={row?.dotColor ?? '#94a3b8'}
+                        strokeWidth={row?.active === false ? 2 : 0}
+                      />
                       <line
                         x1={12}
-                        y1={0}
+                        y1={22}
                         x2={12}
-                        y2={14}
-                        stroke={row.dotColor}
+                        y2={36}
+                        stroke={row?.dotColor ?? '#94a3b8'}
                         strokeWidth={1.5}
                         strokeOpacity={0.6}
                       />
-                    ) : null}
-                    {/* Solid on the lane HEAD is on, a ring on the others —
-                        mini-graph's own rule, reachable now that the rows are
-                        no longer pre-filtered to HEAD. */}
-                    <circle
-                      cx={12}
-                      cy={18}
-                      r={4}
-                      fill={row?.active === false ? 'none' : (row?.dotColor ?? '#94a3b8')}
-                      stroke={row?.dotColor ?? '#94a3b8'}
-                      strokeWidth={row?.active === false ? 2 : 0}
-                    />
-                    <line
-                      x1={12}
-                      y1={22}
-                      x2={12}
-                      y2={36}
-                      stroke={row?.dotColor ?? '#94a3b8'}
-                      strokeWidth={1.5}
-                      strokeOpacity={0.6}
-                    />
-                  </svg>
+                    </svg>
+                  )}
                   {/* Restore is offered on HEAD's lane only. Showing another
                       variation's history is not the same as offering to
                       restore from it: what restoring one variation's version
@@ -367,9 +408,6 @@ export default function VersionTimeline({
                     <CardContent className="px-3 flex items-center justify-between gap-2">
                       <div className="flex flex-col min-w-0">
                         <span className="text-xs font-medium truncate">{versionTitle(v)}</span>
-                        <span className="text-[11px] text-muted-foreground">
-                          {operator.icon} {operator.label}
-                        </span>
                         {/* Only on the lanes HEAD is NOT on. A ring says "not
                             yours" and colour is not a name, so without this a
                             reader with two variations open has a row of
@@ -387,7 +425,15 @@ export default function VersionTimeline({
                           </span>
                         )}
                         <span className="text-[11px] text-muted-foreground">
-                          {formatRelative(v.createdAt)} · {v.elementCount} els
+                          {/* The time is only repeated here when the TITLE is
+                              a label — otherwise it is already the title. */}
+                          {[
+                            v.label ? formatRelative(v.createdAt) : null,
+                            author,
+                            `${v.elementCount} els`,
+                          ]
+                            .filter((part) => part !== null)
+                            .join(' · ')}
                           {row?.branchOut ? (
                             <>
                               {' · '}
@@ -398,11 +444,6 @@ export default function VersionTimeline({
                           ) : null}
                         </span>
                       </div>
-                      {!v.auto && (
-                        <span className="text-[10px] px-1.5 py-0.5 rounded bg-primary/10 text-primary font-medium shrink-0">
-                          manual
-                        </span>
-                      )}
                     </CardContent>
                   </RowShell>
                 </div>

@@ -264,6 +264,8 @@ const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   isRestoring: 'cleared on switch',
 
   loading: 'no subject: an in-flight flag for this screen’s own fetch',
+  stale:
+    'no subject: whether the LAST READ failed, which is about the fetch rather than about a document — and a switch refetches, so a success clears it on its own',
   pendingRestoreRef:
     'no subject: mirrors pendingRestore, reassigned every render — so it is dropped with the state it mirrors',
   fetchSeqRef:

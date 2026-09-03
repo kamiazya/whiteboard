@@ -131,9 +131,12 @@ describe('BrowserDocumentPage version history (browser)', () => {
     await waitFor(() => expect(within(panel).getAllByTestId('version-row')).toHaveLength(2), {
       timeout: 5000,
     })
-    // Both rows are manual saves by the person at this browser.
-    expect(within(panel).getAllByText('Manual')).toHaveLength(2)
-    expect(within(panel).getAllByText(/Human/)).toHaveLength(2)
+    // Both rows say who took them, once each. The three-way duplication —
+    // an "Auto-save"/"Manual" title, an AI/Human/System operator line and a
+    // "manual" badge, all stating the same fact — is what the row rewrite
+    // removed.
+    expect(within(panel).getAllByText(/You/)).toHaveLength(2)
+    expect(within(panel).queryByText(/Manual|Auto-save|System|Human/)).toBeNull()
 
     // The document moves on — behind the session's back, then reopened, so
     // the page under test holds the later state the way a reload would.

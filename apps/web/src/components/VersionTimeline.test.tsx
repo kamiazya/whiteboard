@@ -149,7 +149,7 @@ describe('VersionTimeline', () => {
     // NEW canvas's restore endpoint.
     const { rerender } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -165,7 +165,7 @@ describe('VersionTimeline', () => {
     const { rerender } = render(
       <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
     )
-    await screen.findByText('🤖 Assistant')
+    await screen.findByText(/Assistant/)
 
     const fetchMock = vi.mocked(globalThis.fetch)
     const versionsCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
@@ -186,7 +186,7 @@ describe('VersionTimeline', () => {
     const { rerender } = render(
       <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
     )
-    await screen.findByText('🤖 Assistant')
+    await screen.findByText(/Assistant/)
 
     const fetchMock = vi.mocked(globalThis.fetch)
     const versionsCallCountBefore = fetchMock.mock.calls.filter(([reqInput]) =>
@@ -333,8 +333,8 @@ describe('VersionTimeline', () => {
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await waitFor(() => {
-      expect(screen.getByText('🤖 Assistant')).toBeTruthy()
-      expect(screen.getByText('👤 Alice')).toBeTruthy()
+      expect(screen.getByText(/Assistant/)).toBeTruthy()
+      expect(screen.getByText(/Alice/)).toBeTruthy()
     })
 
     const circles = document.querySelectorAll('svg[viewBox="0 0 24 36"] circle')
@@ -386,9 +386,10 @@ describe('VersionTimeline', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
-    await waitFor(() => {
-      expect(screen.getByText('⚙ System')).toBeTruthy()
-    })
+    // An automatic checkpoint has no author to name. It used to be labelled
+    // "System", which said the same thing the row's own title already did.
+    const row = await screen.findByTestId('version-row')
+    expect(row.textContent).not.toMatch(/System/)
   })
 
   // The empty state is the DOCUMENT's now, not one lane's — nothing is
@@ -439,7 +440,7 @@ describe('VersionTimeline', () => {
     const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
     await waitFor(() => {
-      expect(screen.getByText('🤖 Assistant')).toBeTruthy()
+      expect(screen.getByText(/Assistant/)).toBeTruthy()
     })
 
     expect(container.firstElementChild?.className).toContain('min-h-0')
@@ -467,7 +468,7 @@ describe('VersionTimeline', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -506,7 +507,7 @@ describe('VersionTimeline', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -537,7 +538,7 @@ describe('VersionTimeline', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -577,7 +578,7 @@ describe('VersionTimeline', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -625,7 +626,7 @@ describe('VersionTimeline', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -902,7 +903,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       </DaemonApiContext.Provider>,
     )
 
-    const row = await screen.findByText('🤖 Assistant')
+    const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
       expect(screen.getByText('Restore this version?')).toBeTruthy()
@@ -941,7 +942,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       </DaemonApiContext.Provider>,
     )
 
-    await screen.findByText('🤖 Assistant')
+    await screen.findByText(/Assistant/)
     await waitFor(() => expect(document.querySelector('img')).not.toBeNull())
     expect(document.querySelector('img')?.getAttribute('src')).toBe('blob:mock-1')
     expect(
@@ -971,7 +972,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       </DaemonApiContext.Provider>,
     )
 
-    await screen.findByText('🤖 Assistant')
+    await screen.findByText(/Assistant/)
     expect(document.querySelector('img')).toBeNull()
     expect(
       underlyingFetch.mock.calls.some(([reqInput]) => String(reqInput).includes('/thumbnail')),
@@ -990,11 +991,11 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
 
-    await screen.findByText('🤖 Assistant')
+    await screen.findByText(/Assistant/)
     expect(document.querySelector('img')).not.toBeNull()
   })
 
-  it('renders a manual-trigger version returned by the daemon list', async () => {
+  it('titles a version a person marked by the name they gave it', async () => {
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -1007,6 +1008,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
                 {
                   id: 'v-manual',
                   path: 'canvas-a',
+                  label: 'release candidate',
                   createdAt: '2026-04-23T02:00:00Z',
                   elementCount: 5,
                   auto: false,
@@ -1031,9 +1033,12 @@ describe('VersionTimeline via DaemonApiContext', () => {
       </DaemonApiContext.Provider>,
     )
 
-    await waitFor(() => {
-      expect(screen.getByText('manual')).toBeTruthy()
-    })
+    // The "manual" badge is gone: a version a person marked deliberately is
+    // the one carrying a LABEL, and the label is already the row's title.
+    // Both said the same thing, and neither said what the version holds.
+    const row = await screen.findByTestId('version-row')
+    expect(row.textContent).toContain('release candidate')
+    expect(row.textContent).not.toMatch(/manual/)
   })
 })
 
@@ -1112,7 +1117,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
 
     // Load canvas-old's versions first so there is stale data to leak.
     await waitFor(() => {
-      expect(screen.getByText('🤖 Assistant')).toBeTruthy()
+      expect(screen.getByText(/Assistant/)).toBeTruthy()
     })
 
     // Switching to canvas-new (same component instance, no remount key) must
