@@ -30,14 +30,17 @@ import {
 import { Button } from '../components/ui/button.js'
 import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
-import type { VersionPreviewSession } from '../components/VersionTimeline'
+import {
+  BROWSER_HISTORY_CAPABILITIES,
+  type VersionPreviewSession,
+} from '../components/VersionTimeline'
 import {
   BookmarkAction,
   type SaveVersionOutcome,
 } from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import { useBookmarkShortcut } from '../components/workspace-top-bar/useSaveVersion.js'
+import { useBookmarkShortcut } from '../components/workspace-top-bar/useBookmarkShortcut.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
@@ -72,6 +75,7 @@ import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provid
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
+import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -580,7 +584,7 @@ export function BrowserDocumentPage({
   )
   const versionsEnabled = versionsBackend !== null
   // The panel refetches on a CHANGE of this signal. A manual save announces
-  // itself on the window (`useSaveVersion` dispatches it after the keeper
+  // itself on the window (the page dispatches it after the keeper
   // confirmed the save), which is the same event the daemon page bumps on.
   // The document's history column. This page keeps its own document
   // switching rather than remounting, so an open panel is cleared by hand
@@ -623,9 +627,40 @@ export function BrowserDocumentPage({
     setSavingVersion(true)
     setSaveVersionOutcome(null)
     try {
-      await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
+      // Captured BEFORE the save, not after. `exportScene` reads the live
+      // scene synchronously at call time, so starting it here binds the
+      // picture to the state the save is about to mark. Awaiting the save
+      // first meant an edit made during it was drawn onto the older point —
+      // a picture of content that version does not contain.
+      const picture = exportScene('png')
+      const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
       if (currentDocumentIdRef.current !== startedOn) return
       setSaveVersionOutcome('saved')
+      // The picture rides with the bookmark, as it does on the daemon page —
+      // one path through the seam, so a browser-kept row is not the one that
+      // silently has no picture. Not awaited: the bookmark has landed, and
+      // its picture arriving late or not at all must not hold up the row.
+      void attachVersionThumbnail({
+        backend: versionsBackend,
+        workspaceId: getBrowserWorkspaceId(),
+        path: documentPath,
+        versionId: saved.id,
+        getBlob: () => picture,
+      }).then((outcome) => {
+        if (outcome === 'failed') {
+          log.warn('bookmark thumbnail failed')
+          return
+        }
+        // Announce a SECOND time. The row landed before its picture did, so
+        // the list this save already refreshed holds a row that says it has
+        // none — and without this the picture appears only when something
+        // else happens to refetch, which for a person means reloading.
+        window.dispatchEvent(
+          new CustomEvent('whiteboard:wb_version_saved', {
+            detail: { workspaceId: 'local', path: documentPath },
+          }),
+        )
+      })
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
       window.dispatchEvent(
@@ -983,8 +1018,7 @@ export function BrowserDocumentPage({
             <VersionPanel
               workspaceId={getBrowserWorkspaceId()}
               path={renderState.snapshot.path}
-              // One lane, and a version only when asked for.
-              capabilities={{ branches: false, autoVersions: false }}
+              capabilities={BROWSER_HISTORY_CAPABILITIES}
               onRestored={clearLocalUndo}
               onPreview={setPreview}
               refreshSignal={versionRefreshSignal}

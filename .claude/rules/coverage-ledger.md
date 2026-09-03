@@ -115,13 +115,46 @@ Assert the scan found a plausible COUNT in its own `it`. A regex that stops
 matching otherwise reports itself as "every entry is stale", which sends the
 reader to the wrong file entirely.
 
-There are **four** scans now, and they fall into two families that want
+There are **five** scans now, and they fall into two families that want
 different things:
 
 | family | scans | what it does with what it finds |
 |---|---|---|
-| **classify** | `editor-state-surface`, `scoped-screen-state` | every name found is entered in a `Record<string, Vocabulary>`, with a three-value vocabulary per surface |
+| **classify** | `editor-state-surface`, `scoped-screen-state`, `keeper-parity` | every name found is entered in a `Record<string, Vocabulary>`, with a three-value vocabulary per surface |
 | **assert a rule** | `destructive-copy-surface`, `App.shell-workspaces-surface` | every occurrence found must satisfy one rule; no per-item entries, no vocabulary |
+
+`keeper-parity` is the classify family aimed at a gap no contract can reach.
+`versions-backend.contract.ts` runs one behavioural suite against both
+keepers and catches one that answers the seam WRONGLY; a feature implemented
+in one keeper and never written in the other is an **absent test, not a
+failing one**, and every suite stays green over it — which is how the daemon
+shipped the editor's file seams while the same page in browser mode passed
+none of them. So the scan is over modules that REACH THE DAEMON, and adding
+one is what fails: a feature built the quickest way, a `documentsApiUrl`
+fetch straight from a component, arrives unclassified and stops the run
+until someone answers "and in the browser?". Its vocabulary is four-valued
+because `gap` is a first-class answer — the point is not that both keepers
+must have everything, it is that a difference is a decision somebody took
+rather than one nobody noticed — and each of the four is itself checked, so
+none can be a word in front of an omission: `both-keepers` names a browser
+module that must EXIST, `capability` names a flag the two keepers must
+really differ on, `gap` names a follow-up that must be filable, and
+`daemon-itself` has to say why there is nothing to mirror.
+
+Two things it measured, both of which generalise to any such scan:
+
+- **Widen the probe to the LEAST conventional way of reaching the subject.**
+  The first version matched the shared URL helpers and the authorized fetch,
+  and missed the largest difference in the app: `useBranches` builds
+  `/api/workspaces/…` as a template string and calls `apiFetch`, so the
+  whole branch surface — which the browser keeper cannot answer at all — was
+  invisible to it. The module that reaches a subject the odd way is exactly
+  the one nobody thought about the second implementation for.
+- **Strip comments before matching, or the ledger teaches the wrong habit.**
+  Two modules DESCRIBE an `/api/` route in prose and call none. Demanding an
+  answer for a module that only mentions the subject trains people to write
+  an entry to shut the scan up, which is how a ledger full of true-looking
+  entries stops meaning anything.
 
 The classify family shares a real JUDGEMENT — every scanned name is
 classified, and every entry still names something the source holds — so

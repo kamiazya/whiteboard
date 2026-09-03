@@ -71,8 +71,12 @@ export interface VersionStore {
    */
   loadWorkspaceAt(workspaceId: string, id: string): Promise<LoroDoc | null>
   list(workspaceId: string, path: string): Promise<VersionEntry[]>
-  saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void>
-  loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null>
+  // `path` is the document the caller is asking ABOUT, and both refuse a
+  // version another document owns — the refusal `loadPast` and restore
+  // already make, for the same reason: an id alone must not reach a history
+  // that is not this document's.
+  saveThumbnail(workspaceId: string, path: string, id: string, bytes: Uint8Array): Promise<void>
+  loadThumbnail(workspaceId: string, path: string, id: string): Promise<Uint8Array | null>
   // Frontiers of the oldest retained WORKSPACE-SCOPED version anywhere in the
   // workspace — the earliest point any version checkout still needs from the
   // workspace record's history, so the safe cut for compacting that record.
@@ -356,34 +360,62 @@ export class FileVersionStore implements VersionStore {
     return rows.map((r) => rowToEntry({ ...r, path } as VersionRow))
   }
 
-  async saveThumbnail(workspaceId: string, id: string, bytes: Uint8Array): Promise<void> {
+  /**
+   * Whether `id` is a version of the document at `path` — the one place the
+   * picture routes ask it, so a read and a write cannot come to different
+   * answers about who owns a version.
+   */
+  private async ownsVersion(workspaceId: string, path: string, id: string): Promise<boolean> {
+    validateWorkspaceId(workspaceId)
+    validateDocumentPath(path)
+    const db = await dbReady()
+    const documentId = await this.resolveDocumentId(db, workspaceId, path)
+    if (!documentId) return false
+    const row = await db
+      .selectFrom('versions')
+      .select(['id'])
+      .where('workspaceId', '=', workspaceId)
+      .where('documentId', '=', documentId)
+      .where('id', '=', id)
+      .executeTakeFirst()
+    return row !== undefined
+  }
+
+  async saveThumbnail(
+    workspaceId: string,
+    path: string,
+    id: string,
+    bytes: Uint8Array,
+  ): Promise<void> {
     validateVersionId(id)
     if (bytes.byteLength > MAX_THUMBNAIL_BYTES) {
       throw new Error(`Thumbnail exceeds ${MAX_THUMBNAIL_BYTES} byte limit (${bytes.byteLength})`)
     }
-    // Verify the version belongs to this workspace BEFORE writing the PNG.
+    // Verify the version belongs to this DOCUMENT before writing the PNG.
     // Doing it the other way around would leave an orphan blob on disk for
-    // any id that doesn't match (wrong workspace, deleted version, hostile
+    // any id that doesn't match (wrong document, deleted version, hostile
     // input) — the UPDATE would simply match zero rows and resolve while the
     // file sat at blobs/{ws}/versions/{id}.png with no DB pointer.
-    const db = await dbReady()
-    const owningCanvas = await db
-      .selectFrom('versions')
-      .select(['id'])
-      .where('workspaceId', '=', workspaceId)
-      .where('id', '=', id)
-      .executeTakeFirst()
-    if (!owningCanvas) {
-      throw new Error(`version "${id}" not found in workspace "${workspaceId}"`)
+    if (!(await this.ownsVersion(workspaceId, path, id))) {
+      throw new Error(`version "${id}" not found at "${path}" in workspace "${workspaceId}"`)
     }
+    const db = await dbReady()
     const blobPath = thumbnailPath(workspaceId, id)
     await mkdir(dirname(blobPath), { recursive: true })
     await writeFile(blobPath, bytes)
     await db.updateTable('versions').set({ hasThumbnail: 1 }).where('id', '=', id).execute()
   }
 
-  async loadThumbnail(workspaceId: string, id: string): Promise<Uint8Array | null> {
+  async loadThumbnail(workspaceId: string, path: string, id: string): Promise<Uint8Array | null> {
+    // The path is built FIRST, because building it is what asserts the id
+    // cannot escape `blobs/` — the second line of defence behind
+    // validateVersionId, and it has to fire on a hostile id whether or not
+    // any version owns it.
     const blobPath = thumbnailPath(workspaceId, id)
+    // Absent, not refused: a picture this document does not own reads the
+    // same to a caller as one that was never taken, which is what
+    // `loadPast`'s `null` already says for the state itself.
+    if (!(await this.ownsVersion(workspaceId, path, id))) return null
     try {
       const bytes = await readFile(blobPath)
       return new Uint8Array(bytes)

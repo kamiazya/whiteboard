@@ -1458,7 +1458,7 @@ describe('deleting a document', () => {
     await saveDocument('session1', 'canvas-b', doc)
     const store = new FileVersionStore()
     const version = await store.save('session1', 'canvas-a', doc, { auto: true })
-    await store.saveThumbnail('session1', version.id, new Uint8Array([1, 2, 3]))
+    await store.saveThumbnail('session1', 'canvas-a', version.id, new Uint8Array([1, 2, 3]))
     await createBranch('session1', 'canvas-a', { name: 'feature' })
 
     const db = await getDb(tempDir)
@@ -1530,7 +1530,7 @@ describe('deleting a document', () => {
     await saveDocument('session1', 'agent-deleted', doc)
     const store = new FileVersionStore()
     const version = await store.save('session1', 'agent-deleted', doc, { auto: true })
-    await store.saveThumbnail('session1', version.id, new Uint8Array([1, 2, 3]))
+    await store.saveThumbnail('session1', 'agent-deleted', version.id, new Uint8Array([1, 2, 3]))
     // Populate the doc cache the way a read would, so eviction has something
     // to evict — otherwise this half of the assertion passes vacuously.
     // getDoc, not loadDocument: only the former goes through the LRU.
