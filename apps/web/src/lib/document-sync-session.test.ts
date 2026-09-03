@@ -13,7 +13,9 @@ import {
   readSpatialCanvas,
   setNodeLock,
   writeCanvasComment,
+  writeCommentThread,
   writeSpatialCanvas,
+  writeThreadMessage,
 } from '@kamiazya/whiteboard-loro-adapter'
 import type {
   DocumentBackend,
@@ -222,6 +224,65 @@ describe('createDocumentSyncSession', () => {
     backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
 
     expect(listener).toHaveBeenCalledWith(patched, 'external')
+    unsubscribe()
+  })
+
+  it('publishes the annotation layer beside the canvas, read from the doc', () => {
+    // ADR-0026 step 2: the layer is document-level, so the session reads it
+    // with `readAnnotations` rather than picking it out of the canvas it just
+    // built. This is the accessor the comments panel and the markdown editor
+    // consume — neither of which has a canvas envelope to read.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 12, y: 34 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'needs a second look' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    expect(session.getAnnotations()).toEqual([
+      {
+        id: 't1',
+        anchor: { kind: 'spatial', x: 12, y: 34 },
+        status: 'open',
+        messages: [{ id: 'm1', body: 'needs a second look' }],
+      },
+    ])
+  })
+
+  it('republishes annotations when a remote peer replies, without a canvas edit', () => {
+    // A reply changes no node and no edge. A subscriber that only hears about
+    // canvas values would never learn of it, which is the whole reason this
+    // is its own channel.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 0, y: 0 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'first' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+    writeThreadMessage(doc, 't1', { id: 'm2', body: 'a reply from elsewhere' })
+    backend._ctrl.handlers!.onRemoteUpdate(doc.export({ mode: 'update' }))
+
+    expect(listener).toHaveBeenCalledTimes(1)
+    expect(listener.mock.calls[0]?.[0]?.[0]?.messages.map((m: { body: string }) => m.body)).toEqual(
+      ['first', 'a reply from elsewhere'],
+    )
     unsubscribe()
   })
 

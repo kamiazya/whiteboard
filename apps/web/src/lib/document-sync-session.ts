@@ -2,6 +2,7 @@ import {
   type DocumentContainers,
   deleteSpatialNode,
   documentContainers,
+  readAnnotations,
   readCoreFacets,
   readEdgeLocks,
   readMarkdownBody,
@@ -27,7 +28,7 @@ import type {
 /** Why a backend read or write failed. The published contract's own union. */
 export type BackendErrorReason = Parameters<NonNullable<DocumentBackendHandlers['onError']>>[0]
 
-import type { SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
+import type { CommentThread, SpatialCanvas, StoredCoreFacets } from '@kamiazya/whiteboard-model'
 import { LoroDoc, UndoManager } from 'loro-crdt'
 import type { EditorCommand, EditorLeafCommand } from '../components/spatial-editor/commands.js'
 import { getAppLogger } from './app-logger.js'
@@ -218,6 +219,19 @@ export interface DocumentSyncSession {
   // controlled SpatialEditor needs this to tell apart its own re-render from
   // a replacement mid-gesture. Returns an unsubscribe function.
   subscribe(listener: (canvas: SpatialCanvas, origin: 'local' | 'external') => void): () => void
+  /**
+   * This document's annotation layer (ADR-0026): its conversations, read
+   * from the document-level threads plane rather than picked out of the
+   * canvas.
+   *
+   * Its own channel because it is its own plane. A reply changes no node and
+   * no edge, so a subscriber listening only for canvas values would never
+   * hear about one — and a markdown document, which publishes no canvas at
+   * all, would have no channel to hear about anything.
+   */
+  getAnnotations(): readonly CommentThread[]
+  /** Registers a listener for every published annotation-layer value. */
+  subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void
 }
 
 /**
@@ -432,6 +446,8 @@ export function createDocumentSyncSession(
     })
   }
   let currentCanvas: SpatialCanvas = { nodes: [], edges: [] }
+  let currentAnnotations: readonly CommentThread[] = []
+  const annotationListeners = new Set<(threads: readonly CommentThread[]) => void>()
   const listeners = new Set<(canvas: SpatialCanvas, origin: 'local' | 'external') => void>()
   const pendingExportRequests: ExportRequestHandlerDeps['pending'] = []
   // Chains every onChange firing's commit so firings apply to the Loro doc
@@ -465,8 +481,23 @@ export function createDocumentSyncSession(
     for (const listener of listeners) listener(canvas, origin)
   }
 
+  function notifyAnnotations(threads: readonly CommentThread[]): void {
+    for (const listener of annotationListeners) listener(threads)
+  }
+
   function getCanvas(): SpatialCanvas {
     return currentCanvas
+  }
+
+  function getAnnotations(): readonly CommentThread[] {
+    return currentAnnotations
+  }
+
+  function subscribeAnnotations(listener: (threads: readonly CommentThread[]) => void): () => void {
+    annotationListeners.add(listener)
+    return () => {
+      annotationListeners.delete(listener)
+    }
   }
 
   function subscribe(
@@ -490,9 +521,15 @@ export function createDocumentSyncSession(
   function publishCanvasFromDoc(targetDoc: LoroDoc): void {
     deps.generations.nextApplyGeneration()
     if (isStale()) return
-    const canvas = readSpatialCanvas(contentOf(targetDoc))
+    const content = contentOf(targetDoc)
+    const canvas = readSpatialCanvas(content)
     currentCanvas = canvas
+    // Read from the same doc read that produced the canvas, so the two
+    // published values are always a pair taken at one instant rather than
+    // two reads a remote update could land between.
+    currentAnnotations = readAnnotations(content)
     notify(canvas, 'external')
+    notifyAnnotations(currentAnnotations)
   }
 
   // Debounce window (ms): edits fired within this window of each other
@@ -945,7 +982,9 @@ export function createDocumentSyncSession(
     redo,
     canUndo,
     canRedo,
+    getAnnotations,
     getCanvas,
+    subscribeAnnotations,
     subscribe,
     subscribeHistory,
     getNodeLocks,
