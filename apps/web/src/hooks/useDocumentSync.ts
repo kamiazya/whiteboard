@@ -237,6 +237,11 @@ export function useDocumentSync(
     // all, when the backend goes to null.
     setLockedNodeIds(EMPTY_LOCKED_IDS)
     setLockedEdgeIds(EMPTY_LOCKED_IDS)
+    // Conversations belong to the session being torn down, exactly as the
+    // locks do — left standing they would be listed against whatever document
+    // is next, and with no successor session (backend going to null) nothing
+    // would ever publish over them.
+    setAnnotations(EMPTY_ANNOTATIONS)
     // The body belongs to the session being torn down, exactly as the locks
     // do — left standing it would render against whatever document is next.
     setMarkdownBodyState('')

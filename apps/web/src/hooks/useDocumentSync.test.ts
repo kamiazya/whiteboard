@@ -10,7 +10,7 @@
  * derivation.
  */
 
-import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
+import { writeCommentThread, writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 
 import type {
   DocumentBackend,
@@ -76,6 +76,19 @@ function emptyCanvas(): SpatialCanvas {
 function makeSnapshot(canvas: SpatialCanvas = emptyCanvas()): Uint8Array {
   const doc = new LoroDoc()
   writeSpatialCanvas(doc, canvas)
+  return doc.export({ mode: 'snapshot' })
+}
+
+/** A snapshot carrying one open thread on the annotation plane. */
+function makeSnapshotWithThread(canvas: SpatialCanvas = emptyCanvas()): Uint8Array {
+  const doc = new LoroDoc()
+  writeSpatialCanvas(doc, canvas)
+  writeCommentThread(doc, {
+    id: 't-a',
+    anchor: { kind: 'spatial', x: 5, y: 5 },
+    status: 'open',
+    messages: [{ id: 'm-a', body: 'belongs to the first document' }],
+  })
   return doc.export({ mode: 'snapshot' })
 }
 
@@ -273,6 +286,26 @@ describe('useDocumentSync', () => {
     // disposed canvas's locks would lock nodes of whatever comes next.
     rerender({ backend: null })
     expect([...result.current.lockedNodeIds]).toEqual([])
+  })
+
+  it('clears the annotation layer when the backend goes away', async () => {
+    const backend = makeFakeBackend()
+    const { result, rerender } = renderHook(({ backend }) => useDocumentSync(backend), {
+      initialProps: { backend: backend as DocumentBackend | null },
+    })
+
+    await act(async () => {
+      backend._ctrl.handlers!.onSnapshot(makeSnapshotWithThread(TEXT_CANVAS))
+      await vi.runAllTimersAsync()
+    })
+    expect(result.current.annotations.map((thread) => thread.id)).toEqual(['t-a'])
+
+    // Conversations belong to the document being torn down, exactly as the
+    // locks and the body do. Left standing they would be listed in the rail
+    // against whatever document comes next — and with no successor session to
+    // publish over them, they would stay there indefinitely.
+    rerender({ backend: null })
+    expect(result.current.annotations).toEqual([])
   })
 
   it('does not connect when backend is null, and onChange is a safe no-op', () => {

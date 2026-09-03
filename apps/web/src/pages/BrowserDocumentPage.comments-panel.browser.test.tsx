@@ -59,6 +59,15 @@ vi.mock('../lib/browser-backend.js', async () => {
         status: 'resolved',
         messages: [{ id: 'm2', body: 'settled last week' }],
       })
+      // Anchored to a node the canvas does not contain. The canvas seeded
+      // above has no nodes at all, so this anchor cannot resolve — which is
+      // what makes the thread orphaned rather than merely unplaced.
+      writeThread(content, {
+        id: 't-orphan',
+        anchor: { kind: 'spatial', nodeId: 'n-deleted', x: 60, y: 70 },
+        status: 'open',
+        messages: [{ id: 'm3', body: 'about a node that was deleted' }],
+      })
       handlers.onConnected()
       handlers.onSnapshot(doc.export({ mode: 'snapshot' }))
     }
@@ -118,11 +127,32 @@ it('counts the OPEN conversations on the opener, so the rail need not be open to
   render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
   await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
 
-  // One of the two threads is resolved; a badge counting both would report
-  // work that is done as work outstanding.
-  await waitFor(() => expect(screen.getByRole('button', { name: /comments, 1 open/i })), {
+  // One of the three threads is resolved; a badge counting all of them would
+  // report work that is done as work outstanding.
+  await waitFor(() => expect(screen.getByRole('button', { name: /comments, 2 open/i })), {
     timeout: 15_000,
   })
+})
+
+it('marks a thread whose node is gone, instead of leaving it indistinguishable', async () => {
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(snap.documentId)
+  await store.save(snap)
+
+  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
+  await userEvent.click(await screen.findByRole('button', { name: /comments/i }))
+
+  // ADR-0026 decision 4: deleting the subject of a conversation must not
+  // delete the conversation. The panel has always been able to SAY this; the
+  // mount passed it no resolver, so nothing was ever marked and the claim
+  // was carried entirely by the panel's own component test.
+  await waitFor(() => expect(screen.getByTestId('thread-orphaned-t-orphan')).toBeInTheDocument(), {
+    timeout: 15_000,
+  })
+  // The one anchored to bare coordinates still resolves — a comment placed on
+  // empty canvas has nothing to outlive.
+  expect(screen.queryByTestId('thread-orphaned-t-open')).toBeNull()
 })
 
 it('keeps the opener out of the editor surface, so it cannot swallow the editor own controls', async () => {

@@ -1,4 +1,5 @@
 import { createUniqueNameResolver, serializeSpatial } from '@kamiazya/whiteboard-codec'
+import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { isImageRef } from '@kamiazya/whiteboard-model'
 import type { DocumentIndex } from '@kamiazya/whiteboard-ports'
 import { LoroSyncPlugin } from 'loro-codemirror'
@@ -560,6 +561,26 @@ export function BrowserDocumentPage({
    */
   const [commentsOpen, setCommentsOpen] = useState(false)
   const openThreadCount = annotations.filter((thread) => thread.status === 'open').length
+  /**
+   * Whether a thread's anchor still finds its place (ADR-0026 decision 4:
+   * deleting the subject of a conversation must not delete the conversation).
+   *
+   * Spatial documents only, because only they have a canvas to judge against
+   * — a markdown document would report EMPTY_CANVAS and call every
+   * node-anchored thread orphaned, which is the opposite of not knowing.
+   * Within one, only an anchor that NAMES a node is judged: an anchor at bare
+   * coordinates has nothing to outlive, and a text anchor needs its quote
+   * matched against the body, which is the markdown projection's job.
+   */
+  const resolveAnchor = useMemo(() => {
+    if (documentKind !== 'spatial') return undefined
+    const nodeIds = new Set(canvas.nodes.map((node) => node.id))
+    return (thread: CommentThread): 'placed' | 'orphaned' => {
+      const { anchor } = thread
+      if (anchor.kind !== 'spatial' || anchor.nodeId === undefined) return 'placed'
+      return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
+    }
+  }, [documentKind, canvas])
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
@@ -1001,7 +1022,7 @@ export function BrowserDocumentPage({
         </div>
         {commentsOpen ? (
           <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-            <CommentsPanel threads={annotations} />
+            <CommentsPanel threads={annotations} resolveAnchor={resolveAnchor} />
           </aside>
         ) : null}
       </div>
