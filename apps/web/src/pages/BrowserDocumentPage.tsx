@@ -691,8 +691,28 @@ export function BrowserDocumentPage({
   // are rare actions, and rare + destructive earns a menu (with words)
   // over two always-visible icon buttons. One JSX value shared by both
   // canvas-kind branches so the two rows cannot drift apart.
+  // The opener belongs in the document's own actions row, not floated over the
+  // editor: measured, a control absolutely positioned in the surface's
+  // top-right corner sat on top of the markdown editor's catalog trigger and
+  // intercepted every click meant for it. Both editor kinds put chrome in
+  // their corners, and the annotation layer is a document-level concern, so
+  // the row that already carries document-level verbs is where it goes.
+  const commentsToggle = (
+    <Button
+      variant="ghost"
+      size="sm"
+      aria-label={openThreadCount === 0 ? 'Comments' : `Comments, ${openThreadCount} open`}
+      aria-pressed={commentsOpen}
+      onClick={() => setCommentsOpen((open) => !open)}
+    >
+      <MessageSquare aria-hidden="true" className="size-4" />
+      {openThreadCount > 0 ? <span className="ml-1 text-xs">{openThreadCount}</span> : null}
+    </Button>
+  )
+
   const canvasRowActions = (
     <>
+      {commentsToggle}
       {cleanupError && (
         <div role="alert" aria-live="assertive" className="text-destructive text-xs">
           {cleanupError}
@@ -903,19 +923,9 @@ export function BrowserDocumentPage({
       {/* The annotation layer's document-level surface (ADR-0026 decision 5)
           sits BESIDE the editor rather than inside it, because one panel
           serves both document kinds and a markdown document has no canvas
-          chrome to host one. */}
-      <div className="relative flex h-full min-h-0">
-        <Button
-          variant="outline"
-          size="sm"
-          aria-label={openThreadCount === 0 ? 'Comments' : `Comments, ${openThreadCount} open`}
-          aria-pressed={commentsOpen}
-          onClick={() => setCommentsOpen((open) => !open)}
-          className="absolute top-3 right-3 z-10 bg-background/80 backdrop-blur"
-        >
-          <MessageSquare aria-hidden="true" className="size-4" />
-          {openThreadCount > 0 ? <span className="ml-1 text-xs">{openThreadCount}</span> : null}
-        </Button>
+          chrome to host one. Its opener lives in the document actions row
+          above, in flow — see commentsToggle. */}
+      <div className="flex h-full min-h-0">
         <div className="relative min-w-0 flex-1">
           <DocumentEditorSurface
             kind={documentKind}

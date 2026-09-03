@@ -21,7 +21,12 @@ import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
 
 vi.mock('../components/spatial-editor/index.js', () => ({
-  SpatialEditor: (_props: { canvas: SpatialCanvas }) => <div data-testid="mock-spatial-editor" />,
+  // Fills its host the way the real editor does. A zero-height stand-in makes
+  // any geometric assertion about the surface vacuous — the overlap case below
+  // passed against the very layout it exists to reject.
+  SpatialEditor: (_props: { canvas: SpatialCanvas }) => (
+    <div data-testid="mock-spatial-editor" style={{ height: '100%', width: '100%' }} />
+  ),
 }))
 
 vi.mock('../lib/browser-backend.js', async () => {
@@ -118,4 +123,44 @@ it('counts the OPEN conversations on the opener, so the rail need not be open to
   await waitFor(() => expect(screen.getByRole('button', { name: /comments, 1 open/i })), {
     timeout: 15_000,
   })
+})
+
+it('keeps the opener out of the editor surface, so it cannot swallow the editor own controls', async () => {
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(snap.documentId)
+  await store.save(snap)
+
+  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  const surface = await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
+  const opener = await screen.findByRole('button', { name: /comments/i })
+
+  // A geometric assertion rather than a class one: floated over the surface's
+  // top-right corner, this control sat on top of whatever chrome the mounted
+  // editor puts there — measured, the markdown editor's own catalog trigger,
+  // which then could not be clicked at all. Where the opener lives is a
+  // decision; that it overlaps nothing is the invariant.
+  const a = opener.getBoundingClientRect()
+  const b = surface.getBoundingClientRect()
+  const overlaps = a.left < b.right && b.left < a.right && a.top < b.bottom && b.top < a.bottom
+  expect({ overlaps, opener: a.toJSON(), surface: b.toJSON() }).toMatchObject({ overlaps: false })
+})
+
+it('offers the same opener on a markdown document, which has no canvas chrome to carry one', async () => {
+  const store = new LocalStoreDouble()
+  const note = { ...snap, kind: 'markdown' as const, documentId: '0W16BGNTZ49EKRX27CHPV05AFN' }
+  await store.setDefaultDocumentId(note.documentId)
+  await store.save(note)
+
+  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+
+  // The claim ADR-0026 decision 5 rests on: a document with no canvas still
+  // reaches its conversations. Nothing else in this file would notice if the
+  // opener rode canvas-only chrome.
+  await waitFor(
+    () => expect(screen.getByRole('button', { name: /comments/i })).toBeInTheDocument(),
+    {
+      timeout: 15_000,
+    },
+  )
+  expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
 })
