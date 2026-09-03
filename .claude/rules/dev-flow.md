@@ -73,14 +73,14 @@ TDD red-first; Zod single source of truth (`z.infer`, never a parallel hand-writ
 
 - **`blastRadius`** — who else inside the codebase this edit reaches, each caller flagged for whether a test would fail if it broke. `typecheck` already catches *signature* breaks; this is for the caller that still compiles, changed behavior, and has nothing watching it. Use an impact-graph MCP tool (`get_impact_radius_tool`) when connected, else grep. Sentinels: `none:` (leaf change), `unavailable:` (no such tool on this machine — accepted without argument; nobody is gated on optional local tooling).
 - **`userReach`** — whether it reaches a USER at all: the registration, route, rendering parent, or flag-read that this increment adds. Built-but-unwired passes every other gate, because the tests pass *precisely by calling the new code directly*. A foundation-only slice is fine; a silently foundation-only one is the defect. Sentinel: `foundation: <reason> — wired by <named follow-up>`, rejected if the follow-up is too vague to file.
-- **`benefit`** — what the change is WORTH, and in which currency, prefixed with the column that
-  decides how it gets verified: `delta:` (a metric moves — bench or scoreboard), `relocation:`
-  (work leaves the path a person waits on — what that path stops doing AND what the handover
-  costs), `elimination:` (a class of mistake stops being possible — a count or a mutation check),
-  or `obvious:` (the worth is in the diff). The pattern is enforced, because a field that asks
-  someone to choose a column is one they answer in prose otherwise. What it prevents: a
-  relocation pointed at a stopwatch, which reports no difference about a change that did exactly
-  what it was for. Details and the worked cases are the `measured-change` skill.
+- **`benefit`** — what the change is WORTH, in the currency that picks its instrument. `delta:`
+  (a metric moves) is a bench or a scoreboard; `relocation:` (work leaves the path a person
+  waits on) is what that path stops doing PLUS what the handover costs; `elimination:` (a class
+  of mistake stops being possible) is a count or a mutation check; `obvious:` is worth visible in
+  the diff. PATTERN-enforced, because a field asking someone to choose a column is one they
+  answer in prose otherwise. What it prevents: a relocation pointed at a stopwatch, which cannot
+  see one — and reports a null that reads as a verdict on the change rather than on the probe.
+  Worked cases: `measured-change`.
 
 `codebase-auditor`'s `wiring-gaps` dimension stays the periodic sweep for whatever still slipped through.
 
@@ -93,13 +93,7 @@ worked measurements live.** Load it before the work, not after:
   correct-looking code whose worth is entirely in numbers nobody has taken, so the INSTRUMENT
   lands first, in its own commit, and the change is judged by it. It rejected three changes that
   were obviously right on argument, and priced a fourth through three shapes until one was worth
-  paying for. **Which numbers follows from what kind of benefit you are claiming**, and the skill
-  now names three: a *delta* (faster, better-laid-out) is a bench or a scoreboard; a *relocation*
-  (work leaves the thread a person waits on) is what that path no longer does PLUS what the
-  handover costs — end-to-end duration cannot see it at all, and a null result there is a
-  statement about the probe, not about the change; an *elimination* (a class of mistake stops
-  being possible) is a count or a mutation check, never a duration. Naming the wrong column is
-  how a change that did exactly what it was for gets reported as a speed-up nobody can measure.
+  paying for. Which numbers it wants follows from `benefit`'s column, above.
 - **`diagnosis-evidence`** — before publishing ANY cause, "not a regression", mutation result, or
   fix you are calling verified by hand. A number arrives looking like evidence while saying
   nothing about what was actually exercised; the fix is to choose an observation that could
