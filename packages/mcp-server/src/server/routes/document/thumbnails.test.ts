@@ -124,12 +124,13 @@ describe('thumbnail PUT/GET endpoints', () => {
     expect(res.status).toBe(404)
   })
 
-  // GET /latest-thumbnail is consumed by DocumentThumb's <img src>. A 404 makes
-  // the browser log "Failed to load resource: 404" for every thumbnail-less
-  // canvas, which is console noise (the component already has an onError
-  // fallback). Returning 204 No Content is a success status, so no console
-  // error is logged, while the empty body still triggers <img> onError → the
-  // FileText placeholder.
+  // A 404 would make a browser log "Failed to load resource: 404" for every
+  // thumbnail-less document, which is console noise rather than news: a
+  // client asking for a picture that does not exist yet has asked a valid
+  // question. 204 No Content is a success status, so nothing is logged, and
+  // an empty body still fails an <img> into whatever placeholder the client
+  // draws. (The web app's own consumer of this route has since been deleted
+  // — nothing there rendered it — so the route's clients are external.)
   it('returns 204 (not 404) from GET /latest-thumbnail when the canvas has no thumbnail', async () => {
     const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
     const res = await app.request('/api/workspaces/session1/documents/canvas-a/latest-thumbnail')

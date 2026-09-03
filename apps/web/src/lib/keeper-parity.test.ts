@@ -64,12 +64,6 @@ const BROWSER_FILES = 'src/lib/local-files-source.ts'
 const BROWSER_PAGE = 'src/pages/BrowserDocumentPage.tsx'
 
 const DAEMON_REACH: Record<string, KeeperReach> = {
-  'src/components/DocumentThumb.tsx': {
-    reach: 'gap',
-    missing:
-      'the switcher dropdown draws a document from the daemon latest-thumbnail route, so a browser keeper shows the kind icon instead — and DocumentThumbnail, which renders the same picture from injected bytes, proves the browser could draw one',
-    followUp: 'task #32',
-  },
   'src/components/MergeDialog.tsx': { reach: 'capability', capability: 'merge' },
   'src/components/PairedOriginsCard.tsx': {
     reach: 'daemon-itself',

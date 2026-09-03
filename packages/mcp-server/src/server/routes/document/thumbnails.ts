@@ -97,11 +97,12 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     try {
       const versions = await versionStore.list(workspaceId, path)
       const latestWithThumb = versions.find((v) => v.hasThumbnail)
-      // No thumbnail yet is a normal state (e.g. a brand-new canvas). This
-      // endpoint backs DocumentThumb's <img src>, so a 404 would make the browser
-      // log "Failed to load resource: 404" as console noise. Return 204 No
-      // Content instead: a success status (no console error) whose empty body
-      // still trips the <img> onError handler → the FileText placeholder.
+      // No thumbnail yet is a normal state (a brand-new document has none).
+      // A client points an <img> at this route, so a 404 would make its
+      // browser log "Failed to load resource: 404" as console noise for a
+      // valid question. Return 204 No Content instead: a success status, so
+      // nothing is logged, whose empty body still trips <img> onError and
+      // lets the client draw its own placeholder.
       if (!latestWithThumb) return c.body(null, 204)
       const bytes = await versionStore.loadThumbnail(workspaceId, latestWithThumb.id)
       if (!bytes) return c.body(null, 204)

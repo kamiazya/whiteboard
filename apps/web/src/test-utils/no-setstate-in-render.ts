@@ -2,8 +2,8 @@ import { expect, type vi } from 'vitest'
 
 // React's warning text for an unguarded/cross-component setState-during-render
 // violation. Distinct from the sanctioned "adjust state during render for the
-// current component" pattern (e.g. DocumentThumb's guarded prevSrc reset), which
-// never triggers this. Wording has drifted across React 18/19 point releases,
+// current component" pattern — a guarded `if (prev !== next) setPrev(next)`
+// during render — which never triggers this. Wording has drifted across React 18/19 point releases,
 // so the match stays tolerant of both phrasings.
 const REACT_SETSTATE_IN_RENDER_RE =
   /Cannot update a component .*?while rendering a different component|Warning:.*setState.*during.*render/i
