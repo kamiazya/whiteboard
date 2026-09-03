@@ -18,7 +18,7 @@ Start with the smallest failing test at the **nearest** layer. Do not jump to br
 | E2E | real routes, server composition, websocket timing, persistence order, multi-step page flows | promote only when needed |
 
 Notes:
-- Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser`); traces land under `<package>/tmp/vitest-traces` and are kept for FAILING tests only. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 22GB over a whole run). `pnpm run test:browser:trace` turns it on, and traces every test including passing ones, so point it at the one failing file.
+- Browser suites together: `pnpm run test:browser` (`canvas-viewer-browser` + `web-browser` + `canvas-render-browser`); traces land under `<package>/tmp/vitest-traces` and are kept for FAILING tests only. That trace carries the action log, stacks and screenshots but no DOM view — recording the DOM means recording every resource vite served (302MB against 7.5MB on `apps/web`'s 16 page files; 23GB over a whole run). `pnpm run test:browser:trace` turns it on, and traces every test including passing ones, so point it at the one failing file.
 - After the targeted test passes, run the broader suite covering the touched area, then `pnpm test`.
 - Runtime is the source of truth: if behavior disagrees with a test, fix the test or implementation to match real behavior.
 - Passing tests alone are not sufficient — manually verify the real behavior (Playwright/Chrome MCP) before locking the scenario into regression coverage.

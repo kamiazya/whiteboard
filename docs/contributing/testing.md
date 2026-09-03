@@ -30,7 +30,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 
 # 2. After targeted test passes, run the broader gate for the touched area
 pnpm test
-pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + apps/web web-browser)
+pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
