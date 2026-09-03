@@ -121,14 +121,11 @@ setSyncSseHooks({
   resolveViewportRequest: (requestId) => resolveViewportFn?.(requestId),
 })
 
-// Injected from canvas.ts: auto-version trigger with built-in throttling.
-// Called after WS binary messages; creates a new version and pushes it to the browser when the interval has elapsed.
-type AutoVersionTrigger = (
-  workspaceId: string,
-  path: string,
-  doc: LoroDoc,
-) => Promise<VersionEntry | null>
-var autoVersionTrigger: AutoVersionTrigger = () => Promise.resolve(null)
+// Injected from document.ts. Called after every WS binary message to SIGNAL
+// that the document changed; the checkpoint itself lands once the document
+// goes quiet, and the trigger broadcasts it from there.
+type AutoVersionTrigger = (workspaceId: string, path: string, doc: LoroDoc) => void
+var autoVersionTrigger: AutoVersionTrigger = () => {}
 export function setAutoVersionTrigger(fn: AutoVersionTrigger): void {
   autoVersionTrigger = fn
 }
@@ -480,12 +477,13 @@ export async function handleWsUpgrade(
           'onPersistedForTests test hook threw; ignoring',
         )
       }
-      // Auto-version for the socket's own path over the fresh projection.
+      // Signal the socket's own path as edited. The checkpoint itself lands
+      // once the document goes quiet, and the trigger broadcasts it then —
+      // there is no entry to answer with here.
       resolvedDeps.liveDocuments
         .get(workspaceId, path)
-        .then((doc) => autoVersionTrigger(workspaceId, path, doc))
-        .then((entry) => {
-          if (entry) sendVersionCreated(workspaceId, path, entry)
+        .then((doc) => {
+          autoVersionTrigger(workspaceId, path, doc)
         })
         .catch((err: unknown) => {
           getLogger('ws').error({ err: err as Error }, 'auto-version trigger failed')

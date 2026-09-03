@@ -1,8 +1,9 @@
 import type { RestoreProgress, ServerDeps } from '@kamiazya/whiteboard-server-core'
 import { Hono } from 'hono'
+import { getLogger } from '../log.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } from './document/auto-version.js'
+import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
@@ -14,13 +15,18 @@ import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 
+export type { AutoVersionTrigger }
 export { createAutoVersionTrigger }
 
 export interface DocumentRouterOptions {
   // Allow tests to replace the store. Production uses FileVersionStore.
   versionStore?: VersionStore
   // Auto-version interval in milliseconds. Tests can reduce it.
-  autoVersionIntervalMs?: number
+  /**
+   * The pause after which a document's automatic checkpoint is taken. Tests
+   * that want no checkpoint at all pass a value longer than they run.
+   */
+  autoVersionQuietMs?: number
   // Resolve the HEAD branch name for manual and auto version saves.
   // If omitted, ignore branch metadata. Production wires this from app.ts.
   getHeadBranch?: (workspaceId: string, path: string) => Promise<string | null>
@@ -28,6 +34,18 @@ export interface DocumentRouterOptions {
   // this from app.ts; see `getDefaultServerDeps` for what a caller that
   // omits it gets, which is the same wiring rather than a stand-in.
   serverDeps?: ServerDeps
+  /**
+   * Hands the caller the checkpoint trigger this router created, so a
+   * composition root can flush it when the process is going away.
+   *
+   * The trigger is a TRAILING debounce, which makes an unflushed shutdown
+   * lose exactly the checkpoint it exists to take: the one at the pause where
+   * editing stopped. Nothing else in this router outlives a request, so this
+   * is the one thing a lifetime has to reach into it for. Called
+   * synchronously during construction, so a root that arms its background
+   * work after `createApp` already holds it.
+   */
+  onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -39,12 +57,20 @@ export interface DocumentRouterOptions {
 export function createDocumentRouter(options: DocumentRouterOptions = {}) {
   const app = new Hono()
   const versionStore = options.versionStore ?? new FileVersionStore()
-  const autoInterval = options.autoVersionIntervalMs ?? AUTO_VERSION_INTERVAL_MS
-  const triggerAutoVersion = createAutoVersionTrigger(
-    versionStore,
-    autoInterval,
-    options.getHeadBranch,
-  )
+  const triggerAutoVersion = createAutoVersionTrigger(versionStore, {
+    ...(options.autoVersionQuietMs === undefined ? {} : { quietMs: options.autoVersionQuietMs }),
+    ...(options.getHeadBranch === undefined ? {} : { getHeadBranch: options.getHeadBranch }),
+    // The checkpoint lands long after the update that signalled it, so the
+    // broadcast is the trigger's to make rather than the caller's.
+    onSaved: (workspaceId, path, entry) => {
+      void import('./ws.js')
+        .then(({ sendVersionCreated }) => sendVersionCreated(workspaceId, path, entry))
+        .catch((err: unknown) => {
+          getLogger('auto-version').error({ err: err as Error }, 'version_created broadcast failed')
+        })
+    },
+  })
+  options.onAutoVersionTrigger?.(triggerAutoVersion)
   // Register the same trigger with ws.ts so the WS path shares the auto-version logic.
   // Use dynamic import to avoid the ws.ts <- canvas.ts cycle evaluating in the wrong order.
   void import('./ws.js').then(({ setAutoVersionTrigger }) => {

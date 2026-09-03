@@ -143,7 +143,6 @@ vi.mock('./pages/DaemonIndexPage.js', () => ({
 const BROWSER_STATE: ProviderState = {
   kind: 'browser',
   capabilities: {
-    versions: false,
     branches: false,
     merge: false,
   },
@@ -153,7 +152,6 @@ const DAEMON_STATE: ProviderState = {
   kind: 'daemon',
   daemonBaseUrl: 'http://127.0.0.1:3000',
   capabilities: {
-    versions: true,
     branches: true,
     merge: true,
   },

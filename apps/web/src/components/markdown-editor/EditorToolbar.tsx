@@ -1,6 +1,6 @@
 import type { StateCommand } from '@codemirror/state'
 import type { LucideIcon } from 'lucide-react'
-import { BookOpen, Columns2, MoreHorizontal, PenLine } from 'lucide-react'
+import { BookOpen, Columns2, MoreHorizontal, PenLine, Redo2, Undo2 } from 'lucide-react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 import { MarkdownVerbBar } from './MarkdownVerbBar.js'
@@ -24,6 +24,13 @@ export interface EditorToolbarProps {
   /** Runs a verb from the inline bar. Absent in read mode, where there is no source. */
   readonly runVerb?: (command: StateCommand) => void
   readonly openLinkPicker?: () => boolean
+  /**
+   * Step back and forward through the source pane's own history. Absent
+   * where there is no source pane to act on (Read mode), for the reason
+   * `catalogAvailable` is.
+   */
+  readonly onUndo?: () => void
+  readonly onRedo?: () => void
 }
 
 interface ModeOption {
@@ -58,7 +65,47 @@ const MODE_OPTIONS: readonly ModeOption[] = [
  * where there is not — `MarkdownVerbBar` decides which from its own measured
  * width. On a phone the catalog behind ⋯ still opens as a bottom sheet,
  * exactly where a thumb already is.
+ *
+ * Undo and redo are a separate pair beside them, not verbs in that bar and
+ * not entries in the catalog. They are not verbs: they act on the pane's
+ * history rather than on a selection, so `MARKDOWN_EDITOR_VERBS` does not
+ * carry them and neither does anything derived from it. And the catalog is
+ * the wrong vessel either way — undo is pressed repeatedly, and a sheet that
+ * must be reopened per press is not an undo affordance. Before this pair a
+ * touch device had no way at all to take back a keystroke; the only path was
+ * a chord.
  */
+/** One history step. Always enabled: CodeMirror answers a press with nothing
+ *  to undo by doing nothing, and a control that greys out between keystrokes
+ *  is noisier than one that is simply inert at the ends. */
+function StepButton({
+  label,
+  shortcut,
+  onPress,
+  icon: Icon,
+}: {
+  label: string
+  shortcut: string
+  onPress: () => void
+  icon: LucideIcon
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onPress}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <Icon aria-hidden className="size-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{`${label} (${shortcut})`}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function EditorToolbar({
   mode,
   onModeChange,
@@ -68,6 +115,8 @@ export function EditorToolbar({
   catalogAvailable,
   runVerb,
   openLinkPicker,
+  onUndo,
+  onRedo,
 }: EditorToolbarProps) {
   return (
     <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2">
@@ -81,6 +130,12 @@ export function EditorToolbar({
         <div className="flex-1" />
       )}
       <div className="flex items-center gap-3">
+        {onUndo && onRedo && (
+          <div className="flex items-center gap-0.5">
+            <StepButton label="Undo" shortcut="⌘/Ctrl+Z" onPress={onUndo} icon={Undo2} />
+            <StepButton label="Redo" shortcut="⌘/Ctrl+⇧Z" onPress={onRedo} icon={Redo2} />
+          </div>
+        )}
         <span
           data-testid="markdown-word-count"
           className="text-muted-foreground hidden text-xs tabular-nums sm:block"

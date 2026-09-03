@@ -47,7 +47,7 @@ describe('restore targetPath-overwrite vs delete race', () => {
   })
 
   it('does not resurrect deleted content when a DELETE of the overwrite target races the restore reading it', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
 
     // Source canvas-a with a saved version to restore from.
     const sourceDoc = new LoroDoc()
@@ -142,7 +142,7 @@ describe('restore in-place vs delete race', () => {
   })
 
   it('does not resurrect the canvas when a DELETE of the in-place restore target races the restore reading it', async () => {
-    const app = createDocumentRouter({ autoVersionIntervalMs: 60_000 })
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
 
     // Single canvas with a saved version to restore onto itself (no targetPath).
     const sourceDoc = new LoroDoc()

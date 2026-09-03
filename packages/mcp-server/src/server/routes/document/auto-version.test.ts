@@ -15,7 +15,9 @@ vi.mock('../../config.js', () => ({
   REPO_ROOT: '/tmp',
 }))
 
-const { AUTO_VERSION_INTERVAL_MS, createAutoVersionTrigger } = await import('./auto-version.js')
+const { AUTO_VERSION_CEILING_MS, AUTO_VERSION_QUIET_MS, createAutoVersionTrigger } = await import(
+  './auto-version.js'
+)
 const { corruptStoredData } = await import('../../store/corrupt-stored-data.js')
 const { clearCache } = await import('../../store/doc-cache.js')
 const { loadDocument } = await import('../../store/document-store.js')
@@ -23,8 +25,11 @@ const { createDocumentRouter } = await import('../document.js')
 const wsModule = await import('../ws.js')
 
 describe('auto-version', () => {
-  it('exports a positive interval constant', () => {
-    expect(AUTO_VERSION_INTERVAL_MS).toBeGreaterThan(0)
+  it('exports a quiet period, and a ceiling longer than it', () => {
+    expect(AUTO_VERSION_QUIET_MS).toBeGreaterThan(0)
+    // The ceiling only means anything if editing can plausibly run past a
+    // pause without reaching it.
+    expect(AUTO_VERSION_CEILING_MS).toBeGreaterThan(AUTO_VERSION_QUIET_MS)
   })
 
   it('createAutoVersionTrigger is a function', () => {
@@ -39,7 +44,7 @@ describe('createAutoVersionTrigger', () => {
     vi.useRealTimers()
   })
 
-  it('retries on the next edit without consuming the throttle window when save fails', async () => {
+  it('leaves the key uncovered when a save fails, so the next edit retries it', async () => {
     const doc = new LoroDoc()
     const entry = {
       id: 'v1',
@@ -62,12 +67,21 @@ describe('createAutoVersionTrigger', () => {
         loadThumbnail: vi.fn(),
         getFrontiersBase64: vi.fn(),
       },
-      30_000,
+      { quietMs: 60_000 },
     )
 
-    await expect(trigger('session1', 'canvas-a', doc)).resolves.toBeNull()
-    await expect(trigger('session1', 'canvas-a', doc)).resolves.toEqual(entry)
+    // A failed checkpoint must leave the key looking uncovered, or the next
+    // edit would be skipped by the diff check and the failure would be
+    // permanent for as long as nothing else changed.
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
+    doc.getMap('m').set('k', 1)
+    doc.commit()
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
     expect(save).toHaveBeenCalledTimes(2)
+    expect(save).toHaveBeenNthCalledWith(2, 'session1', 'canvas-a', doc, expect.anything())
+    trigger.stop()
   })
 
   it('passes branchName to save when getHeadBranch is injected', async () => {
@@ -95,10 +109,10 @@ describe('createAutoVersionTrigger', () => {
         getFrontiersBase64: vi.fn(),
         renameBranchInVersions: vi.fn(),
       },
-      30_000,
-      getHeadBranch,
+      { quietMs: 60_000, getHeadBranch },
     )
-    await trigger('session1', 'canvas-a', doc)
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
     expect(getHeadBranch).toHaveBeenCalledWith('session1', 'canvas-a')
     expect(save).toHaveBeenCalledWith('session1', 'canvas-a', doc, {
       auto: true,
@@ -133,10 +147,10 @@ describe('createAutoVersionTrigger', () => {
         getFrontiersBase64: vi.fn(),
         renameBranchInVersions: vi.fn(),
       },
-      30_000,
-      getHeadBranch,
+      { quietMs: 60_000, getHeadBranch },
     )
-    await trigger('session1', 'canvas-a', doc)
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
     expect(save).toHaveBeenCalledWith('session1', 'canvas-a', doc, {
       auto: true,
       operator: {
@@ -163,18 +177,19 @@ describe('createAutoVersionTrigger', () => {
         getFrontiersBase64: vi.fn(),
         renameBranchInVersions: vi.fn(),
       },
-      30_000,
-      getHeadBranch,
+      { quietMs: 60_000, getHeadBranch },
     )
 
-    await expect(trigger('session1', 'canvas-a', doc)).rejects.toMatchObject({
-      name: 'CorruptStoredDataError',
-      message: expect.stringContaining('broken branch state'),
-    })
+    // Corruption reading the head branch must not be swallowed into a save
+    // with the wrong branch on it. The trigger has no caller to reject to any
+    // more, so what the case pins is that no version is written at all.
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
     expect(save).not.toHaveBeenCalled()
+    trigger.stop()
   })
 
-  it('returns null without consuming the throttle window when versionStore.save throws corruption', async () => {
+  it('leaves the key uncovered when the save reports corruption', async () => {
     const doc = new LoroDoc()
     const entry = {
       id: 'v2',
@@ -199,59 +214,21 @@ describe('createAutoVersionTrigger', () => {
         getFrontiersBase64: vi.fn(),
         renameBranchInVersions: vi.fn(),
       },
-      30_000,
+      { quietMs: 60_000 },
     )
 
-    await expect(trigger('session1', 'canvas-a', doc)).resolves.toBeNull()
-    await expect(trigger('session1', 'canvas-a', doc)).resolves.toEqual(entry)
+    // A failed checkpoint must leave the key looking uncovered, or the next
+    // edit would be skipped by the diff check and the failure would be
+    // permanent for as long as nothing else changed.
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
+    doc.getMap('m').set('k', 1)
+    doc.commit()
+    trigger('session1', 'canvas-a', doc)
+    await trigger.flush()
     expect(save).toHaveBeenCalledTimes(2)
-  })
-
-  it('throttles repeated calls within the interval window by tracking last-save time per canvas key', async () => {
-    // The trigger holds an ephemeral per-canvas timestamp registry (Map<key, number>).
-    // This test confirms the registry persists its state across calls within the same
-    // trigger instance so that the throttle window is correctly enforced.
-    //
-    // Pin the clock so both the "first call always fires" invariant and the
-    // "second call is throttled" assertion are grounded in an explicit time,
-    // not a wall-clock assumption.
-    vi.useFakeTimers()
-    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
-
-    const doc = new LoroDoc()
-    const entry = {
-      id: 'v1',
-      path: 'canvas-a',
-      createdAt: '2026-04-23T00:00:00.000Z',
-      elementCount: 0,
-      auto: true,
-      hasThumbnail: false,
-    }
-    const save = vi.fn().mockResolvedValue(entry)
-    // Use a large interval so the second call (at the same pinned instant) always falls within the window.
-    const trigger = createAutoVersionTrigger(
-      {
-        save,
-        load: vi.fn(),
-        list: vi.fn(),
-        saveThumbnail: vi.fn(),
-        loadThumbnail: vi.fn(),
-        getFrontiersBase64: vi.fn(),
-      },
-      60_000,
-    )
-
-    // First call: no prior save recorded → now - 0 >= intervalMs is true → should save.
-    const first = await trigger('session1', 'canvas-a', doc)
-    expect(first).toEqual(entry)
-    expect(save).toHaveBeenCalledTimes(1)
-
-    // Second call at the same pinned instant: within the 60s window → must return null.
-    const second = await trigger('session1', 'canvas-a', doc)
-    expect(second).toBeNull()
-    expect(save).toHaveBeenCalledTimes(1)
-
-    vi.useRealTimers()
+    expect(save).toHaveBeenNthCalledWith(2, 'session1', 'canvas-a', doc, expect.anything())
+    trigger.stop()
   })
 })
 
@@ -289,8 +266,10 @@ describe('auto-version corruption handling', () => {
     clientDoc.commit()
     const update = clientDoc.export({ mode: 'update', from: prevVV })
 
+    // Quiet immediately: the checkpoint fires on the next tick rather than
+    // five minutes out, so the route's own behaviour is what this observes.
     const app = createDocumentRouter({
-      autoVersionIntervalMs: 0,
+      autoVersionQuietMs: 0,
       versionStore,
     })
     const res = await app.request('/api/w/session1/document/canvas-a/update', {
