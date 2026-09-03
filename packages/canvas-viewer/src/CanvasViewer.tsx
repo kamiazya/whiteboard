@@ -6,7 +6,7 @@ import {
   type SvgDocumentOptions,
 } from '@kamiazya/whiteboard-canvas-render'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
-import { useMemo } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { createBrowserMeasureText } from './measure-text.js'
 import { useViewerFontReady } from './use-viewer-font-ready.js'
 
@@ -61,6 +61,33 @@ export function CanvasViewer({
   testId = DEFAULT_TEST_ID,
   label = DEFAULT_LABEL,
 }: CanvasViewerProps) {
+  const hostRef = useRef<HTMLElement | null>(null)
+  const [box, setBox] = useState<{ readonly w: number; readonly h: number } | null>(null)
+  const hostSized = width === undefined && height === undefined
+
+  // What the host did not say. `renderSceneToSvg` maps the scene's own
+  // coordinates into whatever box it is given, so a viewer with no box has
+  // nowhere to map them TO — see the envelope note at the render call. The
+  // figure's size does not depend on the SVG inside it (it is a fixed 100%
+  // either way), so observing it cannot feed back.
+  useEffect(() => {
+    const host = hostRef.current
+    if (!hostSized || host === null || typeof ResizeObserver === 'undefined') return
+    const observer = new ResizeObserver((entries) => {
+      const rect = entries[0]?.contentRect
+      if (rect === undefined || rect.width <= 0 || rect.height <= 0) return
+      setBox((prev) =>
+        prev !== null && Math.abs(prev.w - rect.width) < 1 && Math.abs(prev.h - rect.height) < 1
+          ? prev
+          : { w: rect.width, h: rect.height },
+      )
+    })
+    observer.observe(host)
+    return () => observer.disconnect()
+  }, [hostSized])
+
+  const renderWidth = width ?? (hostSized ? box?.w : undefined)
+  const renderHeight = height ?? (hostSized ? box?.h : undefined)
   // Stable across re-renders of the same component instance so layoutSpatialCanvas
   // doesn't recreate the (lazily-created) Canvas 2D context on every render.
   const resolvedMeasure = useMemo(() => measure ?? createBrowserMeasureText(), [measure])
@@ -84,10 +111,34 @@ export function CanvasViewer({
       // logger to report through, and a malformed body/unrecognized node
       // still renders (chrome-only or a literal fallback run).
     })
-    return renderSceneToSvg(scene, { width, height, padding, background })
+    // `padding` is passed even when the host named none, and that is the
+    // whole of the framing fix rather than a style choice: canvas-render
+    // emits the `width`/`height`/`viewBox` envelope only when SOME envelope
+    // option is present — right for a scene composed into a larger document,
+    // wrong for this component, which is always a whole SVG in a browser.
+    // Without it the root carries `xmlns` alone and the children keep raw
+    // scene coordinates, so a canvas whose nodes start at x=400 draws as
+    // blank space with one clipped corner. `?? 0` is what `sanitizePadding`
+    // already substituted for `undefined`, so a host that was passing a size
+    // gets byte-identical output.
+    return renderSceneToSvg(scene, {
+      width: renderWidth,
+      height: renderHeight,
+      padding: padding ?? 0,
+      background,
+    })
     // eslint-disable-next-line react-hooks/exhaustive-deps -- fontReady is a
     // pure re-measure trigger, not a value read inside the callback.
-  }, [canvas, resolvedMeasure, width, height, padding, background, resolveReference, fontReady])
+  }, [
+    canvas,
+    resolvedMeasure,
+    renderWidth,
+    renderHeight,
+    padding,
+    background,
+    resolveReference,
+    fontReady,
+  ])
 
   // Injecting canvas-render's SVG string via dangerouslySetInnerHTML is sound
   // BECAUSE canvas-render's serializer (packages/canvas-render/src/svg/format.ts)
@@ -105,6 +156,7 @@ export function CanvasViewer({
   // name and reachable text is the honest floor until then.
   return (
     <figure
+      ref={hostRef}
       data-testid={testId}
       aria-label={label}
       // A real <figure>, not role="figure" on a div: same semantics, and the
