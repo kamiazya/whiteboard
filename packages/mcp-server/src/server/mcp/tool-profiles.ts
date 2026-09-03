@@ -29,6 +29,14 @@ export const TOOL_PROFILES: Record<string, { profile: AnnotationProfile; title: 
     profile: DESTRUCTIVE,
     title: 'Apply a batch of edits to the spatial canvas',
   },
+  wb_thread_edit: {
+    // Mutating rather than destructive: the layer has no removal at all
+    // (ADR-0026 decision 6), so nothing this tool does can lose a
+    // conversation. Not idempotent — a thread.add refuses an id the document
+    // already holds, and a message.add appends.
+    profile: MUTATING,
+    title: 'Comment on a document through its annotation layer',
+  },
   wb_body_patch: { profile: MUTATING, title: 'Patch the markdown body of a document' },
   wb_facet_list: { profile: READ_ONLY, title: 'List the facets this deployment registered' },
   wb_scene_render: { profile: READ_ONLY, title: 'Render the laid-out scene as SVG' },

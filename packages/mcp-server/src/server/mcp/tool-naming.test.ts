@@ -42,6 +42,13 @@ const ENTITIES = [
   // pairing handoff — a daemon concern, not stored document content, so it
   // belongs beside 'viewport' rather than the document-model nouns above.
   'pairing',
+  // Added by ADR-0026, and a document-model noun like the first group rather
+  // than a daemon concern: the annotation layer is a plane the document
+  // holds, peer to its nodes and its body, and `vocabulary.md` already makes
+  // the THREAD its anchored unit with comments as the messages inside one.
+  // `comment` would name the message and not the thing `wb_thread_edit`
+  // opens, replies to and resolves.
+  'thread',
 ] as const
 
 /**

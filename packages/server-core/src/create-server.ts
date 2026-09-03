@@ -51,6 +51,7 @@ import {
   linkifyMentionsInputSchema,
   NamelessLinkifyTargetError,
 } from './tools/linkify-mentions.js'
+import { createThreadEditTool } from './tools/thread-edit.js'
 import { createVersionListTool } from './tools/version-list.js'
 import { createVersionRestoreTool } from './tools/version-restore.js'
 import { createVersionSaveTool } from './tools/version-save.js'
@@ -284,6 +285,7 @@ export function createServer(deps: ServerDeps) {
     canvasView: createCanvasViewTool(deps),
     canvasSnapshot: createCanvasSnapshotTool(deps),
     canvasEdit: createCanvasEditTool(deps),
+    threadEdit: createThreadEditTool(deps),
     viewportSet: createViewportSetTool(deps),
     documentGet: createDocumentGetTool(deps),
     documentSearch: createDocumentSearchTool(deps, factsCache),
