@@ -9,10 +9,7 @@
 // inside the visible strip above the keyboard.
 
 import { useEffect } from 'react'
-import {
-  TOUCH_BAR_HEIGHT_PX,
-  touchFormattingBarShown,
-} from '../markdown-editor/touch-bar-layout.js'
+import { TOUCH_BAR_HEIGHT_PX, touchFormattingBarShown } from '../markdown-editor/verb-bar-layout.js'
 import type { BBoxLike, ContainerSize, Viewport } from './viewport.js'
 import { panToShowTarget } from './viewport.js'
 

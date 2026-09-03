@@ -720,6 +720,16 @@ export function MarkdownEditor({
         wordCount={wordCount}
         onOpenCatalog={({ x, y }) => openCatalogAt(x, y, 'grid')}
         catalogAvailable={effectiveMode !== 'read'}
+        runVerb={(command) => {
+          sourceApiRef.current?.run(command)
+        }}
+        openLinkPicker={() => {
+          if (linkTargets === undefined || linkTargets.length === 0) return false
+          const scope = sourceApiRef.current?.pinScope()
+          if (scope === undefined) return false
+          setLinkPicker({ query: scope.text, text: scope.text })
+          return true
+        }}
       />
       <div className="flex min-h-0 flex-1">
         <div

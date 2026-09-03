@@ -3,35 +3,35 @@
 // pinned here rather than by measuring a rendered bar.
 import { afterEach, describe, expect, it } from 'vitest'
 import { clearActiveMarkdownEditor, setActiveMarkdownEditor } from './active-markdown-editor.js'
-import { TOUCH_BAR_ORDER, verb } from './editor-verbs.js'
-import { layoutTouchBar, touchFormattingBarShown } from './touch-bar-layout.js'
+import { VERB_BAR_ORDER, verb } from './editor-verbs.js'
+import { layoutVerbBar, TOUCH_BAR_METRICS, touchFormattingBarShown } from './verb-bar-layout.js'
 
-const items = TOUCH_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
+const items = VERB_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
 
-describe('layoutTouchBar', () => {
+describe('layoutVerbBar', () => {
   it('at a phone width shows the first seven verbs and puts the rest behind "…"', () => {
-    const layout = layoutTouchBar(390, items)
-    expect(layout.visible).toEqual(TOUCH_BAR_ORDER.slice(0, 7))
-    expect(layout.overflow).toEqual(TOUCH_BAR_ORDER.slice(7))
+    const layout = layoutVerbBar(390, items, TOUCH_BAR_METRICS)
+    expect(layout.visible).toEqual(VERB_BAR_ORDER.slice(0, 7))
+    expect(layout.overflow).toEqual(VERB_BAR_ORDER.slice(7))
   })
 
   it('at a wide width shows everything and needs no "…"', () => {
-    const layout = layoutTouchBar(2000, items)
-    expect(layout.visible).toEqual([...TOUCH_BAR_ORDER])
+    const layout = layoutVerbBar(2000, items, TOUCH_BAR_METRICS)
+    expect(layout.visible).toEqual([...VERB_BAR_ORDER])
     expect(layout.overflow).toEqual([])
   })
 
   it('P1: at every width visible ++ overflow is the order, and visible is a prefix of it', () => {
     for (let width = 0; width <= 1200; width += 37) {
-      const layout = layoutTouchBar(width, items)
-      expect([...layout.visible, ...layout.overflow]).toEqual([...TOUCH_BAR_ORDER])
+      const layout = layoutVerbBar(width, items, TOUCH_BAR_METRICS)
+      expect([...layout.visible, ...layout.overflow]).toEqual([...VERB_BAR_ORDER])
     }
   })
 
   it('with no room for a single verb beside "…", everything overflows', () => {
-    const layout = layoutTouchBar(60, items)
+    const layout = layoutVerbBar(60, items, TOUCH_BAR_METRICS)
     expect(layout.visible).toEqual([])
-    expect(layout.overflow).toEqual([...TOUCH_BAR_ORDER])
+    expect(layout.overflow).toEqual([...VERB_BAR_ORDER])
   })
 })
 
