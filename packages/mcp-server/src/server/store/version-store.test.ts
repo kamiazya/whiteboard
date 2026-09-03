@@ -77,6 +77,34 @@ describe('FileVersionStore (Loro native, sqlite-backed)', () => {
     expect(entry.branchName).toBe('main')
   })
 
+  /**
+   * The merge point a restore creates, through the real column.
+   *
+   * The value crosses a migration, a nullable text column and `selectAll`,
+   * and every one of those can drop it without anything else noticing — the
+   * entry would simply come back without the field, which is also exactly
+   * what an ordinary checkpoint looks like. So the absence is asserted
+   * beside the presence: a store that never reads the column back would
+   * pass the first half alone.
+   */
+  it('carries restoredFrom through save and list, and leaves an ordinary point without it', async () => {
+    const doc = new LoroDoc()
+    appendElement(doc, 'e1')
+
+    const merge = await store.save('sess-1', 'canvas-a', doc, {
+      auto: true,
+      restoredFrom: 'v-earlier',
+    })
+    expect(merge.restoredFrom).toBe('v-earlier')
+
+    const plain = await store.save('sess-1', 'canvas-a', doc, { auto: true })
+    expect(plain.restoredFrom).toBeUndefined()
+
+    const listed = await store.list('sess-1', 'canvas-a')
+    expect(listed.find((v) => v.id === merge.id)?.restoredFrom).toBe('v-earlier')
+    expect(listed.find((v) => v.id === plain.id)?.restoredFrom).toBeUndefined()
+  })
+
   it('save counts nodes-model nodes, not the retired legacy elements list', async () => {
     const doc = makeSpatialDoc({
       nodes: [

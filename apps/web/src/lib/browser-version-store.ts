@@ -28,6 +28,8 @@ const versionRowSchema = z
     createdAt: z.number().finite(),
     elementCount: z.number().int().min(0),
     operator: operatorInfoSchema.optional(),
+    /** Set only on the point a restore produced; see `versionEntrySchema`. */
+    restoredFrom: z.string().optional(),
     frontiers: z.instanceof(Uint8Array),
   })
   .strict()
@@ -62,7 +64,12 @@ export class BrowserVersionStore {
   async save(
     workspaceId: string,
     path: string,
-    input: { label?: string; operator?: VersionRow['operator'] } = {},
+    input: {
+      label?: string
+      operator?: VersionRow['operator']
+      /** Records that this point is the merge a restore produced. */
+      restoredFrom?: string
+    } = {},
   ): Promise<VersionEntry> {
     const placement = await this.deps.index.resolveDocument({ workspaceId, path })
     if (placement === null) throw new Error(`no document at ${path}`)
@@ -78,6 +85,7 @@ export class BrowserVersionStore {
       createdAt: Date.now(),
       elementCount: projection === null ? 0 : countNodes(projection),
       ...(input.operator === undefined ? {} : { operator: input.operator }),
+      ...(input.restoredFrom === undefined ? {} : { restoredFrom: input.restoredFrom }),
       // The STORED record's frontier, never a live doc's: a checkpoint has to
       // point at ops that are on disk, and `open` reads what is.
       frontiers: new Uint8Array(encodeFrontiers(record.oplogFrontiers())),
@@ -170,5 +178,6 @@ function toEntry(row: VersionRow, path: string): VersionEntry {
     branchName: 'main',
     ...(row.label === undefined ? {} : { label: row.label }),
     ...(row.operator === undefined ? {} : { operator: row.operator }),
+    ...(row.restoredFrom === undefined ? {} : { restoredFrom: row.restoredFrom }),
   })
 }

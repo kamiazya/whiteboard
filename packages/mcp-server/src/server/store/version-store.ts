@@ -52,7 +52,14 @@ export interface VersionStore {
     workspaceId: string,
     path: string,
     doc: LoroDoc,
-    opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
+    opts: {
+      auto: boolean
+      label?: string
+      branchName?: string
+      operator?: OperatorInfo
+      /** The version this point was produced by restoring; see `versionEntrySchema`. */
+      restoredFrom?: string
+    },
   ): Promise<VersionEntry>
   // Returns an independent past-state doc: the stored workspace record
   // checked out at the version's frontiers, projected back to a standalone
@@ -140,6 +147,7 @@ interface VersionRow {
   frontiers: string
   hasThumbnail: number
   createdAt: number
+  restoredFrom: string | null
   // The store hydrates this from the documents row at list time so callers
   // still see a path field on each entry.
   path: string
@@ -166,6 +174,7 @@ function rowToEntry(row: VersionRow): VersionEntry {
     hasThumbnail: row.hasThumbnail === 1,
     ...(row.label !== null ? { label: row.label } : {}),
     ...(operator !== undefined ? { operator } : {}),
+    ...(row.restoredFrom !== null ? { restoredFrom: row.restoredFrom } : {}),
   }
 }
 
@@ -174,7 +183,14 @@ export class FileVersionStore implements VersionStore {
     workspaceId: string,
     path: string,
     doc: LoroDoc,
-    opts: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
+    opts: {
+      auto: boolean
+      label?: string
+      branchName?: string
+      operator?: OperatorInfo
+      /** The version this point was produced by restoring; see `versionEntrySchema`. */
+      restoredFrom?: string
+    },
   ): Promise<VersionEntry> {
     validateWorkspaceId(workspaceId)
     validateDocumentPath(path)
@@ -239,6 +255,7 @@ export class FileVersionStore implements VersionStore {
           frontiers,
           hasThumbnail: 0,
           createdAt,
+          restoredFrom: opts.restoredFrom ?? null,
         })
         .execute()
 
@@ -254,6 +271,7 @@ export class FileVersionStore implements VersionStore {
         hasThumbnail: false,
         ...(opts.label !== undefined ? { label: opts.label } : {}),
         ...(operator !== undefined ? { operator } : {}),
+        ...(opts.restoredFrom !== undefined ? { restoredFrom: opts.restoredFrom } : {}),
       }
     })
   }

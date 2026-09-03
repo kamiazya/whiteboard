@@ -330,7 +330,14 @@ export interface VersionHistory {
     workspaceId: string,
     path: string,
     doc: LoroDoc,
-    options: { auto: boolean; label?: string; branchName?: string; operator?: OperatorInfo },
+    options: {
+      auto: boolean
+      label?: string
+      branchName?: string
+      operator?: OperatorInfo
+      /** Set when this point is the merge a restore produced; see `versionEntrySchema`. */
+      restoredFrom?: string
+    },
   ): Promise<VersionEntry>
   /**
    * The past state of ONE document, as an independent doc — the stored

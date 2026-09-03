@@ -51,6 +51,17 @@ export function createBrowserVersionsBackend(deps: {
         (v) => v.id === versionId,
       )?.label
       await deps.backend.applyRestore(past, label)
+      // The merge point, recorded the same way the daemon's operation
+      // records it: a restore reconciles a past state onto the live one, so
+      // what comes out is a descendant of both, and a merge that leaves no
+      // row is a merge nobody can find afterwards. Best effort for the same
+      // reason as there — the content has already landed, so a failed row
+      // costs the history a point and the document nothing.
+      try {
+        await deps.store.save(workspaceId, path, { restoredFrom: versionId })
+      } catch {
+        // See above.
+      }
     },
   }
 }
