@@ -623,6 +623,12 @@ export function BrowserDocumentPage({
     setSavingVersion(true)
     setSaveVersionOutcome(null)
     try {
+      // Captured BEFORE the save, not after. `exportScene` reads the live
+      // scene synchronously at call time, so starting it here binds the
+      // picture to the state the save is about to mark. Awaiting the save
+      // first meant an edit made during it was drawn onto the older point —
+      // a picture of content that version does not contain.
+      const picture = exportScene('png')
       const saved = await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
       if (currentDocumentIdRef.current !== startedOn) return
       setSaveVersionOutcome('saved')
@@ -635,7 +641,7 @@ export function BrowserDocumentPage({
         workspaceId: getBrowserWorkspaceId(),
         path: documentPath,
         versionId: saved.id,
-        getBlob: () => exportScene('png'),
+        getBlob: () => picture,
       }).then((outcome) => {
         if (outcome === 'failed') {
           log.warn('bookmark thumbnail failed')

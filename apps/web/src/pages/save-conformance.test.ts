@@ -40,6 +40,21 @@ describe('a saved point carries a picture, whoever keeps it', () => {
     ).toBe(true)
   })
 
+  it.each(PAGES)('%s captures the picture before the save, not inside the attach', async (page) => {
+    // The bytes handed to the attach must be something captured EARLIER.
+    // `exportScene` reads the live scene at call time, so a `getBlob` that
+    // calls it runs after the save has resolved — and draws an edit made
+    // during the save onto the older point, a picture of content that
+    // version does not contain.
+    const source = await read(page)
+    const getBlob = /getBlob:\s*([^,\n]*)/.exec(source)?.[1] ?? ''
+    expect(getBlob, `${page} has no getBlob argument to check`).not.toBe('')
+    expect(
+      /exportScene|getThumbnailBlob/.test(getBlob),
+      `${page} renders the picture inside getBlob, so it is taken after the save resolves — capture it before the save and hand the promise over`,
+    ).toBe(false)
+  })
+
   it.each(PAGES)('%s asks its own renderer for the bytes', async (page) => {
     // PNG explicitly: the daemon's route validates the signature on upload
     // and rejects anything else, and one keeper rejecting what the other

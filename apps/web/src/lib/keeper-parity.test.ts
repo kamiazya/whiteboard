@@ -245,10 +245,15 @@ describe('a panel whose behaviour differs by keeper is told which keeper it is',
   const mounts = Object.entries(sources)
     .filter(([path]) => !path.includes('.test.'))
     .flatMap(([path, text]) =>
-      [...text.matchAll(/<(VersionPanel|VersionTimeline)\s([^>]*?)\/?>/g)].map((m) => ({
+      // The props group is OPTIONAL. Requiring whitespace after the name
+      // skipped `<VersionTimeline/>` — a mount with no props at all, which
+      // is precisely the mount this guard exists to catch, since it is the
+      // one that takes the daemon's shape by default with nothing on the
+      // line to say so.
+      [...text.matchAll(/<(VersionPanel|VersionTimeline)(\s[^>]*?)?\/?>/g)].map((m) => ({
         path: path.replace(/^\//, ''),
         component: m[1] as string,
-        props: m[2] as string,
+        props: m[2] ?? '',
       })),
     )
 

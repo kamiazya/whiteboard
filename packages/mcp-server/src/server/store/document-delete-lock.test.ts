@@ -81,7 +81,7 @@ describe('wb_document_delete', () => {
       writerAcquired()
       await mayWrite
       const entry = await versions.save('ws-1', 'doomed', new LoroDoc(), { auto: false })
-      await versions.saveThumbnail('ws-1', entry.id, new Uint8Array([1, 2, 3]))
+      await versions.saveThumbnail('ws-1', 'doomed', entry.id, new Uint8Array([1, 2, 3]))
       return entry.id
     })
     await lockHeld

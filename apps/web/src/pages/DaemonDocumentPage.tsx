@@ -591,6 +591,12 @@ export function DaemonDocumentPage({
     const startedOn = canvas.path
     setSavingVersion(true)
     setSaveVersionOutcome(null)
+    // Captured BEFORE the POST, not after. `exportScene` reads the live scene
+    // synchronously at call time, so starting it here binds the picture to the
+    // state this save is about to mark. Awaiting the response first meant an
+    // edit made during it was drawn onto the older point — a picture of
+    // content that version does not contain.
+    const picture = getThumbnailBlob()
     try {
       const res = await daemonFetch(
         `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, 'versions')}`,
@@ -619,7 +625,7 @@ export function DaemonDocumentPage({
         workspaceId: canvas.workspaceId,
         path: canvas.path,
         versionId: parsed.data.version.id,
-        getBlob: getThumbnailBlob,
+        getBlob: () => picture,
       }).then((outcome) => {
         if (outcome === 'failed') {
           log.error('bookmark thumbnail upload failed')

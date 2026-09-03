@@ -151,6 +151,23 @@ export function versionsBackendContract(
     }
   })
 
+  it('refuses the picture of a version this document does not own', async () => {
+    const h = await create()
+    try {
+      if (h.foreignVersionId === undefined) return
+      await h.write('mine')
+      const foreign = await h.foreignVersionId()
+
+      // A picture is the same history as the state, so it gets the same
+      // refusal: null, not another document's bytes. A keeper that guarded
+      // `loadPast` and left this open would be answering the seam correctly
+      // in every other case here.
+      expect(await h.backend.loadThumbnail(h.workspaceId, h.path, foreign)).toBeNull()
+    } finally {
+      await h.cleanup()
+    }
+  })
+
   it('records the merge a restore creates, naming what it restored', async () => {
     const h = await create()
     try {

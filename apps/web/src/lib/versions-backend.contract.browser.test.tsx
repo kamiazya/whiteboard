@@ -166,6 +166,9 @@ function daemonHarness(): VersionsBackendHarness {
         if (row !== undefined) versions[versions.indexOf(row)] = { ...row, hasThumbnail: true }
         return json({ ok: true })
       }
+      // The route establishes ownership before it reads bytes, so a version
+      // another document owns is answered as absent — see thumbnails.ts.
+      if (id === OTHER) return new Response('{}', { status: 404 })
       const blob = thumbnails.get(id)
       // 204, the way the daemon answers a point that has no picture yet.
       if (blob === undefined) return new Response(null, { status: 204 })

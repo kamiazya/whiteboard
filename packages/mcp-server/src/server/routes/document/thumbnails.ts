@@ -26,7 +26,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     app,
     'put',
     ['versions', ':id', 'thumbnail'],
-    async (c, workspaceId, _path, params) => {
+    async (c, workspaceId, path, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)
@@ -40,7 +40,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
         return c.json({ error: 'invalid_png' }, 400)
       }
       try {
-        await versionStore.saveThumbnail(workspaceId, id, bytes)
+        await versionStore.saveThumbnail(workspaceId, path, id, bytes)
       } catch (err) {
         const msg = err instanceof Error ? err.message : 'save failed'
         return c.json({ error: 'save_failed', message: msg }, 400)
@@ -66,7 +66,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
     app,
     'get',
     ['versions', ':id', 'thumbnail'],
-    async (c, workspaceId, _path, params) => {
+    async (c, workspaceId, path, params) => {
       const id = params.id as string
       try {
         validateVersionId(id)
@@ -76,7 +76,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
         throw err
       }
       try {
-        const bytes = await versionStore.loadThumbnail(workspaceId, id)
+        const bytes = await versionStore.loadThumbnail(workspaceId, path, id)
         if (!bytes) return c.json({ error: 'not_found' }, 404)
         return c.body(bytes.buffer as ArrayBuffer, 200, {
           'Content-Type': 'image/png',
@@ -104,7 +104,7 @@ export function createThumbnailsRouter(options: ThumbnailsRouterOptions) {
       // nothing is logged, whose empty body still trips <img> onError and
       // lets the client draw its own placeholder.
       if (!latestWithThumb) return c.body(null, 204)
-      const bytes = await versionStore.loadThumbnail(workspaceId, latestWithThumb.id)
+      const bytes = await versionStore.loadThumbnail(workspaceId, path, latestWithThumb.id)
       if (!bytes) return c.body(null, 204)
       return c.body(bytes.buffer as ArrayBuffer, 200, {
         'Content-Type': 'image/png',
