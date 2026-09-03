@@ -203,6 +203,27 @@ export function registerDocumentTools(server: McpServer, deps: ServerDeps): void
 
   registerToolWithAnnotations(
     server,
+    tools.threadEdit.name,
+    {
+      description: tools.threadEdit.description,
+      inputSchema: tools.threadEdit.inputSchema.shape,
+      outputSchema: tools.threadEdit.outputSchema,
+    },
+    async (args) => {
+      const parsed = tools.threadEdit.inputSchema.parse(args)
+      // Same lock as wb_canvas_edit, for the same reason one level in: this
+      // reads the threads the document holds, mints ids against what it read,
+      // and saves the whole snapshot back. Two concurrent batches without it
+      // mint the same thread id and the later save wins silently.
+      const result = await withDocumentWriteLock(parsed.documentId, () =>
+        tools.threadEdit.execute(parsed),
+      )
+      return structuredJsonResult(result)
+    },
+  )
+
+  registerToolWithAnnotations(
+    server,
     tools.versionSave.name,
     {
       description: tools.versionSave.description,
