@@ -26,6 +26,7 @@ import {
   AlertDialogTitle,
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
+import { TOGGLE_STATE_CLASS } from '../components/ui/dock-button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
@@ -704,6 +705,11 @@ export function BrowserDocumentPage({
       aria-label={openThreadCount === 0 ? 'Comments' : `Comments, ${openThreadCount} open`}
       aria-pressed={commentsOpen}
       onClick={() => setCommentsOpen((open) => !open)}
+      // A toggle has to LOOK toggled. Without this the rail's open state was
+      // announced to a screen reader and invisible to everyone else, which is
+      // how it read in the running app: the panel was open and its opener was
+      // indistinguishable from the closed one.
+      className={TOGGLE_STATE_CLASS}
     >
       <MessageSquare aria-hidden="true" className="size-4" />
       {openThreadCount > 0 ? <span className="ml-1 text-xs">{openThreadCount}</span> : null}

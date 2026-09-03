@@ -286,6 +286,63 @@ describe('createDocumentSyncSession', () => {
     unsubscribe()
   })
 
+  it('republishes annotations after a LOCAL comment commit, which is how a person creates one', async () => {
+    // The path a person actually takes, and the one the remote-peer case
+    // above does not cover: the editor commits a comment through
+    // `commitToDoc`, which writes it into the doc and — before this — never
+    // told the annotation channel. Found by dogfooding: the bubble appeared
+    // on the canvas (the optimistic canvas value is published undebounced)
+    // while the panel went on saying "No comments yet" for the rest of the
+    // session, because annotations were only recomputed when a REMOTE update
+    // happened to arrive.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(emptyCanvas()))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+
+    const comment: CanvasComment = {
+      id: 'c1',
+      x: 40,
+      y: 60,
+      text: 'made right here',
+      createdAt: '2026-09-03T00:00:00.000Z',
+    }
+    const command: EditorCommand = { kind: 'create-comment', comment }
+    const next = applyCommand(emptyCanvas(), command)
+    session.onChange(next, command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations().map((thread) => thread.messages[0]?.body)).toEqual([
+      'made right here',
+    ])
+    expect(listener).toHaveBeenCalled()
+    unsubscribe()
+  })
+
+  it('does not republish annotations for a commit that touched no conversation', async () => {
+    // The guard is value equality rather than a list of comment-shaped
+    // command kinds: a classification over EditorCommand['kind'] is silent
+    // when kind N+1 arrives, and this one would go stale into "the panel
+    // stops updating" — the exact defect above, re-introduced.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    backend._ctrl.handlers!.onSnapshot(makeSnapshot(twoNodeCanvas()))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+
+    const command: EditorCommand = { kind: 'move-node', id: 'n-a', x: 10, y: 20 }
+    session.onChange(applyCommand(twoNodeCanvas(), command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(listener).not.toHaveBeenCalled()
+    unsubscribe()
+  })
+
   it('onChange with a move-node command writes only that node into doc.getMap("nodes"), leaving a peer edit to the sibling node intact after merge', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())

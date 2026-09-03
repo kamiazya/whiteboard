@@ -164,3 +164,55 @@ it('offers the same opener on a markdown document, which has no canvas chrome to
   )
   expect(screen.queryByTestId('mock-spatial-editor')).toBeNull()
 })
+
+/**
+ * The background colour once it has stopped moving.
+ *
+ * The control transitions its colours, so a reading taken right after the
+ * pointer leaves is a frame of the fade rather than a state. Measured, the
+ * naive version compared a mid-transition `oklab(0.97 0 0 / 0.920548)`
+ * against a settled `oklch(0.97 0 0)` and "passed" for a difference that was
+ * pure animation — it survived deleting the styling it exists to pin.
+ */
+async function settledBackground(el: Element): Promise<string> {
+  let previous = ''
+  await waitFor(() => {
+    const current = getComputedStyle(el).backgroundColor
+    const settled = current === previous
+    previous = current
+    expect(settled).toBe(true)
+  })
+  return previous
+}
+
+it('shows the opener as pressed while the rail is open, not only to a screen reader', async () => {
+  const store = new LocalStoreDouble()
+  await store.setDefaultDocumentId(snap.documentId)
+  await store.save(snap)
+
+  render(<BrowserDocumentPage store={store.index} pointer={store.pointer} clock={store.clock} />)
+  const editor = await screen.findByTestId('mock-spatial-editor', undefined, { timeout: 15_000 })
+  const opener = await screen.findByRole('button', { name: /comments/i })
+
+  // The pointer is parked off the control for both readings: a ghost button
+  // takes the same `bg-accent` on :hover, so measuring where the click left
+  // the cursor compares hovered-open against unhovered-closed.
+  await userEvent.hover(editor)
+  const closed = await settledBackground(opener)
+
+  await userEvent.click(opener)
+  await screen.findByTestId('comments-panel')
+  await userEvent.hover(editor)
+  const open = await settledBackground(opener)
+
+  // Computed style rather than a class assertion: what a reader can SEE is
+  // the claim, and a class name proves only that a string was written. The
+  // attribute was already right — `aria-pressed` was set from the first
+  // version — and the picture was identical either way.
+  // Plain inequality, NOT `expect.not.stringMatching`: that matcher treats
+  // its argument as a REGEX, so the parentheses in `rgba(0, 0, 0, 0)` become
+  // groups and the pattern stops matching the literal it came from — it
+  // passes for two IDENTICAL colours, which is exactly the vacuity this
+  // assertion exists to avoid.
+  expect(open).not.toBe(closed)
+})

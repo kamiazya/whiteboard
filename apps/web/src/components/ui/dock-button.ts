@@ -59,6 +59,21 @@ const DOCK_BUTTON_WIDTH_CLASS = 'w-9 pointer-coarse:w-11'
 const DOCK_BUTTON_BASE_CLASS =
   'flex items-center justify-center rounded-md text-muted-foreground transition-[transform,color,background-color] duration-(--motion-duration-fast) ease-(--motion-ease-out) hover:bg-accent hover:text-foreground active:scale-[0.97] focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-ring'
 
+/**
+ * How a control that TOGGLES something says it is currently on.
+ *
+ * Derived from the ARIA state rather than from a parallel boolean, and that
+ * is the whole point: `aria-pressed={open}` becomes the one place the state
+ * is written, so a control cannot end up announcing "pressed" to a screen
+ * reader while looking identical to its off state — which is what every site
+ * with the attribute and no styling was doing.
+ *
+ * Wear it on any toggle, not only a dock button: a header control opening a
+ * rail is the same promise to the reader as a tool button.
+ */
+export const TOGGLE_STATE_CLASS =
+  'aria-pressed:bg-accent aria-pressed:text-foreground aria-expanded:bg-accent aria-expanded:text-foreground'
+
 /** A square dock control (icon only). */
 export const DOCK_BUTTON_CLASS = `${DOCK_BUTTON_BASE_CLASS} ${DOCK_BUTTON_HEIGHT_CLASS} ${DOCK_BUTTON_WIDTH_CLASS}`
 
