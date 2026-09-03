@@ -13,6 +13,7 @@ export default defineConfig({
     environment: 'node',
     include: [
       'vite-pwa-options.test.ts',
+      'vite-manual-chunks.test.ts',
       'public-headers.test.ts',
       'vite-dev-headers.test.ts',
       'vite-plugin-strip-wasm-sourcemap.test.ts',

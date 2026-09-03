@@ -1,5 +1,6 @@
 import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
+import { TOGGLE_STATE_CLASS } from '@/components/ui/dock-button'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
 import { cn } from '@/lib/utils'
@@ -248,7 +249,7 @@ export default function WorkspaceTopBar({
                 onClick={onToggleHistory}
                 className={cn(
                   'shrink-0 rounded-md p-1 text-muted-foreground hover:bg-accent hover:text-foreground',
-                  historyOpen && 'bg-accent text-foreground',
+                  TOGGLE_STATE_CLASS,
                 )}
               >
                 <History aria-hidden="true" className="size-4" />
