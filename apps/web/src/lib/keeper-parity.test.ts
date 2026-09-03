@@ -71,6 +71,15 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     followUp: 'task #32',
   },
   'src/components/MergeDialog.tsx': { reach: 'capability', capability: 'merge' },
+  'src/components/PairedOriginsCard.tsx': {
+    reach: 'daemon-itself',
+    why: "lists and revokes the pairing grants a daemon issued to web origins — the grants are the daemon's, so a browser keeper has none to show",
+  },
+  'src/components/StorageReportCard.tsx': {
+    reach: 'both-keepers',
+    browser: 'src/lib/persistent-storage.ts',
+    note: 'the daemon reports its own disk and offers optimize-all; the browser answers the same question through navigator.storage',
+  },
   'src/components/MergeToast.tsx': { reach: 'capability', capability: 'merge' },
   'src/components/VersionThumbnail.tsx': {
     reach: 'gap',
@@ -88,11 +97,16 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     browser: BROWSER_PAGE,
     note: 'reads the workspace names route, and stays empty in browser mode by design — the page names its document instead',
   },
+  'src/contexts/DaemonApiContext.tsx': {
+    reach: 'daemon-itself',
+    why: 'carries the authorized fetch for a connected daemon, so it is the connection itself rather than a feature built on one',
+  },
   'src/contexts/VersionsBackendContext.tsx': {
     reach: 'both-keepers',
     browser: BROWSER_VERSIONS,
     note: 'the daemon backend is this context FALLBACK; the browser page provides its own',
   },
+  'src/hooks/useBranches.ts': { reach: 'capability', capability: 'branches' },
   'src/lib/daemon-api-client.ts': {
     reach: 'both-keepers',
     browser: BROWSER_FILES,
@@ -120,6 +134,10 @@ const DAEMON_REACH: Record<string, KeeperReach> = {
     reach: 'both-keepers',
     browser: 'src/pages/BrowserIndexPage.tsx',
   },
+  'src/pages/PairConsentPage.tsx': {
+    reach: 'daemon-itself',
+    why: 'the screen where a person grants a web origin access to their daemon — it exists only because there is a daemon to pair with',
+  },
   'src/pages/SettingsPage.tsx': {
     reach: 'daemon-itself',
     why: 'the Connections screen is where a daemon is found, paired and promoted to — its subject is the connection, so a browser keeper has nothing to mirror',
@@ -140,19 +158,40 @@ const sources = import.meta.glob('/src/**/*.{ts,tsx}', {
 
 /**
  * How a module is recognised as reaching the daemon: it builds one of the
- * daemon's URLs, or it holds the authorized fetch that carries its bearer
- * token. Both, because either alone misses a real call site — a component
- * with a URL and an injected fetch, or a hook handed `daemonFetch` and a
- * hand-written path.
+ * daemon's URLs from the shared helpers, it holds one of the two fetches
+ * that reach it, or it writes an `/api/` path by hand.
+ *
+ * All four, because the narrow version of this scan MISSED the largest
+ * difference in the app. `useBranches` — the whole branch surface, which the
+ * browser keeper cannot answer at all — builds
+ * `/api/workspaces/${'${id}'}/documents/…` as a template string and calls
+ * `apiFetch`, so a pattern over the URL helpers and `daemonFetch` alone did
+ * not see it. A module that reaches the daemon the least conventional way is
+ * exactly the one nobody thought about the browser for.
  */
-const DAEMON_REACH_PATTERN = /documentsApiUrl|workspacesApiUrl|daemonFetch/
+const DAEMON_REACH_PATTERN = /documentsApiUrl|workspacesApiUrl|daemonFetch|apiFetch|['"`]\/api\//
+
+/**
+ * Comments are stripped first: `WorkspaceFilesPanel` and
+ * `document-embed-content` each describe an `/api/` route in prose and
+ * neither calls one, and a ledger that demands an answer for a module that
+ * only MENTIONS the daemon teaches people to write an entry to shut it up.
+ */
+function code(text: string): string {
+  return text.replace(/\/\*[\s\S]*?\*\//g, '').replace(/(^|[^:])\/\/[^\n]*/g, '$1')
+}
 
 function daemonReachingModules(): string[] {
-  return Object.entries(sources)
-    .filter(([path]) => !path.includes('.test.'))
-    .filter(([, text]) => DAEMON_REACH_PATTERN.test(text))
-    .map(([path]) => path.replace(/^\//, ''))
-    .sort()
+  return (
+    Object.entries(sources)
+      .filter(([path]) => !path.includes('.test.'))
+      // Never imported at runtime: it re-exports types and one fetch to prove
+      // they resolve, and says so in its own header. Nothing about a keeper.
+      .filter(([path]) => !path.endsWith('/_type-probe.ts'))
+      .filter(([, text]) => DAEMON_REACH_PATTERN.test(code(text)))
+      .map(([path]) => path.replace(/^\//, ''))
+      .sort()
+  )
 }
 
 describe('every module that reaches the daemon says what the browser keeper does', () => {
@@ -161,7 +200,7 @@ describe('every module that reaches the daemon says what the browser keeper does
   it('finds a plausible number of daemon-reaching modules', () => {
     // A regex that stopped matching would otherwise report itself below as
     // "every entry is stale", sending the reader to the wrong file entirely.
-    expect(scanned.length).toBeGreaterThanOrEqual(10)
+    expect(scanned.length).toBeGreaterThanOrEqual(18)
   })
 
   it('classifies every one of them, and names nothing that has stopped reaching', () => {

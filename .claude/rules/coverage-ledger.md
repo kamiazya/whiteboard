@@ -141,6 +141,21 @@ module that must EXIST, `capability` names a flag the two keepers must
 really differ on, `gap` names a follow-up that must be filable, and
 `daemon-itself` has to say why there is nothing to mirror.
 
+Two things it measured, both of which generalise to any such scan:
+
+- **Widen the probe to the LEAST conventional way of reaching the subject.**
+  The first version matched the shared URL helpers and the authorized fetch,
+  and missed the largest difference in the app: `useBranches` builds
+  `/api/workspaces/…` as a template string and calls `apiFetch`, so the
+  whole branch surface — which the browser keeper cannot answer at all — was
+  invisible to it. The module that reaches a subject the odd way is exactly
+  the one nobody thought about the second implementation for.
+- **Strip comments before matching, or the ledger teaches the wrong habit.**
+  Two modules DESCRIBE an `/api/` route in prose and call none. Demanding an
+  answer for a module that only mentions the subject trains people to write
+  an entry to shut the scan up, which is how a ledger full of true-looking
+  entries stops meaning anything.
+
 The classify family shares a real JUDGEMENT — every scanned name is
 classified, and every entry still names something the source holds — so
 `assertScannedLedger` in `test-utils/coverage-ledger.ts` now holds it, beside
