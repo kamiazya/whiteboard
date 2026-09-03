@@ -15,6 +15,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { sharedBrowserTestConfig } from '../../../../../vitest.browser.shared.js'
 
 const __dirname = dirname(fileURLToPath(import.meta.url))
 const ROOT = join(__dirname, '../../../../..')
@@ -303,5 +304,51 @@ describe('run-shared-layer-tests.mjs (CLI)', () => {
 
     expect(exitCode).not.toBe(0)
     expect(stderr.chunks.join('')).toMatch(/pnpm could not start/)
+  })
+})
+
+/**
+ * `sharedBrowserTestConfig`'s trace budget.
+ *
+ * The default browser run must not record DOM snapshots. Measured on
+ * `apps/web`'s 16 page files (63 tests, all passing): with snapshots on, the
+ * run writes 302MB of trace scratch, 284MB of it the `.network` file that
+ * carries every resource body vite served so the viewer can replay the DOM.
+ * With them off, the same subset writes 7.5MB and a `.network` of zero. A
+ * whole `web-browser` run measured 22GB and exhausted this container's disk
+ * MID-RUN — reported not as "no space" but as `Failed to fetch dynamically
+ * imported module`, `Cannot connect to the iframe`, and a summary of
+ * `774 passed` against a true total of 929. 155 tests silently never ran and
+ * the smaller total read like good news.
+ *
+ * Fidelity is not lost, only moved: `pnpm test:browser:trace` sets the env
+ * var and gets the full trace back. That escape hatch is why the default is
+ * allowed to be lean, so it is pinned here too — a CLI `--browser.trace=on`
+ * cannot restore snapshots on its own (measured: a config carrying
+ * `snapshots: false` still produced a zero-byte `.network` under that flag,
+ * because vitest MERGES the override rather than replacing the object), so
+ * this env var is the only thing that can.
+ */
+describe('sharedBrowserTestConfig trace budget', () => {
+  const VAR = 'WHITEBOARD_TRACE_SNAPSHOTS'
+  const before = process.env[VAR]
+
+  afterEach(() => {
+    if (before === undefined) delete process.env[VAR]
+    else process.env[VAR] = before
+  })
+
+  // Statically imported, and the env var read PER CALL rather than at module
+  // load, so no dynamic import is needed to see a changed value. An in-body
+  // `await import()` would also trip `test-lazy-import-check` — which is how
+  // the first version of this suite was written, and what caught it.
+  it('records no DOM snapshots by default', () => {
+    delete process.env[VAR]
+    expect(sharedBrowserTestConfig().trace.snapshots).toBe(false)
+  })
+
+  it('records them when the trace script asks for them', () => {
+    process.env[VAR] = '1'
+    expect(sharedBrowserTestConfig().trace.snapshots).toBe(true)
   })
 })

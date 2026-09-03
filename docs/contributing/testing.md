@@ -30,7 +30,7 @@ pnpm --filter @kamiazya/whiteboard-web test   # apps/web jsdom, when the change 
 
 # 2. After targeted test passes, run the broader gate for the touched area
 pnpm test
-pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + apps/web web-browser)
+pnpm test:browser        # for browser-mode changes (canvas-viewer-browser + web-browser + canvas-render-browser)
 pnpm smoke:e2e           # for MCP tool / route / protocol changes
 pnpm test:e2e:distribution # for packaged daemon / tarball / binary behavior
 ```
@@ -173,8 +173,16 @@ There are three real-browser Vitest projects:
 
 ```bash
 pnpm run test:browser         # canvas-viewer-browser + web-browser + canvas-render-browser
-pnpm run test:browser:trace   # same, with trace artifacts on failure
+pnpm run test:browser:trace   # same, plus a trace for EVERY test and its DOM snapshots
 ```
+
+The default run retains a trace only for a FAILING test, and that trace has
+no DOM view — action log, stacks and screenshots, but no time-travel through
+the page. Recording the DOM means recording every resource vite served, which
+measured 302MB against 7.5MB on `apps/web`'s 16 page files and 22GB over a
+whole `web-browser` run. When you need the DOM, re-run the one failing file
+under `test:browser:trace`; it traces every test including passing ones, so
+it is a per-file tool rather than a suite-wide one.
 
 **jsdom exclude policy**: apps/web's jsdom config must exclude `.browser.test.ts` and `.browser.test.tsx` files. Tests that depend on IndexedDB or other real browser APIs belong in `web-browser`, not jsdom. Mixing them causes silent no-op failures or missing-API errors.
 
