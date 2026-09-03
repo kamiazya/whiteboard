@@ -1,6 +1,6 @@
 import type { StateCommand } from '@codemirror/state'
 import { Ellipsis } from 'lucide-react'
-import { type MouseEvent as ReactMouseEvent, useEffect, useRef, useState } from 'react'
+import { type MouseEvent as ReactMouseEvent, useEffect, useState } from 'react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 import {
@@ -16,19 +16,34 @@ import { VERB_ICONS } from './verb-icons.js'
 
 const BAR_ITEMS = VERB_BAR_ORDER.map((id) => ({ id, band: verb(id).band }))
 
-/** The bar's own width, which as a `flex-1` item IS the room left for it. */
+/**
+ * The bar's own width, which as a `flex-1` item IS the room left for it.
+ *
+ * The observer is created ONCE per node, from an effect keyed on a node held
+ * in state — never from the ref callback itself. An inline ref callback runs
+ * on every render, and `observe()` delivers a callback immediately, so
+ * re-observing there re-renders, which re-observes: a loop that runs one
+ * iteration per frame for as long as the bar is mounted. It is not
+ * self-limiting either, because the two ends measure different numbers —
+ * `clientWidth` is rounded and `contentRect.width` is not, so at a
+ * fractional width the two values never agree and the loop never settles.
+ * That starves the whole page this bar is mounted in; it surfaced as typing
+ * arriving truncated in page tests nowhere near this file.
+ */
 function useMeasuredWidth(): [(node: HTMLDivElement | null) => void, number] {
+  const [node, setNode] = useState<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(0)
-  const observer = useRef<ResizeObserver | null>(null)
-  const ref = (node: HTMLDivElement | null) => {
-    observer.current?.disconnect()
-    if (node === null) return
-    setWidth(node.clientWidth)
-    observer.current = new ResizeObserver(([entry]) => setWidth(entry.contentRect.width))
-    observer.current.observe(node)
-  }
-  useEffect(() => () => observer.current?.disconnect(), [])
-  return [ref, width]
+  useEffect(() => {
+    if (node === null || typeof ResizeObserver === 'undefined') return
+    const measure = () => setWidth((prev) => (prev === node.clientWidth ? prev : node.clientWidth))
+    measure()
+    const observer = new ResizeObserver(measure)
+    observer.observe(node)
+    return () => observer.disconnect()
+  }, [node])
+  // `setNode` is a stable setState function, so React attaches this ref once
+  // rather than on every render.
+  return [setNode, width]
 }
 
 export interface MarkdownVerbBarProps {
