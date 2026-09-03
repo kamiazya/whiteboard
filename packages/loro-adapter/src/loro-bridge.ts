@@ -1,7 +1,6 @@
 import {
   type CanvasComment,
   type CanvasEdge,
-  canvasCommentSchema,
   canvasEdgeSchema,
   canvasExtensionSchema,
   type DocumentKind,
@@ -18,12 +17,8 @@ import {
   trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
 import type { z } from 'zod'
-import {
-  canvasCommentFromThread,
-  migrateCanvasCommentsToThreads,
-  readCommentThreads,
-  writeThreadInto,
-} from './comment-threads.js'
+import { readCanvasComments } from './annotations.js'
+import { migrateCanvasCommentsToThreads, writeThreadInto } from './comment-threads.js'
 import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
 
 const NODES_KEY = 'nodes'
@@ -472,23 +467,11 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
     ? parsedEnvelope.data
     : {}
 
-  // Threads are where a comment lives (ADR-0026); the legacy map is read only
-  // for a document no writer has touched since, and the first write empties
-  // it. A read never migrates — it would turn opening a document into a
-  // commit, and a reader may not even hold the write lock.
-  const comments: CanvasComment[] = []
-  const threadIds = new Set<string>()
-  for (const thread of readCommentThreads(doc)) {
-    threadIds.add(thread.id)
-    const projected = canvasCommentFromThread(thread)
-    if (projected !== undefined) comments.push(projected)
-  }
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  for (const commentId of commentsMap.keys()) {
-    if (threadIds.has(commentId)) continue
-    const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
-    if (parsed.success) comments.push(parsed.data)
-  }
+  // The annotation layer is document-level and format-agnostic, so reading it
+  // is not this reader's job — `readAnnotations` answers it for a markdown
+  // document too. What stays here is only the lossy projection into the flat
+  // shape the canvas renderer still takes.
+  const comments = readCanvasComments(doc)
 
   const hasEnvelope = Object.values(envelope).some((value) => value !== undefined)
   if (!hasEnvelope && comments.length === 0) return { nodes, edges }

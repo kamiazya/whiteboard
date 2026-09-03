@@ -1,3 +1,4 @@
+export { readAnnotations, readCanvasComments } from './annotations.js'
 export {
   migrateCanvasCommentsToThreads,
   readCommentThreads,
