@@ -42,12 +42,21 @@ export type FileRefLabel = { readonly file: string; readonly label: string }
  * `canvas` is for a caller that already HOLDS one in memory — the editor,
  * whose LoroDoc is live — where exporting a snapshot just to post it would be
  * strictly worse. `snapshot` is for a caller that has only the stored bytes,
- * where decoding on the main thread costs the thread that answers the user:
- * measured at 1.20ms for 12 nodes, 2.60ms at 40 and 4.60ms at 120, which is
- * an order of magnitude more than posting either shape costs (the structured
- * clone of the decoded object was 0.10-0.40ms, and of the bytes below
- * measurement). A list of twenty visible rows was spending 24-92ms of the
- * main thread purely to hand work to a worker that could decode it itself.
+ * and hands them over without decoding: the point is not a faster render but
+ * a main thread that stays free while one happens, so whatever the person is
+ * doing meanwhile keeps the budget the decode was taking.
+ *
+ * Two measurements decide the shape, and the second is the load-bearing one:
+ *
+ * - Decoding on the main thread costs 1.20ms at 12 nodes, 2.60ms at 40 and
+ *   4.60ms at 120 — so a list of twenty visible rows was spending 24-92ms of
+ *   the thread that answers the user, to hand work to a worker that could
+ *   decode it itself.
+ * - Handing over the BYTES costs nothing measurable (the structured clone of
+ *   the decoded object was 0.10-0.40ms; of the bytes, below measurement).
+ *   That is what makes the move a release rather than a relocation — an
+ *   expensive handover would simply have moved the block into the handover,
+ *   and the main thread's share of a thumbnail would still not be zero.
  *
  * Exactly one of the two, which is what the union says. Decoding pulls
  * loro-crdt's WASM into the worker, so the worker imports it lazily and only

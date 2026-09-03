@@ -14,9 +14,10 @@
  * someone is waiting on.
  *
  * Neither is decoded here. A spatial document's snapshot travels to the
- * worker as bytes, because decoding it on this thread cost 1.20ms at 12
- * nodes, 2.60ms at 40 and 4.60ms at 120 — twenty visible rows of the main
- * thread, spent to hand work to a worker that can decode it itself.
+ * worker as bytes, so this thread's share of a thumbnail is the read and
+ * nothing else: decoding cost 1.20ms at 12 nodes, 2.60ms at 40 and 4.60ms at
+ * 120, and handing the bytes over costs nothing measurable. What that buys
+ * is not a faster picture but a thread that is free while one is drawn.
  *
  * Total by contract. Every failure answers `null` and the row keeps its kind
  * icon: a list that cannot draw a miniature is a plainer list, a list that
@@ -60,9 +61,8 @@ export interface RowRenderDeps {
    */
   readonly broker: RenderBroker
   /**
-   * The two renders and the snapshot decode are injected like the reads
-   * above, so the branch that actually produces a picture is assertable
-   * without standing up a worker.
+   * Both renders are injected like the reads above, so the branch that
+   * actually produces a picture is assertable without standing up a worker.
    */
   readonly renderMarkdown?: (body: string, maxWidth: number) => Promise<DocumentRender | null>
   /** Takes the stored SNAPSHOT — the worker decodes it, not this thread. */
