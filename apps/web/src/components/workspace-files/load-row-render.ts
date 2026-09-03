@@ -16,6 +16,11 @@
  * Total by contract. Every failure answers `null` and the row keeps its kind
  * icon: a list that cannot draw a miniature is a plainer list, a list that
  * throws is a broken screen.
+ *
+ * Every answer goes through the render broker (ADR-0027), which is why the
+ * preview pane beside a row no longer redraws what the row just drew: both
+ * ask for the same key, and the second one joins the first rather than
+ * starting a second render.
  */
 
 import type { BoundingBox } from '@kamiazya/whiteboard-canvas-render'
@@ -25,6 +30,8 @@ import { LoroDoc } from 'loro-crdt'
 import type { ResolvedTheme } from '../../hooks/useThemeMode.js'
 import { nextLayoutRequestId, sharedLayoutWorkerPool } from '../../lib/layout-worker-pool.js'
 import type { LayoutResponse, MarkdownRenderResponse } from '../../lib/layout-worker-protocol.js'
+import type { RenderBroker } from '../../lib/render-broker.js'
+import { renderKeyOf } from '../../lib/render-key.js'
 import type { WorkspaceDocumentEntry } from './document-entry.js'
 import type { WorkspaceFilesSource } from './files-source.js'
 
@@ -45,6 +52,11 @@ export interface RowRenderDeps {
   readonly source: WorkspaceFilesSource
   /** Spatial rendering resolves its palette from this; markdown takes its ink from CSS. */
   readonly theme: ResolvedTheme
+  /**
+   * Answers from the memo, joins a render already in flight for the same key,
+   * and otherwise runs the pipeline below exactly once.
+   */
+  readonly broker: RenderBroker
   /**
    * The two renders and the snapshot decode are injected like the reads
    * above, so the branch that actually produces a picture is assertable
@@ -86,18 +98,45 @@ function decodeCanvas(bytes: Uint8Array): SpatialCanvas {
   return readSpatialCanvas(doc)
 }
 
-export function createRowRenderLoader(deps: RowRenderDeps) {
-  return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
-    try {
-      if (document.kind === 'markdown') {
-        const markdown = await deps.source.loadMarkdown(document)
-        if (markdown.trim() === '') return null
-        return await (deps.renderMarkdown ?? renderMarkdownInPool)(markdown, ROW_LAYOUT_WIDTH)
-      }
+/**
+ * The kind the pipeline will actually take, which is what the key has to
+ * agree with. `kind` is optional on a row, and an entry without one is read
+ * as spatial below — so the key must say spatial too. Deriving both from
+ * here is not tidiness: a key that said `markdown` for a spatially rendered
+ * document would drop the theme axis, and one entry would then serve a light
+ * and a dark render of the same board.
+ */
+function renderedKind(document: WorkspaceDocumentEntry): 'spatial' | 'markdown' {
+  return document.kind === 'markdown' ? 'markdown' : 'spatial'
+}
 
-      const bytes = await deps.source.loadSpatialSnapshot(document)
-      const canvas = (deps.readCanvas ?? decodeCanvas)(bytes)
-      return await (deps.renderSpatial ?? renderSpatialInPool)(canvas, deps.theme)
+export function createRowRenderLoader(deps: RowRenderDeps) {
+  const produce = async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
+    if (renderedKind(document) === 'markdown') {
+      const markdown = await deps.source.loadMarkdown(document)
+      if (markdown.trim() === '') return null
+      return await (deps.renderMarkdown ?? renderMarkdownInPool)(markdown, ROW_LAYOUT_WIDTH)
+    }
+
+    const bytes = await deps.source.loadSpatialSnapshot(document)
+    const canvas = (deps.readCanvas ?? decodeCanvas)(bytes)
+    return await (deps.renderSpatial ?? renderSpatialInPool)(canvas, deps.theme)
+  }
+
+  return async (document: WorkspaceDocumentEntry): Promise<DocumentRender | null> => {
+    // The catch stays OUTSIDE the broker: a rejection must not be remembered
+    // as an answer, so the broker is allowed to see it and forget the entry,
+    // and the totality this loader promises is restored here.
+    try {
+      const key = renderKeyOf(
+        {
+          documentId: document.documentId,
+          kind: renderedKind(document),
+          ...(document.updatedAt === undefined ? {} : { updatedAt: document.updatedAt }),
+        },
+        deps.theme,
+      )
+      return await deps.broker.render(key, () => produce(document))
     } catch {
       return null
     }

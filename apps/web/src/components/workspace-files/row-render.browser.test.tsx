@@ -11,6 +11,7 @@ import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { LoroDoc } from 'loro-crdt'
 import { expect, it } from 'vitest'
+import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { createRowRenderLoader } from './load-row-render.js'
 
 const canvas: SpatialCanvas = {
@@ -31,6 +32,7 @@ it('renders a spatial document from its snapshot bytes through the pool', async 
   const bytes = snapshotBytes()
   const load = createRowRenderLoader({
     theme: 'light',
+    broker: createInTabRenderBroker(),
     source: {
       listDocuments: async () => [],
       createDocument: async () => {},

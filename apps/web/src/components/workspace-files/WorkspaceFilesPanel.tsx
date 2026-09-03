@@ -3,6 +3,7 @@ import { Columns2, List, Search } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useThemeMode } from '../../hooks/useThemeMode.js'
+import { createInTabRenderBroker } from '../../lib/render-broker.js'
 import { ContextMenu } from '../spatial-editor/ContextMenu.js'
 import { DocumentMinimap } from './DocumentMinimap.js'
 import { DocumentPreview } from './DocumentPreview.js'
@@ -194,11 +195,18 @@ export function WorkspaceFilesPanel({
   }, [documents])
   const activeTag = query.trim().startsWith('#') ? query.trim().slice(1) : null
 
+  // One broker for the whole panel. Deliberately NOT keyed on the theme the
+  // loader below is: a markdown render is theme-independent (its ink comes
+  // from CSS), so its entries survive a theme toggle, and a spatial render
+  // carries the theme in its own key. Rebuilding the broker per theme would
+  // throw both away — which is the measured "dark mode re-renders every row".
+  const broker = useMemo(() => createInTabRenderBroker(), [source])
+
   // One loader for the whole panel, so a re-render does not hand every card
   // a new function and re-trigger its render.
   const loadRender = useMemo(
-    () => createRowRenderLoader({ source, theme: resolvedTheme }),
-    [source, resolvedTheme],
+    () => createRowRenderLoader({ source, theme: resolvedTheme, broker }),
+    [source, resolvedTheme, broker],
   )
 
   // The row-size rendition. Separate from `loadRender` on purpose: it asks
