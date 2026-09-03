@@ -734,7 +734,9 @@ describe('DaemonDocumentPage', () => {
           ),
         ).toBe(true)
       })
-      await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
+      // The announcement itself, by its role: a loose /saved/i also matches
+      // the empty-state copy beside it, which says what a checkpoint does.
+      await waitFor(() => expect(screen.getByRole('status').textContent).toBe('Bookmark saved'))
 
       vi.unstubAllGlobals()
     })

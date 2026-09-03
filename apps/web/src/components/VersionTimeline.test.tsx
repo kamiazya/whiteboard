@@ -446,9 +446,17 @@ describe('VersionTimeline', () => {
     vi.stubGlobal('fetch', fetchMock)
 
     render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
-    await waitFor(() => {
-      expect(screen.getByText(/No versions yet/i)).toBeTruthy()
-    })
+    const empty = await screen.findByText(/No versions yet/i)
+
+    // The empty state names no cadence, and that is the point rather than
+    // vagueness. It said "auto-save (~30s)" for as long as the trigger was a
+    // 30-second throttle and for a while after it became a five-minute
+    // pause — a number in copy is a second place the interval lives, and the
+    // one nothing updates. It also said "this canvas" for a history that is
+    // the DOCUMENT's, and reads the same above a markdown body.
+    const copy = empty.textContent ?? ''
+    expect(copy).not.toMatch(/\d+\s*s\b|~|canvas/i)
+    expect(copy).toContain('A checkpoint is saved a little after you stop editing.')
   })
 
   it('scroll container can shrink inside the fixed-height history popover', async () => {

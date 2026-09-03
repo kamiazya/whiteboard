@@ -404,8 +404,12 @@ export default function VersionTimeline({
                   filtered, so an empty one means there is nothing anywhere. */}
               No versions yet.
               <br />
+              {/* No interval in the copy. A number here is a second place
+                  the trigger's timing lives, and the one nothing updates —
+                  it read "~30s" through the whole life of the five-minute
+                  pause that replaced it. */}
               {capabilities.autoVersions
-                ? 'Edit this canvas to trigger auto-save (~30s), or press ⌘/Ctrl+S.'
+                ? 'A checkpoint is saved a little after you stop editing. Bookmark this point with the button above, or ⌘/Ctrl+S.'
                 : 'Save one with the button above, or ⌘/Ctrl+S.'}
             </div>
           ) : (
