@@ -382,6 +382,7 @@ export default function VersionTimeline({
       id: v.id,
       branchName: v.branchName ?? 'main',
       createdAt: v.createdAt,
+      ...(v.restoredFrom === undefined ? {} : { restoredFrom: v.restoredFrom }),
     })),
   })
   const miniGraphById = new Map(miniGraphRows.map((r) => [r.versionId, r]))
@@ -436,12 +437,25 @@ export default function VersionTimeline({
             visibleVersions.map((v) => {
               const row = miniGraphById.get(v.id)
               const author = versionAuthor(v.operator)
+              const restoredSource =
+                row?.restoredFrom === undefined
+                  ? undefined
+                  : visibleVersions.find((other) => other.id === row.restoredFrom)
+              const restoredFromTitle =
+                restoredSource === undefined ? null : versionTitle(restoredSource)
               return (
                 <div key={v.id} data-testid="version-row" className="flex items-stretch gap-1.5">
                   {/* The lane column, only where lanes exist. A keeper with
                       one branch drew a straight line down the left of every
                       row and spent the width saying nothing. */}
-                  {capabilities.branches && (
+                  {/* The lane is drawn for BRANCHES or for lineage. It used
+                      to be branches-only, which left the browser keeper — one
+                      lane, and restores like any other — with nowhere to draw
+                      the arc a restore leaves. */}
+                  {(capabilities.branches ||
+                    row?.restoredFrom !== undefined ||
+                    row?.isRestoreSource === true ||
+                    row?.isRestoreArcThrough === true) && (
                     /* biome-ignore lint/a11y/noSvgWithoutTitle: decorative graph, aria-hidden removes it from the accessibility tree */
                     <svg
                       data-testid="version-lane"
@@ -482,6 +496,41 @@ export default function VersionTimeline({
                         strokeWidth={1.5}
                         strokeOpacity={0.6}
                       />
+                      {/* The arc a restore leaves, in the side channel at
+                          x=20 so it never sits under the trunk. Painted a row
+                          at a time — the top hook where the merge is, a
+                          straight run through the rows between, the bottom
+                          hook at the point that was restored — because one
+                          row's 24x36 box cannot hold a span of several. */}
+                      {row?.restoredFrom !== undefined && (
+                        <path
+                          d="M12 18 C20 18, 20 22, 20 36"
+                          fill="none"
+                          stroke={row.dotColor}
+                          strokeWidth={1.5}
+                          strokeDasharray="3 2"
+                        />
+                      )}
+                      {row?.isRestoreArcThrough && (
+                        <line
+                          x1={20}
+                          y1={0}
+                          x2={20}
+                          y2={36}
+                          stroke={row.dotColor}
+                          strokeWidth={1.5}
+                          strokeDasharray="3 2"
+                        />
+                      )}
+                      {row?.isRestoreSource && (
+                        <path
+                          d="M20 0 C20 14, 20 18, 12 18"
+                          fill="none"
+                          stroke={row.dotColor}
+                          strokeWidth={1.5}
+                          strokeDasharray="3 2"
+                        />
+                      )}
                     </svg>
                   )}
                   {/* Restore is offered on HEAD's lane only. Showing another
@@ -535,6 +584,21 @@ export default function VersionTimeline({
                           ]
                             .filter((part) => part !== null)
                             .join(' · ')}
+                          {/* Why the arc exists. The SHAPE of the lineage is
+                              derivable from the rows on their own; what no
+                              amount of that can say is that these two points
+                              met because somebody went back — the same reason
+                              a merge commit carries a message. Named by what
+                              the row it points at is CALLED, so the label and
+                              the arc's far end read as the same thing. */}
+                          {restoredFromTitle !== null ? (
+                            <>
+                              {' · '}
+                              <span data-testid="version-restored-from" className="text-primary">
+                                restored from {restoredFromTitle}
+                              </span>
+                            </>
+                          ) : null}
                           {row?.branchOut ? (
                             <>
                               {' · '}

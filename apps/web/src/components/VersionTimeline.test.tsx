@@ -1277,3 +1277,97 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     })
   })
 })
+
+/**
+ * The lineage a restore leaves, on screen.
+ *
+ * Two halves that have to arrive together: the arc says the two points are
+ * joined, and the label says WHY. The shape alone would show a branch with
+ * no account of itself; the label alone would claim a link the eye cannot
+ * follow.
+ */
+describe('VersionTimeline draws where a restored state came from', () => {
+  const restoredHistory = () =>
+    new Response(
+      JSON.stringify({
+        versions: [
+          {
+            id: 'v-merge',
+            path: 'canvas-a',
+            createdAt: '2026-04-23T03:00:00Z',
+            elementCount: 5,
+            auto: true,
+            hasThumbnail: false,
+            branchName: 'main',
+            restoredFrom: 'v-old',
+          },
+          {
+            id: 'v-between',
+            path: 'canvas-a',
+            createdAt: '2026-04-23T02:00:00Z',
+            elementCount: 4,
+            auto: true,
+            hasThumbnail: false,
+            branchName: 'main',
+          },
+          {
+            id: 'v-old',
+            path: 'canvas-a',
+            createdAt: '2026-04-23T01:00:00Z',
+            elementCount: 3,
+            auto: false,
+            label: 'first draft',
+            hasThumbnail: false,
+            branchName: 'main',
+          },
+        ],
+      }),
+      { status: 200, headers: { 'Content-Type': 'application/json' } },
+    )
+
+  it('arcs from the merge down to the point it restored, and names it', async () => {
+    vi.unstubAllGlobals()
+    vi.stubGlobal(
+      'fetch',
+      vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
+        const url =
+          typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
+        if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+        if (url.includes('/versions')) return Promise.resolve(restoredHistory())
+        return Promise.resolve(new Response('{}', { status: 200 }))
+      }),
+    )
+
+    const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    await screen.findByText('first draft')
+
+    // Named by what the row it points at is CALLED, so the label and the
+    // arc's far end read as the same thing.
+    const label = screen.getByTestId('version-restored-from')
+    expect(label.textContent).toBe('restored from first draft')
+    expect(label.closest('[data-testid="version-row"]')?.textContent).toContain('5 els')
+
+    // All three pieces of the arc, or it is two hooks with a gap: the merge
+    // row's top hook, the middle row's straight run, the source's bottom
+    // hook. Dashed is what separates it from the trunk it runs beside.
+    const dashed = [
+      ...container.querySelectorAll('[data-testid="version-lane"] [stroke-dasharray]'),
+    ]
+    expect(dashed).toHaveLength(3)
+    const rows = [...container.querySelectorAll('[data-testid="version-row"]')]
+    expect(rows).toHaveLength(3)
+    for (const [i, row] of rows.entries()) {
+      expect(
+        row.querySelectorAll('[stroke-dasharray]').length,
+        `row ${i} should paint exactly its own piece of the arc`,
+      ).toBe(1)
+    }
+  })
+
+  it('draws no arc for a history nobody restored in', async () => {
+    const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    await screen.findByText(/Assistant/)
+    expect(container.querySelectorAll('[stroke-dasharray]')).toHaveLength(0)
+    expect(screen.queryByTestId('version-restored-from')).toBeNull()
+  })
+})
