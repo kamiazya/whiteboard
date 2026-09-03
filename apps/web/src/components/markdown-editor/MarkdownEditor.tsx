@@ -1,4 +1,5 @@
 import { acceptCompletion, autocompletion, completionStatus } from '@codemirror/autocomplete'
+import { redo, undo } from '@codemirror/commands'
 import type { Extension, StateCommand } from '@codemirror/state'
 import { Prec } from '@codemirror/state'
 import { keymap } from '@codemirror/view'
@@ -742,6 +743,19 @@ export function MarkdownEditor({
         wordCount={wordCount}
         onOpenCatalog={({ x, y }) => openCatalogAt(x, y, 'grid')}
         catalogAvailable={effectiveMode !== 'read'}
+        {...(effectiveMode === 'read'
+          ? {}
+          : {
+              // The step pair runs through the same `run(command)` seam the
+              // catalog's verbs do — undo is an ordinary CodeMirror command,
+              // so it needs no API of its own.
+              onUndo: () => {
+                sourceApiRef.current?.run(undo)
+              },
+              onRedo: () => {
+                sourceApiRef.current?.run(redo)
+              },
+            })}
       />
       <div className="flex min-h-0 flex-1">
         <div

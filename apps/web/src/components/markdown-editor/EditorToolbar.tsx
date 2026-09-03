@@ -1,5 +1,5 @@
 import type { LucideIcon } from 'lucide-react'
-import { BookOpen, Columns2, MoreHorizontal, PenLine } from 'lucide-react'
+import { BookOpen, Columns2, MoreHorizontal, PenLine, Redo2, Undo2 } from 'lucide-react'
 import { cn } from '../../lib/utils.js'
 import { Tooltip, TooltipContent, TooltipTrigger } from '../ui/tooltip.js'
 
@@ -19,6 +19,13 @@ export interface EditorToolbarProps {
    * disabled entries.
    */
   readonly catalogAvailable: boolean
+  /**
+   * Step back and forward through the source pane's own history. Absent
+   * where there is no source pane to act on (Read mode), for the reason
+   * `catalogAvailable` is.
+   */
+  readonly onUndo?: () => void
+  readonly onRedo?: () => void
 }
 
 interface ModeOption {
@@ -34,9 +41,9 @@ const MODE_OPTIONS: readonly ModeOption[] = [
 ]
 
 /**
- * The markdown editor's one chrome strip, and it holds exactly one kind of
- * thing: **how this document is shown** (word count + view mode), plus the
- * doorway to everything that CHANGES the document.
+ * The markdown editor's one chrome strip: **how this document is shown**
+ * (word count + view mode), the step pair, and the doorway to everything
+ * else that CHANGES the document.
  *
  * The doorway's name is "Editing actions" rather than the generic "More
  * actions" the app shell's own ⋯ uses: two controls with the same accessible
@@ -47,7 +54,53 @@ const MODE_OPTIONS: readonly ModeOption[] = [
  * reach for the one that needed them — a 28px target at the top edge is the
  * worst place on a phone. Verbs live in the catalog behind ⋯, which opens
  * as a bottom sheet exactly where a thumb already is.
+ *
+ * Undo and redo are here anyway, and the difference is the half of that
+ * reasoning that inverts. Formatting had TWO paths and lost the worse one;
+ * undo had exactly one, a chord, so a touch device had no way to take back
+ * a keystroke at all. And the catalog is the wrong vessel for it either
+ * way: undo is pressed repeatedly, and a sheet that must be reopened per
+ * press is not an undo affordance.
+ *
+ * The top edge is still the worse place for a thumb, and the canvas answers
+ * this better — a persistent pair in the bottom dock. When the markdown
+ * editor grows a bottom surface of its own, these two belong in it.
  */
+/**
+ * One step control. Always enabled: CodeMirror's `undo` declines when its
+ * history is empty, so an exhausted direction is a press that does nothing
+ * rather than a lie. Tracking the depth would mean re-rendering this strip
+ * on every keystroke to keep two icons dim, which is a worse trade than the
+ * no-op it replaces.
+ */
+function StepButton({
+  label,
+  shortcut,
+  onPress,
+  icon: Icon,
+}: {
+  label: string
+  shortcut: string
+  onPress: () => void
+  icon: LucideIcon
+}) {
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <button
+          type="button"
+          aria-label={label}
+          onClick={onPress}
+          className="text-muted-foreground hover:text-foreground hover:bg-accent inline-flex h-6 w-6 items-center justify-center rounded-md transition-colors duration-(--motion-duration-fast) focus-visible:ring-2 focus-visible:ring-ring focus-visible:outline-none"
+        >
+          <Icon aria-hidden className="size-3.5" />
+        </button>
+      </TooltipTrigger>
+      <TooltipContent>{`${label} (${shortcut})`}</TooltipContent>
+    </Tooltip>
+  )
+}
+
 export function EditorToolbar({
   mode,
   onModeChange,
@@ -55,10 +108,18 @@ export function EditorToolbar({
   wordCount,
   onOpenCatalog,
   catalogAvailable,
+  onUndo,
+  onRedo,
 }: EditorToolbarProps) {
   return (
     <div className="border-border bg-background flex h-10 shrink-0 items-center gap-1 border-b px-2">
       <div className="ml-auto flex items-center gap-3">
+        {onUndo && onRedo && (
+          <div className="flex items-center gap-0.5">
+            <StepButton label="Undo" shortcut="⌘/Ctrl+Z" onPress={onUndo} icon={Undo2} />
+            <StepButton label="Redo" shortcut="⌘/Ctrl+⇧Z" onPress={onRedo} icon={Redo2} />
+          </div>
+        )}
         <span
           data-testid="markdown-word-count"
           className="text-muted-foreground hidden text-xs tabular-nums sm:block"
