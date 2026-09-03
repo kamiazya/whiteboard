@@ -36,11 +36,32 @@ import type { ResolvedTheme } from '../hooks/useThemeMode.js'
 /** Opaque file reference -> readable label, the plain-data form of the seam. */
 export type FileRefLabel = { readonly file: string; readonly label: string }
 
-export type LayoutRequest = {
+/**
+ * A canvas the worker should lay out, in one of two shapes.
+ *
+ * `canvas` is for a caller that already HOLDS one in memory — the editor,
+ * whose LoroDoc is live — where exporting a snapshot just to post it would be
+ * strictly worse. `snapshot` is for a caller that has only the stored bytes,
+ * where decoding on the main thread costs the thread that answers the user:
+ * measured at 1.20ms for 12 nodes, 2.60ms at 40 and 4.60ms at 120, which is
+ * an order of magnitude more than posting either shape costs (the structured
+ * clone of the decoded object was 0.10-0.40ms, and of the bytes below
+ * measurement). A list of twenty visible rows was spending 24-92ms of the
+ * main thread purely to hand work to a worker that could decode it itself.
+ *
+ * Exactly one of the two, which is what the union says. Decoding pulls
+ * loro-crdt's WASM into the worker, so the worker imports it lazily and only
+ * this shape pays for it — the editor's path and every markdown render are
+ * untouched.
+ */
+type LayoutSubject =
+  | { readonly canvas: SpatialCanvas; readonly snapshot?: undefined }
+  | { readonly snapshot: Uint8Array; readonly canvas?: undefined }
+
+export type LayoutRequest = LayoutSubject & {
   readonly type: 'layout'
   /** Echoed back so a late reply for a superseded canvas can be dropped. */
   readonly id: number
-  readonly canvas: SpatialCanvas
   readonly theme: ResolvedTheme
   readonly fileRefLabels?: readonly FileRefLabel[]
   /** File refs the host resolved as dangling — the plain-data form of the

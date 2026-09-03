@@ -14,7 +14,6 @@ function deps(over: Partial<RowRenderDeps> = {}): RowRenderDeps {
     broker: createInTabRenderBroker(),
     renderMarkdown: vi.fn(async () => ({ svg: SVG, bounds: BOUNDS })),
     renderSpatial: vi.fn(async () => ({ svg: SVG, bounds: BOUNDS })),
-    readCanvas: vi.fn(() => ({ nodes: [], edges: [] })),
     ...over,
   }
 }
@@ -116,7 +115,7 @@ describe('createRowRenderLoader', () => {
     expect(d.source.loadSpatialSnapshot).toHaveBeenCalledWith(
       expect.objectContaining({ path: 'deep/one' }),
     )
-    expect(d.renderSpatial).toHaveBeenCalledWith({ nodes: [], edges: [] }, 'light')
+    expect(d.renderSpatial).toHaveBeenCalledWith(expect.any(Uint8Array), 'light')
     expect(d.source.loadMarkdown).not.toHaveBeenCalled()
   })
 
@@ -158,14 +157,25 @@ describe('createRowRenderLoader', () => {
     ).toBeNull()
   })
 
-  it('answers null when the snapshot will not decode', async () => {
-    const d = deps({
-      readCanvas: vi.fn(() => {
-        throw new Error('corrupt')
-      }),
-    })
+  // The decode moved into the worker, so a corrupt snapshot now arrives as a
+  // refused render rather than a throw on this thread. The row's answer is
+  // the same either way, which is the point of the move being invisible here;
+  // that the WORKER survives it is `layout-worker-snapshot.browser.test.tsx`.
+  it('answers null when the render refuses a snapshot it could not decode', async () => {
+    const d = deps({ renderSpatial: vi.fn(async () => null) })
     expect(
       await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' }),
     ).toBeNull()
+  })
+
+  // The bytes go to the worker untouched: nothing on this thread decodes
+  // them, which is the whole saving.
+  it('hands the stored snapshot to the renderer without decoding it here', async () => {
+    const snapshot = new Uint8Array([9, 8, 7])
+    const d = deps({
+      source: fakeFilesSource({ loadSpatialSnapshot: async () => snapshot }),
+    })
+    await createRowRenderLoader(d)({ documentId: 'd2', path: 'a', kind: 'spatial' })
+    expect(d.renderSpatial).toHaveBeenCalledWith(snapshot, 'light')
   })
 })
