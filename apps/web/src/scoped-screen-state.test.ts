@@ -260,12 +260,19 @@ const BRANCH_CHIP_STATE: Record<string, ScopeCoverage> = {
 const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   versions: 'cleared on switch',
   previewing: 'cleared on switch',
+  // The past state ITSELF, held so the published session can be re-emitted
+  // when the restore's progress moves. It is a document's content, so a
+  // switch that left it would draw the departed document over the arrived
+  // one.
+  previewPast: 'cleared on switch',
   restoreError: 'cleared on switch',
   isRestoring: 'cleared on switch',
 
   loading: 'no subject: an in-flight flag for this screen’s own fetch',
   stale:
     'no subject: whether the LAST READ failed, which is about the fetch rather than about a document — and a switch refetches, so a success clears it on its own',
+  onPreviewRef:
+    'no subject: mirrors the callback prop, reassigned every render — it exists so the session is published from ONE effect rather than from a call beside every state change',
   previewingRef:
     'no subject: mirrors previewing, reassigned every render — so it is dropped with the state it mirrors',
   fetchSeqRef:

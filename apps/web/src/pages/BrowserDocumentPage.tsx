@@ -27,6 +27,7 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
+import type { VersionPreviewSession } from '../components/VersionTimeline'
 import {
   BookmarkAction,
   type SaveVersionOutcome,
@@ -68,7 +69,6 @@ import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provid
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
-import type { PastDocument } from '../lib/versions-backend.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -588,7 +588,7 @@ export function BrowserDocumentPage({
   // The past state the person is LOOKING at, drawn in place of the editor.
   // Read-only by construction — see DocumentPreview — so "look, then decide"
   // cannot turn into an edit against a state that is not the document's.
-  const [preview, setPreview] = useState<PastDocument | null>(null)
+  const [preview, setPreview] = useState<VersionPreviewSession | null>(null)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
   // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
   useBookmarkShortcut(versionsEnabled, () => {
@@ -982,6 +982,7 @@ export function BrowserDocumentPage({
                     versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
                   }
                   historyOpen={historyOpen}
+                  {...(preview === null ? {} : { preview })}
                 />
               </Suspense>
             )}
@@ -1008,7 +1009,7 @@ export function BrowserDocumentPage({
         )}
         <div className="relative h-full min-h-0">
           {preview ? (
-            <DocumentPreview past={preview} />
+            <DocumentPreview past={preview.past} />
           ) : (
             <DocumentEditorSurface
               kind={documentKind}

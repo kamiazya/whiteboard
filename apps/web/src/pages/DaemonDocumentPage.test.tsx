@@ -1135,12 +1135,14 @@ describe('DaemonDocumentPage', () => {
       await act(async () => {
         fireEvent.click(row.querySelector('button') as HTMLElement)
       })
+      // The looking-at state is the DOCUMENT's chrome now, not a bar inside
+      // the history: what changed is the document.
       await waitFor(() => {
         expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
       })
 
       await act(async () => {
-        fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Restore this version' }))
       })
       await waitFor(() => {
         expect(

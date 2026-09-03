@@ -1,4 +1,4 @@
-import { ChevronLeft, History } from 'lucide-react'
+import { ChevronLeft, History, RotateCcw, X } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
@@ -19,6 +19,18 @@ export interface DocumentIdentity {
    * owns renaming through its own store rather than through `/names`.
    */
   readonly onRename?: (next: string) => void
+}
+
+/**
+ * What the bar needs to show a LOOKING-AT state. Structurally the panel's
+ * `VersionPreviewSession` minus the state itself, which the bar never draws.
+ */
+export interface TopBarPreview {
+  readonly title: string
+  readonly isRestoring: boolean
+  readonly error: string | null
+  readonly stop: () => void
+  readonly restore: () => void
 }
 
 export interface WorkspaceTopBarCapabilities {
@@ -62,6 +74,19 @@ interface Props {
    */
   onToggleHistory?: () => void
   historyOpen?: boolean
+  /**
+   * A past version on screen in place of the document, and the two things to
+   * do about it.
+   *
+   * It lives HERE rather than in the history panel because the thing that
+   * changed is the document: the panel is beside it on a wide screen and a
+   * sheet at the far edge on a narrow one, so a person who has just replaced
+   * what they are looking at would be told about it, and offered the way
+   * back, in the one place they are not looking. The bar's ordinary actions
+   * are hidden while this is set — every one of them acts on a document that
+   * is not currently drawn.
+   */
+  preview?: TopBarPreview
   // Bumped by the host page on an externally observed HEAD/version change
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
@@ -106,6 +131,7 @@ export default function WorkspaceTopBar({
   capabilities,
   onToggleHistory,
   historyOpen = false,
+  preview,
   branchRefreshSignal,
   titleSlot,
 }: Props) {
@@ -121,6 +147,54 @@ export default function WorkspaceTopBar({
   })
 
   const canvasCustomName = effectiveNames.documents[path]
+
+  if (preview !== undefined) {
+    return (
+      <header
+        data-testid="version-preview-bar"
+        className="relative z-30 flex h-12 shrink-0 items-center gap-2 border-b border-primary/40 bg-primary/5 px-3"
+      >
+        <span className="min-w-0 flex-1 leading-tight">
+          <b className="block truncate text-sm font-medium">Viewing {preview.title}</b>
+          {preview.error === null ? (
+            <span className="text-[11px] text-muted-foreground">read-only</span>
+          ) : (
+            <span role="alert" className="text-[11px] text-destructive">
+              {preview.error}
+            </span>
+          )}
+        </span>
+        {/* Native `disabled` on both: neither carries a tooltip to keep
+            alive, and an in-flight restore is exactly the state a pointer
+            should bounce off rather than queue behind. Stopping mid-restore
+            would put the live document back while the past state is still
+            landing on it. */}
+        <button
+          type="button"
+          aria-label="Stop viewing"
+          disabled={preview.isRestoring}
+          onClick={preview.stop}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md text-muted-foreground hover:bg-accent hover:text-foreground disabled:opacity-50"
+        >
+          <X aria-hidden="true" className="size-4" />
+        </button>
+        {/* The heavier of the two, so it carries the weight — a pair of
+            identical round buttons would say the acts are alike. */}
+        <button
+          type="button"
+          aria-label="Restore this version"
+          disabled={preview.isRestoring}
+          onClick={preview.restore}
+          className="inline-flex size-8 shrink-0 items-center justify-center rounded-md bg-primary text-primary-foreground hover:opacity-90 disabled:opacity-50"
+        >
+          <RotateCcw
+            aria-hidden="true"
+            className={cn('size-4', preview.isRestoring && 'animate-spin')}
+          />
+        </button>
+      </header>
+    )
+  }
 
   return (
     <header className="relative z-30 flex h-12 shrink-0 items-center justify-between gap-3 border-b bg-background px-3">

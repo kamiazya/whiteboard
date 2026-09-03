@@ -2,7 +2,7 @@ import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-libra
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { DaemonApiContext } from '@/contexts/DaemonApiContext'
 import { createDaemonFetch } from '@/lib/daemon-api-client'
-import VersionTimeline from './VersionTimeline.js'
+import VersionTimeline, { type VersionPreviewSession } from './VersionTimeline.js'
 
 const mockLog = vi.hoisted(() => ({
   error: vi.fn(),
@@ -126,8 +126,36 @@ afterEach(() => {
   cleanup()
 })
 
+/**
+ * The LOOKING-AT session the panel publishes.
+ *
+ * These tests used to click the panel's own preview bar. The bar moved onto
+ * the document's chrome — the thing that actually changed — so what the
+ * panel offers is now this object, and driving it here is driving the real
+ * contract rather than a second copy of the buttons. What the CHROME does
+ * with it is the top bar's own test and the page flow's.
+ */
+function capturePreview() {
+  let latest: VersionPreviewSession | null = null
+  const onPreview = (session: VersionPreviewSession | null) => {
+    latest = session
+  }
+  return {
+    onPreview,
+    get current(): VersionPreviewSession | null {
+      return latest
+    },
+    /** The session, or a failure naming what was expected instead of a null deref. */
+    require(): VersionPreviewSession {
+      if (latest === null) throw new Error('no version is being looked at')
+      return latest
+    },
+  }
+}
+
 describe('VersionTimeline', () => {
   it('does not render version rows while the branch HEAD is still loading', async () => {
+    const preview = capturePreview()
     // useBranches defaults head to 'main' until /branches resolves. If the
     // real HEAD is a feature branch, rendering rows filtered by that default
     // briefly offers the WRONG branch's versions as restore targets.
@@ -142,7 +170,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     // Give the versions fetch time to land.
     await waitFor(() => {
@@ -156,24 +184,28 @@ describe('VersionTimeline', () => {
   })
 
   it('closes an open restore dialog when the canvas changes', async () => {
+    const preview = capturePreview()
     // Switching documents with the dialog open must not leave the previous
     // canvas's version staged — confirming would POST that version id to the
     // NEW canvas's restore endpoint.
-    const { rerender } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    const { rerender } = render(
+      <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />,
+    )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
 
-    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-b" />)
+    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-b" onPreview={preview.onPreview} />)
     await waitFor(() => {
-      expect(screen.queryByTestId('version-preview-bar')).toBeNull()
+      expect(preview.current).toBeNull()
     })
   })
 
   it('refetches versions when refreshSignal changes (e.g. after a manual save)', async () => {
+    const preview = capturePreview()
     const { rerender } = render(
       <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
     )
@@ -184,7 +216,14 @@ describe('VersionTimeline', () => {
       String(reqInput).includes('/versions'),
     ).length
 
-    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={1} />)
+    rerender(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        refreshSignal={1}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     await waitFor(() => {
       const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
@@ -195,6 +234,7 @@ describe('VersionTimeline', () => {
   })
 
   it('does not refetch when re-rendered with an unchanged refreshSignal', async () => {
+    const preview = capturePreview()
     const { rerender } = render(
       <VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />,
     )
@@ -205,7 +245,14 @@ describe('VersionTimeline', () => {
       String(reqInput).includes('/versions'),
     ).length
 
-    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-a" refreshSignal={0} />)
+    rerender(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        refreshSignal={0}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     const versionsCallCountAfter = fetchMock.mock.calls.filter(([reqInput]) =>
       String(reqInput).includes('/versions'),
@@ -214,6 +261,7 @@ describe('VersionTimeline', () => {
   })
 
   it('clamps relative timestamps to "0s ago" when the server clock is ahead', async () => {
+    const preview = capturePreview()
     vi.unstubAllGlobals()
     const future = new Date(Date.now() + 30_000).toISOString()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
@@ -245,7 +293,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       expect(screen.getByText(/0s ago/)).toBeTruthy()
     })
@@ -258,7 +306,8 @@ describe('VersionTimeline', () => {
   // otherwise. What it asserted (v-feat absent, two lanes) was true of a
   // timeline that showed one lane; the timeline now shows them all.
   it('shows every lane, not only the one HEAD is on', async () => {
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    const preview = capturePreview()
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     // v-new and v-mid on `main`, v-feat on `feature`. Before this, asking for
     // the feature branch's history meant switching onto it first.
@@ -276,11 +325,12 @@ describe('VersionTimeline', () => {
   })
 
   it('draws the rows HEAD is not on as rings, which is mini-graph own rule', async () => {
+    const preview = capturePreview()
     // `mini-graph.ts` has documented "rows on other branches use a ring dot"
     // since it was written, and no call site could reach it: the timeline
     // filtered to HEAD first, so every row it drew was active by
     // construction. This is that rule becoming visible.
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
       expect(document.querySelectorAll('svg[viewBox="0 0 24 36"]').length).toBe(3)
@@ -297,12 +347,13 @@ describe('VersionTimeline', () => {
   })
 
   it('names the variation a row is on, but only on the rows HEAD is not on', async () => {
+    const preview = capturePreview()
     // A ring says "not the lane you are on". It does not say WHICH lane, and
     // colour is not a name — with two variations open the reader has a row of
     // history and no way to tell whose. The lane HEAD is on takes no label
     // for the same reason the shell does not repeat the current workspace on
     // every row: it is the frame, so saying it once is saying it.
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
       expect(screen.getByText(/4 els/)).toBeTruthy()
@@ -318,12 +369,13 @@ describe('VersionTimeline', () => {
   })
 
   it('offers restore only on the lane HEAD is on', async () => {
+    const preview = capturePreview()
     // Showing another variation history is not the same as offering to
     // restore from it. What restoring one variation version into another
     // MEANS is a question nobody has answered, so the row is context here,
     // not a target — an affordance that acts on an undecided semantic is
     // worse than no affordance.
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
       expect(screen.getByText(/4 els/)).toBeTruthy()
@@ -335,7 +387,8 @@ describe('VersionTimeline', () => {
   })
 
   it('renders the branchOut label on the row matching baseVersionId', async () => {
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    const preview = capturePreview()
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     // "variation -> feature" should appear on the v-mid row.
     await waitFor(() => {
       expect(screen.getByText(/variation → feature/)).toBeTruthy()
@@ -343,7 +396,8 @@ describe('VersionTimeline', () => {
   })
 
   it('renders operator affordances and keeps the lane color on the branch color', async () => {
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    const preview = capturePreview()
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
       expect(screen.getByText(/Assistant/)).toBeTruthy()
@@ -369,6 +423,7 @@ describe('VersionTimeline', () => {
   })
 
   it('legacy row without operator renders system fallback', async () => {
+    const preview = capturePreview()
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -399,7 +454,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     // An automatic checkpoint has no author to name. It used to be labelled
     // "System", which said the same thing the row's own title already did.
     const row = await screen.findByTestId('version-row')
@@ -409,6 +464,7 @@ describe('VersionTimeline', () => {
   // The empty state is the DOCUMENT's now, not one lane's — nothing is
   // filtered out, so an empty list means there is nothing anywhere.
   it('renders the empty state when the document has no versions at all', async () => {
+    const preview = capturePreview()
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -445,7 +501,7 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     const empty = await screen.findByText(/No versions yet/i)
 
     // The empty state names no cadence, and that is the point rather than
@@ -460,7 +516,10 @@ describe('VersionTimeline', () => {
   })
 
   it('scroll container can shrink inside the fixed-height history popover', async () => {
-    const { container } = render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    const preview = capturePreview()
+    const { container } = render(
+      <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />,
+    )
 
     await waitFor(() => {
       expect(screen.getByText(/Assistant/)).toBeTruthy()
@@ -473,6 +532,7 @@ describe('VersionTimeline', () => {
   })
 
   it('calls onRestored and refreshes after a successful restore', async () => {
+    const preview = capturePreview()
     const onRestored = vi.fn()
     const restoreCalls: string[] = []
     vi.unstubAllGlobals()
@@ -490,16 +550,22 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
+    render(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        onRestored={onRestored}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
 
-    const restoreButton = screen.getByRole('button', { name: 'Restore' })
-    fireEvent.click(restoreButton)
+    act(() => preview.require().restore())
 
     await waitFor(() => {
       expect(restoreCalls.some((u) => u.includes('/versions/v-new/restore'))).toBe(true)
@@ -508,11 +574,12 @@ describe('VersionTimeline', () => {
       expect(onRestored).toHaveBeenCalledTimes(1)
     })
     await waitFor(() => {
-      expect(screen.queryByTestId('version-preview-bar')).toBeNull()
+      expect(preview.current).toBeNull()
     })
   })
 
   it('keeps the dialog open and does not fire onRestored when the restore request fails', async () => {
+    const preview = capturePreview()
     const onRestored = vi.fn()
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
@@ -530,25 +597,32 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
+    render(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        onRestored={onRestored}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
 
-    const restoreButton = screen.getByRole('button', { name: 'Restore' })
-    fireEvent.click(restoreButton)
+    act(() => preview.require().restore())
 
     await waitFor(() => {
-      expect(screen.getByText(/restore failed/i)).toBeTruthy()
+      expect(preview.require().error).toMatch(/restore failed/i)
     })
     expect(onRestored).not.toHaveBeenCalled()
-    expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+    expect(preview.current).not.toBeNull()
   })
 
   it('keeps the dialog open with an error when the restore request throws (network failure)', async () => {
+    const preview = capturePreview()
     const onRestored = vi.fn()
     vi.unstubAllGlobals()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
@@ -562,26 +636,33 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
+    render(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        onRestored={onRestored}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
 
-    const restoreButton = screen.getByRole('button', { name: 'Restore' })
-    fireEvent.click(restoreButton)
+    act(() => preview.require().restore())
 
     await waitFor(() => {
-      expect(screen.getByText(/restore failed/i)).toBeTruthy()
+      expect(preview.require().error).toMatch(/restore failed/i)
     })
     expect(onRestored).not.toHaveBeenCalled()
-    expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+    expect(preview.current).not.toBeNull()
     expect(mockLog.error).toHaveBeenCalledWith('restore request threw', expect.any(TypeError))
   })
 
   it('disables the Restore action while a restore is in flight so repeat activation cannot double-submit', async () => {
+    const preview = capturePreview()
     const onRestored = vi.fn()
     const restoreCalls: string[] = []
     vi.unstubAllGlobals()
@@ -603,26 +684,32 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
+    render(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        onRestored={onRestored}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
 
-    const restoreButton = screen.getByRole('button', { name: 'Restore' })
-    fireEvent.click(restoreButton)
-    // Repeat activation while the first request is still in flight.
-    fireEvent.click(restoreButton)
-    fireEvent.click(restoreButton)
+    act(() => preview.require().restore())
+    // Repeat activation while the first request is still in flight. The
+    // chrome disables its button, but the guard that matters is the panel's
+    // own — a second call must not become a second request.
+    act(() => preview.require().restore())
+    act(() => preview.require().restore())
 
     await waitFor(() => {
       expect(restoreCalls.length).toBe(1)
     })
-    expect((screen.getByRole('button', { name: 'Restoring…' }) as HTMLButtonElement).disabled).toBe(
-      true,
-    )
+    expect(preview.require().isRestoring).toBe(true)
 
     resolveRestore?.()
     await waitFor(() => {
@@ -631,6 +718,7 @@ describe('VersionTimeline', () => {
   })
 
   it('ignores Cancel and keeps the pending version locked while a restore is in flight', async () => {
+    const preview = capturePreview()
     const onRestored = vi.fn()
     const restoreCalls: string[] = []
     vi.unstubAllGlobals()
@@ -652,24 +740,31 @@ describe('VersionTimeline', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onRestored={onRestored} />)
+    render(
+      <VersionTimeline
+        workspaceId="sess_1"
+        path="canvas-a"
+        onRestored={onRestored}
+        onPreview={preview.onPreview}
+      />,
+    )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
 
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    act(() => preview.require().restore())
     await waitFor(() => {
       expect(restoreCalls.length).toBe(1)
     })
 
     // Cancel must not close the dialog nor unlock a second /restore submission
     // while the first request is still in flight.
-    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
-    expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
-    expect(screen.getByRole('button', { name: 'Restoring…' })).toBeTruthy()
+    act(() => preview.require().stop())
+    expect(preview.current).not.toBeNull()
+    expect(preview.require().isRestoring).toBe(true)
 
     resolveRestore?.()
     await waitFor(() => {
@@ -677,7 +772,7 @@ describe('VersionTimeline', () => {
     })
     expect(restoreCalls).toHaveLength(1)
     await waitFor(() => {
-      expect(screen.queryByTestId('version-preview-bar')).toBeNull()
+      expect(preview.current).toBeNull()
     })
   })
 })
@@ -690,6 +785,7 @@ describe('VersionTimeline HEAD polling', () => {
   })
 
   it('refetches branches on the same 15s poll as versions, picking up an external HEAD change', async () => {
+    const preview = capturePreview()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     let head = 'main'
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
@@ -725,7 +821,7 @@ describe('VersionTimeline HEAD polling', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       expect(screen.getByText(/5 els/)).toBeTruthy()
     })
@@ -790,48 +886,52 @@ describe('formatRelative display branches (via rendered version rows)', () => {
   }
 
   it('renders seconds-ago for a timestamp under a minute old', async () => {
+    const preview = capturePreview()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const now = new Date('2026-04-23T02:00:00Z')
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 30_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       expect(screen.getByText(/30s ago/)).toBeTruthy()
     })
   })
 
   it('renders minutes-ago for a timestamp under an hour old', async () => {
+    const preview = capturePreview()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const now = new Date('2026-04-23T02:00:00Z')
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 5 * 60_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       expect(screen.getByText(/5m ago/)).toBeTruthy()
     })
   })
 
   it('renders hours-ago for a timestamp under a day old', async () => {
+    const preview = capturePreview()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const now = new Date('2026-04-23T02:00:00Z')
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 3 * 3600_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       expect(screen.getByText(/3h ago/)).toBeTruthy()
     })
   })
 
   it('renders an absolute date/time for a timestamp a day or more old', async () => {
+    const preview = capturePreview()
     vi.useFakeTimers({ shouldAdvanceTime: true })
     const now = new Date('2026-04-23T02:00:00Z')
     vi.setSystemTime(now)
     stubFetchWithVersionAt(new Date(now.getTime() - 2 * 86_400_000).toISOString())
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       // 2026-04-21 00:00 local time rendered as M/D HH:MM.
       expect(screen.getByText(/4\/21 \d{2}:\d{2}/)).toBeTruthy()
@@ -839,9 +939,10 @@ describe('formatRelative display branches (via rendered version rows)', () => {
   })
 
   it('falls back to the raw ISO string for an invalid createdAt', async () => {
+    const preview = capturePreview()
     stubFetchWithVersionAt('not-a-real-date')
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
     await waitFor(() => {
       expect(screen.getByText(/not-a-real-date/)).toBeTruthy()
     })
@@ -877,6 +978,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
   }
 
   it('resolves the versions request against the daemon origin with an Authorization header', async () => {
+    const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -890,7 +992,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -912,6 +1014,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
   })
 
   it('POSTs restore through the provided daemon fetch', async () => {
+    const preview = capturePreview()
     const restoreCalls: string[] = []
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -930,16 +1033,16 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
+      expect(preview.current).not.toBeNull()
     })
-    fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
+    act(() => preview.require().restore())
 
     await waitFor(() => {
       expect(restoreCalls.some((u) => u.startsWith(DAEMON_BASE_URL))).toBe(true)
@@ -947,6 +1050,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
   })
 
   it('fetches the thumbnail through the authorized daemon fetch and renders it via an objectURL, when a daemon provider is active', async () => {
+    const preview = capturePreview()
     const createObjectURL = vi.fn(() => 'blob:mock-1')
     const revokeObjectURL = vi.fn()
     const originalCreateObjectURL = URL.createObjectURL
@@ -969,7 +1073,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -987,6 +1091,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
   })
 
   it('a version with hasThumbnail=false renders the placeholder without fetching a thumbnail, in daemon mode', async () => {
+    const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -1000,7 +1105,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -1012,6 +1117,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
   })
 
   it('renders the thumbnail <img> for the same-origin fallback (no provider)', async () => {
+    const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -1021,13 +1127,14 @@ describe('VersionTimeline via DaemonApiContext', () => {
     })
     vi.stubGlobal('fetch', underlyingFetch)
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await screen.findByText(/Assistant/)
     expect(document.querySelector('img')).not.toBeNull()
   })
 
   it('titles a version a person marked by the name they gave it', async () => {
+    const preview = capturePreview()
     const underlyingFetch = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -1062,7 +1169,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
 
     render(
       <DaemonApiContext.Provider value={daemonFetch}>
-        <VersionTimeline workspaceId="sess_1" path="canvas-a" />
+        <VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />
       </DaemonApiContext.Provider>,
     )
 
@@ -1082,6 +1189,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
   })
 
   it('does not reject or crash when the versions fetch throws a network error', async () => {
+    const preview = capturePreview()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -1092,7 +1200,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
       expect(mockLog.error).toHaveBeenCalledWith('versions request threw', expect.any(TypeError))
@@ -1105,6 +1213,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
   })
 
   it('logs and leaves the list empty when the versions response is not ok', async () => {
+    const preview = capturePreview()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
@@ -1115,7 +1224,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     vi.stubGlobal('fetch', fetchMock)
     mockLog.error.mockClear()
 
-    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" />)
+    render(<VersionTimeline workspaceId="sess_1" path="canvas-a" onPreview={preview.onPreview} />)
 
     await waitFor(() => {
       expect(mockLog.error).toHaveBeenCalledWith(
@@ -1127,6 +1236,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
   })
 
   it('clears the previous canvas versions immediately when workspaceId/path changes', async () => {
+    const preview = capturePreview()
     // canvas-new's /versions request hangs for the rest of the test, so any
     // row rendered after the switch can only be the stale canvas-old data —
     // unless the reset-on-change effect cleared it.
@@ -1147,7 +1257,9 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     })
     vi.stubGlobal('fetch', fetchMock)
 
-    const { rerender } = render(<VersionTimeline workspaceId="sess_1" path="canvas-old" />)
+    const { rerender } = render(
+      <VersionTimeline workspaceId="sess_1" path="canvas-old" onPreview={preview.onPreview} />,
+    )
 
     // Load canvas-old's versions first so there is stale data to leak.
     await waitFor(() => {
@@ -1157,7 +1269,9 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
     // Switching to canvas-new (same component instance, no remount key) must
     // clear that stale data immediately, even though canvas-new's own
     // /versions request never resolves here.
-    rerender(<VersionTimeline workspaceId="sess_1" path="canvas-new" />)
+    rerender(
+      <VersionTimeline workspaceId="sess_1" path="canvas-new" onPreview={preview.onPreview} />,
+    )
     await waitFor(() => {
       expect(screen.queryByText('🤖 Assistant')).toBeNull()
     })

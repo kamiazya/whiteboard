@@ -1,8 +1,10 @@
 import { ChevronDown, ChevronUp } from 'lucide-react'
 import { type ReactNode, type Ref, useState } from 'react'
-import VersionTimeline, { type VersionTimelineCapabilities } from '@/components/VersionTimeline'
+import VersionTimeline, {
+  type VersionPreviewSession,
+  type VersionTimelineCapabilities,
+} from '@/components/VersionTimeline'
 import { cn } from '@/lib/utils'
-import type { PastDocument } from '@/lib/versions-backend'
 
 interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>
@@ -11,7 +13,7 @@ interface VersionPanelProps {
   capabilities?: VersionTimelineCapabilities
   onRestored?: () => void
   refreshSignal?: number
-  onPreview?: (past: PastDocument | null) => void
+  onPreview?: (session: VersionPreviewSession | null) => void
   headerActions?: ReactNode
 }
 

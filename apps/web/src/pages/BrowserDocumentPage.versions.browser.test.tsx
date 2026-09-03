@@ -178,7 +178,21 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // Read-only: the editor is not on screen while a past state is.
     expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
 
-    await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
+    // The controls sit on the DOCUMENT's chrome, not inside the history.
+    // What changed is the document, and on a narrow screen the panel is a
+    // sheet at the far edge from it — so the knowledge and the way out both
+    // belong where the change is. Icon-only, per the project's whole button
+    // policy; the accessible name is the only text.
+    const chrome = screen.getByRole('banner')
+    const restore = within(chrome).getByRole('button', { name: 'Restore this version' })
+    const stop = within(chrome).getByRole('button', { name: 'Stop viewing' })
+    expect(restore.textContent).toBe('')
+    expect(stop.textContent).toBe('')
+    // …and nowhere else: a second Restore inside the panel would be two
+    // controls for one act.
+    expect(within(reopened).queryByRole('button', { name: /restore/i })).toBeNull()
+
+    await userEvent.click(restore)
 
     await waitFor(async () => expect(await storedText(documentId)).toBe('first'), {
       timeout: 5000,

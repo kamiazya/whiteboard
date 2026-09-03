@@ -17,6 +17,25 @@ import { formatRelative } from './workspace-files/format-relative.js'
 const log = getAppLogger('VersionTimeline')
 
 /**
+ * A past state on screen, and the two things a person can do about it.
+ *
+ * Published by the panel and rendered by whoever owns the document's
+ * chrome. Carries `isRestoring` and `error` because the chrome shows them:
+ * the restore is in flight on the document, not in the history.
+ */
+export interface VersionPreviewSession {
+  readonly past: PastDocument
+  /** What the row calls it — a name if someone gave one, otherwise when. */
+  readonly title: string
+  readonly isRestoring: boolean
+  readonly error: string | null
+  /** Put the live document back. Refused while a restore is in flight. */
+  readonly stop: () => void
+  /** Apply this state to the document. */
+  readonly restore: () => void
+}
+
+/**
  * What the keeper behind this history can do. Both default to true — the
  * daemon's shape — so every existing mount is unchanged; the browser keeper
  * passes both false: it has one lane and saves only when asked.
@@ -33,12 +52,16 @@ interface Props {
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
   /**
-   * Hands the page a past state to DRAW, or null to stop. The panel owns
-   * every version act — loading, restoring, refreshing — and the page owns
-   * only the surface, so there is still exactly one place that knows how a
-   * version behaves.
+   * Publishes the whole LOOKING-AT session, or null when there is none.
+   *
+   * Still only a publication: the panel owns every version act — loading,
+   * restoring, refreshing — and hands out the two callbacks rather than the
+   * ability to do either itself, so there is exactly one place that knows
+   * how a version behaves. What moved out is where the session is DRAWN,
+   * because the thing that changed is the document, and the controls belong
+   * on it rather than in a panel that a narrow screen puts at the far edge.
    */
-  onPreview?: (past: PastDocument | null) => void
+  onPreview?: (session: VersionPreviewSession | null) => void
   // Bumped by the caller (e.g. after a manual save, or a WS
   // version_created broadcast) to force a refetch without waiting for the
   // 15s poll. Only a value CHANGE triggers a refetch, matching
@@ -149,6 +172,11 @@ export default function VersionTimeline({
   const [stale, setStale] = useState(false)
   /** The version currently being LOOKED at, before deciding to apply it. */
   const [previewing, setPreviewing] = useState<VersionEntry | null>(null)
+  // The loaded state itself, kept rather than handed straight out: the
+  // session is re-published whenever `isRestoring` or the error moves, and
+  // re-loading the document to do that would refetch on every keystroke of
+  // state.
+  const [previewPast, setPreviewPast] = useState<PastDocument | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
   // Mirrors `previewing`, refreshed on every render so an async handler's
@@ -200,6 +228,7 @@ export default function VersionTimeline({
   useEffect(() => {
     setVersions([])
     setPreviewing(null)
+    setPreviewPast(null)
     setRestoreError(null)
     setIsRestoring(false)
     onPreview?.(null)
@@ -263,7 +292,7 @@ export default function VersionTimeline({
           setRestoreError('That version could not be read.')
           return
         }
-        onPreview?.(past)
+        setPreviewPast(past)
       } catch (err) {
         if (previewingRef.current?.id !== v.id) return
         log.error('version document request threw', err)
@@ -280,9 +309,9 @@ export default function VersionTimeline({
     // and would unlock a second submission of the same restore.
     if (isRestoring) return
     setPreviewing(null)
+    setPreviewPast(null)
     setRestoreError(null)
-    onPreview?.(null)
-  }, [isRestoring, onPreview])
+  }, [isRestoring])
 
   const restorePreviewed = useCallback(async () => {
     // Guard against a double activation firing a second restore before the
@@ -311,10 +340,33 @@ export default function VersionTimeline({
     // shows when the response lands.
     if (previewingRef.current?.id !== v.id) return
     setPreviewing(null)
-    onPreview?.(null)
+    setPreviewPast(null)
     onRestored?.()
     await refresh()
-  }, [isRestoring, workspaceId, path, onRestored, onPreview, refresh, versionsBackend])
+  }, [isRestoring, workspaceId, path, onRestored, refresh, versionsBackend])
+
+  // One place the session is published from, rather than a call beside every
+  // state change: `isRestoring` and the error move without any of the open /
+  // stop / restore paths running, and a chrome showing a stale "restoring…"
+  // is exactly the state a person is watching.
+  const onPreviewRef = useRef(onPreview)
+  onPreviewRef.current = onPreview
+  useEffect(() => {
+    if (previewing === null || previewPast === null) {
+      onPreviewRef.current?.(null)
+      return
+    }
+    onPreviewRef.current?.({
+      past: previewPast,
+      title: versionTitle(previewing),
+      isRestoring,
+      error: restoreError,
+      stop: closePreview,
+      restore: () => {
+        void restorePreviewed()
+      },
+    })
+  }, [previewing, previewPast, isRestoring, restoreError, closePreview, restorePreviewed])
 
   const head = branchesState.head
 
@@ -344,42 +396,10 @@ export default function VersionTimeline({
         {headerActions}
       </div>
 
-      {previewing && (
-        <div
-          data-testid="version-preview-bar"
-          className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-2 py-1.5"
-        >
-          <span className="min-w-0 flex-1 text-[11px] leading-tight">
-            <b className="block truncate font-medium">Looking at {versionTitle(previewing)}</b>
-            <span className="text-muted-foreground">
-              {versionTime(previewing.createdAt)} · read-only
-            </span>
-          </span>
-          <button
-            type="button"
-            disabled={isRestoring}
-            onClick={closePreview}
-            className="shrink-0 rounded-md border px-2 py-1 text-[11px] hover:bg-accent disabled:opacity-50"
-          >
-            Stop
-          </button>
-          <button
-            type="button"
-            // Native `disabled` here, unlike the tooltip-wrapped controls
-            // elsewhere: this button carries no tooltip to keep alive, and
-            // an in-flight restore is exactly the state a pointer should
-            // bounce off rather than queue behind.
-            disabled={isRestoring}
-            onClick={() => {
-              void restorePreviewed()
-            }}
-            className="shrink-0 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90"
-          >
-            {isRestoring ? 'Restoring…' : 'Restore'}
-          </button>
-        </div>
-      )}
-      {restoreError && (
+      {/* Only the errors with no session to carry them — a version that
+          could not be read. A failed RESTORE is shown on the document's
+          chrome, beside the state it failed to change. */}
+      {restoreError && previewing === null && (
         <div role="alert" className="px-1 text-[11px] text-destructive">
           {restoreError}
         </div>
