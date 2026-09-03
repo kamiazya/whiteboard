@@ -3,7 +3,7 @@ import { Hono } from 'hono'
 import { getLogger } from '../log.js'
 import { installAutoCompact } from '../store/auto-compact.js'
 import { FileVersionStore, type VersionStore } from '../store/version-store.js'
-import { createAutoVersionTrigger } from './document/auto-version.js'
+import { type AutoVersionTrigger, createAutoVersionTrigger } from './document/auto-version.js'
 import { createDocumentSvgExportRouter } from './document/export-svg.js'
 import { createLiveDocRouter } from './document/live-doc.js'
 import { createMaintenanceRouter } from './document/maintenance.js'
@@ -15,6 +15,7 @@ import { createVersionsRouter } from './document/versions.js'
 import { createWorkspaceDocumentRouter } from './document/workspace-document.js'
 import { createWorkspacesRouter } from './document/workspaces.js'
 
+export type { AutoVersionTrigger }
 export { createAutoVersionTrigger }
 
 export interface DocumentRouterOptions {
@@ -33,6 +34,18 @@ export interface DocumentRouterOptions {
   // this from app.ts; see `getDefaultServerDeps` for what a caller that
   // omits it gets, which is the same wiring rather than a stand-in.
   serverDeps?: ServerDeps
+  /**
+   * Hands the caller the checkpoint trigger this router created, so a
+   * composition root can flush it when the process is going away.
+   *
+   * The trigger is a TRAILING debounce, which makes an unflushed shutdown
+   * lose exactly the checkpoint it exists to take: the one at the pause where
+   * editing stopped. Nothing else in this router outlives a request, so this
+   * is the one thing a lifetime has to reach into it for. Called
+   * synchronously during construction, so a root that arms its background
+   * work after `createApp` already holds it.
+   */
+  onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
 }
 
 // Entry point that composes the canvas API's sub-routers: workspace/canvas
@@ -57,6 +70,7 @@ export function createDocumentRouter(options: DocumentRouterOptions = {}) {
         })
     },
   })
+  options.onAutoVersionTrigger?.(triggerAutoVersion)
   // Register the same trigger with ws.ts so the WS path shares the auto-version logic.
   // Use dynamic import to avoid the ws.ts <- canvas.ts cycle evaluating in the wrong order.
   void import('./ws.js').then(({ setAutoVersionTrigger }) => {

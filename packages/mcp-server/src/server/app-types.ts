@@ -1,5 +1,6 @@
 import type { ServerDeps } from '@kamiazya/whiteboard-server-core'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
+import type { AutoVersionTrigger } from './routes/document.js'
 import type { DaemonIdentity } from './security/daemon-identity.js'
 import type { McpHttpAuthStrategy } from './security/mcp-auth.js'
 import type { OAuthClientRegistry } from './security/oauth-authz-registry.js'
@@ -62,6 +63,13 @@ interface LocalDaemonAppOptions {
    *  callers with no real listener — the tool still registers and answers
    *  isError, the same standalone behavior the stdio entrypoint gets. */
   daemonBaseUrl?: string
+  /** Hands the composition root the checkpoint trigger the document router
+   *  creates, so its shutdown can flush what an edit left pending. The
+   *  checkpoint lands at a PAUSE in editing, so a shutdown that does not
+   *  flush loses exactly the one the debounce exists to take. Called
+   *  synchronously during createApp, so a root that arms its background work
+   *  afterwards already holds it. */
+  onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
 }
 
 export interface ServerModeAppOptions {
@@ -83,6 +91,13 @@ export interface ServerModeAppOptions {
   touch: () => void
   getStatus: () => RuntimeStatusResponse
   shutdown: () => Promise<void>
+  /** Hands the composition root the checkpoint trigger the document router
+   *  creates, so its shutdown can flush what an edit left pending. The
+   *  checkpoint lands at a PAUSE in editing, so a shutdown that does not
+   *  flush loses exactly the one the debounce exists to take. Called
+   *  synchronously during createApp, so a root that arms its background work
+   *  afterwards already holds it. */
+  onAutoVersionTrigger?: (trigger: AutoVersionTrigger) => void
 }
 
 export type AppOptions = LocalDaemonAppOptions | ServerModeAppOptions

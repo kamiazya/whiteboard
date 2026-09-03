@@ -62,6 +62,21 @@ export const LOOP_COSTS = {
       'imports is the only way lower.',
     measuredOn: '2026-08-30',
   },
+  'auto-checkpoint': {
+    runs: 'in-process',
+    // No yield to add: a checkpoint is one document export plus one row
+    // write, and an export is a single call that cannot be subdivided. So
+    // this is the whole pass, not a slice of it.
+    stallCeilingMs: 500,
+    fixture:
+      'asserted by auto-version-loop-availability.test.ts, which grows a canvas until a ' +
+      'checkpoint is long enough to measure and reads 60-95ms there, with ZERO sampler ' +
+      'ticks at every size — the pass never yields. Roughly linear in the document: 13.2ms ' +
+      'at 250 nodes, 38.3ms at 1000, 94.7ms at 4000. The trigger takes one after five ' +
+      'minutes of quiet, which is the cheapest moment available; the sum of this column is ' +
+      'what a shutdown flush pays for every document an edit left pending.',
+    measuredOn: '2026-09-03',
+  },
   'backup-scheduler': {
     runs: 'subprocess',
     because:

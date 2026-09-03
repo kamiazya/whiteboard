@@ -19,6 +19,7 @@ import { DIST_WEB_APP_DIR, getDataDir } from './config.js'
 import { ensureWorkspaceId } from './current-workspace.js'
 import { buildDaemonBaseUrl, normalizeBindHost } from './daemon-auth-binding.js'
 import { getLogger } from './log.js'
+import type { AutoVersionTrigger } from './routes/document.js'
 import {
   getConnectionStats,
   handleWsUpgrade,
@@ -299,8 +300,14 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // while nobody is connected.
   installWsUpdateFanout(serverDeps)
 
+  // Filled synchronously by createApp below, and read only by the
+  // auto-checkpoint declaration's stop() — which runs long after.
+  let autoVersionTrigger: AutoVersionTrigger | undefined
   const app = createApp({
     authMode: 'local-daemon',
+    onAutoVersionTrigger: (trigger) => {
+      autoVersionTrigger = trigger
+    },
     token: options.token,
     mcpAuth: options.mcpAuth,
     instanceId,
@@ -323,6 +330,30 @@ export async function startHttpServer(options: StartHttpServerOptions): Promise<
   // where each one answers who runs it and what it costs the serving loop.
   // See background-work.ts for why that is a registry rather than four calls.
   const backgroundWork = startBackgroundWork([
+    {
+      name: 'auto-checkpoint',
+      trigger: 'a document update, taken once that document has been quiet for five minutes',
+      instances: {
+        runs: 'every-instance',
+        because:
+          'the debounce is about documents THIS process is holding edits for — another ' +
+          'instance has neither the pending timer nor the LoroDoc the checkpoint would be ' +
+          'taken from, so a leader could not take it',
+      },
+      loop: LOOP_COSTS['auto-checkpoint'],
+      // Nothing to arm: the trigger schedules itself from the update that
+      // signalled it, which is why it is declared here for its STOP rather
+      // than its start. A trailing debounce loses exactly the checkpoint it
+      // exists to take if the process goes away without flushing — the one
+      // at the pause where editing stopped — so shutting down TAKES the
+      // pending checkpoints instead of dropping them.
+      worker: {
+        start: () => {},
+        stop: async () => {
+          await autoVersionTrigger?.flush()
+        },
+      },
+    },
     {
       name: 'idle-shutdown',
       trigger: `no request for ${options.idleTimeoutMs ?? 15 * 60_000}ms`,
