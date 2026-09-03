@@ -371,7 +371,7 @@ export interface ReduceGestureOptions {
   readonly createId?: () => string
 }
 
-const defaultCreateId = () =>
+export const defaultCreateId = () =>
   typeof crypto !== 'undefined' && 'randomUUID' in crypto
     ? crypto.randomUUID()
     : String(Math.random())

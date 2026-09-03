@@ -31,11 +31,15 @@ async function caretInto(container: HTMLElement, right: number): Promise<void> {
 }
 
 describe('the editor catalog (real browser)', () => {
-  it('has no formatting verbs left in the top strip', () => {
+  it('keeps the catalog beside the verb bar, because it holds what the bar cannot', () => {
+    // The strip carried formatting verbs, then deliberately carried none,
+    // and carries them again — the two reasons for removing them expired
+    // (see MarkdownVerbBar). What must stay true through all of that is that
+    // ⋯ is not the same list twice: the bar has ONE heading slot that
+    // cycles, and the catalog is where a level is chosen outright.
     const { queryByRole } = render(<MarkdownEditor value="make this bold" onChange={() => {}} />)
-    expect(queryByRole('button', { name: 'Bold' })).toBeNull()
-    expect(queryByRole('button', { name: 'Italic' })).toBeNull()
-    // What the strip keeps is what it is FOR: how this document is shown.
+    expect(queryByRole('button', { name: 'Editing actions' })).not.toBeNull()
+    // What the strip is FOR is still there: how this document is shown.
     expect(queryByRole('button', { name: 'Write' })).not.toBeNull()
   })
 
@@ -89,7 +93,7 @@ describe('the editor catalog (real browser)', () => {
     await caretInto(container, 8)
 
     await userEvent.click(getByRole('button', { name: 'Editing actions' }))
-    await userEvent.click(getByRole('menuitem', { name: 'Toggle task' }))
+    await userEvent.click(getByRole('menuitem', { name: 'Task' }))
 
     expect(onChange.mock.calls.at(-1)?.[0]).toBe('- [x] ship it')
   })

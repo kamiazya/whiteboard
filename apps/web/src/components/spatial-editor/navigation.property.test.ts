@@ -73,19 +73,37 @@ const modeTally = emptyTally(MODE_COVERAGE)
  */
 let anchorReusedCount = 0
 
+/**
+ * How often the generator reached a double press the machine ACCEPTED.
+ * Counted for the same reason as the line above, and because this one was
+ * measured at 4-8 per run against siblings in the thousands — the ledger
+ * entry below passed on a margin of four, and reported `zoom-at` uncovered
+ * on about one run in sixteen. A ledger that fails at random teaches the
+ * reader to re-run it, which is the opposite of what it is for.
+ */
+let doublePressZoomCount = 0
+
 afterAll(() => {
   assertLedger('NavigationEffect kind', EFFECT_COVERAGE, effectTally)
   assertLedger('NavigationMode kind', MODE_COVERAGE, modeTally)
   expect(
     anchorReusedCount,
     'the generator never reached a gather whose anchor id was reused — the invariant about a mode holding a pointer that is not down has nothing to check',
-    // A floor, not a target: measured 100, 107 and 107 across three runs, and
-    // this sits at roughly a third of the lowest. The number matters because
+    // A floor, not a target: measured 100, 107 and 107 when it was written,
+    // and 68-73 once `double-press` took a share of the step draw — still
+    // twice the floor, which is why the number below did not move with it.
+    // The number matters because
     // it MOVED — a uniform draw of the step kinds reached this arrangement 4
     // times in 12000 sequences and the mutation check came back green, which
     // is exactly what a guard that never reaches its subject looks like from
     // the outside.
   ).toBeGreaterThan(30)
+  expect(
+    doublePressZoomCount,
+    'the generator never reached an accepted double press — the zoom-at ledger entry below is passing on luck',
+    // A floor, not a target, sized the same way: measured 556, 567 and 556
+    // across three runs with the `double-press` step, against 4-8 without it.
+  ).toBeGreaterThan(180)
 })
 
 const rawPointArb = fc.record({
@@ -200,6 +218,16 @@ const stepArb = fc.record({
     // completes it. Steering toward an interesting state is what
     // `fc.commands`' own `check` does; the ORACLE stays independent.
     { weight: 3, arbitrary: fc.constant('reuse-mode-anchor' as const) },
+    // A compound step, like the one above: press, release, press again, with
+    // hand mode on and the plain button both times. Every part is something
+    // a one-handed touch user does; what the generator supplies is the
+    // ARRANGEMENT, which is what a uniform draw almost never reaches —
+    // `handMode && !spaceDown && button === 0` on two consecutive presses is
+    // 1 in 64 before the interval and the distance are asked about, and the
+    // first press's pointer has to be released in between or the second one
+    // promotes to a pinch instead. Measured: 4-8 accepted double presses per
+    // run without this step, 556-567 with it.
+    { weight: 1, arbitrary: fc.constant('double-press' as const) },
     // A press that reached an overlay control rather than this machine. It
     // joins the down set without a touch, and its RELEASE does arrive here —
     // so it is generated for the lifetime invariants, which would otherwise
@@ -207,6 +235,17 @@ const stepArb = fc.record({
     { weight: 2, arbitrary: fc.constant('external-press' as const) },
   ),
   placement: pressPlacementArb,
+  /**
+   * Where the second press of a `double-press` lands relative to the first.
+   * Sized just outside the slop on each axis, so the step generates the
+   * ACCEPT and the REJECT case in roughly equal measure — a compound step
+   * that always satisfied the rule would leave "never claims a double press
+   * across more than the slop" with nothing to reject.
+   */
+  rePressOffset: fc.record({
+    x: fc.integer({ min: -50, max: 50 }),
+    y: fc.integer({ min: -50, max: 50 }),
+  }),
   button: fc.constantFrom(0, 1),
   isPrimary: fc.boolean(),
   context: contextArb,
@@ -263,7 +302,10 @@ function drive(sequence: Sequence, check: (observation: Observation) => void) {
     const result = reduceNavigation(before, event)
     expect(snapshot(before), 'the reducer mutated the state it was handed').toBe(beforeSnapshot)
     modeTally[result.state.mode.kind] += 1
-    for (const effect of result.effects) effectTally[effect.kind] += 1
+    for (const effect of result.effects) {
+      effectTally[effect.kind] += 1
+      if (effect.kind === 'zoom-at') doublePressZoomCount += 1
+    }
     if (
       result.state.mode.kind === 'gathering' &&
       result.state.mode.memberIds.has(result.state.mode.anchorId)
@@ -301,6 +343,39 @@ function drive(sequence: Sequence, check: (observation: Observation) => void) {
       lastPoint = point
       platformDown.delete(id)
       apply({ type: 'pointerup', pointerId: id, pointerType: 'touch' })
+      continue
+    }
+
+    if (step.kind === 'double-press') {
+      // Only from a quiet hand: a second pointer still down would make the
+      // re-press a pinch, which is a real arrangement the plain draw already
+      // produces and not the one this step exists to reach.
+      if (platformDown.size > 0) continue
+      const id = step.pointerId
+      const type = sequence.types[String(id)] ?? 'touch'
+      // Hand mode with the plain button and no Space is the whole precondition
+      // the reducer checks; everything else about the context stays generated.
+      const context = { ...step.context, handMode: true, spaceDown: false }
+      const second = { x: point.x + step.rePressOffset.x, y: point.y + step.rePressOffset.y }
+      for (const at of [point, second]) {
+        platformDown.add(id)
+        apply({
+          type: 'pointerdown',
+          pointerId: id,
+          pointerType: type,
+          isPrimary: true,
+          button: 0,
+          point: at,
+          timeStamp: clock,
+          context,
+        })
+        lastPoint = at
+        platformDown.delete(id)
+        apply({ type: 'pointerup', pointerId: id, pointerType: type })
+        // `dt` again, as the INTERVAL between the two presses — the same
+        // 0-600 draw the window at 400ms splits either side of.
+        clock += step.dt
+      }
       continue
     }
 

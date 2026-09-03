@@ -1,7 +1,6 @@
 import {
   type CanvasComment,
   type CanvasEdge,
-  canvasCommentSchema,
   canvasEdgeSchema,
   canvasExtensionSchema,
   type DocumentKind,
@@ -14,34 +13,13 @@ import {
   spatialNodeSchema,
   storedCoreFacetsSchema,
   type TrustFacets,
+  threadFromCanvasComment,
   trustFacetsSchema,
 } from '@kamiazya/whiteboard-model'
-import type { LoroMap, LoroText } from 'loro-crdt'
 import type { z } from 'zod'
-
-/**
- * Where one document's containers live.
- *
- * Every function below reaches for containers by name and never for the
- * document as a whole, so the only thing it needs is something that can hand
- * one over. `LoroDoc` satisfies this structurally — a document's containers
- * are its roots — and so does a workspace-tree node, whose containers hang off
- * its own meta map. That is the whole reason this type exists: the two storage
- * models differ in WHERE a container is found and in nothing else, so the
- * bridge should not have to be written twice.
- *
- * Call sites that pass a `LoroDoc` keep compiling unchanged.
- */
-export interface DocumentContainers {
-  getMap(key: string): LoroMap
-  getText(key: string): LoroText
-  /**
-   * Part of the seam because the bridge decides where a write ENDS, and that
-   * is not something to leave each caller to remember. A tree-node host
-   * delegates to the document its node belongs to.
-   */
-  commit(): void
-}
+import { readCanvasComments } from './annotations.js'
+import { migrateCanvasCommentsToThreads, writeThreadInto } from './comment-threads.js'
+import { COMMENTS_KEY, type DocumentContainers, THREADS_KEY } from './containers.js'
 
 const NODES_KEY = 'nodes'
 const EDGES_KEY = 'edges'
@@ -57,15 +35,6 @@ const EDGES_KEY = 'edges'
  */
 const CANVAS_KEY = 'canvas'
 const EXTENSION_FIELD = 'x-whiteboard'
-/**
- * The comment annotation layer (ADR-0024), keyed per comment like nodes and
- * edges — NOT stored inside the canvas envelope above, although the model
- * type carries comments on `x-whiteboard`. The envelope is whole-value LWW,
- * which is right for a preference and exactly wrong for comments: two peers
- * commenting concurrently must both survive a merge. `writeSpatialCanvas`
- * splits the field out on write and `readSpatialCanvas` reassembles it.
- */
-const COMMENTS_KEY = 'comments'
 const FACETS_KEY = 'facets'
 // Editor state that is NOT canvas content: stored beside the canvas in the
 // same doc (so it survives reload and syncs to peers) but in its own map,
@@ -203,14 +172,17 @@ export function writeSpatialCanvas(doc: DocumentContainers, canvas: SpatialCanva
     canvasMap.set(EXTENSION_FIELD, envelope)
   }
 
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  const existingCommentIds = new Set<string>(commentsMap.keys())
+  // Before the incoming set is applied, so a legacy entry the resync omits is
+  // migrated and THEN dropped by the sweep below rather than surviving it.
+  migrateCanvasCommentsToThreads(doc)
+  const threadsMap = doc.getMap(THREADS_KEY)
+  const existingCommentIds = new Set<string>(threadsMap.keys())
   for (const comment of comments ?? []) {
     existingCommentIds.delete(comment.id)
-    commentsMap.set(comment.id, commentToFields(comment))
+    writeCommentInto(doc, comment)
   }
   // A resync states the whole truth, comments included.
-  for (const id of existingCommentIds) commentsMap.delete(id)
+  for (const id of existingCommentIds) threadsMap.delete(id)
 
   const existingNodeIds = new Set<string>(nodesMap.keys())
   const existingEdgeIds = new Set<string>(edgesMap.keys())
@@ -287,14 +259,22 @@ function deleteEdgeInto(doc: DocumentContainers, edgeId: string): boolean {
 // projection (including commentToFields' loud non-finite-anchor refusal)
 // cannot drift between the single-commit and withSpatialBatch paths.
 function writeCommentInto(doc: DocumentContainers, comment: CanvasComment): void {
-  doc.getMap(COMMENTS_KEY).set(comment.id, commentToFields(comment))
+  // `commentToFields` is still what refuses a non-finite anchor, loudly and
+  // before anything is stored — a thread whose anchor fails the schema would
+  // be dropped by every reader instead.
+  commentToFields(comment)
+  migrateCanvasCommentsToThreads(doc)
+  writeThreadInto(doc, threadFromCanvasComment(comment))
 }
 
 /** Returns false (writing nothing) when the comment id is absent. */
 function deleteCommentInto(doc: DocumentContainers, commentId: string): boolean {
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  if (!commentsMap.keys().includes(commentId)) return false
-  commentsMap.delete(commentId)
+  // The legacy entry goes too, or the fallback read below would resurrect a
+  // comment this call closed.
+  migrateCanvasCommentsToThreads(doc)
+  const threadsMap = doc.getMap(THREADS_KEY)
+  if (!threadsMap.keys().includes(commentId)) return false
+  threadsMap.delete(commentId)
   return true
 }
 
@@ -487,12 +467,11 @@ export function readSpatialCanvas(doc: DocumentContainers): SpatialCanvas {
     ? parsedEnvelope.data
     : {}
 
-  const commentsMap = doc.getMap(COMMENTS_KEY)
-  const comments: CanvasComment[] = []
-  for (const commentId of commentsMap.keys()) {
-    const parsed = canvasCommentSchema.safeParse(commentsMap.get(commentId))
-    if (parsed.success) comments.push(parsed.data)
-  }
+  // The annotation layer is document-level and format-agnostic, so reading it
+  // is not this reader's job — `readAnnotations` answers it for a markdown
+  // document too. What stays here is only the lossy projection into the flat
+  // shape the canvas renderer still takes.
+  const comments = readCanvasComments(doc)
 
   const hasEnvelope = Object.values(envelope).some((value) => value !== undefined)
   if (!hasEnvelope && comments.length === 0) return { nodes, edges }
@@ -826,6 +805,7 @@ export const CONTENT_CONTAINER_KEYS: ReadonlyArray<{ key: string; kind: 'map' | 
   { key: EDGES_KEY, kind: 'map' },
   { key: CANVAS_KEY, kind: 'map' },
   { key: COMMENTS_KEY, kind: 'map' },
+  { key: THREADS_KEY, kind: 'map' },
   { key: FACETS_KEY, kind: 'map' },
   { key: NODE_LOCKS_KEY, kind: 'map' },
   { key: EDGE_LOCKS_KEY, kind: 'map' },

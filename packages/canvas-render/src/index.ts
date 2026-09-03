@@ -1,4 +1,5 @@
 export { type ArrowPolygon, edgeArrowPolygons } from './edge-arrows.js'
+export { placeCommentBubble } from './layout/comment-placement.js'
 export { flattenDrawnEdgePath } from './layout/edges/edge-flatten.js'
 export { edgeLabelAnchor } from './layout/edges/edge-label-anchor.js'
 export { flattenRoundedEdgePath } from './layout/edges/edge-rounding.js'
@@ -48,6 +49,10 @@ export type {
   SpatialLayoutOptions,
 } from './layout/spatial-canvas.js'
 export {
+  COMMENT_BUBBLE_OFFSET_PX,
+  COMMENT_BUBBLE_PADDING_PX,
+  COMMENT_BUBBLE_RADIUS_PX,
+  commentAnchor,
   layoutSpatialCanvas,
   layoutSpatialCanvasWithAnchors,
   layoutSpatialEdges,

@@ -50,6 +50,7 @@ import type {
   TextRunNode,
 } from '../scene-graph.js'
 import { SPATIAL_THEME_GEOMETRY, type SpatialGeometry } from '../theme/spatial-geometry.js'
+import { commentLeaderEnd, placeCommentBubble } from './comment-placement.js'
 import { computeEdgeJumps } from './edges/edge-jumps.js'
 import { edgeLabelAnchor } from './edges/edge-label-anchor.js'
 import {
@@ -269,6 +270,41 @@ export interface SpatialLayoutOptions {
    * measurer whose per-call cost is far above the fake's.
    */
   readonly contentCache?: SpatialContentCache
+  /**
+   * Draw resolved comments too, muted per the theme's `resolvedOverlay`
+   * (ADR-0025 decisions 2 and 5). Absent/false is the historic behavior —
+   * resolved comments stay in the document, never composed — so every
+   * existing caller's output is byte-identical; the editor's "Show
+   * resolved" toggle is per-user LOCAL view state and must never be written
+   * to the shared document, only passed here at render time.
+   */
+  readonly showResolved?: boolean
+  /**
+   * Extra boxes a comment bubble must not cover, beyond this canvas's own
+   * nodes and earlier bubbles. For a caller laying out ONE comment apart
+   * from its canvas (the editor's drag preview renders the dragged comment
+   * alone) and needing it placed exactly as the committed scene placed it.
+   */
+  readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * This document's annotation layer, handed over beside the canvas rather
+   * than read out of its envelope.
+   *
+   * ADR-0026 decision 1b makes the layer keeper-side: it is stored one level
+   * above content, so it no longer rides inside `x-whiteboard`. A markdown
+   * document has no envelope at all, which is the argument that decides it —
+   * there is nowhere in a canvas key to put a markdown document's comments.
+   *
+   * When present it REPLACES the envelope's copy rather than adding to it,
+   * and an empty array is an answer ("no conversations") rather than a
+   * missing one. Both matter while call sites migrate one at a time: the
+   * union would draw two pins on one comment, and a fallback would hand a
+   * caller that read the layer and found it empty the stale copy back.
+   *
+   * Absent, the envelope is read as before. That is what keeps every
+   * unmigrated caller byte-identical, and it goes once none is left.
+   */
+  readonly comments?: readonly CanvasComment[]
 }
 
 /**
@@ -1310,19 +1346,26 @@ function layoutSpatialCanvasInternal(
 
 /** Pin diameter (px). Fixed like badge geometry — a mark, not content. */
 export const COMMENT_PIN_SIZE_PX = 20
-/** Gap (px) from the anchor point to the bubble's top-left corner. */
-export const COMMENT_BUBBLE_OFFSET_PX = 14
+export { COMMENT_BUBBLE_OFFSET_PX } from './comment-placement.js'
+
 const COMMENT_TEXT_MAX_WIDTH_PX = 200
-const COMMENT_BUBBLE_PADDING_PX = 8
-const COMMENT_BUBBLE_RADIUS_PX = 8
+// Exported with the offset so the editor's compose bubble can wear the same
+// box the renderer draws (padding, corner) — the draft and the settled
+// comment are one object, not two that happen to look alike.
+export const COMMENT_BUBBLE_PADDING_PX = 8
+export const COMMENT_BUBBLE_RADIUS_PX = 8
 
 /**
  * Where a comment points: the target node's top-right corner while the node
  * exists (the pin FOLLOWS the node), the stored anchor otherwise. The
  * fallback is what makes a dangling `targetNodeId` harmless, per the model's
  * contract that a comment may outlive its subject.
+ *
+ * Exported because the editor places its compose bubble and its edit bubble
+ * at the same anchor this layer draws from — one producer for the geometry,
+ * so the draft cannot open one place and settle another.
  */
-function commentAnchor(
+export function commentAnchor(
   comment: CanvasComment,
   canvas: SpatialCanvas,
 ): { readonly x: number; readonly y: number } {
@@ -1338,63 +1381,48 @@ function commentAnchor(
  * the anchor) plus one bubble (rounded rect holding the text, floating
  * offset from the anchor) per unresolved comment, composed from existing
  * scene kinds so no consumer of the closed union changes. Resolved comments
- * stay in the document and are deliberately not drawn. Appearance comes
- * from the resolver's optional `resolveComment` — assigned, never invented —
- * so a resolver that predates the layer still lays comments out, bare.
+ * stay in the document and are drawn only when `options.showResolved` is set
+ * (ADR-0025 decision 2), muted via the resolver's `resolvedOverlay`.
+ * Appearance comes from the resolver's optional `resolveComment` — assigned,
+ * never invented — so a resolver that predates the layer still lays
+ * comments out, bare.
  *
- * ponytail: placement is a fixed down-right offset with no collision
- * avoidance; overlapping bubbles on clustered comments are the ceiling, and
- * a greedy占-region placer over sceneBounds is the upgrade path.
+ * The pin and bubble carry ids (`${comment.id}/pin`, `${comment.id}/bubble`,
+ * mirroring the leader's `${comment.id}/leader`) so the editor can hit-test
+ * them, and `commentChrome: true` so `sceneDigest` can tell them apart from
+ * an addressable document node despite carrying an id of their own (see
+ * `ShapeSceneNode.commentChrome`).
+ *
+ * Bubbles are placed by `placeCommentBubble`: down-right of the anchor
+ * unless that would cover a node or an earlier comment's bubble, then the
+ * least-covered quadrant. Group frames are not obstacles — a comment inside
+ * a group is about its members, and pushing the bubble out of the frame
+ * would carry it away from them. Document order decides who yields:
+ * a later comment fans out around an earlier one.
  */
 function composeComments(
   canvas: SpatialCanvas,
   options: ResolvedLayoutOptions,
 ): readonly SceneNode[] {
-  const comments = canvas['x-whiteboard']?.comments
+  const comments = options.comments ?? canvas['x-whiteboard']?.comments
   if (comments === undefined || comments.length === 0) return []
 
-  const appearance = options.appearance.resolveComment?.()
+  const chrome = options.appearance.resolveComment?.()
+  const obstacles: BoundingBox[] = [
+    ...canvas.nodes
+      .filter((node) => node.type !== 'group')
+      .map((node) => ({ x: node.x, y: node.y, w: node.width, h: node.height })),
+    ...(options.commentObstacles ?? []),
+  ]
   const out: SceneNode[] = []
   for (const comment of comments) {
-    if (comment.resolved === true) continue
+    if (comment.resolved === true && options.showResolved !== true) continue
+    // Assigned, never invented: a resolved comment's muting comes only from
+    // the theme's `resolvedOverlay`, never from an opacity literal here. A
+    // bare resolver (no `resolveComment`) still composes full geometry with
+    // no appearance at all, resolved or not.
+    const appearance = comment.resolved === true ? chrome?.resolvedOverlay : chrome
     const anchor = commentAnchor(comment, canvas)
-
-    const bubbleX = anchor.x + COMMENT_BUBBLE_OFFSET_PX
-    const bubbleY = anchor.y + COMMENT_BUBBLE_OFFSET_PX
-
-    // The leader FIRST, so pin and bubble paint over its ends: a dashed line
-    // from the anchor to the bubble's near corner keeps the pair reading as
-    // one comment when a dense canvas separates them. Geometry is composed
-    // for every resolver; only its paint is assigned. The endpoint sits ON
-    // the rounded corner's arc, not the bbox corner — the corner point
-    // itself is outside the rounded fill, which leaves a visible gap
-    // between the dash end and the bubble border.
-    const leaderInsetPx = COMMENT_BUBBLE_RADIUS_PX * (1 - Math.SQRT1_2)
-    out.push({
-      kind: 'edge',
-      id: `${comment.id}/leader`,
-      path: [
-        { x: anchor.x, y: anchor.y },
-        { x: bubbleX + leaderInsetPx, y: bubbleY + leaderInsetPx },
-      ],
-      fromSide: 'right',
-      toSide: 'left',
-      fromEnd: 'none',
-      toEnd: 'none',
-      ...(appearance !== undefined ? { appearance: appearance.leader } : {}),
-    })
-
-    out.push({
-      kind: 'shape',
-      bbox: {
-        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
-        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
-        w: COMMENT_PIN_SIZE_PX,
-        h: COMMENT_PIN_SIZE_PX,
-      },
-      radius: COMMENT_PIN_SIZE_PX / 2,
-      ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
-    })
 
     // The text goes through the same mdast pipeline as a text node's body,
     // so wrapping (CJK included) and theming have one producer. A parse
@@ -1411,23 +1439,61 @@ function composeComments(
     }
     const contentRight = Math.max(0, ...laid.nodes.map((node) => sceneRight(node)))
     const contentBottom = Math.max(0, ...laid.nodes.map((node) => sceneBottom(node)))
-
-    out.push({
-      kind: 'shape',
-      bbox: {
-        x: bubbleX,
-        y: bubbleY,
+    const bubble = placeCommentBubble(
+      anchor,
+      {
         w: contentRight + 2 * COMMENT_BUBBLE_PADDING_PX,
         h: contentBottom + 2 * COMMENT_BUBBLE_PADDING_PX,
       },
+      obstacles,
+    )
+    obstacles.push(bubble)
+
+    // The leader FIRST, so pin and bubble paint over its ends: a dashed line
+    // from the anchor to the bubble's near corner keeps the pair reading as
+    // one comment when a dense canvas separates them. Geometry is composed
+    // for every resolver; only its paint is assigned.
+    out.push({
+      kind: 'edge',
+      id: `${comment.id}/leader`,
+      path: [
+        { x: anchor.x, y: anchor.y },
+        commentLeaderEnd(anchor, bubble, COMMENT_BUBBLE_RADIUS_PX),
+      ],
+      fromSide: 'right',
+      toSide: 'left',
+      fromEnd: 'none',
+      toEnd: 'none',
+      ...(appearance !== undefined ? { appearance: appearance.leader } : {}),
+    })
+
+    out.push({
+      kind: 'shape',
+      id: `${comment.id}/pin`,
+      commentChrome: true,
+      bbox: {
+        x: anchor.x - COMMENT_PIN_SIZE_PX / 2,
+        y: anchor.y - COMMENT_PIN_SIZE_PX / 2,
+        w: COMMENT_PIN_SIZE_PX,
+        h: COMMENT_PIN_SIZE_PX,
+      },
+      radius: COMMENT_PIN_SIZE_PX / 2,
+      ...(appearance !== undefined ? { appearance: appearance.pin } : {}),
+    })
+
+    out.push({
+      kind: 'shape',
+      id: `${comment.id}/bubble`,
+      commentChrome: true,
+      bbox: bubble,
       radius: COMMENT_BUBBLE_RADIUS_PX,
       ...(appearance !== undefined ? { appearance: appearance.bubble } : {}),
     })
     out.push(
       ...translateScene(
         laid,
-        bubbleX + COMMENT_BUBBLE_PADDING_PX,
-        bubbleY + COMMENT_BUBBLE_PADDING_PX,
+        bubble.x + COMMENT_BUBBLE_PADDING_PX,
+        bubble.y + COMMENT_BUBBLE_PADDING_PX,
       ).nodes,
     )
   }

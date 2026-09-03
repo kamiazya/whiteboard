@@ -420,10 +420,10 @@ describe('createDocumentSyncSession', () => {
     expect(comments).toEqual([{ ...comment, resolved: true }])
   })
 
-  it('debounce coalescing: set-comment-resolved then delete-comment for the same id dedupes to the delete; an unrelated comment survives', async () => {
+  it('debounce coalescing: move-comment then set-comment-text for the same id dedupes to one fine-grained write carrying both', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
-    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'going away' }
+    const comment: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'first pass' }
     const other: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'stays' }
     const initial: SpatialCanvas = {
       ...emptyCanvas(),
@@ -433,22 +433,31 @@ describe('createDocumentSyncSession', () => {
     const snapshotBytes = makeSnapshot(initial)
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
 
-    const resolveCmd: EditorCommand = { kind: 'set-comment-resolved', id: 'c-1', resolved: true }
-    const afterResolve = applyCommand(initial, resolveCmd)
-    session.onChange(afterResolve, resolveCmd)
+    const moveCmd: EditorCommand = { kind: 'move-comment', id: 'c-1', x: 120, y: -30 }
+    const afterMove = applyCommand(initial, moveCmd)
+    session.onChange(afterMove, moveCmd)
 
-    const deleteCmd: EditorCommand = { kind: 'delete-comment', id: 'c-1' }
-    const afterDelete = applyCommand(afterResolve, deleteCmd)
-    session.onChange(afterDelete, deleteCmd)
+    const textCmd: EditorCommand = { kind: 'set-comment-text', id: 'c-1', text: 'second pass' }
+    const afterText = applyCommand(afterMove, textCmd)
+    session.onChange(afterText, textCmd)
 
     await vi.advanceTimersByTimeAsync(300)
 
+    // Both map to `comment:c-1`, so one write; and it is the fine-grained
+    // path — the full-resync fallback's tell (the warning) must not fire.
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
     expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
     const doc = new LoroDoc()
     doc.import(snapshotBytes)
     doc.import(backend._ctrl.pushLocalUpdateCalls[0]!)
     const comments = readSpatialCanvas(doc)['x-whiteboard']?.comments ?? []
-    expect(comments.map((c) => c.id)).toEqual(['c-2'])
+    expect(comments.find((c) => c.id === 'c-1')).toEqual({
+      ...comment,
+      x: 120,
+      y: -30,
+      text: 'second pass',
+    })
+    expect(comments.find((c) => c.id === 'c-2')).toEqual(other)
   })
 
   it('a batch containing a comment command plus a node command commits fine-grained: a remote comment survives, one undo step', async () => {
@@ -491,15 +500,60 @@ describe('createDocumentSyncSession', () => {
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 
-  it('a batch containing set-comment-resolved and delete-comment commits fine-grained: a remote comment survives, one undo step', async () => {
+  it('a batch containing move-comment and set-comment-text commits fine-grained: a remote comment survives, one undo step', async () => {
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+    const toMove: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'move me' }
+    const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
+    const initial: SpatialCanvas = {
+      ...twoNodeCanvas(),
+      'x-whiteboard': { comments: [toMove, toEdit] },
+    }
+    const snapshotBytes = makeSnapshot(initial)
+    backend._ctrl.handlers!.onSnapshot(snapshotBytes)
+
+    const remoteComment: CanvasComment = { id: 'remote-c', x: -5, y: 3, text: 'remote note' }
+    const remoteDoc = new LoroDoc()
+    remoteDoc.import(snapshotBytes)
+    writeCanvasComment(remoteDoc, remoteComment)
+    backend._ctrl.handlers!.onRemoteUpdate(remoteDoc.export({ mode: 'update' }))
+
+    const batch: EditorCommand = {
+      kind: 'batch',
+      commands: [
+        { kind: 'move-comment', id: 'c-1', x: 120, y: -30 },
+        { kind: 'set-comment-text', id: 'c-2', text: 'edited' },
+        { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
+      ],
+    }
+    const next = batch.commands.reduce(applyCommand, initial)
+    session.onChange(next, batch)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(appLoggerSpies.warn).not.toHaveBeenCalled()
+    expect(backend._ctrl.pushLocalUpdateCalls).toHaveLength(1)
+    const merged = new LoroDoc()
+    merged.import(snapshotBytes)
+    merged.import(remoteDoc.export({ mode: 'update' }))
+    merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
+    const result = readSpatialCanvas(merged)
+    const comments = result['x-whiteboard']?.comments ?? []
+    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
+    expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ x: 120, y: -30 })
+    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ text: 'edited' })
+    expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
+  })
+
+  it('a batch containing set-comment-resolved and set-comment-text commits fine-grained: a remote comment survives, one undo step', async () => {
     const backend = makeFakeBackend()
     const session = createDocumentSyncSession(backend, makeDeps())
     session.connect()
     const toResolve: CanvasComment = { id: 'c-1', x: 0, y: 0, text: 'resolve me' }
-    const toDelete: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'delete me' }
+    const toEdit: CanvasComment = { id: 'c-2', x: 5, y: 5, text: 'edit me' }
     const initial: SpatialCanvas = {
       ...twoNodeCanvas(),
-      'x-whiteboard': { comments: [toResolve, toDelete] },
+      'x-whiteboard': { comments: [toResolve, toEdit] },
     }
     const snapshotBytes = makeSnapshot(initial)
     backend._ctrl.handlers!.onSnapshot(snapshotBytes)
@@ -516,13 +570,18 @@ describe('createDocumentSyncSession', () => {
       kind: 'batch',
       commands: [
         { kind: 'set-comment-resolved', id: 'c-1', resolved: true },
-        { kind: 'delete-comment', id: 'c-2' },
+        { kind: 'set-comment-text', id: 'c-2', text: 'edited' },
         { kind: 'move-node', id: 'n-a', x: 42, y: 42 },
       ],
     }
     const next: SpatialCanvas = {
       ...applyCommand(initial, { kind: 'move-node', id: 'n-a', x: 42, y: 42 }),
-      'x-whiteboard': { comments: [{ ...toResolve, resolved: true }] },
+      'x-whiteboard': {
+        comments: [
+          { ...toResolve, resolved: true },
+          { ...toEdit, text: 'edited' },
+        ],
+      },
     }
     session.onChange(next, batch)
     await vi.advanceTimersByTimeAsync(300)
@@ -535,8 +594,9 @@ describe('createDocumentSyncSession', () => {
     merged.import(backend._ctrl.pushLocalUpdateCalls[0]!)
     const result = readSpatialCanvas(merged)
     const comments = result['x-whiteboard']?.comments ?? []
-    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'remote-c'])
+    expect(comments.map((c) => c.id).sort()).toEqual(['c-1', 'c-2', 'remote-c'])
     expect(comments.find((c) => c.id === 'c-1')).toMatchObject({ resolved: true })
+    expect(comments.find((c) => c.id === 'c-2')).toMatchObject({ text: 'edited' })
     expect(result.nodes.find((n) => n.id === 'n-a')).toMatchObject({ x: 42, y: 42 })
   })
 

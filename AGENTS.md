@@ -69,11 +69,16 @@ Use:
 
 ```bash
 pnpm run test:browser        # canvas-viewer-browser + web-browser + canvas-render-browser
-pnpm run test:browser:trace  # same, with trace artifacts on failure
+pnpm run test:browser:trace  # same, plus a trace for EVERY test and its DOM snapshots
 ```
 
 - Failure traces are stored under `<package>/tmp/vitest-traces`.
 - Check traces before adding temporary debug code.
+- **The default trace has no DOM view** — actions, stacks and screenshots
+  only, because recording the DOM records every resource vite serves: 23GB
+  a run, filling the disk and reporting a test count short of the real one.
+  Re-run the ONE failing file under `test:browser:trace` for it — that
+  traces every test, so never point it at the suite.
 - **Keep a browser test's `describe` + `it` titles under 155 characters
   combined** (characters, not UTF-8 bytes: vitest replaces every
   non-alphanumeric character with one ASCII `-` before the name reaches the

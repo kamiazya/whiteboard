@@ -977,10 +977,7 @@ export function BrowserDocumentPage({
                         ?.requestFullscreen()
                         .catch((err) => log.warn('requestFullscreen rejected', err))
                   }}
-                  capabilities={{
-                    branches: capabilities.branches,
-                    merge: capabilities.merge,
-                  }}
+                  capabilities={capabilities}
                   onToggleHistory={
                     versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
                   }

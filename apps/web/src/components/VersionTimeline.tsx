@@ -12,6 +12,7 @@ import { displayBranchName } from '@/lib/utils'
 import { type PastDocument, VersionsRequestError } from '@/lib/versions-backend'
 import { SquiggleLoader } from './SquiggleLoader.js'
 import { VersionThumbnail } from './VersionThumbnail.js'
+import { formatRelative } from './workspace-files/format-relative.js'
 
 const log = getAppLogger('VersionTimeline')
 
@@ -50,18 +51,17 @@ interface Props {
   headerActions?: ReactNode
 }
 
-// Render an ISO string as a short relative timestamp.
-function formatRelative(iso: string): string {
-  const then = new Date(iso).getTime()
-  if (!Number.isFinite(then)) return iso
-  // Clamp: server clocks slightly ahead of the client would otherwise yield
-  // "-5s ago".
-  const diffSec = Math.max(0, Math.floor((Date.now() - then) / 1000))
-  if (diffSec < 60) return `${diffSec}s ago`
-  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`
-  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`
-  const d = new Date(then)
-  return `${d.getMonth() + 1}/${d.getDate()} ${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`
+/**
+ * This surface's two knobs on the shared formatter, bound once.
+ *
+ * Past a day a saved version's DATE is the interesting fact rather than its
+ * age, and a corrupt `createdAt` echoes rather than rendering blank — the
+ * two places a private clone of this had silently diverged. Bound here
+ * because four call sites repeating the options object is the same
+ * hand-kept duplication one level down.
+ */
+function versionTime(iso: string): string {
+  return formatRelative(iso, { pastDay: 'absolute', invalid: 'echo' })
 }
 
 /**
@@ -78,7 +78,7 @@ function formatRelative(iso: string): string {
  * saying it again.
  */
 function versionTitle(version: Pick<VersionEntry, 'label' | 'createdAt'>): string {
-  return version.label || formatRelative(version.createdAt)
+  return version.label || versionTime(version.createdAt)
 }
 
 /**
@@ -352,7 +352,7 @@ export default function VersionTimeline({
           <span className="min-w-0 flex-1 text-[11px] leading-tight">
             <b className="block truncate font-medium">Looking at {versionTitle(previewing)}</b>
             <span className="text-muted-foreground">
-              {formatRelative(previewing.createdAt)} · read-only
+              {versionTime(previewing.createdAt)} · read-only
             </span>
           </span>
           <button
@@ -509,7 +509,7 @@ export default function VersionTimeline({
                           {/* The time is only repeated here when the TITLE is
                               a label — otherwise it is already the title. */}
                           {[
-                            v.label ? formatRelative(v.createdAt) : null,
+                            v.label ? versionTime(v.createdAt) : null,
                             author,
                             `${v.elementCount} els`,
                           ]

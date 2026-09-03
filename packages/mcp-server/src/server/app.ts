@@ -13,10 +13,10 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import { encodeFrontiers, type LoroDoc } from 'loro-crdt'
 import type { RuntimeStatusResponse } from '../shared/api-contracts/runtime.js'
+import { errorMessage } from '../shared/error-message.js'
 import {
   checkoutCloneOrThrow,
   decodeBranchTipOrThrow,
-  errorMessage,
   extractInitializeDebugPayload,
   isJsonObject,
   isReservedUiPath,

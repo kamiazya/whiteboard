@@ -5,7 +5,13 @@
 import type { SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
 import type { MdastRoot } from '@kamiazya/whiteboard-model/mdast'
 import { describe, expect, it } from 'vitest'
-import type { ResolvedEdgeNode, SceneNode, ShapeSceneNode, TextRunNode } from '../scene-graph.js'
+import type {
+  BoundingBox,
+  ResolvedEdgeNode,
+  SceneNode,
+  ShapeSceneNode,
+  TextRunNode,
+} from '../scene-graph.js'
 import { createFakeMeasure } from '../test-utils/fake-measure.js'
 import type { SpatialAppearanceResolver } from './nodes/spatial-appearance.js'
 import {
@@ -25,6 +31,11 @@ const fakeAppearance: SpatialAppearanceResolver = {
     pin: { fill: '#d97706' },
     bubble: { fill: '#fef3c7', stroke: '#d97706' },
     leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3' },
+    resolvedOverlay: {
+      pin: { fill: '#d97706', fillOpacity: 0.45 },
+      bubble: { fill: '#fef3c7', stroke: '#d97706', fillOpacity: 0.45 },
+      leader: { stroke: '#d97706', strokeWidth: 1, strokeDasharray: '4 3', strokeOpacity: 0.45 },
+    },
   }),
 }
 
@@ -67,6 +78,17 @@ function shapesOf(nodes: readonly SceneNode[]): ShapeSceneNode[] {
   return nodes.filter((node): node is ShapeSceneNode => node.kind === 'shape')
 }
 
+// The handle the editor's hit-testing consumes: `${comment.id}/pin` and
+// `${comment.id}/bubble`, mirroring the shipped `${comment.id}/leader`
+// convention.
+function pinOf(nodes: readonly SceneNode[], commentId: string): ShapeSceneNode | undefined {
+  return shapesOf(nodes).find((shape) => shape.id === `${commentId}/pin`)
+}
+
+function bubbleOf(nodes: readonly SceneNode[], commentId: string): ShapeSceneNode | undefined {
+  return shapesOf(nodes).find((shape) => shape.id === `${commentId}/bubble`)
+}
+
 // Comment text lays out through the mdast pipeline, so its runs sit inside
 // paragraph/heading BLOCK nodes rather than at the top level.
 function runsOf(nodes: readonly SceneNode[]): TextRunNode[] {
@@ -77,6 +99,54 @@ function runsOf(nodes: readonly SceneNode[]): TextRunNode[] {
   })
 }
 
+describe('the comments option', () => {
+  // ADR-0026 decision 1b: the annotation layer is keeper-side, so it stops
+  // riding inside the canvas envelope and travels beside it. These pin the
+  // seam that lets a caller hand comments over directly — the step that
+  // makes a markdown document's threads renderable at all, since it has no
+  // envelope to put them in.
+  it('draws comments passed as an option, on a canvas whose envelope has none', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [TEXT_NODE], edges: [] },
+      baseOptions({ comments: [{ id: 'c1', x: 400, y: 60, text: 'from beside the canvas' }] }),
+    )
+
+    expect(pinOf(scene.nodes, 'c1')).toBeDefined()
+    // Joined, because the body lays out through the markdown pipeline and a
+    // bubble-width wrap splits it across runs.
+    expect(
+      runsOf(scene.nodes)
+        .map((run) => run.text)
+        .join(' '),
+    ).toContain('from beside the canvas')
+  })
+
+  it('lets the option win over the envelope, so a migrating caller is never doubled', () => {
+    // Both populated is what a half-migrated call site looks like. Drawing
+    // the union would put two pins on one comment; preferring the argument
+    // makes the migration one call site at a time.
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'stale', x: 10, y: 10, text: 'from the envelope' }]),
+      baseOptions({ comments: [{ id: 'fresh', x: 400, y: 60, text: 'from the option' }] }),
+    )
+
+    expect(pinOf(scene.nodes, 'fresh')).toBeDefined()
+    expect(pinOf(scene.nodes, 'stale')).toBeUndefined()
+  })
+
+  it('draws nothing for an empty option, rather than falling back to the envelope', () => {
+    // An empty array is an ANSWER — "this document has no conversations" —
+    // and a caller that has read the layer and found it empty must not get
+    // the envelope's stale copy back.
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'stale', x: 10, y: 10, text: 'from the envelope' }]),
+      baseOptions({ comments: [] }),
+    )
+
+    expect(pinOf(scene.nodes, 'stale')).toBeUndefined()
+  })
+})
+
 describe('comment layer', () => {
   it('draws a pin centered on the anchor and a bubble holding the text, after all content', () => {
     const scene = layoutSpatialCanvas(
@@ -84,17 +154,18 @@ describe('comment layer', () => {
       baseOptions(),
     )
 
-    const shapes = shapesOf(scene.nodes)
-    const pin = shapes.find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
+    const pin = pinOf(scene.nodes, 'c1')
     expect(pin).toBeDefined()
+    expect(pin?.commentChrome).toBe(true)
     expect(pin?.bbox.x).toBe(400 - COMMENT_PIN_SIZE_PX / 2)
     expect(pin?.bbox.y).toBe(60 - COMMENT_PIN_SIZE_PX / 2)
     // A circle: the rect chrome with radius = half its side.
     expect(pin?.radius).toBe(COMMENT_PIN_SIZE_PX / 2)
     expect(pin?.appearance).toEqual({ fill: '#d97706' })
 
-    const bubble = shapes.find((shape) => shape.appearance?.fill === '#fef3c7')
+    const bubble = bubbleOf(scene.nodes, 'c1')
     expect(bubble).toBeDefined()
+    expect(bubble?.commentChrome).toBe(true)
     expect(bubble?.bbox.x).toBe(400 + COMMENT_BUBBLE_OFFSET_PX)
     expect(bubble?.bbox.y).toBe(60 + COMMENT_BUBBLE_OFFSET_PX)
 
@@ -138,9 +209,8 @@ describe('comment layer', () => {
 
     // Under the pin and bubble: both ends tuck beneath the chrome instead of
     // striking through it.
-    const shapes = shapesOf(scene.nodes)
-    const pin = shapes.find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
-    const bubble = shapes.find((shape) => shape.appearance?.fill === '#fef3c7')
+    const pin = pinOf(scene.nodes, 'c1')
+    const bubble = bubbleOf(scene.nodes, 'c1')
     const leaderIndex = scene.nodes.indexOf(leader as ResolvedEdgeNode)
     expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(pin as ShapeSceneNode))
     expect(leaderIndex).toBeLessThan(scene.nodes.indexOf(bubble as ShapeSceneNode))
@@ -168,9 +238,7 @@ describe('comment layer', () => {
       canvasWith([{ id: 'c1', x: 999, y: 999, text: 'about n1', targetNodeId: 'n1' }]),
       baseOptions(),
     )
-    const followedPin = shapesOf(followed.nodes).find(
-      (shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX,
-    )
+    const followedPin = pinOf(followed.nodes, 'c1')
     // Pinned to the node's top-right corner, not the stored anchor.
     expect(followedPin?.bbox.x).toBe(200 - COMMENT_PIN_SIZE_PX / 2)
     expect(followedPin?.bbox.y).toBe(0 - COMMENT_PIN_SIZE_PX / 2)
@@ -179,9 +247,7 @@ describe('comment layer', () => {
       canvasWith([{ id: 'c1', x: 50, y: 70, text: 'about a deleted node', targetNodeId: 'gone' }]),
       baseOptions(),
     )
-    const danglingPin = shapesOf(dangling.nodes).find(
-      (shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX,
-    )
+    const danglingPin = pinOf(dangling.nodes, 'c1')
     expect(danglingPin?.bbox.x).toBe(50 - COMMENT_PIN_SIZE_PX / 2)
     expect(danglingPin?.bbox.y).toBe(70 - COMMENT_PIN_SIZE_PX / 2)
   })
@@ -214,10 +280,81 @@ describe('comment layer', () => {
       canvasWith([{ id: 'c1', x: 5, y: 5, text: 'still drawn' }]),
       baseOptions({ appearance: bare }),
     )
-    const pin = shapesOf(scene.nodes).find((shape) => shape.bbox.w === COMMENT_PIN_SIZE_PX)
+    const pin = pinOf(scene.nodes, 'c1')
     expect(pin).toBeDefined()
+    expect(pin?.commentChrome).toBe(true)
     expect(pin?.appearance).toBeUndefined()
     expect(runsOf(scene.nodes).map((run) => run.text)).toContain('still drawn')
+  })
+
+  it('draws a resolved comment muted, with ids, when showResolved is on — unresolved stays base', () => {
+    const scene = layoutSpatialCanvas(
+      canvasWith([
+        { id: 'c1', x: 10, y: 10, text: 'still open' },
+        { id: 'c2', x: 400, y: 60, text: 'done already', resolved: true },
+      ]),
+      baseOptions({ showResolved: true }),
+    )
+
+    const openPin = pinOf(scene.nodes, 'c1')
+    expect(openPin?.appearance).toEqual({ fill: '#d97706' })
+
+    const resolvedPin = pinOf(scene.nodes, 'c2')
+    const resolvedBubble = bubbleOf(scene.nodes, 'c2')
+    expect(resolvedPin).toBeDefined()
+    expect(resolvedPin?.commentChrome).toBe(true)
+    expect(resolvedBubble).toBeDefined()
+    expect(resolvedBubble?.commentChrome).toBe(true)
+    expect(resolvedPin?.appearance).toEqual({ fill: '#d97706', fillOpacity: 0.45 })
+    expect(resolvedBubble?.appearance).toEqual({
+      fill: '#fef3c7',
+      stroke: '#d97706',
+      fillOpacity: 0.45,
+    })
+
+    const resolvedLeader = scene.nodes.find(
+      (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c2/leader',
+    )
+    expect(resolvedLeader?.appearance).toEqual({
+      stroke: '#d97706',
+      strokeWidth: 1,
+      strokeDasharray: '4 3',
+      strokeOpacity: 0.45,
+    })
+
+    const texts = runsOf(scene.nodes).map((run) => run.text)
+    expect(texts).toContain('done already')
+  })
+
+  it('showResolved absent/false is byte-identical to before it existed — a resolved comment stays hidden', () => {
+    const withoutFlag = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
+      baseOptions(),
+    )
+    const withFlagOff = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 10, y: 10, text: 'done already', resolved: true }]),
+      baseOptions({ showResolved: false }),
+    )
+    expect(withFlagOff).toEqual(withoutFlag)
+  })
+
+  it('a bare resolver composes a resolved comment under showResolved too, carrying no appearance', () => {
+    const bare: SpatialAppearanceResolver = {
+      resolveNode: () => ({}),
+      resolveEdge: () => undefined,
+      resolveLabel: () => ({}),
+    }
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'c1', x: 5, y: 5, text: 'done, no theme', resolved: true }]),
+      baseOptions({ appearance: bare, showResolved: true }),
+    )
+    const pin = pinOf(scene.nodes, 'c1')
+    const bubble = bubbleOf(scene.nodes, 'c1')
+    expect(pin).toBeDefined()
+    expect(pin?.appearance).toBeUndefined()
+    expect(bubble).toBeDefined()
+    expect(bubble?.appearance).toBeUndefined()
+    expect(runsOf(scene.nodes).map((run) => run.text)).toContain('done, no theme')
   })
 
   it('wraps long comment text within the bubble width instead of one endless line', () => {
@@ -234,5 +371,125 @@ describe('comment layer', () => {
     )
     const runs = runsOf(scene.nodes).filter((run) => run.text !== 'content')
     expect(runs.length).toBeGreaterThan(1)
+  })
+
+  describe('placement', () => {
+    const NEIGHBOUR: SpatialNode = {
+      id: 'n2',
+      type: 'text',
+      x: 214,
+      y: 20,
+      width: 200,
+      height: 100,
+      text: 'neighbour',
+    }
+    function bboxOverlap(a: BoundingBox, b: BoundingBox): number {
+      const w = Math.min(a.x + a.w, b.x + b.w) - Math.max(a.x, b.x)
+      const h = Math.min(a.y + a.h, b.y + b.h) - Math.max(a.y, b.y)
+      return w > 0 && h > 0 ? w * h : 0
+    }
+
+    it('a node-anchored bubble does not cover the node to its right', () => {
+      const scene = layoutSpatialCanvas(
+        {
+          nodes: [TEXT_NODE, NEIGHBOUR],
+          edges: [],
+          'x-whiteboard': {
+            comments: [{ id: 'c1', x: 0, y: 0, text: 'tighten', targetNodeId: 'n1' }],
+          },
+        },
+        baseOptions(),
+      )
+      const bubble = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      expect(bboxOverlap(bubble.bbox, { x: 214, y: 20, w: 200, h: 100 })).toBe(0)
+      expect(bboxOverlap(bubble.bbox, { x: 0, y: 0, w: 200, h: 100 })).toBe(0)
+      // Up-right of the anchor (200, 0): the leader ends on the bubble's
+      // bottom-left corner arc, the corner nearest the pin.
+      expect(bubble.bbox.y + bubble.bbox.h).toBe(0 - COMMENT_BUBBLE_OFFSET_PX)
+      const leader = scene.nodes.find(
+        (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
+      )
+      const inset = 8 * (1 - Math.SQRT1_2)
+      expect(leader?.path[1]).toEqual({
+        x: bubble.bbox.x + inset,
+        y: bubble.bbox.y + bubble.bbox.h - inset,
+      })
+    })
+
+    it('a later comment fans out around an earlier bubble instead of stacking on it', () => {
+      const scene = layoutSpatialCanvas(
+        canvasWith([
+          { id: 'c1', x: 400, y: 300, text: 'first' },
+          { id: 'c2', x: 406, y: 304, text: 'second' },
+        ]),
+        baseOptions(),
+      )
+      const first = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      const second = bubbleOf(scene.nodes, 'c2') as ShapeSceneNode
+      expect(bboxOverlap(first.bbox, second.bbox)).toBe(0)
+      // The earlier one keeps its default spot: document order decides who yields.
+      expect(first.bbox.x).toBe(400 + COMMENT_BUBBLE_OFFSET_PX)
+      expect(first.bbox.y).toBe(300 + COMMENT_BUBBLE_OFFSET_PX)
+    })
+
+    it('a bubble pushed to the left is led to by its right-hand corner', () => {
+      // A wall to the right of the anchor takes both right-hand quadrants.
+      const scene = layoutSpatialCanvas(
+        {
+          nodes: [
+            { id: 'wall', type: 'text', x: 405, y: -500, width: 400, height: 1000, text: 'w' },
+          ],
+          edges: [],
+          'x-whiteboard': { comments: [{ id: 'c1', x: 400, y: 300, text: 'left' }] },
+        },
+        baseOptions(),
+      )
+      const bubble = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      expect(bubble.bbox.x + bubble.bbox.w).toBe(400 - COMMENT_BUBBLE_OFFSET_PX)
+      expect(bubble.bbox.y).toBe(300 + COMMENT_BUBBLE_OFFSET_PX)
+      const leader = scene.nodes.find(
+        (node): node is ResolvedEdgeNode => node.kind === 'edge' && node.id === 'c1/leader',
+      )
+      const inset = 8 * (1 - Math.SQRT1_2)
+      expect(leader?.path[1]).toEqual({
+        x: bubble.bbox.x + bubble.bbox.w - inset,
+        y: bubble.bbox.y + inset,
+      })
+    })
+
+    it('a group frame is not an obstacle, so a comment inside a group stays inside it', () => {
+      const scene = layoutSpatialCanvas(
+        {
+          nodes: [{ id: 'g', type: 'group', x: 0, y: 0, width: 800, height: 800 }],
+          edges: [],
+          'x-whiteboard': { comments: [{ id: 'c1', x: 100, y: 100, text: 'in the frame' }] },
+        },
+        baseOptions(),
+      )
+      const bubble = bubbleOf(scene.nodes, 'c1') as ShapeSceneNode
+      expect(bubble.bbox.x).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
+      expect(bubble.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
+    })
+
+    it('honours caller-supplied obstacles, for a comment laid out apart from its canvas', () => {
+      const alone = {
+        nodes: [],
+        edges: [],
+        'x-whiteboard': { comments: [{ id: 'c1', x: 100, y: 100, text: 'x' }] },
+      } satisfies SpatialCanvas
+      const withoutObstacle = bubbleOf(
+        layoutSpatialCanvas(alone, baseOptions()).nodes,
+        'c1',
+      ) as ShapeSceneNode
+      const withObstacle = bubbleOf(
+        layoutSpatialCanvas(
+          alone,
+          baseOptions({ commentObstacles: [{ x: 110, y: 110, w: 300, h: 300 }] }),
+        ).nodes,
+        'c1',
+      ) as ShapeSceneNode
+      expect(withoutObstacle.bbox.y).toBe(100 + COMMENT_BUBBLE_OFFSET_PX)
+      expect(withObstacle.bbox.y + withObstacle.bbox.h).toBe(100 - COMMENT_BUBBLE_OFFSET_PX)
+    })
   })
 })

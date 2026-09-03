@@ -30,7 +30,9 @@ import {
   canReuseCarriedSides,
   carriedByGesture,
   carriedSideCacheKey,
+  commentExtensionFor,
   frozenSidesOf,
+  ghostCommentObstacles,
   liveNodesFor,
 } from './gesture-view.js'
 import type { GestureState } from './gestures.js'
@@ -59,6 +61,8 @@ export interface DragLayersInputs {
   anchors: RenderedCanvas['anchors']
   /** The committed surface's keyed projection (mount-once patch container). */
   keyed: KeyedSvgRender
+  /** Draw resolved comments in the drag layers too, matching the committed surface. */
+  showResolved?: boolean
   boxes: readonly NodeBox[]
   selectableBoxes: readonly NodeBox[]
   livePoint: Point | null
@@ -77,10 +81,27 @@ export function useDragLayers({
   scene,
   anchors,
   keyed,
+  showResolved,
   boxes,
   selectableBoxes,
   livePoint,
 }: DragLayersInputs) {
+  // The committed layout, FROZEN at gesture start. The worker's next
+  // reply may land mid-gesture, and THREE things ride on it: the anchors
+  // are the points bystander edges are pinned to, the scene is what
+  // decides which edges are pin-eligible at all (frozenSidesOf) — a
+  // swapped scene silently un-pins every bystander even with the anchors
+  // held, which is the same re-fraction by another door — and the ghost's
+  // comment obstacles below, which must keep answering the placement
+  // question the way the committed scene answered it at the press.
+  const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
+  const gestureCommitted = useGestureCaptured(
+    gestureState.kind === 'moving' ||
+      gestureState.kind === 'resizing' ||
+      gestureState.kind === 'connecting',
+    committedPair,
+  )
+
   /**
    * The dragged node's own content, rendered ONCE per drag (the reducer's
    * pointermove passthrough returns the same state reference, so this memo
@@ -95,12 +116,27 @@ export function useDragLayers({
     if (nodes.length === 0) return undefined
     // Same embed options as the committed scene: a ghost that drops an
     // expanded miniature back to a bare card mid-drag reads as data loss.
+    // The carried nodes' own comments ride the ghost too (see
+    // commentExtensionFor): they are drawn at the node's corner, and the
+    // corner is what is moving.
+    const ghostComments = commentExtensionFor(canvas, carried, true)
+    // A riding comment's bubble is placed against what the COMMITTED scene
+    // placed it against — the bystander nodes and the bubbles staying
+    // behind — so at the press it sits exactly where it was drawn. Rendered
+    // alone it would re-place in an empty canvas and jump quadrant.
+    const ghostObstacles = ghostCommentObstacles(canvas, gestureCommitted.scene, carried)
     const rendered = renderCanvasToSvg(
-      { nodes, edges: [] },
+      {
+        nodes,
+        edges: [],
+        ...(ghostComments === undefined ? {} : { 'x-whiteboard': ghostComments }),
+      },
       {
         measure: resolvedMeasure,
         theme,
         ...fileSeamOptions,
+        showResolved,
+        commentObstacles: ghostObstacles,
       },
     )
     return {
@@ -119,21 +155,10 @@ export function useDragLayers({
     resolvedMeasure,
     theme,
     fileSeamOptions,
+    gestureCommitted,
+    showResolved,
   ])
 
-  // The committed layout, FROZEN at gesture start. The worker's next
-  // reply may land mid-gesture, and BOTH halves matter: the anchors are
-  // the points bystander edges are pinned to, and the scene is what
-  // decides which edges are pin-eligible at all (frozenSidesOf) — a
-  // swapped scene silently un-pins every bystander even with the anchors
-  // held, which is the same re-fraction by another door.
-  const committedPair = useMemo(() => ({ scene, anchors }), [scene, anchors])
-  const gestureCommitted = useGestureCaptured(
-    gestureState.kind === 'moving' ||
-      gestureState.kind === 'resizing' ||
-      gestureState.kind === 'connecting',
-    committedPair,
-  )
   // Last optimized sides for the gesture's carried edges (see liveEdges).
   const carriedSideCacheRef = useRef<CarriedSideCache | null>(null)
   useEffect(() => {
@@ -164,15 +189,18 @@ export function useDragLayers({
   const dragStatic = useMemo(() => {
     if (gestureState.kind !== 'moving' && gestureState.kind !== 'resizing') return undefined
     const carried = carriedByGesture(canvas, gestureState, extraIds, isLocked)
+    const baseComments = commentExtensionFor(canvas, carried, false)
     const base: SpatialCanvas = {
       ...canvas,
       nodes: canvas.nodes.filter((n) => !carried.has(n.id)),
       edges: [],
+      ...(baseComments === undefined ? {} : { 'x-whiteboard': baseComments }),
     }
     const rendered = renderCanvasToSvg(base, {
       measure: resolvedMeasure,
       theme,
       ...fileSeamOptions,
+      showResolved,
     })
     const metricsCache = new Map<string, TextMetrics>()
     const measure: MeasureText = (text, font) => {
@@ -209,6 +237,7 @@ export function useDragLayers({
     resolvedMeasure,
     theme,
     fileSeamOptions,
+    showResolved,
   ])
   // The committed surface's mount-once container (see the editor's JSX):
   // during a gesture it patches to the drag backdrop, on drop back to the
@@ -358,12 +387,20 @@ export function useDragLayers({
       new Set([gestureState.nodeId]),
     ).find((n) => n.id === gestureState.nodeId)
     if (resized === undefined) return undefined
+    // The resized node's comments re-anchor to its LIVE corner each frame,
+    // for the same reason the move ghost carries them.
+    const liveComments = commentExtensionFor(canvas, dragStatic.carried, true)
     const rendered = renderCanvasToSvg(
-      { nodes: [resized], edges: [] },
+      {
+        nodes: [resized],
+        edges: [],
+        ...(liveComments === undefined ? {} : { 'x-whiteboard': liveComments }),
+      },
       {
         measure: dragStatic.measure,
         theme,
         ...fileSeamOptions,
+        showResolved,
       },
     )
     return { svg: rendered.svg, bounds: rendered.bounds }

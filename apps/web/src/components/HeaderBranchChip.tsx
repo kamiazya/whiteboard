@@ -221,6 +221,11 @@ export function HeaderBranchChip({
   // reason its own comment gives about a staged restore.
   //
   // Setters only, so this never re-runs for its own writes.
+  //
+  // It is also why the rename/delete/merge state stays in THIS component
+  // rather than in a dialog of its own: a reset that reaches eight slices
+  // cannot reach state a child owns, and a child that owns none is the
+  // prop-drilling instead.
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     setPendingDelete(null)

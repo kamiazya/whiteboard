@@ -53,6 +53,19 @@ export interface RenderCanvasCoreOptions {
    * opaque rectangle erasing a shaped node for the whole edit.
    */
   readonly suppressedBodyNodeIds?: readonly string[]
+  /**
+   * Boxes a comment bubble must not cover, beyond the rendered canvas's own
+   * nodes and earlier bubbles (canvas-render's `commentObstacles`). The drag
+   * layers render a comment APART from its canvas and still need it placed
+   * exactly where the committed scene placed it, or the press jumps it.
+   */
+  readonly commentObstacles?: readonly BoundingBox[]
+  /**
+   * Draw resolved comments too, muted (canvas-render's `showResolved`).
+   * Per-user VIEW state — it threads through every render of this surface
+   * (committed, worker, drag layers) and is never written to the document.
+   */
+  readonly showResolved?: boolean
 }
 
 export interface RenderedCanvas {
@@ -79,6 +92,8 @@ export function renderCanvasToSvgWith(
     expandFileNode: options.expandFileNode,
     contentCache: options.contentCache,
     suppressedBodyNodeIds: options.suppressedBodyNodeIds,
+    commentObstacles: options.commentObstacles,
+    showResolved: options.showResolved,
   })
   const bounds = sceneBounds(scene)
   const svg = renderSceneToSvg(scene, documentEnvelope(bounds))
@@ -97,6 +112,26 @@ function documentEnvelope(bounds: BoundingBox): SvgDocumentOptions {
  * stringification is ~3ms at 40 nodes against a 66-125ms layout, so the
  * worker protocol stays untouched. Same envelope as `RenderedCanvas.svg`.
  */
+/**
+ * The keyed render with every group under `keyPrefix` left out — how a
+ * comment being dragged leaves the committed surface for the gesture. It
+ * has to LEAVE rather than hide: the patcher animates a replaced group from
+ * where it was (FLIP), so a hidden group that is replaced on the drop
+ * commit flies from the old anchor to the new one, while a group that is
+ * absent and then inserted never animates — the same reason the node drag
+ * backdrop excludes the carried node. The `svg` string is rebuilt so the
+ * producer's `svg === rootOpen + groups + close` pin still holds.
+ */
+export function keyedWithoutPrefix(keyed: KeyedSvgRender, keyPrefix: string): KeyedSvgRender {
+  const groups = keyed.groups.filter((group) => !group.key.startsWith(keyPrefix))
+  if (groups.length === keyed.groups.length) return keyed
+  return {
+    ...keyed,
+    groups,
+    svg: `${keyed.rootOpen}${groups.map((group) => group.svg).join('')}</svg>`,
+  }
+}
+
 export function renderedCanvasKeyed(
   rendered: Pick<RenderedCanvas, 'scene' | 'bounds'>,
 ): KeyedSvgRender {

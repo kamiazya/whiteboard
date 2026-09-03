@@ -10,6 +10,7 @@ import { cleanup, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
 import { userEvent } from 'vitest/browser'
+import { DESKTOP_BAR_HEIGHT_PX, TOUCH_BAR_HEIGHT_PX } from '../markdown-editor/verb-bar-layout.js'
 import { nodeEditorContent } from './node-editor-test-utils.js'
 import { SpatialEditor } from './SpatialEditor.js'
 import { EXIT_HINT_ALLOWANCE_PX } from './use-keyboard-avoidance.js'
@@ -40,10 +41,10 @@ function canvasWithNodeAt(y: number): SpatialCanvas {
   }
 }
 
-function Host({ start }: { start: SpatialCanvas }) {
+function Host({ start, height = 600 }: { start: SpatialCanvas; height?: number }) {
   const [canvas, setCanvas] = useState<SpatialCanvas>(start)
   return (
-    <div style={{ width: 800, height: 600 }}>
+    <div style={{ width: 800, height }}>
       <SpatialEditor
         defaultTool="select"
         canvas={canvas}
@@ -118,4 +119,62 @@ it('stops listening once the edit ends', async () => {
   raiseKeyboard(fake, rootOf(container), 300)
   await new Promise((resolve) => setTimeout(resolve, 50))
   expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
+})
+
+it('pans a node out from under the strip the desktop bar puts below the header', async () => {
+  // The fine-pointer counterpart of the keyboard: no viewport shrinks, but
+  // the canvas's own top edge is covered while an edit is open, and a node
+  // opened up there is as invisible as one under a keyboard.
+  installFakeVisualViewport()
+  const { container } = render(<Host start={canvasWithNodeAt(0)} />)
+  await startEditing(container, { x: 200, y: 40 })
+  const dy = 0 - (DESKTOP_BAR_HEIGHT_PX + PAN_MARGIN_PX)
+  await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
+})
+
+it('on a coarse pointer also clears the formatting bar riding on the keyboard', async () => {
+  const realMatchMedia = window.matchMedia
+  window.matchMedia = (query: string) =>
+    query === '(pointer: coarse)'
+      ? ({ matches: true, media: query } as MediaQueryList)
+      : realMatchMedia.call(window, query)
+  try {
+    const fake = installFakeVisualViewport()
+    const { container } = render(<Host start={canvasWithNodeAt(400)} />)
+    await startEditing(container, { x: 200, y: 450 })
+    raiseKeyboard(fake, rootOf(container), 300)
+    const dy = 500 + EXIT_HINT_ALLOWANCE_PX - (300 - TOUCH_BAR_HEIGHT_PX - PAN_MARGIN_PX)
+    await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
+  } finally {
+    window.matchMedia = realMatchMedia
+  }
+})
+
+it('pans when the keyboard shrank the layout viewport instead of occluding it', async () => {
+  // `interactive-widget=resizes-content` (index.html) makes Chrome and
+  // Firefox shrink the LAYOUT viewport for the keyboard. The keyboard then
+  // occludes nothing and reads as absent from every signal a page has —
+  // while having taken half the canvas away. The edited node still has to be
+  // brought back into what is left, so the pan cannot be gated on occlusion.
+  const realMatchMedia = window.matchMedia
+  window.matchMedia = (query: string) =>
+    query === '(pointer: coarse)'
+      ? ({ matches: true, media: query } as MediaQueryList)
+      : realMatchMedia.call(window, query)
+  try {
+    installFakeVisualViewport()
+    const { container, rerender } = render(<Host start={canvasWithNodeAt(400)} />)
+    await startEditing(container, { x: 200, y: 450 })
+    expect(transformOf(container)).toBe('scale(1) translate(0px, 0px)')
+
+    // The whole viewport shrinks: the container with it, and the fake visual
+    // viewport to match, so occlusion stays exactly zero throughout.
+    rerender(<Host start={canvasWithNodeAt(400)} height={300} />)
+    window.dispatchEvent(new Event('resize'))
+
+    const dy = 500 + EXIT_HINT_ALLOWANCE_PX - (300 - TOUCH_BAR_HEIGHT_PX - PAN_MARGIN_PX)
+    await vi.waitFor(() => expect(transformOf(container)).toBe(`scale(1) translate(0px, ${-dy}px)`))
+  } finally {
+    window.matchMedia = realMatchMedia
+  }
 })

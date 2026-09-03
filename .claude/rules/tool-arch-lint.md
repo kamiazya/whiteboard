@@ -110,7 +110,23 @@ also retires a name that said `session` about a workspace.
 The one part of `.claude/rules/vocabulary.md` that can be mechanical rather
 than prose: it fails on a retired word appearing anywhere under `apps/web/src`
 or `packages/*/src`. Only words with no legitimate meaning left qualify — today
-`slug`. `canvas` never will, because it is correct for the spatial surface and
+`slug` plus the three keeper-axis spellings, each with its own scan roots.
+`canvas` never will, because it is correct for the spatial surface and
 wrong only as the container noun, and telling those apart needs a reader.
 `migrations/` is excluded as history, and `EXEMPT_FILES` carries the one other
 file writing history, with its reason.
+
+**The scan runs at module scope, and each file is read exactly once.** Both
+halves were bought by the same CI flake: the four words share three scan roots
+between them, so a per-word walk read 4826 files to cover 2141, and the whole
+thing sat in a test body under vitest's 5000ms default. Warm it is ~255ms;
+under the full parallel suite it measured 6315ms and timed out, reporting
+`no source file says "slug"` and a five-second budget in one message — which
+reads as a violation that is not there. Module evaluation is not bounded by a
+per-test timeout, so the cost now lands in the collection phase, the same move
+`.claude/rules/integrator-flow.md` prescribes for a heavy in-body
+`await import()`. The read count is pinned by its own assertion rather than
+left to a reader, because the redundancy was invisible in the source and
+visible only as a timeout somewhere else. Directory WALKS are still repeated
+per word and deliberately so: deduping them saves 9ms of the 255, which does
+not buy a second thing to keep true.

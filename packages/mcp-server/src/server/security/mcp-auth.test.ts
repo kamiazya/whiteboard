@@ -1,10 +1,9 @@
 import { describe, expect, it } from 'vitest'
-
-const {
+import {
   buildMcpProtectedResourceMetadata,
   createLocalTokenMcpHttpAuthStrategy,
   resolveMcpProtectedResourceMetadataFromEnv,
-} = await import('./mcp-auth.js')
+} from './mcp-auth.js'
 
 describe('MCP auth strategy', () => {
   it('parses protected resource metadata config from env', () => {

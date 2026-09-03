@@ -177,9 +177,19 @@ export type EditorLeafCommand =
       readonly resolved: boolean
     }
   | {
-      // Removes one comment. A missing id is a no-op.
-      readonly kind: 'delete-comment'
+      // Rewrites one comment's stored anchor. Meaningful for a point-anchored
+      // comment; on a node-anchored one it only moves the fallback the layer
+      // draws at when the target is gone. A missing id is a no-op.
+      readonly kind: 'move-comment'
       readonly id: string
+      readonly x: number
+      readonly y: number
+    }
+  | {
+      // Rewrites one comment's text. A missing id is a no-op.
+      readonly kind: 'set-comment-text'
+      readonly id: string
+      readonly text: string
     }
 
 /**
@@ -589,18 +599,20 @@ function createComment(canvas: SpatialCanvas, comment: CanvasComment): SpatialCa
   })
 }
 
-function setCommentResolved(canvas: SpatialCanvas, id: string, resolved: boolean): SpatialCanvas {
+/** One comment rewritten field-wise; a missing id leaves the canvas reference untouched. */
+function patchComment(
+  canvas: SpatialCanvas,
+  id: string,
+  patch: Partial<Pick<CanvasComment, 'resolved' | 'x' | 'y' | 'text'>>,
+): SpatialCanvas {
   return withComments(canvas, (comments) => {
     if (!comments.some((comment) => comment.id === id)) return undefined
-    return comments.map((comment) => (comment.id === id ? { ...comment, resolved } : comment))
+    return comments.map((comment) => (comment.id === id ? { ...comment, ...patch } : comment))
   })
 }
 
-function deleteComment(canvas: SpatialCanvas, id: string): SpatialCanvas {
-  return withComments(canvas, (comments) => {
-    if (!comments.some((comment) => comment.id === id)) return undefined
-    return comments.filter((comment) => comment.id !== id)
-  })
+function setCommentResolved(canvas: SpatialCanvas, id: string, resolved: boolean): SpatialCanvas {
+  return patchComment(canvas, id, { resolved })
 }
 
 export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): SpatialCanvas {
@@ -661,8 +673,10 @@ export function applyCommand(canvas: SpatialCanvas, command: EditorCommand): Spa
       return createComment(canvas, command.comment)
     case 'set-comment-resolved':
       return setCommentResolved(canvas, command.id, command.resolved)
-    case 'delete-comment':
-      return deleteComment(canvas, command.id)
+    case 'move-comment':
+      return patchComment(canvas, command.id, { x: command.x, y: command.y })
+    case 'set-comment-text':
+      return patchComment(canvas, command.id, { text: command.text })
     case 'batch':
       // Pure fold; a batch of no-ops folds back to the input reference,
       // preserving the union-wide "nothing changed → same object" contract.

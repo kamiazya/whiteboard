@@ -733,10 +733,7 @@ export function DaemonDocumentPage({
                 )}
                 workspaceId={canvas.workspaceId}
                 path={canvas.path}
-                capabilities={{
-                  branches: capabilities.branches,
-                  merge: capabilities.merge,
-                }}
+                capabilities={capabilities}
                 // Whatever the document holds: the daemon writes a history for
                 // every kind, and gating this on the editor is what left a
                 // markdown document's checkpoints unreachable.

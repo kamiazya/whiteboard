@@ -6,7 +6,8 @@
 
 ADR-0024 shipped the comment layer's data model, per-comment CRDT storage,
 scene-composed rendering, `wb_canvas_edit` ops (`comment.add` /
-`comment.resolve` / `comment.remove`), snapshot exposure, and the MCP Apps
+`comment.resolve`, and a `comment.remove` since withdrawn — decision 2),
+snapshot exposure, and the MCP Apps
 widget's click-to-anchor + `sendMessage` flow (PRs #1204–#1212). It
 explicitly deferred the apps/web editor's interactive UI.
 
@@ -61,14 +62,24 @@ Two facts frame every choice:
   built now; the keyboard-reachable create/resolve paths carry the
   accessibility requirement the panel would otherwise have carried.
 - Resolve/reopen ship with **no confirmation dialog** (resolve is reversible
-  by design — ADR-0024 keeps the record) and a toast with Undo. A failed
-  resolve/reopen write keeps the bubble's visible state unchanged and says
-  so in the toast — the pin never optimistically flips to a state the
-  document does not hold.
-- `comment.remove` stays an MCP-op-only affordance in v1. The editor ships
-  resolve-only, matching the ticketing rule one level down: deletion is for
-  a comment that was never worth keeping, and the editor should not make
-  destroying the conversation easier than closing it.
+  by design — ADR-0024 keeps the record). **Landed** (2026-09-02) as
+  context-menu verbs on the comment — "Resolve" on an open one, "Reopen" on
+  a resolved one — beside "Edit comment", and "Show / Hide resolved
+  comments" on the empty-canvas band. The toast-with-Undo this bullet first
+  promised is NOT built: the host's Undo already reverts the write, and a
+  resolved comment is one toggle and one verb from being back, so a toast
+  would be a third path to the same place. Revisit only if dogfooding shows
+  a resolve going unnoticed. The write is the same `set-comment-resolved`
+  the fine-grained path already carried, so a failed write leaves the
+  document — and therefore the pin — as it was.
+- **There is no removal, on either side** (user decision, 2026-09-02). The
+  first cut kept `comment.remove` as an MCP-only op while the editor shipped
+  resolve-only; that asymmetry — an agent able to erase feedback a person
+  could only close — was the objection, and the op was withdrawn rather than
+  mirrored. Resolving is the one way to close a comment, for agents and
+  people alike, and `resolved: false` reopens it. A whole-document write can
+  still drop comments (they live in the document), which is the same door a
+  node has; what is gone is the verb.
 
 ### 3. Comments ship authorless in the editor (v1)
 
@@ -126,8 +137,8 @@ look correct in every single-user test.
 | Threads / `parentId` replies | dogfooding shows single-text comments forcing awkward node-edit conversations |
 | Identity minting / per-author styling | a keeper that can vouch for identity (daemon accounts / SaaS) |
 | Push notification to AI (`resources/subscribe` etc.) | client-support verification + a real latency complaint against pull |
-| Dense-canvas collision avoidance / clustering | dogfooding pain at real comment densities (the fixed-offset ponytail stands) |
-| Resolve/remove authorization (author-only? role?) | real identity; named here so it is not decided by omission — today's boundary is "anyone with document write access" |
+| ~~Dense-canvas collision avoidance~~ | **Landed** (2026-09-02): the trigger fired on the first real canvas — a bubble covered the node beside it. `placeCommentBubble` in canvas-render takes the least-covered of four quadrants around the anchor, against every non-group node and every earlier bubble, so comments fan out instead of stacking; the editor's draft and drag preview place through the same function. Still deferred: clustering, and a second ring of candidates for an anchor sitting inside a node (today it takes the least-covered quadrant). |
+| Resolve/reopen authorization (author-only? role?) | real identity; named here so it is not decided by omission — today's boundary is "anyone with document write access" |
 | Comments panel / history surface | toggle proves insufficient on dense canvases |
 | `text` length cap + snapshot truncation treatment | first oversized-comment incident or measured snapshot bloat |
 
@@ -142,7 +153,10 @@ look correct in every single-user test.
   interaction), with race cases stated per slice: a compose bubble whose
   anchor node is deleted by a remote peer mid-edit keeps the draft and falls
   back to the point anchor; a resolve/reopen whose bubble unmounts mid-write
-  still lands or reports failure via toast.
+  still lands, and a failed one leaves the document — and therefore the pin
+  — as it was. (This bullet named a toast, which the decision above says is
+  deliberately not built. A test written to it would have been asserting on
+  a mechanism that does not exist.)
 - User copy vocabulary: the feature is a **Comment** (the layer name
   "annotation layer" stays an internal term), and the lifecycle word is
   **Resolved** — never "History", "Archived", or "Done".

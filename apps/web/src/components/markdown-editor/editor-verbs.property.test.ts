@@ -21,15 +21,19 @@
  * counter got wrong, passing on 16 attempts and 2 actual effects.
  */
 import { EditorSelection, EditorState, type StateCommand } from '@codemirror/state'
-import { afterAll, describe, expect } from 'vitest'
+import { normalizeMdast, parseMarkdownBody } from '@kamiazya/whiteboard-codec'
+import { afterAll, describe, expect, it } from 'vitest'
 import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils/coverage-ledger.js'
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
+  cycleHeadingLevel,
+  inVerbTableOrder,
   levelCommand,
   MARKDOWN_EDITOR_VERBS,
   type MarkdownVerbId,
   type MarkdownVerbSpec,
   selfContainedCommand,
+  VERB_BAR_ORDER,
   verb,
 } from './editor-verbs.js'
 
@@ -48,7 +52,25 @@ const VERB_COVERAGE = {
   code: 'covered',
   link: 'covered',
   'toggle-task': 'covered',
+  'bullet-list': 'covered',
+  'ordered-list': 'covered',
+  outdent: 'covered',
+  indent: 'covered',
+  quote: 'covered',
+  'code-block': 'covered',
+  table: 'covered',
+  rule: 'covered',
+  strikethrough: 'covered',
+  math: 'covered',
 } satisfies Record<MarkdownVerbId, SurfaceCoverage>
+
+/**
+ * The verbs whose whole point is to ADD lines — a fence needs its own two,
+ * a table its header and separator, a rule its own line. V1 is about every
+ * other verb staying on the lines it was given; these are excluded by
+ * name so a new line-inserting verb has to be listed here deliberately.
+ */
+const LINE_INSERTERS: ReadonlySet<MarkdownVerbId> = new Set(['code-block', 'table', 'rule'])
 
 const drives = emptyTally(VERB_COVERAGE)
 /** How often driving a verb actually changed the document. Guards against a sparse generator. */
@@ -93,10 +115,35 @@ const line = fc.oneof(
     weight: 3,
     arbitrary: fc.constantFrom('- [ ] open task', '- [x] done task', '1. [ ] numbered'),
   },
+  // Indented lines, so outdent has something to take off.
+  { weight: 1, arbitrary: fc.constantFrom('  - nested item', '  indented prose') },
   { weight: 1, arbitrary: fc.constant('') },
 )
 
 const document = fc.array(line, { minLength: 1, maxLength: 6 }).map((lines) => lines.join('\n'))
+
+/**
+ * Lines separated by blank lines and never two list items in a row, so every
+ * line is a block of its own and a line end is a block end. Two adjacent
+ * text lines are ONE paragraph and two list items ONE (loose) list even
+ * across blank lines; a block tapped in between splits either — which is
+ * what was asked for, but not what B3 is about.
+ */
+const isListLine = (text: string) => /^(-|\d+\.) /.test(text)
+const blockDocument = fc
+  // An indented line after a list item is that item's continuation, so
+  // only lines starting at the margin are blocks of their own.
+  .array(
+    line.filter((text) => !text.startsWith(' ')),
+    { minLength: 1, maxLength: 4 },
+  )
+  .filter((lines) => {
+    // Blank lines do not end a list, so adjacency is judged over the
+    // non-blank lines: `- a`, blank, blank, `- b` is still one list.
+    const items = lines.filter((text) => text !== '')
+    return items.every((text, i) => i === 0 || !(isListLine(text) && isListLine(items[i - 1])))
+  })
+  .map((lines) => lines.join('\n\n'))
 
 /** A document paired with a caret position inside it. */
 const documentAndCaret = document.chain((doc) =>
@@ -107,6 +154,16 @@ const documentAndCaret = document.chain((doc) =>
 const selfContained: readonly MarkdownVerbSpec[] = MARKDOWN_EDITOR_VERBS.filter(
   (spec) => selfContainedCommand(spec) !== null,
 )
+const keepsLineCount: readonly MarkdownVerbSpec[] = selfContained.filter(
+  (spec) => !LINE_INSERTERS.has(spec.id),
+)
+
+/** Lines carrying none of the list/quote prefixes, so a toggle's second application is exactly its inverse. */
+const plainLine = fc.constantFrom('weekly review', 'ship the thing', 'notes and more', '')
+const plainDocument = fc
+  .array(plainLine, { minLength: 1, maxLength: 4 })
+  .filter((lines) => lines.some((l) => l !== ''))
+  .map((lines) => lines.join('\n'))
 
 /**
  * The offset of line `index` (clamped), which is how a caret has to be
@@ -127,6 +184,21 @@ function countLines(doc: string): number {
   return doc.split('\n').length
 }
 
+/**
+ * The top-level blocks of `doc` as the parser reads them: kind and the text
+ * under each, with the parser's own reading of headings kept separate from
+ * paragraphs so a setext promotion shows up as a changed kind.
+ */
+function blocksOf(doc: string): { readonly type: string; readonly text: string }[] {
+  const textUnder = (node: { type: string; value?: string; children?: unknown[] }): string =>
+    (node.value ?? '') +
+    (node.children ?? []).map((child) => textUnder(child as typeof node)).join('')
+  return normalizeMdast(parseMarkdownBody(doc)).children.map((block) => ({
+    type: block.type,
+    text: textUnder(block),
+  }))
+}
+
 /** Whether `inner` appears in `outer` in order, as a subsequence. */
 function isSubsequence(inner: string, outer: string): boolean {
   let i = 0
@@ -142,10 +214,10 @@ describe('markdown editor verbs', () => {
    * verb at least once, which is what the ledger tallies.
    */
   fcTest.prop(
-    [documentAndCaret, fc.integer({ min: 0, max: selfContained.length - 1 })],
+    [documentAndCaret, fc.integer({ min: 0, max: keepsLineCount.length - 1 })],
     withDefaults(),
-  )('V1: no verb changes the line count', ({ doc, at }, which) => {
-    const spec = selfContained[which]
+  )('V1: no verb but the declared line inserters changes the line count', ({ doc, at }, which) => {
+    const spec = keepsLineCount[which]
     const command = selfContainedCommand(spec)
     if (command === null) throw new Error(`${spec.id} lost its command`)
     const result = drive(spec.id, command, doc, at)
@@ -153,14 +225,15 @@ describe('markdown editor verbs', () => {
   })
 
   /**
-   * W1. A wrap is insert-only by design (see `wrapSelectionWith` — unwrapping
-   * is deliberately not attempted), so the document it started from must
-   * survive inside the result, in order and complete.
+   * W1. On a word carrying none of the marks, a wrap adds its pair and
+   * nothing else: the document it started from survives inside the result,
+   * in order and complete. (The toggle's other half — the pair coming off
+   * again — is the model test's, where the nest around the word is state.)
    */
   fcTest.prop([documentAndCaret], withDefaults())(
     'W1: wrapping never loses a character of the document',
     ({ doc, at }) => {
-      for (const id of ['bold', 'italic', 'code', 'link'] as const) {
+      for (const id of ['bold', 'italic', 'code', 'link', 'strikethrough', 'math'] as const) {
         const spec = verb(id)
         const command = selfContainedCommand(spec)
         if (command === null) throw new Error(`${id} lost its command`)
@@ -199,11 +272,13 @@ describe('markdown editor verbs', () => {
    * H2. Promote then demote returns the original, for a line that had no
    * heading marker to begin with. Restricted to single-line documents so the
    * caret cannot cover a line that already had one — that line's marker is
-   * genuinely lost by the demote, which is what demote means.
+   * genuinely lost by the demote, which is what demote means. A task line is
+   * not in the set either: a heading displaces its checkbox by design (GFM
+   * reads `[ ] # x` as text), so `- [ ] x` round-trips to `- x`.
    */
   fcTest.prop(
     [
-      fc.constantFrom('weekly review', 'ship the thing', '- [ ] open task', 'notes and more'),
+      fc.constantFrom('weekly review', 'ship the thing', '- open item', 'notes and more'),
       fc.integer({ min: 1, max: 3 }),
     ],
     withDefaults(),
@@ -220,16 +295,162 @@ describe('markdown editor verbs', () => {
    * command reports unhandled — correctly — when none is.
    */
   fcTest.prop(
-    [fc.constantFrom('- [ ] open task', '- [x] done task', '1. [ ] numbered')],
+    [fc.constantFrom('- [ ] open task', '- [x] done task', '1. [ ] numbered', 'plain prose')],
     withDefaults(),
-  )('T1: toggling a task checkbox twice returns the original line', (taskLine) => {
+  )('T1: the task button cycles a line back to itself in three presses', (line) => {
     const command = selfContainedCommand(verb('toggle-task'))
     if (command === null) throw new Error('toggle-task lost its command')
-    const once = drive('toggle-task', command, taskLine, 0)
-    expect(once.handled).toBe(true)
-    expect(once.doc).not.toBe(taskLine)
-    const twice = drive('toggle-task', command, once.doc, 0)
-    expect(twice.doc).toBe(taskLine)
+    let doc: string = line
+    for (let step = 0; step < 3; step++) {
+      const result = drive('toggle-task', command, doc, 0)
+      expect(result.handled).toBe(true)
+      expect(result.doc).not.toBe(doc)
+      doc = result.doc
+    }
+    // A plain line joins the cycle as a bullet task, so it comes back as a bullet.
+    expect(doc).toBe(line === 'plain prose' ? '- plain prose' : line)
+  })
+
+  fcTest.prop([plainDocument], withDefaults())(
+    'L1: a list or quote prefix toggled twice over the whole document returns the original',
+    (doc) => {
+      for (const id of ['bullet-list', 'ordered-list', 'quote'] as const) {
+        const command = selfContainedCommand(verb(id))
+        if (command === null) throw new Error(`${id} lost its command`)
+        const once = drive(id, command, doc, 0, doc.length)
+        expect(once.handled, `${id} did nothing to ${JSON.stringify(doc)}`).toBe(true)
+        expect(once.doc).not.toBe(doc)
+        const twice = drive(id, command, once.doc, 0, once.doc.length)
+        expect(twice.doc).toBe(doc)
+      }
+    },
+  )
+
+  /**
+   * N1. Indent and outdent are the two verbs whose effect depends on the
+   * lines ABOVE, so V1's random caret reaches them only by luck — it drove
+   * `outdent` ten times without once landing on an indented line, and the
+   * ledger's vacuity guard caught exactly that. This drives both on a
+   * document where each must act: a second item always has a sibling above
+   * to nest under, and a nested item is always liftable.
+   */
+  fcTest.prop(
+    [
+      fc.constantFrom('-', '1.'),
+      fc.constantFrom('-', '1.'),
+      fc.constantFrom('milk', 'tea', 'bread'),
+    ],
+    withDefaults(),
+  )('N1: nesting the second item and lifting it back returns the document', (above, item, text) => {
+    const doc = `${above} first\n${item} ${text}`
+    const indent = selfContainedCommand(verb('indent'))
+    const outdent = selfContainedCommand(verb('outdent'))
+    if (indent === null || outdent === null) throw new Error('the indent band lost a command')
+    // Caret at the end, where typing leaves it — and re-derived after the
+    // edit, since the indent moved every offset on that line.
+    const nested = drive('indent', indent, doc, doc.length)
+    expect(nested.handled, `nothing to nest under in ${JSON.stringify(doc)}`).toBe(true)
+    expect(nested.doc).not.toBe(doc)
+    const lifted = drive('outdent', outdent, nested.doc, nested.doc.length)
+    expect(lifted.handled).toBe(true)
+    expect(lifted.doc).toBe(doc)
+  })
+
+  it('L2: a line already carrying the prefix is stripped, not doubled', () => {
+    const cases = [
+      ['bullet-list', '- item'],
+      ['ordered-list', '1. item'],
+      ['quote', '> item'],
+    ] as const
+    for (const [id, line] of cases) {
+      const command = selfContainedCommand(verb(id))
+      if (command === null) throw new Error(`${id} lost its command`)
+      expect(drive(id, command, line, 0).doc).toBe('item')
+    }
+  })
+
+  fcTest.prop([documentAndCaret], withDefaults())(
+    'B1: a block inserter never loses a character and always adds lines',
+    ({ doc, at }) => {
+      for (const id of ['code-block', 'table', 'rule'] as const) {
+        const command = selfContainedCommand(verb(id))
+        if (command === null) throw new Error(`${id} lost its command`)
+        const result = drive(id, command, doc, at)
+        expect(isSubsequence(doc, result.doc), `${id} dropped text`).toBe(true)
+        expect(countLines(result.doc)).toBeGreaterThan(countLines(doc))
+      }
+    },
+  )
+
+  it('B2: a code block around a selection fences the selected lines', () => {
+    const command = selfContainedCommand(verb('code-block'))
+    if (command === null) throw new Error('code-block lost its command')
+    expect(drive('code-block', command, 'alpha\nbeta', 0, 10).doc).toBe('```\nalpha\nbeta\n```')
+  })
+
+  /**
+   * B3, judged on the parse rather than the string. A block inserter tapped
+   * at the end of a line adds exactly its block after that line's, and
+   * leaves every other block as the parser read it before: same kinds in
+   * the same order, same text. That is what rules out the spellings that
+   * look right and parse wrong — `milk` + `---` is a setext heading, and
+   * `milk```` is a paragraph ending in three backticks.
+   */
+  fcTest.prop([blockDocument, fc.nat()], withDefaults())(
+    'B3: an inserter at a line end adds its block and changes no other block',
+    (doc, lineChoice) => {
+      const lineIndex = lineChoice % countLines(doc)
+      const at = lineStart(doc, lineIndex) + doc.split('\n')[lineIndex].length
+      const before = blocksOf(doc)
+      // Where it landed, not merely that it landed: an inserter that always
+      // appended would satisfy "one block added, the rest unchanged".
+      const expectedIndex = blocksOf(doc.slice(0, at)).length
+      for (const [id, type] of [
+        ['rule', 'thematicBreak'],
+        ['code-block', 'code'],
+        ['table', 'table'],
+      ] as const) {
+        const command = selfContainedCommand(verb(id))
+        if (command === null) throw new Error(`${id} lost its command`)
+        const after = blocksOf(drive(id, command, doc, at).doc)
+        const added = after.findIndex(
+          (block, index) => block.type === type && before[index]?.type !== type,
+        )
+        expect(added, `${id} added no ${type} to ${JSON.stringify(doc)}`).toBeGreaterThanOrEqual(0)
+        expect(added, `${id} put its block somewhere other than after the tapped line`).toBe(
+          expectedIndex,
+        )
+        expect([...after.slice(0, added), ...after.slice(added + 1)]).toEqual(before)
+      }
+    },
+  )
+
+  fcTest.prop(
+    [fc.constantFrom('weekly review', 'ship the thing', 'notes and more')],
+    withDefaults(),
+  )('H3: cycling the heading level has period four on a body line', (body) => {
+    let doc: string = body
+    for (let step = 0; step < 4; step++) {
+      const result = drive('heading', cycleHeadingLevel, doc, 0)
+      expect(result.handled).toBe(true)
+      doc = result.doc
+    }
+    expect(doc).toBe(body)
+  })
+
+  it('reading order keeps each band together, whatever the priority order was', () => {
+    // Priority decides WHAT survives a narrow bar; the table decides the
+    // sequence. Laying a full bar out in priority order interleaves the
+    // bands and leaves the dividers drawn between them meaningless.
+    const bands = inVerbTableOrder(VERB_BAR_ORDER).map((id) => verb(id).band)
+    const runs = bands.filter((band, index) => index === 0 || band !== bands[index - 1])
+    expect(runs).toEqual([...new Set(runs)])
+  })
+
+  it('the verb bar order places every verb exactly once', () => {
+    const ids = MARKDOWN_EDITOR_VERBS.map((spec) => spec.id)
+    expect([...VERB_BAR_ORDER].sort()).toEqual([...ids].sort())
+    expect(new Set(VERB_BAR_ORDER).size).toBe(VERB_BAR_ORDER.length)
   })
 
   afterAll(() => {
