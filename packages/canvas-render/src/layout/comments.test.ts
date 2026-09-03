@@ -99,6 +99,54 @@ function runsOf(nodes: readonly SceneNode[]): TextRunNode[] {
   })
 }
 
+describe('the comments option', () => {
+  // ADR-0026 decision 1b: the annotation layer is keeper-side, so it stops
+  // riding inside the canvas envelope and travels beside it. These pin the
+  // seam that lets a caller hand comments over directly — the step that
+  // makes a markdown document's threads renderable at all, since it has no
+  // envelope to put them in.
+  it('draws comments passed as an option, on a canvas whose envelope has none', () => {
+    const scene = layoutSpatialCanvas(
+      { nodes: [TEXT_NODE], edges: [] },
+      baseOptions({ comments: [{ id: 'c1', x: 400, y: 60, text: 'from beside the canvas' }] }),
+    )
+
+    expect(pinOf(scene.nodes, 'c1')).toBeDefined()
+    // Joined, because the body lays out through the markdown pipeline and a
+    // bubble-width wrap splits it across runs.
+    expect(
+      runsOf(scene.nodes)
+        .map((run) => run.text)
+        .join(' '),
+    ).toContain('from beside the canvas')
+  })
+
+  it('lets the option win over the envelope, so a migrating caller is never doubled', () => {
+    // Both populated is what a half-migrated call site looks like. Drawing
+    // the union would put two pins on one comment; preferring the argument
+    // makes the migration one call site at a time.
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'stale', x: 10, y: 10, text: 'from the envelope' }]),
+      baseOptions({ comments: [{ id: 'fresh', x: 400, y: 60, text: 'from the option' }] }),
+    )
+
+    expect(pinOf(scene.nodes, 'fresh')).toBeDefined()
+    expect(pinOf(scene.nodes, 'stale')).toBeUndefined()
+  })
+
+  it('draws nothing for an empty option, rather than falling back to the envelope', () => {
+    // An empty array is an ANSWER — "this document has no conversations" —
+    // and a caller that has read the layer and found it empty must not get
+    // the envelope's stale copy back.
+    const scene = layoutSpatialCanvas(
+      canvasWith([{ id: 'stale', x: 10, y: 10, text: 'from the envelope' }]),
+      baseOptions({ comments: [] }),
+    )
+
+    expect(pinOf(scene.nodes, 'stale')).toBeUndefined()
+  })
+})
+
 describe('comment layer', () => {
   it('draws a pin centered on the anchor and a bubble holding the text, after all content', () => {
     const scene = layoutSpatialCanvas(
