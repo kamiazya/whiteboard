@@ -157,6 +157,25 @@ imports. Start the run, then leave the working tree alone.
   a raw DOM wipe also races the shared setup's own cleanup, so in
   isolation it reproduces only intermittently (1 in 17 reruns) while CI
   load makes it reliable.
+- **A tenth, with the ninth's exact signature and a different cause:
+  `EnvironmentTeardownError` on a module the test imported STATICALLY.**
+  `Cannot load '/src/server/security/timing-safe.ts' imported from
+  bearer-token.ts after the environment was torn down`, reported against
+  `mcp-node` with `Test Files 188 passed`, `Tests 2130 passed`, `Errors 2`,
+  job red. Nothing in the chain is dynamic — the test file's imports are all
+  top-level, and every module down to `timing-safe.ts` is a plain `import` —
+  so this is NOT the in-body `await import()` shape above. Vitest's runner
+  instantiates a static graph on demand, and under CI load the tail of that
+  graph was still loading when the environment was torn down.
+  The consequence for triage is the part worth keeping: the summary line
+  says everything passed, so **the exit code is the only thing that noticed**,
+  and the file it names is a victim rather than a suspect. Measured before
+  concluding that: the named file alone passes, the whole project passes
+  twice, and CI's own `vitest run --project=mcp-node --shard=1/2` passes
+  three times locally at the identical 188/2130 counts. There is no repo-side
+  fix to reach for — do not go rewriting the auth import chain from a failure
+  that will not reproduce. Re-run the job; a second identical failure is the
+  point at which it is worth root-causing under real contention.
 - **A seventh: clicking a trigger whose menu is still dismissing.** The click is consumed and
   the menu stays shut, so the failure reads as "the list does not contain this item" when no
   list was ever opened — and raising the query's timeout only buys a slower identical failure.
