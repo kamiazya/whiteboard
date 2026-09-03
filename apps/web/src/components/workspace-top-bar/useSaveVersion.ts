@@ -71,14 +71,19 @@ export function useSaveVersion({
   return { saving, savingRef, saveVersion }
 }
 
-// Cmd/Ctrl+S performs a quick save.
-// Excalidraw can focus an offscreen contenteditable for clipboard or IME work, which makes
-// browser-level heuristics think the user is typing and can reopen the native Save Page dialog.
-// Capture the shortcut unconditionally here because the canvas has no competing native save meaning.
-export function useQuickSaveShortcut(
-  enabled: boolean,
-  saveVersion: (label?: string) => Promise<boolean>,
-) {
+/**
+ * ⌘/Ctrl+S asks for a bookmark; it no longer takes one.
+ *
+ * Under automatic checkpoints there is nothing to "save" — the state is
+ * already held. What the chord means now is "mark this point", and a mark
+ * without a name is indistinguishable from the checkpoint beside it, so it
+ * opens the naming field instead of writing a row.
+ *
+ * Captured unconditionally: the canvas can focus an offscreen
+ * contenteditable for clipboard or IME work, which makes the browser's own
+ * heuristics reopen the native Save Page dialog.
+ */
+export function useBookmarkShortcut(enabled: boolean, onRequest: () => void) {
   useEffect(() => {
     if (!enabled) return
     const onKey = (e: KeyboardEvent) => {
@@ -86,10 +91,10 @@ export function useQuickSaveShortcut(
       if (!isSave) return
       e.preventDefault()
       e.stopPropagation()
-      void saveVersion('')
+      onRequest()
     }
     window.addEventListener('keydown', onKey, { capture: true })
     return () =>
       window.removeEventListener('keydown', onKey, { capture: true } as EventListenerOptions)
-  }, [saveVersion, enabled])
+  }, [onRequest, enabled])
 }

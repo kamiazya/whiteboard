@@ -23,12 +23,13 @@ import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDispla
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
 import { Button } from '../components/ui/button.js'
 import WorkspaceTopBar from '../components/WorkspaceTopBar.js'
+import {
+  BookmarkAction,
+  type SaveVersionOutcome,
+} from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import {
-  SaveVersionAction,
-  type SaveVersionOutcome,
-} from '../components/workspace-top-bar/SaveVersionAction.js'
+import { useBookmarkShortcut } from '../components/workspace-top-bar/useSaveVersion.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { DaemonApiContext } from '../contexts/DaemonApiContext.js'
@@ -159,10 +160,18 @@ export function DaemonDocumentPage({
   // does not remount, and a panel left open across a switch would be listing
   // the departed document's versions under the arrived document's name.
   const [historyOpen, setHistoryOpen] = useState(false)
+  // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
+  const [bookmarkArmed, setBookmarkArmed] = useState(0)
   // Bumped on any version_created broadcast (covers this button's own save,
   // MCP tool saves, and other peers) so an open VersionTimeline updates
   // without waiting for its 15s poll.
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
+  useBookmarkShortcut(canvas !== null, () => {
+    setHistoryOpen(true)
+    setBookmarkArmed((n) => n + 1)
+  })
+
   const [savingVersion, setSavingVersion] = useState(false)
   const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
 
@@ -395,6 +404,7 @@ export function DaemonDocumentPage({
   // SCOPE RESET — see the state's own note above.
   useEffect(() => {
     setHistoryOpen(false)
+    setBookmarkArmed(0)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
@@ -550,7 +560,7 @@ export function DaemonDocumentPage({
     }
   }
 
-  const saveVersion = async (): Promise<void> => {
+  const saveVersion = async (label: string): Promise<void> => {
     if (canvas === null || savingVersion) return
     setSavingVersion(true)
     setSaveVersionOutcome(null)
@@ -560,7 +570,7 @@ export function DaemonDocumentPage({
         {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({}),
+          body: JSON.stringify({ label }),
         },
       )
       if (!res.ok) throw new Error(`save failed: ${res.status}`)
@@ -571,6 +581,22 @@ export function DaemonDocumentPage({
       }
       setSaveVersionOutcome('saved')
       setVersionRefreshSignal((n) => n + 1)
+      // The thumbnail rides with the bookmark, as it did when the top bar
+      // owned the save. It moved here with the save itself: the bar no
+      // longer takes versions, so it no longer needs the scene exporter.
+      void (async () => {
+        try {
+          const blob = await getThumbnailBlob()
+          if (blob && parsed.data.version.id) {
+            await daemonFetch(
+              `${daemonBaseUrl}${documentsApiUrl(canvas.workspaceId, canvas.path, `versions/${parsed.data.version.id}/thumbnail`)}`,
+              { method: 'PUT', headers: { 'Content-Type': 'image/png' }, body: blob },
+            )
+          }
+        } catch (err) {
+          log.error('bookmark thumbnail upload failed:', err)
+        }
+      })()
       // The server's manual POST /versions route does not broadcast
       // version_created over the websocket (that only fires for auto-saves
       // and other peers' saves), so this button must dispatch the same
@@ -606,10 +632,11 @@ export function DaemonDocumentPage({
   }
 
   const versionHeaderActions = canvas ? (
-    <SaveVersionAction
+    <BookmarkAction
       saving={savingVersion}
       outcome={saveVersionOutcome}
-      onSave={() => void saveVersion()}
+      armed={bookmarkArmed}
+      onSave={(label) => void saveVersion(label)}
     />
   ) : null
 
@@ -712,7 +739,6 @@ export function DaemonDocumentPage({
                 // Version thumbnails come from the same PNG export path the
                 // user can trigger by hand. Without this the save flow skips
                 // the upload entirely and latest-thumbnail stays 204 forever.
-                getThumbnailBlob={getThumbnailBlob}
               />
             )}
             {capabilities.branches && canvas && (

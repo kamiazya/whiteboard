@@ -107,7 +107,13 @@ describe('BrowserDocumentPage version history (browser)', () => {
     const empty = await within(panel).findByText(/No versions yet/)
     expect(empty.textContent).toContain('Save one with the button above, or ⌘/Ctrl+S.')
 
+    // ⌘/Ctrl+S asks for a bookmark rather than taking one: it opens the
+    // history with its naming field ready. An unnamed mark would be titled
+    // by its time, exactly like the checkpoint beside it.
     await userEvent.keyboard('{Control>}s{/Control}')
+    const nameField = await screen.findByRole('textbox', { name: 'Name this point' })
+    await userEvent.fill(nameField, 'first draft')
+    await userEvent.keyboard('{Enter}')
 
     // The row reaches the store the panel reads…
     const store = new BrowserVersionStore({ docs: new BrowserWorkspaceDocs(), index })
@@ -122,11 +128,16 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // The panel's own icon: the route a finger has, where a shortcut is
     // nothing. It draws no verb — the name is the accessible name, and what
     // the save produced is the row below it, not a word beside it.
-    const saveIcon = within(panel).getByRole('button', { name: 'Save version' })
-    expect(saveIcon.textContent).toBe('')
-    await userEvent.click(saveIcon)
+    const bookmark = within(panel).getByRole('button', { name: 'Bookmark this point' })
+    expect(bookmark.textContent).toBe('')
+    await userEvent.click(bookmark)
+    await userEvent.fill(
+      await within(panel).findByRole('textbox', { name: 'Name this point' }),
+      'second draft',
+    )
+    await userEvent.keyboard('{Enter}')
     // Announced for a reader who cannot see the row arrive, and only there.
-    const announced = await within(panel).findByText('Version saved')
+    const announced = await within(panel).findByText('Bookmark saved')
     expect(announced.className).toContain('sr-only')
     await waitFor(() => expect(within(panel).getAllByTestId('version-row')).toHaveLength(2), {
       timeout: 5000,
@@ -135,7 +146,9 @@ describe('BrowserDocumentPage version history (browser)', () => {
     // an "Auto-save"/"Manual" title, an AI/Human/System operator line and a
     // "manual" badge, all stating the same fact — is what the row rewrite
     // removed.
-    expect(within(panel).getAllByText(/You/)).toHaveLength(2)
+    // Both are named marks, and the name is what tells them apart.
+    expect(within(panel).getByText('first draft')).toBeTruthy()
+    expect(within(panel).getByText('second draft')).toBeTruthy()
     expect(within(panel).queryByText(/Manual|Auto-save|System|Human/)).toBeNull()
 
     // The document moves on — behind the session's back, then reopened, so

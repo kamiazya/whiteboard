@@ -2,15 +2,10 @@ import { ChevronLeft, History } from 'lucide-react'
 import type { ReactNode } from 'react'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
-import { useDirtyState } from '@/hooks/useDirtyState'
-import { getAppLogger } from '@/lib/app-logger'
 import { cn } from '@/lib/utils'
-import { isMacPlatform } from '../lib/platform.js'
 import { HeaderBranchChip } from './HeaderBranchChip'
-import { HeaderVersionDot } from './HeaderVersionDot'
 import { TopBarSecondaryActions } from './workspace-top-bar/TopBarSecondaryActions'
 import { useDocumentNames } from './workspace-top-bar/useDocumentNames'
-import { useQuickSaveShortcut, useSaveVersion } from './workspace-top-bar/useSaveVersion'
 
 // Gates which pieces of daemon-only chrome render. Omitted entirely (the
 // default), every capability behaves as if it were `true` — this keeps every
@@ -34,7 +29,6 @@ export interface WorkspaceTopBarCapabilities {
 interface Props {
   workspaceId: string
   path: string
-  getThumbnailBlob?: () => Promise<Blob | null>
   /**
    * Leaves the document for the document browser, which is where finding one
    * happens (user decision 2026-08-22). apps/web has no react-router-dom
@@ -52,17 +46,10 @@ interface Props {
   // Omitted when the host page has no fullscreen affordance of its own.
   onToggleFullscreen?: () => void
   isFullscreen?: boolean
-  // Gates HeaderVersionDot/Cmd+S/History (versions), HeaderBranchChip (branches),
-  // and HeaderBranchChip's mergeEnabled passthrough (merge). Undefined means
-  // "all capabilities on", matching every existing caller's behavior.
+  // Gates HeaderBranchChip (branches) and its mergeEnabled passthrough
+  // (merge). Undefined means "all capabilities on", matching every existing
+  // caller's behavior.
   capabilities?: WorkspaceTopBarCapabilities
-  /**
-   * Whether THIS document has a history to save into — a page fact, not a
-   * keeper capability (both keepers have one now): the browser's markdown
-   * documents have no version backend yet, so their page hides the save
-   * dot and the shortcut. Undefined means "yes".
-   */
-  versionsEnabled?: boolean
   /**
    * Opens and closes the document's history. The PAGE owns both the state and
    * the panel: history is a column of the editor row, not a popover hanging
@@ -75,6 +62,9 @@ interface Props {
    */
   onToggleHistory?: () => void
   historyOpen?: boolean
+  // Bumped by the host page on an externally observed HEAD/version change
+  // (another client, an MCP tool call) so the chip/timeline refetch without
+  // waiting for their own poll interval.
   // Bumped by the host page on an externally observed HEAD/version change
   // (another client, an MCP tool call) so the chip/timeline refetch without
   // waiting for their own poll interval.
@@ -111,11 +101,9 @@ export default function WorkspaceTopBar({
   path,
   onToggleFullscreen,
   isFullscreen,
-  getThumbnailBlob,
   onNavigateBack,
   dataMode = 'daemon',
   capabilities,
-  versionsEnabled = true,
   onToggleHistory,
   historyOpen = false,
   branchRefreshSignal,
@@ -124,7 +112,6 @@ export default function WorkspaceTopBar({
   const isLocalMode = dataMode === 'local'
   const branchesEnabled = capabilities?.branches ?? true
   const mergeEnabled = capabilities?.merge ?? true
-  const log = getAppLogger('workspace-top-bar')
   const daemonFetch = useDaemonApi()
 
   const { effectiveNames, renameDocument } = useDocumentNames({
@@ -132,24 +119,6 @@ export default function WorkspaceTopBar({
     isLocalMode,
     daemonFetch,
   })
-
-  // Save state: dirty dot + Cmd/Ctrl+S only.
-  // No beforeunload guard: every Excalidraw edit flows through useWhiteboardSync
-  // → LoroDoc → WebSocket → daemon → SQLite blob in real time, so closing the
-  // tab cannot lose persisted content. The dirty dot here only tracks
-  // "haven't named a manual version yet"; warning the user about it via the
-  // browser's leave-confirmation dialog is misleading and was getting in the
-  // way of automation (e.g. Playwright workflows).
-  const { isDirty } = useDirtyState(workspaceId, path)
-  const { saving, saveVersion } = useSaveVersion({
-    workspaceId,
-    path,
-    getThumbnailBlob,
-    log,
-  })
-  useQuickSaveShortcut(versionsEnabled, saveVersion)
-  const isMac = isMacPlatform()
-  const shortcutHint = isMac ? '⌘S' : 'Ctrl+S'
 
   const canvasCustomName = effectiveNames.documents[path]
 
@@ -213,16 +182,6 @@ export default function WorkspaceTopBar({
             </TooltipTrigger>
             <TooltipContent>History</TooltipContent>
           </Tooltip>
-        )}
-
-        {/* Save-state dot. */}
-        {versionsEnabled && (
-          <HeaderVersionDot
-            dirty={isDirty}
-            saving={saving}
-            onSave={() => void saveVersion('')}
-            shortcutHint={shortcutHint}
-          />
         )}
       </div>
 

@@ -26,12 +26,13 @@ import {
 } from '../components/ui/alert-dialog.js'
 import { Button } from '../components/ui/button.js'
 import { DropdownMenuItem } from '../components/ui/dropdown-menu.js'
+import {
+  BookmarkAction,
+  type SaveVersionOutcome,
+} from '../components/workspace-top-bar/BookmarkAction.js'
 import { DocumentMenu } from '../components/workspace-top-bar/DocumentMenu.js'
 import { sanitizeExportFilenameBase } from '../components/workspace-top-bar/export-filename.js'
-import {
-  SaveVersionAction,
-  type SaveVersionOutcome,
-} from '../components/workspace-top-bar/SaveVersionAction.js'
+import { useBookmarkShortcut } from '../components/workspace-top-bar/useSaveVersion.js'
 import { useSceneExport } from '../components/workspace-top-bar/useSceneExport.js'
 import { VersionPanel } from '../components/workspace-top-bar/VersionPanel.js'
 import { VersionsBackendContext } from '../contexts/VersionsBackendContext.js'
@@ -299,6 +300,7 @@ export function BrowserDocumentPage({
     setIsDuplicating(false)
     setSaveVersionOutcome(null)
     setHistoryOpen(false)
+    setBookmarkArmed(0)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -577,7 +579,16 @@ export function BrowserDocumentPage({
   // switching rather than remounting, so an open panel is cleared by hand
   // with the rest of the document-scoped state.
   const [historyOpen, setHistoryOpen] = useState(false)
+  // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready. The
+  // chord asks for a bookmark now; it does not take one.
+  const [bookmarkArmed, setBookmarkArmed] = useState(0)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
+  // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
+  useBookmarkShortcut(versionsEnabled, () => {
+    setHistoryOpen(true)
+    setBookmarkArmed((n) => n + 1)
+  })
+
   useEffect(() => {
     const onSaved = () => setVersionRefreshSignal((n) => n + 1)
     window.addEventListener('whiteboard:wb_version_saved', onSaved)
@@ -590,12 +601,12 @@ export function BrowserDocumentPage({
   // save, which is what clears the dot and refreshes the list.
   const [savingVersion, setSavingVersion] = useState(false)
   const [saveVersionOutcome, setSaveVersionOutcome] = useState<SaveVersionOutcome>(null)
-  const saveVersionFromPanel = async (): Promise<void> => {
+  const saveVersionFromPanel = async (label: string): Promise<void> => {
     if (versionsBackend === null || documentPath === null || savingVersion) return
     setSavingVersion(true)
     setSaveVersionOutcome(null)
     try {
-      await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label: '' })
+      await versionsBackend.save(getBrowserWorkspaceId(), documentPath, { label })
       setSaveVersionOutcome('saved')
       // The top bar addresses this document as `local`/path (its
       // `dataMode="local"` placeholder), so the dot listens under that id.
@@ -905,10 +916,11 @@ export function BrowserDocumentPage({
               onRestored={clearLocalUndo}
               refreshSignal={versionRefreshSignal}
               headerActions={
-                <SaveVersionAction
+                <BookmarkAction
                   saving={savingVersion}
                   outcome={saveVersionOutcome}
-                  onSave={() => void saveVersionFromPanel()}
+                  armed={bookmarkArmed}
+                  onSave={(label) => void saveVersionFromPanel(label)}
                 />
               }
             />
@@ -961,7 +973,6 @@ export function BrowserDocumentPage({
                     branches: capabilities.branches,
                     merge: capabilities.merge,
                   }}
-                  versionsEnabled={versionsEnabled}
                   onToggleHistory={
                     versionsEnabled ? () => setHistoryOpen((open) => !open) : undefined
                   }

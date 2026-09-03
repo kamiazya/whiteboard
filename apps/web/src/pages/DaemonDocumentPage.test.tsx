@@ -111,6 +111,20 @@ function toggleHistoryPanel() {
   fireEvent.click(screen.getByRole('button', { name: /history/i }))
 }
 
+// A bookmark is a NAMED point now: the control opens a field rather than
+// saving on the press, because a row with no label is titled by its time and
+// so cannot be told from the automatic checkpoint beside it.
+async function takeBookmark(name = 'a point worth keeping') {
+  await act(async () => {
+    screen.getByRole('button', { name: 'Bookmark this point' }).click()
+  })
+  const field = await screen.findByRole('textbox', { name: 'Name this point' })
+  await act(async () => {
+    fireEvent.change(field, { target: { value: name } })
+    fireEvent.keyDown(field, { key: 'Enter' })
+  })
+}
+
 const DAEMON_BASE_URL = 'http://127.0.0.1:3099'
 
 describe('DaemonDocumentPage', () => {
@@ -708,10 +722,7 @@ describe('DaemonDocumentPage', () => {
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       toggleHistoryPanel()
-      const saveButton = await screen.findByRole('button', { name: 'Save version' })
-      await act(async () => {
-        saveButton.click()
-      })
+      await takeBookmark()
 
       await waitFor(() => {
         expect(
@@ -728,7 +739,7 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
 
-    it('clears HeaderVersionDot after a manual "Save version" click, not just a remote version_created broadcast', async () => {
+    it('announces a bookmark on the window, which is what a version_created broadcast would otherwise have to do', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
@@ -799,16 +810,18 @@ describe('DaemonDocumentPage', () => {
         backend.handlers?.onRemoteUpdate?.(update)
       })
 
-      await waitFor(() => expect(screen.getByTestId('header-version-dot')).toBeTruthy())
+      const saved = vi.fn()
+      window.addEventListener('whiteboard:wb_version_saved', saved)
 
       toggleHistoryPanel()
-      const saveButton = await screen.findByRole('button', { name: 'Save version' })
-      await act(async () => {
-        saveButton.click()
-      })
+      await takeBookmark()
 
-      await waitFor(() => expect(screen.getByText(/saved/i)).toBeTruthy())
-      await waitFor(() => expect(screen.queryByTestId('header-version-dot')).toBeNull())
+      // The daemon's manual POST does not broadcast version_created, so the
+      // page announces the bookmark itself — the same identity-scoped event
+      // a broadcast would have carried. Without it nothing downstream (the
+      // favicon's dirty signal, an open panel) learns the save happened.
+      await waitFor(() => expect(saved).toHaveBeenCalledTimes(1))
+      window.removeEventListener('whiteboard:wb_version_saved', saved)
 
       vi.unstubAllGlobals()
     })
@@ -854,10 +867,7 @@ describe('DaemonDocumentPage', () => {
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       toggleHistoryPanel()
-      const saveButton = await screen.findByRole('button', { name: 'Save version' })
-      await act(async () => {
-        saveButton.click()
-      })
+      await takeBookmark()
 
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
 
@@ -899,10 +909,7 @@ describe('DaemonDocumentPage', () => {
       fireEvent.click(await screen.findByTestId('select-tool-button'))
 
       toggleHistoryPanel()
-      const saveButton = await screen.findByRole('button', { name: 'Save version' })
-      await act(async () => {
-        saveButton.click()
-      })
+      await takeBookmark()
 
       await waitFor(() => expect(screen.getByText(/save failed/i)).toBeTruthy())
 
@@ -1598,7 +1605,7 @@ describe('DaemonDocumentPage', () => {
       expect(onNavigateBack).toHaveBeenCalledTimes(1)
     })
 
-    it('performs exactly one POST /versions on a single Cmd/Ctrl+S keydown', async () => {
+    it('asks for a name on ⌘/Ctrl+S rather than writing a version straight away', async () => {
       const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
         (input, init) => {
           const url = String(input)
@@ -1651,6 +1658,22 @@ describe('DaemonDocumentPage', () => {
         fireEvent.keyDown(window, { key: 's', metaKey: true })
       })
 
+      // The chord opens the history with its naming field ready. Nothing is
+      // written until a name is given: an unnamed mark would be titled by
+      // its time, exactly like the automatic checkpoint beside it.
+      const field = await screen.findByRole('textbox', { name: 'Name this point' })
+      expect(
+        fetchMock.mock.calls.filter(
+          ([reqInput, init]) =>
+            String(reqInput).includes('/workspaces/w1/documents/main/versions') &&
+            init?.method === 'POST',
+        ),
+      ).toHaveLength(0)
+
+      await act(async () => {
+        fireEvent.change(field, { target: { value: 'a point worth keeping' } })
+        fireEvent.keyDown(field, { key: 'Enter' })
+      })
       await waitFor(() => {
         const postCalls = fetchMock.mock.calls.filter(
           ([reqInput, init]) =>
@@ -1659,77 +1682,6 @@ describe('DaemonDocumentPage', () => {
         )
         expect(postCalls).toHaveLength(1)
       })
-
-      vi.unstubAllGlobals()
-    })
-
-    it('drives HeaderVersionDot dirty/clean via the identity-scoped doc_changed/wb_version_saved events', async () => {
-      const fetchMock = vi.fn<(input: RequestInfo | URL, init?: RequestInit) => Promise<Response>>(
-        (input) => {
-          const url = String(input)
-          if (url.includes('/branches')) {
-            return Promise.resolve(
-              new Response(JSON.stringify({ head: 'main', branches: [] }), {
-                status: 200,
-                headers: { 'Content-Type': 'application/json' },
-              }),
-            )
-          }
-          return Promise.resolve(new Response('{}', { status: 200 }))
-        },
-      )
-      vi.stubGlobal('fetch', fetchMock)
-
-      await act(async () => {
-        render(
-          <DaemonDocumentPage
-            daemonBaseUrl={DAEMON_BASE_URL}
-            createBackend={makeCreateBackend()}
-          />,
-          { container: document.body },
-        )
-      })
-      await waitFor(() => expect(screen.getByTestId('spatial-editor-container')).toBeTruthy())
-      // Hand (view-only) is the default tool; the host history cluster only
-      // docks in Select mode, so tests exercising it switch first.
-      fireEvent.click(await screen.findByTestId('select-tool-button'))
-
-      expect(screen.queryByTestId('header-version-dot')).toBeNull()
-
-      const backend = createdBackends[0]!
-      const { LoroDoc, LoroMap } = require('loro-crdt') as typeof import('loro-crdt')
-      const remoteDoc = new LoroDoc()
-      const list = remoteDoc.getMovableList('elements')
-      const map = list.insertContainer(0, new LoroMap())
-      map.set('id', 'el-1')
-      map.set('type', 'rectangle')
-      map.set('x', 0)
-      map.set('y', 0)
-      map.set('width', 10)
-      map.set('height', 10)
-      map.set('isDeleted', false)
-      remoteDoc.commit()
-      const update = remoteDoc.export({ mode: 'update' })
-
-      await act(async () => {
-        backend.handlers?.onRemoteUpdate?.(update)
-      })
-
-      await waitFor(() => expect(screen.getByTestId('header-version-dot')).toBeTruthy())
-
-      await act(async () => {
-        backend.handlers?.onVersionCreated?.({
-          id: 'v-remote',
-          path: 'main',
-          createdAt: '2026-01-01T00:00:00Z',
-          elementCount: 1,
-          auto: false,
-          hasThumbnail: false,
-          branchName: 'main',
-        })
-      })
-
-      await waitFor(() => expect(screen.queryByTestId('header-version-dot')).toBeNull())
 
       vi.unstubAllGlobals()
     })
@@ -1841,4 +1793,9 @@ describe('DaemonDocumentPage', () => {
       vi.unstubAllGlobals()
     })
   })
+  // The bookmark's thumbnail moved with the save. The top bar used to own
+  // both and no longer takes versions at all, so an unwired page would leave
+  // every canvas answering 204 on latest-thumbnail forever with nothing to
+  // notice — which is what the deleted prop-threading test guarded, now
+  // guarded by the behaviour instead.
 })
