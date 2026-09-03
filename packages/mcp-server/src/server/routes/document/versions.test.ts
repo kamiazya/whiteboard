@@ -1,6 +1,7 @@
 import { mkdir } from 'node:fs/promises'
 import { userInfo } from 'node:os'
 import { join } from 'node:path'
+import { writeSpatialCanvas } from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import { LoroDoc, LoroMap } from 'loro-crdt'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
@@ -195,5 +196,79 @@ describe('versions API', () => {
     const resB = await app.request('/api/workspaces/session1/documents/canvas-b/versions')
     const bodyB = (await resB.json()) as { versions: Array<{ label?: string }> }
     expect(bodyB.versions.map((v) => v.label)).toEqual(['b1'])
+  })
+})
+
+// Reading a past state, which is what makes "see it, then decide" possible.
+// The panel used to offer restore behind a confirmation and nothing else, so
+// the only way to learn what a version held was to apply it and look.
+describe('GET /versions/:id/document', () => {
+  beforeEach(async () => {
+    await mkdir(join(tmp.dir, 'session1'), { recursive: true })
+    clearCache()
+    _clearWorkspaceDocCacheForTests()
+    await saveDocument('session1', 'canvas-a', new LoroDoc(), { kind: 'spatial' })
+    await saveDocument('session1', 'canvas-b', new LoroDoc(), { kind: 'spatial' })
+  })
+  afterEach(() => {
+    clearCache()
+  })
+
+  it('answers the canvas as it stood, not as it stands', async () => {
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+
+    const first = new LoroDoc()
+    writeSpatialCanvas(first, {
+      nodes: [{ id: 'kept', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'kept' }],
+      edges: [],
+    })
+    first.commit()
+    await saveDocument('session1', 'canvas-a', first, { kind: 'spatial', overwrite: true })
+
+    const saved = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'before' }),
+    })
+    expect(saved.status).toBe(200)
+    const { version } = (await saved.json()) as { version: { id: string } }
+
+    // Move on, so a stale read would answer the CURRENT state instead.
+    const second = new LoroDoc()
+    second.import(first.export({ mode: 'snapshot' }))
+    writeSpatialCanvas(second, {
+      nodes: [
+        { id: 'kept', type: 'text', x: 0, y: 0, width: 80, height: 40, text: 'kept' },
+        { id: 'added-later', type: 'text', x: 90, y: 0, width: 80, height: 40, text: 'later' },
+      ],
+      edges: [],
+    })
+    second.commit()
+    await saveDocument('session1', 'canvas-a', second, { kind: 'spatial', overwrite: true })
+
+    const res = await app.request(
+      `/api/workspaces/session1/documents/canvas-a/versions/${version.id}/document`,
+    )
+    expect(res.status).toBe(200)
+    const body = (await res.json()) as { kind: string; canvas: { nodes: { id: string }[] } }
+    expect(body.kind).toBe('spatial')
+    expect(body.canvas.nodes.map((n) => n.id)).toEqual(['kept'])
+  })
+
+  it('refuses a version id that belongs to another document, as restore does', async () => {
+    const app = createDocumentRouter({ autoVersionQuietMs: 60_000 })
+    const saved = await app.request('/api/workspaces/session1/documents/canvas-a/versions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ label: 'a' }),
+    })
+    const { version } = (await saved.json()) as { version: { id: string } }
+
+    // The id alone would otherwise read one document's history through
+    // another's path.
+    const res = await app.request(
+      `/api/workspaces/session1/documents/canvas-b/versions/${version.id}/document`,
+    )
+    expect(res.status).toBe(404)
   })
 })

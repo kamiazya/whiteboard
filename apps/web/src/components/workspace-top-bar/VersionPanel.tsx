@@ -1,5 +1,6 @@
 import type { ReactNode, Ref } from 'react'
 import VersionTimeline, { type VersionTimelineCapabilities } from '@/components/VersionTimeline'
+import type { PastDocument } from '@/lib/versions-backend'
 
 interface VersionPanelProps {
   panelRef?: Ref<HTMLDivElement>
@@ -8,6 +9,7 @@ interface VersionPanelProps {
   capabilities?: VersionTimelineCapabilities
   onRestored?: () => void
   refreshSignal?: number
+  onPreview?: (past: PastDocument | null) => void
   headerActions?: ReactNode
 }
 
@@ -30,6 +32,7 @@ export function VersionPanel({
   capabilities,
   onRestored,
   refreshSignal,
+  onPreview,
   headerActions,
 }: VersionPanelProps) {
   return (
@@ -44,6 +47,7 @@ export function VersionPanel({
         capabilities={capabilities}
         onRestored={onRestored}
         refreshSignal={refreshSignal}
+        onPreview={onPreview}
         headerActions={headerActions}
       />
     </div>

@@ -259,15 +259,15 @@ const BRANCH_CHIP_STATE: Record<string, ScopeCoverage> = {
 
 const VERSION_TIMELINE_STATE: Record<string, ScopeCoverage> = {
   versions: 'cleared on switch',
-  pendingRestore: 'cleared on switch',
+  previewing: 'cleared on switch',
   restoreError: 'cleared on switch',
   isRestoring: 'cleared on switch',
 
   loading: 'no subject: an in-flight flag for this screen’s own fetch',
   stale:
     'no subject: whether the LAST READ failed, which is about the fetch rather than about a document — and a switch refetches, so a success clears it on its own',
-  pendingRestoreRef:
-    'no subject: mirrors pendingRestore, reassigned every render — so it is dropped with the state it mirrors',
+  previewingRef:
+    'no subject: mirrors previewing, reassigned every render — so it is dropped with the state it mirrors',
   fetchSeqRef:
     'no subject: a monotonic dispatch stamp; resetting it would revive the stale-response race it exists to close',
   prevRefreshSignalRef:
@@ -298,6 +298,9 @@ const MARKDOWN_DOCUMENT_STATE: Record<string, ScopeCoverage> = {
 // so everything it holds about a document has to be dropped by hand.
 const BROWSER_DOCUMENT_PAGE_STATE: Record<string, ScopeCoverage> = {
   historyOpen: 'cleared on switch',
+  // The past state being looked at. Restoring one the person opened on the
+  // DEPARTED document would apply that version id to the arrived one.
+  preview: 'cleared on switch',
   // Cleared with the panel: a field left armed across a switch would name
   // the arrived document from the departed one's keystroke.
   bookmarkArmed: 'cleared on switch',

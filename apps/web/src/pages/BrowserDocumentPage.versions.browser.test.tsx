@@ -166,6 +166,18 @@ describe('BrowserDocumentPage version history (browser)', () => {
     const restoreTarget = row?.querySelector('button')
     if (!restoreTarget) throw new Error('the version row is not restorable')
     await userEvent.click(restoreTarget)
+
+    // LOOK first. The document shows the state that version holds while the
+    // record still holds the later one — which is the whole promise: the old
+    // flow asked you to confirm a state you could not see, and applying it
+    // was the only way to find out what was in it.
+    const preview = await screen.findByTestId('document-preview')
+    await waitFor(() => expect(preview.textContent ?? '').toContain('first'))
+    expect(preview.textContent ?? '').not.toContain('second')
+    expect(await storedText(documentId)).toBe('second')
+    // Read-only: the editor is not on screen while a past state is.
+    expect(screen.queryByTestId('spatial-editor-container')).toBeNull()
+
     await userEvent.click(await screen.findByRole('button', { name: 'Restore' }))
 
     await waitFor(async () => expect(await storedText(documentId)).toBe('first'), {

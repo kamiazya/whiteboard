@@ -89,6 +89,14 @@ beforeEach(() => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+    if (url.endsWith('/document')) {
+      return Promise.resolve(
+        new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        }),
+      )
+    }
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))
   })
@@ -136,7 +144,7 @@ describe('VersionTimeline browser mode', () => {
     expect(viewport!.scrollTop).toBeGreaterThan(before)
   })
 
-  it('keeps each history row keyboard-focusable and opens the restore dialog', async () => {
+  it('keeps each history row keyboard-focusable, and opens the version for looking at', async () => {
     render(
       <div
         style={{
@@ -158,8 +166,7 @@ describe('VersionTimeline browser mode', () => {
     expect(firstVersion).toHaveFocus()
     firstVersion.click()
 
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
-    await expect.element(page.getByText('Restore this version?')).toBeInTheDocument()
+    await expect.element(page.getByTestId('version-preview-bar')).toBeInTheDocument()
   })
 
   it('rings the lane HEAD is not on, names it, and keeps it out of the tab order', async () => {
@@ -218,7 +225,7 @@ describe('VersionTimeline browser mode', () => {
     expect(document.activeElement).not.toBe(shell)
   })
 
-  it('closes the dialog and notifies the caller after a real click through a successful restore', async () => {
+  it('closes the preview and notifies the caller after a real click through a successful restore', async () => {
     const onRestored = vi.fn()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -227,6 +234,14 @@ describe('VersionTimeline browser mode', () => {
         return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -249,16 +264,16 @@ describe('VersionTimeline browser mode', () => {
     const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
     firstVersion.click()
 
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    await expect.element(page.getByTestId('version-preview-bar')).toBeInTheDocument()
     await page.getByRole('button', { name: 'Restore' }).click()
 
-    await expect.element(page.getByRole('alertdialog')).not.toBeInTheDocument()
+    await expect.element(page.getByTestId('version-preview-bar')).not.toBeInTheDocument()
     await waitFor(() => {
       expect(onRestored).toHaveBeenCalledTimes(1)
     })
   })
 
-  it('keeps the dialog open with an error after a real click through a failed restore', async () => {
+  it('keeps the preview open with an error after a real click through a failed restore', async () => {
     const onRestored = vi.fn()
     const fetchMock = vi.fn<(...args: FetchArgs) => Promise<Response>>((input) => {
       const url =
@@ -269,6 +284,14 @@ describe('VersionTimeline browser mode', () => {
         )
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) {
+        return Promise.resolve(
+          new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
+            status: 200,
+            headers: { 'Content-Type': 'application/json' },
+          }),
+        )
+      }
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -291,11 +314,11 @@ describe('VersionTimeline browser mode', () => {
     const firstVersion = await screen.findByRole('button', { name: /^Version 1\b/ })
     firstVersion.click()
 
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    await expect.element(page.getByTestId('version-preview-bar')).toBeInTheDocument()
     await page.getByRole('button', { name: 'Restore' }).click()
 
     await expect.element(page.getByText(/restore failed/i)).toBeInTheDocument()
-    await expect.element(page.getByRole('alertdialog')).toBeInTheDocument()
+    await expect.element(page.getByTestId('version-preview-bar')).toBeInTheDocument()
     expect(onRestored).not.toHaveBeenCalled()
   })
 })

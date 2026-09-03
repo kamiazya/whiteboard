@@ -1,5 +1,6 @@
 import {
   documentKindSchema,
+  spatialCanvasSchema,
   workspaceDisplayNameSchema,
   workspaceSegmentSchema,
 } from '@kamiazya/whiteboard-model'
@@ -80,6 +81,23 @@ export const exportDocumentJsonRequestSchema = z.object({
   outputPath: z.string().optional(),
   overwrite: z.boolean().optional(),
 })
+
+/**
+ * A past state, as the History panel PREVIEWS it before deciding to restore.
+ *
+ * Projected server-side rather than shipped as CRDT bytes: what the panel
+ * needs is something to draw, and every surface that draws a document
+ * already speaks these two shapes. It also keeps the contract inspectable —
+ * a snapshot on the wire would be opaque to everything but Loro.
+ *
+ * Discriminated on `kind` so a reader cannot mistake an empty canvas for a
+ * markdown document with no body.
+ */
+export const versionDocumentResponseSchema = z.discriminatedUnion('kind', [
+  z.object({ kind: z.literal('spatial'), canvas: spatialCanvasSchema }),
+  z.object({ kind: z.literal('markdown'), body: z.string() }),
+])
+export type VersionDocumentResponse = z.infer<typeof versionDocumentResponseSchema>
 
 export const listVersionsResponseSchema = z.object({
   versions: z.array(versionEntrySchema),

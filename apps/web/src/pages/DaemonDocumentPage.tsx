@@ -11,6 +11,7 @@ import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeas
 import type { ConnectionsBacklink } from '../components/connections/ConnectionsChip.js'
 import { ConnectionsChip } from '../components/connections/ConnectionsChip.js'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
+import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -61,6 +62,7 @@ import { scheduleReplicaRefresh } from '../lib/replica-refresh.js'
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
+import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
@@ -162,6 +164,10 @@ export function DaemonDocumentPage({
   const [historyOpen, setHistoryOpen] = useState(false)
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
+  // The past state the person is LOOKING at, drawn in place of the editor.
+  // Read-only by construction — see DocumentPreview — so "look, then decide"
+  // cannot turn into an edit against a state that is not the document's.
+  const [preview, setPreview] = useState<PastDocument | null>(null)
   // Bumped on any version_created broadcast (covers this button's own save,
   // MCP tool saves, and other peers) so an open VersionTimeline updates
   // without waiting for its 15s poll.
@@ -405,6 +411,7 @@ export function DaemonDocumentPage({
   useEffect(() => {
     setHistoryOpen(false)
     setBookmarkArmed(0)
+    setPreview(null)
   }, [controller.path])
 
   const canvasValueRef = useRef(canvasValue)
@@ -650,6 +657,7 @@ export function DaemonDocumentPage({
               workspaceId={canvas.workspaceId}
               path={canvas.path}
               onRestored={clearLocalUndo}
+              onPreview={setPreview}
               refreshSignal={versionRefreshSignal}
               headerActions={versionHeaderActions}
             />
@@ -834,6 +842,8 @@ export function DaemonDocumentPage({
               Create a canvas
             </Button>
           </div>
+        ) : preview ? (
+          <DocumentPreview past={preview} />
         ) : (
           <DocumentEditorSurface
             kind={documentKind}

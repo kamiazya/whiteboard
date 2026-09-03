@@ -1076,6 +1076,14 @@ describe('DaemonDocumentPage', () => {
               }),
             )
           }
+          if (url.endsWith('/document')) {
+            return Promise.resolve(
+              new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
+                status: 200,
+                headers: { 'Content-Type': 'application/json' },
+              }),
+            )
+          }
           if (url.includes('/versions')) {
             return Promise.resolve(
               new Response(
@@ -1126,7 +1134,7 @@ describe('DaemonDocumentPage', () => {
         fireEvent.click(row.querySelector('button') as HTMLElement)
       })
       await waitFor(() => {
-        expect(screen.getByText('Restore this version?')).toBeTruthy()
+        expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
       })
 
       await act(async () => {

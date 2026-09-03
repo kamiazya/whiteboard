@@ -1,3 +1,8 @@
+import {
+  readDocumentKind,
+  readMarkdownBody,
+  readSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import type { BrowserBackend } from './browser-backend.js'
 import type { BrowserVersionStore } from './browser-version-store.js'
 import { getBrowserWorkspaceId } from './browser-workspace-id.js'
@@ -28,6 +33,16 @@ export function createBrowserVersionsBackend(deps: {
         // sync peer; the browser has one person and no peer to name.
         operator: { kind: 'human', peerId: 'browser' },
       }),
+    async loadPast(_workspaceId, path, versionId) {
+      // The store answers a LoroDoc; the seam answers something to draw. The
+      // projection happens here so the seam stays free of CRDT types and a
+      // keeper that never held one could still implement it.
+      const past = await deps.store.loadPast(getBrowserWorkspaceId(), path, versionId)
+      if (past === null) return null
+      return readDocumentKind(past) === 'markdown'
+        ? { kind: 'markdown', body: readMarkdownBody(past) }
+        : { kind: 'spatial', canvas: readSpatialCanvas(past) }
+    },
     async restore(_workspaceId, path, versionId) {
       const workspaceId = getBrowserWorkspaceId()
       const past = await deps.store.loadPast(workspaceId, path, versionId)

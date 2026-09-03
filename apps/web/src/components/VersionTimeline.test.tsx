@@ -48,6 +48,16 @@ function mkBranchesResponse(): Response {
   )
 }
 
+// The preview read. Registered before any generic `/versions` branch in each
+// mock below: a list payload answered here would fail the document schema and
+// the row would report "could not be read" instead of opening.
+function mkVersionDocumentResponse(): Response {
+  return new Response(JSON.stringify({ kind: 'spatial', canvas: { nodes: [], edges: [] } }), {
+    status: 200,
+    headers: { 'Content-Type': 'application/json' },
+  })
+}
+
 function mkVersionsResponse(): Response {
   return new Response(
     JSON.stringify({
@@ -104,6 +114,7 @@ beforeEach(() => {
     const url =
       typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
     if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+    if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
     if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
     return Promise.resolve(new Response('{}', { status: 200 }))
   })
@@ -125,6 +136,7 @@ describe('VersionTimeline', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       // Branches never resolve within this test; versions resolve immediately.
       if (url.includes('/branches')) return new Promise<Response>(() => {})
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -152,12 +164,12 @@ describe('VersionTimeline', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
 
     rerender(<VersionTimeline workspaceId="sess_1" path="canvas-b" />)
     await waitFor(() => {
-      expect(screen.queryByText('Restore this version?')).toBeNull()
+      expect(screen.queryByTestId('version-preview-bar')).toBeNull()
     })
   })
 
@@ -208,6 +220,7 @@ describe('VersionTimeline', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
           new Response(
@@ -361,6 +374,7 @@ describe('VersionTimeline', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
           new Response(
@@ -423,6 +437,7 @@ describe('VersionTimeline', () => {
           ),
         )
       }
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(new Response(JSON.stringify({ versions: [] }), { status: 200 }))
       }
@@ -461,6 +476,7 @@ describe('VersionTimeline', () => {
         return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -471,7 +487,7 @@ describe('VersionTimeline', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
 
     const restoreButton = screen.getByRole('button', { name: 'Restore' })
@@ -484,7 +500,7 @@ describe('VersionTimeline', () => {
       expect(onRestored).toHaveBeenCalledTimes(1)
     })
     await waitFor(() => {
-      expect(screen.queryByText('Restore this version?')).toBeNull()
+      expect(screen.queryByTestId('version-preview-bar')).toBeNull()
     })
   })
 
@@ -500,6 +516,7 @@ describe('VersionTimeline', () => {
         )
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -510,7 +527,7 @@ describe('VersionTimeline', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
 
     const restoreButton = screen.getByRole('button', { name: 'Restore' })
@@ -520,7 +537,7 @@ describe('VersionTimeline', () => {
       expect(screen.getByText(/restore failed/i)).toBeTruthy()
     })
     expect(onRestored).not.toHaveBeenCalled()
-    expect(screen.getByText('Restore this version?')).toBeTruthy()
+    expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
   })
 
   it('keeps the dialog open with an error when the restore request throws (network failure)', async () => {
@@ -531,6 +548,7 @@ describe('VersionTimeline', () => {
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/restore')) return Promise.reject(new TypeError('Failed to fetch'))
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -541,7 +559,7 @@ describe('VersionTimeline', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
 
     const restoreButton = screen.getByRole('button', { name: 'Restore' })
@@ -551,7 +569,7 @@ describe('VersionTimeline', () => {
       expect(screen.getByText(/restore failed/i)).toBeTruthy()
     })
     expect(onRestored).not.toHaveBeenCalled()
-    expect(screen.getByText('Restore this version?')).toBeTruthy()
+    expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     expect(mockLog.error).toHaveBeenCalledWith('restore request threw', expect.any(TypeError))
   })
 
@@ -571,6 +589,7 @@ describe('VersionTimeline', () => {
         })
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -581,7 +600,7 @@ describe('VersionTimeline', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
 
     const restoreButton = screen.getByRole('button', { name: 'Restore' })
@@ -619,6 +638,7 @@ describe('VersionTimeline', () => {
         })
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -629,7 +649,7 @@ describe('VersionTimeline', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
 
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
@@ -639,8 +659,8 @@ describe('VersionTimeline', () => {
 
     // Cancel must not close the dialog nor unlock a second /restore submission
     // while the first request is still in flight.
-    fireEvent.click(screen.getByRole('button', { name: 'Cancel' }))
-    expect(screen.getByText('Restore this version?')).toBeTruthy()
+    fireEvent.click(screen.getByRole('button', { name: 'Stop' }))
+    expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     expect(screen.getByRole('button', { name: 'Restoring…' })).toBeTruthy()
 
     resolveRestore?.()
@@ -649,7 +669,7 @@ describe('VersionTimeline', () => {
     })
     expect(restoreCalls).toHaveLength(1)
     await waitFor(() => {
-      expect(screen.queryByText('Restore this version?')).toBeNull()
+      expect(screen.queryByTestId('version-preview-bar')).toBeNull()
     })
   })
 })
@@ -691,6 +711,7 @@ describe('VersionTimeline HEAD polling', () => {
           ),
         )
       }
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -852,6 +873,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -891,6 +913,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
         return Promise.resolve(new Response(JSON.stringify({ ok: true }), { status: 200 }))
       }
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -906,7 +929,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
     const row = await screen.findByText(/Assistant/)
     fireEvent.click(row.closest('button')!)
     await waitFor(() => {
-      expect(screen.getByText('Restore this version?')).toBeTruthy()
+      expect(screen.getByTestId('version-preview-bar')).toBeTruthy()
     })
     fireEvent.click(screen.getByRole('button', { name: 'Restore' }))
 
@@ -960,6 +983,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) return Promise.resolve(mkVersionsResponse())
       return Promise.resolve(new Response('{}', { status: 200 }))
     })
@@ -1000,6 +1024,7 @@ describe('VersionTimeline via DaemonApiContext', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         return Promise.resolve(
           new Response(
@@ -1102,6 +1127,7 @@ describe('VersionTimeline error handling and canvas-switch reset', () => {
       const url =
         typeof input === 'string' ? input : input instanceof URL ? input.toString() : input.url
       if (url.includes('/branches')) return Promise.resolve(mkBranchesResponse())
+      if (url.endsWith('/document')) return Promise.resolve(mkVersionDocumentResponse())
       if (url.includes('/versions')) {
         versionsCallCount += 1
         if (versionsCallCount === 1) return Promise.resolve(mkVersionsResponse())

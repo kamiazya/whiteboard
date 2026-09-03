@@ -1,16 +1,6 @@
 import type { OperatorInfo, VersionEntry } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { History } from 'lucide-react'
 import { type ReactNode, useCallback, useEffect, useRef, useState } from 'react'
-import {
-  AlertDialog,
-  AlertDialogAction,
-  AlertDialogCancel,
-  AlertDialogContent,
-  AlertDialogDescription,
-  AlertDialogFooter,
-  AlertDialogHeader,
-  AlertDialogTitle,
-} from '@/components/ui/alert-dialog'
 import { CardContent } from '@/components/ui/card'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { useDaemonApi } from '@/contexts/DaemonApiContext'
@@ -19,7 +9,7 @@ import { useBranches } from '@/hooks/useBranches'
 import { getAppLogger } from '@/lib/app-logger'
 import { buildMiniGraph } from '@/lib/mini-graph'
 import { displayBranchName } from '@/lib/utils'
-import { VersionsRequestError } from '@/lib/versions-backend'
+import { type PastDocument, VersionsRequestError } from '@/lib/versions-backend'
 import { SquiggleLoader } from './SquiggleLoader.js'
 import { VersionThumbnail } from './VersionThumbnail.js'
 
@@ -41,6 +31,13 @@ interface Props {
   capabilities?: VersionTimelineCapabilities
   // Called after restore succeeds so the browser-side LoroUndoManager can be cleared.
   onRestored?: () => void
+  /**
+   * Hands the page a past state to DRAW, or null to stop. The panel owns
+   * every version act — loading, restoring, refreshing — and the page owns
+   * only the surface, so there is still exactly one place that knows how a
+   * version behaves.
+   */
+  onPreview?: (past: PastDocument | null) => void
   // Bumped by the caller (e.g. after a manual save, or a WS
   // version_created broadcast) to force a refetch without waiting for the
   // 15s poll. Only a value CHANGE triggers a refetch, matching
@@ -140,6 +137,7 @@ export default function VersionTimeline({
   path,
   capabilities = { branches: true, autoVersions: true },
   onRestored,
+  onPreview,
   refreshSignal,
   headerActions,
 }: Props) {
@@ -149,14 +147,15 @@ export default function VersionTimeline({
   const [loading, setLoading] = useState(false)
   /** The last read failed, so what is on screen is older than it looks. */
   const [stale, setStale] = useState(false)
-  const [pendingRestore, setPendingRestore] = useState<VersionEntry | null>(null)
+  /** The version currently being LOOKED at, before deciding to apply it. */
+  const [previewing, setPreviewing] = useState<VersionEntry | null>(null)
   const [restoreError, setRestoreError] = useState<string | null>(null)
   const [isRestoring, setIsRestoring] = useState(false)
-  // Mirrors pendingRestore, refreshed on every render so confirmRestore's
+  // Mirrors `previewing`, refreshed on every render so an async handler's
   // async continuation can read the *current* pending version after an
   // await, instead of a value closed over before the request started.
-  const pendingRestoreRef = useRef<VersionEntry | null>(pendingRestore)
-  pendingRestoreRef.current = pendingRestore
+  const previewingRef = useRef<VersionEntry | null>(previewing)
+  previewingRef.current = previewing
   // Monotonically increasing sequence stamp. Each refresh() call captures the
   // value at dispatch time; a response only commits if no newer refresh has
   // started meanwhile. Without this, a slow /versions response for an older
@@ -194,16 +193,17 @@ export default function VersionTimeline({
   // Clear the previously loaded canvas's versions immediately on canvas
   // change so a stale row (with thumbnail URLs pointing at the old
   // workspaceId/path) never renders under the new canvas while the refetch
-  // is in flight. Also drop any staged restore — confirming a dialog opened
-  // on the previous canvas would POST that version id to the NEW canvas's
-  // restore endpoint.
+  // is in flight. Also drop any open preview — restoring a state the person
+  // was looking at on the PREVIOUS document would apply that version id to
+  // the one that arrived.
   // SCOPE RESET — see scoped-screen-state.test.ts
   useEffect(() => {
     setVersions([])
-    setPendingRestore(null)
+    setPreviewing(null)
     setRestoreError(null)
     setIsRestoring(false)
-  }, [workspaceId, path])
+    onPreview?.(null)
+  }, [workspaceId, path, onPreview])
 
   // Reload whenever the canvas changes.
   useEffect(() => {
@@ -242,17 +242,58 @@ export default function VersionTimeline({
     refresh()
   }, [refreshSignal, refresh])
 
-  const confirmRestore = useCallback(async () => {
-    // Guard against a double-click or repeated keyboard activation firing a
-    // second /restore POST before the first response closes the dialog.
-    if (!pendingRestore || isRestoring) return
-    const v = pendingRestore
+  /**
+   * Look at a version: load what it holds and hand it to the page to draw.
+   *
+   * This is what replaced a confirmation dialog. The dialog asked whether to
+   * apply a state nobody could see; applying it and looking was the only way
+   * to find out what was in it, and the way back was undo.
+   */
+  const openPreview = useCallback(
+    async (v: VersionEntry) => {
+      setRestoreError(null)
+      setPreviewing(v)
+      try {
+        const past = await versionsBackend.loadPast(workspaceId, path, v.id)
+        // Still the version the person asked for? A slower load for an
+        // earlier row must not draw itself over a later choice.
+        if (previewingRef.current?.id !== v.id) return
+        if (past === null) {
+          setPreviewing(null)
+          setRestoreError('That version could not be read.')
+          return
+        }
+        onPreview?.(past)
+      } catch (err) {
+        if (previewingRef.current?.id !== v.id) return
+        log.error('version document request threw', err)
+        setPreviewing(null)
+        setRestoreError('That version could not be read.')
+      }
+    },
+    [workspaceId, path, versionsBackend, onPreview],
+  )
+
+  const closePreview = useCallback(() => {
+    // Never while a restore is in flight. Stopping then would put the live
+    // document back on screen while the past state is still landing on it,
+    // and would unlock a second submission of the same restore.
+    if (isRestoring) return
+    setPreviewing(null)
+    setRestoreError(null)
+    onPreview?.(null)
+  }, [isRestoring, onPreview])
+
+  const restorePreviewed = useCallback(async () => {
+    // Guard against a double activation firing a second restore before the
+    // first response comes back.
+    const v = previewingRef.current
+    if (!v || isRestoring) return
     setRestoreError(null)
     setIsRestoring(true)
-    // Only clear the dialog and run success side effects (onRestored clears the
-    // browser-side LoroUndoManager) once the server confirms the restore
-    // actually happened. A failed request keeps the dialog open with an error
-    // so the caller never discards undo history for a restore that didn't occur.
+    // Success side effects (onRestored clears the browser-side undo manager)
+    // run only once the keeper confirms: a failed request must not discard
+    // undo history for a restore that did not happen.
     try {
       await versionsBackend.restore(workspaceId, path, v.id)
     } catch (err) {
@@ -266,18 +307,14 @@ export default function VersionTimeline({
     } finally {
       setIsRestoring(false)
     }
-    // Re-check that the dialog still refers to this same version before
-    // clearing it: the dialog is guarded against dismissal while isRestoring
-    // is true, but this identity check keeps success side effects (which
-    // clear undo history) tied to the request that actually completed rather
-    // than whatever version the dialog happens to show when the response
-    // lands.
-    if (pendingRestoreRef.current?.id !== v.id) return
-    setPendingRestore(null)
+    // Tied to the request that completed rather than to whatever the panel
+    // shows when the response lands.
+    if (previewingRef.current?.id !== v.id) return
+    setPreviewing(null)
+    onPreview?.(null)
     onRestored?.()
-    // Refresh immediately after restore so the pending UI closes cleanly.
     await refresh()
-  }, [pendingRestore, isRestoring, workspaceId, path, onRestored, refresh, versionsBackend])
+  }, [isRestoring, workspaceId, path, onRestored, onPreview, refresh, versionsBackend])
 
   const head = branchesState.head
 
@@ -306,6 +343,47 @@ export default function VersionTimeline({
         </div>
         {headerActions}
       </div>
+
+      {previewing && (
+        <div
+          data-testid="version-preview-bar"
+          className="flex items-center gap-2 rounded-md border border-primary/40 bg-primary/5 px-2 py-1.5"
+        >
+          <span className="min-w-0 flex-1 text-[11px] leading-tight">
+            <b className="block truncate font-medium">Looking at {versionTitle(previewing)}</b>
+            <span className="text-muted-foreground">
+              {formatRelative(previewing.createdAt)} · read-only
+            </span>
+          </span>
+          <button
+            type="button"
+            disabled={isRestoring}
+            onClick={closePreview}
+            className="shrink-0 rounded-md border px-2 py-1 text-[11px] hover:bg-accent disabled:opacity-50"
+          >
+            Stop
+          </button>
+          <button
+            type="button"
+            // Native `disabled` here, unlike the tooltip-wrapped controls
+            // elsewhere: this button carries no tooltip to keep alive, and
+            // an in-flight restore is exactly the state a pointer should
+            // bounce off rather than queue behind.
+            disabled={isRestoring}
+            onClick={() => {
+              void restorePreviewed()
+            }}
+            className="shrink-0 rounded-md bg-primary px-2 py-1 text-[11px] font-medium text-primary-foreground hover:opacity-90"
+          >
+            {isRestoring ? 'Restoring…' : 'Restore'}
+          </button>
+        </div>
+      )}
+      {restoreError && (
+        <div role="alert" className="px-1 text-[11px] text-destructive">
+          {restoreError}
+        </div>
+      )}
 
       {stale && (
         <div data-testid="version-list-stale" className="text-[11px] text-muted-foreground px-1">
@@ -391,8 +469,7 @@ export default function VersionTimeline({
                   <RowShell
                     interactive={row?.active !== false}
                     onActivate={() => {
-                      setRestoreError(null)
-                      setPendingRestore(v)
+                      void openPreview(v)
                     }}
                   >
                     {v.hasThumbnail && (
@@ -452,54 +529,6 @@ export default function VersionTimeline({
           )}
         </div>
       </ScrollArea>
-
-      <AlertDialog
-        open={!!pendingRestore}
-        onOpenChange={(open) => {
-          // A restore POST is in flight for the currently pending version;
-          // dismissing here (Escape, overlay click, Cancel) would let the
-          // user reopen the same or a different row and fire a second
-          // /restore before the first resolves. Keep the dialog pinned to
-          // the in-flight request until it settles.
-          if (!open && isRestoring) return
-          if (!open) {
-            setPendingRestore(null)
-            setRestoreError(null)
-            setIsRestoring(false)
-          }
-        }}
-      >
-        <AlertDialogContent>
-          <AlertDialogHeader>
-            <AlertDialogTitle>Restore this version?</AlertDialogTitle>
-            <AlertDialogDescription>
-              {pendingRestore && (
-                <>
-                  Restoring <strong>{versionTitle(pendingRestore)}</strong> (
-                  {formatRelative(pendingRestore.createdAt)}, {pendingRestore.elementCount}{' '}
-                  elements) will merge that state into the current canvas and broadcast the change
-                  to every connected tab. Per-peer Ctrl+Z history is cleared.
-                </>
-              )}
-              {restoreError && <span className="mt-2 block text-destructive">{restoreError}</span>}
-            </AlertDialogDescription>
-          </AlertDialogHeader>
-          <AlertDialogFooter>
-            <AlertDialogCancel disabled={isRestoring}>Cancel</AlertDialogCancel>
-            {/* AlertDialogAction closes the dialog by default on click; prevent that so a
-                failed restore keeps the dialog open with the error instead of discarding it. */}
-            <AlertDialogAction
-              disabled={isRestoring}
-              onClick={(e) => {
-                e.preventDefault()
-                void confirmRestore()
-              }}
-            >
-              {isRestoring ? 'Restoring…' : 'Restore'}
-            </AlertDialogAction>
-          </AlertDialogFooter>
-        </AlertDialogContent>
-      </AlertDialog>
     </div>
   )
 }

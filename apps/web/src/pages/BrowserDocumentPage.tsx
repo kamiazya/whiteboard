@@ -6,6 +6,7 @@ import { Braces, Copy, Minimize2, Trash2 } from 'lucide-react'
 import { lazy, Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useLocation, useNavigate } from 'react-router-dom'
 import { DocumentPageSkeleton } from '../components/DocumentPageSkeleton.js'
+import { DocumentPreview } from '../components/DocumentPreview.js'
 import { DocumentEditorSurface } from '../components/document-editor/DocumentEditorSurface.js'
 import { DocumentPageShell } from '../components/document-editor/DocumentPageShell.js'
 import { LoadDegradedView } from '../components/document-editor/LoadDegradedView.js'
@@ -67,6 +68,7 @@ import { BROWSER_CAPABILITIES, type WhiteboardCapabilities } from '../lib/provid
 import { setShellConnection } from '../lib/shell-status-store.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { cn } from '../lib/utils.js'
+import type { PastDocument } from '../lib/versions-backend.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import type { DocumentSnapshot } from '../lib/whiteboard-client.js'
 import { derivePageState, refineForContentReadFailure } from './browser-page-state.js'
@@ -301,6 +303,7 @@ export function BrowserDocumentPage({
     setSaveVersionOutcome(null)
     setHistoryOpen(false)
     setBookmarkArmed(0)
+    setPreview(null)
   }, [documentId])
   // The loaded document's own path — the address the URL carries. Read off the
   // snapshot rather than looked up in the list, so it is known at the same
@@ -582,6 +585,10 @@ export function BrowserDocumentPage({
   // Bumped by ⌘/Ctrl+S to open the panel with its naming field ready. The
   // chord asks for a bookmark now; it does not take one.
   const [bookmarkArmed, setBookmarkArmed] = useState(0)
+  // The past state the person is LOOKING at, drawn in place of the editor.
+  // Read-only by construction — see DocumentPreview — so "look, then decide"
+  // cannot turn into an edit against a state that is not the document's.
+  const [preview, setPreview] = useState<PastDocument | null>(null)
   const [versionRefreshSignal, setVersionRefreshSignal] = useState(0)
   // ⌘/Ctrl+S asks for a bookmark: open the history and arm its naming field.
   useBookmarkShortcut(versionsEnabled, () => {
@@ -914,6 +921,7 @@ export function BrowserDocumentPage({
               // One lane, and a version only when asked for.
               capabilities={{ branches: false, autoVersions: false }}
               onRestored={clearLocalUndo}
+              onPreview={setPreview}
               refreshSignal={versionRefreshSignal}
               headerActions={
                 <BookmarkAction
@@ -1002,68 +1010,72 @@ export function BrowserDocumentPage({
           </Button>
         )}
         <div className="relative h-full min-h-0">
-          <DocumentEditorSurface
-            kind={documentKind}
-            documentKey={documentId ?? 'no-canvas'}
-            markdown={
-              markdownDoc.coreFacets === null
-                ? { body: null, setBody: markdownDoc.setBody }
-                : {
-                    body: markdownDoc.body,
-                    setBody: markdownDoc.setBody,
-                    sourceExtensions: markdownBinding,
-                    autoFocus: true,
-                    theme: resolvedTheme,
-                    meta: markdownDoc.coreFacets,
-                    title: titleOf(documentName, documentPath),
-                    resolveAlias,
-                    linkTargets,
-                    onOpenDocument: (id) => navigateToDocument(id),
-                    resolveEmbed,
-                  }
-            }
-            spatial={() => (
-              <div className="flex h-full min-h-0 flex-col">
-                <SpatialEditorPane
-                  className="relative min-h-0 flex-1"
-                  editorKey={documentId ?? 'no-canvas'}
-                  canvasLoaded={canvasLoaded}
-                  canvas={canvas}
-                  onChange={onChange}
-                  externalVersion={externalVersion}
-                  theme={resolvedTheme}
-                  // File-node reference = canvas id minted in the browser; the
-                  // current canvas is excluded (a self-reference card is pure
-                  // noise).
-                  fileRefOptions={documents
-                    .filter((entry) => entry.documentId !== documentId)
-                    .map((entry) => ({
-                      file: entry.documentId,
-                      label: entry.name,
-                      kind: entry.kind,
-                    }))}
-                  onOpenDocument={navigateToDocument}
-                  missingFileRef={missingFileRef}
-                  fileSeams={fileSeams}
-                  lockedNodeIds={lockedNodeIds}
-                  lockedEdgeIds={lockedEdgeIds}
-                  onToggleNodeLock={setNodeLock}
-                  onToggleEdgeLock={setEdgeLock}
-                  nodeInEditor={nodeInEditor}
-                  history={{
-                    onUndo: () => void undo(),
-                    onRedo: () => void redo(),
-                    canUndo: canUndo(),
-                    canRedo: canRedo(),
-                  }}
-                  overlayTitle={documentName ?? 'Untitled'}
-                  resolveAlias={resolveAlias}
-                  resolveEmbed={resolveEmbed}
-                  linkTargets={linkTargets}
-                />
-              </div>
-            )}
-          />
+          {preview ? (
+            <DocumentPreview past={preview} />
+          ) : (
+            <DocumentEditorSurface
+              kind={documentKind}
+              documentKey={documentId ?? 'no-canvas'}
+              markdown={
+                markdownDoc.coreFacets === null
+                  ? { body: null, setBody: markdownDoc.setBody }
+                  : {
+                      body: markdownDoc.body,
+                      setBody: markdownDoc.setBody,
+                      sourceExtensions: markdownBinding,
+                      autoFocus: true,
+                      theme: resolvedTheme,
+                      meta: markdownDoc.coreFacets,
+                      title: titleOf(documentName, documentPath),
+                      resolveAlias,
+                      linkTargets,
+                      onOpenDocument: (id) => navigateToDocument(id),
+                      resolveEmbed,
+                    }
+              }
+              spatial={() => (
+                <div className="flex h-full min-h-0 flex-col">
+                  <SpatialEditorPane
+                    className="relative min-h-0 flex-1"
+                    editorKey={documentId ?? 'no-canvas'}
+                    canvasLoaded={canvasLoaded}
+                    canvas={canvas}
+                    onChange={onChange}
+                    externalVersion={externalVersion}
+                    theme={resolvedTheme}
+                    // File-node reference = canvas id minted in the browser; the
+                    // current canvas is excluded (a self-reference card is pure
+                    // noise).
+                    fileRefOptions={documents
+                      .filter((entry) => entry.documentId !== documentId)
+                      .map((entry) => ({
+                        file: entry.documentId,
+                        label: entry.name,
+                        kind: entry.kind,
+                      }))}
+                    onOpenDocument={navigateToDocument}
+                    missingFileRef={missingFileRef}
+                    fileSeams={fileSeams}
+                    lockedNodeIds={lockedNodeIds}
+                    lockedEdgeIds={lockedEdgeIds}
+                    onToggleNodeLock={setNodeLock}
+                    onToggleEdgeLock={setEdgeLock}
+                    nodeInEditor={nodeInEditor}
+                    history={{
+                      onUndo: () => void undo(),
+                      onRedo: () => void redo(),
+                      canUndo: canUndo(),
+                      canRedo: canRedo(),
+                    }}
+                    overlayTitle={documentName ?? 'Untitled'}
+                    resolveAlias={resolveAlias}
+                    resolveEmbed={resolveEmbed}
+                    linkTargets={linkTargets}
+                  />
+                </div>
+              )}
+            />
+          )}
           {/* Markdown documents keep CodeMirror's own history (its keymap
             already handles undo); the history group rides the spatial
             editor's dock via paletteLeading above. */}

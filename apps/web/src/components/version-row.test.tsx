@@ -63,6 +63,7 @@ const ROWS = [
 function backendOf(list: () => Promise<typeof ROWS>): VersionsBackend {
   return {
     list: list as never,
+    loadPast: vi.fn() as never,
     save: vi.fn() as never,
     restore: vi.fn() as never,
   }

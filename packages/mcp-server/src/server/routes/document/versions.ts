@@ -1,8 +1,14 @@
+import {
+  readDocumentKind,
+  readMarkdownBody,
+  readSpatialCanvas,
+} from '@kamiazya/whiteboard-loro-adapter'
 import { Hono } from 'hono'
 import {
   type ListVersionsResponse,
   type SaveVersionResponse,
   saveVersionRequestSchema,
+  type VersionDocumentResponse,
 } from '../../../shared/api-contracts/document.js'
 import { isCorruptStoredDataError } from '../../store/corrupt-stored-data.js'
 import { getDoc } from '../../store/document-store.js'
@@ -39,6 +45,51 @@ export function createVersionsRouter(options: VersionsRouterOptions) {
       throw err
     }
   })
+
+  /**
+   * One version's CONTENT, for previewing it before deciding to restore.
+   *
+   * The panel used to offer restore behind a confirmation dialog and nothing
+   * else, so the only way to find out what a version held was to apply it and
+   * look. This is the read that makes "see it, then decide" possible.
+   *
+   * Projected here rather than shipped as CRDT bytes: what a viewer needs is
+   * something to draw, and the two shapes below are what every surface that
+   * draws a document already speaks.
+   */
+  onDocumentsRoute(
+    app,
+    'get',
+    ['versions', ':id', 'document'],
+    async (c, workspaceId, path, params) => {
+      const id = params.id as string
+      try {
+        // The version must belong to THIS document. Without the check an id
+        // alone would read another document's history through this path — the
+        // refusal `restoreVersion` makes for the same reason.
+        const owned = (await versionStore.list(workspaceId, path)).some((v) => v.id === id)
+        if (!owned) return c.json({ error: 'version not found' }, 404)
+
+        // Already the past DOCUMENT: `load` checks the frontier out against
+        // the stored workspace and projects it, which is the shape restore
+        // reconciles from too.
+        const past = await versionStore.load(workspaceId, id)
+        if (past === null) return c.json({ error: 'version not found' }, 404)
+
+        const response: VersionDocumentResponse =
+          readDocumentKind(past) === 'markdown'
+            ? { kind: 'markdown', body: readMarkdownBody(past) }
+            : { kind: 'spatial', canvas: readSpatialCanvas(past) }
+        return c.json(response)
+      } catch (err) {
+        const missing = handleDocumentNotFound(err)
+        if (missing) return c.json(missing.body, missing.status)
+        const issue = handleCorruptStoredData(err)
+        if (issue) return c.json(issue.body, issue.status)
+        throw err
+      }
+    },
+  )
 
   // Save a manual version with body { label?: string; operator?: OperatorInfo }. auto is false.
   onDocumentsRoute(app, 'post', ['versions'], async (c, workspaceId, path) => {
