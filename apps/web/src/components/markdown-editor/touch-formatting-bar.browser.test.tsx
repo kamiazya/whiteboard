@@ -15,7 +15,7 @@ import { TouchFormattingBar } from './TouchFormattingBar.js'
 // The bar loads its panel lazily; importing it here moves that chunk's load
 // into the collection phase, off the per-assertion retry budget.
 import './TouchFormattingBarPanel.js'
-import { TOUCH_BAR_HEIGHT_PX } from './touch-bar-layout.js'
+import { TOUCH_BAR_HEIGHT_PX } from './verb-bar-layout.js'
 
 const realMatchMedia = window.matchMedia
 let coarse = true

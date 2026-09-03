@@ -358,12 +358,15 @@ export const cycleHeadingLevel: StateCommand = ({ state, dispatch }) => {
 }
 
 /**
- * The touch bar's priority order: what stays on screen first as the bar
- * narrows (`layoutTouchBar` takes a prefix of this). A permutation of every
- * verb id, pinned by the property test, so a new verb has to be given a
- * place here rather than silently never reaching the bar.
+ * A verb bar's priority order: what stays on screen first as the bar narrows
+ * (`layoutVerbBar` takes a prefix of this). A permutation of every verb id,
+ * pinned by the property test, so a new verb has to be given a place here
+ * rather than silently never reaching a bar.
+ *
+ * This decides MEMBERSHIP only. The sequence a bar draws is the table's —
+ * see `inVerbTableOrder`.
  */
-export const TOUCH_BAR_ORDER: readonly MarkdownVerbId[] = [
+export const VERB_BAR_ORDER: readonly MarkdownVerbId[] = [
   'heading',
   'bold',
   'italic',
@@ -381,6 +384,18 @@ export const TOUCH_BAR_ORDER: readonly MarkdownVerbId[] = [
   'strikethrough',
   'math',
 ]
+
+/**
+ * The given ids in the TABLE's order — which is the reading order, bands
+ * intact. `VERB_BAR_ORDER` answers a different question (what survives when
+ * the width is short), and using it to lay out a bar that shows everything
+ * interleaves the bands and leaves the dividers between them meaningless.
+ * Membership is decided by priority; sequence is decided here.
+ */
+export function inVerbTableOrder(ids: readonly MarkdownVerbId[]): readonly MarkdownVerbId[] {
+  const rank = new Map(MARKDOWN_EDITOR_VERBS.map((spec, index) => [spec.id, index]))
+  return [...ids].sort((a, b) => (rank.get(a) ?? 0) - (rank.get(b) ?? 0))
+}
 
 /**
  * The document transform a verb performs with no further input, or `null`

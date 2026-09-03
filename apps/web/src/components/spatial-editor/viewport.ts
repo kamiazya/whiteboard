@@ -187,12 +187,15 @@ export const PAN_MARGIN_PX = 12
 
 /**
  * Chrome painted OVER the canvas, which the viewport must not treat as
- * visible space. Today that is the bottom dock; a node parked underneath it
- * is as invisible as one past the edge, and the creation cascade walks
- * straight into that strip.
+ * visible space: a node parked underneath is as invisible as one past the
+ * edge, and the creation cascade walks straight into such a strip.
+ *
+ * Both edges have an occupant — the dock along the bottom, and, while a node
+ * is being edited, the formatting bar under the header.
  */
 export interface ViewportOcclusion {
-  readonly bottom: number
+  readonly top?: number
+  readonly bottom?: number
 }
 
 /** How far one axis must move so [start,end] lands inside [min,max]. */
@@ -226,15 +229,16 @@ export function panToShowTarget(
   if (containerSize === null) return undefined
   const topLeft = canvasToScreen({ x: box.x, y: box.y }, viewport)
   const bottomRight = canvasToScreen({ x: box.x + box.width, y: box.y + box.height }, viewport)
+  const visibleTop = occlusion?.top ?? 0
   const visibleBottom = containerSize.height - (occlusion?.bottom ?? 0)
   const fits =
     topLeft.x >= 0 &&
-    topLeft.y >= 0 &&
+    topLeft.y >= visibleTop &&
     bottomRight.x <= containerSize.width &&
     bottomRight.y <= visibleBottom
   if (fits) return undefined
   const dx = shiftToReveal(topLeft.x, bottomRight.x, 0, containerSize.width)
-  const dy = shiftToReveal(topLeft.y, bottomRight.y, 0, visibleBottom)
+  const dy = shiftToReveal(topLeft.y, bottomRight.y, visibleTop, visibleBottom)
   // The shifts are screen pixels; the viewport origin is canvas units.
   return { ...viewport, x: viewport.x + dx / viewport.zoom, y: viewport.y + dy / viewport.zoom }
 }

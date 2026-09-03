@@ -27,12 +27,13 @@ import { assertLedger, emptyTally, type SurfaceCoverage } from '../../test-utils
 import { fc, fcTest, withDefaults } from '../../test-utils/fast-check.js'
 import {
   cycleHeadingLevel,
+  inVerbTableOrder,
   levelCommand,
   MARKDOWN_EDITOR_VERBS,
   type MarkdownVerbId,
   type MarkdownVerbSpec,
   selfContainedCommand,
-  TOUCH_BAR_ORDER,
+  VERB_BAR_ORDER,
   verb,
 } from './editor-verbs.js'
 
@@ -437,10 +438,19 @@ describe('markdown editor verbs', () => {
     expect(doc).toBe(body)
   })
 
-  it('the touch bar order places every verb exactly once', () => {
+  it('reading order keeps each band together, whatever the priority order was', () => {
+    // Priority decides WHAT survives a narrow bar; the table decides the
+    // sequence. Laying a full bar out in priority order interleaves the
+    // bands and leaves the dividers drawn between them meaningless.
+    const bands = inVerbTableOrder(VERB_BAR_ORDER).map((id) => verb(id).band)
+    const runs = bands.filter((band, index) => index === 0 || band !== bands[index - 1])
+    expect(runs).toEqual([...new Set(runs)])
+  })
+
+  it('the verb bar order places every verb exactly once', () => {
     const ids = MARKDOWN_EDITOR_VERBS.map((spec) => spec.id)
-    expect([...TOUCH_BAR_ORDER].sort()).toEqual([...ids].sort())
-    expect(new Set(TOUCH_BAR_ORDER).size).toBe(TOUCH_BAR_ORDER.length)
+    expect([...VERB_BAR_ORDER].sort()).toEqual([...ids].sort())
+    expect(new Set(VERB_BAR_ORDER).size).toBe(VERB_BAR_ORDER.length)
   })
 
   afterAll(() => {
