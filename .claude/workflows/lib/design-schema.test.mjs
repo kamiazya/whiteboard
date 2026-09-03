@@ -81,3 +81,40 @@ test('the `userReach` foundation sentinel demands the follow-up that wires it', 
   assert.match(description, /foundation:/)
   assert.match(description, /follow-up/i)
 })
+
+// `properties` asks what stays TRUE, `blastRadius` who this reaches, `userReach` whether a user
+// reaches it at all — and none of the three asks what the change is WORTH. A design can clear
+// every one of them while its author has never decided whether the benefit is a delta, a
+// relocation or an elimination, and that decision is what picks the instrument: an end-to-end
+// duration cannot see a relocation, so pointing one at it reports a null result about a change
+// that did exactly what it was for. The prefix is enforced rather than described, because a
+// description asking someone to choose a column is a description they can answer in prose.
+test('requires a `benefit` naming which kind of benefit the change claims', () => {
+  const benefit = DESIGN_SCHEMA.properties.benefit
+  assert.equal(benefit.type, 'string')
+  assert.ok(DESIGN_SCHEMA.required.includes('benefit'))
+})
+
+test('the `benefit` pattern admits exactly the four claim kinds, and no bare prose', () => {
+  const pattern = new RegExp(DESIGN_SCHEMA.properties.benefit.pattern)
+  assert.equal(pattern.test('delta: p95 layout 66ms -> 40ms, pnpm bench interleaved'), true)
+  assert.equal(
+    pattern.test('relocation: main thread stops paying 24-92ms of decode per list; clone of the bytes unmeasurable'),
+    true,
+  )
+  assert.equal(pattern.test('elimination: a new document kind cannot miss a surface — Record<DocumentKind> fails the build'), true)
+  assert.equal(pattern.test('obvious: fixes a crash on an empty body, visible in the diff'), true)
+  // The whole point of the field is that a column is CHOSEN. Prose that names no column is the
+  // answer this rejects, along with a prefix carrying nothing after it.
+  assert.equal(pattern.test('makes the list feel faster'), false)
+  assert.equal(pattern.test('relocation:'), false)
+  assert.equal(pattern.test('relocation:   '), false)
+  assert.equal(pattern.test(''), false)
+})
+
+test('the `benefit` description names the instrument each kind needs', () => {
+  const description = DESIGN_SCHEMA.properties.benefit.description || ''
+  assert.match(description, /relocation/)
+  assert.match(description, /elimination/)
+  assert.match(description, /measured-change/)
+})

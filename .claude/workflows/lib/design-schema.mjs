@@ -59,6 +59,20 @@ export const DESIGN_SCHEMA = {
       description:
         'The concrete path by which a user reaches this change, naming the entry point that makes it reachable and confirming this increment adds it (e.g. "registered via registerToolWithAnnotations + called by smoke:e2e"; "rendered by CanvasList, reachable from /w/:ws"; "mounted on the Hono app in createServer"). Never empty. When the increment deliberately lands unwired, supply exactly one entry "foundation: <reason> — wired by <named follow-up>"; an unwired slice with no named follow-up is not an acceptable answer.',
     },
+    // What the change is WORTH, and in which currency — the one thing the fields above never
+    // ask. `properties` asks what stays true, `blastRadius` who it reaches, `userReach` whether a
+    // user reaches it at all; a design can clear every one of those while nobody has decided
+    // whether the benefit is a delta, a relocation or an elimination. That decision picks the
+    // INSTRUMENT, and picking the wrong one is not a smaller measurement: an end-to-end duration
+    // is structurally unable to see a relocation, so it comes back "no difference" about a change
+    // that did exactly what it was for. The prefix is a pattern rather than a description because
+    // a description asking someone to choose a column is one they can answer in prose.
+    benefit: {
+      type: 'string',
+      pattern: '^(delta|relocation|elimination|obvious):\\s*\\S',
+      description:
+        'Which kind of benefit this change claims, and the number or check that shows it (see the measured-change skill). Exactly one of: "delta: <the metric that moves, and the bench/scoreboard that takes it>"; "relocation: <what the path a person waits on stops doing, AND what the handover costs — a handover as expensive as the work has bought nothing>"; "elimination: <the class of mistake that stops being possible, and what now fails when it recurs — a count or a mutation check, never a duration>"; "obvious: <reason>" when the worth is visible in the diff itself (a bug fix, a piece of copy). Prose naming no column is not an answer: the column is what decides how this gets verified.',
+    },
     // Optional by design: an absent answer preserves the previous behaviour. When present and not
     // `none:`, dev-loop hands the design back to the main session BEFORE implementing, because the
     // `developer` agent has no browser and can only report the unmet step afterwards.
@@ -68,7 +82,15 @@ export const DESIGN_SCHEMA = {
         'What must be looked at in a running app for this change to count as verified (AGENTS.md step 3) — e.g. "open a canvas, drag a node, watch the edge re-route". Answer "none: <reason>" when tests alone settle it (a pure helper, a server-side path, a docs change).',
     },
   },
-  required: ['completionCriteria', 'scope', 'testScenarios', 'properties', 'blastRadius', 'userReach'],
+  required: [
+    'completionCriteria',
+    'scope',
+    'testScenarios',
+    'properties',
+    'blastRadius',
+    'userReach',
+    'benefit',
+  ],
 }
 
 // Reuses the schema's own item pattern (rather than a second hand-picked regex) so a caller-
@@ -78,6 +100,11 @@ export const DESIGN_SCHEMA = {
 const nonBlankItem = new RegExp(DESIGN_SCHEMA.properties.properties.items.pattern)
 const isNonBlankList = (v) =>
   Array.isArray(v) && v.length > 0 && v.every((x) => typeof x === 'string' && nonBlankItem.test(x))
+
+// Reuses the schema's own prefix pattern for the same reason `nonBlankItem` does: a second
+// hand-written regex here is a second place the four claim kinds can drift out of step.
+const benefitClaim = new RegExp(DESIGN_SCHEMA.properties.benefit.pattern)
+const isBenefitClaim = (v) => typeof v === 'string' && benefitClaim.test(v)
 
 // Kept in lockstep with DESIGN_SCHEMA's `additionalProperties: false` at both the top level and
 // inside `testScenarios` — isValidDesignShape below must reject any key outside these lists or a
@@ -92,6 +119,7 @@ const ALLOWED_TOP_LEVEL_KEYS = [
   'properties',
   'blastRadius',
   'userReach',
+  'benefit',
   'manualVerification',
 ]
 const ALLOWED_TEST_SCENARIO_KEYS = ['unit', 'browser', 'e2e']
@@ -121,6 +149,7 @@ export function isValidDesignShape(d) {
   if (!isNonBlankList(d.properties)) return false
   if (!isNonBlankList(d.blastRadius)) return false
   if (!isNonBlankList(d.userReach)) return false
+  if (!isBenefitClaim(d.benefit)) return false
   if (d.manualVerification !== undefined && typeof d.manualVerification !== 'string') return false
   return true
 }
