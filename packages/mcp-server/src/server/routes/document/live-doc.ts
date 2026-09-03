@@ -6,9 +6,7 @@ import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
 import type {
   DocumentExistsResponse,
   UpdateDocumentResponse,
-  VersionEntry,
 } from '../../../shared/api-contracts/document.js'
-import { getLogger } from '../../log.js'
 import { onDocumentAction } from './path-route.js'
 
 // A Loro update embeds any attachment-affecting deltas since the client's

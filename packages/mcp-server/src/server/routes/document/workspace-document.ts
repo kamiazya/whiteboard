@@ -4,10 +4,7 @@ import { Hono } from 'hono'
 import { bodyLimit } from 'hono/body-limit'
 import type { LoroDoc } from 'loro-crdt'
 import { getDefaultServerDeps } from '../../../di/default-server-deps.js'
-import type {
-  UpdateDocumentResponse,
-  VersionEntry,
-} from '../../../shared/api-contracts/document.js'
+import type { UpdateDocumentResponse } from '../../../shared/api-contracts/document.js'
 import { getLogger } from '../../log.js'
 import { validateWorkspaceId, validationErrorBody } from '../../validators.js'
 import { workspaceIdFromHandle } from '../../workspace-handle.js'
