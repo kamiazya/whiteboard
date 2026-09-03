@@ -29,10 +29,14 @@ export const renderKeySchema = z.object({
   kind: documentKindSchema,
   /**
    * What the document was when it was drawn, or null from a keeper that
-   * stamps no time. Null keeps the entry usable within one sitting — the
-   * list re-reads on mount, so a changed document arrives under a new
-   * entry — and is what stops persistence being safe until a real frontier
-   * reaches this surface.
+   * stamps no time.
+   *
+   * Null is not a version that happens to be missing — it is the absence of
+   * any way to notice a change, so a key carrying it is NOT memoisable (see
+   * `isMemoisableKey`). A re-read of the list produces the identical key, so
+   * remembering a completed render under it would serve the old picture for
+   * as long as the tab is open. It is also what stops persistence being safe
+   * until a real frontier reaches this surface.
    */
   version: z.string().nullable(),
   /**
@@ -63,6 +67,35 @@ export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): Re
 }
 
 /**
+ * Whether a completed render may be remembered under this key.
+ *
+ * Only a key that can NOTICE a change may be: with `version: null` the key a
+ * re-read produces is byte-identical to the one before it, so a memo would
+ * answer with the old picture until the tab closes. A caller may still join
+ * work already in flight for such a key — two panes asking in the same
+ * instant are asking about the same bytes — which is why this is a property
+ * of the memo and not of the whole broker.
+ */
+export function isMemoisableKey(key: RenderKey): boolean {
+  return key.version !== null
+}
+
+/**
+ * One path segment, unambiguous whatever the value contains.
+ *
+ * Both `documentId` and the version are opaque strings from a keeper — the
+ * daemon's document contract says so explicitly and is deliberately not
+ * pattern-bound — so a `/` in either would otherwise move the boundary
+ * between segments and let two different documents join to one path.
+ * `encodeURIComponent` is reversible and escapes the separator; the `~`
+ * prefix is what makes `.` and `..` impossible as whole segments, which
+ * matters before the OPFS store exists rather than after.
+ */
+function segment(value: string): string {
+  return `~${encodeURIComponent(value)}`
+}
+
+/**
  * The key as a path, build id first (ADR-0027 decision 5).
  *
  * Today it is the in-memory map's key; it is shaped as a path because that is
@@ -70,9 +103,7 @@ export function renderKeyOf(subject: RenderKeySubject, theme: ResolvedTheme): Re
  * build's whole cache one directory removal rather than a scan.
  */
 export function renderKeyPath(key: RenderKey): string {
-  const leaf =
-    key.theme === null
-      ? (key.version ?? 'unversioned')
-      : `${key.version ?? 'unversioned'}-${key.theme}`
-  return `${key.buildId}/${key.kind}/${key.documentId}/${leaf}.svg`
+  const version = key.version ?? ''
+  const leaf = key.theme === null ? segment(version) : `${segment(version)}-${key.theme}`
+  return `${segment(key.buildId)}/${key.kind}/${segment(key.documentId)}/${leaf}.svg`
 }

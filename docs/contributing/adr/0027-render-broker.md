@@ -107,10 +107,18 @@ evidence instead of blocking the first increment.
 
 ### 5. Persistence is OPFS, and the path is the invalidation strategy
 
-The key derives the path deterministically, with the build id leading:
+The key derives the path deterministically, with the build id leading, and
+every component the keeper supplied is **encoded** — the document contract
+declares `id` opaque and deliberately not pattern-bound, so a `/` in an id or
+a timestamp would otherwise move the boundary between segments and let two
+different documents join to one path. Verified rather than argued: unencoded,
+`{id: 'a', version: 'b/c'}` and `{id: 'a/b', version: 'c'}` produce the same
+string. The `~` prefix on each segment is what additionally makes `.` and
+`..` impossible as whole segments, which matters before the store exists
+rather than after.
 
 ```
-render/<buildId>/<documentId>/<versionKey>[-<theme>].svg
+render/~<buildId>/<kind>/~<documentId>/~<versionKey>[-<theme>].svg
 ```
 
 Retiring a build's entire cache is removing one directory — no scan, no
@@ -125,10 +133,16 @@ bytes are produced, so the renderer persists its own output with no extra hop.
 
 The surfaces are a table keyed by a union — the way this repo already pins its
 background workers and its editor verbs — and each entry names the pipeline it
-takes and the kinds it answers for. Adding a document kind fails the type check
-until every surface has an answer; adding a surface fails until it names a
-pipeline. The missing markdown thumbnail is the evidence this mechanism exists
-for, and a comment listing surfaces is the thing it replaces.
+takes and the kinds it answers for. `kinds` is a `Record<DocumentKind, …>`, so
+**adding a document kind fails the type check** until every surface has an
+answer. That is the direction that actually broke, and it is the mechanical
+half.
+
+The surface direction is weaker, and saying so is part of the decision: a new
+component that renders without asking the broker cannot be caught by a type,
+only by a reader with this list in front of them. It is a list to review
+against rather than a wall, and the honest alternative — a source scan for
+"anything that draws a document" — has no reliable shape to match on.
 
 ## Consequences
 
@@ -146,9 +160,13 @@ Still open, and named rather than assumed:
 
 - **Persistence needs a version key that does not exist yet.**
   `documentSummarySchema` carries no frontier. `updatedAt` is stamped per push
-  in practice but is optional in the schema, so a keeper that omits it would
-  silently make entries uncacheable. Adding the frontier is its own increment,
-  and until it lands the broker caches in memory only.
+  in practice but is optional in the schema, and a key with no version cannot
+  notice its document changing — so `isMemoisableKey` refuses to remember a
+  completed render under one, and only the in-flight join applies there. That
+  is the honest behaviour rather than a limitation to work around: a memo
+  under such a key would serve the old picture for as long as the tab is open.
+  Adding the frontier is its own increment, and until it lands the broker
+  caches in memory only.
 - **The fetch of a document's bytes is unmeasured**, and `load-row-render.ts`
   claims it dominates the wait. If that is true, the cache's largest win is
   skipping the fetch rather than the CPU — which does not change this design,

@@ -15,7 +15,7 @@
  * what will make two tabs racing to fill one persistent entry harmless.
  */
 
-import { type RenderKey, renderKeyPath } from './render-key.js'
+import { isMemoisableKey, type RenderKey, renderKeyPath } from './render-key.js'
 
 /** What a surface gets back. `null` is "nothing to draw", and it is an answer. */
 export interface RenderResult {
@@ -73,6 +73,11 @@ export function createInTabRenderBroker(options: InTabRenderBrokerOptions = {}):
 
       const work = produce()
         .then((result) => {
+          // A key that cannot notice its document changing must not remember
+          // an answer: it would serve the old picture for as long as the tab
+          // is open. Joining the in-flight work above is still right there —
+          // the callers are asking in the same instant, about the same bytes.
+          if (!isMemoisableKey(key)) return result
           if (done.size >= maxEntries) {
             const oldest = done.keys().next()
             if (oldest.done !== true) done.delete(oldest.value)

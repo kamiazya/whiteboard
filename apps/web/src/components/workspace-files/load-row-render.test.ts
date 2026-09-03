@@ -27,7 +27,12 @@ describe('createRowRenderLoader', () => {
   it('renders one document once, however many surfaces ask', async () => {
     const d = deps()
     const load = createRowRenderLoader(d)
-    const entry = { documentId: 'd1', path: 'a', kind: 'markdown' as const }
+    const entry = {
+      documentId: 'd1',
+      path: 'a',
+      kind: 'markdown' as const,
+      updatedAt: '2026-09-03T00:00:00Z',
+    }
 
     const [row, preview] = await Promise.all([load(entry), load(entry)])
 
@@ -43,7 +48,9 @@ describe('createRowRenderLoader', () => {
   // a picture that is wrong rather than missing.
   it('keys a kind-less row the way it actually renders it — spatially, with the theme', async () => {
     const broker = createInTabRenderBroker()
-    const entry = { documentId: 'k1', path: 'k' }
+    // Stamped, so the two renders below are separated by the THEME axis
+    // rather than by a version-less key refusing to be remembered at all.
+    const entry = { documentId: 'k1', path: 'k', updatedAt: '2026-09-03T00:00:00Z' }
 
     const light = deps({ broker, theme: 'light' })
     await createRowRenderLoader(light)(entry)
@@ -59,8 +66,11 @@ describe('createRowRenderLoader', () => {
   // input) but must not rebuild a markdown picture, whose ink comes from CSS.
   it('keeps a markdown render across a theme change, and redraws a spatial one', async () => {
     const broker = createInTabRenderBroker()
-    const note = { documentId: 'n1', path: 'n', kind: 'markdown' as const }
-    const board = { documentId: 'b1', path: 'b', kind: 'spatial' as const }
+    // Both carry a version: without one nothing is remembered at all (see
+    // isMemoisableKey), and the axis under test here is the THEME.
+    const stamped = { updatedAt: '2026-09-03T00:00:00Z' }
+    const note = { documentId: 'n1', path: 'n', kind: 'markdown' as const, ...stamped }
+    const board = { documentId: 'b1', path: 'b', kind: 'spatial' as const, ...stamped }
 
     const light = deps({ broker, theme: 'light' })
     await createRowRenderLoader(light)(note)

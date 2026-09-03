@@ -1,5 +1,11 @@
 import { describe, expect, it } from 'vitest'
-import { RENDERER_BUILD_ID, renderKeyOf, renderKeyPath, renderKeySchema } from './render-key.js'
+import {
+  isMemoisableKey,
+  RENDERER_BUILD_ID,
+  renderKeyOf,
+  renderKeyPath,
+  renderKeySchema,
+} from './render-key.js'
 
 const spatial = { documentId: 'doc-1', kind: 'spatial' as const, updatedAt: '2026-09-03T00:00:00Z' }
 const markdown = {
@@ -7,6 +13,55 @@ const markdown = {
   kind: 'markdown' as const,
   updatedAt: '2026-09-03T00:00:00Z',
 }
+
+// The daemon contract declares `id` opaque and deliberately not
+// pattern-bound, and `updatedAt` is a plain string beside it. So path syntax
+// inside either is not excluded by anything upstream, and the path is both
+// this cache's map key and the address the OPFS store will use.
+describe('renderKeyPath — every component unambiguous', () => {
+  const md = (documentId: string, updatedAt: string) =>
+    renderKeyOf({ documentId, kind: 'markdown' as const, updatedAt }, 'light')
+
+  it('keeps two documents apart when a separator moves between id and version', () => {
+    // Unencoded, both of these join to `<build>/markdown/a/b/c.svg` — two
+    // different documents, one entry, and the second row shows the first
+    // one's picture.
+    expect(renderKeyPath(md('a', 'b/c'))).not.toBe(renderKeyPath(md('a/b', 'c')))
+  })
+
+  it('keeps a document whose id contains a separator apart from its neighbour', () => {
+    expect(renderKeyPath(md('x/y', 'v'))).not.toBe(renderKeyPath(md('x', 'y/v')))
+  })
+
+  // `.` and `..` are ordinary strings to a Map and directory traversal to a
+  // filesystem. The encoding has to make them impossible as whole segments
+  // before the OPFS store exists, not after.
+  it('never emits a dot or dot-dot segment', () => {
+    for (const id of ['.', '..', 'a/../b']) {
+      const segments = renderKeyPath(md(id, '..')).split('/')
+      expect(segments).not.toContain('.')
+      expect(segments).not.toContain('..')
+    }
+  })
+
+  it('is still one path per key — the same key twice is the same path', () => {
+    expect(renderKeyPath(md('a/b', 'c'))).toBe(renderKeyPath(md('a/b', 'c')))
+  })
+})
+
+// A key with no version cannot notice that its document changed, so a
+// completed render must not be remembered under it. The in-flight join is
+// still safe there — two panes asking at the same instant are asking about
+// the same bytes — and that distinction is the whole point of this flag.
+describe('isMemoisableKey', () => {
+  it('refuses a key with no version', () => {
+    expect(isMemoisableKey(renderKeyOf({ documentId: 'd', kind: 'spatial' }, 'light'))).toBe(false)
+  })
+
+  it('accepts a key that carries one', () => {
+    expect(isMemoisableKey(renderKeyOf(spatial, 'light'))).toBe(true)
+  })
+})
 
 describe('renderKeyOf', () => {
   it('carries the theme for a spatial document, whose palette is baked into the SVG', () => {
@@ -47,9 +102,10 @@ describe('renderKeyOf', () => {
   })
 
   it('leads the path with the build id, so retiring a build is one directory', () => {
-    expect(renderKeyPath(renderKeyOf(spatial, 'light')).startsWith(`${RENDERER_BUILD_ID}/`)).toBe(
-      true,
-    )
+    // The first segment, decoded — the encoding is reversible on purpose, so
+    // a sweep can still recognise which build a directory belongs to.
+    const [first] = renderKeyPath(renderKeyOf(spatial, 'light')).split('/')
+    expect(decodeURIComponent((first ?? '').replace(/^~/, ''))).toBe(RENDERER_BUILD_ID)
   })
 
   it('is a valid key by its own schema', () => {

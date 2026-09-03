@@ -46,6 +46,39 @@ describe('the in-tab render broker', () => {
     expect(produce).toHaveBeenCalledTimes(1)
   })
 
+  // A version-less document is one the key cannot notice changing, so a
+  // completed render is NOT remembered under it — otherwise a row would show
+  // the same picture for the life of the tab however often the list refreshed.
+  it('does not remember a completed render for a document with no version', async () => {
+    const produce = vi.fn().mockResolvedValue(drawn)
+    const broker = createInTabRenderBroker()
+    const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light')
+
+    expect(await broker.render(key, produce)).toEqual(drawn)
+    expect(await broker.render(key, produce)).toEqual(drawn)
+
+    expect(produce).toHaveBeenCalledTimes(2)
+    expect(broker.size).toBe(0)
+  })
+
+  // ...but two panes asking at the same instant are asking about the same
+  // bytes, so the join still applies. This is the half that keeps the
+  // measured double render fixed for a keeper that stamps no time.
+  it('still joins concurrent callers for a document with no version', async () => {
+    const pending = deferred()
+    const produce = vi.fn().mockReturnValue(pending.promise)
+    const broker = createInTabRenderBroker()
+    const key = renderKeyOf({ documentId: 'no-stamp', kind: 'spatial' as const }, 'light')
+
+    const first = broker.render(key, produce)
+    const second = broker.render(key, produce)
+    pending.release()
+
+    expect(await first).toEqual(drawn)
+    expect(await second).toEqual(drawn)
+    expect(produce).toHaveBeenCalledTimes(1)
+  })
+
   it('keeps different keys apart', async () => {
     const produce = vi.fn().mockResolvedValue(drawn)
     const broker = createInTabRenderBroker()
