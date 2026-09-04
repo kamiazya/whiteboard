@@ -187,9 +187,16 @@ jobs:
 
       - name: Collect changed test files
         id: changed
+        # base_ref reaches the shell through env, never ${{ }} interpolation —
+        # a ref name may legally contain shell metacharacters.
+        # `.claude/**` is excluded: its test-NAMED files (biome-plugin lint
+        # fixtures) belong to no vitest project, and vitest exits 1 on a file
+        # list that matches no project.
+        env:
+          BASE_REF: ${{ github.base_ref }}
         run: |
-          git fetch origin "${{ github.base_ref }}" --depth=1
-          files=$(git diff --name-only "origin/${{ github.base_ref }}"...HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
+          git fetch origin "$BASE_REF" --depth=1
+          files=$(git diff --name-only "origin/$BASE_REF"...HEAD -- '*.test.ts' '*.test.tsx' '*.browser.test.ts' '*.browser.test.tsx' ':(exclude).claude/**' | while read -r f; do [ -f "$f" ] && echo "$f"; done | tr '\n' ' ')
           echo "files=$files" >> "$GITHUB_OUTPUT"
           echo "changed test files: $files"
 
@@ -202,7 +209,7 @@ jobs:
         run: |
           for i in 1 2 3 4 5; do
             echo "=== stress run $i/5 ==="
-            pnpm exec vitest run ${{ steps.changed.outputs.files }}
+            pnpm exec vitest run --passWithNoTests ${{ steps.changed.outputs.files }}
           done
 
   sbom-npm:

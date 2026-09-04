@@ -52,7 +52,7 @@ export function judgeQuarantine(markers, nowMs) {
   return { ok: problems.length === 0, problems }
 }
 
-const SCAN_ROOTS = ['apps/web/src', 'packages', 'tools']
+const SCAN_ROOTS = ['apps/web', 'packages', 'tools']
 const TEST_FILE = /\.test\.(ts|tsx|mts|mjs)$/
 
 export function scanRepoQuarantine(repoRoot = join(import.meta.dirname, '../../..')) {

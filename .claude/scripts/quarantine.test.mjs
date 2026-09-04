@@ -33,6 +33,17 @@ test('a marker missing the issue reference is itself a violation', () => {
   assert.match(verdict.problems.join('\n'), /issue/)
 })
 
+test('a marker with no parseable date fails, and is not silently age-exempt', () => {
+  for (const date of ['not-a-date', '2026-13-40']) {
+    const verdict = judgeQuarantine(
+      [{ file: 'c.test.ts', line: 1, date, issue: 'wb:x', reason: 'r' }],
+      NOW,
+    )
+    assert.equal(verdict.ok, false, `date ${date} must not pass`)
+    assert.match(verdict.problems.join('\n'), /parseable/)
+  }
+})
+
 test('within cap and age: ok', () => {
   const markers = [{ file: 'a', line: 1, date: '2026-09-01', issue: 'wb:x', reason: 'r' }]
   assert.equal(judgeQuarantine(markers, NOW).ok, true)
