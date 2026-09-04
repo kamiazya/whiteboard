@@ -224,7 +224,10 @@ export function PromoteWorkspaceSection({
             // The demote gate (ADR-0023 decision 2): delete the source
             // record only when every image made it across AND the replica
             // read back from this browser holds every promoted document.
-            if (outcome.blobs.failed.length === 0) {
+            // `missing` gates too: the file store folds read errors into
+            // "missing", so those references may be retryable — and the
+            // record is the retry vehicle.
+            if (outcome.blobs.failed.length === 0 && outcome.blobs.missing.length === 0) {
               const { demoteBrowserWorkspace, replicaCarriesAll } = await import(
                 '../../lib/demote-browser-workspace.js'
               )

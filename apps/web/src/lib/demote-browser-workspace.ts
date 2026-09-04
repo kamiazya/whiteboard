@@ -48,9 +48,12 @@ export async function demoteBrowserWorkspace(
   sourceWorkspaceId: string,
   dbName?: string,
 ): Promise<void> {
-  await new IdbDocumentStore(dbName).deleteDoc({
-    docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
-  })
+  // Registry first, record last — the two cannot share a transaction (the
+  // record deletion owns its own), so the ORDER decides what a failure in
+  // between leaves behind. This way it is an orphaned record with no
+  // registry row: unreachable, harmless garbage. The other order leaves a
+  // registry row whose record is gone — a workspace that lists but opens
+  // empty, which reads as data loss.
   const db = await openWhiteboardDb(dbName)
   let nextHandle: string
   try {
@@ -80,4 +83,13 @@ export async function demoteBrowserWorkspace(
     db.close()
   }
   await switchBrowserWorkspace(nextHandle, dbName)
+  try {
+    await new IdbDocumentStore(dbName).deleteDoc({
+      docRef: { kind: 'workspace-tree', workspaceId: sourceWorkspaceId },
+    })
+  } catch {
+    // The demotion already stands: with the registry row gone the record is
+    // unreachable, so a failed byte deletion is lingering garbage, not a
+    // half-demoted workspace — and not worth failing the report over.
+  }
 }

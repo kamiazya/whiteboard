@@ -592,6 +592,55 @@ describe('PromoteWorkspaceSection', () => {
     expect(promotion.localCopyRemoved).toBe(true)
   })
 
+  it('a missing blob keeps the browser copy — missing may be a fold-in of a read error', async () => {
+    // DocumentFileStore.get never throws: an unreachable store degrades to
+    // "missing", so a missing reference may be retryable — and the source
+    // record is the retry vehicle a re-run of the move needs.
+    const { sketchId } = await seedTwoDocuments()
+    // An image REFERENCE whose bytes were never stored.
+    const content = new LoroDoc()
+    writeSpatialCanvas(content, {
+      nodes: [
+        {
+          id: 'img',
+          type: 'file',
+          file: newImageRef('img-never-stored'),
+          x: 0,
+          y: 0,
+          width: 5,
+          height: 5,
+        },
+      ],
+      edges: [],
+    })
+    expect(
+      await seedWorkspaceDocumentContent(
+        sketchId,
+        new Uint8Array(content.export({ mode: 'snapshot' })),
+      ),
+    ).toBe(true)
+    const sourceId = getBrowserWorkspaceId()
+    const target = new LoroDoc()
+    render(
+      <PromoteWorkspaceSection
+        daemon={DAEMON}
+        settingsStore={createUserSettingsStore()}
+        baseFetch={daemonStub(target)}
+        reload={vi.fn()}
+      />,
+    )
+    await userEvent.click(screen.getByTestId('promote-workspace-open'))
+    await userEvent.click(await screen.findByTestId('promote-confirm'))
+    const result = await screen.findByTestId('promote-last-result')
+    expect(result.textContent).toMatch(/kept in this browser/i)
+
+    expect(await new BrowserWorkspaceDocs().open(sourceId)).not.toBeNull()
+    const promotion = createUserSettingsStore().load().migration.promotion
+    if (promotion?.ok !== true) throw new Error('expected an ok promotion record')
+    expect(promotion.blobsMissing).toHaveLength(1)
+    expect(promotion.localCopyRemoved).toBe(false)
+  })
+
   it('a failed blob transfer keeps the browser copy and says why', async () => {
     // The demote gate: deletion is allowed only when everything the record
     // references made it across. A refused image PUT means the daemon copy
