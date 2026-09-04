@@ -28,15 +28,25 @@ export interface PoolWorker {
 
 /**
  * `interactive` is work a person is waiting on — the scene for the commit
- * they just made. `background` is work that fills a surface they are looking
- * at but did not ask for a moment ago: a list of thumbnails, a favicon.
+ * they just made. `background` fills a surface they are looking at but did
+ * not ask for a moment ago: a list of thumbnails. `idle` is work NOBODY is
+ * waiting on, where arriving a second late is not noticed at all — the tab
+ * favicon is the case it exists for.
  *
- * The distinction exists so ONE fleet can serve both. Without it the choice
- * is between two fleets (two module graphs, two font registrations, and no
- * sharing of a warm worker) or a background list sitting in front of the one
- * latency a user actually feels.
+ * The distinction exists so ONE fleet can serve all three. Without it the
+ * choice is between several fleets (several module graphs, several font
+ * registrations, and no sharing of a warm worker) or a thumbnail list
+ * sitting in front of the one latency a user actually feels.
+ *
+ * Two bands were not enough once a surface appeared that is genuinely below
+ * a list: `background` already means "not what they asked for", but a list
+ * is still something they are looking at, and an icon competing with it on
+ * equal terms wins slots by arrival order.
  */
-type LayoutPriority = 'interactive' | 'background'
+export type LayoutPriority = 'interactive' | 'background' | 'idle'
+
+/** Highest first. `nextRunnableIndex` walks this order. */
+const PRIORITY_ORDER: readonly LayoutPriority[] = ['interactive', 'background', 'idle']
 
 export interface LayoutWorkerPool {
   /**
@@ -87,21 +97,36 @@ interface Slot {
 }
 
 /**
- * How many workers background work may occupy at once.
+ * How many workers may be busy with work nobody asked for a moment ago.
  *
  * Ordering the queue is not enough on its own: a worker cannot be
- * interrupted mid-message, so background work holding every slot would still
- * make an interactive request wait out a render nobody was waiting for.
- * Holding one worker back bounds that wait at zero.
+ * interrupted mid-message, so lower-priority work holding every slot would
+ * still make an interactive request wait out a render nobody was waiting
+ * for. Holding one worker back bounds that wait at zero.
  *
- * A single-worker fleet has nothing to hold back. Background runs there
+ * The budget is over ALL the lower bands together, not one per band. Counted
+ * per band, `idle` would be free to take the very slot `background`'s cap is
+ * holding for an interactive request — the reservation defeated by the
+ * lowest-value work in the app, exactly when it is doing its job. Measured
+ * on a two-worker fleet: an idle request arriving between two background
+ * ones ran immediately and both background requests then waited.
+ *
+ * A single-worker fleet has nothing to hold back. The lower bands run there
  * anyway rather than starving, and an interactive request waits out at most
  * ONE render instead of the whole list — the honest trade on a machine with
  * no cores to spare.
  */
-function backgroundSlotCap(size: number): number {
+function deferrableSlotCap(size: number): number {
   return size > 1 ? size - 1 : 1
 }
+
+/**
+ * And `idle` gets one worker whatever the fleet size, inside that budget. A
+ * band that could fill every slot it is allowed is not the lowest band
+ * however it is labelled — a list of thumbnails would wait out renders
+ * nobody is looking at.
+ */
+const IDLE_SLOT_CAP = 1
 
 export function createLayoutWorkerPool(options: {
   size: number
@@ -156,20 +181,34 @@ export function createLayoutWorkerPool(options: {
   const freeSlot = (): Slot | undefined =>
     slots.find((slot) => slot.busyWith === null) ?? (slots.length < size ? spawn() : undefined)
 
-  const backgroundInFlight = (): number =>
-    slots.filter((slot) => slot.busyWith?.priority === 'background').length
+  const inFlightAt = (priority: LayoutPriority): number =>
+    slots.filter((slot) => slot.busyWith?.priority === priority).length
+
+  const deferrableInFlight = (): number =>
+    slots.filter((slot) => slot.busyWith !== null && slot.busyWith.priority !== 'interactive')
+      .length
 
   /**
-   * The next request that may run right now: interactive first, FIFO within
-   * a priority, and background only while it is under its slot cap. Returning
-   * an INDEX rather than shifting lets a blocked background request stay
-   * queued while a later interactive one goes ahead of it.
+   * The next request that may run right now: by band, highest first, FIFO
+   * within a band, and each band only while it is under its slot cap.
+   * Returning an INDEX rather than shifting lets a blocked request stay
+   * queued while a higher-priority one goes ahead of it.
+   *
+   * A band that is queued but AT its cap STOPS the walk rather than letting
+   * the next band down take the slot. That slot is the one being held for
+   * the band above, so handing it to a lower one defeats the reservation
+   * exactly when it is doing its job.
    */
   const nextRunnableIndex = (): number => {
-    const interactive = queue.findIndex((pending) => pending.priority === 'interactive')
-    if (interactive !== -1) return interactive
-    if (backgroundInFlight() >= backgroundSlotCap(size)) return -1
-    return queue.findIndex((pending) => pending.priority === 'background')
+    for (const priority of PRIORITY_ORDER) {
+      const at = queue.findIndex((pending) => pending.priority === priority)
+      if (at === -1) continue
+      if (priority === 'interactive') return at
+      if (deferrableInFlight() >= deferrableSlotCap(size)) return -1
+      if (priority === 'idle' && inFlightAt('idle') >= IDLE_SLOT_CAP) return -1
+      return at
+    }
+    return -1
   }
 
   function pump(): void {
