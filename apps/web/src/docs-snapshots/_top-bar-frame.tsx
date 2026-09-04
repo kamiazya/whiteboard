@@ -25,6 +25,12 @@ export function TopBarFrame({ testId, width, height, scene }: TopBarFrameProps) 
       <WorkspaceTopBar
         workspaceId="ws_main"
         path="design/architecture"
+        // The bar renders no title of its own — the caller's slot does
+        // (production passes DocumentProperties; a plain span keeps the
+        // figure's chrome without its machinery). The name arrives from
+        // /names via useDocumentNames, so waiting on it still proves that
+        // fetch chain settled before the capture.
+        titleSlot={({ name }) => <span className="truncate text-sm font-medium">{name}</span>}
         onToggleFullscreen={() => undefined}
       />
       <div style={{ height: `calc(100% - ${TOP_BAR_HEIGHT_PX}px)` }}>

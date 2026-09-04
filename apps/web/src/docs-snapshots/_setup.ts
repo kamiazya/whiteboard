@@ -6,7 +6,16 @@
 // easy to forget when adding new scenes.
 
 import { afterEach, beforeEach } from 'vitest'
+import { BROWSER_DEFAULT_SEGMENT } from '../lib/browser-idb.js'
+import { setBrowserWorkspaceIdForTests } from '../lib/browser-workspace-id.js'
 import { seedMathRandom } from './_helpers.js'
+
+// The synchronous workspace-id accessor throws until something resolves it;
+// every other project's setup seeds this seam and this one was missed when
+// the boot chain moved (the whole suite failed with "browser workspace id
+// read before resolveBrowserWorkspaceId() completed"). A FIXED id, not a
+// generated one: a snapshot regenerates byte-identical or not at all.
+setBrowserWorkspaceIdForTests('01ARZ3NDEKTSV4RRFFQ69G5FAV', BROWSER_DEFAULT_SEGMENT)
 
 let restoreMathRandom: (() => void) | null = null
 

@@ -2,6 +2,7 @@ import { cleanup, render, waitFor } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import { afterEach, beforeEach, describe, it, vi } from 'vitest'
 import { page } from 'vitest/browser'
+import { getBrowserWorkspaceId } from '../lib/browser-workspace-id.js'
 import { BrowserIndexPage } from '../pages/BrowserIndexPage.js'
 import { LocalStoreDouble } from '../test-utils/local-index.js'
 import '../index.css'
@@ -33,6 +34,11 @@ afterEach(() => {
 describe('docs snapshot: browser document list', () => {
   it('captures the list with a markdown note and a spatial pair', async () => {
     const store = new LocalStoreDouble()
+    // A fresh real database mints its workspace with segment 'default', and
+    // the page heading shows it. Without this the double's row has neither
+    // name nor segment and the heading falls back to the raw ULID — a
+    // screen no user sees.
+    await store.index.renameWorkspace({ workspaceId: getBrowserWorkspaceId(), segment: 'default' })
     // 1d, 2d, 5d ago relative to NOW so the labels stay stable.
     await store.save({
       documentId: '0RVY147ADGKPSWZ258BEHMQTX0',
@@ -77,6 +83,10 @@ describe('docs snapshot: browser document list', () => {
         throw new Error('cards not settled')
       }
     })
+    // The UI webfont applies to the card titles after first paint; captured
+    // mid-swap the PNG is not byte-stable (measured: the titles were the
+    // only differing pixels between two regenerations).
+    await document.fonts.ready
 
     await page.screenshot({ path: resolveDocAssetPath('browser-local-list.png') })
   })
