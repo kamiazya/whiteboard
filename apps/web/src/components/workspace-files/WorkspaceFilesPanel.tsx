@@ -3,6 +3,7 @@ import {
   Columns2,
   CopyPlus,
   ExternalLink,
+  Eye,
   List,
   Pencil,
   Pin,
@@ -27,6 +28,7 @@ import { createRowOutlineLoader } from './load-row-outline.js'
 import { createRowRenderLoader } from './load-row-render.js'
 import { NewDocumentMenu } from './NewDocumentMenu.js'
 import { newDocumentPathIn } from './new-document-path.js'
+import { PeekDialog } from './PeekDialog.js'
 import { RenameDocumentDialog } from './RenameDocumentDialog.js'
 import { SearchResults } from './SearchResults.js'
 import { searchDocuments, withNameMatches } from './search-documents.js'
@@ -191,6 +193,9 @@ export function WorkspaceFilesPanel({
     x: number
     y: number
   } | null>(null)
+  // The peek: a document being looked at without being opened. Only ever
+  // set where tapOpens (no preview pane); see PeekDialog.
+  const [peek, setPeek] = useState<WorkspaceDocumentEntry | null>(null)
   // The rename dialog's target, plus the in-flight/refusal state its form
   // shows. Null means closed.
   const [renaming, setRenaming] = useState<WorkspaceDocumentEntry | null>(null)
@@ -269,6 +274,7 @@ export function WorkspaceFilesPanel({
     // `setDocumentName` on the new workspace's store.
     setSelected(null)
     setCardMenu(null)
+    setPeek(null)
     setRenaming(null)
     setRenameError(null)
     setRenameBusy(false)
@@ -329,6 +335,9 @@ export function WorkspaceFilesPanel({
           const entry = entries.find((row) => row.path === current.entry.path)
           return entry === undefined ? null : { ...current, entry }
         })
+        setPeek((current) =>
+          current === null ? null : (entries.find((row) => row.path === current.path) ?? null),
+        )
       })
       .catch(() => undefined)
     return () => {
@@ -625,6 +634,15 @@ export function WorkspaceFilesPanel({
                   onSelect: () => onOpenDocument(cardMenu.entry.path),
                 },
               ]),
+          ...(tapOpens
+            ? [
+                {
+                  label: 'Preview',
+                  icon: <Eye />,
+                  onSelect: () => setPeek(cardMenu.entry),
+                },
+              ]
+            : []),
           ...(onDuplicateDocument === undefined
             ? []
             : [
@@ -945,6 +963,12 @@ export function WorkspaceFilesPanel({
           }}
         />
       )}
+      <PeekDialog
+        document={peek}
+        loadRender={loadRender}
+        onOpen={openEntry}
+        onClose={() => setPeek(null)}
+      />
       <RenameDocumentDialog
         document={renaming}
         workspace={workspace}

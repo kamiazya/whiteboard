@@ -225,6 +225,18 @@ describe('the spatial-editor-container hook means one thing', () => {
   })
 })
 
+/**
+ * Chrome that belongs to the DOCUMENT, not to the canvas — ADR-0026
+ * decision 5. `CommentsPanel` serves a markdown document exactly as it
+ * serves a spatial one (a note has no canvas to hang a per-node toggle on),
+ * so it deliberately does NOT join `SHARED_CANVAS_CHROME`: that group's own
+ * docblock is about chrome the PAGE positions around the editor, and this
+ * one is chrome that answers a question about the document as a whole.
+ * Kept as its own group so a reader does not have to infer the distinction
+ * from where an entry happens to sit.
+ */
+const SHARED_DOCUMENT_CHROME = ['CommentsPanel'] as const
+
 describe('document page canvas chrome', () => {
   it.each(SHARED_CANVAS_CHROME)('both pages render %s', async (chrome) => {
     const missing: string[] = []
@@ -270,6 +282,53 @@ describe('document page canvas chrome', () => {
     for (const page of PAGES) {
       expect((await read(page)).length, `${page} is empty`).toBeGreaterThan(10_000)
     }
+  })
+})
+
+describe('document page document-level chrome', () => {
+  it.each(SHARED_DOCUMENT_CHROME)('both pages render %s', async (chrome) => {
+    const missing: string[] = []
+    for (const page of PAGES) {
+      const source = await read(page)
+      if (!renders(source, chrome)) missing.push(page)
+    }
+
+    expect(
+      missing,
+      `${chrome} is document-level chrome (ADR-0026 decision 5): a page that ` +
+        'omits it leaves that document kind with no way to reach its ' +
+        'conversations at all.',
+    ).toEqual([])
+  })
+})
+
+/**
+ * `threads=` must reach the spatial pane on BOTH pages, and specifically
+ * inside their own spatial slot — the same reaches-subject discipline the
+ * "spatial editor pane is built once" scan above applies to the pane itself.
+ *
+ * `threads=` also appears once more per page, on `<CommentsPanel`, which sits
+ * OUTSIDE the spatial slot by design (it is document-level chrome, not
+ * canvas-level — see `SHARED_DOCUMENT_CHROME` above). So this checks that
+ * SOME occurrence lands inside the slot, not that every occurrence does; an
+ * entry for a `threads=` that stopped reaching the pane at all fails the same
+ * as the pane never having been found in the "built once" scan above.
+ */
+describe('document page threads reach the spatial pane', () => {
+  it.each(PAGES)('%s passes threads= inside its spatial slot', async (page) => {
+    const source = await read(page)
+    const [start, end] = spatialSlotRange(source)
+    expect(start, `${page} has no spatial slot`).toBeGreaterThan(-1)
+
+    const offsets: number[] = []
+    for (let i = source.indexOf('threads='); i !== -1; i = source.indexOf('threads=', i + 1)) {
+      offsets.push(i)
+    }
+    expect(offsets.length, `${page} never passes threads= to anything`).toBeGreaterThan(0)
+    expect(
+      offsets.some((at) => at >= start && at <= end),
+      `${page} never passes threads= inside its spatial slot`,
+    ).toBe(true)
   })
 })
 

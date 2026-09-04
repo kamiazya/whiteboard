@@ -16,6 +16,8 @@ import {
   renameBranchResponseSchema,
   type SetHeadResponse,
   setHeadResponseSchema,
+  type VersionDocumentResponse,
+  versionDocumentResponseSchema,
 } from '@kamiazya/whiteboard-mcp/api-contracts'
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { ZodError } from 'zod'
@@ -41,6 +43,7 @@ export function buildBranchUrls(
   deleteBranch: (name: string) => string
   stats: (name: string) => string
   merge: (source: string) => string
+  branchDocument: (name: string) => string
 } {
   const safePath = encodeURIComponent(path)
   const base = `/api/workspaces/${workspaceId}/documents/${safePath}`
@@ -50,6 +53,7 @@ export function buildBranchUrls(
     deleteBranch: (name) => `${base}/branches/${encodeURIComponent(name)}`,
     stats: (name) => `${base}/branches/${encodeURIComponent(name)}/stats`,
     merge: (source) => `${base}/branches/${encodeURIComponent(source)}/merge`,
+    branchDocument: (name) => `${base}/branches/${encodeURIComponent(name)}/document`,
   }
 }
 
@@ -168,6 +172,15 @@ export function branchesApi(workspaceId: string, path: string, fetchFn: typeof f
         }),
       )
       return safeParse(setHeadResponseSchema, await res.json())
+    },
+    // One variation's content at its tip, read-only — what ?v=<name> draws.
+    // null when the branch (or its tip) is gone: the caller shows "variation
+    // not found" and falls back to the live document.
+    async loadDocument(name: string): Promise<VersionDocumentResponse | null> {
+      const res = await fetchFn(urls.branchDocument(name))
+      if (res.status === 404) return null
+      await requireOk(res)
+      return safeParse(versionDocumentResponseSchema, await res.json())
     },
     async merge(source: string, args: { into: string; dryRun?: boolean }): Promise<MergeResult> {
       const res = await requireOk(

@@ -8,6 +8,7 @@ import type { CommentThread } from '@kamiazya/whiteboard-model'
 import { type DocumentKind, isImageRef } from '@kamiazya/whiteboard-model'
 import { MessageSquare } from 'lucide-react'
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import { useSearchParams } from 'react-router-dom'
 import { AgentPresenceChip } from '../components/AgentPresenceChip.js'
 import { CommentsPanel } from '../components/annotations/CommentsPanel.js'
 import { CapabilityTeaser } from '../components/capability-teaser/CapabilityTeaser.js'
@@ -22,6 +23,7 @@ import { SpatialEditorPane } from '../components/document-editor/SpatialEditorPa
 import { useNodeInEditor } from '../components/document-editor/use-node-in-editor.js'
 import { DocumentProperties } from '../components/document-properties/DocumentProperties.js'
 import { HeaderBranchBanner } from '../components/HeaderBranchBanner.js'
+import { HeaderVariationBanner } from '../components/HeaderVariationBanner.js'
 import { MergeToast } from '../components/MergeToast.js'
 import { CanvasDisplaySettings } from '../components/spatial-editor/CanvasDisplaySettings.js'
 import type { SpatialEditorHandle } from '../components/spatial-editor/index.js'
@@ -46,6 +48,7 @@ import {
   type MarkdownEmbedLoader,
   useMarkdownEmbedContent,
 } from '../hooks/use-markdown-embed-content.js'
+import { type BranchMeta, branchesApi } from '../hooks/useBranches.js'
 import { useDirtyState } from '../hooks/useDirtyState.js'
 import { useDocumentOutline } from '../hooks/useDocumentOutline.js'
 import { dispatchIdentityEvent, useDocumentSync } from '../hooks/useDocumentSync.js'
@@ -75,6 +78,7 @@ import { createSharedSseStreamSource } from '../lib/sse-shared-stream-source.js'
 import { markdownAnchorResolver } from '../lib/text-anchor.js'
 import { createUserSettingsStore } from '../lib/user-settings-store.js'
 import { attachVersionThumbnail } from '../lib/version-thumbnail.js'
+import type { PastDocument } from '../lib/versions-backend.js'
 import { applyViewportRequest } from '../lib/viewport-request.js'
 import { useBrowserToolRegistry } from '../lib/webmcp/use-browser-tool-registry.js'
 import { deriveDaemonPageState } from './daemon-page-state.js'
@@ -178,6 +182,102 @@ export function DaemonDocumentPage({
   // tool call) so HeaderBranchChip refetches; the chip's own switch/create/
   // rename/delete actions already refetch internally and don't need this.
   const [branchRefreshSignal, setBranchRefreshSignal] = useState(0)
+  // ── ?v=<name>: a non-default variation, addressable (ADR-0022) ──
+  // The address names a READ-ONLY view of that variation's tip; HEAD does
+  // not move. Decision 1 holds on both edges: `?v=main` and a `?v` naming
+  // the current HEAD strip back to the plain address, so the default
+  // variation is never decorated.
+  const [searchParams, setSearchParams] = useSearchParams()
+  const variationParam = searchParams.get('v')
+  const [variationPreview, setVariationPreview] = useState<{
+    name: string
+    head: string
+    branches: readonly BranchMeta[]
+    past: PastDocument
+  } | null>(null)
+  const [variationNotice, setVariationNotice] = useState<string | null>(null)
+  const clearVariationParam = useCallback(() => {
+    setSearchParams(
+      (prev) => {
+        const next = new URLSearchParams(prev)
+        next.delete('v')
+        return next
+      },
+      { replace: true },
+    )
+  }, [setSearchParams])
+
+  useEffect(() => {
+    if (!canvas || variationParam === null || !capabilities.branches) {
+      setVariationPreview(null)
+      return
+    }
+    const { workspaceId: wsId, path: docPath } = canvas
+    let cancelled = false
+    const api = branchesApi(wsId, docPath, daemonFetch)
+    void (async () => {
+      try {
+        const state = await api.list()
+        if (cancelled) return
+        if (variationParam === 'main' || variationParam === state.head) {
+          clearVariationParam()
+          return
+        }
+        if (!state.branches.some((b) => b.name === variationParam)) {
+          setVariationNotice(`Variation «${variationParam}» was not found`)
+          clearVariationParam()
+          return
+        }
+        const past = await api.loadDocument(variationParam)
+        if (cancelled) return
+        if (past === null) {
+          setVariationNotice(`Variation «${variationParam}» could not be read`)
+          clearVariationParam()
+          return
+        }
+        setVariationNotice(null)
+        setVariationPreview({
+          name: variationParam,
+          head: state.head,
+          branches: state.branches,
+          past,
+        })
+      } catch {
+        if (!cancelled) {
+          setVariationNotice('Variation preview failed to load')
+          clearVariationParam()
+        }
+      }
+    })()
+    return () => {
+      cancelled = true
+    }
+    // branchRefreshSignal: an external HEAD change can make the previewed
+    // name the HEAD, which must strip the param rather than keep a stale
+    // "read-only" claim over what is now the live document.
+  }, [
+    canvas?.workspaceId,
+    canvas?.path,
+    variationParam,
+    capabilities.branches,
+    daemonFetch,
+    clearVariationParam,
+    branchRefreshSignal,
+  ])
+
+  const switchToVariation = useCallback(() => {
+    if (!canvas || variationPreview === null) return
+    const { workspaceId: wsId, path: docPath } = canvas
+    void (async () => {
+      try {
+        await branchesApi(wsId, docPath, daemonFetch).setHead(variationPreview.name)
+        setBranchRefreshSignal((n) => n + 1)
+        clearVariationParam()
+      } catch {
+        setVariationNotice('Switching to this variation failed')
+      }
+    })()
+  }, [canvas, variationPreview, daemonFetch, clearVariationParam])
   // The document's history column. Cleared on a document switch: this page
   // does not remount, and a panel left open across a switch would be listing
   // the departed document's versions under the arrived document's name.
@@ -885,11 +985,54 @@ export function DaemonDocumentPage({
                 historyOpen={historyOpen}
                 {...(preview === null ? {} : { preview })}
                 branchRefreshSignal={branchRefreshSignal}
+                onPreviewVariation={(name) => {
+                  setSearchParams((prev) => {
+                    const next = new URLSearchParams(prev)
+                    next.set('v', name)
+                    return next
+                  })
+                }}
                 onNavigateBack={onNavigateBack}
                 // Version thumbnails come from the same PNG export path the
                 // user can trigger by hand. Without this the save flow skips
                 // the upload entirely and latest-thumbnail stays 204 forever.
               />
+            )}
+            {capabilities.branches && canvas && variationPreview !== null && (
+              <HeaderVariationBanner
+                workspaceId={canvas.workspaceId}
+                path={canvas.path}
+                name={variationPreview.name}
+                head={variationPreview.head}
+                branches={variationPreview.branches}
+                onSwitch={switchToVariation}
+                onExit={clearVariationParam}
+                runMerge={(src, args) =>
+                  branchesApi(canvas.workspaceId, canvas.path, daemonFetch).merge(src, args)
+                }
+              />
+            )}
+            {variationNotice !== null && (
+              // role="alert", not "status": every notice here reports a
+              // failure (unknown name, unreadable tip, failed switch), and
+              // an alert injected with its content is the supported pattern
+              // — a conditionally-mounted status region is not
+              // (polite-live-region.test.ts).
+              <div
+                role="alert"
+                data-testid="variation-preview-notice"
+                className="flex items-center gap-3 border-b bg-muted px-3 py-1.5 text-xs text-muted-foreground"
+              >
+                <span className="min-w-0 flex-1 truncate">{variationNotice}</span>
+                <button
+                  type="button"
+                  aria-label="Dismiss"
+                  className="shrink-0 rounded-md p-1 hover:bg-accent"
+                  onClick={() => setVariationNotice(null)}
+                >
+                  ×
+                </button>
+              </div>
             )}
             {capabilities.branches && canvas && (
               <HeaderBranchBanner workspaceId={canvas.workspaceId} path={canvas.path} />
@@ -994,6 +1137,8 @@ export function DaemonDocumentPage({
             <div className="relative min-w-0 flex-1">
               {preview ? (
                 <DocumentPreview past={preview.past} theme={resolvedTheme} />
+              ) : variationPreview ? (
+                <DocumentPreview past={variationPreview.past} theme={resolvedTheme} />
               ) : (
                 <DocumentEditorSurface
                   kind={documentKind}
@@ -1050,6 +1195,7 @@ export function DaemonDocumentPage({
                       resolveEmbed={resolveEmbed}
                       resolveTitle={resolveTitle}
                       linkTargets={linkTargets}
+                      threads={annotations}
                     >
                       <AgentPresenceChip summary={agentActivity.summary} />
                     </SpatialEditorPane>
@@ -1062,11 +1208,12 @@ export function DaemonDocumentPage({
                 <CommentsPanel
                   threads={annotations}
                   resolveAnchor={resolveAnchor}
-                  // Not while a past version is on screen: the editor is
-                  // replaced by DocumentPreview but this rail is not, and a
-                  // reply is a write to the LIVE document — sent from a
-                  // surface showing something else entirely.
-                  onReply={preview === null ? handleReply : undefined}
+                  // Not while a past version OR a variation preview is on
+                  // screen: the editor is replaced by DocumentPreview but
+                  // this rail is not, and a reply is a write to the LIVE
+                  // document — sent from a surface showing something else
+                  // entirely.
+                  onReply={preview === null && variationPreview === null ? handleReply : undefined}
                 />
               </aside>
             ) : null}
