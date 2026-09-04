@@ -1,5 +1,5 @@
-import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { SPATIAL_LIGHT_PALETTE } from '@kamiazya/whiteboard-canvas-render'
+import type { SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { describe, expect, it } from 'vitest'
 import { indexNodeBoxes } from './geometry.js'
 import { buildMinimapNodes } from './SpatialEditor.js'
