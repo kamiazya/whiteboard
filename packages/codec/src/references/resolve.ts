@@ -20,8 +20,10 @@ export type AliasResolver = (alias: string) => string | null
  * serialization (`wikiLink` -> `[[ID]]`, `embed` -> `![[ID]]`).
  *
  * There is no scheme: `[[<ULID>]]` resolves directly (no resolver needed)
- * and everything else goes to the injected resolver as a NAME, which is the
- * one bracket form authors elsewhere already know. An unresolved target stays
+ * and everything else goes to the injected resolver as an ALIAS — a
+ * workspace path, since display names are retired from resolution (path +
+ * id are the only written forms; names appear at render time instead). An
+ * unresolved target stays
  * as literal text rather than being dropped, so a link this version cannot
  * honour is visible rather than silently missing.
  */
@@ -71,9 +73,10 @@ function resolveTarget(
   if (resolver === undefined) return undefined
   const documentId = resolver(target)
   if (documentId === null) return undefined
-  return isEmbed
-    ? { type: 'embed', documentId }
-    : { type: 'wikiLink', documentId, alias: alias ?? target }
+  // Only an explicit |label becomes the alias. The written target is an
+  // address, and freezing it into the label slot would stop the renderer
+  // from showing the target's CURRENT display name for a bare [[path]].
+  return isEmbed ? { type: 'embed', documentId } : { type: 'wikiLink', documentId, alias }
 }
 
 function resolvePhrasing(

@@ -80,7 +80,12 @@ import {
   SPATIAL_THEME_GEOMETRY,
 } from '@kamiazya/whiteboard-canvas-render'
 import { createBrowserMeasureText } from '@kamiazya/whiteboard-canvas-viewer'
-import type { CanvasComment, SpatialCanvas, SpatialNode } from '@kamiazya/whiteboard-model'
+import type {
+  CanvasComment,
+  CommentThread,
+  SpatialCanvas,
+  SpatialNode,
+} from '@kamiazya/whiteboard-model'
 import { bundledFacetRegistry } from '@kamiazya/whiteboard-plugin-visual'
 import {
   forwardRef,
@@ -105,6 +110,7 @@ import {
   type LinkDialogState,
 } from './CanvasContextMenu.js'
 import { CommentDragLayer } from './CommentDragLayer.js'
+import { CommentThreadCard } from './CommentThreadCard.js'
 import { ConnectOverlay } from './ConnectOverlay.js'
 import type { EditorCommand } from './commands.js'
 import { applyCommand } from './commands.js'
@@ -298,6 +304,16 @@ export interface SpatialEditorProps {
    */
   readonly onOpenInEditor?: (nodeId: string, text: string) => void
   /**
+   * The document's conversations, for the card a press opens on a comment.
+   *
+   * The canvas's own `x-whiteboard.comments` is a lossy projection — one
+   * `text` per comment, with nowhere for a reply to sit — so reading a
+   * conversation needs the threads plane itself. Absent, a press still
+   * selects nothing and the comment keeps its drawn bubble: a host with no
+   * annotation channel has no conversation to open.
+   */
+  readonly threads?: readonly CommentThread[]
+  /**
    * Marks a file reference whose target no longer exists (deleted canvas,
    * ref imported into a store that never had it). The card renders a quiet
    * "Missing reference" label and the follow affordances (context menu,
@@ -487,6 +503,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       onToggleEdgeLock,
       onToggleNodeLock,
       onOpenInEditor,
+      threads,
       fileRefOptions,
       onOpenFileRef,
       missingFileRef,
@@ -787,6 +804,14 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }
     const commentById = (id: string): CanvasComment | undefined =>
       canvasRef.current['x-whiteboard']?.comments?.find((entry) => entry.id === id)
+    /**
+     * Opens a conversation in place, or shuts the one already open. Pressing
+     * the comment whose card is up is how it closes without hunting for the
+     * ×, which is the gesture people try first.
+     */
+    const toggleCommentCard = (commentId: string): void => {
+      setOpenCommentId((current) => (current === commentId ? null : commentId))
+    }
     /** Opens the compose bubble over an existing comment, pre-filled, to rewrite its text. */
     const openCommentEditor = (comment: CanvasComment) => {
       setCommentCompose({
@@ -823,6 +848,18 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
     }, [canvas, pendingCut])
     const [edgeLabelEditId, setEdgeLabelEditId] = useState<string | null>(null)
     const [commentCompose, setCommentCompose] = useState<CommentComposeState | null>(null)
+    /**
+     * The conversation opened in place on the canvas — at most one, because
+     * a card is a place to read and answer ONE thread, and a canvas of
+     * simultaneously open cards is the comments rail with worse layout.
+     */
+    const [openCommentId, setOpenCommentId] = useState<string | null>(null)
+    /**
+     * The comment a press landed on, read back at the release. A press that
+     * never travelled opens the card; one that travelled was a pin drag and
+     * the drag branch owns it.
+     */
+    const pressedCommentRef = useRef<string | null>(null)
     /**
      * A point-anchored comment's pin being dragged: the comment as it was
      * at the press (its stored anchor), the press point, and the live
@@ -1272,25 +1309,21 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       if (e.button !== 0) return
       // A comment's chrome floats above content, so it is tested before the
       // nodes under it. A press on it never falls through to node or
-      // marquee handling: a double press edits the text; a single press on
-      // a point-anchored comment arms a pin drag. A node-anchored comment's
-      // anchor IS its node's corner, so its pin does not drag — moving the
-      // node is how it moves (and the comment rides along).
+      // marquee handling: a press that stays put OPENS the conversation at
+      // the release, and one that travels drags the pin of a point-anchored
+      // comment. A node-anchored comment's anchor IS its node's corner, so
+      // its pin does not drag — moving the node is how it moves (and the
+      // comment rides along).
+      //
+      // There is deliberately no double-press-to-edit here any more. A
+      // single press now opens the card, whose own top-right Edit is the
+      // successor: the second press of a pair would land on that card, which
+      // stops propagation, so the pairing could never complete.
       const hitCommentId = hitTestComment(point)
       if (hitCommentId !== undefined) {
         const comment = commentById(hitCommentId)
         if (comment === undefined) return
-        const key = `comment:${comment.id}`
-        const pressedAt = e.timeStamp
-        const isDoublePress =
-          lastPressRef.current !== null &&
-          lastPressRef.current.key === key &&
-          pressedAt - lastPressRef.current.at <= DOUBLE_PRESS_WINDOW_MS
-        lastPressRef.current = isDoublePress ? null : { key, at: pressedAt, point: screenPoint }
-        if (isDoublePress) {
-          openCommentEditor(comment)
-          return
-        }
+        pressedCommentRef.current = comment.id
         if (comment.targetNodeId === undefined) {
           setCommentDrag({
             comment,
@@ -1538,6 +1571,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
       // canvas, and treating its release as one would re-collapse the very
       // selection the gather just built.
       if (!navigation.fallThrough) return
+      // Consumed here whatever happens next, so a press on a comment can
+      // never open its card two gestures later.
+      const pressedComment = pressedCommentRef.current
+      pressedCommentRef.current = null
       if (commentDrag !== null) {
         if (commentDrag.dropped !== null) return
         const released = screenToCanvas(clientPointToRootLocal(e, root), viewport)
@@ -1551,6 +1588,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         // reload or remote import.
         if (dx === 0 && dy === 0) {
           setCommentDrag(null)
+          toggleCommentCard(commentDrag.comment.id)
           return
         }
         const dropped = {
@@ -1571,6 +1609,11 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           state: { kind: 'idle' },
           commands: [{ kind: 'move-comment', id: commentDrag.comment.id, ...dropped } as const],
         })
+        return
+      }
+      if (pressedComment !== null) {
+        // A node-anchored comment arms no drag, so its release arrives here.
+        toggleCommentCard(pressedComment)
         return
       }
       const armed = doublePressRef.current
@@ -1751,7 +1794,10 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
         },
         e.timeStamp,
       )
-      // A cancelled pin drag writes nothing: the comment stays where it was.
+      // A cancelled pin drag writes nothing: the comment stays where it was,
+      // and the press that armed it is spent — left set, the next unrelated
+      // release would read the stale id and open that comment's card.
+      pressedCommentRef.current = null
       setCommentDrag(null)
     }
 
@@ -2162,6 +2208,75 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
           onLostPointerCapture={handleLostPointerCapture}
           onKeyDown={handleKeyDown}
         >
+          {(() => {
+            // Drawn only when the threads plane can answer for it: the
+            // canvas comment alone holds one message, and a card that
+            // showed a conversation's first line and called it the whole
+            // conversation would be worse than no card.
+            //
+            // SCREEN space, outside the pan/zoom transform, for two
+            // reasons that both bit. The transform layer is its own
+            // stacking context BELOW the minimap's z-10, so a card drawn
+            // inside it had every action swallowed by the minimap when the
+            // comment sat near the bottom-right corner — measured, and no
+            // z-index on the card can lift it out of its parent's context.
+            // And a card is chrome, not content: its controls are tap
+            // targets with a screen size, so scaling them with the zoom
+            // was wrong even where it was reachable.
+            if (openCommentId === null || commentCompose !== null) return null
+            const thread = threads?.find((entry) => entry.id === openCommentId)
+            const bubble = commentChromeBoxes.find(
+              (entry) => entry.commentId === openCommentId && entry.part === 'bubble',
+            )
+            if (thread === undefined || bubble === undefined) return null
+            return (
+              <CommentThreadCard
+                // Keyed by THREAD, so moving to another conversation mounts a
+                // fresh card. Without it React reuses this one instance and
+                // its unsent draft survives the switch — the next submit would
+                // append the first thread's text to the second, since the
+                // handler closes over the new id.
+                key={thread.id}
+                thread={thread}
+                box={(() => {
+                  const at = canvasToScreen({ x: bubble.bbox.x, y: bubble.bbox.y }, viewport)
+                  return { x: at.x, y: at.y, width: bubble.bbox.w * viewport.zoom, height: 0 }
+                })()}
+                style={commentComposeStyle(theme)}
+                onReply={(body) =>
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [
+                      {
+                        kind: 'reply-to-thread',
+                        threadId: thread.id,
+                        message: {
+                          id: (createId ?? defaultCreateId)(),
+                          body,
+                          // No author: this app has no accounts, so there
+                          // is no name to write that would not be invented.
+                          createdAt: new Date().toISOString(),
+                        },
+                      } as const,
+                    ],
+                  })
+                }
+                onResolve={(resolved) =>
+                  applyResult({
+                    state: { kind: 'idle' },
+                    commands: [{ kind: 'set-comment-resolved', id: thread.id, resolved } as const],
+                  })
+                }
+                onEdit={() => {
+                  const comment = commentById(thread.id)
+                  if (comment === undefined) return
+                  setOpenCommentId(null)
+                  openCommentEditor(comment)
+                }}
+                onClose={() => setOpenCommentId(null)}
+              />
+            )
+          })()}
           {/* Screen space, outside the pan/zoom transform — an overview that
           panned with the canvas would defeat its purpose.
           It stays up during a drag: `data-editor-overlay` already stops a

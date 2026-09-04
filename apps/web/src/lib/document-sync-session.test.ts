@@ -322,6 +322,95 @@ describe('createDocumentSyncSession', () => {
     unsubscribe()
   })
 
+  it('a local reply reaches the thread, which no comment command could carry', async () => {
+    // The gap this closes: every other comment command travels through the
+    // CANVAS envelope (`x-whiteboard.comments`), and that shape holds one
+    // `text` per comment — a reply has nowhere to sit in it. So an MCP peer
+    // could add a message and a person could not, and the panel could only
+    // report the count of messages it had no way to show.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 10, y: 20 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'the opening question' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const listener = vi.fn()
+    const unsubscribe = session.subscribeAnnotations(listener)
+
+    // The canvas is UNCHANGED by a reply — no node, no edge, and nothing in
+    // the envelope either. That is the property that makes this command
+    // unlike every other one the commit path takes.
+    const before = session.getCanvas()
+    const command: EditorCommand = {
+      kind: 'reply-to-thread',
+      threadId: 't1',
+      message: { id: 'm2', body: 'and the answer' },
+    }
+    session.onChange(applyCommand(before, command), command)
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual([
+      'the opening question',
+      'and the answer',
+    ])
+    // The PAYLOAD, not merely that a notification happened: a subscriber
+    // handed the pre-reply annotations would satisfy `toHaveBeenCalled` and
+    // leave every reader looking at the old conversation.
+    expect(listener).toHaveBeenLastCalledWith([
+      expect.objectContaining({
+        id: 't1',
+        messages: [
+          expect.objectContaining({ body: 'the opening question' }),
+          expect.objectContaining({ body: 'and the answer' }),
+        ],
+      }),
+    ])
+    unsubscribe()
+  })
+
+  it('two replies inside one debounce window both survive, because appending is not overwriting', async () => {
+    // Every other target key here dedupes to the last value for one target,
+    // which is right when the target HOLDS one value. A reply appends, so a
+    // key of `thread:t1` would commit only the second of these and lose the
+    // first without a trace.
+    const backend = makeFakeBackend()
+    const session = createDocumentSyncSession(backend, makeDeps())
+    session.connect()
+
+    const doc = new LoroDoc()
+    writeSpatialCanvas(doc, emptyCanvas())
+    writeCommentThread(doc, {
+      id: 't1',
+      anchor: { kind: 'spatial', x: 10, y: 20 },
+      status: 'open',
+      messages: [{ id: 'm1', body: 'the opening question' }],
+    })
+    backend._ctrl.handlers!.onSnapshot(doc.export({ mode: 'snapshot' }))
+
+    const canvas = session.getCanvas()
+    for (const message of [
+      { id: 'm2', body: 'first reply' },
+      { id: 'm3', body: 'second reply' },
+    ]) {
+      session.onChange(canvas, { kind: 'reply-to-thread', threadId: 't1', message })
+    }
+    await vi.advanceTimersByTimeAsync(300)
+
+    expect(session.getAnnotations()[0]?.messages.map((m) => m.body)).toEqual([
+      'the opening question',
+      'first reply',
+      'second reply',
+    ])
+  })
+
   it('does not republish annotations for a commit that touched no conversation', async () => {
     // The guard is value equality rather than a list of comment-shaped
     // command kinds: a classification over EditorCommand['kind'] is silent

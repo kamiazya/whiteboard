@@ -336,18 +336,22 @@ export function BrowserDocumentPage({
   )
   const currentUpdatedAt = pageState.kind === 'editing' ? pageState.snapshot.updatedAt : null
 
-  // [[Name]] resolution for the markdown preview: display names from the
-  // same snapshot list the switcher shows, so a link resolves exactly when
-  // the author can see one unambiguous canvas by that name.
-  // `createUniqueNameResolver` takes {id, name}; a stored row now says
+  // [[path]] resolution for the markdown preview: display names are
+  // retired from resolution (path + id are the only written forms), and
+  // the name labels the link at render time via `resolveTitle` instead.
+  // `createUniqueNameResolver` takes {id, name}; a stored row says
   // `documentId`, so the projection is explicit rather than structural.
   const resolveAlias = useMemo(
     () =>
       createUniqueNameResolver(
-        documents.map((entry) => ({ id: entry.documentId, name: entry.name })),
+        documents.map((entry) => ({ id: entry.documentId, name: entry.path })),
       ),
     [documents],
   )
+  const resolveTitle = useMemo(() => {
+    const byId = new Map(documents.map((entry) => [entry.documentId, entry.name]))
+    return (documentId: string) => byId.get(documentId)
+  }, [documents])
   // The list read races the save a rename queues, so this canvas's live
   // truth is its own snapshot and the list is only the copy for the OTHER
   // documents. Both the switcher and the link picker read THIS, or the
@@ -395,6 +399,7 @@ export function BrowserDocumentPage({
         .filter((entry) => entry.documentId !== documentId)
         .map((entry) => ({
           id: entry.documentId,
+          path: entry.path,
           name: entry.name,
           kind: entry.kind,
         })),
@@ -712,6 +717,33 @@ export function BrowserDocumentPage({
       return nodeIds.has(anchor.nodeId) ? 'placed' : 'orphaned'
     }
   }, [documentKind, canvas])
+
+  /**
+   * Appends the reader's reply to a conversation.
+   *
+   * Goes through `onChange` like every other edit, so it is one undo step and
+   * rides the annotation channel — the alternative, a direct write, would put
+   * a second door onto the same plane with different history behaviour. The
+   * canvas argument is the CURRENT one unchanged: a reply touches no node and
+   * no edge, which is exactly why the command needed its own write path.
+   */
+  const handleReply = useCallback(
+    (threadId: string, body: string) => {
+      onChange(canvas, {
+        kind: 'reply-to-thread',
+        threadId,
+        message: {
+          id: crypto.randomUUID(),
+          body,
+          // No author: this app has no accounts, so there is no name to write
+          // that would not be invented. A message an MCP peer wrote carries
+          // the one its caller supplied, and the panel shows whichever it has.
+          createdAt: new Date().toISOString(),
+        },
+      })
+    },
+    [canvas, onChange],
+  )
 
   const nodeInEditor = useNodeInEditor(canvas, onChange, documentId)
 
@@ -1131,6 +1163,7 @@ export function BrowserDocumentPage({
                         meta: markdownDoc.coreFacets,
                         title: titleOf(documentName, documentPath),
                         resolveAlias,
+                        resolveTitle,
                         linkTargets,
                         onOpenDocument: (id) => navigateToDocument(id),
                         resolveEmbed,
@@ -1173,7 +1206,9 @@ export function BrowserDocumentPage({
                       overlayTitle={documentName ?? 'Untitled'}
                       resolveAlias={resolveAlias}
                       resolveEmbed={resolveEmbed}
+                      resolveTitle={resolveTitle}
                       linkTargets={linkTargets}
+                      threads={annotations}
                     />
                   </div>
                 )}
@@ -1185,7 +1220,15 @@ export function BrowserDocumentPage({
           </div>
           {commentsOpen ? (
             <aside className="w-72 shrink-0 overflow-y-auto border-l bg-background p-2">
-              <CommentsPanel threads={annotations} resolveAnchor={resolveAnchor} />
+              <CommentsPanel
+                threads={annotations}
+                resolveAnchor={resolveAnchor}
+                // Not while a past version is on screen: the editor is
+                // replaced by DocumentPreview but this rail is not, and a
+                // reply is a write to the LIVE document — sent from a
+                // surface showing something else entirely.
+                onReply={preview === null ? handleReply : undefined}
+              />
             </aside>
           ) : null}
         </div>

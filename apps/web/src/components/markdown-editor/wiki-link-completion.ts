@@ -95,9 +95,9 @@ export const wikiLinkCompletionTheme = EditorView.theme({
 
 /**
  * `[[` completion for document references. Accepting a candidate writes the
- * same markup the Link picker would (`linkMarkupFor`) — readable `[[Name]]`
- * when unique, `[[<id>|Name]]` otherwise — so the two entry points cannot
- * teach different link spellings.
+ * same markup the Link picker would (`linkMarkupFor`) — the bare
+ * `[[path]]`, labeled with the target's display name at render time — so
+ * the two entry points cannot teach different link spellings.
  *
  * `from` points AFTER the `[[`, at the query, and each option's `apply` is a
  * function that replaces the brackets too. That split is load-bearing, twice

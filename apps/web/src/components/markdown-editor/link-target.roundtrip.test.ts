@@ -12,8 +12,14 @@ import { describe, expect, it } from 'vitest'
 import { type LinkTarget, linkMarkupFor } from './link-target.js'
 
 const ID = '01ARZ3NDEKTSV4RRFFQ69G5FAV'
-const target: LinkTarget = { id: ID, name: 'Weekly review', kind: 'markdown' }
-const resolver = (alias: string) => (alias === 'Weekly review' ? ID : null)
+const target: LinkTarget = {
+  id: ID,
+  path: 'reviews/weekly',
+  name: 'Weekly review',
+  kind: 'markdown',
+}
+// The reader resolves PATHS (display names are retired from resolution).
+const resolver = (alias: string) => (alias === 'reviews/weekly' ? ID : null)
 
 function nodeTypesFor(markup: string): string[] {
   const root = resolveReferences(parseMarkdownBody(markup), resolver)
@@ -33,15 +39,26 @@ describe('what the picker writes is what the codec reads', () => {
     expect(nodeTypesFor(linkMarkupFor(target, [target], text))).toEqual(['wikiLink'])
   })
 
+  it('a path shaped exactly like a document id still links (by the id form)', () => {
+    // The references syntax carries no scheme, so that spelling IS the id
+    // form and cannot be written as a target.
+    const odd: LinkTarget = {
+      id: ID,
+      path: '01BX5ZZKBKACTAV9WEVGEMMVRZ',
+      name: 'Shadowy',
+      kind: 'markdown',
+    }
+    expect(nodeTypesFor(linkMarkupFor(odd, [odd]))).toEqual(['wikiLink'])
+  })
+
   it.each([
     ['single ] bracket'],
     ['A|B'],
-    // A name shaped exactly like a document id. The references syntax carries
-    // no scheme, so this IS the id form and cannot be written as a target.
-    ['01BX5ZZKBKACTAV9WEVGEMMVRZ'],
     ['weird ]] name'],
-  ])('a document named %j still links', (name) => {
-    const odd: LinkTarget = { id: ID, name, kind: 'markdown' }
+  ])('a document NAMED %j still links when the path falls back to the id', (name) => {
+    // An unwritable path cannot come out of documentPathSchema, but the
+    // fallback still has to survive an unwritable NAME in the alias slot.
+    const odd: LinkTarget = { id: ID, path: '01BX5ZZKBKACTAV9WEVGEMMVRZ', name, kind: 'markdown' }
     expect(nodeTypesFor(linkMarkupFor(odd, [odd]))).toEqual(['wikiLink'])
   })
 

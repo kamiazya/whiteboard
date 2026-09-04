@@ -50,7 +50,6 @@ export interface FollowRenameInput {
   readonly entriesBefore: readonly {
     readonly documentId: string
     readonly path: string
-    readonly name?: string
   }[]
   /**
    * One entry per document the path change carried — a move is a SUBTREE
@@ -76,7 +75,6 @@ export async function followReferencesAfterRename(
     entries: input.entriesBefore.map((entry) => ({
       id: entry.documentId,
       path: entry.path,
-      ...(entry.name === undefined ? {} : { name: entry.name }),
     })),
     moves: input.moves,
   })

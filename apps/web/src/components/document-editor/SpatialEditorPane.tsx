@@ -38,6 +38,7 @@ type PassedThrough = Pick<
   | 'onToggleNodeLock'
   | 'onToggleEdgeLock'
   | 'agentTouchedNodeIds'
+  | 'threads'
 >
 
 export interface SpatialEditorPaneProps extends PassedThrough {
@@ -68,6 +69,7 @@ export interface SpatialEditorPaneProps extends PassedThrough {
   overlayTitle: string
   resolveAlias: NodeTextEditorOverlayProps['resolveAlias']
   resolveEmbed: NodeTextEditorOverlayProps['resolveEmbed']
+  resolveTitle?: NodeTextEditorOverlayProps['resolveTitle']
   linkTargets: NodeTextEditorOverlayProps['linkTargets']
   /** The container's classes — the two pages sit in different grid shells. */
   className: string
@@ -86,6 +88,7 @@ export function SpatialEditorPane({
   overlayTitle,
   resolveAlias,
   resolveEmbed,
+  resolveTitle,
   linkTargets,
   className,
   editorRef,
@@ -101,6 +104,7 @@ export function SpatialEditorPane({
   onToggleNodeLock,
   onToggleEdgeLock,
   agentTouchedNodeIds,
+  threads,
 }: SpatialEditorPaneProps) {
   return (
     <div data-testid="spatial-editor-container" className={className}>
@@ -136,6 +140,7 @@ export function SpatialEditorPane({
         onToggleNodeLock={onToggleNodeLock}
         onOpenInEditor={nodeInEditor.open}
         onToggleEdgeLock={onToggleEdgeLock}
+        threads={threads}
         paletteLeading={<HistoryCluster {...history} />}
       />
       {nodeInEditor.editing !== null && (
@@ -145,6 +150,7 @@ export function SpatialEditorPane({
           theme={theme}
           resolveAlias={resolveAlias}
           resolveEmbed={resolveEmbed}
+          resolveTitle={resolveTitle}
           linkTargets={linkTargets}
           onCommit={nodeInEditor.commit}
           onClose={nodeInEditor.close}

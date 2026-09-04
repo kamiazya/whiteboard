@@ -207,6 +207,13 @@ export interface MdastLayoutOptions {
   readonly resolveEmbed?: (
     documentId: string,
   ) => { readonly title?: string; readonly root: MdastRoot } | undefined
+  /**
+   * The current display name for a linked document, labeling a bare
+   * `[[path]]` at render time (an explicit `|label` always wins). Separate
+   * from `resolveEmbed` because a label lookup must not cost a content
+   * load. Absent or unknown, the id is the honest fallback.
+   */
+  readonly resolveTitle?: (documentId: string) => string | undefined
 }
 
 /**
@@ -222,6 +229,15 @@ export interface RenderedSvgFragment {
 
 /** Root depth is 0; mirrors embed-recursion.ts's cap and cycle semantics. */
 const EMBED_DEPTH_CAP = 3
+
+/** `resolveTitle` guarded to the never-throw rule. */
+function tryResolveTitle(options: ResolvedMdastOptions, documentId: string): string | undefined {
+  try {
+    return options.resolveTitle?.(documentId)
+  } catch {
+    return undefined
+  }
+}
 
 /** `resolveEmbed` guarded to the never-throw rule. */
 function tryResolveEmbed(
@@ -692,7 +708,7 @@ function layoutPhrasing(
           break
         case 'wikiLink':
           emit(
-            child.alias ?? child.documentId,
+            child.alias ?? tryResolveTitle(options, child.documentId) ?? child.documentId,
             {
               link: {
                 kind: 'wikiLink',

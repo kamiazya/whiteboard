@@ -90,6 +90,49 @@ describe('layoutMdastBlocks — semantic provenance', () => {
     expect(paragraph.runs[0].link).toEqual({ kind: 'link', href: 'https://example.com' })
   })
 
+  it('a bare wikiLink is labeled by resolveTitle, then by its id', () => {
+    // A bare [[path]] carries no alias (codec resolves the label slot to
+    // undefined), so the CURRENT display name labels the link at render
+    // time; without a title source the id is the honest fallback.
+    const bare: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [{ type: 'wikiLink', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV' }],
+        },
+      ],
+    }
+    const titled = layoutMdastBlocks(bare, {
+      ...options,
+      resolveTitle: (documentId) =>
+        documentId === '01ARZ3NDEKTSV4RRFFQ69G5FAV' ? 'Login flow' : undefined,
+    })
+    const titledRun = titled.nodes.flatMap((n) => (n.kind === 'paragraph' ? n.runs : []))[0]
+    expect(titledRun?.text).toBe('Login flow')
+
+    const untitled = layoutMdastBlocks(bare, options)
+    const untitledRun = untitled.nodes.flatMap((n) => (n.kind === 'paragraph' ? n.runs : []))[0]
+    expect(untitledRun?.text).toBe('01ARZ3NDEKTSV4RRFFQ69G5FAV')
+  })
+
+  it('an explicit alias beats resolveTitle — the author chose that label', () => {
+    const labeled: MdastRoot = {
+      type: 'root',
+      children: [
+        {
+          type: 'paragraph',
+          children: [
+            { type: 'wikiLink', documentId: '01ARZ3NDEKTSV4RRFFQ69G5FAV', alias: 'my label' },
+          ],
+        },
+      ],
+    }
+    const scene2 = layoutMdastBlocks(labeled, { ...options, resolveTitle: () => 'Login flow' })
+    const run = scene2.nodes.flatMap((n) => (n.kind === 'paragraph' ? n.runs : []))[0]
+    expect(run?.text).toBe('my label')
+  })
+
   it('recovers wikiLink documentId and alias', () => {
     const paragraph = scene.nodes.find(
       (n) => n.kind === 'paragraph' && n.runs.some((r) => r.link?.kind === 'wikiLink'),

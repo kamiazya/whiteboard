@@ -81,9 +81,11 @@ A path is never derived from a display name, in either mode.
 that and found every non-Latin title collapsing to `untitled-N`, which is
 indistinguishable in the very column a path exists to distinguish.
 
-The identifier stays the durable one: a `[[reference]]` between canvases
-names the target's `documentId`, so it survives both a rename and a move,
-and following one resolves that identifier to the target's current path.
+A `[[reference]]` between documents is written as a **path** or a
+**document id** — display names never resolve; they label a link at render
+time instead. The id survives everything; a path reference is repointed
+automatically when its target moves, and a rename (of the display name)
+changes what links show, never what they mean.
 
 ## One product concept, one daemon-side store
 

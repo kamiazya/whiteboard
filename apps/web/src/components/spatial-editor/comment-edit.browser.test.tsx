@@ -1,8 +1,13 @@
-// ADR-0025: a comment's text is edited in place — a double press on its
-// bubble, or "Edit comment" from its context menu, opens the same inline
+// ADR-0025: a comment's text is edited in place — "Edit comment" from the
+// card a press opens on it, or from its context menu, opens the same inline
 // compose bubble the create gesture uses, pre-filled, and commits one
 // `set-comment-text`. Escape keeps the stored text.
-import type { CanvasComment, SpatialCanvas } from '@kamiazya/whiteboard-model'
+//
+// The double press this used to test is GONE (2026-09-04): a single press
+// now opens the card, and the second press of a pair lands on that card,
+// which stops propagation — so the pairing could never complete. The card's
+// own top-right Edit is the successor, and it is what these cases drive.
+import type { CanvasComment, CommentThread, SpatialCanvas } from '@kamiazya/whiteboard-model'
 import { cleanup, fireEvent, render } from '@testing-library/react'
 import { useState } from 'react'
 import { afterEach, expect, it, vi } from 'vitest'
@@ -18,6 +23,12 @@ const FREE: CanvasComment = {
   y: 450,
   text: 'free note',
   createdAt: '2026-09-02T00:00:00.000Z',
+}
+const THREAD: CommentThread = {
+  id: 'c-free',
+  anchor: { kind: 'spatial', x: 600, y: 450 },
+  status: 'open',
+  messages: [{ id: 'm1', body: 'free note', createdAt: '2026-09-02T00:00:00.000Z' }],
 }
 const start: SpatialCanvas = {
   nodes: [{ id: 'n1', type: 'text', x: 100, y: 100, width: 200, height: 100, text: 'hello' }],
@@ -38,6 +49,7 @@ function makeHost() {
         <SpatialEditor
           defaultTool="select"
           canvas={canvas}
+          threads={[THREAD]}
           onChange={(next, command) => {
             latest.commands.push(command)
             setCanvas(next)
@@ -74,14 +86,14 @@ function pressBubble(root: HTMLElement, pointerId: number) {
   fireEvent.pointerUp(root, at)
 }
 
-it('a double press on the bubble opens the compose bubble pre-filled; Ctrl+Enter commits set-comment-text', async () => {
+it('the card Edit opens the compose bubble pre-filled; Ctrl+Enter commits set-comment-text', async () => {
   const { Host, latest } = makeHost()
   const { container } = render(<Host />)
   const root = rootOf(container)
   await waitForComment(container)
 
   pressBubble(root, 1)
-  pressBubble(root, 1)
+  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
   const compose = page.getByTestId('comment-compose')
   await expect.element(compose).toBeInTheDocument()
   expect((compose.element() as HTMLTextAreaElement).value).toBe('free note')
@@ -106,7 +118,7 @@ it('Escape abandons the edit and keeps the stored text', async () => {
   await waitForComment(container)
 
   pressBubble(root, 2)
-  pressBubble(root, 2)
+  await userEvent.click(page.getByRole('button', { name: 'Edit comment' }))
   await expect.element(page.getByTestId('comment-compose')).toBeInTheDocument()
   await userEvent.keyboard(' nope')
   await userEvent.keyboard('{Escape}')

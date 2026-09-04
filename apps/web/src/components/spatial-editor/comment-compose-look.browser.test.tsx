@@ -65,12 +65,11 @@ it('the edit bubble wears the dark theme comment chrome over the drawn bubble', 
       'free note',
     ),
   )
+  // Through the context menu: the subject is the DRAFT's chrome, and the
+  // card a press opens would only stand between the two.
   const r = root.getBoundingClientRect()
-  const at = { pointerId: 1, clientX: r.left + 625, clientY: r.top + 470 }
-  fireEvent.pointerDown(root, { button: 0, ...at })
-  fireEvent.pointerUp(root, at)
-  fireEvent.pointerDown(root, { button: 0, ...at })
-  fireEvent.pointerUp(root, at)
+  fireEvent.contextMenu(root, { clientX: r.left + 625, clientY: r.top + 470, button: 2 })
+  await userEvent.click(page.getByRole('menuitem', { name: 'Edit comment' }))
 
   const style = await composeStyle()
   expect(style.backgroundColor).toBe('rgb(38, 38, 38)')

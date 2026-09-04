@@ -71,8 +71,10 @@ describe('POST /linkify-mentions', () => {
     const out = await h.linkify(src.documentId, target.documentId)
     expect(out.status).toBe(200)
     expect(out.body).toEqual({ linked: 2 })
+    // The link targets the PATH (display names are retired from
+    // resolution); the prose word survives as the label.
     expect(await h.readBody(src.documentId)).toBe(
-      '会議で[[設計メモ]]の前提が変わった。既存の [[設計メモ]] は触らない。末尾にも[[設計メモ]]。',
+      '会議で[[target|設計メモ]]の前提が変わった。既存の [[設計メモ]] は触らない。末尾にも[[target|設計メモ]]。',
     )
 
     // Detection and linkify share one span rule: nothing left to mention.
@@ -84,7 +86,7 @@ describe('POST /linkify-mentions', () => {
     expect((await h.linkify(src.documentId, target.documentId)).body).toEqual({ linked: 0 })
   })
 
-  it('an ambiguous name links by id with the name as alias', async () => {
+  it('a shared display name changes nothing — the path spelling never needs the id', async () => {
     const deps = makeDeps()
     const h = await harness(deps)
     const target = await h.create('target', 'markdown', 'Dup')
@@ -92,7 +94,20 @@ describe('POST /linkify-mentions', () => {
     const src = await h.create('src', 'markdown')
     await h.writeBody(src.documentId, 'about Dup here')
     expect((await h.linkify(src.documentId, target.documentId)).body).toEqual({ linked: 1 })
-    expect(await h.readBody(src.documentId)).toBe(`about [[${target.documentId}|Dup]] here`)
+    expect(await h.readBody(src.documentId)).toBe('about [[target|Dup]] here')
+  })
+
+  it('a path that reads as a document id falls back to the id spelling', async () => {
+    // The reader resolves a direct id FIRST, so [[<that path>]] would point
+    // at whatever document has that id, not at this target. The id form is
+    // the one spelling that cannot be shadowed.
+    const deps = makeDeps()
+    const h = await harness(deps)
+    const target = await h.create('01BX5ZZKBKACTAV9WEVGEMMVRZ', 'markdown', 'Shadow')
+    const src = await h.create('src', 'markdown')
+    await h.writeBody(src.documentId, 'about Shadow here')
+    expect((await h.linkify(src.documentId, target.documentId)).body).toEqual({ linked: 1 })
+    expect(await h.readBody(src.documentId)).toBe(`about [[${target.documentId}|Shadow]] here`)
   })
 
   it('rewrites canvas text nodes but never labels', async () => {
@@ -117,7 +132,7 @@ describe('POST /linkify-mentions', () => {
     })
     const parsed = JSON.parse(canvas.content)
     expect(parsed.nodes.find((n: { id: string }) => n.id === 'a').text).toBe(
-      'we depend on [[Redis]] heavily',
+      'we depend on [[target|Redis]] heavily',
     )
     // A [[link]] in a label would render as literal brackets, so labels are
     // mention-detected but never rewritten.

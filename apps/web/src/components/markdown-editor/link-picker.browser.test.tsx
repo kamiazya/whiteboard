@@ -15,10 +15,10 @@ afterEach(() => {
 })
 
 const targets: readonly LinkTarget[] = [
-  { id: '01JWEEK', name: 'Weekly review', kind: 'markdown' },
-  { id: '01JSPRINT', name: 'Sprint board', kind: 'spatial' },
-  { id: '01JDUPE1', name: 'untitled', kind: 'markdown' },
-  { id: '01JDUPE2', name: 'untitled', kind: 'markdown' },
+  { id: '01JWEEK', path: 'reviews/weekly', name: 'Weekly review', kind: 'markdown' },
+  { id: '01JSPRINT', path: 'sprint-board', name: 'Sprint board', kind: 'spatial' },
+  { id: '01JDUPE1', path: 'untitled', name: 'untitled', kind: 'markdown' },
+  { id: '01JDUPE2', path: 'untitled-2', name: 'untitled', kind: 'markdown' },
 ]
 
 async function caretInto(container: HTMLElement, right: number): Promise<void> {
@@ -84,7 +84,7 @@ describe('the link picker (real browser)', () => {
     expect((picker.querySelector('#link-picker-search') as HTMLInputElement).value).toBe('weekly')
 
     await userEvent.keyboard('{Enter}')
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[Weekly review]] notes')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[reviews/weekly]] notes')
   })
 
   it('narrows as you type and links what you pick', async () => {
@@ -102,13 +102,12 @@ describe('the link picker (real browser)', () => {
     const options = picker.querySelectorAll('[role="option"]')
     expect(options).toHaveLength(1)
     await userEvent.click(options[0] as HTMLElement)
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[Sprint board]]')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[sprint-board]]')
   })
 
-  // The picker is the one place that knows WHICH document was chosen, so it
-  // spends that knowledge on the ambiguous case instead of writing a link
-  // that would silently stay literal text.
-  it('writes the id when two documents share a name', async () => {
+  // Two documents sharing a display name is no problem for the PATH form —
+  // paths are unique, and the render-time title still shows the name.
+  it('writes each path when two documents share a name', async () => {
     const onChange = vi.fn()
     const { container, getByRole } = render(
       <MarkdownEditor value="x" onChange={onChange} linkTargets={targets} />,
@@ -121,8 +120,7 @@ describe('the link picker (real browser)', () => {
     await userEvent.fill(input, 'untitled')
     await userEvent.click(picker.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    // The id resolves; the alias is what makes it readable.
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[01JDUPE1|untitled]]')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[untitled]]')
   })
 
   it('offers the URL when what you typed is one', async () => {
@@ -164,7 +162,7 @@ describe('the link picker (real browser)', () => {
     await userEvent.keyboard('{Control>}{End}{/Control}')
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[Weekly review]] beta')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[reviews/weekly]] beta')
   })
 
   // Pinning an offset is not enough: text typed BEFORE it shifts every later
@@ -185,7 +183,7 @@ describe('the link picker (real browser)', () => {
     await userEvent.keyboard('SEE ')
     await userEvent.click(container.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('SEE [[Weekly review]] beta')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('SEE [[reviews/weekly]] beta')
   })
 
   it('moves the highlight with the arrow keys and commits the active row', async () => {
@@ -205,7 +203,7 @@ describe('the link picker (real browser)', () => {
     expect(options[1]?.getAttribute('aria-selected')).toBe('true')
     await userEvent.keyboard('{Enter}')
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[01JDUPE2|untitled]]')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('[[untitled-2]]')
   })
 
   it('says so when nothing matches, and Enter does nothing', async () => {
@@ -244,7 +242,7 @@ describe('the link picker (real browser)', () => {
     await userEvent.fill(display, 'last week')
     await userEvent.click(picker.querySelectorAll('[role="option"]')[0] as HTMLElement)
 
-    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[Weekly review|last week]] notes')
+    expect(onChange.mock.calls.at(-1)?.[0]).toBe('see [[reviews/weekly|last week]] notes')
   })
 
   it('applies the display text to an external link too', async () => {
