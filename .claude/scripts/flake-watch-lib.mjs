@@ -76,5 +76,9 @@ export function formatReport({ recurrences, singles, unattributedRuns }, windowD
   lines.push(
     `  (${singles.length} single-occurrence test failure(s) and ${unattributedRuns.length} run(s) with no test annotation — infra-shaped — not listed.)`,
   )
+  lines.push('')
+  lines.push(
+    '  Act on the >=2x entries NOW: launch a root-cause fix lane each (own worktree + dev-loop) — re-running is how a defect gets waved through.',
+  )
   return lines.join('\n')
 }
