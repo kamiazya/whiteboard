@@ -186,6 +186,7 @@ import { EXPAND_MIN_H, EXPAND_MIN_W, useFileSeamScene } from './use-file-seam-sc
 import { useKeyboardAvoidance } from './use-keyboard-avoidance.js'
 import { useLockPolicy } from './use-lock-policy.js'
 import { useNativeCanvasListeners } from './use-native-canvas-listeners.js'
+import { useNodeBoxes } from './use-node-boxes.js'
 import { useNodeCreation } from './use-node-creation.js'
 import { useViewportControls } from './use-viewport-controls.js'
 import { useWorkerScene } from './use-worker-scene.js'
@@ -610,15 +611,7 @@ export const SpatialEditor = forwardRef<SpatialEditorHandle, SpatialEditorProps>
      * delete paths). Cleared whenever the primary selection clears.
      */
     const extraIds = selectionState.extraIds
-    const boxes = useMemo(() => indexNodeBoxes(canvas), [canvas])
-    const selectedBox = useMemo(
-      () => (selectedId === null ? undefined : boxes.find((b) => b.id === selectedId)?.box),
-      [boxes, selectedId],
-    )
-    const selectedNode = useMemo(
-      () => (selectedId === null ? undefined : canvas.nodes.find((n) => n.id === selectedId)),
-      [canvas, selectedId],
-    )
+    const { boxes, selectedBox, selectedNode } = useNodeBoxes({ canvas, selectedId })
     /** Narrowed pair so the overlay never has to assert a non-null `selectedId`. */
     const selection =
       selectedId !== null && selectedBox !== undefined
